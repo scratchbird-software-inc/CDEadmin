@@ -58,7 +58,8 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'import-server-file@large-object', 'export-server-file@large-object',
           'vacuum@table', 'analyze@table', 'reindex@table', 'cluster@table', 'truncate@table',
           'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
-          'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server'}
+          'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
+          'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -130,6 +131,17 @@ def test_maintenance_statements_are_quoted_and_allow_listed():
         assert (compiled['statement'], compiled['autocommit']) == (statement, autocommit), operation
     assert compile_maintenance('schema', 'reindex', {'name': 's"1'}, {})['autocommit'] is True
     assert compile_maintenance('database', 'reindex', {'name': 'd'}, {})['statement'] == 'REINDEX DATABASE "d"'
+    # M6: database scope has no table list; schema scope names the listed relations, sorted and deduplicated.
+    assert compile_maintenance('database', 'vacuum', {'name': 'd'}, {'full': True})['statement'] == 'VACUUM (FULL)'
+    assert compile_maintenance('database', 'analyze', {'name': 'd'}, {})['statement'] == 'ANALYZE'
+    schema = {'name': 's"1', 'relations': ['t2', 'a;b', 't2']}
+    assert compile_maintenance('schema', 'vacuum', schema, {'analyze': True})['statement'] == \
+        'VACUUM (ANALYZE) "s""1"."a;b", "s""1"."t2"'
+    assert compile_maintenance('schema', 'analyze', schema, {'verbose': True})['statement'] == \
+        'ANALYZE (VERBOSE) "s""1"."a;b", "s""1"."t2"'
+    for bad in ({'name': 's'}, {'name': 's', 'relations': []}, {'name': 's', 'relations': [1]}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('schema', 'vacuum', bad, {})
     assert compile_maintenance('materialized-view', 'refresh', {'schema': 's', 'name': 'm'}, {'concurrently': True})[
         'statement'] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "s"."m" WITH DATA'
     for kind, operation, draft in [
@@ -141,6 +153,26 @@ def test_maintenance_statements_are_quoted_and_allow_listed():
             ('index', 'cluster', {}), ('schema', 'vacuum', {})]:
         with pytest.raises(PostgreSQLNativeAdminError):
             compile_maintenance(kind, operation, table, draft)
+
+
+def test_database_drop_compiles_with_force_from_the_server_scope():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider
+    native = {'name': 'd"b'}
+    assert compile_maintenance('database', 'drop', native, {'confirmation': 'd"b', 'force': True}) == {
+        'statement': 'DROP DATABASE "d""b" WITH (FORCE)', 'read_only': False, 'autocommit': True}
+    assert compile_maintenance('database', 'drop', native, {'confirmation': 'd"b'})['statement'] == 'DROP DATABASE "d""b"'
+    for draft in ({}, {'confirmation': 'other'}, {'confirmation': 'd"b', 'force': 'yes'}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('database', 'drop', native, draft)
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'database', 'operation_id': 'drop',
+                                                   '_provider_route': {'server_id': 3, 'database_id': 9}}) \
+        == {'server_id': 3, 'database_id': None}
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'database', 'operation_id': 'alter',
+                                                   '_provider_route': {'server_id': 3, 'database_id': 9}}) \
+        == {'server_id': 3, 'database_id': 9}
+    fields = provider_form_fields('drop', 'database')
+    assert fields['confirmation']['required'] and not fields['force']['required']
 
 
 def test_server_operations_compile_without_a_target():
@@ -923,7 +955,7 @@ def database_native(name):
     return native
 
 
-def run_database(live, operation_id, draft, native=None):
+def run_database(live, operation_id, draft, native=None, confirmation_required=False):
     provider, _route = live
     # Server scope: the route names the server only; the attachment is the maintenance database.
     resource = target(None, 'database', native) if native else None
@@ -933,7 +965,7 @@ def run_database(live, operation_id, draft, native=None):
     assert validation['errors'] == [], (operation_id, validation)
     plan = provider.plan_visual_admin(request)
     assert plan['state'] == 'ready', plan
-    assert plan['confirmation_required'] is False, plan
+    assert plan['confirmation_required'] is confirmation_required, plan
     result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
                                           'confirmed': True})
     assert result['provider_result']['transaction_outcome'] == 'committed', result
@@ -1927,3 +1959,60 @@ def test_wal_replay_control_is_refused_on_a_primary(live):
     for operation_id in ('wal-replay-pause', 'wal-replay-resume'):
         with pytest.raises(Exception):
             run_server(live, operation_id)
+
+
+# -- M6 (2026-11-11): schema/database VACUUM+ANALYZE and forced database drop, observed live -------
+@live_only
+def test_vacuum_and_analyze_at_schema_and_database_scope(live):
+    fresh_table('m_sv')
+    query('CREATE MATERIALIZED VIEW public.m_sv_mv AS SELECT * FROM public.m_sv')
+    query("DELETE FROM public.m_sv WHERE id % 2 = 0")
+    dead = lambda: one("SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname='m_sv'")
+    assert dead() > 0
+    native = {'name': 'public', 'relations': ['m_sv', 'm_sv_mv']}
+    plan, outcome = run(live, 'vacuum', kind='schema', native=native, values={'analyze': True})
+    assert plan['command_preview']['statement'] == 'VACUUM (ANALYZE) "public"."m_sv", "public"."m_sv_mv"'
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'autocommit'
+    assert dead() == 0
+    plan, outcome = run(live, 'analyze', kind='schema', native=native)
+    assert plan['command_preview']['statement'] == 'ANALYZE "public"."m_sv", "public"."m_sv_mv"'
+    assert one("SELECT count(*) FROM pg_stats WHERE schemaname='public' AND tablename='m_sv_mv'") > 0
+    query("DELETE FROM public.m_sv WHERE id % 3 = 0")
+    assert dead() > 0
+    plan, outcome = run(live, 'vacuum', kind='database', native={'name': DATABASE}, values={'freeze': True})
+    assert plan['command_preview']['statement'] == 'VACUUM (FREEZE)'
+    assert dead() == 0
+    plan, outcome = run(live, 'analyze', kind='database', native={'name': DATABASE}, values={'verbose': True})
+    assert plan['command_preview']['statement'] == 'ANALYZE (VERBOSE)'
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'transaction'
+    # The provider's own listing carries the schema's relation list the compiler consumed.
+    provider, route = live
+    listed = provider._captured_resources({'resource_id': None, 'authority_path': []}, route)
+    public = next(r for r in listed if r['resource_kind'] == 'schema' and r['display_name'] == 'public')
+    relations = public['extensions']['postgresql']['native']['relations']
+    assert {'m_sv', 'm_sv_mv'} <= set(relations)
+    with pytest.raises(Exception, match='no tables'):
+        run(live, 'vacuum', kind='schema', native={'name': 'public', 'relations': []})
+
+
+@live_only
+def test_database_drop_with_force_terminates_sessions(live):
+    import psycopg
+    name = f'ui_ops_dropme_{UNIQUE}'
+    query(f'CREATE DATABASE "{name}"', database=SETTINGS.get('database', 'postgres'))
+    held = psycopg.connect(dsn(name), autocommit=True)
+    try:
+        held.execute('SELECT 1')
+        native = database_native(name)
+        # Without FORCE the held session blocks the drop and the server refuses.
+        with pytest.raises(Exception):
+            run_database(live, 'drop', {'confirmation': name}, native, confirmation_required=True)
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}'") == [(1,)]
+        plan = run_database(live, 'drop', {'confirmation': name, 'force': True}, native, confirmation_required=True)
+        assert plan['command_preview']['statement'] == f'DROP DATABASE "{name}" WITH (FORCE)'
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}'") == [(0,)]
+        with pytest.raises(psycopg.OperationalError):
+            held.execute('SELECT 1')
+    finally:
+        held.close()
+        query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)', database=SETTINGS.get('database', 'postgres'))

@@ -20,8 +20,10 @@ from __future__ import annotations
 MAINTENANCE_OPERATIONS = {
     'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate'}),
     'index': frozenset({'reindex'}),
-    'schema': frozenset({'reindex'}),
-    'database': frozenset({'reindex'}),
+    # Schema and database scope VACUUM/ANALYZE (M6, 2026-11-11): a schema
+    # has no VACUUM form, so its statement names the tables captured with it.
+    'schema': frozenset({'vacuum', 'analyze', 'reindex'}),
+    'database': frozenset({'vacuum', 'analyze', 'reindex'}),
     'materialized-view': frozenset({'refresh'}),
     # Server operations from the provider tree's server scope (M6, 2026-11-11):
     # the inherited server menu's reload, restore point and WAL replay control.
@@ -45,7 +47,11 @@ _OPTIONS = {
     ('table', 'analyze'): {'verbose', 'skip_locked'},
     ('table', 'reindex'): {'concurrently', 'verbose'},
     ('index', 'reindex'): {'concurrently', 'verbose'},
+    ('schema', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
+    ('schema', 'analyze'): {'verbose', 'skip_locked'},
     ('schema', 'reindex'): {'concurrently', 'verbose'},
+    ('database', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
+    ('database', 'analyze'): {'verbose', 'skip_locked'},
     ('database', 'reindex'): {'concurrently', 'verbose'},
     ('table', 'cluster'): {'index', 'verbose'},
     ('table', 'truncate'): {'restart_identity', 'cascade', 'confirmation'},
@@ -77,6 +83,20 @@ def _qualified(native):
             _identifier(_name(native.get('name'), 'name'), 'name'))
 
 
+def _schema_relations(native):
+    """The schema's tables and materialized views as one quoted list, from the
+    listing that produced the node; a table created afterwards is not in it."""
+    from .native_admin import _identifier, _name
+    schema = _name(native.get('name'), 'name')
+    relations = native.get('relations')
+    if not isinstance(relations, list) or any(type(item) is not str for item in relations):
+        _refuse('the schema listing carries no table list to vacuum or analyze')
+    if not relations:
+        _refuse('the schema has no tables or materialized views to vacuum or analyze')
+    return ', '.join(_identifier(schema, 'schema') + '.' + _identifier(name, 'name')
+                     for name in sorted(set(relations)))
+
+
 def _parallel(value):
     if value in (None, ''):
         return None
@@ -104,6 +124,12 @@ def compile_operation(kind, operation, native, draft):
     else:
         target = _qualified(native)
     object_name = native.get('name')
+    if operation in {'vacuum', 'analyze'} and kind == 'database':
+        # Without a table list VACUUM/ANALYZE cover the connected database;
+        # the apply route checks that database is the one named here.
+        target = ''
+    elif operation in {'vacuum', 'analyze'} and kind == 'schema':
+        target = _schema_relations(native)
     if operation == 'vacuum':
         flags = {name: _flag(draft, name) for name in ('full', 'freeze', 'analyze', 'verbose')}
         parallel = _parallel(draft.get('parallel'))
@@ -112,11 +138,11 @@ def compile_operation(kind, operation, native, draft):
         options = [name.upper() for name, on in flags.items() if on]
         if parallel is not None:
             options.append(f'PARALLEL {parallel}')
-        statement = 'VACUUM' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target
+        statement = ('VACUUM' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
         autocommit = True
     elif operation == 'analyze':
         options = [name.upper() for name in ('verbose', 'skip_locked') if _flag(draft, name)]
-        statement = 'ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target
+        statement = ('ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
     elif operation == 'reindex':
         concurrently = _flag(draft, 'concurrently')
         options = (['CONCURRENTLY'] if concurrently else []) + (['VERBOSE'] if _flag(draft, 'verbose') else [])

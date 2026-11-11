@@ -403,8 +403,13 @@ class PostgreSQLProvider:
         # Database, role and tablespace changes run from the server scope
         # (M4): the attachment is the maintenance database, so no database
         # id.
-        optional = request.get('resource_kind') in {'database', 'role',
-                                                    'tablespace', 'server'}
+        kind = request.get('resource_kind')
+        optional = kind in {'database', 'role', 'tablespace', 'server'}
+        if kind == 'database' and request.get('operation_id') == 'drop':
+            # DROP DATABASE cannot run on a connection to that database
+            # (M6): it always runs from the server scope attachment.
+            return {'server_id': _required_int(route, 'server_id'),
+                    'database_id': None}
         return {
             'server_id': _required_int(route, 'server_id'),
             'database_id': (route.get('database_id') if optional and
@@ -1136,6 +1141,14 @@ class PostgreSQLProvider:
             if n.get('catalog') == 'pg_class':
                 attributes[int(n['oid'])] = (
                     n.get('children') or {}).get('pg_attribute') or []
+        # Schema-scope VACUUM/ANALYZE name the schema's tables and
+        # materialized views (M6): PostgreSQL has no schema form.
+        schema_relations: dict[str, list[str]] = {}
+        for r in capture['resources']:
+            if r.get('resource_kind') in {'table', 'materialized-view'}:
+                schema_relations.setdefault(
+                    (r.get('native') or {}).get('schema'), []
+                ).append(r['display_name'])
         # Array and relation row types stay out, as on the inherited tree.
         hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
@@ -1216,6 +1229,8 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)
+                native['relations'] = schema_relations.get(
+                    item['display_name'], [])
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',

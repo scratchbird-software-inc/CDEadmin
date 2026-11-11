@@ -94,11 +94,18 @@ def test_alter_runs_in_one_transaction_except_the_tablespace():
                                    'comments': 'the app'})
 
 
-def test_drop_and_inspect_stay_inherited():
-    for operation in ('drop', 'inspect'):
-        with pytest.raises(PostgreSQLNativeAdminError,
-                           match='inherited dialog'):
-            compile_database(operation, {'confirmation': 'appdb'})
+def test_drop_is_native_with_force_and_inspect_stays_inherited():
+    # M6 (2026-11-11): drop joined the editor, typed name, optional FORCE.
+    assert compile_database('drop', {'confirmation': 'appdb'}) == {
+        'statement': 'DROP DATABASE "appdb"', 'read_only': False,
+        'autocommit': True}
+    assert compile_database('drop', {'confirmation': 'appdb',
+                                     'force': True})['statement'] == \
+        'DROP DATABASE "appdb" WITH (FORCE)'
+    with pytest.raises(PostgreSQLNativeAdminError, match='confirmation'):
+        compile_database('drop', {'confirmation': 'other'})
+    with pytest.raises(PostgreSQLNativeAdminError, match='provider tree'):
+        compile_database('inspect', {})
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -106,8 +113,9 @@ def test_drop_and_inspect_stay_inherited():
                     if item['resource_kind'] == 'database')
     routes = {op['operation_id']: op['execution_route']
               for op in database['operations']}
-    assert routes['create'] == routes['alter'] == 'provider-native'
-    assert routes['drop'] == routes['inspect'] == 'legacy-preserved'
+    assert routes['create'] == routes['alter'] == routes['drop'] == \
+        'provider-native'
+    assert routes['inspect'] == 'legacy-preserved'
 
 
 def test_forms_follow_the_inherited_ids():

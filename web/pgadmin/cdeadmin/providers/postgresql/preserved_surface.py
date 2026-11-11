@@ -659,10 +659,9 @@ def adapt_catalog(catalog):
                              'text-search-configuration',
                              'text-search-dictionary', 'text-search-parser',
                              'text-search-template'} and
-                    operation_id == 'inspect') and not (
-                    kind == 'database' and operation_id == 'drop'):
+                    operation_id == 'inspect'):
                 # Object-family inspection is the provider tree's own (M3);
-                # database drop stays with the inherited dialog (M4).
+                # database drop joined the editor with FORCE (M6).
                 operation['form'] = native_form(
                     kind, operation_id, resource['title']
                 )

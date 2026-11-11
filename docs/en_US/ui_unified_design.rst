@@ -375,6 +375,21 @@ through the running application's workspace route against the demo
 server (node payload, reload, restore point, rejected pause); the menu
 itself was not screen-checked.
 
+M6 second slice (2026-11-11), database and schema scope: VACUUM and
+ANALYZE run at database scope (no table list, so they cover the connected
+database, which the apply route checks is the one named) and at schema
+scope, where PostgreSQL has no schema form, so the statement names the
+schema's tables and materialized views as listed with the schema node; a
+table created after that listing is not included and an empty schema is
+refused. Database drop joined the database editor with a typed-name
+confirmation and an optional FORCE, compiled as one DROP DATABASE run
+from the server scope outside a transaction; FORCE terminates the other
+sessions of that database first, including any this application holds to
+it, and the server still refuses the connected database and templates.
+Observed live on PostgreSQL 18.3: dead tuples cleared at both scopes,
+statistics recorded for the materialized view, and a held session
+terminated by the forced drop.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

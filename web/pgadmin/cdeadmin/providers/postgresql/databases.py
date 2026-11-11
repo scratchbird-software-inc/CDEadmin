@@ -196,22 +196,50 @@ def _alter(native, draft):
     return {'statement': ';\n'.join(statements), 'read_only': False}
 
 
+def _drop(native, draft):
+    """DROP DATABASE, optionally WITH (FORCE), from the server scope (M6).
+
+    FORCE terminates the other sessions of that database first, including
+    any this application holds to it; the server refuses to drop the
+    connected database and a template database regardless.
+    """
+    name = _name(facts(native)['name'], 'name')
+    if _name(draft.get('confirmation'), 'confirmation') != name:
+        raise PostgreSQLNativeAdminError(
+            'drop confirmation does not match object name')
+    force = ' WITH (FORCE)' if _flag(draft, 'force') else ''
+    return {'statement': f'DROP DATABASE {_identifier(name, "name")}{force}',
+            'read_only': False, 'autocommit': True}
+
+
 def compile_operation(operation, native, draft):
-    """One exact native text for database create or alter."""
+    """One exact native text for database create, alter or drop."""
     if operation == 'create':
         return _create(draft)
     if operation == 'alter':
         return _alter(native, draft)
+    if operation == 'drop':
+        return _drop(native, draft)
     raise PostgreSQLNativeAdminError(
-        'database drop and inspection stay with the inherited dialog and '
-        'the provider tree')
+        'database inspection stays with the provider tree')
 
 
 def form(operation, field):
     """Dialog fields; ids follow the inherited database dialog."""
     grantee = {'field_id': 'grantee', 'label': 'Grantee', 'control': 'text',
                'required': True}
-    if operation == 'create':
+    if operation == 'drop':
+        fields = [
+            field('force', 'Force (terminate other sessions first)',
+                  'boolean', help='DROP DATABASE ... WITH (FORCE); sessions '
+                  'in a prepared transaction or that cannot be terminated '
+                  'still block it.'),
+            field('confirmation', 'Type the database name to confirm',
+                  required=True),
+        ]
+        notes = ('Runs from the server scope outside a transaction. The '
+                 'server refuses the connected database and templates.')
+    elif operation == 'create':
         providers = [{'value': item, 'label': item}
                      for item in LOCALE_PROVIDERS]
         fields = [
