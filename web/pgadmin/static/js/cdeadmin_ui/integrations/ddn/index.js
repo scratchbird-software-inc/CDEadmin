@@ -58,3 +58,17 @@ export {
   erdModuleDefinition,
   registerERDModule,
 } from './erdModule.js';
+export {CubeDesignerSurface} from './CubeDesignerSurface';
+export {
+  CUBE_CREATE_EVENT,
+  CUBE_OPEN_EVENT,
+  CubesNavigator,
+  openCubeDesign,
+  requestCubeCreate,
+} from './CubesNavigator';
+export {
+  CUBE_DESIGN_ASSET_TYPE,
+  CUBE_MODULE_ID,
+  cubeModuleDefinition,
+  registerCubeModule,
+} from './cubeModule.js';

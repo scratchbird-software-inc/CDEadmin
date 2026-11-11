@@ -9,6 +9,19 @@
 
 """ScratchRobin versioned DDN design store (designs.db)."""
 
+from .cube_ddn import (
+    AGGREGATION_GRID_PROFILE,
+    CUBE_MODULE,
+    CUBE_PROFILE,
+    CUBE_VIEWS,
+    USAGE_MATRIX_PROFILE,
+    CubeDesignSync,
+    ddn_to_semantic_model,
+    default_cube_model,
+    diff_cube_ddn,
+    preview_cube_materialization_plan,
+    semantic_model_to_ddn,
+)
 from .ddn_elements import (
     assign_uuid7_element_ids,
     ddn_text_to_workspace,
@@ -63,8 +76,13 @@ from .shared_ddn import (
 )
 
 __all__ = (
+    'AGGREGATION_GRID_PROFILE',
     'APP_EXTENSION_KEY',
     'BINDING_STATES',
+    'CUBE_MODULE',
+    'CUBE_PROFILE',
+    'CUBE_VIEWS',
+    'CubeDesignSync',
     'DEFAULT_LOGICAL_TYPE_MAPS',
     'DESIGN_KINDS',
     'DESTRUCTIVE_METADATA_WARNING',
@@ -77,6 +95,7 @@ __all__ = (
     'PROCESS_EXTENSION_KEY',
     'SAVE_POINT_STATUSES',
     'TARGET_KINDS',
+    'USAGE_MATRIX_PROFILE',
     'DesignStore',
     'DesignStoreConflict',
     'DesignStoreError',
@@ -93,16 +112,21 @@ __all__ = (
     'convert_erd_design_engine',
     'copy_type_map',
     'ddn_text_to_workspace',
+    'ddn_to_semantic_model',
+    'default_cube_model',
     'default_store_path',
     'deterministic_uuid7',
+    'diff_cube_ddn',
     'init_app',
     'init_routes_app',
     'inspect_ddn_text',
     'is_uuid7',
     'normalize_to_logical_type',
+    'preview_cube_materialization_plan',
     'preview_erd_alter_plan',
     'process_for_app',
     'propose_system_diagram_change',
+    'semantic_model_to_ddn',
     'sha256_text',
     'store_for_app',
     'uuid7',

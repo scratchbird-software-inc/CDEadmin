@@ -29,6 +29,12 @@ copy of each deep-frozen profile pack source and memoizes profile descriptors,
 so every DDN runtime after the first reuses them. The manifest records it under
 `consumer_patches.registry_pack_cache`.
 
+Updated 2026-11-10 (owner decision): The intake also applies
+`ddn_cube_dimensional.py` ([ddn-cube-dimensional.md](ddn-cube-dimensional.md))
+to register the `cube.dimensional@1` dimensional cube profile in ScratchRobin's
+isolated DDN capture alongside `matrix.relations@1` and `table.records@1`,
+recorded under `consumer_patches.cube_dimensional`.
+
 Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
 `native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld
 `--as-needed` flag is conditional on a non-Apple toolchain. On Intel macOS its

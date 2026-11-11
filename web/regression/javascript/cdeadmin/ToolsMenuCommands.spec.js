@@ -28,6 +28,7 @@ import {biModuleDefinition} from 'sources/cdeadmin_ui/modules/bi/module';
 import {tracingModuleDefinition} from 'sources/cdeadmin_ui/modules/tracing/module';
 import {ddnModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/module';
 import {erdModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/erdModule';
+import {cubeModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/cubeModule';
 import {migrationModuleDefinition} from 'sources/cdeadmin_ui/modules/migration/module';
 import {mlVectorModuleDefinition} from 'sources/cdeadmin_ui/modules/ml_vector/module';
 import {qualityModuleDefinition} from 'sources/cdeadmin_ui/modules/quality/module';
@@ -37,7 +38,8 @@ const DEFINITIONS = [etlModuleDefinition, contractModuleDefinition, aiModuleDefi
   schemaCompareModuleDefinition, lineageModuleDefinition, cdcModuleDefinition,
   replicationModuleDefinition, apiModuleDefinition, biModuleDefinition,
   tracingModuleDefinition, ddnModuleDefinition, erdModuleDefinition,
-  migrationModuleDefinition, mlVectorModuleDefinition, qualityModuleDefinition];
+  cubeModuleDefinition, migrationModuleDefinition, mlVectorModuleDefinition,
+  qualityModuleDefinition];
 
 const registry = {register() {}, get() {}, list: () => [], active() {}};
 
@@ -58,8 +60,9 @@ describe('Tools menu module commands', () => {
   it('lists only commands that start from the menu', () => {
     const onTools = commands().filter((command) => command.surfaces.includes('tools'))
       .map((command) => command.id).sort();
-    expect(onTools).toEqual(['ddn.diagrams.new', 'ddn.diagrams.show',
-      'erd.designer.new', 'erd.designer.show', 'schema_compare.session.create']);
+    expect(onTools).toEqual(['cube.designer.new', 'cube.designer.show',
+      'ddn.diagrams.new', 'ddn.diagrams.show', 'erd.designer.new',
+      'erd.designer.show', 'schema_compare.session.create']);
   });
 
   it('keeps the module actions for their own tools', () => {
@@ -67,7 +70,9 @@ describe('Tools menu module commands', () => {
     for(const id of ['schema_compare.plan.apply', 'replication.failover.execute',
       'cdc.replay.execute', 'etl.run.start', 'ai.emergency.disable_writes',
       'ddn.designer.save', 'erd.designer.open', 'erd.designer.save',
-      'erd.designer.convert', 'erd.designer.alter_plan', 'erd.designer.accept']) {
+      'erd.designer.convert', 'erd.designer.alter_plan', 'erd.designer.accept',
+      'cube.designer.open', 'cube.designer.save',
+      'cube.designer.materialization_plan', 'cube.designer.accept']) {
       expect(byId[id].surfaces).toEqual(['toolbar']);
     }
     // Owner direction 2026-11-08: the proof-of-concept DDN viewer and designer
@@ -86,6 +91,6 @@ describe('Tools menu module commands', () => {
       await command.execute({}, context);
     }
     expect(opened).toEqual(expect.arrayContaining(['schema_compare.compare_setup',
-      'activity.diagrams', 'activity.erd_models']));
+      'activity.diagrams', 'activity.erd_models', 'activity.cubes']));
   });
 });

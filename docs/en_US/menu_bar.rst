@@ -59,7 +59,11 @@ its launcher commands (*New Data Model (ERD)…* and *Data Models (ERD)*) on the
 *Preview ERD Alter Plan*, *Accept ERD Version* and *Open in ERD Designer*) stay
 on the open designer toolbar. The cross-engine comparison module uses the label
 *Schema Comparison* on its activity and *Tools* entry while legacy PostgreSQL
-*Schema Diff* remains for inherited registrations until PostgreSQL M7.
+*Schema Diff* remains for inherited registrations until PostgreSQL M7. The
+task-specific Cube Designer likewise registers only *New Cube…* and *Cubes* on
+the *Tools* menu while keeping *Save Cube Checkpoint*, *Preview Materialized
+Aggregate Plan*, *Accept & Apply Cube* and *Open in Cube Designer* on the open
+designer toolbar.
 
 Window
 ======

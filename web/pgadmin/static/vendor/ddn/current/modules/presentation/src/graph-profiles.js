@@ -85,7 +85,7 @@ function compartmentRows(entry, all, profile) {
         result.push({ group: 'slots', label: `${name} = ${typeof value === 'string' ? value : JSON.stringify(value)}`, style: {} });
     for (const extension of array(object(metadata(record, 'x_usecase')).extension_points))
         result.push({ group: 'extension points', label: str(extension), style: {} });
-    if (profile === 'erd.crowfoot@1' && !members.length && entry.appearance?.record.body !== 'title') {
+    if ((profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1') && !members.length && entry.appearance?.record.body !== 'title') {
         let data = object(record.data);
         const source = resolveRecord(all, data.source, entry.definition.file);
         if (source?.owner === 'data')
@@ -155,7 +155,7 @@ function decorateNode(entry, all, profile, preserveBounds = false) {
     const record = entry.definition.record, role = str(record.role), effective = entry.effective;
     // Crow's-foot changes relation notation; its progressive entity body keeps
     // the same measured columns/draft editor presentation as native DDN.
-    if (profile === 'erd.crowfoot@1' && entry.item.primitives.length && ['columns', 'draft', 'notes'].includes(str(entry.appearance?.record.body, str(effective.body))))
+    if ((profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1') && entry.item.primitives.length && ['columns', 'draft', 'notes'].includes(str(entry.appearance?.record.body, str(effective.body))))
         return entry;
     let bounds = preserveBounds ? entry.item.bounds : dimensions(entry, profile);
     const rows = compartmentRows(entry, all, profile), { fill, stroke, width } = glyphStyle(entry, profile), textScale = num(pathValue(effective, 'style.font_size'), 16) / 16;

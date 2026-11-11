@@ -142,6 +142,13 @@ remote geography, routing or geocoding.
    ``deployment``), neutral-logical engine-to-engine type conversion with
    user-editable type maps and explicit loss choices, and system-diagram drift
    overlays that route proposed changes through native operation review.
+5. **Dimensional cube profile (2026-11-10)**: ``tools/dependency_patches/ddn_cube_dimensional.py``
+   (reviewed in ``tools/dependency_patches/ddn-cube-dimensional.md`` and
+   recorded in ``resource-manifest.json`` under ``consumer_patches.cube_dimensional``)
+   adds the ``cube.dimensional@1`` graph profile for star/snowflake cube models,
+   role-playing dimensions, measure groups and materialized aggregate nodes,
+   rendered alongside ``matrix.relations@1`` and ``table.records@1`` in the
+   shared ``DDNViewerSurface``.
 
 Legacy source and evidence
 ==========================

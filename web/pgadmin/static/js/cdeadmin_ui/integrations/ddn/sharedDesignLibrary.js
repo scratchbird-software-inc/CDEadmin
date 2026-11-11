@@ -164,18 +164,27 @@ export class DesignStoreClient {
     {
       requireGitReview = false,
       gitReviewRef = null,
+      endpointId = null,
+      targetEngine = null,
       comment = '',
     } = {}
   ) {
+    const body = {
+      require_git_review: Boolean(requireGitReview),
+      git_review_ref: gitReviewRef,
+      comment,
+    };
+    if (endpointId !== null && endpointId !== undefined) {
+      body.endpoint_id = endpointId;
+    }
+    if (targetEngine !== null && targetEngine !== undefined) {
+      body.target_engine = targetEngine;
+    }
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
           `/versions/${segment(version)}/accept`,
-        {
-          require_git_review: Boolean(requireGitReview),
-          git_review_ref: gitReviewRef,
-          comment,
-        }
+        body
       )
     );
   }
@@ -428,6 +437,169 @@ export class DesignStoreClient {
       )
     );
   }
+
+  createCubeDesign(
+    projectId,
+    {key, title, model = null, endpointId = null, note = ''}
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'create_cube',
+        key,
+        title,
+        model,
+        endpoint_id: endpointId,
+        note,
+      })
+    );
+  }
+
+  importCubeFromStore(
+    projectId,
+    {key, endpointId, modelId, note = ''}
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'import_cube_store',
+        key,
+        endpoint_id: endpointId,
+        model_id: modelId,
+        note,
+      })
+    );
+  }
+
+  getCubeModel(projectId, designId, {version = null} = {}) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/cube/model${suffix}`
+      )
+    );
+  }
+
+  saveCubeModel(
+    projectId,
+    designId,
+    {
+      expectedHeadVersion = null,
+      model = null,
+      ddnText = null,
+      cubeNotes = null,
+      pinnedPositions = null,
+      status = 'draft',
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/cube/model`,
+        {
+          expected_head_version: expectedHeadVersion,
+          model,
+          ddn_text: ddnText,
+          cube_notes: cubeNotes,
+          pinned_positions: pinnedPositions,
+          status,
+          note,
+        }
+      )
+    );
+  }
+
+  syncCubeActive(projectId, designId, {note = ''} = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/cube/sync-active`,
+        {note}
+      )
+    );
+  }
+
+  leaveCubeAccepted(
+    projectId,
+    designId,
+    {
+      mode = 'branch_minor_draft',
+      targetVersion = null,
+      endpointId = null,
+      targetEngine = 'postgresql',
+      note = '',
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/cube/leave-accepted`,
+        {
+          mode,
+          target_version: targetVersion,
+          endpoint_id: endpointId,
+          target_engine: targetEngine,
+          note,
+        }
+      )
+    );
+  }
+
+  previewCubeMaterializationPlan(
+    projectId,
+    designId,
+    {
+      baseVersion = null,
+      desiredVersion = null,
+      targetEngine = 'postgresql',
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/cube/materialization-plan`,
+        {
+          base_version: baseVersion,
+          desired_version: desiredVersion,
+          target_engine: targetEngine,
+        }
+      )
+    );
+  }
+
+  gitOperation(
+    projectId,
+    designId,
+    {
+      action = 'drift',
+      repository = '',
+      repoRoot = '',
+      path = '',
+      branch = 'main',
+      version = null,
+      commit = false,
+      note = '',
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/git`,
+        {
+          action,
+          repository,
+          repo_root: repoRoot || repository,
+          path,
+          branch,
+          version,
+          commit,
+          note,
+        }
+      )
+    );
+  }
 }
 
 /**
@@ -580,16 +752,19 @@ export class SharedDDNTaskController {
   async accept({
     requireGitReview = false,
     gitReviewRef = null,
+    endpointId = null,
+    targetEngine = null,
     comment = '',
   } = {}) {
     if (!this.session) throw new Error('Design session is not loaded.');
-    await this.client.acceptVersion(
+    const accepted = await this.client.acceptVersion(
       this.projectId,
       this.designId,
       this.session.design.version.version,
-      {requireGitReview, gitReviewRef, comment}
+      {requireGitReview, gitReviewRef, endpointId, targetEngine, comment}
     );
-    return this.load({version: this.session.design.version.version});
+    await this.load({version: this.session.design.version.version});
+    return accepted;
   }
 
   async confirmSuspectBinding(bindingId, newTargetRef = null) {
@@ -654,5 +829,86 @@ export class SharedDDNTaskController {
       action,
       parameters,
     });
+  }
+
+  getCubeModel({version = null} = {}) {
+    return this.client.getCubeModel(this.projectId, this.designId, {
+      version: version ?? this.session?.design?.version?.version ?? null,
+    });
+  }
+
+  async saveCubeModel({
+    model = null,
+    ddnText = null,
+    cubeNotes = null,
+    status = 'draft',
+    note = '',
+  } = {}) {
+    if (!this.session) {
+      throw new Error('Load the cube session before saving.');
+    }
+    const res = await this.client.saveCubeModel(
+      this.projectId,
+      this.designId,
+      {
+        expectedHeadVersion: this.session.design.head_version,
+        model,
+        ddnText,
+        cubeNotes,
+        pinnedPositions: this.pinnedPositions,
+        status,
+        note,
+      }
+    );
+    await this.load({version: res.design.version.version});
+    this._emit({type: 'saved', version: res.design.version.version});
+    return res;
+  }
+
+  async syncCubeActive({note = ''} = {}) {
+    const res = await this.client.syncCubeActive(this.projectId, this.designId, {
+      note,
+    });
+    if (res?.merged && res?.design?.version?.version) {
+      await this.load({version: res.design.version.version});
+    }
+    return res;
+  }
+
+  async leaveCubeAccepted(options = {}) {
+    const res = await this.client.leaveCubeAccepted(
+      this.projectId,
+      this.designId,
+      options
+    );
+    const nextVer =
+      res?.design?.version?.version ?? res?.design?.head_version ?? null;
+    if (nextVer) {
+      await this.load({version: nextVer});
+    }
+    return res;
+  }
+
+  previewCubeMaterializationPlan(options = {}) {
+    return this.client.previewCubeMaterializationPlan(
+      this.projectId,
+      this.designId,
+      {
+        desiredVersion: this.session?.design?.version?.version ?? null,
+        ...options,
+      }
+    );
+  }
+
+  async gitOperation(options = {}) {
+    const res = await this.client.gitOperation(
+      this.projectId,
+      this.designId,
+      options
+    );
+    if (options?.action === 'load' && res?.head_version) {
+      await this.load({version: res.head_version});
+    }
+    return res;
   }
 }

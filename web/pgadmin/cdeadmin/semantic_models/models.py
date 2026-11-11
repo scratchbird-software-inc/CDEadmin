@@ -75,6 +75,9 @@ WINDOW_OPERATIONS = frozenset({
     'running_sum', 'moving_sum', 'moving_average', 'lag', 'delta',
     'percent_change', 'rank', 'dense_rank',
 })
+DIMENSION_USAGE_KINDS = frozenset({
+    'regular', 'referenced', 'fact', 'many_to_many',
+})
 _ID = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,127}$')
 
 
@@ -195,7 +198,7 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
     model['sources'] = normalized_sources
 
     joins = array(model.get('joins', []), 'model.joins', 128)
-    _unique(joins, 'model.joins')
+    join_ids = _unique(joins, 'model.joins')
     for join in joins:
         identifier(join.get('id'), 'join.id')
         if join.get('left_source') not in source_ids or (
@@ -208,6 +211,8 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
         if cardinality not in CARDINALITIES:
             raise SemanticModelError('join.cardinality is unsupported')
         join['cardinality'] = cardinality
+        if 'active' in join:
+            join['active'] = bool(join['active'])
         predicates = array(join.get('predicates', []), 'join.predicates', 32)
         if join.get('join_type', 'inner') != 'cross' and not predicates:
             raise SemanticModelError('non-cross joins require predicates')
@@ -327,6 +332,45 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                 level_ids.add(level_id)
                 level['name'] = required_text(level.get('name'), 'level.name')
                 _validate_field_reference(level.get('field'), source_ids)
+        for ref_key in ('key_field', 'name_field', 'sort_field'):
+            if dimension.get(ref_key) is not None:
+                _validate_field_reference(dimension[ref_key], source_ids)
+        if 'attributes' in dimension:
+            attrs = array(
+                dimension.get('attributes', []), 'dimension.attributes', 128
+            )
+            _unique(attrs, 'dimension.attributes')
+            for attr in attrs:
+                attr_id = identifier(attr.get('id'), 'attribute.id')
+                if attr_id in level_ids or attr_id in dimension_ids:
+                    raise SemanticModelError(
+                        'attribute identifiers must be unique'
+                    )
+                level_ids.add(attr_id)
+                attr['name'] = required_text(
+                    attr.get('name'), 'attribute.name', 256
+                )
+                _validate_field_reference(attr.get('field'), source_ids)
+                if attr.get('sort_field') is not None:
+                    _validate_field_reference(attr['sort_field'], source_ids)
+            dimension['attributes'] = attrs
+        if dimension.get('role_of') is not None:
+            role_of = identifier(dimension['role_of'], 'dimension.role_of')
+            if role_of not in dimension_ids or role_of == dimension['id']:
+                raise SemanticModelError(
+                    'role-playing dimension must reference another dimension'
+                )
+            dimension['role_of'] = role_of
+            dimension['active'] = bool(dimension.get('active', True))
+        elif 'active' in dimension:
+            dimension['active'] = bool(dimension['active'])
+        if dimension.get('join_id') is not None:
+            join_id = identifier(dimension['join_id'], 'dimension.join_id')
+            if join_id not in join_ids:
+                raise SemanticModelError(
+                    'dimension.join_id references an unknown join'
+                )
+            dimension['join_id'] = join_id
     model['dimensions'] = dimensions
 
     measures = array(model.get('measures', []), 'model.measures')
@@ -423,9 +467,100 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
     model['parameters'] = parameters
 
     parameter_definitions = {item['id']: item for item in parameters}
+    for measure in measures:
+        if 'filters' in measure:
+            if measure.get('expression') is not None and measure['filters']:
+                raise SemanticModelError(
+                    'calculated measures cannot carry row filters directly'
+                )
+            measure['filters'] = _validate_filters(
+                measure.get('filters', []), source_ids, parameter_definitions
+            )
+        if measure.get('measure_group_id') is not None:
+            measure['measure_group_id'] = identifier(
+                measure['measure_group_id'], 'measure.measure_group_id'
+            )
     model['default_filters'] = _validate_filters(
         model.get('default_filters', []), source_ids, parameter_definitions
     )
+    measure_group_ids = set()
+    if 'measure_groups' in model:
+        groups = array(
+            model.get('measure_groups', []), 'model.measure_groups', 64
+        )
+        measure_group_ids = _unique(groups, 'model.measure_groups')
+        for group in groups:
+            group['name'] = required_text(
+                group.get('name'), 'measure_group.name', 256
+            )
+            fact_source = identifier(
+                group.get('fact_source'), 'measure_group.fact_source'
+            )
+            if fact_source not in source_ids:
+                raise SemanticModelError(
+                    'measure_group.fact_source references an unknown source'
+                )
+            group['fact_source'] = fact_source
+            grp_measures = array(
+                group.get('measures', []), 'measure_group.measures', 256
+            )
+            for mid in grp_measures:
+                if mid not in measure_ids:
+                    raise SemanticModelError(
+                        'measure_group references an unknown measure'
+                    )
+            group['measures'] = list(grp_measures)
+            usages = array(
+                group.get('dimension_usage', []),
+                'measure_group.dimension_usage', 128,
+            )
+            seen_dims = set()
+            norm_usages = []
+            for usage in usages:
+                usage = mapping(usage, 'dimension_usage')
+                dim_id = identifier(
+                    usage.get('dimension_id'), 'dimension_usage.dimension_id'
+                )
+                if dim_id not in dimension_ids:
+                    raise SemanticModelError(
+                        'dimension_usage references an unknown dimension'
+                    )
+                if dim_id in seen_dims:
+                    raise SemanticModelError(
+                        'dimension_usage entries must be unique per dimension'
+                    )
+                seen_dims.add(dim_id)
+                rel_kind = usage.get('relationship_kind', 'regular')
+                if rel_kind not in DIMENSION_USAGE_KINDS:
+                    raise SemanticModelError(
+                        'dimension_usage.relationship_kind is unsupported'
+                    )
+                usage['dimension_id'] = dim_id
+                usage['relationship_kind'] = rel_kind
+                usage['active'] = bool(usage.get('active', True))
+                if usage.get('granularity_field') is not None:
+                    _validate_field_reference(
+                        usage['granularity_field'], source_ids
+                    )
+                if usage.get('join_id') is not None:
+                    jid = identifier(
+                        usage['join_id'], 'dimension_usage.join_id'
+                    )
+                    if jid not in join_ids:
+                        raise SemanticModelError(
+                            'dimension_usage.join_id is unknown'
+                        )
+                    usage['join_id'] = jid
+                norm_usages.append(usage)
+            group['dimension_usage'] = norm_usages
+        model['measure_groups'] = groups
+        for measure in measures:
+            mg_id = measure.get('measure_group_id')
+            if mg_id is not None and mg_id not in measure_group_ids:
+                raise SemanticModelError(
+                    'measure.measure_group_id references an unknown group'
+                )
+    admitted_grain = dimension_ids | level_ids
     materializations = array(
         model.get('materializations', []), 'model.materializations', 64
     )
@@ -441,6 +576,52 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
         materialization['enabled'] = bool(
             materialization.get('enabled', False)
         )
+        if materialization.get('measure_group_id') is not None:
+            mg_id = identifier(
+                materialization['measure_group_id'],
+                'materialization.measure_group_id',
+            )
+            if measure_group_ids and mg_id not in measure_group_ids:
+                raise SemanticModelError(
+                    'materialization.measure_group_id is unknown'
+                )
+            materialization['measure_group_id'] = mg_id
+        if 'grain_dimensions' in materialization:
+            grain_dims = array(
+                materialization.get('grain_dimensions', []),
+                'materialization.grain_dimensions', 64,
+            )
+            if any(item not in admitted_grain for item in grain_dims):
+                raise SemanticModelError(
+                    'materialization.grain_dimensions has an unknown level'
+                )
+            materialization['grain_dimensions'] = list(grain_dims)
+        if 'measures' in materialization:
+            mat_measures = array(
+                materialization.get('measures', []),
+                'materialization.measures', 128,
+            )
+            if any(item not in measure_ids for item in mat_measures):
+                raise SemanticModelError(
+                    'materialization.measures has an unknown measure'
+                )
+            materialization['measures'] = list(mat_measures)
+        if 'target_relation' in materialization:
+            t_rel = array(
+                materialization.get('target_relation', []),
+                'materialization.target_relation', 8,
+            )
+            if t_rel and not all(
+                isinstance(p, str) and p.strip() for p in t_rel
+            ):
+                raise SemanticModelError(
+                    'materialization.target_relation requires identifier parts'
+                )
+            materialization['target_relation'] = [p.strip() for p in t_rel]
+        if 'refresh_policy' in materialization:
+            materialization['refresh_policy'] = str(
+                materialization.get('refresh_policy') or 'manual'
+            )[:128]
     model['materializations'] = materializations
     security = mapping(model.get('security', {}), 'model.security')
     security['row_filters'] = _validate_filters(

@@ -275,3 +275,36 @@ Decisions for the owner
   other value refuses queries when the filter is required.
 * Authoring new in-model reports and schedules is dropped; confirm that BI
   subscriptions are the intended home.
+
+DDN-backed Cube Designer (2026-11-10)
+-------------------------------------
+
+Alongside the live runtime ``BIModelsTool`` view above, ScratchRobin provides
+the task-specific **Cube Designer** (surface ``diagram.cube.designer``,
+activity ``activity.cubes``, form references ``SR-F-010021``–``SR-F-010023``)
+built on ``DesignStore``, ``StoreDDNProcess`` and the shared
+``DDNViewerSurface``:
+
+* **Full dimensional DDN profile**: cube designs use the reviewed consumer
+  profile ``cube.dimensional@1`` together with ``matrix.relations@1``
+  (dimension usage matrix) and ``table.records@1`` (aggregation rule grid).
+  Store-to-DDN and DDN-to-store conversion in
+  ``web/pgadmin/cdeadmin/design_store/cube_ddn.py`` is lossless with UUIDv7
+  element identities.
+* **First-release store scope**: ``semantic_models/models.py`` and
+  ``semantic_models/compiler.py`` support dimension entities (``key_field``,
+  ``name_field``, ``sort_field``, ``attributes``), role-playing dimensions
+  (``role_of``, ``active``, ``join_id``), measure groups and dimension usage
+  (``measure_groups``), filtered measures (``filters`` on ``measure``), and
+  aggregation/materialization plans (``measure_group_id``, ``grain_dimensions``,
+  ``measures``, ``target_relation``, ``refresh_policy``). Parent-child
+  hierarchies, perspectives, translations, semi-additive measures, and external
+  SML/Ossie export are deferred beyond the first release.
+* **Save points, acceptance, active drift and Git**: drafts, in-progress and
+  in-review checkpoints stay in ``designs.db`` (and Git as DDN text) without
+  altering the active runtime cube. Accepting a version applies it to
+  ``SemanticModelService``; leaving an accepted version branches a minor-bump
+  draft or rolls back to an earlier accepted version; changes accepted by
+  others are merged through 3-way DDN diff before acceptance; materialized
+  aggregate database changes are highlighted for native-operation review and
+  never executed automatically.

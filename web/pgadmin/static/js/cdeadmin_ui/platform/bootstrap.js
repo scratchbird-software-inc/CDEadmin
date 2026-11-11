@@ -16,6 +16,9 @@ import {
   DESIGN_STORE_SERVICE_ID, ERD_MODULE_ID, registerERDModule,
 } from '../integrations/ddn/erdModule';
 import {
+  CUBE_MODULE_ID, registerCubeModule,
+} from '../integrations/ddn/cubeModule';
+import {
   PLATFORM_SERVICE_IDS, registerCorePlatformServices,
 } from './PlatformServices';
 import {
@@ -136,6 +139,9 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       !moduleRegistry.has(ERD_MODULE_ID)) {
     registerERDModule({modules: moduleRegistry, services: serviceRegistry, api});
   }
+  if(!moduleRegistry.has(CUBE_MODULE_ID)) {
+    registerCubeModule({modules: moduleRegistry, services: serviceRegistry, api});
+  }
   if(!moduleRegistry.has(SCHEMA_COMPARE_MODULE_ID)) registerSchemaCompareModule({
     modules: moduleRegistry, services: serviceRegistry, api,
   });
@@ -186,6 +192,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       moduleRegistry.activate(PROJECTS_MODULE_ID),
       moduleRegistry.activate(DDN_MODULE_ID),
       moduleRegistry.activate(ERD_MODULE_ID),
+      moduleRegistry.activate(CUBE_MODULE_ID),
       moduleRegistry.activate(SCHEMA_COMPARE_MODULE_ID),
       moduleRegistry.activate(LINEAGE_MODULE_ID),
       moduleRegistry.activate(QUALITY_MODULE_ID),

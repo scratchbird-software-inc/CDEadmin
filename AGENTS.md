@@ -218,6 +218,27 @@ a separate cube canvas in ScratchRobin.
   active version) before it can be accepted. ScratchRobin does not provide
   concurrent editing.
 
+Owner decisions, 2026-11-10 (cube designer):
+- Proceed with implementing the ERD, cube, BI and screen mesh designers in
+  order on the unified design store and shared DDN libraries, superseding
+  the 2026-11-08 planning-only hold while leaving the separate PostgreSQL
+  provider-tree migration stream untouched.
+- Use a full dimensional DDN profile (`cube.dimensional@1`), expanded in
+  ScratchRobin's reviewed consumer capture, while the ScratchRobin
+  semantic-model store holds the active runtime implementation.
+- Render the dimension usage matrix and aggregation grid as DDN views
+  (`matrix.relations@1` and `table.records@1`) through the shared DDN
+  libraries and viewer; edit measures, dimensions and aggregation rules
+  through ScratchRobin forms.
+- First-release cube store scope covers dimension entities (key, name, sort
+  and attribute fields), role-playing dimensions with an `active`
+  relationship flag, measure groups and dimension usage, filtered measures,
+  and aggregation/materialization plans; defer parent-child hierarchies,
+  perspectives, translations and semi-additive measures.
+- Defer external SML and Ossie export until after the first cube designer
+  release (when added later: SML first, Ossie as a lossy export with an
+  explicit loss report).
+
 ## ERD and data modelling design (owner direction, 2026-11-08)
 
 The ERD designer is a data modelling design tool, not only a diagram tool,

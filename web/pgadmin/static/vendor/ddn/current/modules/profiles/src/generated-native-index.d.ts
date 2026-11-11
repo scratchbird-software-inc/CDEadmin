@@ -1,2 +1,2 @@
-export declare const nativeSchemaHash = "b2d8478a9c7e73019dd8ebce8d8528f874c72e1d73ab750fd01d2d6ffcb64813";
+export declare const nativeSchemaHash = "936236a1f08fdf8336bc7822c87b723d2f835402e87950f56a7b38576db1839c";
 export declare const nativeIndex: Record<string, unknown>;

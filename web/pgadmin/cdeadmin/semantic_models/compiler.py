@@ -134,10 +134,17 @@ def compile_sql(model_value, query_value, dialect):
             'id': dimension['id'], 'name': dimension['name'],
             'field': dimension['field'],
         }
+        for attr in dimension.get('attributes', []):
+            levels[attr['id']] = attr
         for hierarchy in dimension.get('hierarchies', []):
             for level in hierarchy['levels']:
                 levels[level['id']] = level
     measures = {item['id']: item for item in model['measures']}
+    parameter_values = {
+        item['id']: item.get('default') for item in model['parameters']
+        if 'default' in item
+    }
+    parameter_values.update(query['parameters'])
     axis_ids = []
     for axis in ('pages', 'rows', 'columns'):
         for item in query['axes'][axis]:
@@ -164,9 +171,18 @@ def compile_sql(model_value, query_value, dialect):
                 measure['expression'], stack | frozenset({measure_id})
             )
         aggregation = measure['aggregation']
+        m_filters = measure.get('filters') or []
+        m_cond = ' AND '.join(
+            _compile_filter(item, field, dialect, parameter_values, binder)
+            for item in m_filters
+        )
         if aggregation == 'count' and measure.get('field') is None:
+            if m_cond:
+                return f'COUNT(CASE WHEN {m_cond} THEN 1 END)'
             return 'COUNT(*)'
         operand = field(measure['field'])
+        if m_cond:
+            operand = f'CASE WHEN {m_cond} THEN {operand} END'
         if aggregation == 'count_distinct':
             return f'COUNT(DISTINCT {operand})'
         if aggregation == 'none':
@@ -217,7 +233,10 @@ def compile_sql(model_value, query_value, dialect):
     first = model['sources'][0]['id']
     from_clause = source_sql[first]
     joined = {first}
-    remaining = list(model['joins'])
+    remaining = [
+        item for item in model['joins']
+        if item.get('active', True) is not False
+    ]
     while remaining:
         progress = False
         for join in list(remaining):
@@ -243,11 +262,6 @@ def compile_sql(model_value, query_value, dialect):
     if joined != set(sources):
         raise SemanticModelError('every source must be connected by a join')
 
-    parameter_values = {
-        item['id']: item.get('default') for item in model['parameters']
-        if 'default' in item
-    }
-    parameter_values.update(query['parameters'])
     filters = (
         model['default_filters'] + model['security']['row_filters'] +
         query['filters'] + query['cross_filters']
