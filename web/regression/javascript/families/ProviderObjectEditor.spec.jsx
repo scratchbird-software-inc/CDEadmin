@@ -48,7 +48,7 @@ describe('family editor tree glue', () => {
 
   it('offers a PostgreSQL provider-tree server its server-scope operations only', async () => {
     const pgServer = {_type: 'server', _id: 18, cde_provider_tree: true, connected: true, cde_engine_id: 'postgresql',
-      runtime_verification_state: 'verified', verified_runtime_version: '18.3', cde_context_actions: [], label: 'demo'};
+      runtime_verification_state: 'legacy', verified_runtime_version: '18.3', cde_context_actions: [], label: 'demo'};
     installTree({pgserver: {data: pgServer}});
     resetDescriptorClient();
     const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}),

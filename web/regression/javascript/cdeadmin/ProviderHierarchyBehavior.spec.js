@@ -142,8 +142,9 @@ describe('CDEadmin provider hierarchy behavior', () => {
   it('treats a connected, verified PostgreSQL provider-tree server as ready', () => {
     // The inherited connection is its session; the provider-endpoint flags never appear on it.
     const server = {cde_provider_tree: true, cde_endpoint: false, connected: true,
-      runtime_verification_state: 'verified'};
+      runtime_verification_state: 'legacy'};
     expect(providerEndpointSessionReady(server)).toBe(true);
+    expect(providerEndpointSessionReady({...server, runtime_verification_state: 'verified'})).toBe(true);
     expect(providerEndpointSessionReady({...server, connected: false})).toBe(false);
     expect(providerEndpointSessionReady({...server, runtime_verification_state: 'stale'})).toBe(false);
     expect(providerEndpointSessionReady({...server, cde_provider_tree: false})).toBe(false);

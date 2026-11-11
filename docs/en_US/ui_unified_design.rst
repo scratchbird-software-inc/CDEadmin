@@ -358,15 +358,22 @@ offers reload configuration, create restore point, and pause and resume
 WAL replay as provider-native operations run from the server scope on the
 maintenance attachment, each planned as one function call whose result
 row is the receipt, with confirmation on reload and the replay controls;
-the replay controls are accepted only by a standby in recovery and the
-server's refusal on a primary is reported as is. Change password and clear
-SSH tunnel password stay with the inherited dialogs since they carry
-credentials. On the way a reachability defect was found and fixed: the
-client's session-ready check accepted only provider-endpoint servers, so
-on a PostgreSQL provider-tree server no descriptor entry, including the M4
-and M5 editors, had been reachable from the tree menu; a connected,
-verified provider-tree server now counts as ready, and its node carries an
-action list of its own so the menu is built.
+the replay controls are accepted only by a standby in recovery. On a
+primary the server rejects them, and that rejection reaches the browser
+the way every rejected administrative statement does today: as the
+fail-closed unknown-outcome response, with the server's message kept in
+the application log only (a standing property of the apply contract, not
+of this slice). Change password and clear SSH tunnel password stay with
+the inherited dialogs since they carry credentials. On the way a
+reachability defect was found and fixed: the client's session-ready check
+accepted only provider-endpoint servers, so on a PostgreSQL provider-tree
+server no descriptor entry, including the M4 and M5 editors, had been
+reachable from the tree menu; a connected provider-tree server (whose node
+reports the verification state ``legacy``) now counts as ready, and its
+node carries an action list of its own so the menu is built. Observed
+through the running application's workspace route against the demo
+server (node payload, reload, restore point, rejected pause); the menu
+itself was not screen-checked.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
