@@ -55,6 +55,8 @@ RESOURCES = [
              schema=None, parent='postgresql:pg_foreign_server:16655'),
     captured('pg_language', 13, 'language', 'plpgsql', schema=None),
     captured('pg_conversion', 16670, 'conversion', 'latin1_to_utf8'),
+    captured('pg_foreign_server', 16655, 'foreign-server', 'remote',
+             schema=None, row={'srvfdw': '16654'}),
 ]
 
 
@@ -64,8 +66,9 @@ class LegacyRouteTests(unittest.TestCase):
 
     def route(self, index):
         item = RESOURCES[index]
-        return identity.legacy_route(7, 10, item['resource_kind'],
-                                     item['native'], self.schemas)
+        return identity.legacy_route(
+            7, 10, item['resource_kind'], item['native'], self.schemas,
+            wrappers=identity.foreign_server_wrappers(RESOURCES))
 
     def test_schema_oids_come_from_captured_namespaces(self):
         self.assertEqual({'public': 2200, 'sales': 16500}, self.schemas)
@@ -106,6 +109,15 @@ class LegacyRouteTests(unittest.TestCase):
         self.assertEqual('user_mapping', route['node_type'])
         self.assertEqual(16655, route['tid'])
         self.assertIsNone(route['scid'])
+        # The wrapper id rides along for the inherited views (M3 follow-up).
+        self.assertEqual(16654, route['fid'])
+
+    def test_foreign_server_carries_its_wrapper(self):
+        route = self.route(14)
+        self.assertEqual('foreign_server', route['node_type'])
+        self.assertEqual(16654, route['fid'])
+        self.assertIsNone(route['tid'])
+        self.assertNotIn('fid', self.route(12))
 
     def test_cluster_level_objects_have_no_schema(self):
         route = self.route(12)

@@ -36,7 +36,7 @@ class Response:
 
 class ViewMapTests(unittest.TestCase):
     def test_every_legacy_node_type_has_a_view_or_a_declared_gap(self):
-        known = set(views.VIEW_SPECS) | views.NEEDS_WRAPPER_ID
+        known = set(views.VIEW_SPECS)
         node_types = {v for v in LEGACY_NODE_TYPES.values() if v}
         node_types |= set(CONSTRAINT_NODE_TYPES.values())
         node_types |= {'trigger_function', 'partition', 'domain_constraints'}
@@ -65,6 +65,16 @@ class ViewMapTests(unittest.TestCase):
                                                  scid=None, oid=3)))
         self.assertEqual({'gid': 1, 'sid': 7, 'did': 16610},
                          views.view_kwargs(chain('database', oid=16610)))
+        self.assertEqual(
+            {'gid': 1, 'sid': 7, 'did': 10, 'fid': 16654, 'fsid': 16610},
+            views.view_kwargs(chain('foreign_server', scid=None, tid=None,
+                                    fid=16654)))
+        self.assertEqual(
+            {'gid': 1, 'sid': 7, 'did': 10, 'fid': 16654, 'fsid': 16601,
+             'umid': 16610},
+            views.view_kwargs(chain('user_mapping', scid=None, fid=16654)))
+        with self.assertRaisesRegex(ValueError, 'foreign-data-wrapper id'):
+            views.view_kwargs(chain('user_mapping', scid=None))
         self.assertEqual(
             {'gid': 1, 'sid': 7, 'did': 10, 'scid': 2200, 'doid': 16601,
              'coid': 16610}, views.view_kwargs(chain('domain_constraints')))
@@ -213,8 +223,9 @@ class InspectionTests(unittest.TestCase):
     def test_kinds_without_a_view_say_why(self):
         self.assertIn('no inherited node', views.inherited_inspection(
             chain(None))['states']['all'])
-        self.assertIn('foreign-data-wrapper id', views.inherited_inspection(
-            chain('user_mapping'))['states']['all'])
+        missing = views.inherited_inspection(chain('user_mapping'))
+        self.assertIn('foreign-data-wrapper id missing',
+                      missing['states']['ddl'])
         with patch.object(views, 'inherited_sql',
                           lambda c: (True, 'DO $$ ... pgagent.pga_job $$')), \
                 patch.object(views, 'inherited_statistics',

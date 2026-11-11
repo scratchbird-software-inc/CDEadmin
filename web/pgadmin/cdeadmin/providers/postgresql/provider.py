@@ -55,7 +55,9 @@ from .native_admin import (
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .support_policy import admission_error, public_version
-from .legacy_identity import constraint_indexes, legacy_route, schema_oids
+from .legacy_identity import (
+    constraint_indexes, foreign_server_wrappers, implicit_type_ids,
+    legacy_route, schema_oids)
 from .preserved_surface import (
     SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
@@ -1101,8 +1103,13 @@ class PostgreSQLProvider:
         # come from the captured namespaces, so the chain costs no query.
         schemas = schema_oids(capture['resources'])
         backed = constraint_indexes(capture['resources'])
+        wrappers = foreign_server_wrappers(capture['resources'])
+        # Array and relation row types stay out, as on the inherited tree.
+        hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
         for item in capture['resources']:
+            if item['resource_id'] in hidden_types:
+                continue
             native = copy.deepcopy(item['native'])
             native['name'] = item['display_name']
             raw = native.get('catalog_row', {})
@@ -1133,7 +1140,7 @@ class PostgreSQLProvider:
                     'legacy_route': legacy_route(
                         route['server_id'], route['database_id'],
                         item['resource_kind'], item['native'], schemas,
-                        backed)}}}
+                        backed, wrappers)}}}
             result.append(resource)
             # M3 (2026-11-11): columns as children of relations, from the
             # pg_attribute facts capture already attaches; the inherited

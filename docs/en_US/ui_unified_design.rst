@@ -192,6 +192,11 @@ run), with the inherited job SQL (job, steps and schedules) and the inherited
 run-log statistics. Jobs live in pgAgent's tables, not in ``pg_depend``, so
 the dependency section says so. This closes the M3 parity list; the
 inherited tree's job steps and schedules as child nodes are not offered.
+Follow-ups (2026-11-11): the provider's *Types* group hides array types and
+relation row types as the inherited node does (row types return when system
+objects are shown); and the identity chain carries the foreign-data-wrapper
+id, so foreign servers and user mappings inspect with the inherited SQL
+(password literals redacted) and dependencies instead of reporting the gap.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

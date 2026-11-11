@@ -470,6 +470,44 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 existence_query(*bad)
 
+    def test_implicit_types_stay_hidden_as_on_the_inherited_tree(self):
+        def typ(oid, name, typrelid=0):
+            return {'resource_id': f'postgresql:pg_type:{oid}',
+                    'resource_kind': 'type', 'display_name': name,
+                    'display_path': ['appdb', 'service', name],
+                    'native': {'catalog': 'pg_type', 'oid': oid,
+                               'schema': 'service', 'catalog_row': {
+                                   # OIDs arrive as text in captured rows.
+                                   'typname': name,
+                                   'typrelid': str(typrelid)}}}
+        table = {'resource_id': 'postgresql:pg_class:16393',
+                 'resource_kind': 'table', 'display_name': 'assets',
+                 'display_path': ['appdb', 'service', 'assets'],
+                 'native': {'catalog': 'pg_class', 'oid': 16393,
+                            'schema': 'service',
+                            'catalog_row': {'relkind': 'r'}}}
+        composite = {**table, 'resource_id': 'postgresql:pg_class:16500',
+                     'resource_kind': 'composite-type',
+                     'native': {**table['native'], 'oid': 16500,
+                                'catalog_row': {'relkind': 'c'}}}
+        capture = {'resources': [
+            table, composite, typ(16394, 'assets', 16393),
+            typ(16395, '_assets'), typ(16501, 'address', 16500),
+            typ(16502, '_address'), typ(16600, 'mood')]}
+        self.provider.capture_catalog = Mock(return_value=capture)
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        names = [r['display_name'] for r in self.provider.list_resources(
+            parent) if r['resource_kind'] == 'type']
+        self.assertEqual(['address', 'mood'], names)
+        # With system objects shown the inherited node lists row types too,
+        # but never array types.
+        with patch.object(type(self.provider), '_show_system_objects',
+                          staticmethod(lambda: True)):
+            names = [r['display_name'] for r in self.provider.list_resources(
+                parent) if r['resource_kind'] == 'type']
+        self.assertEqual(['assets', 'address', 'mood'], names)
+
     def test_relations_list_their_columns_as_children(self):
         table = {'resource_id': 'postgresql:pg_class:16393',
                  'resource_kind': 'table', 'display_name': 'assets',

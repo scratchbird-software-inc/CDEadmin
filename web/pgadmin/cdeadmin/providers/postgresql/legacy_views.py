@@ -34,9 +34,10 @@ _CONSTRAINT = _TABLE + 'constraints.'
 _FDW = _SERVERS + 'databases.foreign_data_wrappers.'
 
 
-def _spec(module, view, obj, owner=None, scid=True, did=True, text=False):
+def _spec(module, view, obj, owner=None, scid=True, did=True, text=False,
+          wrapper=False):
     return {'module': module, 'view': view, 'object': obj, 'owner': owner,
-            'scid': scid, 'did': did, 'text': text}
+            'scid': scid, 'did': did, 'text': text, 'wrapper': wrapper}
 
 
 VIEW_SPECS = {
@@ -111,6 +112,11 @@ VIEW_SPECS = {
                           text=True),
     'foreign_data_wrapper': _spec(_FDW[:-1], 'ForeignDataWrapperView',
                                   'fid', scid=False, text=True),
+    'foreign_server': _spec(_FDW + 'foreign_servers', 'ForeignServerView',
+                            'fsid', scid=False, text=True, wrapper=True),
+    'user_mapping': _spec(_FDW + 'foreign_servers.user_mappings',
+                          'UserMappingView', 'umid', owner='fsid',
+                          scid=False, text=True, wrapper=True),
     'role': _spec(_SERVERS + 'roles', 'RoleView', 'rid', scid=False,
                   did=False),
     'tablespace': _spec(_SERVERS + 'tablespaces', 'TablespaceView', 'tsid',
@@ -124,7 +130,8 @@ VIEW_SPECS = {
 CLUSTER_NODE_TYPES = frozenset({'role', 'tablespace'})
 # Node types whose dependencies come through the view's own routes: the
 # cluster-level views and columns (which filter pg_depend by attribute).
-ROUTE_DEPENDENCY_NODE_TYPES = CLUSTER_NODE_TYPES | {'column'}
+ROUTE_DEPENDENCY_NODE_TYPES = CLUSTER_NODE_TYPES | {
+    'column', 'foreign_server', 'user_mapping'}
 
 # Node types whose inherited view has a statistics method.
 STATISTICS_NODE_TYPES = frozenset({
@@ -137,9 +144,6 @@ STATISTICS_NODE_TYPES = frozenset({
 # live in pgagent tables, not in pg_depend.
 NO_DEPENDENCY_PANELS = frozenset({'pga_job'})
 
-# Node types whose inherited view needs an id the chain does not carry yet
-# (the foreign-data-wrapper OID): reported as unavailable, not attempted.
-NEEDS_WRAPPER_ID = frozenset({'foreign_server', 'user_mapping'})
 # Node types whose inherited node shows properties only: no SQL, statistics
 # or dependency panels to inherit (the replica node is a walsender row).
 PROPERTIES_ONLY = frozenset({'replica_nodes'})
@@ -174,6 +178,10 @@ def view_kwargs(chain):
         if chain.get('scid') is None:
             raise ValueError('schema id missing')
         kwargs['scid'] = chain['scid']
+    if spec['wrapper']:
+        if chain.get('fid') is None:
+            raise ValueError('foreign-data-wrapper id missing')
+        kwargs['fid'] = chain['fid']
     if spec['owner']:
         if chain.get('tid') is None:
             raise ValueError('owning object id missing')
@@ -289,11 +297,6 @@ def inherited_inspection(chain, connection_for=None):
     node_type = (chain or {}).get('node_type')
     if not node_type:
         result['states']['all'] = 'unavailable: no inherited node for kind'
-        return result
-    if node_type in NEEDS_WRAPPER_ID:
-        result['states']['all'] = (
-            'unavailable: the inherited view needs the foreign-data-wrapper '
-            'id, which the identity chain does not carry yet')
         return result
     if node_type in PROPERTIES_ONLY:
         result['states']['all'] = (
