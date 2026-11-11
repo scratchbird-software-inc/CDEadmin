@@ -221,7 +221,11 @@ expressions and a comment; alter changes roles, expressions, comment and
 name while the type and command stay fixed, as PostgreSQL fixes them; drop
 needs the typed name. Expressions are admitted only when PostgreSQL's own
 parser reads them as one balanced expression. The capture now names a
-policy's roles so the dialog can show them.
+policy's roles so the dialog can show them. Fourth slice (2026-11-11), the
+schema editor: create with owner, comment, privileges, default privileges
+for new tables, sequences, functions and types, and security labels; alter
+renames, changes the owner and comment, grants and revokes; drop with
+CASCADE needs the typed name.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

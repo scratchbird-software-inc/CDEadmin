@@ -1136,6 +1136,9 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'policy':
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] == 'schema':
+                from .schemas import facts as schema_facts
+                native['schema_facts'] = schema_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',

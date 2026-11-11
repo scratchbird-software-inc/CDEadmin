@@ -21,7 +21,7 @@ POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
     # M4 (2026-11-11): object-family editors on the provider tree.
-    'sequence', 'extension', 'row-policy',
+    'sequence', 'extension', 'row-policy', 'schema',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -329,6 +329,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind == 'row-policy':
         from .policies import compile_operation as compile_policy
         return compile_policy(operation, native, draft)
+    if kind == 'schema':
+        from .schemas import compile_operation as compile_schema
+        return compile_schema(operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

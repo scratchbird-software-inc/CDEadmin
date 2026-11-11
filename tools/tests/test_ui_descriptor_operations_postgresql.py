@@ -808,3 +808,68 @@ def test_row_policy_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_policy WHERE polname='mine'") == [(0,)]
     finally:
         query(f'DROP SCHEMA "Pol schema" CASCADE; DROP ROLE {role}')
+
+
+# -- M4 (2026-11-11): the schema editor's lifecycle, provider-native, observed live --------------
+def schema_native(name):
+    rows = query(f"""SELECT pg_get_userbyid(n.nspowner), n.nspacl::text[], d.description
+                     FROM pg_namespace n LEFT JOIN pg_description d ON d.objoid=n.oid AND d.classoid='pg_namespace'::regclass
+                     WHERE n.nspname='{name}'""")
+    assert len(rows) == 1, name
+    owner, acl, comment = rows[0]
+    native = {'schema': name, 'name': name, 'comment': comment,
+              'catalog_row': {'nspname': name, 'nspacl': acl}}
+    native['owner'] = owner
+    return native
+
+
+def run_schema(live, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, 'schema', native) if native else None
+    request = {'resource_kind': 'schema', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation_id == 'drop'), plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+@live_only
+def test_schema_lifecycle_round_trips(live):
+    owner, reader = 'ui_ops_owner_' + UNIQUE, 'ui_ops_reader_' + UNIQUE
+    query(f'CREATE ROLE {owner}; CREATE ROLE {reader}')
+    try:
+        plan = run_schema(live, 'create', {
+            'name': 'Sch ema', 'namespaceowner': owner, 'description': "it's",
+            'nspacl': [{'grantee': reader, 'privileges': 'U'}],
+            'default_privileges': [{'object_type': 'TABLES', 'grantee': reader, 'privileges': 'SELECT'}],
+            'seclabels': []})
+        assert plan['command_preview']['statement'].startswith('CREATE SCHEMA "Sch ema" AUTHORIZATION')
+        native = schema_native('Sch ema')
+        assert (native['owner'], native['comment']) == (owner, "it's")
+        assert any(item.startswith(f'{reader}=U/') for item in native['catalog_row']['nspacl'])
+        # The default privilege is recorded for the schema, granted by the connected user.
+        assert query(f"""SELECT count(*) FROM pg_default_acl a JOIN pg_namespace n ON n.oid=a.defaclnamespace
+                         WHERE n.nspname='Sch ema' AND a.defaclobjtype='r'""") == [(1,)]
+        plan = run_schema(live, 'alter', {
+            'name': 'schema_two', 'namespaceowner': '', 'description': '',
+            'revoke': [{'grantee': reader}], 'nspacl': [{'grantee': reader, 'privileges': 'UC'}],
+            'default_revoke': [{'object_type': 'TABLES', 'grantee': reader}]}, native)
+        assert 'OWNER TO' not in plan['command_preview']['statement']
+        native = schema_native('schema_two')
+        assert (native['owner'], native['comment']) == (owner, None)
+        assert any(item.startswith(f'{reader}=UC/') for item in native['catalog_row']['nspacl'])
+        assert query(f"""SELECT count(*) FROM pg_default_acl a JOIN pg_namespace n ON n.oid=a.defaclnamespace
+                         WHERE n.nspname='schema_two'""") == [(0,)]
+        with pytest.raises(Exception):
+            run_schema(live, 'drop', {'confirmation': 'other', 'cascade': False}, native)
+        run_schema(live, 'drop', {'confirmation': 'schema_two', 'cascade': True}, native)
+        assert query("SELECT count(*) FROM pg_namespace WHERE nspname IN ('Sch ema', 'schema_two')") == [(0,)]
+    finally:
+        query('DROP SCHEMA IF EXISTS "Sch ema" CASCADE; DROP SCHEMA IF EXISTS schema_two CASCADE')
+        query(f'DROP OWNED BY {owner}, {reader}; DROP ROLE {owner}; DROP ROLE {reader}')
