@@ -18,7 +18,10 @@ are marked ``autocommit`` so the apply route runs them without BEGIN/COMMIT.
 from __future__ import annotations
 
 MAINTENANCE_OPERATIONS = {
-    'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate'}),
+    # M7 (2026-11-11): the inherited table node's row count, statistics
+    # reset and trigger toggles join the maintenance set.
+    'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate', 'count-rows',
+                        'reset-statistics', 'enable-triggers', 'disable-triggers'}),
     'index': frozenset({'reindex'}),
     # Schema and database scope VACUUM/ANALYZE (M6, 2026-11-11): a schema
     # has no VACUUM form, so its statement names the tables captured with it.
@@ -47,7 +50,7 @@ CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
     ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
     ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
-    ('pgagent-job', 'run-now'),
+    ('pgagent-job', 'run-now'), ('table', 'disable-triggers'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
@@ -56,6 +59,8 @@ MUTATION_CLASSES = {
     'wal-replay-resume': 'admin',
     'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
     'run-now': 'admin',
+    'count-rows': 'read', 'reset-statistics': 'admin', 'enable-triggers': 'admin',
+    'disable-triggers': 'admin',
 }
 
 _OPTIONS = {
@@ -80,6 +85,10 @@ _OPTIONS = {
     ('role', 'drop-owned'): {'database', 'cascade', 'confirmation'},
     ('tablespace', 'move-objects'): {'database', 'object_type', 'new_tablespace', 'owner'},
     ('pgagent-job', 'run-now'): set(),
+    ('table', 'count-rows'): set(),
+    ('table', 'reset-statistics'): set(),
+    ('table', 'enable-triggers'): set(),
+    ('table', 'disable-triggers'): set(),
 }
 _RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
@@ -141,6 +150,9 @@ def compile_operation(kind, operation, native, draft):
         return _server_operation(operation, draft)
     if key in DATABASE_PICKED:
         return _database_picked_operation(kind, operation, native, draft)
+    if kind == 'table' and operation in {'count-rows', 'reset-statistics', 'enable-triggers',
+                                          'disable-triggers'}:
+        return _table_operation(operation, native)
     if key == ('pgagent-job', 'run-now'):
         from .pgagent import run_now
         compiled = run_now(native)
@@ -250,6 +262,32 @@ def _database_picked_operation(kind, operation, native, draft):
     }
 
 
+def _table_operation(operation, native):
+    """The inherited table node's own operations (M7): one statement each,
+    in a transaction; the row count is a read whose result row is shown."""
+    from .native_admin import _name
+    target = _qualified(native)
+    read_only = operation == 'count-rows'
+    if operation == 'count-rows':
+        statement = f'SELECT count(*) AS row_count FROM {target}'
+    elif operation == 'reset-statistics':
+        oid = native.get('oid')
+        if type(oid) is str and oid.isdigit():
+            oid = int(oid)
+        if type(oid) is not int or oid <= 0:
+            _refuse('the table listing carries no OID to reset statistics for')
+        statement = f'SELECT pg_catalog.pg_stat_reset_single_table_counters({oid}) AS reset'
+    else:
+        word = 'ENABLE' if operation == 'enable-triggers' else 'DISABLE'
+        statement = f'ALTER TABLE {target} {word} TRIGGER ALL'
+    return {
+        'statement': statement, 'read_only': read_only, 'autocommit': False,
+        'returns_rows': operation in {'count-rows', 'reset-statistics'},
+        'maintenance': {'action': operation, 'object_kind': 'table', 'object': _name(native.get('name'), 'name'),
+                        'options': [], 'transaction_mode': 'transaction'},
+    }
+
+
 def _server_operation(operation, draft):
     """One server-wide function call; the result row is the receipt."""
     from .native_admin import _literal
@@ -323,7 +361,8 @@ def form(kind, operation, field):
               'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
               'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',
               'drop-owned': 'Drop owned objects', 'move-objects': 'Move objects to another tablespace',
-              'run-now': 'Run now'}
+              'run-now': 'Run now', 'count-rows': 'Count rows', 'reset-statistics': 'Reset statistics',
+              'enable-triggers': 'Enable all triggers', 'disable-triggers': 'Disable all triggers'}
     if kind in {'role', 'tablespace', 'pgagent-job'}:
         return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:server:{kind}',
                 'title': titles[operation], 'fields': fields}

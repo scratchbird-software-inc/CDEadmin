@@ -475,6 +475,15 @@ settings were already declared for the provider tree (M2). This closes
 the M6 list of the parity matrix. The tab was not watched in a browser;
 the routes it calls were observed answering for the demo database by OID.
 
+M7 first slice (2026-11-11), the inherited table node's own operations:
+count rows (a read whose result row is the receipt), reset statistics,
+enable all triggers and disable all triggers join the provider-native
+maintenance set on a table, each one statement in a transaction;
+disabling confirms, since it also stops foreign-key enforcement until the
+triggers are enabled again. Truncate with cascade and restart identity
+was already native. Observed live on PostgreSQL 18.3: the count, the
+counters reset, and a trigger's enabled state toggled.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

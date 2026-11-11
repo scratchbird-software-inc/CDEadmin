@@ -60,7 +60,8 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
           'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
           'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database',
-          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace', 'run-now@pgagent-job'}
+          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace', 'run-now@pgagent-job',
+          'count-rows@table', 'reset-statistics@table', 'enable-triggers@table', 'disable-triggers@table'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -219,6 +220,22 @@ def test_database_picked_operations_compile_and_route_to_the_picked_database():
             'field_id': 'database', 'label': 'Database', 'control': 'reference', 'required': True,
             'reference_kind': 'database', 'reference_value': 'resource_id',
             'help': 'Only the objects of this database are affected.'}, op
+
+
+def test_table_operations_of_the_inherited_node_compile():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    table = {'schema': 'we"ird', 'name': 'ta;ble --', 'oid': '24601'}
+    quoted = '"we""ird"."ta;ble --"'
+    compiled = compile_maintenance('table', 'count-rows', table, {})
+    assert (compiled['statement'], compiled['read_only'], compiled['returns_rows']) == (
+        f'SELECT count(*) AS row_count FROM {quoted}', True, True)
+    assert compile_maintenance('table', 'reset-statistics', table, {})['statement'] == \
+        'SELECT pg_catalog.pg_stat_reset_single_table_counters(24601) AS reset'
+    assert compile_maintenance('table', 'enable-triggers', table, {})['statement'] == f'ALTER TABLE {quoted} ENABLE TRIGGER ALL'
+    assert compile_maintenance('table', 'disable-triggers', table, {})['statement'] == f'ALTER TABLE {quoted} DISABLE TRIGGER ALL'
+    for draft, native in (({'verbose': True}, table), ({}, {'schema': 's', 'name': 't'})):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('table', 'reset-statistics', native, draft)
 
 
 def test_server_operations_compile_without_a_target():
@@ -2241,3 +2258,27 @@ def test_pgagent_job_lifecycle_and_run_now(live):
         assert query(f"SELECT count(*) FROM pgagent.pga_jobstep WHERE jstjobid={jobid}", database=maintenance) == [(0,)]
     finally:
         query('DROP SCHEMA IF EXISTS pgagent CASCADE', database=maintenance)
+
+
+# -- M7 (2026-11-11): the inherited table node's operations, observed live ------------------------
+@live_only
+def test_table_count_reset_and_trigger_toggles(live):
+    fresh_table('m_ops')
+    oid = one("SELECT oid::int FROM pg_class WHERE oid='public.m_ops'::regclass")
+    query('CREATE OR REPLACE FUNCTION public.m_ops_noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$')
+    query('CREATE TRIGGER m_ops_trg BEFORE INSERT ON public.m_ops FOR EACH ROW EXECUTE FUNCTION public.m_ops_noop()')
+    enabled = lambda: one("SELECT tgenabled FROM pg_trigger WHERE tgname='m_ops_trg'")
+    native = {'schema': 'public', 'name': 'm_ops', 'oid': oid}
+    plan, outcome = run(live, 'count-rows', kind='table', native=native)
+    assert outcome['result']['rows'] == [{'row_count': 1000}]
+    assert outcome['maintenance_receipt']['action'] == 'count-rows'
+    query("INSERT INTO public.m_ops (grp, payload) VALUES (1, 'y')")
+    assert one("SELECT n_tup_ins FROM pg_stat_user_tables WHERE relname='m_ops'") > 0
+    plan, outcome = run(live, 'reset-statistics', kind='table', native=native)
+    assert eventually("SELECT n_tup_ins FROM pg_stat_user_tables WHERE relname='m_ops'", [(0,)]) == [(0,)]
+    assert enabled() == 'O'
+    plan, outcome = run(live, 'disable-triggers', kind='table', native=native)
+    assert plan['confirmation_required'] is True
+    assert enabled() == 'D'
+    plan, outcome = run(live, 'enable-triggers', kind='table', native=native)
+    assert enabled() == 'O'

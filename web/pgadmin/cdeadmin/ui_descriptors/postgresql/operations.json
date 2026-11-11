@@ -757,6 +757,62 @@
       "confirmation": "confirm",
       "fields": [],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py against a stand-in pgagent schema on PostgreSQL 18.3 (the demo image cannot install pgAgent; not checked against a real agent). Sets jobnextrun = now(); the agent picks the job up at its next poll. M6, 2026-11-11."
+    },
+    {
+      "operation_id": "count-rows",
+      "resource_kind": "table",
+      "title": "Count rows",
+      "menu": {
+        "category": "diagnostics",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
+    },
+    {
+      "operation_id": "reset-statistics",
+      "resource_kind": "table",
+      "title": "Reset statistics",
+      "menu": {
+        "category": "maintenance",
+        "order": 60
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. pg_stat_reset_single_table_counters(oid)."
+    },
+    {
+      "operation_id": "enable-triggers",
+      "resource_kind": "table",
+      "title": "Enable all triggers",
+      "menu": {
+        "category": "lifecycle",
+        "order": 70
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... ENABLE TRIGGER ALL."
+    },
+    {
+      "operation_id": "disable-triggers",
+      "resource_kind": "table",
+      "title": "Disable all triggers",
+      "menu": {
+        "category": "lifecycle",
+        "order": 80
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... DISABLE TRIGGER ALL, including internal constraint triggers: foreign keys stop being enforced until re-enabled."
     }
   ]
 }
