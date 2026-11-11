@@ -447,6 +447,7 @@ def adapt_catalog(catalog):
         'publication', 'subscription', 'text-search-configuration',
         'text-search-dictionary', 'text-search-parser',
         'text-search-template', 'pgagent-job', 'column', 'constraint',
+        'table',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -501,6 +502,9 @@ def adapt_catalog(catalog):
         if kind == 'constraint':
             from .constraints import form as constraint_form
             return constraint_form(operation_id, field)
+        if kind == 'table':
+            from .tables import form as table_form
+            return table_form(operation_id, field)
         if kind in {'role', 'tablespace'}:
             from .cluster import role_form, tablespace_form
             return (role_form if kind == 'role' else tablespace_form)(
@@ -669,8 +673,12 @@ def adapt_catalog(catalog):
                              'text-search-configuration',
                              'text-search-dictionary', 'text-search-parser',
                              'text-search-template', 'pgagent-job',
-                             'column', 'constraint'} and
-                    operation_id == 'inspect'):
+                             'column', 'constraint', 'table'} and
+                    operation_id == 'inspect') and not (
+                    kind == 'table' and operation_id in {
+                        'insert', 'update', 'delete'}):
+                # The table's data operations stay with the inherited grid
+                # (M7 edits the table itself natively).
                 # Object-family inspection is the provider tree's own (M3);
                 # database drop joined the editor with FORCE (M6).
                 operation['form'] = native_form(

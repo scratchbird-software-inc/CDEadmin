@@ -1212,6 +1212,10 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'policy':
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] in {'table', 'partitioned-table'}:
+                # The table editor's initial values (M7).
+                from .tables import facts as table_facts
+                native['table_facts'] = table_facts(native)
             if item['resource_kind'] == 'constraint':
                 # The owning relation and the editor's initial values (M7).
                 from .constraints import _oid as constraint_oid

@@ -104,8 +104,9 @@ def test_no_descriptor_without_a_provider_route():
     for operation in OPERATIONS.values():
         kind, operation_id = operation['resource_kind'], operation['operation_id']
         assert kind in POSTGRESQL_NATIVE_FORM_KINDS or operation_id in MAINTENANCE_OPERATIONS.get(kind, ()), (kind, operation_id)
+    # Partitions stay legacy-preserved until M7 reaches them (tables are native since M7).
     with pytest.raises(PostgreSQLNativeAdminError, match='preserved PostgreSQL UI'):
-        compile_native_admin({'resource_kind': 'table', 'operation_id': 'alter', 'draft': {}})
+        compile_native_admin({'resource_kind': 'partition', 'operation_id': 'alter', 'draft': {}})
 
 
 def compile_maintenance(kind, operation, native, draft):
@@ -2422,3 +2423,71 @@ def test_constraint_lifecycle_round_trips_for_the_five_kinds(live):
     # PostgreSQL 18 keeps the NOT NULL constraint row (contype n) the primary key added.
     assert query("SELECT count(*) FROM pg_constraint WHERE conrelid='public.m_con'::regclass AND contype <> 'n'") == [(0,)]
     query('DROP TABLE public.m_con; DROP TABLE public.m_con_ref')
+
+
+# -- M7 (2026-11-11): table editor, provider-native, observed live ---------------------------------
+def table_native(schema, name):
+    """What the provider's capture attaches to a table node."""
+    from pgadmin.cdeadmin.providers.postgresql.tables import facts
+    rows = query(f"""SELECT c.oid::int, c.relkind, c.relpersistence, c.reloptions::text[], c.relrowsecurity,
+                            c.relforcerowsecurity, c.relreplident, d.description, pg_get_userbyid(c.relowner)
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass AND d.objsubid=0
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    oid, relkind, persistence, options, rls, force, replident, comment, owner = rows[0]
+    native = {'catalog': 'pg_class', 'oid': oid, 'name': name, 'schema': schema, 'comment': comment, 'owner': owner,
+              'catalog_row': {'relname': name, 'relkind': relkind, 'relpersistence': persistence,
+                              'reloptions': options, 'relrowsecurity': rls, 'relforcerowsecurity': force,
+                              'relreplident': replident}}
+    native['table_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_table_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('owner changes need a superuser')
+    owner = f'ui_ops_tblowner_{UNIQUE}'
+    query(f'CREATE ROLE {owner}; CREATE SCHEMA IF NOT EXISTS m_arch; CREATE TABLE IF NOT EXISTS public.m_parent (id int PRIMARY KEY)')
+    try:
+        plan = run_kind(live, 'table', 'create', {
+            'name': 'm_tbl', 'schema': 'public', 'relowner': owner, 'relpersistence': True, 'description': "it's",
+            'columns': [{'name': 'id', 'cltype': 'bigint', 'colconstype': 'i', 'attidentity': 'd', 'attnotnull': True},
+                        {'name': 'parent_id', 'cltype': 'integer'},
+                        {'name': 'qty', 'cltype': 'integer', 'attnotnull': True, 'defval': '1', 'description': 'count'},
+                        {'name': 'total', 'cltype': 'numeric', 'colconstype': 'g', 'genexpr': 'qty * 2'}],
+            'primary_key': [{'name': 'm_tbl_pk', 'columns': [{'column': 'id'}], 'fillfactor': 80}],
+            'unique_constraint': [{'name': 'm_tbl_qty_uq', 'columns': 'qty', 'include': 'total'}],
+            'foreign_key': [{'name': 'm_tbl_fk', 'columns': [{'local_column': 'parent_id', 'referenced': 'id'}],
+                             'references_table_name': 'public.m_parent', 'confdeltype': 'c'}],
+            'check_constraint': [{'name': 'm_tbl_qty_ok', 'consrc': 'qty > 0'}],
+            'fillfactor': 70, 'autovacuum_enabled': 'f', 'autovacuum_custom': True,
+            'vacuum_table': [{'name': 'autovacuum_vacuum_threshold', 'value': 50}],
+            'rlspolicy': True, 'relacl': [{'grantee': owner, 'privileges': 'r'}]})
+        assert plan['command_preview']['statement'].startswith('CREATE UNLOGGED TABLE "public"."m_tbl" (')
+        current = table_native('public', 'm_tbl')['table_facts']
+        assert (current['relpersistence'], current['description'], current['fillfactor'],
+                current['autovacuum_enabled'], current['vacuum_settings'].get('autovacuum_vacuum_threshold'),
+                current['rlspolicy'], current['relowner']) == (True, "it's", 70, 'f', '50', True, owner)
+        assert sorted(query("SELECT conname FROM pg_constraint WHERE conrelid='public.m_tbl'::regclass AND contype <> 'n'")) == [
+            ('m_tbl_fk',), ('m_tbl_pk',), ('m_tbl_qty_ok',), ('m_tbl_qty_uq',)]
+        assert one("SELECT col_description('public.m_tbl'::regclass, 3)") == 'count'
+        assert one(f"SELECT has_table_privilege('{owner}', 'public.m_tbl', 'SELECT')") is True
+        # Alter: rename, move schema, logged, reset fill factor, autovacuum off custom, replica identity, comment, revoke.
+        plan = run_kind(live, 'table', 'alter', {
+            'name': 'm_tbl2', 'schema': 'm_arch', 'relpersistence': False, 'reset_fillfactor': True,
+            'autovacuum_custom': False, 'autovacuum_enabled': 'x', 'replica_identity': 'FULL', 'description': '',
+            'revoke': [{'grantee': owner}]}, table_native('public', 'm_tbl'))
+        current = table_native('m_arch', 'm_tbl2')['table_facts']
+        assert (current['relpersistence'], current['fillfactor'], current['autovacuum_enabled'],
+                current['vacuum_settings'], current['replica_identity'], current['description']) == (
+            False, None, 'x', {}, 'FULL', '')
+        assert one(f"SELECT has_table_privilege('{owner}', 'm_arch.m_tbl2', 'SELECT')") is False
+        with pytest.raises(Exception):
+            run_kind(live, 'table', 'alter', {'description': ''}, table_native('m_arch', 'm_tbl2'))
+        run_kind(live, 'table', 'drop', {'confirmation': 'm_tbl2'}, table_native('m_arch', 'm_tbl2'))
+        assert query("SELECT count(*) FROM pg_class WHERE relname='m_tbl2'") == [(0,)]
+    finally:
+        query('DROP TABLE IF EXISTS public.m_tbl CASCADE; DROP TABLE IF EXISTS m_arch.m_tbl2 CASCADE')
+        query(f'DROP SCHEMA IF EXISTS m_arch CASCADE; DROP TABLE IF EXISTS public.m_parent CASCADE; DROP OWNED BY {owner}; DROP ROLE {owner}')

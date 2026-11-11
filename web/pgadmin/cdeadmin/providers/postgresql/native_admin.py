@@ -27,8 +27,8 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'tablespace',
     # M6 (2026-11-11): pgAgent jobs with their steps and schedules.
     'pgagent-job',
-    # M7 (2026-11-11): the table family starts with columns and constraints.
-    'column', 'constraint',
+    # M7 (2026-11-11): the table family: columns, constraints, the table.
+    'column', 'constraint', 'table',
     # M5 (2026-11-11).
     'cast', 'collation', 'language', 'foreign-data-wrapper',
     'foreign-server', 'user-mapping', 'publication', 'subscription',
@@ -374,6 +374,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind == 'constraint':
         from .constraints import compile_operation as compile_constraint
         return compile_constraint(operation, native, draft)
+    if kind == 'table':
+        from .tables import compile_operation as compile_table
+        return compile_table(operation, native, draft)
     if kind in {'cast', 'collation', 'language'}:
         from .catalog_objects import compile_operation as compile_catalog
         return compile_catalog(kind, operation, native, draft)

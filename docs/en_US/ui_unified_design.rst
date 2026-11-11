@@ -558,6 +558,33 @@ name with optional CASCADE. Observed live on PostgreSQL 18.3 for all
 five kinds; PostgreSQL 18 also stores NOT NULL as a constraint row, which
 the tree lists but the editor leaves alone.
 
+M7 fifth slice (2026-11-11), the table editor: create, alter and drop
+of a table through the provider's native route, with the table family
+form as the dialog. Create compiles the one ``CREATE TABLE`` the
+inherited template rendered: LIKE source with its INCLUDING options, OF
+type, the Columns grid (each column clause from the column editor's
+rules: type, compression, collation, NOT NULL, default, identity or
+generated), the five constraint grids (each body from the constraint
+editor's rules), PARTITION BY with column or expression keys, INHERITS,
+access method, storage options including custom autovacuum parameters,
+and tablespace; then owner, row security, security labels, grants, the
+table comment and column and constraint comments. Alter emits one
+statement per changed table-level fact: rename, schema, owner,
+persistence, tablespace, row security, storage options set or reset
+(resets through their own flags, added to the family form), replica
+identity, labels, grants and revocations, comment. Columns and
+constraints of an existing table are edited on their own nodes, so those
+grids act at creation only; the partitions grid, OIDs and the read-only
+properties are not compiled; owner, tablespace and access method are
+OIDs in the captured row, so a value the dialog supplies is applied
+rather than compared. The data operations and inspection stay with the
+inherited grid. Observed live on PostgreSQL 18.3: a table created with
+identity, generated and commented columns, four constraints, storage and
+autovacuum options, row security, owner and a grant; then renamed, moved
+to another schema, made logged, reset, given a replica identity and
+revoked; then dropped. The family form keeps its draft status until its
+recorded gaps are closed.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
