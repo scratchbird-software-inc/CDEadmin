@@ -1212,6 +1212,16 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'policy':
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] == 'constraint':
+                # The owning relation and the editor's initial values (M7).
+                from .constraints import _oid as constraint_oid
+                from .constraints import facts as constraint_facts
+                owner = relations.get(constraint_oid(
+                    (native.get('catalog_row') or {}).get('conrelid')))
+                if owner:
+                    native['table'] = owner[1]
+                native['constraint_facts'] = constraint_facts(
+                    native, relations)
             if item['resource_kind'] == 'domain':
                 from .types import domain_facts
                 native['domain_facts'] = domain_facts(

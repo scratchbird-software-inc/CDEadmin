@@ -552,6 +552,24 @@
           "tier": 1
         }
       ]
+    },
+    {
+      "resource_kind": "constraint",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
     }
   ]
 }

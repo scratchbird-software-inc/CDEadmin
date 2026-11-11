@@ -538,6 +538,26 @@ synthesized form and the menu, and by the running application returning
 the column, extension, schema and role forms and flagging the column,
 schema and server-scope group nodes; not watched in a browser.
 
+M7 fourth slice (2026-11-11), the five constraint kinds: one ``constraint``
+kind on the provider tree with a kind selector (primary key, unique,
+foreign key, check, exclusion) whose fields follow the inherited dialogs.
+Create compiles the ``ALTER TABLE ... ADD CONSTRAINT`` each inherited
+template rendered: columns or an existing unique index with INCLUDE,
+fill factor, index tablespace and deferrability for primary key and
+unique; column pairs, the referenced table, MATCH, ON UPDATE and ON
+DELETE actions, deferrability and NOT VALID for a foreign key; the
+expression, NOT VALID and NO INHERIT for a check; access method,
+elements (columns or expressions with operator class, order and
+operator), predicate, INCLUDE and index options for an exclusion. Alter
+emits one statement per changed fact: rename, validate for a foreign key
+or check created NOT VALID, a foreign key's deferrability, the backing
+index's fill factor (set, or reset through its own flag because the
+validator drops empty values) and tablespace, and comment; columns,
+references and expressions are not changed in place. Drop takes a typed
+name with optional CASCADE. Observed live on PostgreSQL 18.3 for all
+five kinds; PostgreSQL 18 also stores NOT NULL as a constraint row, which
+the tree lists but the editor leaves alone.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

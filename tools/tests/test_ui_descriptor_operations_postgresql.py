@@ -2349,3 +2349,76 @@ def test_column_lifecycle_round_trips(live):
     run_kind(live, 'column', 'drop', {'confirmation': 'gross', 'cascade': True}, column_native('public', 'm_col', 'gross'))
     assert query("SELECT attname FROM pg_attribute WHERE attrelid='public.m_col'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum") == [('id',), ('seq_id',)]
     query('DROP TABLE public.m_col')
+
+
+# -- M7 (2026-11-11): constraint editor, the five kinds, observed live -----------------------------
+def constraint_native(schema, table, name):
+    """What the provider's capture attaches to a constraint node."""
+    from pgadmin.cdeadmin.providers.postgresql.constraints import facts
+    rows = query(f"""SELECT c.oid::int, c.contype, c.condeferrable, c.condeferred, c.convalidated, c.connoinherit,
+                            c.confupdtype, c.confdeltype, c.confmatchtype, c.conrelid::int, c.confrelid::int,
+                            pg_get_constraintdef(c.oid), obj_description(c.oid, 'pg_constraint')
+                     FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace
+                     WHERE n.nspname='{schema}' AND r.relname='{table}' AND c.conname='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    (oid, contype, deferrable, deferred, validated, noinherit, upd, dele, match, conrelid, confrelid,
+     definition, comment) = rows[0]
+    native = {'catalog': 'pg_constraint', 'oid': oid, 'name': name, 'schema': schema, 'table': table,
+              'definition': definition, 'comment': comment,
+              'catalog_row': {'conname': name, 'contype': contype, 'conrelid': conrelid, 'confrelid': confrelid,
+                              'condeferrable': deferrable, 'condeferred': deferred, 'convalidated': validated,
+                              'connoinherit': noinherit, 'confupdtype': upd, 'confdeltype': dele,
+                              'confmatchtype': match}}
+    native['constraint_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_constraint_lifecycle_round_trips_for_the_five_kinds(live):
+    query('DROP TABLE IF EXISTS public.m_con CASCADE; DROP TABLE IF EXISTS public.m_con_ref CASCADE')
+    query('CREATE EXTENSION IF NOT EXISTS btree_gist')
+    query('CREATE TABLE public.m_con_ref (id int PRIMARY KEY)')
+    query('CREATE TABLE public.m_con (id int, ref_id int, qty int, room int, during tstzrange, tag text)')
+    parent = {'catalog': 'pg_constraint', 'name': 'm_con', 'schema': 'public', 'table': 'm_con', 'catalog_row': {}}
+    defn = lambda name: one(f"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='{name}'")
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_pk', 'contype': 'p', 'columns': 'id', 'fillfactor': 90,
+                                            'comment': 'primary'}, parent)
+    assert defn('m_con_pk') == 'PRIMARY KEY (id)'
+    assert one("SELECT reloptions::text FROM pg_class WHERE relname='m_con_pk'") == '{fillfactor=90}'
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_tag_uq', 'contype': 'u', 'columns': 'tag',
+                                            'include': 'qty', 'condeferrable': True}, parent)
+    assert defn('m_con_tag_uq') == 'UNIQUE (tag) INCLUDE (qty) DEFERRABLE'
+    run_kind(live, 'constraint', 'create', {
+        'name': 'm_con_fk', 'contype': 'f', 'fk_columns': [{'local_column': 'ref_id', 'referenced': 'id'}],
+        'remote_schema': 'public', 'remote_table': 'm_con_ref', 'confdeltype': 'c', 'not_valid': True}, parent)
+    assert defn('m_con_fk') == 'FOREIGN KEY (ref_id) REFERENCES m_con_ref(id) ON DELETE CASCADE NOT VALID'
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_qty', 'contype': 'c', 'consrc': 'qty > 0',
+                                            'not_valid': True}, parent)
+    assert defn('m_con_qty') == 'CHECK ((qty > 0)) NOT VALID'
+    run_kind(live, 'constraint', 'create', {
+        'name': 'm_con_x', 'contype': 'x', 'amname': 'gist',
+        'elements': [{'column': 'room', 'operator': '='}, {'column': 'during', 'operator': '&&'}],
+        'indconstraint': 'qty > 0'}, parent)
+    assert defn('m_con_x') == 'EXCLUDE USING gist (room WITH =, during WITH &&) WHERE ((qty > 0))'
+    # Alter: rename + fill factor on the primary key; validate + deferrable on the foreign key; validate the check.
+    # The dialog prefills contype from the facts; hidden fields are dropped by the validator, so the API draft names it.
+    plan = run_kind(live, 'constraint', 'alter', {'contype': 'p', 'name': 'm_con_pkey2', 'reset_fillfactor': True,
+                                                  'comment': ''}, constraint_native('public', 'm_con', 'm_con_pk'))
+    assert 'RESET (FILLFACTOR)' in plan['command_preview']['statement'], plan['command_preview']['statement']
+    assert one("SELECT reloptions FROM pg_class WHERE relname='m_con_pkey2'") is None
+    assert one("SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='m_con_pkey2'") is None
+    run_kind(live, 'constraint', 'alter', {'contype': 'f', 'validate': True, 'condeferrable': True,
+                                           'condeferred': True}, constraint_native('public', 'm_con', 'm_con_fk'))
+    assert one("SELECT convalidated AND condeferrable AND condeferred FROM pg_constraint WHERE conname='m_con_fk'") is True
+    run_kind(live, 'constraint', 'alter', {'contype': 'c', 'validate': True},
+             constraint_native('public', 'm_con', 'm_con_qty'))
+    assert one("SELECT convalidated FROM pg_constraint WHERE conname='m_con_qty'") is True
+    with pytest.raises(Exception):
+        run_kind(live, 'constraint', 'alter', {'contype': 'c', 'validate': True},
+                 constraint_native('public', 'm_con', 'm_con_qty'))
+    # Drop each; the unique one is backed by an index that goes with it.
+    for name in ('m_con_x', 'm_con_qty', 'm_con_fk', 'm_con_tag_uq', 'm_con_pkey2'):
+        run_kind(live, 'constraint', 'drop', {'confirmation': name}, constraint_native('public', 'm_con', name))
+    # PostgreSQL 18 keeps the NOT NULL constraint row (contype n) the primary key added.
+    assert query("SELECT count(*) FROM pg_constraint WHERE conrelid='public.m_con'::regclass AND contype <> 'n'") == [(0,)]
+    query('DROP TABLE public.m_con; DROP TABLE public.m_con_ref')

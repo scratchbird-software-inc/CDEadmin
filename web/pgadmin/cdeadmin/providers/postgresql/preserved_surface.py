@@ -446,7 +446,7 @@ def adapt_catalog(catalog):
         'foreign-data-wrapper', 'foreign-server', 'user-mapping',
         'publication', 'subscription', 'text-search-configuration',
         'text-search-dictionary', 'text-search-parser',
-        'text-search-template', 'pgagent-job', 'column',
+        'text-search-template', 'pgagent-job', 'column', 'constraint',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -498,6 +498,9 @@ def adapt_catalog(catalog):
         if kind == 'column':
             from .columns import form as column_form
             return column_form(operation_id, field)
+        if kind == 'constraint':
+            from .constraints import form as constraint_form
+            return constraint_form(operation_id, field)
         if kind in {'role', 'tablespace'}:
             from .cluster import role_form, tablespace_form
             return (role_form if kind == 'role' else tablespace_form)(
@@ -666,7 +669,7 @@ def adapt_catalog(catalog):
                              'text-search-configuration',
                              'text-search-dictionary', 'text-search-parser',
                              'text-search-template', 'pgagent-job',
-                             'column'} and
+                             'column', 'constraint'} and
                     operation_id == 'inspect'):
                 # Object-family inspection is the provider tree's own (M3);
                 # database drop joined the editor with FORCE (M6).
