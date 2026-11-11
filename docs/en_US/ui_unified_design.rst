@@ -215,6 +215,13 @@ dialog remains reachable through the inherited tree. Second slice
 (2026-11-11), the extension editor on the same route: create with schema,
 version, CASCADE and comment; alter updates to a version, moves relocatable
 extensions between schemas and sets the comment; drop needs the typed name.
+Third slice (2026-11-11), the row security policy editor: create with the
+table, permissive or restrictive, the command, roles, USING and WITH CHECK
+expressions and a comment; alter changes roles, expressions, comment and
+name while the type and command stay fixed, as PostgreSQL fixes them; drop
+needs the typed name. Expressions are admitted only when PostgreSQL's own
+parser reads them as one balanced expression. The capture now names a
+policy's roles so the dialog can show them.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1104,6 +1104,10 @@ class PostgreSQLProvider:
         schemas = schema_oids(capture['resources'])
         backed = constraint_indexes(capture['resources'])
         wrappers = foreign_server_wrappers(capture['resources'])
+        relations = {int(r['native']['oid']): (r['native'].get('schema'),
+                                              r['display_name'])
+                     for r in capture['resources']
+                     if (r.get('native') or {}).get('catalog') == 'pg_class'}
         # Array and relation row types stay out, as on the inherited tree.
         hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
@@ -1129,6 +1133,9 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'extension':
                 from .extensions import facts as extension_facts
                 native['extension_facts'] = extension_facts(native)
+            if item['resource_kind'] == 'policy':
+                from .policies import facts as policy_facts
+                native['policy_facts'] = policy_facts(native, relations)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',

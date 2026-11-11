@@ -741,3 +741,70 @@ def test_extension_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == [(0,)]
     finally:
         query('DROP EXTENSION IF EXISTS pg_trgm; DROP SCHEMA "Ext schema" CASCADE; DROP SCHEMA ext_moved CASCADE')
+
+
+# -- M4 (2026-11-11): the row-security policy editor's lifecycle, provider-native, observed live --
+def policy_native(schema, table, name):
+    rows = query(f"""SELECT p.polcmd, p.polpermissive, pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid),
+                            (SELECT array_agg(CASE WHEN r = 0 THEN 'public' ELSE pg_get_userbyid(r) END) FROM unnest(p.polroles) r),
+                            d.description, p.polrelid::int
+                     FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_policy'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND p.polname='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    command, permissive, using, check, roles, comment, relid = rows[0]
+    from pgadmin.cdeadmin.providers.postgresql.policies import facts
+    native = {'schema': schema, 'name': name, 'comment': comment,
+              'catalog_row': {'polname': name, 'polrelid': str(relid), 'polcmd': command,
+                              'polpermissive': permissive, 'roles_sql': roles, 'using_sql': using,
+                              'check_sql': check}}
+    native['policy_facts'] = facts(native, {relid: (schema, table)})
+    return native
+
+
+def run_policy(live, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, 'row-policy', native) if native else None
+    request = {'resource_kind': 'row-policy', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation_id == 'drop'), plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+@live_only
+def test_row_policy_lifecycle_round_trips(live):
+    role = 'ui_ops_tenant_' + UNIQUE
+    query(f'CREATE SCHEMA "Pol schema"; CREATE TABLE "Pol schema".docs (id int, owner text); '
+          f'ALTER TABLE "Pol schema".docs ENABLE ROW LEVEL SECURITY; CREATE ROLE {role}')
+    try:
+        plan = run_policy(live, 'create', {
+            'name': 'own docs', 'schema': 'Pol schema', 'table': 'docs', 'type': 'PERMISSIVE', 'event': 'UPDATE',
+            'policyowner': role, 'using': 'owner = CURRENT_USER', 'withcheck': 'id > 0',
+            'description': "it's"})
+        assert plan['command_preview']['statement'].startswith('CREATE POLICY "own docs" ON "Pol schema"."docs"')
+        native = policy_native('Pol schema', 'docs', 'own docs')
+        assert native['policy_facts']['event'] == 'UPDATE' and native['policy_facts']['type'] == 'PERMISSIVE'
+        assert native['policy_facts']['roles'] == [role]
+        assert native['policy_facts']['using'] == '(owner = CURRENT_USER)' and native['comment'] == "it's"
+        # Alter: roles widened to PUBLIC (PostgreSQL stores a list with PUBLIC as PUBLIC alone),
+        # USING changed, comment cleared, renamed; AS and FOR untouched.
+        plan = run_policy(live, 'alter', {
+            'name': 'mine', 'policyowner': 'public', 'using': 'owner = CURRENT_USER AND id <> 0',
+            'withcheck': '(id > 0)', 'description': ''}, native)
+        assert 'WITH CHECK' not in plan['command_preview']['statement']
+        native = policy_native('Pol schema', 'docs', 'mine')
+        assert native['policy_facts']['roles'] == ['public'] and native['comment'] is None
+        assert native['policy_facts']['using'] == '((owner = CURRENT_USER) AND (id <> 0))'
+        with pytest.raises(Exception):
+            run_policy(live, 'drop', {'confirmation': 'other'}, native)
+        run_policy(live, 'drop', {'confirmation': 'mine'}, native)
+        assert query("SELECT count(*) FROM pg_policy WHERE polname='mine'") == [(0,)]
+    finally:
+        query(f'DROP SCHEMA "Pol schema" CASCADE; DROP ROLE {role}')

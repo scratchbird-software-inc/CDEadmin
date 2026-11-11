@@ -429,7 +429,7 @@ def adapt_catalog(catalog):
     maintenance = MAINTENANCE_OPERATIONS
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
-        'sequence', 'extension',
+        'sequence', 'extension', 'row-policy',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -450,6 +450,9 @@ def adapt_catalog(catalog):
         if kind == 'extension':
             from .extensions import form as extension_form
             return extension_form(operation_id, field)
+        if kind == 'row-policy':
+            from .policies import form as policy_form
+            return policy_form(operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -588,7 +591,7 @@ def adapt_catalog(catalog):
                 operation['confirmation_required'] = (kind, operation_id) in CONFIRMED
                 operation['target_required'] = True
             elif kind in native_form_kinds and not (
-                    kind in {'sequence', 'extension'} and
+                    kind in {'sequence', 'extension', 'row-policy'} and
                     operation_id == 'inspect'):
                 # Object-family inspection is the provider tree's own (M3).
                 operation['form'] = native_form(
