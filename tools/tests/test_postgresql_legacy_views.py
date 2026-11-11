@@ -104,6 +104,30 @@ class UnwrapAndRedactTests(unittest.TestCase):
         self.assertEqual(views.redact_sql(None), None)
 
 
+class StatisticsTests(unittest.TestCase):
+    def test_one_row_becomes_a_mapping_and_many_stay_rows(self):
+        one = {'columns': [{'name': 'size'}], 'rows': [{'size': '8 kB'}]}
+        self.assertEqual({'size': '8 kB'}, views.statistics_rows(one))
+        many = {'columns': [], 'rows': [{'n': 1}, {'n': 2}]}
+        self.assertEqual([{'n': 1}, {'n': 2}], views.statistics_rows(many))
+        self.assertEqual({'other': 1}, views.statistics_rows({'other': 1}))
+
+    def test_kinds_without_statistics_say_so(self):
+        ok, why = views.inherited_statistics(chain('view'))
+        self.assertFalse(ok)
+        self.assertIn('no statistics', why)
+
+    def test_statistics_come_from_the_inherited_view(self):
+        class View:
+            def statistics(self, **kwargs):
+                assert kwargs['tid'] == 16610
+                return Response({'data': {'columns': [],
+                                          'rows': [{'rows': 42}]}})
+        with patch.object(views, '_view', lambda spec: View()):
+            self.assertEqual((True, {'rows': 42}),
+                             views.inherited_statistics(chain('table')))
+
+
 class InspectionTests(unittest.TestCase):
     def test_sections_come_from_the_inherited_view(self):
         calls = {}
@@ -112,6 +136,10 @@ class InspectionTests(unittest.TestCase):
             def sql(self, **kwargs):
                 calls['sql'] = kwargs
                 return Response("CREATE INDEX i ON t (c) -- password 'x'")
+
+            def statistics(self, **kwargs):
+                return Response({'data': {'columns': [],
+                                          'rows': [{'size': '16 kB'}]}})
 
             def get_dependencies(self, conn, oid):
                 calls['deps'] = (conn, oid)
@@ -129,8 +157,9 @@ class InspectionTests(unittest.TestCase):
                          result['ddl'])
         self.assertEqual(('c', 16610), calls['deps'])
         self.assertEqual([10], connections)
-        self.assertEqual({'ddl': 'inherited', 'dependencies': 'inherited'},
-                         result['states'])
+        self.assertEqual({'ddl': 'inherited', 'statistics': 'inherited',
+                          'dependencies': 'inherited'}, result['states'])
+        self.assertEqual({'size': '16 kB'}, result['statistics'])
         self.assertEqual('public.t', result['dependencies'][0]['name'])
         self.assertEqual([], result['dependents'])
 
@@ -178,7 +207,7 @@ class ProviderWiringTests(unittest.TestCase):
         def fake(chain_value, connection_for):
             seen['conn'] = connection_for(chain_value['did'])
             return {'ddl': 'CREATE SEQUENCE s', 'dependencies': ['d'],
-                    'dependents': ['e'],
+                    'dependents': ['e'], 'statistics': {'last_value': 5},
                     'states': {'ddl': 'inherited',
                                'dependencies': 'inherited'}}
         with patch('flask.has_request_context', lambda: True), \
@@ -190,6 +219,7 @@ class ProviderWiringTests(unittest.TestCase):
         self.assertEqual('CREATE SEQUENCE s', native['ddl'])
         self.assertEqual(['d'], native['dependencies'])
         self.assertEqual(['e'], native['dependents'])
+        self.assertEqual({'last_value': 5}, native['statistics'])
         self.assertEqual([{'objid': 1}], native['dependency_rows'])
         self.assertEqual('inherited',
                          native['inherited_inspection']['states']['ddl'])

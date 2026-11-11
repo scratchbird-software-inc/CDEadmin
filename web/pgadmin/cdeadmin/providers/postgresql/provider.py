@@ -970,6 +970,8 @@ class PostgreSQLProvider:
         inspected = inherited_inspection(chain, connection_for)
         if 'ddl' in inspected:
             native['ddl'] = inspected['ddl']
+        if 'statistics' in inspected:
+            native['statistics'] = inspected['statistics']
         if 'dependencies' in inspected:
             # The captured pg_depend rows stay available under their own key.
             if 'dependencies' in native:

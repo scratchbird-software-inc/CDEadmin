@@ -153,8 +153,12 @@ backs a primary key, unique or exclusion constraint routes to the constraint
 node, as the inherited tree lists it. Every section reports its own state
 (``inherited`` or ``unavailable: <reason>``); user mappings and foreign servers
 are unavailable until the chain carries the foreign-data-wrapper id, and
-password literals in inherited SQL are redacted. Statistics, server-scope roles
-and tablespaces, columns, system objects and pgAgent are later M3 slices.
+password literals in inherited SQL are redacted. Second slice (2026-11-11):
+the ``statistics`` section carries the inherited statistics for the kinds
+whose inherited node had them (databases, tables, materialized views,
+sequences, indexes, functions and procedures, subscriptions, primary and unique
+keys); one object's statistics show as a name and value list. Server-scope
+roles and tablespaces, columns, system objects and pgAgent are later slices.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -116,6 +116,13 @@ VIEW_SPECS = {
                         scid=False, did=False),
 }
 
+# Node types whose inherited view has a statistics method.
+STATISTICS_NODE_TYPES = frozenset({
+    'database', 'table', 'mview', 'sequence', 'index', 'function',
+    'procedure', 'trigger_function', 'subscription', 'primary_key',
+    'unique_constraint',
+})
+
 # Node types whose inherited view needs an id the chain does not carry yet
 # (the foreign-data-wrapper OID): reported as unavailable, not attempted.
 NEEDS_WRAPPER_ID = frozenset({'foreign_server', 'user_mapping'})
@@ -187,6 +194,42 @@ def _unwrap(result):
         False, 'inherited view returned no text')
 
 
+def _unwrap_json(result):
+    """Return (ok, data) from a view's JSON Response."""
+    status = getattr(result, 'status_code', None)
+    if status is None:
+        return False, 'inherited view returned no data'
+    try:
+        body = json.loads(result.get_data(as_text=True))
+    except ValueError:
+        return False, f'inherited view answered {status}'
+    if status != 200:
+        message = body.get('errormsg') if isinstance(body, dict) else body
+        return False, f'inherited view answered {status}: {message}'
+    return True, body.get('data', body) if isinstance(body, dict) else body
+
+
+def statistics_rows(data):
+    """Shape the inherited statistics for the inspector: one object's
+    statistics become a name -> value mapping; several rows stay a list."""
+    rows = data.get('rows') if isinstance(data, dict) else None
+    if rows is None:
+        return data
+    if len(rows) == 1 and isinstance(rows[0], dict):
+        return dict(rows[0])
+    return [dict(row) if isinstance(row, dict) else row for row in rows]
+
+
+def inherited_statistics(chain):
+    """The node's statistics from its inherited view, or a reason."""
+    node_type = chain['node_type']
+    if node_type not in STATISTICS_NODE_TYPES:
+        return False, 'the inherited node has no statistics'
+    spec = VIEW_SPECS[node_type]
+    ok, value = _unwrap_json(_view(spec).statistics(**view_kwargs(chain)))
+    return (True, statistics_rows(value)) if ok else (False, value)
+
+
 def inherited_sql(chain):
     """The node's reverse-engineered SQL from its inherited view."""
     spec = VIEW_SPECS[chain['node_type']]
@@ -214,8 +257,9 @@ def inherited_inspection(chain, connection_for=None):
 
     ``connection_for(did)`` returns the server's default connection for a
     database (``None`` for cluster-level objects). Returns a dict with
-    ``ddl``, ``dependencies``, ``dependents`` when available and a
-    ``states`` entry naming each section's state and reason; never raises.
+    ``ddl``, ``statistics``, ``dependencies``, ``dependents`` when
+    available and a ``states`` entry naming each section's state and
+    reason; never raises.
     """
     result = {'states': {}}
     node_type = (chain or {}).get('node_type')
@@ -239,6 +283,16 @@ def inherited_inspection(chain, connection_for=None):
             result['states']['ddl'] = 'unavailable: ' + str(value)
     except Exception as exc:  # the inspector must still answer
         result['states']['ddl'] = (
+            f'unavailable: {type(exc).__name__}: {exc}')
+    try:
+        ok, value = inherited_statistics(chain)
+        if ok:
+            result['statistics'] = value
+            result['states']['statistics'] = 'inherited'
+        else:
+            result['states']['statistics'] = 'unavailable: ' + str(value)
+    except Exception as exc:
+        result['states']['statistics'] = (
             f'unavailable: {type(exc).__name__}: {exc}')
     if connection_for is None:
         result['states']['dependencies'] = 'unavailable: no connection'
