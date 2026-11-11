@@ -426,6 +426,12 @@ through the same handler and identity bridge; the grant wizard now takes
 the clicked item rather than the tree selection, so a provider node opens
 it with its schema preselected. Not opened in a browser.
 
+M6 sixth slice (2026-11-11): the inherited maintenance dialog joins the
+openers at database scope and on schema, table, index and materialized
+view resources, kept beside the provider-native maintenance operations
+because it offers every VACUUM option and the constraint-backed index
+cases the native forms do not. Not opened in a browser.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

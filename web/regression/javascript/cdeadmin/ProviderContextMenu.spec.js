@@ -164,6 +164,10 @@ describe('provider-owned Object Explorer menus', () => {
     pgAdmin.Browser.GrantWizard = {start_grant_wizard: startGrantWizard};
     openInheritedTool('grant_wizard', 'item-2');
     expect(startGrantWizard).toHaveBeenCalledWith(null, 'item-2');
+    const maintenance = jest.fn();
+    pgAdmin.Tools = {...(pgAdmin.Tools || {}), maintenance: {callback_maintenance: maintenance}};
+    openInheritedTool('maintenance', 'item-3');
+    expect(maintenance).toHaveBeenCalledWith({}, 'item-3');
     expect(() => openInheritedTool('vacuum', 'item-1')).toThrow(/not known/);
   });
   it('admits the PostgreSQL per-database dashboard the provider tree declares', () => {

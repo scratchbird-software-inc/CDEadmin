@@ -373,6 +373,8 @@ export function openInheritedTool(tool, item) {
     return browser.GrantWizard.start_grant_wizard(null, item);
   case 'search_objects':
     return pgAdmin.Tools.SearchObjects.show_search_objects(null, item);
+  case 'maintenance':
+    return pgAdmin.Tools.maintenance.callback_maintenance({}, item);
   default:
     throw new Error(gettext('The inherited tool "%s" is not known.', String(tool)));
   }

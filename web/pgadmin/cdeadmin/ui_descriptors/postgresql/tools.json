@@ -301,6 +301,46 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "database.postgresql.maintenance",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Maintenance dialog...",
+      "description": "The inherited maintenance dialog (VACUUM, ANALYZE, REINDEX, CLUSTER with every option), kept beside the provider-native maintenance operations.",
+      "handler": "open_inherited_tool",
+      "icon": "action.maintenance",
+      "group": "maintenance",
+      "priority": 90,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "maintenance"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.maintenance",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Maintenance dialog...",
+      "description": "The inherited maintenance dialog (VACUUM, ANALYZE, REINDEX, CLUSTER with every option), kept beside the provider-native maintenance operations.",
+      "handler": "open_inherited_tool",
+      "icon": "action.maintenance",
+      "group": "maintenance",
+      "priority": 90,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "maintenance"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table",
+          "index",
+          "materialized-view"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
     }
   ]
 }
