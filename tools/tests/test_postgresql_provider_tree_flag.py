@@ -141,6 +141,9 @@ class WiringTests(unittest.TestCase):
         # server-scope operations.
         self.assertIn("else ([] if provider_tree_enabled(server) else None)",
                       text)
+        # Owner decision 2026-11-11 (option 1): nodes flag the lifecycle
+        # operations their provider edits with a form of its own.
+        self.assertEqual(3, text.count("'cde_native_editor': _native_editor_operations("))
         # The inherited Connect records the runtime (owner decision
         # 2026-11-10) and never fails the connection over it.
         connect = text.split('    def connect(self, gid, sid')[1]

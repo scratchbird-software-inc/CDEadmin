@@ -522,7 +522,21 @@ operator, pgAgent job, column) is reachable through the workspace API and
 its operation dialogs but not yet through the tree's Edit entry. The
 provider's own form builders carry every field; the proposed fix is a
 client fallback to the endpoint's visual-administration catalog form when
-the bundle has no form for an engine-object kind.
+the bundle has no form for an engine-object kind. Decided and done the
+same day (owner decision 2026-11-11, option 1): the workspace gained a
+``native_forms`` action returning the provider-native lifecycle forms of
+one kind from the endpoint's visual-administration catalog; provider-tree
+nodes and groups carry ``cde_native_editor``, the lifecycle operations
+their provider edits natively, so the tree offers Edit and Create for
+them; and the object editor, when the bundle has no form for the kind,
+builds one from the provider's form (its fields on General, the provider
+plan on SQL) and reads initial values along each field's
+``initial_value_path`` into the inspected resource's native block. The
+provider's Python form builders stay the single source; no form files
+were generated. Verified by unit tests of the action, the flags, the
+synthesized form and the menu, and by the running application returning
+the column, extension, schema and role forms and flagging the column,
+schema and server-scope group nodes; not watched in a browser.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

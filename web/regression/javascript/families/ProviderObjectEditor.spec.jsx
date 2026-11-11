@@ -66,6 +66,24 @@ describe('family editor tree glue', () => {
     expect(familyEditorContextActions({...pgServer, cde_provider_tree: false}, 'pgserver')).toEqual([]);
   });
 
+  it('offers Edit and Create for kinds the server flags as natively editable (owner decision 2026-11-11)', async () => {
+    const column = {_type: 'cde_resource', cde_resource_kind: 'column', cde_resource_id: 'col-1', cde_engine_id: 'postgresql',
+      cde_database_target_id: 'db-1', label: 'amount', cde_context_actions: [], cde_native_editor: ['alter', 'create', 'drop']};
+    const columns = {_type: 'cde_resource_group', cde_resource_kind: 'column', cde_engine_id: 'postgresql', label: 'Columns',
+      cde_context_actions: [], cde_native_editor: ['alter', 'create', 'drop']};
+    const pgServer = {_type: 'server', _id: 18, cde_provider_tree: true, connected: true, cde_engine_id: 'postgresql',
+      runtime_verification_state: 'legacy', verified_runtime_version: '18.3', cde_context_actions: []};
+    installTree({pgserver: {data: pgServer}, column: {data: column, parent: 'pgserver'}, columns: {data: columns, parent: 'pgserver'}});
+    resetDescriptorClient();
+    const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}), post: async () => ({})});
+    await client.bundle('postgresql', {version: '18.3'});
+    expect(familyEditorContextActions(column, 'column').map((entry) => entry.id)).toContain('family-editor-edit');
+    expect(familyEditorContextActions(columns, 'columns').map((entry) => entry.id)).toContain('family-editor-create-column');
+    // Without the flag and without a bundle form, nothing is offered.
+    expect(familyEditorContextActions({...column, cde_native_editor: []}, 'column').map((entry) => entry.id))
+      .not.toContain('family-editor-edit');
+  });
+
   it('builds the workspace endpoint url with the database target', () => {
     expect(providerEndpointUrl(pgAdmin.Browser.Nodes.server, 'server', serverData, 'db 1'))
       .toBe('/browser/server/cde_workspace/1/7?database_target_id=db%201');

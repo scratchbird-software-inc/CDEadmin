@@ -303,6 +303,22 @@ def _passwordless(server):
         return False
 
 
+def _native_editor_operations(visual_admin, resource_kind):
+    """Lifecycle operations the provider edits natively with a form of
+    its own (owner decision 2026-11-11, option 1): the client offers Edit
+    and Create for them even when the descriptor bundle has no form."""
+    for item in (visual_admin or {}).get('objects', []):
+        if item.get('resource_kind') == resource_kind:
+            return sorted(
+                operation['operation_id']
+                for operation in item.get('operations', [])
+                if operation.get('operation_id') in {'create', 'alter',
+                                                     'drop'} and
+                operation.get('execution_route') == 'provider-native' and
+                (operation.get('form') or {}).get('fields'))
+    return []
+
+
 def _unsupported_operations(visual_admin, resource_kind):
     """Operations the endpoint's provider reports as unsupported.
 
@@ -341,6 +357,18 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
     """
     nodes = []
     replication, pgagent = None, False
+    # The provider's visual-administration catalog flags the kinds it edits
+    # natively (owner decision 2026-11-11, option 1); absent on failure.
+    visual_admin = None
+    try:
+        endpoint_service = endpoint_service_for_app(current_app)
+        context, _endpoint, _root = endpoint_service.workspace(server)
+        binding = endpoint_service.provider_registry.resolve(context)
+        describe_admin = getattr(
+            binding.instance, 'visual_admin_descriptor', None)
+        visual_admin = describe_admin() if callable(describe_admin) else None
+    except Exception:
+        visual_admin = None
     if manager is not None:
         try:
             replication = get_replication_type(
@@ -384,6 +412,8 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
             'cde_resource_kind': resource_kind,
+            'cde_native_editor': _native_editor_operations(
+                visual_admin, resource_kind),
             'cde_context_actions': [],
         })
     return nodes
@@ -447,6 +477,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 'cde_engine_id': profile['engine_id'],
                 'cde_profile_id': profile['profile_id'],
                 'cde_resource_kind': value['resource_kind'],
+                'cde_native_editor': _native_editor_operations(
+                    snapshot.get('visual_admin'), value['resource_kind']),
                 'cde_context_actions': resource_group_context_actions(
                     profile, value['resource_kind'],
                     snapshot.get('visual_admin'),
@@ -509,6 +541,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'cde_profile_id': profile['profile_id'],
             'cde_context_actions': actions,
             'cde_unsupported_operations': _unsupported_operations(
+                snapshot.get('visual_admin'), value['resource_kind']),
+            'cde_native_editor': _native_editor_operations(
                 snapshot.get('visual_admin'), value['resource_kind']),
             'cde_section': value.get('section'),
         })
@@ -3113,7 +3147,7 @@ class ServerNode(PGChildNodeView):
                         'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
                         'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts',
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'browse_source', 'catalog_diagram', 'sql_builder',
+                        'browse_source', 'catalog_diagram', 'sql_builder', 'native_forms',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
@@ -3600,6 +3634,10 @@ class ServerNode(PGChildNodeView):
                     )
                 elif action == 'browse_source':
                     payload = service.browse_source(
+                        server, data.get('request') or {}
+                    )
+                elif action == 'native_forms':
+                    payload = service.native_forms(
                         server, data.get('request') or {}
                     )
                 elif action == 'catalog_diagram':

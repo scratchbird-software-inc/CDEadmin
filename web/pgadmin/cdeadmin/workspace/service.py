@@ -2661,6 +2661,48 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def native_forms(self, server, request):
+        """The provider-native lifecycle forms of one resource kind.
+
+        Owner decision 2026-11-11 (option 1): a kind that has no form in the
+        descriptor bundle is edited with the form its provider declares in
+        the visual-administration catalog, so the client falls back to it.
+        """
+        if not isinstance(request, dict) or set(request).difference({
+                'resource_kind', 'database_target_id'}):
+            raise ProviderWorkspaceError('native form request is invalid')
+        kind = request.get('resource_kind')
+        if not isinstance(kind, str) or not kind:
+            raise ProviderWorkspaceError('resource kind is required')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server,
+            database_target_id=request.get('database_target_id', Ellipsis),
+        )
+        binding = self.endpoint_service.provider_registry.resolve(context)
+        describe_admin = getattr(
+            binding.instance, 'visual_admin_descriptor', None)
+        catalog = describe_admin() if callable(describe_admin) else None
+        operations = []
+        for item in (catalog or {}).get('objects', []):
+            if item.get('resource_kind') != kind:
+                continue
+            for operation in item.get('operations', []):
+                form = operation.get('form') or {}
+                if (operation.get('execution_route') != 'provider-native' or
+                        not isinstance(form.get('fields'), list)):
+                    continue
+                operations.append({
+                    'operation_id': operation.get('operation_id'),
+                    'title': form.get('title') or operation.get('title'),
+                    'fields': copy.deepcopy(form['fields']),
+                    'notes': form.get('notes'),
+                    'confirmation_required': bool(
+                        operation.get('confirmation_required')),
+                    'target_required': operation.get(
+                        'target_required', True) is not False,
+                })
+        return {'resource_kind': kind, 'operations': operations}
+
     def browse_source(self, server, request):
         """Editor text reading one resource's records (Browse data).
 

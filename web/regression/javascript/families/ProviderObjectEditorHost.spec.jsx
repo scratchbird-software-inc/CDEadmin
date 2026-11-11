@@ -9,7 +9,7 @@ beforeEach(() => {
   window.innerHeight = 1200;
 });
 
-function fakeApi(bundle, resource) {
+function fakeApi(bundle, resource, nativeForms={operations: []}) {
   const calls = [];
   return {
     calls,
@@ -18,6 +18,7 @@ function fakeApi(bundle, resource) {
       calls.push(payload);
       switch(payload.action) {
       case 'resource_inspect': return {data: {success: 1, data: resource}};
+      case 'native_forms': return {data: {success: 1, data: nativeForms}};
       case 'visual_admin_validate': return {data: {success: 1, data: {valid: true, errors: []}}};
       case 'visual_admin_plan': return {data: {success: 1, data: {plan_id: 'plan-1', plan_digest: 'digest-1', state: 'ready',
         execution_available: true, confirmation_required: false,
@@ -61,6 +62,28 @@ describe('ProviderObjectEditorHost', () => {
     expect(api.calls.at(-1)).toMatchObject({action: 'visual_admin_apply',
       request: {plan_id: 'plan-1', plan_digest: 'digest-1', confirmed: true}});
     expect(screen.getByText('Applied.')).toBeInTheDocument();
+  });
+
+  it('falls back to the provider\'s own form for a kind without a bundle form (owner decision 2026-11-11)', async () => {
+    const bundle = loadEngineBundle('postgresql');
+    expect(bundle.forms['engine_object:column']).toBeUndefined();
+    const column = {resource_id: 'col-1', resource_kind: 'column', display_name: 'amount', display_path: ['demo', 'shop', 'orders', 'amount'],
+      extensions: {postgresql: {native: {name: 'amount', column_facts: {name: 'amount', cltype: 'numeric(10,2)', attnotnull: true}}},
+        cdeadmin: {database_target_id: 'db-1'}}};
+    const nativeForms = {resource_kind: 'column', operations: [{operation_id: 'alter', title: 'Edit column', notes: null,
+      confirmation_required: false, target_required: true, fields: [
+        {field_id: 'name', label: 'Name', control: 'text', required: false, initial_value_path: ['column_facts', 'name']},
+        {field_id: 'cltype', label: 'Data type', control: 'text', required: false, initial_value_path: ['column_facts', 'cltype']},
+        {field_id: 'attnotnull', label: 'Not NULL', control: 'boolean', required: false, initial_value_path: ['column_facts', 'attnotnull']}]}]};
+    const api = fakeApi(bundle, column, nativeForms);
+    render(<Theme><ProviderObjectEditorHost api={api} endpointUrl="/browser/server/cde_workspace/1/18" engine="postgresql"
+      version="18.3" resourceId="col-1" resourceKind="column" databaseTargetId="db-1" mode="alter"
+      displayName="amount" onClose={() => {}} onApplied={() => {}} /></Theme>);
+    await screen.findByRole('dialog', {name: /Edit column — amount/});
+    expect(api.calls.find((call) => call.action === 'native_forms')).toMatchObject({request: {resource_kind: 'column'}});
+    // Initial values follow the native form's initial_value_path into the native block.
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('amount');
+    expect(screen.getByLabelText(/^Data type/)).toHaveValue('numeric(10,2)');
   });
 
   it('fixes the variant the resource kind declares, in create mode too', async () => {

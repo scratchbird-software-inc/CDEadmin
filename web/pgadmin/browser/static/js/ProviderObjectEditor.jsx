@@ -38,6 +38,16 @@ function resourceEditorAvailable(bundle, resourceKind) {
   return bundle?.kinds?.[resourceKind]?.family !== 'server' && editorAvailable(bundle, resourceKind);
 }
 
+/**
+ * Whether a node can open the editor for an operation: a bundle form, or the
+ * provider's own form the server flagged on the node (owner decision
+ * 2026-11-11, option 1: `cde_native_editor` lists create/alter/drop).
+ */
+function nodeEditorAvailable(bundle, resourceKind, itemData, operation) {
+  return resourceEditorAvailable(bundle, resourceKind) ||
+    (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation));
+}
+
 /*
  * LEGACY REGISTRATION RETIRED (2026-10-28) for these engines. Their Server form in
  * ui_descriptors/<engine>/forms/server.form.json is `complete`, and register / edit now go only
@@ -129,7 +139,7 @@ export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
     // No descriptors served for this engine: the legacy workspace still works.
     return false;
   }
-  if(!resourceEditorAvailable(bundle, itemData.cde_resource_kind)) return false;
+  if(!nodeEditorAvailable(bundle, itemData.cde_resource_kind, itemData, 'alter')) return false;
   return openEditorPanel({context, itemData, item, resourceKind: itemData.cde_resource_kind,
     resourceId: itemData.cde_resource_id, mode, displayName: itemData.label || itemData._label});
 }
@@ -139,7 +149,7 @@ export function openFamilyCreate(itemData, item, resourceKind) {
   const context = treeContext(itemData, item);
   if(!context) return false;
   const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
-  if(!bundle || !resourceEditorAvailable(bundle, resourceKind)) return false;
+  if(!bundle || !nodeEditorAvailable(bundle, resourceKind, itemData, 'create')) return false;
   return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
     displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
 }
@@ -225,7 +235,7 @@ export function familyEditorContextActions(itemData, item) {
   const entries = [];
   const resourceKind = providerServer ? 'server' :
     itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
-  if(itemData._type === 'cde_resource' && resourceEditorAvailable(bundle, resourceKind)) {
+  if(itemData._type === 'cde_resource' && nodeEditorAvailable(bundle, resourceKind, itemData, 'alter')) {
     entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
   }
@@ -234,7 +244,7 @@ export function familyEditorContextActions(itemData, item) {
     itemData._type === 'cde_database_target' ?
       Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
         !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind) : [];
-  const creatable = childKinds.filter((kind) => resourceEditorAvailable(bundle, kind) && bundle.kinds[kind]?.tier1.includes('create'));
+  const creatable = childKinds.filter((kind) => nodeEditorAvailable(bundle, kind, itemData, 'create') && bundle.kinds[kind]?.tier1.includes('create'));
   if(creatable.length === 1) {
     entries.push({category: 'common', id: `family-editor-create-${creatable[0]}`,
       label: gettext('Create %s...', kindTitle(bundle, creatable[0])), iconKey: 'action.create',

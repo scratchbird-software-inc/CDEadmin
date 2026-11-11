@@ -109,6 +109,40 @@ export function resolveBundle({engine, families, capabilities, operations=[], na
     forms: resolvedForms, kinds};
 }
 
+/**
+ * A resolved form built from a provider-native lifecycle form (owner decision
+ * 2026-11-11, option 1): kinds with no form in the descriptor bundle are
+ * edited with the form their provider declares in the visual-administration
+ * catalog. Its fields go on General; the SQL tab shows the provider plan.
+ */
+export function nativeEditorForm(resourceKind, nativeOperation, {title=null}={}) {
+  if(!nativeOperation || !Array.isArray(nativeOperation.fields)) return null;
+  const fields = nativeOperation.fields.filter((field) => field.field_id !== 'confirmation');
+  const familyTitle = title || resourceKind.replace(/-/g, ' ');
+  return {
+    family: 'engine_object', resource_kinds: [resourceKind], status: 'complete', native: true,
+    title: nativeOperation.title || familyTitle, notes: nativeOperation.notes || null, fields,
+    tabs: [
+      {tab: 'General', title: 'General', primitive: 'group', required: true, fields, grid_columns: [], nested: []},
+      {tab: 'SQL', title: 'SQL', primitive: 'sql_preview', required: true, fields: [], grid_columns: [], nested: []},
+    ],
+    family_title: familyTitle, family_tabs: ['General', 'SQL'], missing_required_tabs: [],
+  };
+}
+
+/** Read a native form field's initial value from the inspected resource's native block. */
+export function nativeInitialValues(form, native={}) {
+  const record = {};
+  for(const field of form?.fields || []) {
+    const path = field.initial_value_path;
+    if(!Array.isArray(path) || !path.length) continue;
+    let value = native;
+    for(const part of path) value = value == null ? undefined : value[part];
+    if(value !== undefined) record[field.field_id] = value;
+  }
+  return record;
+}
+
 /** The resolved form that edits a resource kind, or null when none is declared. */
 export function formForKind(bundle, resourceKind) {
   const kind = bundle?.kinds?.[resourceKind];
