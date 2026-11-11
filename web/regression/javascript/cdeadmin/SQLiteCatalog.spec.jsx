@@ -1,3 +1,4 @@
+/* global globalThis */
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import SQLiteCatalog from 'sources/Dialogs/SQLiteCatalog';
 import {withTheme} from '../fake_theme';
@@ -6,7 +7,9 @@ jest.mock('sources/cdeadmin_ui/integrations/ddn', () => ({
   DDNViewerSurface: () => <div>SQLite DDN viewer</div>,
 }));
 jest.mock('sources/Dialogs/FirebirdCatalogDesigner', () => () => null);
-jest.mock('sources/Dialogs/FirebirdERD', () => ({onReview}) => <button onClick={() => onReview(globalThis.__review)}>Mock diagram review</button>);
+jest.mock('sources/Dialogs/FirebirdERD', () => function MockDiagramReview({onReview}) {
+  return <button onClick={() => onReview(globalThis.__review)}>Mock diagram review</button>;
+});
 
 const Component = withTheme(SQLiteCatalog);
 const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn',
@@ -294,7 +297,7 @@ it('turns diagram rename arguments into a native rename design before preview', 
   await waitFor(()=>expect(screen.getByRole('button',{name:'Preview native changes'})).toBeEnabled());
   fireEvent.click(screen.getByRole('button',{name:'Preview native changes'}));
   await waitFor(()=>expect(post).toHaveBeenLastCalledWith({action:'sqlite_schema_plan',request:{database_target_id:'file-1',
-    baseline:JSON.stringify(snapshot),desired:expect.any(String),deletions:[],rebuilds:[],column_renames:[],renames,}}));
+    baseline:JSON.stringify(snapshot),desired:expect.any(String),deletions:[],rebuilds:[],column_renames:[],renames}}));
 });
 
 it('carries the diagram review rebuild identities into the native preview', async () => {

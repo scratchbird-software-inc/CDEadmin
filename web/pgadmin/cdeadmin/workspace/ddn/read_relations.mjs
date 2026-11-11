@@ -60,7 +60,7 @@ try {
     if(definition?.record.role !== 'ref' || definition.record.endpoints?.length !== 2) return undefined;
     const [from, to] = definition.record.endpoints.map(endpoint => endpoint.definition);
     return {source: resourceIds.get(key(from?.file || file, from?.id)) ?? null,
-            target: resourceIds.get(key(to?.file || file, to?.id)) ?? null};
+      target: resourceIds.get(key(to?.file || file, to?.id)) ?? null};
   };
   for(const {row, subject, native} of rowInfo) {
     const file = JSON.parse(subject)[0];

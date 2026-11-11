@@ -377,7 +377,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     {display === 'relations' && result?.diagram?.snapshot && !includeSystem && <FirebirdERD engine="sqlite" diagram={result.diagram}
       post={post} databaseTargetId={databaseTargetId} onReviewBusyChange={setBusy}
       onReview={reviewDiagram} />}
-    {display === 'relations' && includeSystem && <Alert severity="info">Diagram review requires user-object-only capture; clear "Include system objects" and capture again.</Alert>}
+    {display === 'relations' && includeSystem && <Alert severity="info">Diagram review requires user-object-only capture; clear &quot;Include system objects&quot; and capture again.</Alert>}
     {shown?.snapshot && display !== 'relations' && <Box sx={{height: 500, minHeight: 250, overflow: 'auto'}}>
       <DDNViewerSurface presentation snapshot={{...shown.snapshot, view,
         entry: shown.views.find(item => item.id === view)?.entry || shown.snapshot.entry}} />

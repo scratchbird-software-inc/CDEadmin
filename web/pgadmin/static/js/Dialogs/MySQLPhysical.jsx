@@ -14,7 +14,7 @@ const phaseOptions = (current, phase, input_job_id) => {
   const {mysqld, recovery_gtid_mode, recovery_port, recovery_mode, recovery_server_id, recovery_local_infile, recovery_federated, recovery_tls, incremental_job_id, deployment, ...base} = current;
   return {...base, phase, input_job_id, ...(phase === 'prepare_redo' ? {incremental_job_id: incremental_job_id || null} : {}), ...(phase === 'recover' ? {mysqld: mysqld || '/usr/sbin/mysqld', recovery_gtid_mode: recovery_gtid_mode || 'ON', recovery_port: recovery_port ?? 3307,
     recovery_mode: recovery_mode || 'read_only', recovery_local_infile: recovery_local_infile ?? false, recovery_federated: recovery_federated ?? false, ...(recovery_tls ? {recovery_tls} : {}), ...(recovery_mode === 'replay' ? {recovery_server_id: recovery_server_id || 10001} : {})} : {}),
-    ...(phase === 'deploy' ? {deployment: deployment || {directory: '/var/lib/scratchrobin-recovered', service: 'scratchrobin-recovered.service', bind_address: '127.0.0.1', port: 3307, server_id: 10002}} : {})};
+  ...(phase === 'deploy' ? {deployment: deployment || {directory: '/var/lib/scratchrobin-recovered', service: 'scratchrobin-recovered.service', bind_address: '127.0.0.1', port: 3307, server_id: 10002}} : {})};
 };
 export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
   const [options, setOptions] = useState(initial), [credentials, setCredentials] = useState({});

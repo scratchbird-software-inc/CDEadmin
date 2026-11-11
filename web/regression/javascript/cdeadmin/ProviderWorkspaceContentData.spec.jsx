@@ -7,12 +7,9 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, screen, waitFor, within, useLayoutEffect, useState, render, bootstrap,
-  ProviderWorkspaceContent, DatabaseTargetWorkspace, ObjectInspectorSection, ResultControls,
-  RecordListAdminField, ServerProfileWorkspace, VisualAdministration, VisualAdminField,
-  inspectorSections, initialObjectDraft, visibleFieldOptions, changedFieldDraft,
-  administrationResourceId, administrationOutcomeValue, ProviderWorkspaceModule, modelFixtures,
-  getApiInstance, requestSQLSource, firebirdManifest, installSharedHooks, installWorkspaceHooks,
+import {
+  act, fireEvent, screen, waitFor, within, render, bootstrap, ProviderWorkspaceContent,
+  modelFixtures, installSharedHooks, installWorkspaceHooks,
 } from './providerWorkspaceContentShared';
 
 jest.mock('../../../pgadmin/static/js/api_instance');
