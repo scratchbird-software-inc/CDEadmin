@@ -27,7 +27,7 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'tablespace',
     # M5 (2026-11-11).
     'cast', 'collation', 'language', 'foreign-data-wrapper',
-    'foreign-server', 'user-mapping',
+    'foreign-server', 'user-mapping', 'publication', 'subscription',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -365,6 +365,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind in {'foreign-data-wrapper', 'foreign-server', 'user-mapping'}:
         from .foreign_objects import compile_operation as compile_foreign
         return compile_foreign(kind, operation, native, draft)
+    if kind in {'publication', 'subscription'}:
+        from .replication import compile_operation as compile_replication
+        return compile_replication(kind, operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

@@ -1674,3 +1674,109 @@ def test_foreign_objects_lifecycle_round_trips(live):
     finally:
         query('DROP FOREIGN DATA WRAPPER IF EXISTS "ui ops fdw" CASCADE')
         query('DROP FOREIGN DATA WRAPPER IF EXISTS ui_ops_fdw CASCADE')
+
+
+# -- M5 (2026-11-11): publication and subscription editors, provider-native, observed live --------
+def publication_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.replication import publication_facts
+    rows = query(f"""SELECT p.puballtables, p.pubinsert, p.pubupdate, p.pubdelete, p.pubtruncate, p.pubviaroot,
+                            d.description, pg_get_userbyid(p.pubowner)
+                     FROM pg_publication p LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_publication'::regclass
+                     WHERE p.pubname='{name}'""")
+    assert len(rows) == 1, name
+    alltables, ins, upd, dele, trunc, root, comment, owner = rows[0]
+    members = query(f"""SELECT n.nspname, c.relname, c.oid::int, pr.prattrs::int[], pg_get_expr(pr.prqual, pr.prrelid)
+                        FROM pg_publication_rel pr JOIN pg_publication p ON p.oid=pr.prpubid
+                        JOIN pg_class c ON c.oid=pr.prrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                        WHERE p.pubname='{name}' ORDER BY c.relname""")
+    schemas = query(f"""SELECT n.nspname, n.oid::int FROM pg_publication_namespace pn JOIN pg_publication p ON p.oid=pn.pnpubid
+                        JOIN pg_namespace n ON n.oid=pn.pnnspid WHERE p.pubname='{name}'""")
+    relations = {m[2]: (m[0], m[1]) for m in members}
+    attributes = {m[2]: [{'attnum': a, 'attname': b} for a, b in query(
+        f'SELECT attnum, attname FROM pg_attribute WHERE attrelid={m[2]} AND attnum > 0')] for m in members}
+    native = {'name': name, 'comment': comment,
+              'catalog_row': {'pubname': name, 'puballtables': alltables, 'pubinsert': ins, 'pubupdate': upd,
+                              'pubdelete': dele, 'pubtruncate': trunc, 'pubviaroot': root},
+              'children': {'pg_publication_rel': [{'prrelid': str(m[2]), 'prattrs': m[3], 'row_filter_sql': m[4]}
+                                                  for m in members],
+                           'pg_publication_namespace': [{'pnnspid': str(s[1])} for s in schemas]}}
+    native['publication_facts'] = publication_facts(native, relations, attributes, {s[1]: s[0] for s in schemas})
+    native['owner'] = owner
+    return native
+
+
+def subscription_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.replication import subscription_facts
+    rows = query(f"""SELECT s.subpublications, s.subenabled, s.subslotname, s.subsynccommit, s.subbinary, s.substream,
+                            s.subtwophasestate, s.subdisableonerr, s.subrunasowner, s.subpasswordrequired, s.suborigin,
+                            s.subfailover, d.description
+                     FROM pg_subscription s LEFT JOIN pg_description d ON d.objoid=s.oid AND d.classoid='pg_subscription'::regclass
+                     WHERE s.subname='{name}'""")
+    assert len(rows) == 1, name
+    keys = ('subpublications', 'subenabled', 'subslotname', 'subsynccommit', 'subbinary', 'substream',
+            'subtwophasestate', 'subdisableonerr', 'subrunasowner', 'subpasswordrequired', 'suborigin', 'subfailover')
+    native = {'name': name, 'comment': rows[0][12], 'catalog_row': dict(zip(keys, rows[0][:12]), subname=name,
+                                                                        connection_redacted=True)}
+    native['subscription_facts'] = subscription_facts(native)
+    return native
+
+
+@live_only
+def test_publication_and_subscription_lifecycles_round_trip(live):
+    # Publications and a non-connecting subscription (connect = false, no slot) need no logical WAL.
+    query('CREATE SCHEMA "Rep schema"; CREATE TABLE "Rep schema".t (id int PRIMARY KEY, note text); '
+          'CREATE TABLE "Rep schema".u (id int PRIMARY KEY); CREATE SCHEMA rep_other')
+    try:
+        run_kind(live, 'publication', 'create', {
+            'name': 'ui ops pub', 'pubtable': [{'table_name': '"Rep schema".t', 'columns': 'id, note',
+                                                'where': 'id > 0'}],
+            'evnt_insert': True, 'evnt_update': True, 'evnt_delete': False, 'evnt_truncate': False,
+            'publish_via_partition_root': True, 'description': "it's"})
+        publication = publication_native('ui ops pub')
+        facts = publication['publication_facts']
+        assert (facts['evnt_delete'], facts['publish_via_partition_root'], publication['comment']) == (
+            False, True, "it's")
+        assert facts['pubtable'] == [{'table_name': 'Rep schema.t', 'columns': 'id, note', 'where': '(id > 0)'}]
+        run_kind(live, 'publication', 'alter', {
+            'name': 'ui_ops_pub', 'evnt_delete': True, 'add_tables': [{'table_name': '"Rep schema".u'}],
+            'drop_tables': [{'table_name': '"Rep schema".t'}], 'description': ''}, publication)
+        publication = publication_native('ui_ops_pub')
+        assert publication['publication_facts']['evnt_delete'] is True
+        assert [item['table_name'] for item in publication['publication_facts']['pubtable']] == ['Rep schema.u']
+        run_kind(live, 'publication', 'create', {'name': 'ui_ops_schemas', 'pubschema': [{'schema': 'rep_other'}]})
+        assert publication_native('ui_ops_schemas')['publication_facts']['pubschema'] == [{'schema': 'rep_other'}]
+        # A subscription to this same server, created without connecting (no slot, disabled).
+        run_kind(live, 'subscription', 'create', {
+            'name': 'ui ops sub', 'host': SETTINGS['host'], 'port': SETTINGS['port'], 'db': DATABASE,
+            'username': SETTINGS['user'], 'pub': 'ui_ops_pub', 'connect': False, 'enabled': False,
+            'create_slot': False, 'copy_data': False, 'slot_name': 'NONE', 'sync': 'off', 'streaming': 'on',
+            'binary': True})
+        subscription = subscription_native('ui ops sub')
+        facts = subscription['subscription_facts']
+        assert (facts['pub'], facts['enabled'], facts['slot_name'], facts['streaming'], facts['binary']) == (
+            ['ui_ops_pub'], False, None, 'on', True)
+        run_kind(live, 'subscription', 'alter', {
+            'name': 'ui_ops_sub', 'sync': 'local', 'binary': False, 'pub': 'ui_ops_pub, ui_ops_schemas',
+            'enabled': False, 'description': 'mirror'}, subscription)
+        subscription = subscription_native('ui_ops_sub')
+        facts = subscription['subscription_facts']
+        assert (sorted(facts['pub']), facts['sync'], facts['binary'], subscription['comment']) == (
+            ['ui_ops_pub', 'ui_ops_schemas'], 'local', False, 'mirror')
+        # The alter form has no connection fields, so the draft is refused before the compiler's own
+        # "credentials" refusal; either way no connection change can run from here.
+        with pytest.raises(Exception):
+            provider, route = live
+            provider.plan_visual_admin({'resource_kind': 'subscription', 'operation_id': 'alter',
+                                        'target_resource': target(None, 'subscription', subscription),
+                                        '_provider_route': route, 'draft': {'host': 'elsewhere'}})
+        run_kind(live, 'subscription', 'drop', {'confirmation': 'ui_ops_sub'}, subscription)
+        run_kind(live, 'publication', 'drop', {'confirmation': 'ui_ops_pub'}, publication)
+        run_kind(live, 'publication', 'drop', {'confirmation': 'ui_ops_schemas'},
+                 publication_native('ui_ops_schemas'))
+        assert query("SELECT count(*) FROM pg_publication WHERE pubname LIKE 'ui%'") == [(0,)]
+    finally:
+        query('DROP SUBSCRIPTION IF EXISTS "ui ops sub"')
+        query('DROP SUBSCRIPTION IF EXISTS ui_ops_sub')
+        query('DROP PUBLICATION IF EXISTS "ui ops pub"; DROP PUBLICATION IF EXISTS ui_ops_pub; '
+              'DROP PUBLICATION IF EXISTS ui_ops_schemas')
+        query('DROP SCHEMA "Rep schema" CASCADE; DROP SCHEMA rep_other CASCADE')

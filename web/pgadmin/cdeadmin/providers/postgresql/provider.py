@@ -1180,6 +1180,14 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
+            if item['resource_kind'] == 'publication':
+                from .replication import publication_facts
+                native['publication_facts'] = publication_facts(
+                    native, relations, attributes,
+                    {oid: name for name, oid in schemas.items()})
+            if item['resource_kind'] == 'subscription':
+                from .replication import subscription_facts
+                native['subscription_facts'] = subscription_facts(native)
             if item['resource_kind'] in {'foreign-data-wrapper',
                                          'foreign-server', 'user-mapping'}:
                 from .foreign_objects import FACTS as foreign_facts

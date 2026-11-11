@@ -237,7 +237,9 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                         'subdisableonerr', 'subpasswordrequired', 'subrunasowner',
                         'subfailover', 'subslotname', 'subsynccommit', 'subpublications', 'suborigin')
                     native = 'jsonb_build_object(' + ','.join(f"'{field}',c.{field}" for field in fields) + ", 'connection_redacted',true)"
-                description = 'shobj_description' if catalog == 'pg_subscription' else 'obj_description'
+                # A subscription's comment is in pg_description (COMMENT ON SUBSCRIPTION), like
+                # every database-local object; pg_shdescription holds none for it (M5, 2026-11-11).
+                description = 'obj_description'
                 native_identity = f"(pg_catalog.pg_identify_object('pg_catalog.{catalog}'::regclass,c.oid,0)).identity"
                 query = sql.SQL(f"SELECT {identity}, {name}, {namespace}, ({native})::text, {definition}, pg_catalog.{description}(c.oid, %s), {native_identity} FROM pg_catalog.{{}} c {joins} WHERE {where} ORDER BY c.oid").format(sql.Identifier(storage_catalog))
 

@@ -320,6 +320,20 @@ with options, altered through its options. The capture redacts these
 options, so changes are explicit rows rather than a diff, and options that
 carry a credential (password, passfile, SSL password and key) are refused
 here and stay with the inherited dialog, so a plan never shows a secret.
+Third slice (2026-11-11), the publication and subscription editors: a
+publication for all tables, listed tables with column lists and row
+filters, or tables in schemas, with the published operations, publishing
+via the partition root, owner and comment, altered through rename, owner,
+operations, tables and schemas added or dropped, and comment; a
+subscription whose connection is built from the dialog's non-secret
+settings (host, port, database, user, password file and SSL settings,
+never a password), with publications and every option PostgreSQL 13 to 17
+knows, created as one statement outside a transaction as PostgreSQL
+requires, altered through rename, owner, enable state, options,
+publication list and comment, with REFRESH PUBLICATION run alone; the
+connection string is never shown and a change to it stays with the
+inherited dialog. Column lists, row filters, schema publications and the
+published-operation subset, which YugabyteDB refuses, are offered here.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -434,6 +434,7 @@ def adapt_catalog(catalog):
         'procedure', 'index', 'trigger', 'event-trigger', 'rule', 'role',
         'tablespace', 'cast', 'collation', 'language',
         'foreign-data-wrapper', 'foreign-server', 'user-mapping',
+        'publication', 'subscription',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -490,6 +491,9 @@ def adapt_catalog(catalog):
                     'user-mapping'}:
             from .foreign_objects import form as foreign_form
             return foreign_form(kind, operation_id, field)
+        if kind in {'publication', 'subscription'}:
+            from .replication import form as replication_form
+            return replication_form(kind, operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -635,7 +639,8 @@ def adapt_catalog(catalog):
                              'event-trigger', 'rule', 'role',
                              'tablespace', 'cast', 'collation',
                              'language', 'foreign-data-wrapper',
-                             'foreign-server', 'user-mapping'} and
+                             'foreign-server', 'user-mapping',
+                             'publication', 'subscription'} and
                     operation_id == 'inspect') and not (
                     kind == 'database' and operation_id == 'drop'):
                 # Object-family inspection is the provider tree's own (M3);
