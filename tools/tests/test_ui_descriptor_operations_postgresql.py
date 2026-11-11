@@ -1263,3 +1263,133 @@ def test_index_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_class WHERE relname IN ('ix_two', 'ix_conc')") == [(0,)]
     finally:
         query('DROP SCHEMA "Ix schema" CASCADE')
+
+
+# -- M4 (2026-11-11): trigger, event trigger and rule editors, provider-native, observed live -----
+def trigger_native(schema, table, name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import trigger_facts
+    rows = query(f"""SELECT pg_get_triggerdef(t.oid), t.tgenabled, t.tgisinternal, d.description
+                     FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_trigger'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND t.tgname='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    definition, enabled, internal, comment = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'tgname': name, 'tgenabled': enabled, 'tgisinternal': internal}}
+    native['trigger_facts'] = trigger_facts(native)
+    return native
+
+
+def rule_native(schema, table, name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import rule_facts
+    rows = query(f"""SELECT pg_get_ruledef(r.oid), r.ev_enabled, r.is_instead, d.description
+                     FROM pg_rewrite r JOIN pg_class c ON c.oid=r.ev_class JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=r.oid AND d.classoid='pg_rewrite'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND r.rulename='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    definition, enabled, instead, comment = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'rulename': name, 'ev_enabled': enabled, 'is_instead': instead}}
+    native['rule_facts'] = rule_facts(native)
+    return native
+
+
+def event_trigger_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import event_trigger_facts
+    rows = query(f"""SELECT e.evtevent, e.evttags, e.evtenabled, d.description, e.evtfoid::regproc::text
+                     FROM pg_event_trigger e LEFT JOIN pg_description d ON d.objoid=e.oid
+                     AND d.classoid='pg_event_trigger'::regclass WHERE e.evtname='{name}'""")
+    assert len(rows) == 1, name
+    event, tags, enabled, comment, function = rows[0]
+    native = {'name': name, 'comment': comment,
+              'catalog_row': {'evtname': name, 'evtevent': event, 'evttags': tags, 'evtenabled': enabled}}
+    native['event_trigger_facts'] = event_trigger_facts(native)
+    native['function'] = function
+    return native
+
+
+@live_only
+def test_trigger_and_rule_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Tr schema"; CREATE TABLE "Tr schema".orders (id int, status text); '
+          'CREATE TABLE "Tr schema".log (note text); '
+          'CREATE FUNCTION "Tr schema".log_it() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN '
+          "INSERT INTO \"Tr schema\".log VALUES (TG_ARGV[0]); RETURN NEW; END $$")
+    try:
+        run_kind(live, 'trigger', 'create', {
+            # A transition table is allowed with one event only (server rule).
+            'name': 'audit', 'schema': 'Tr schema', 'table': 'orders', 'fires': 'AFTER',
+            'evnt_insert': True, 'is_row_trigger': True, 'tgnewtable': 'newrows', 'whenclause': 'new.id > 0',
+            'tfunction': '"Tr schema".log_it', 'tgargs': 'first', 'description': "it's"})
+        native = trigger_native('Tr schema', 'orders', 'audit')
+        facts = native['trigger_facts']
+        assert (facts['evnt_insert'], facts['evnt_update'], facts['tgnewtable'], facts['tgargs'],
+                native['comment']) == (True, False, 'newrows', 'first', "it's")
+        query('INSERT INTO "Tr schema".orders VALUES (1, \'new\')')
+        assert query('SELECT note FROM "Tr schema".log') == [('first',)]
+        # CREATE OR REPLACE with the same name: add UPDATE OF status, drop the transition table, disable, rename.
+        run_kind(live, 'trigger', 'alter', {
+            'evnt_update': True, 'columns': [{'column': 'status'}], 'tgnewtable': '', 'tgargs': 'second',
+            'is_enable_trigger': 'D', 'description': '', 'name': 'audit_rows'}, native)
+        native = trigger_native('Tr schema', 'orders', 'audit_rows')
+        facts = native['trigger_facts']
+        assert (facts['evnt_update'], facts['columns'], facts['tgnewtable'], facts['tgargs'],
+                facts['is_enable_trigger'], native['comment']) == (True, ['status'], None, 'second', 'D', None)
+        query('INSERT INTO "Tr schema".orders VALUES (2, \'new\')')
+        assert query('SELECT count(*) FROM "Tr schema".log') == [(1,)]
+        run_kind(live, 'trigger', 'create', {
+            'name': 'check_it', 'schema': 'Tr schema', 'table': 'orders', 'is_constraint_trigger': True,
+            'fires': 'AFTER', 'evnt_delete': True, 'tgdeferrable': True, 'tginitdeferred': True,
+            'is_row_trigger': True, 'tfunction': '"Tr schema".log_it', 'tgargs': 'c'})
+        constraint = trigger_native('Tr schema', 'orders', 'check_it')
+        assert (constraint['trigger_facts']['is_constraint_trigger'], constraint['trigger_facts']['tginitdeferred']) \
+            == (True, True)
+        run_kind(live, 'trigger', 'alter', {'tginitdeferred': False}, constraint)
+        assert trigger_native('Tr schema', 'orders', 'check_it')['trigger_facts']['tginitdeferred'] is False
+        run_kind(live, 'trigger', 'drop', {'confirmation': 'audit_rows'}, native)
+        # Rules: a DO ALSO rule on UPDATE, then replaced, disabled and renamed.
+        run_kind(live, 'rule', 'create', {
+            'name': 'log_updates', 'schema': 'Tr schema', 'view': 'orders', 'event': 'UPDATE',
+            'do_instead': False, 'condition': 'old.status <> new.status',
+            'statements': 'INSERT INTO "Tr schema".log VALUES (\'rule\')', 'comment': 'log'})
+        rule = rule_native('Tr schema', 'orders', 'log_updates')
+        assert (rule['rule_facts']['event'], rule['rule_facts']['do_instead'], rule['comment']) == (
+            'UPDATE', False, 'log')
+        query('UPDATE "Tr schema".orders SET status = \'done\' WHERE id = 1')
+        assert query("SELECT count(*) FROM \"Tr schema\".log WHERE note='rule'") == [(1,)]
+        run_kind(live, 'rule', 'alter', {'statements': 'NOTHING', 'do_instead': True, 'is_enable_rule': 'D',
+                                         'comment': '', 'name': 'ignore_updates'}, rule)
+        rule = rule_native('Tr schema', 'orders', 'ignore_updates')
+        assert (rule['rule_facts']['statements'], rule['rule_facts']['do_instead'],
+                rule['rule_facts']['is_enable_rule']) == ('NOTHING', True, 'D')
+        run_kind(live, 'rule', 'drop', {'confirmation': 'ignore_updates'}, rule)
+        assert query("SELECT count(*) FROM pg_rewrite WHERE rulename='ignore_updates'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Tr schema" CASCADE')
+
+
+@live_only
+def test_event_trigger_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('event triggers need a superuser')
+    query("CREATE FUNCTION public.ui_ops_note() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN "
+          "RAISE NOTICE 'noted'; END $$")
+    try:
+        run_kind(live, 'event-trigger', 'create', {
+            'name': 'ui_ops_notes', 'eventname': 'ddl_command_end', 'when': 'CREATE TABLE, DROP TABLE',
+            'eventfunname': 'public.ui_ops_note', 'comment': "it's"})
+        native = event_trigger_native('ui_ops_notes')
+        assert (native['event_trigger_facts']['eventname'], native['event_trigger_facts']['when'],
+                native['comment']) == ('ddl_command_end', 'CREATE TABLE, DROP TABLE', "it's")
+        run_kind(live, 'event-trigger', 'alter', {'enabled': 'D', 'comment': '', 'name': 'ui_ops_quiet'}, native)
+        native = event_trigger_native('ui_ops_quiet')
+        assert (native['event_trigger_facts']['enabled'], native['comment']) == ('D', None)
+        run_kind(live, 'event-trigger', 'alter', {'when': 'DROP TABLE', 'eventfunname': 'public.ui_ops_note',
+                                                  'enabled': 'O'}, native)
+        native = event_trigger_native('ui_ops_quiet')
+        assert (native['event_trigger_facts']['when'], native['event_trigger_facts']['enabled']) == (
+            'DROP TABLE', 'O')
+        run_kind(live, 'event-trigger', 'drop', {'confirmation': 'ui_ops_quiet'}, native)
+        assert query("SELECT count(*) FROM pg_event_trigger WHERE evtname LIKE 'ui_ops%'") == [(0,)]
+    finally:
+        query("DROP EVENT TRIGGER IF EXISTS ui_ops_notes; DROP EVENT TRIGGER IF EXISTS ui_ops_quiet; "
+              "DROP FUNCTION public.ui_ops_note()")

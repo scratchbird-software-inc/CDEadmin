@@ -1174,6 +1174,16 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
+            if item['resource_kind'] in {'trigger', 'rule', 'event-trigger'}:
+                from .triggers import (
+                    event_trigger_facts, rule_facts, trigger_facts)
+                reader, key = {
+                    'trigger': (trigger_facts, 'trigger_facts'),
+                    'rule': (rule_facts, 'rule_facts'),
+                    'event-trigger': (event_trigger_facts,
+                                      'event_trigger_facts'),
+                }[item['resource_kind']]
+                native[key] = reader(native)
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)

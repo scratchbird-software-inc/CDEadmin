@@ -270,7 +270,20 @@ fill factor and other storage parameters, tablespace, a WHERE predicate and
 comment; alter renames, moves tablespace, sets or resets storage
 parameters, clusters the table on the index and sets the comment, while the
 columns stay fixed. A concurrent build or drop runs alone outside a
-transaction. Reindex was already native.
+transaction. Reindex was already native. Tenth slice (2026-11-11), the
+trigger, event trigger and rule editors: a trigger with timing, events and
+UPDATE OF columns, row or statement scope, WHEN condition, constraint
+trigger with deferrability, transition tables, the function and its
+arguments and a comment, altered through CREATE OR REPLACE for a changed
+definition (constraint triggers are dropped and created), enable state,
+comment and rename; an event trigger with event, command tags, function,
+owner and comment, altered through enable state, comment, owner and
+rename, with a changed event, tags or function as drop and create, as the
+inherited dialog does; a rule with event, condition, INSTEAD or ALSO and
+its commands, altered through CREATE OR REPLACE, enable state, comment and
+rename. Transition tables and constraint triggers, which YugabyteDB
+refuses, are offered here. Internal constraint triggers belong to their
+constraint and are not edited.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -431,7 +431,7 @@ def adapt_catalog(catalog):
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
         'sequence', 'extension', 'row-policy', 'schema', 'database',
         'domain', 'type', 'view', 'materialized-view', 'function',
-        'procedure', 'index',
+        'procedure', 'index', 'trigger', 'event-trigger', 'rule',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -474,6 +474,9 @@ def adapt_catalog(catalog):
         if kind == 'index':
             from .indexes import form as index_form
             return index_form(operation_id, field)
+        if kind in {'trigger', 'event-trigger', 'rule'}:
+            from .triggers import form as trigger_form
+            return trigger_form(kind, operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -615,7 +618,8 @@ def adapt_catalog(catalog):
                     kind in {'sequence', 'extension', 'row-policy',
                              'schema', 'database', 'domain', 'type',
                              'view', 'materialized-view', 'function',
-                             'procedure', 'index'} and
+                             'procedure', 'index', 'trigger',
+                             'event-trigger', 'rule'} and
                     operation_id == 'inspect') and not (
                     kind == 'database' and operation_id == 'drop'):
                 # Object-family inspection is the provider tree's own (M3);
