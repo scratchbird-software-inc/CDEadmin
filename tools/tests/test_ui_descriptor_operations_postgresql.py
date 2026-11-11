@@ -57,7 +57,8 @@ live_only = pytest.mark.skipif(SETTINGS is None, reason='CDEADMIN_ROUNDTRIP_POST
 TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'import-server-file@large-object', 'export-server-file@large-object',
           'vacuum@table', 'analyze@table', 'reindex@table', 'cluster@table', 'truncate@table',
-          'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view'}
+          'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
+          'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -140,6 +141,35 @@ def test_maintenance_statements_are_quoted_and_allow_listed():
             ('index', 'cluster', {}), ('schema', 'vacuum', {})]:
         with pytest.raises(PostgreSQLNativeAdminError):
             compile_maintenance(kind, operation, table, draft)
+
+
+def test_server_operations_compile_without_a_target():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider
+    assert compile_maintenance('server', 'reload', {}, {}) == {
+        'statement': 'SELECT pg_catalog.pg_reload_conf() AS reloaded', 'read_only': False, 'autocommit': False,
+        'returns_rows': True, 'maintenance': {'action': 'reload', 'object_kind': 'server', 'object': None,
+                                              'options': [], 'transaction_mode': 'transaction'}}
+    assert compile_maintenance('server', 'restore-point', {}, {'name': "before it's"})['statement'] == \
+        "SELECT pg_catalog.pg_create_restore_point('before it''s') AS restore_point_lsn"
+    assert compile_maintenance('server', 'wal-replay-pause', {}, {})['statement'].endswith('pg_wal_replay_pause() AS paused')
+    for draft in ({'name': ''}, {'name': 'x' * 64}, {}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('server', 'restore-point', {}, draft)
+    with pytest.raises(PostgreSQLNativeAdminError):
+        compile_maintenance('server', 'reload', {}, {'verbose': True})
+    # Server scope: the route names the server only, and the dialog needs no target.
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'server', '_provider_route': {'server_id': 7}}) \
+        == {'server_id': 7, 'database_id': None}
+    for operation in ('reload', 'restore-point', 'wal-replay-pause', 'wal-replay-resume'):
+        provider = provider_form_fields(operation, 'server')
+        assert ('name' in provider) == (operation == 'restore-point'), operation
+    from pgadmin.cdeadmin.providers.postgresql.preserved_surface import adapt_catalog
+    catalog = adapt_catalog({'objects': []})
+    server = next(item for item in catalog['objects'] if item['resource_kind'] == 'server')
+    reload = next(op for op in server['operations'] if op['operation_id'] == 'reload')
+    assert (reload['target_required'], reload['confirmation_required'], reload['execution_route']) == (
+        False, True, 'provider-native')
 
 
 # -- live harness: psycopg behind the pgAdmin connection-manager surface the provider uses --------
@@ -1855,3 +1885,45 @@ def test_text_search_lifecycles_round_trip(live):
                      "WHERE n.nspname='Fts schema'") == [(0,)]
     finally:
         query('DROP SCHEMA "Fts schema" CASCADE')
+
+
+# -- M6 (2026-11-11): server operations from the server scope, provider-native, observed live -----
+def run_server(live, operation_id, values=None):
+    provider, _route = live
+    operation = OPERATIONS[f'{operation_id}@server']
+    draft = operation_draft(operation, values)
+    request = {'resource_kind': 'server', 'operation_id': operation_id, 'target_resource': None,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation['confirmation'] != 'none'), (operation_id, plan)
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    outcome = result['provider_result']
+    assert outcome['transaction_outcome'] == 'committed', outcome
+    return outcome
+
+
+@live_only
+def test_server_reload_and_restore_point(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('pg_reload_conf and restore points need a superuser')
+    outcome = run_server(live, 'reload')
+    assert outcome['result']['rows'] == [{'reloaded': True}]
+    assert outcome['maintenance_receipt']['action'] == 'reload'
+    if query("SELECT setting FROM pg_settings WHERE name='wal_level'") == [('minimal',)]:
+        pytest.skip('restore points need wal_level above minimal')
+    outcome = run_server(live, 'restore-point', {'name': f'ui ops {UNIQUE}'})
+    lsn = outcome['result']['rows'][0]['restore_point_lsn']
+    assert isinstance(lsn, str) and '/' in lsn
+
+
+@live_only
+def test_wal_replay_control_is_refused_on_a_primary(live):
+    if query('SELECT pg_is_in_recovery()') == [(True,)]:
+        pytest.skip('this server is a standby; pause and resume would succeed')
+    for operation_id in ('wal-replay-pause', 'wal-replay-resume'):
+        with pytest.raises(Exception):
+            run_server(live, operation_id)

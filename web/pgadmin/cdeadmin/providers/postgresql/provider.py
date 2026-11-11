@@ -404,7 +404,7 @@ class PostgreSQLProvider:
         # (M4): the attachment is the maintenance database, so no database
         # id.
         optional = request.get('resource_kind') in {'database', 'role',
-                                                    'tablespace'}
+                                                    'tablespace', 'server'}
         return {
             'server_id': _required_int(route, 'server_id'),
             'database_id': (route.get('database_id') if optional and

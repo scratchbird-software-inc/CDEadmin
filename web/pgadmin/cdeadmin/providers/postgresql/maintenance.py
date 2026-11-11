@@ -23,14 +23,21 @@ MAINTENANCE_OPERATIONS = {
     'schema': frozenset({'reindex'}),
     'database': frozenset({'reindex'}),
     'materialized-view': frozenset({'refresh'}),
+    # Server operations from the provider tree's server scope (M6, 2026-11-11):
+    # the inherited server menu's reload, restore point and WAL replay control.
+    'server': frozenset({'reload', 'restore-point', 'wal-replay-pause',
+                         'wal-replay-resume'}),
 }
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).
 CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
+    ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
     'truncate': 'destructive', 'refresh': 'admin',
+    'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
+    'wal-replay-resume': 'admin',
 }
 
 _OPTIONS = {
@@ -43,7 +50,12 @@ _OPTIONS = {
     ('table', 'cluster'): {'index', 'verbose'},
     ('table', 'truncate'): {'restart_identity', 'cascade', 'confirmation'},
     ('materialized-view', 'refresh'): {'concurrently', 'with_data'},
+    ('server', 'reload'): set(),
+    ('server', 'restore-point'): {'name'},
+    ('server', 'wal-replay-pause'): set(),
+    ('server', 'wal-replay-resume'): set(),
 }
+_RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
 
 
@@ -85,6 +97,8 @@ def compile_operation(kind, operation, native, draft):
         _refuse('Unknown PostgreSQL maintenance option')
     options = []
     autocommit = False
+    if kind == 'server':
+        return _server_operation(operation, draft)
     if kind in {'schema', 'database'}:
         target = _identifier(_name(native.get('name'), 'name'), 'name')
     else:
@@ -137,6 +151,28 @@ def compile_operation(kind, operation, native, draft):
     }
 
 
+def _server_operation(operation, draft):
+    """One server-wide function call; the result row is the receipt."""
+    from .native_admin import _literal
+    if operation == 'reload':
+        statement = 'SELECT pg_catalog.pg_reload_conf() AS reloaded'
+    elif operation == 'restore-point':
+        name = draft.get('name')
+        if not isinstance(name, str) or not _RESTORE_POINT.fullmatch(name):
+            _refuse('a restore point needs a name of at most 63 characters')
+        statement = ('SELECT pg_catalog.pg_create_restore_point('
+                     + _literal(name, 'name') + ') AS restore_point_lsn')
+    elif operation == 'wal-replay-pause':
+        statement = 'SELECT pg_catalog.pg_wal_replay_pause() AS paused'
+    else:
+        statement = 'SELECT pg_catalog.pg_wal_replay_resume() AS resumed'
+    return {
+        'statement': statement, 'read_only': False, 'autocommit': False, 'returns_rows': True,
+        'maintenance': {'action': operation, 'object_kind': 'server', 'object': None,
+                        'options': [], 'transaction_mode': 'transaction'},
+    }
+
+
 def form(kind, operation, field):
     """Dialog fields for the catalog form; mirrors the allow-list above."""
     def boolean(name, label, **kw):
@@ -164,7 +200,15 @@ def form(kind, operation, field):
     elif operation == 'refresh':
         fields = [boolean('with_data', 'Populate with data', default=True),
                   boolean('concurrently', 'Concurrently (requires a unique index)')]
+    elif operation == 'restore-point':
+        fields = [field('name', 'Restore point name', required=True,
+                        help='Recorded in the WAL; a recovery_target_name for point-in-time recovery.')]
     titles = {'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
-              'truncate': 'Truncate', 'refresh': 'Refresh'}
+              'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
+              'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
+              'wal-replay-resume': 'Resume WAL replay'}
+    if kind == 'server':
+        return {'form_id': f'postgresql-server-{operation}', 'form_key': 'native:postgresql:server:server',
+                'title': titles[operation], 'fields': fields}
     return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:schema:{kind}',
             'title': f'{titles[operation]} {kind.replace("-", " ")}', 'fields': fields}

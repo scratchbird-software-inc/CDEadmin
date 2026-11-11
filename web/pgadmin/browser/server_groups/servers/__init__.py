@@ -1439,7 +1439,13 @@ class ServerNode(PGChildNodeView):
                 **_runtime_node_fields(server),
                 runtime_verification_state=verification_state,
                 cde_engine_id=profile['engine_id'],
-                cde_context_actions=_cde_endpoint_actions(server, profile),
+                # On the provider tree the server node carries descriptor
+                # operations of its own (M6): an empty action list marks it
+                # as a provider context node for the client menu.
+                cde_context_actions=(
+                    _cde_endpoint_actions(server, profile)
+                    if _cde_endpoint_actions(server, profile) is not None
+                    else ([] if provider_tree_enabled(server) else None)),
                 username=server.username,
                 is_kerberos_conn=bool(server.kerberos_conn),
                 gss_authenticated=manager.gss_authenticated,

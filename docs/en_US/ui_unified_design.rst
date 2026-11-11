@@ -353,6 +353,21 @@ full definition on create, and owner, schema, rename and comment on
 alter), while the routine form's recorded gap for aggregates stays
 accurate. This closes the M5 list of the parity matrix.
 
+M6 first slice (2026-11-11), server operations: a provider-tree server
+offers reload configuration, create restore point, and pause and resume
+WAL replay as provider-native operations run from the server scope on the
+maintenance attachment, each planned as one function call whose result
+row is the receipt, with confirmation on reload and the replay controls;
+the replay controls are accepted only by a standby in recovery and the
+server's refusal on a primary is reported as is. Change password and clear
+SSH tunnel password stay with the inherited dialogs since they carry
+credentials. On the way a reachability defect was found and fixed: the
+client's session-ready check accepted only provider-endpoint servers, so
+on a PostgreSQL provider-tree server no descriptor entry, including the M4
+and M5 editors, had been reachable from the tree menu; a connected,
+verified provider-tree server now counts as ready, and its node carries an
+action list of its own so the menu is built.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -213,13 +213,18 @@ const CATEGORY_MAP = {
  * (the first request starts the fetch) or when the kind declares nothing.
  */
 export function familyEditorContextActions(itemData, item) {
-  if(!['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
+  // A provider-tree server node offers the engine's server-scope operations
+  // (reload configuration, restore points, WAL replay control) from the
+  // descriptor; its edit and create entries stay with the server dialog.
+  const providerServer = itemData?._type === 'server' && Boolean(itemData.cde_provider_tree);
+  if(!providerServer && !['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
   const context = treeContext(itemData, item);
   if(!context) return [];
   const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
   if(!bundle) return [];
   const entries = [];
-  const resourceKind = itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
+  const resourceKind = providerServer ? 'server' :
+    itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
   if(itemData._type === 'cde_resource' && resourceEditorAvailable(bundle, resourceKind)) {
     entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
@@ -242,6 +247,7 @@ export function familyEditorContextActions(itemData, item) {
   }
   if(itemData._type !== 'cde_resource_group') {
     // The endpoint's provider decides per runtime (version and proof).
+    // A server node lists its descriptor operations only (no family editor).
     const unsupported = new Set(itemData.cde_unsupported_operations || []);
     for(const group of menuForKind(bundle, resourceKind)) {
       for(const entry of group.items) {

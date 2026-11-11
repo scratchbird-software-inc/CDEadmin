@@ -644,7 +644,8 @@ def adapt_catalog(catalog):
                 operation['execution_route'] = 'provider-native'
                 operation['mutation_class'] = mutation_classes[operation_id]
                 operation['confirmation_required'] = (kind, operation_id) in CONFIRMED
-                operation['target_required'] = True
+                # Server operations act on the connection's server (M6).
+                operation['target_required'] = kind != 'server'
             elif kind in native_form_kinds and not (
                     kind in {'sequence', 'extension', 'row-policy',
                              'schema', 'database', 'domain', 'type',

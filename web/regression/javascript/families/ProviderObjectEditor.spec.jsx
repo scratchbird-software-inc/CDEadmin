@@ -46,6 +46,26 @@ describe('family editor tree glue', () => {
       group: {data: groupData, parent: 'server'}, database: {data: databaseData, parent: 'server'}});
   });
 
+  it('offers a PostgreSQL provider-tree server its server-scope operations only', async () => {
+    const pgServer = {_type: 'server', _id: 18, cde_provider_tree: true, connected: true, cde_engine_id: 'postgresql',
+      runtime_verification_state: 'verified', verified_runtime_version: '18.3', cde_context_actions: [], label: 'demo'};
+    installTree({pgserver: {data: pgServer}});
+    resetDescriptorClient();
+    const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}),
+      post: async () => ({})});
+    await client.bundle('postgresql', {version: '18.3'});
+    const entries = familyEditorContextActions(pgServer, 'pgserver');
+    expect(entries.map((entry) => entry.id)).toEqual(expect.arrayContaining([
+      'descriptor-op-reload', 'descriptor-op-restore-point', 'descriptor-op-wal-replay-pause',
+      'descriptor-op-wal-replay-resume']));
+    expect(entries.find((entry) => entry.id === 'descriptor-op-reload').category).toBe('maintenance');
+    expect(entries.find((entry) => entry.id === 'descriptor-op-restore-point').category).toBe('backup');
+    expect(entries.find((entry) => entry.id === 'family-editor-edit')).toBeUndefined();
+    expect(entries.find((entry) => entry.id.startsWith('family-editor-create'))).toBeUndefined();
+    // Without the provider-tree choice the inherited server menu stays alone.
+    expect(familyEditorContextActions({...pgServer, cde_provider_tree: false}, 'pgserver')).toEqual([]);
+  });
+
   it('builds the workspace endpoint url with the database target', () => {
     expect(providerEndpointUrl(pgAdmin.Browser.Nodes.server, 'server', serverData, 'db 1'))
       .toBe('/browser/server/cde_workspace/1/7?database_target_id=db%201');

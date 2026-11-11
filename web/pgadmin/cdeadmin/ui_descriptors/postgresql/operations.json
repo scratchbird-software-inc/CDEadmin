@@ -408,6 +408,70 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+    },
+    {
+      "operation_id": "reload",
+      "resource_kind": "server",
+      "title": "Reload configuration",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+    },
+    {
+      "operation_id": "restore-point",
+      "resource_kind": "server",
+      "title": "Create restore point",
+      "menu": {
+        "category": "backup_restore",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Restore point name",
+          "control": "text",
+          "required": true,
+          "help": "Recorded in the WAL; a recovery_target_name for point-in-time recovery."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+    },
+    {
+      "operation_id": "wal-replay-pause",
+      "resource_kind": "server",
+      "title": "Pause WAL replay",
+      "menu": {
+        "category": "replication",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
+    },
+    {
+      "operation_id": "wal-replay-resume",
+      "resource_kind": "server",
+      "title": "Resume WAL replay",
+      "menu": {
+        "category": "replication",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
     }
   ]
 }
