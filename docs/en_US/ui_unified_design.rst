@@ -495,6 +495,35 @@ provider's builder renders; the text is placed in the editor and not run.
 The CREATE script is the provider tree's DDL state. Observed through the
 running application on the demo table; not opened in a browser.
 
+M7 third slice (2026-11-11), the column editor: create, alter and drop
+on a provider-tree column through the provider's native route, compiled
+as the inherited column dialog rendered them: ADD COLUMN with type,
+collation, NOT NULL, default, identity or generated clause, then comment,
+statistics, storage and compression; on alter one statement per changed
+fact against the captured attribute row (rename, type with optional
+collation, default set or drop, NOT NULL, identity add, change and drop,
+statistics, storage, compression, comment); drop with optional CASCADE
+and a typed name. Types and expressions are admitted by PostgreSQL's own
+parser; a type change carries no USING clause, as the inherited dialog
+did not. The capture now names each column's owning relation and carries
+the editor's initial values. Column privileges, security labels and
+attribute options stay with the inherited dialog. Observed live on
+PostgreSQL 18.3 (create with every clause, identity and generated
+columns, the alter set, identity transitions, cascade drop); the default
+statistics target is read as -1 where PostgreSQL 17+ stores NULL. Reachability
+finding, recorded for decision: the object editor renders only forms
+from the descriptor bundle, and PostgreSQL ships no engine-object form
+files, so the client offers Edit and Create only for kinds with a family
+form (sequence, index, trigger, type, view, routine, role, database,
+table); every engine-object kind edited natively since M4 (extension,
+schema, row policy, cast, collation, language, foreign data wrapper,
+foreign server, user mapping, publication, subscription, text search,
+operator, pgAgent job, column) is reachable through the workspace API and
+its operation dialogs but not yet through the tree's Edit entry. The
+provider's own form builders carry every field; the proposed fix is a
+client fallback to the endpoint's visual-administration catalog form when
+the bundle has no form for an engine-object kind.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

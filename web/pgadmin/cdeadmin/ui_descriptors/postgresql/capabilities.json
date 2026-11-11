@@ -534,6 +534,24 @@
         }
       ],
       "notes": "M5 review (2026-11-11): declared so the provider tree lists the operator kind the provider already edits natively (native_admin._operator_admin); the form is the provider-native one from preserved_surface.adapt_catalog."
+    },
+    {
+      "resource_kind": "column",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
     }
   ]
 }

@@ -2282,3 +2282,70 @@ def test_table_count_reset_and_trigger_toggles(live):
     assert enabled() == 'D'
     plan, outcome = run(live, 'enable-triggers', kind='table', native=native)
     assert enabled() == 'O'
+
+
+# -- M7 (2026-11-11): column editor, provider-native, observed live --------------------------------
+def column_native(schema, table, name):
+    """What the provider's capture attaches to a column node."""
+    from pgadmin.cdeadmin.providers.postgresql.columns import facts
+    rows = query(f"""SELECT c.oid::int, a.attnum, pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
+                            pg_catalog.col_description(a.attrelid, a.attnum),
+                            CASE WHEN a.attgenerated='' AND a.attidentity='' THEN
+                                 (SELECT pg_get_expr(d.adbin, d.adrelid, false) FROM pg_attrdef d
+                                  WHERE d.adrelid=a.attrelid AND d.adnum=a.attnum) END,
+                            a.attidentity, a.attgenerated, a.attstattarget, a.attstorage, a.attcompression
+                     FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND a.attname='{name}' AND NOT a.attisdropped""")
+    assert len(rows) == 1, (schema, table, name)
+    oid, attnum, typ, notnull, comment, default, identity, generated, stat, storage, compression = rows[0]
+    native = {'catalog': 'pg_attribute', 'oid': oid, 'attnum': attnum, 'name': name, 'schema': schema, 'table': table,
+              'data_type': typ, 'not_null': notnull, 'comment': comment, 'default_expression': default,
+              'catalog_row': {'attname': name, 'attnotnull': notnull, 'attidentity': identity,
+                              'attgenerated': generated, 'attstattarget': stat, 'attstorage': storage,
+                              'attcompression': compression}}
+    native['column_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_column_lifecycle_round_trips(live):
+    query('DROP TABLE IF EXISTS public.m_col; CREATE TABLE public.m_col (id int)')
+    # Create: the parent relation is the target the dialog opens from.
+    parent = column_native('public', 'm_col', 'id')
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'Net Total', 'cltype': 'numeric(10,2)', 'attnotnull': True, 'defval': '0',
+        'description': "it's", 'attstattarget': 500, 'attstorage': 'p'}, parent)
+    assert plan['command_preview']['statement'].startswith('ALTER TABLE "public"."m_col" ADD COLUMN "Net Total" numeric(10, 2)')
+    native = column_native('public', 'm_col', 'Net Total')
+    current = native['column_facts']
+    assert (current['cltype'], current['attnotnull'], current['defval'], current['description'],
+            current['attstattarget'], current['attstorage']) == ('numeric(10,2)', True, '0', "it's", 500, 'p')
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'seq_id', 'cltype': 'bigint', 'colconstype': 'i', 'attidentity': 'd', 'seqstart': 100}, parent)
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['attidentity'] == 'd'
+    # Alter: rename, retype, drop default, drop not null, comment, statistics.
+    plan = run_kind(live, 'column', 'alter', {
+        'name': 'gross', 'cltype': 'numeric(14,2)', 'defval': '', 'attnotnull': False, 'description': '',
+        'attstattarget': -1, 'attstorage': 'm'}, native)
+    current = column_native('public', 'm_col', 'gross')['column_facts']
+    assert (current['cltype'], current['attnotnull'], current['defval'], current['description'],
+            current['attstattarget'], current['attstorage']) == ('numeric(14,2)', False, '', '', -1, 'm')
+    # A generated column over the renamed one (PostgreSQL refuses to retype a column it depends on).
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'doubled', 'cltype': 'numeric', 'colconstype': 'g', 'genexpr': 'gross * 2'}, parent)
+    assert column_native('public', 'm_col', 'doubled')['column_facts']['colconstype'] == 'g'
+    # Identity transitions: by default -> always, then dropped.
+    seq = column_native('public', 'm_col', 'seq_id')
+    run_kind(live, 'column', 'alter', {'colconstype': 'i', 'attidentity': 'a', 'seqincrement': 5}, seq)
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['attidentity'] == 'a'
+    assert one("SELECT seqincrement FROM pg_sequence WHERE seqrelid = pg_get_serial_sequence('public.m_col', 'seq_id')::regclass") == 5
+    run_kind(live, 'column', 'alter', {'colconstype': 'n'}, column_native('public', 'm_col', 'seq_id'))
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['colconstype'] == 'n'
+    with pytest.raises(Exception):
+        run_kind(live, 'column', 'alter', {'cltype': 'numeric(14, 2)'}, column_native('public', 'm_col', 'gross'))
+    # Drop: the generated column depends on gross, so plain drop is refused and cascade removes both.
+    with pytest.raises(Exception):
+        run_kind(live, 'column', 'drop', {'confirmation': 'gross'}, column_native('public', 'm_col', 'gross'))
+    run_kind(live, 'column', 'drop', {'confirmation': 'gross', 'cascade': True}, column_native('public', 'm_col', 'gross'))
+    assert query("SELECT attname FROM pg_attribute WHERE attrelid='public.m_col'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum") == [('id',), ('seq_id',)]
+    query('DROP TABLE public.m_col')

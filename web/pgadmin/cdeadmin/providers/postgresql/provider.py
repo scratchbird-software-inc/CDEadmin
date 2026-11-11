@@ -1309,12 +1309,16 @@ class PostgreSQLProvider:
                 'catalog': 'pg_attribute', 'oid': native.get('oid'),
                 'attnum': attnum, 'name': name,
                 'schema': native.get('schema'),
+                # The owning relation, for the column editor (M7).
+                'table': relation['display_name'],
                 'data_type': row.get('formatted_type'),
                 'not_null': row.get('attnotnull'),
                 'comment': row.get('comment'),
                 'default_expression': row.get('default_expression'),
                 'navigator_parent_resource_id': relation['resource_id'],
                 'catalog_row': row})
+            from .columns import facts as column_facts
+            column_native['column_facts'] = column_facts(column_native)
             columns.append({
                 'identity': self._identity(),
                 'endpoint_id': self.context.endpoint_id,
