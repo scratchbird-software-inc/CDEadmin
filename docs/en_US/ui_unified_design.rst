@@ -251,7 +251,18 @@ and WITH or WITHOUT DATA, and altered through rename, schema, owner,
 tablespace, fill factor, comment, and a changed query as drop and create in
 one transaction, as the inherited dialog does. The query is admitted only
 when PostgreSQL's own parser reads it as one SELECT. WITH CHECK OPTION,
-which YugabyteDB refuses, is offered here.
+which YugabyteDB refuses, is offered here. Eighth slice (2026-11-11), the
+function and procedure editors: arguments with mode, name, type and
+default, a return type including SETOF and TABLE, language, body,
+volatility, strictness, leak-proofness, security definer, parallel safety,
+cost, rows and SET parameters, with owner and comment; a changed body or
+option runs CREATE OR REPLACE with the unchanged signature, while a changed
+signature is refused; rename, owner, schema and comment address the
+routine by its catalog identity. The alter dialog reads the current
+definition back through PostgreSQL's own parser, so its values are exact.
+C-language routines, support and window functions, privileges and security
+labels stay with the inherited dialog. A trigger function is a function
+returning ``trigger``.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

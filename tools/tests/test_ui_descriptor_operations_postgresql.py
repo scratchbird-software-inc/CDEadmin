@@ -1130,3 +1130,72 @@ def test_view_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_class WHERE relname='load'") == [(0,)]
     finally:
         query('DROP SCHEMA "View schema" CASCADE')
+
+
+# -- M4 (2026-11-11): function and procedure editors, provider-native, observed live --------------
+def routine_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.routines import facts
+    rows = query(f"""SELECT p.oid::int, pg_get_functiondef(p.oid), p.prokind, d.description,
+                            (pg_identify_object('pg_proc'::regclass, p.oid, 0)).identity, p.provolatile,
+                            p.proisstrict, p.prosecdef, p.proleakproof, p.proparallel, p.procost, p.prorows,
+                            pg_get_userbyid(p.proowner)
+                     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                     LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_proc'::regclass
+                     WHERE n.nspname='{schema}' AND p.proname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    (oid, definition, kind, comment, identity, volatile, strict, secdef, leakproof, parallel, cost, prorows,
+     owner) = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'sql_identity': identity,
+              'catalog_row': {'proname': name, 'prokind': kind, 'provolatile': volatile, 'proisstrict': strict,
+                              'prosecdef': secdef, 'proleakproof': leakproof, 'proparallel': parallel,
+                              'procost': cost, 'prorows': prorows}}
+    native['routine_facts'] = facts(native)
+    native['owner'] = owner
+    return native
+
+
+@live_only
+def test_routine_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Fn schema"')
+    try:
+        run_kind(live, 'function', 'create', {
+            'name': 'is big', 'pronamespace': 'Fn schema',
+            'arguments': [{'argmode': 'IN', 'argname': 'n', 'argtype': 'integer', 'argdefval': '0'}],
+            'prorettypename': 'boolean', 'lanname': 'sql', 'prosrc': 'SELECT n > 10',
+            'provolatile': 'IMMUTABLE', 'proisstrict': True, 'proparallel': 'SAFE', 'procost': 10,
+            'variables': [{'name': 'search_path', 'value': 'public, pg_temp'}], 'description': "it's"})
+        native = routine_native('Fn schema', 'is big')
+        facts = native['routine_facts']
+        assert facts['definition_parsed'] and facts['arguments'][0]['argdefval'] == '0'
+        assert (facts['provolatile'], facts['proisstrict'], facts['procost'], native['comment']) == (
+            'IMMUTABLE', True, 10, "it's")
+        assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(True,)]
+        # Body and options change through CREATE OR REPLACE with the same signature; then rename.
+        run_kind(live, 'function', 'alter', {
+            'arguments': facts['arguments'], 'prorettypename': facts['prorettypename'],
+            'prosrc': 'SELECT n > 100', 'provolatile': 'STABLE', 'proisstrict': False, 'description': ''},
+            native)
+        native = routine_native('Fn schema', 'is big')
+        assert (native['routine_facts']['provolatile'], native['routine_facts']['proisstrict'],
+                native['comment']) == ('STABLE', False, None)
+        assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(False,)]
+        run_kind(live, 'function', 'alter', {'name': 'is_huge'}, native)
+        native = routine_native('Fn schema', 'is_huge')
+        assert native['routine_facts']['sql_identity'].endswith('(integer)')
+        run_kind(live, 'procedure', 'create', {
+            'name': 'bump', 'pronamespace': 'Fn schema', 'lanname': 'plpgsql',
+            'arguments': [{'argmode': 'INOUT', 'argname': 'x', 'argtype': 'integer'}],
+            'prosrc': 'begin x := x + 1; end'})
+        assert query('CALL "Fn schema".bump(41)') == [(42,)]
+        procedure = routine_native('Fn schema', 'bump')
+        run_kind(live, 'procedure', 'alter', {'prosrc': 'begin x := x + 2; end'}, procedure)
+        assert query('CALL "Fn schema".bump(40)') == [(42,)]
+        with pytest.raises(Exception):
+            run_kind(live, 'function', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'function', 'drop', {'confirmation': 'is_huge'}, native)
+        run_kind(live, 'procedure', 'drop', {'confirmation': 'bump'}, procedure)
+        assert query("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+                     "WHERE n.nspname='Fn schema'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Fn schema" CASCADE')
