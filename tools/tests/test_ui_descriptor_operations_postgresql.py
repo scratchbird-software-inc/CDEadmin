@@ -1780,3 +1780,77 @@ def test_publication_and_subscription_lifecycles_round_trip(live):
         query('DROP PUBLICATION IF EXISTS "ui ops pub"; DROP PUBLICATION IF EXISTS ui_ops_pub; '
               'DROP PUBLICATION IF EXISTS ui_ops_schemas')
         query('DROP SCHEMA "Rep schema" CASCADE; DROP SCHEMA rep_other CASCADE')
+
+
+# -- M5 (2026-11-11): text search editors, provider-native, observed live -------------------------
+def text_search_native(kind, schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.text_search import facts
+    catalog, column, classoid = {
+        'text-search-configuration': ('pg_ts_config', 'cfgname', 'pg_ts_config'),
+        'text-search-dictionary': ('pg_ts_dict', 'dictname', 'pg_ts_dict'),
+        'text-search-parser': ('pg_ts_parser', 'prsname', 'pg_ts_parser'),
+        'text-search-template': ('pg_ts_template', 'tmplname', 'pg_ts_template')}[kind]
+    namespace = column.replace('name', 'namespace')
+    rows = query(f"""SELECT to_jsonb(c) - 'oid', d.description FROM {catalog} c
+                     JOIN pg_namespace n ON n.oid=c.{namespace}
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='{classoid}'::regclass
+                     WHERE n.nspname='{schema}' AND c.{column}='{name}'""")
+    assert len(rows) == 1, (kind, schema, name)
+    native = {'schema': schema, 'name': name, 'comment': rows[0][1], 'catalog_row': rows[0][0]}
+    native['text_search_facts'] = facts(kind, native)
+    return native
+
+
+@live_only
+def test_text_search_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Fts schema"')
+    try:
+        run_kind(live, 'text-search-template', 'create', {
+            'name': 't one', 'schema': 'Fts schema', 'tmplinit': 'dsimple_init', 'tmpllexize': 'dsimple_lexize',
+            'description': "it's"})
+        template = text_search_native('text-search-template', 'Fts schema', 't one')
+        assert (template['text_search_facts']['tmplinit'], template['comment']) == ('dsimple_init', "it's")
+        run_kind(live, 'text-search-dictionary', 'create', {
+            'name': 'd one', 'schema': 'Fts schema', 'template': '"Fts schema"."t one"',
+            'options': [{'option': 'stopwords', 'value': 'english'}], 'description': 'd'})
+        dictionary = text_search_native('text-search-dictionary', 'Fts schema', 'd one')
+        assert dictionary['text_search_facts']['dictinitoption'] == "stopwords = 'english'"
+        run_kind(live, 'text-search-dictionary', 'alter', {
+            'name': 'd_two', 'set_options': [{'option': 'accept', 'value': 'false'}],
+            'drop_options': [{'option': 'stopwords'}], 'description': ''}, dictionary)
+        dictionary = text_search_native('text-search-dictionary', 'Fts schema', 'd_two')
+        assert (dictionary['text_search_facts']['dictinitoption'], dictionary['comment']) == (
+            "accept = 'false'", None)
+        run_kind(live, 'text-search-parser', 'create', {
+            'name': 'p one', 'schema': 'Fts schema', 'prsstart': 'prsd_start', 'prstoken': 'prsd_nexttoken',
+            'prsend': 'prsd_end', 'prslextype': 'prsd_lextype'})
+        parser = text_search_native('text-search-parser', 'Fts schema', 'p one')
+        assert parser['text_search_facts']['prsheadline'] is None
+        run_kind(live, 'text-search-parser', 'alter', {'prsheadline': 'prsd_headline', 'name': 'p_two'}, parser)
+        parser = text_search_native('text-search-parser', 'Fts schema', 'p_two')
+        assert parser['text_search_facts']['prsheadline'] == 'prsd_headline'
+        run_kind(live, 'text-search-configuration', 'create', {
+            'name': 'c one', 'schema': 'Fts schema', 'prsname': '"Fts schema".p_two',
+            'tokens': [{'token': 'asciiword', 'dictname': '"Fts schema".d_two, pg_catalog.simple'}],
+            'description': 'c'})
+        configuration = text_search_native('text-search-configuration', 'Fts schema', 'c one')
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c one'""") == [(2,)]
+        run_kind(live, 'text-search-configuration', 'alter', {
+            'name': 'c_two', 'add_mappings': [{'token': 'word', 'dictname': 'pg_catalog.simple'}],
+            'alter_mappings': [{'token': 'asciiword', 'dictname': 'pg_catalog.simple'}],
+            'description': ''}, configuration)
+        configuration = text_search_native('text-search-configuration', 'Fts schema', 'c_two')
+        assert configuration['comment'] is None
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c_two'""") == [(2,)]
+        run_kind(live, 'text-search-configuration', 'alter', {'drop_mappings': [{'token': 'word'}]}, configuration)
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c_two'""") == [(1,)]
+        for kind, name in (('text-search-configuration', 'c_two'), ('text-search-dictionary', 'd_two'),
+                           ('text-search-parser', 'p_two'), ('text-search-template', 't one')):
+            run_kind(live, kind, 'drop', {'confirmation': name}, text_search_native(kind, 'Fts schema', name))
+        assert query("SELECT count(*) FROM pg_ts_config c JOIN pg_namespace n ON n.oid=c.cfgnamespace "
+                     "WHERE n.nspname='Fts schema'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Fts schema" CASCADE')

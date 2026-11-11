@@ -334,6 +334,15 @@ publication list and comment, with REFRESH PUBLICATION run alone; the
 connection string is never shown and a change to it stays with the
 inherited dialog. Column lists, row filters, schema publications and the
 published-operation subset, which YugabyteDB refuses, are offered here.
+Fourth slice (2026-11-11), the text search editors: a configuration from a
+parser or copied from another, with token mappings added, altered or
+dropped, owner and comment; a dictionary from a template with options set
+or dropped in place, owner and comment, the template fixed once created; a
+parser with its start, get-token, end, lextypes and headline functions and
+a template with its init and lexize functions, where a changed function is
+drop and create, as the inherited dialogs do; all with rename and schema
+move. The preserved surface has no concept for these kinds, so the
+provider admits them explicitly.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

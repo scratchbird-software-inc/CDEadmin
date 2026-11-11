@@ -381,6 +381,10 @@ def concept_declarations():
     }
 
 
+TEXT_SEARCH_KINDS = ('text-search-configuration', 'text-search-dictionary',
+                     'text-search-parser', 'text-search-template')
+
+
 def preserved_operations():
     """Return the exact object-operation map owned by the legacy surface."""
     result = {}
@@ -400,6 +404,11 @@ def administration_operations():
     result = {**preserved_operations(), 'large-object': OPERATIONS}
     for kind, operations in MAINTENANCE_OPERATIONS.items():
         result[kind] = frozenset(result.get(kind, frozenset()) | operations)
+    # Text search kinds have no preserved-surface concept of their own; the
+    # provider tree edits them natively (M5, 2026-11-11).
+    for kind in TEXT_SEARCH_KINDS:
+        result[kind] = frozenset(result.get(kind, frozenset())
+                                 | {'create', 'alter', 'drop', 'inspect'})
     return result
 
 
@@ -434,7 +443,9 @@ def adapt_catalog(catalog):
         'procedure', 'index', 'trigger', 'event-trigger', 'rule', 'role',
         'tablespace', 'cast', 'collation', 'language',
         'foreign-data-wrapper', 'foreign-server', 'user-mapping',
-        'publication', 'subscription',
+        'publication', 'subscription', 'text-search-configuration',
+        'text-search-dictionary', 'text-search-parser',
+        'text-search-template',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -494,6 +505,9 @@ def adapt_catalog(catalog):
         if kind in {'publication', 'subscription'}:
             from .replication import form as replication_form
             return replication_form(kind, operation_id, field)
+        if kind.startswith('text-search-'):
+            from .text_search import form as text_search_form
+            return text_search_form(kind, operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -640,7 +654,10 @@ def adapt_catalog(catalog):
                              'tablespace', 'cast', 'collation',
                              'language', 'foreign-data-wrapper',
                              'foreign-server', 'user-mapping',
-                             'publication', 'subscription'} and
+                             'publication', 'subscription',
+                             'text-search-configuration',
+                             'text-search-dictionary', 'text-search-parser',
+                             'text-search-template'} and
                     operation_id == 'inspect') and not (
                     kind == 'database' and operation_id == 'drop'):
                 # Object-family inspection is the provider tree's own (M3);

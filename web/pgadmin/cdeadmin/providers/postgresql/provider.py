@@ -1180,6 +1180,10 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
+            if item['resource_kind'].startswith('text-search-'):
+                from .text_search import facts as text_search_facts
+                native['text_search_facts'] = text_search_facts(
+                    item['resource_kind'], native)
             if item['resource_kind'] == 'publication':
                 from .replication import publication_facts
                 native['publication_facts'] = publication_facts(
