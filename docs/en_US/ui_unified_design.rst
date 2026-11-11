@@ -241,7 +241,17 @@ through owner, comment, rename, schema, enumeration values added (before or
 after a value) or renamed, and composite attributes added, dropped,
 renamed or retyped. External and shell types, type privileges and security
 labels stay with the inherited dialog. Type names are admitted by
-PostgreSQL's own parser and spelled canonically.
+PostgreSQL's own parser and spelled canonically. Seventh slice
+(2026-11-11), the view and materialized view editors: a view is created
+from one SELECT with the check option, security barrier and security
+invoker, owner and comment, and altered through rename, schema, owner,
+options set or reset, comment, and a changed query as CREATE OR REPLACE; a
+materialized view is created with access method, fill factor, tablespace
+and WITH or WITHOUT DATA, and altered through rename, schema, owner,
+tablespace, fill factor, comment, and a changed query as drop and create in
+one transaction, as the inherited dialog does. The query is admitted only
+when PostgreSQL's own parser reads it as one SELECT. WITH CHECK OPTION,
+which YugabyteDB refuses, is offered here.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

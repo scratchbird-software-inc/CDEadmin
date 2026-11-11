@@ -22,7 +22,7 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
     # M4 (2026-11-11): object-family editors on the provider tree.
     'sequence', 'extension', 'row-policy', 'schema', 'database',
-    'domain', 'type',
+    'domain', 'type', 'view', 'materialized-view',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -339,6 +339,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind in {'domain', 'type'}:
         from .types import compile_operation as compile_type
         return compile_type(kind, operation, native, draft)
+    if kind in {'view', 'materialized-view'}:
+        from .views import compile_operation as compile_view
+        return compile_view(kind, operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

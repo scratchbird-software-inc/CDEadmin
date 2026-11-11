@@ -1165,6 +1165,9 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'type':
                 from .types import type_facts
                 native['type_facts'] = type_facts(native, attributes)
+            if item['resource_kind'] in {'view', 'materialized-view'}:
+                from .views import facts as view_facts
+                native['view_facts'] = view_facts(native)
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)

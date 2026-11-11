@@ -1066,3 +1066,67 @@ def test_type_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_type WHERE typname='addr'") == [(0,)]
     finally:
         query('DROP SCHEMA typ_schema CASCADE')
+
+
+# -- M4 (2026-11-11): view and materialized view editors, provider-native, observed live ----------
+def view_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.views import facts
+    rows = query(f"""SELECT c.relkind, c.reloptions::text[], c.relispopulated, pg_get_viewdef(c.oid), d.description,
+                            pg_get_userbyid(c.relowner)
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass AND d.objsubid=0
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    relkind, options, populated, definition, comment, owner = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'relname': name, 'relkind': relkind, 'reloptions': options,
+                              'relispopulated': populated}}
+    native['view_facts'] = facts(native)
+    native['owner'] = owner
+    return native
+
+
+@live_only
+def test_view_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "View schema"; CREATE TABLE "View schema".t (id int, owner text)')
+    try:
+        run_kind(live, 'view', 'create', {
+            'name': 'mine', 'schema': 'View schema', 'definition': 'SELECT id, owner FROM "View schema".t',
+            'check_option': 'local', 'security_barrier': True, 'security_invoker': False, 'comment': "it's"})
+        native = view_native('View schema', 'mine')
+        facts = native['view_facts']
+        assert (facts['check_option'], facts['security_barrier'], native['comment']) == ('local', True, "it's")
+        plan = run_kind(live, 'view', 'alter', {
+            'name': 'mine', 'schema': 'View schema', 'definition': facts['definition'],
+            'check_option': 'no', 'security_barrier': False, 'security_invoker': True, 'comment': ''}, native)
+        assert 'CREATE OR REPLACE' not in plan['command_preview']['statement']
+        native = view_native('View schema', 'mine')
+        facts = native['view_facts']
+        assert (facts['check_option'], facts['security_barrier'], facts['security_invoker'], native['comment']) == (
+            'no', False, True, None)
+        # CREATE OR REPLACE VIEW may add columns at the end but never drop or reorder them (server rule).
+        run_kind(live, 'view', 'alter', {
+            'name': 'ours', 'definition': 'SELECT id, owner, id > 0 AS positive FROM "View schema".t',
+            'check_option': 'cascaded'}, native)
+        native = view_native('View schema', 'ours')
+        assert native['view_facts']['check_option'] == 'cascaded' and 'positive' in native['view_facts']['definition']
+        run_kind(live, 'view', 'drop', {'confirmation': 'ours'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname='ours'") == [(0,)]
+        # Materialized view: created without data, fill factor set, query replaced by drop and create.
+        run_kind(live, 'materialized-view', 'create', {
+            'name': 'load', 'schema': 'View schema', 'definition': 'SELECT count(*) AS n FROM "View schema".t',
+            'with_data': False, 'fillfactor': 80})
+        native = view_native('View schema', 'load')
+        assert (native['view_facts']['with_data'], native['view_facts']['fillfactor']) == (False, 80)
+        run_kind(live, 'materialized-view', 'alter', {'fillfactor': 80, 'reset_fillfactor': True, 'comment': 'rows'},
+                 native)
+        native = view_native('View schema', 'load')
+        assert (native['view_facts']['fillfactor'], native['comment']) == (None, 'rows')
+        run_kind(live, 'materialized-view', 'alter', {
+            'definition': 'SELECT count(*) AS n, max(id) AS top FROM "View schema".t', 'with_data': True}, native)
+        native = view_native('View schema', 'load')
+        assert native['view_facts']['with_data'] is True and 'max(id)' in native['view_facts']['definition']
+        run_kind(live, 'materialized-view', 'drop', {'confirmation': 'load'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname='load'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "View schema" CASCADE')
