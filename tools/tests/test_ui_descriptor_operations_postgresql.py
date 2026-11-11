@@ -873,3 +873,74 @@ def test_schema_lifecycle_round_trips(live):
     finally:
         query('DROP SCHEMA IF EXISTS "Sch ema" CASCADE; DROP SCHEMA IF EXISTS schema_two CASCADE')
         query(f'DROP OWNED BY {owner}, {reader}; DROP ROLE {owner}; DROP ROLE {reader}')
+
+
+# -- M4 (2026-11-11): database create and alter from the server scope, provider-native, live -----
+def database_native(name):
+    rows = query(f"""SELECT d.oid::int, t.spcname, d.datallowconn, d.datistemplate, pg_get_userbyid(d.datdba),
+                            d.datconnlimit, s.description, d.datacl::text[]
+                     FROM pg_database d JOIN pg_tablespace t ON t.oid=d.dattablespace
+                     LEFT JOIN pg_shdescription s ON s.objoid=d.oid AND s.classoid='pg_database'::regclass
+                     WHERE d.datname='{name}'""")
+    assert len(rows) == 1, name
+    did, spcname, allow, template, owner, limit, comment, acl = rows[0]
+    from pgadmin.cdeadmin.providers.postgresql.databases import facts
+    native = {'name': name, 'catalog_metadata': {'did': did, 'name': name, 'spcname': spcname,
+                                                 'datallowconn': allow, 'is_template': template,
+                                                 'description': comment}, 'catalog_row': {'datconnlimit': limit}}
+    native['database_facts'] = facts(native)
+    native.update(owner=owner, acl=acl or [])
+    return native
+
+
+def run_database(live, operation_id, draft, native=None):
+    provider, _route = live
+    # Server scope: the route names the server only; the attachment is the maintenance database.
+    resource = target(None, 'database', native) if native else None
+    request = {'resource_kind': 'database', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] is False, plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+@live_only
+def test_database_create_and_alter_round_trip(live):
+    owner, reader = 'ui_ops_dbowner_' + UNIQUE, 'ui_ops_dbreader_' + UNIQUE
+    name = f'ui_ops_created_{UNIQUE}'
+    query(f'CREATE ROLE {owner}; CREATE ROLE {reader}')
+    try:
+        plan = run_database(live, 'create', {
+            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8',
+            'datlocaleprovider': 'libc', 'datcollate': 'C', 'datctype': 'C', 'datconnlimit': 7,
+            'datallowconn': True, 'is_template': False})
+        assert plan['command_preview']['statement'].startswith(f'CREATE DATABASE "{name}" WITH OWNER')
+        native = database_native(name)
+        assert (native['owner'], native['database_facts']['datconnlimit']) == (owner, 7)
+        plan = run_database(live, 'alter', {
+            'name': name, 'spcname': native['database_facts']['spcname'], 'datconnlimit': 3,
+            'datallowconn': True, 'is_template': False, 'comments': "it's",
+            # A grant to the owner folds into the owner's implicit full entry; grant to another role.
+            'datacl': [{'grantee': reader, 'privileges': 'c'}]}, native)
+        assert 'RENAME' not in plan['command_preview']['statement']
+        native = database_native(name)
+        assert (native['database_facts']['datconnlimit'], native['database_facts']['comments']) == (3, "it's")
+        assert any(item.startswith(f'{reader}=c/') for item in native['acl'])
+        # A tablespace change runs alone in autocommit (same tablespace name: the server accepts a no-op move
+        # only for a different one, so this checks the plan shape with pg_default -> pg_default refused by us).
+        with pytest.raises(Exception):
+            run_database(live, 'alter', {'spcname': 'pg_default', 'comments': 'x'}, dict(
+                native, database_facts=dict(native['database_facts'], spcname='other')))
+        # Rename runs from the maintenance database, which is not the renamed one.
+        run_database(live, 'alter', {'name': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}_r'") == [(1,)]
+    finally:
+        query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        query(f'DROP DATABASE IF EXISTS "{name}_r" WITH (FORCE)')
+        query(f'DROP ROLE {owner}; DROP ROLE {reader}')

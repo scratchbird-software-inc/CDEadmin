@@ -400,9 +400,14 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL provider route is invalid'
             )
+        # Database create and alter run from the server scope (M4): the
+        # attachment is the maintenance database, so no database id.
+        optional = request.get('resource_kind') == 'database'
         return {
             'server_id': _required_int(route, 'server_id'),
-            'database_id': _required_int(route, 'database_id'),
+            'database_id': (route.get('database_id') if optional and
+                            route.get('database_id') is None else
+                            _required_int(route, 'database_id')),
         }
 
     @classmethod
@@ -470,7 +475,9 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError('Retained administrative statement changed')
         self.permissions.require('data_read' if compiled['read_only'] else 'administer')
         self.permissions.require('execute')
-        database_id = _required_int(route, 'database_id')
+        database_id = route.get('database_id')
+        if database_id is not None:
+            database_id = _required_int(route, 'database_id')
         session = self.open_session({'route': route})
         state = self._sessions[session['session_id']]
         response = None
@@ -496,7 +503,8 @@ class PostgreSQLProvider:
                     raise PostgreSQLProviderError('Administrative literal policy could not be established')
             status, identity = connection.execute_dict(
                 'SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()')
-            if not status or identity.get('rows') != [{'oid': database_id}]:
+            if not status or (database_id is not None and
+                              identity.get('rows') != [{'oid': database_id}]):
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
             status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
@@ -1248,15 +1256,20 @@ class PostgreSQLProvider:
                       'node_type': {'replica-node': 'replica_nodes',
                                     'pgagent-job': 'pga_job'}.get(
                           catalog_kind, catalog_kind)}
+        native = {
+            **{key: row[key] for key in ('schema', 'name', 'index_method', 'data_type', 'language', 'left_type', 'right_type', 'identity_arguments', 'sql_identity', 'oid') if key in row},
+            'catalog_metadata': dict(row),
+        }
+        if catalog_kind == 'database':
+            # The alter dialog's initial values (M4, 2026-11-11).
+            from .databases import facts as database_facts
+            native['database_facts'] = database_facts(native)
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,
             **({'legacy_route': legacy} if legacy else {}),
             'legacy_metadata': dict(row),
-            'native': normalize_resource_properties({
-                **{key: row[key] for key in ('schema', 'name', 'index_method', 'data_type', 'language', 'left_type', 'right_type', 'identity_arguments', 'sql_identity', 'oid') if key in row},
-                'catalog_metadata': dict(row),
-            }),
+            'native': normalize_resource_properties(native),
         })
         return {
             'identity': self._identity(),

@@ -225,7 +225,13 @@ policy's roles so the dialog can show them. Fourth slice (2026-11-11), the
 schema editor: create with owner, comment, privileges, default privileges
 for new tables, sequences, functions and types, and security labels; alter
 renames, changes the owner and comment, grants and revokes; drop with
-CASCADE needs the typed name.
+CASCADE needs the typed name. Fifth slice (2026-11-11), the database editor
+from the server scope, attached to the maintenance database: create is one
+statement outside a transaction, as PostgreSQL requires, with owner,
+template, encoding, locale provider and locales, tablespace, connection
+limit and the allow-connections and template flags; alter renames, changes
+the owner, limit, flags, comment and privileges in one transaction, and a
+tablespace change runs alone. Drop stays with the inherited dialog.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

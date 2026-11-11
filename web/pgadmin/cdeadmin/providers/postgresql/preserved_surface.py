@@ -429,7 +429,7 @@ def adapt_catalog(catalog):
     maintenance = MAINTENANCE_OPERATIONS
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
-        'sequence', 'extension', 'row-policy', 'schema',
+        'sequence', 'extension', 'row-policy', 'schema', 'database',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -456,6 +456,9 @@ def adapt_catalog(catalog):
         if kind == 'schema':
             from .schemas import form as schema_form
             return schema_form(operation_id, field)
+        if kind == 'database':
+            from .databases import form as database_form
+            return database_form(operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -595,8 +598,11 @@ def adapt_catalog(catalog):
                 operation['target_required'] = True
             elif kind in native_form_kinds and not (
                     kind in {'sequence', 'extension', 'row-policy',
-                             'schema'} and operation_id == 'inspect'):
-                # Object-family inspection is the provider tree's own (M3).
+                             'schema', 'database'} and
+                    operation_id == 'inspect') and not (
+                    kind == 'database' and operation_id == 'drop'):
+                # Object-family inspection is the provider tree's own (M3);
+                # database drop stays with the inherited dialog (M4).
                 operation['form'] = native_form(
                     kind, operation_id, resource['title']
                 )
