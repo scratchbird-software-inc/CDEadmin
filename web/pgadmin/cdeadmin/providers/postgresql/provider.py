@@ -278,8 +278,30 @@ class PostgreSQLCatalogSource:
             sql = self._renderer('pga_job/sql/pre3.4/properties.sql',
                                  jid=object_id, conn=connection)
             status, result = connection.execute_dict(sql)
-            return [{**row, 'name': row.get('jobname')}
+            rows = [{**row, 'name': row.get('jobname')}
                     for row in self._rows(status, result)]
+            if object_id is not None:
+                # The editor's initial values (M6): steps, schedules and
+                # whether this pgAgent has the connection-string column.
+                status, result = connection.execute_dict(
+                    "SELECT EXISTS(SELECT 1 FROM information_schema.columns"
+                    " WHERE table_schema='pgagent' AND table_name="
+                    "'pga_jobstep' AND column_name='jstconnstr')"
+                    " AS has_connstr")
+                has_connstr = bool(
+                    self._rows(status, result)[0].get('has_connstr'))
+                status, result = connection.execute_dict(self._renderer(
+                    'pga_job/sql/pre3.4/steps.sql', jid=object_id,
+                    jstid=None, has_connstr=has_connstr, conn=connection))
+                steps = self._rows(status, result)
+                status, result = connection.execute_dict(self._renderer(
+                    'pga_job/sql/pre3.4/schedules.sql', jid=object_id,
+                    jscid=None, conn=connection))
+                schedules = self._rows(status, result)
+                for row in rows:
+                    row.update(has_connstr=has_connstr, steps=steps,
+                               schedules=schedules)
+            return rows
         if catalog_kind == 'replica-node':
             # The inherited Replica Nodes collection: pg_stat_replication
             # rows joined to their slots, keyed by the walsender pid. The
@@ -404,7 +426,8 @@ class PostgreSQLProvider:
         # (M4): the attachment is the maintenance database, so no database
         # id.
         kind = request.get('resource_kind')
-        optional = kind in {'database', 'role', 'tablespace', 'server'}
+        optional = kind in {'database', 'role', 'tablespace', 'server',
+                            'pgagent-job'}
         if kind == 'database' and request.get('operation_id') == 'drop':
             # DROP DATABASE cannot run on a connection to that database
             # (M6): it always runs from the server scope attachment.
@@ -1366,6 +1389,9 @@ class PostgreSQLProvider:
         if catalog_kind == 'tablespace':
             from .cluster import tablespace_facts
             native['tablespace_facts'] = tablespace_facts(native)
+        if catalog_kind == 'pgagent-job':
+            from .pgagent import facts as job_facts
+            native['job_facts'] = job_facts(native)
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,

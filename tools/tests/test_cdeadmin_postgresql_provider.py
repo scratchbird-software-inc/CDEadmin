@@ -1128,14 +1128,24 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
         manager = FakeManager()
         renderer = Mock(return_value='SELECT preserved_catalog')
         source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
-        manager._connection.execute_dict = Mock(return_value=(
-            True, {'rows': [{'jobid': 3, 'jobname': 'nightly vacuum'}]}))
+        manager._connection.execute_dict = Mock(side_effect=(
+            (True, {'rows': [{'jobid': 3, 'jobname': 'nightly vacuum'}]}),
+            (True, {'rows': [{'has_connstr': True}]}),
+            (True, {'rows': [{'jstid': 9, 'jstname': 'vac'}]}),
+            (True, {'rows': [{'jscid': 4, 'jscname': 'daily'}]}),
+        ))
         rows = source.read('pgagent-job', {'server_id': 7}, 3)
         # The inherited job template names the job jobname.
         self.assertEqual('nightly vacuum', rows[0]['name'])
-        self.assertEqual('pga_job/sql/pre3.4/properties.sql',
-                         renderer.call_args.args[0])
-        self.assertEqual(3, renderer.call_args.kwargs['jid'])
+        # One job also carries its steps and schedules for the editor (M6).
+        templates = [call.args[0] for call in renderer.call_args_list]
+        self.assertEqual(['pga_job/sql/pre3.4/properties.sql',
+                          'pga_job/sql/pre3.4/steps.sql',
+                          'pga_job/sql/pre3.4/schedules.sql'], templates)
+        self.assertEqual(3, renderer.call_args_list[0].kwargs['jid'])
+        self.assertEqual(True, rows[0]['has_connstr'])
+        self.assertEqual('vac', rows[0]['steps'][0]['jstname'])
+        self.assertEqual('daily', rows[0]['schedules'][0]['jscname'])
 
     def test_catalog_source_lists_replica_nodes_from_the_properties_template(
             self):

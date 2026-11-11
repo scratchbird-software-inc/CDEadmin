@@ -33,6 +33,8 @@ MAINTENANCE_OPERATIONS = {
     # 2026-11-11): the dialog picks the database; the plan's route runs there.
     'role': frozenset({'reassign-owned', 'drop-owned'}),
     'tablespace': frozenset({'move-objects'}),
+    # The inherited pgAgent "Run now" (M6, 2026-11-11).
+    'pgagent-job': frozenset({'run-now'}),
 }
 #: Operations whose database comes from the dialog's `database` reference.
 DATABASE_PICKED = frozenset({('role', 'reassign-owned'), ('role', 'drop-owned'),
@@ -45,6 +47,7 @@ CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
     ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
     ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
+    ('pgagent-job', 'run-now'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
@@ -52,6 +55,7 @@ MUTATION_CLASSES = {
     'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
     'wal-replay-resume': 'admin',
     'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
+    'run-now': 'admin',
 }
 
 _OPTIONS = {
@@ -75,6 +79,7 @@ _OPTIONS = {
     ('role', 'reassign-owned'): {'database', 'new_owner'},
     ('role', 'drop-owned'): {'database', 'cascade', 'confirmation'},
     ('tablespace', 'move-objects'): {'database', 'object_type', 'new_tablespace', 'owner'},
+    ('pgagent-job', 'run-now'): set(),
 }
 _RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
@@ -136,6 +141,12 @@ def compile_operation(kind, operation, native, draft):
         return _server_operation(operation, draft)
     if key in DATABASE_PICKED:
         return _database_picked_operation(kind, operation, native, draft)
+    if key == ('pgagent-job', 'run-now'):
+        from .pgagent import run_now
+        compiled = run_now(native)
+        compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
+                                   'options': [], 'transaction_mode': 'transaction'}
+        return compiled
     if kind in {'schema', 'database'}:
         target = _identifier(_name(native.get('name'), 'name'), 'name')
     else:
@@ -311,8 +322,9 @@ def form(kind, operation, field):
               'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
               'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
               'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',
-              'drop-owned': 'Drop owned objects', 'move-objects': 'Move objects to another tablespace'}
-    if kind in {'role', 'tablespace'}:
+              'drop-owned': 'Drop owned objects', 'move-objects': 'Move objects to another tablespace',
+              'run-now': 'Run now'}
+    if kind in {'role', 'tablespace', 'pgagent-job'}:
         return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:server:{kind}',
                 'title': titles[operation], 'fields': fields}
     if kind == 'server':

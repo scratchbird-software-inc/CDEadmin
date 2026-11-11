@@ -406,7 +406,8 @@ def administration_operations():
         result[kind] = frozenset(result.get(kind, frozenset()) | operations)
     # Text search kinds have no preserved-surface concept of their own; the
     # provider tree edits them natively (M5, 2026-11-11).
-    for kind in TEXT_SEARCH_KINDS:
+    for kind in TEXT_SEARCH_KINDS + ('pgagent-job',):
+        # pgAgent jobs likewise (M6, 2026-11-11).
         result[kind] = frozenset(result.get(kind, frozenset())
                                  | {'create', 'alter', 'drop', 'inspect'})
     return result
@@ -445,7 +446,7 @@ def adapt_catalog(catalog):
         'foreign-data-wrapper', 'foreign-server', 'user-mapping',
         'publication', 'subscription', 'text-search-configuration',
         'text-search-dictionary', 'text-search-parser',
-        'text-search-template',
+        'text-search-template', 'pgagent-job',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -491,6 +492,9 @@ def adapt_catalog(catalog):
         if kind in {'trigger', 'event-trigger', 'rule'}:
             from .triggers import form as trigger_form
             return trigger_form(kind, operation_id, field)
+        if kind == 'pgagent-job':
+            from .pgagent import form as job_form
+            return job_form(operation_id, field)
         if kind in {'role', 'tablespace'}:
             from .cluster import role_form, tablespace_form
             return (role_form if kind == 'role' else tablespace_form)(
@@ -658,7 +662,7 @@ def adapt_catalog(catalog):
                              'publication', 'subscription',
                              'text-search-configuration',
                              'text-search-dictionary', 'text-search-parser',
-                             'text-search-template'} and
+                             'text-search-template', 'pgagent-job'} and
                     operation_id == 'inspect'):
                 # Object-family inspection is the provider tree's own (M3);
                 # database drop joined the editor with FORCE (M6).

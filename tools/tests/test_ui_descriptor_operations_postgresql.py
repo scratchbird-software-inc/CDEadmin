@@ -60,7 +60,7 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
           'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
           'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database',
-          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace'}
+          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace', 'run-now@pgagent-job'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -2137,3 +2137,107 @@ def test_move_objects_between_tablespaces(live):
     finally:
         query('DROP TABLE IF EXISTS public.m_move')
         query(f'DROP TABLESPACE IF EXISTS "{name}"', database=SETTINGS.get('database', 'postgres'))
+
+
+# -- M6 (2026-11-11): pgAgent job editor and Run now against a stand-in pgagent schema -------------
+STAND_IN_PGAGENT = """
+CREATE SCHEMA pgagent;
+CREATE TABLE pgagent.pga_jobclass (jclid serial PRIMARY KEY, jclname text NOT NULL);
+INSERT INTO pgagent.pga_jobclass (jclname) VALUES ('Routine Maintenance');
+CREATE TABLE pgagent.pga_job (
+    jobid serial PRIMARY KEY, jobjclid int NOT NULL, jobname text NOT NULL, jobdesc text NOT NULL DEFAULT '',
+    jobhostagent text NOT NULL DEFAULT '', jobenabled bool NOT NULL DEFAULT true,
+    jobcreated timestamptz NOT NULL DEFAULT now(), jobchanged timestamptz NOT NULL DEFAULT now(),
+    jobagentid int, jobnextrun timestamptz, joblastrun timestamptz);
+CREATE TABLE pgagent.pga_jobstep (
+    jstid serial PRIMARY KEY, jstjobid int NOT NULL REFERENCES pgagent.pga_job ON DELETE CASCADE,
+    jstname text NOT NULL, jstdesc text NOT NULL DEFAULT '', jstenabled bool NOT NULL DEFAULT true,
+    jstkind char(1) NOT NULL, jstcode text NOT NULL DEFAULT '', jstconnstr text NOT NULL DEFAULT '',
+    jstdbname name NOT NULL DEFAULT '', jstonerror char(1) NOT NULL DEFAULT 'f', jscnextrun timestamptz);
+CREATE TABLE pgagent.pga_schedule (
+    jscid serial PRIMARY KEY, jscjobid int NOT NULL REFERENCES pgagent.pga_job ON DELETE CASCADE,
+    jscname text NOT NULL, jscdesc text NOT NULL DEFAULT '', jscenabled bool NOT NULL DEFAULT true,
+    jscstart timestamptz NOT NULL, jscend timestamptz, jscminutes bool[] NOT NULL, jschours bool[] NOT NULL,
+    jscweekdays bool[] NOT NULL, jscmonthdays bool[] NOT NULL, jscmonths bool[] NOT NULL);
+CREATE TABLE pgagent.pga_exception (jexid serial PRIMARY KEY, jexscid int NOT NULL, jexdate date, jextime time);
+CREATE TABLE pgagent.pga_jobagent (jagpid int PRIMARY KEY, jagstation text NOT NULL);
+CREATE TABLE pgagent.pga_joblog (jlgid serial PRIMARY KEY, jlgjobid int NOT NULL, jlgstatus char(1) NOT NULL);
+"""
+
+
+def job_native(jobid):
+    """What the provider's server-scope capture attaches to a job node."""
+    from pgadmin.cdeadmin.providers.postgresql.pgagent import facts
+    # The harness driver attaches to the scratch database for every scope.
+    maintenance = DATABASE
+    (jobname, enabled, desc, agent, jclid), = query(
+        f"SELECT jobname, jobenabled, jobdesc, jobhostagent, jobjclid FROM pgagent.pga_job WHERE jobid={jobid}",
+        database=maintenance)
+    steps = [dict(zip(('jstid', 'jstname', 'jstenabled', 'jstkind', 'jstconntype', 'jstconnstr', 'jstdbname',
+                       'jstonerror', 'jstcode', 'jstdesc'), row)) for row in query(
+        f"""SELECT jstid, jstname, jstenabled, jstkind = 's', (jstdbname != '' OR jstkind = 'b'), jstconnstr,
+                   jstdbname, jstonerror, jstcode, jstdesc FROM pgagent.pga_jobstep WHERE jstjobid={jobid}
+            ORDER BY jstname""", database=maintenance)]
+    schedules = [dict(zip(('jscid', 'jscname', 'jscenabled', 'jscstart', 'jscend', 'jscminutes', 'jschours',
+                           'jscweekdays', 'jscmonthdays', 'jscmonths', 'jscdesc'), row)) for row in query(
+        f"""SELECT jscid, jscname, jscenabled, jscstart::text, jscend::text, jscminutes::text, jschours::text,
+                   jscweekdays::text, jscmonthdays::text, jscmonths::text, jscdesc
+            FROM pgagent.pga_schedule WHERE jscjobid={jobid} ORDER BY jscname""",
+        database=maintenance)]
+    native = {'name': jobname, 'catalog_metadata': {
+        'jobid': jobid, 'jobname': jobname, 'jobenabled': enabled, 'jobdesc': desc, 'jobhostagent': agent,
+        'jobjclid': jclid, 'has_connstr': True, 'steps': steps, 'schedules': schedules}}
+    native['job_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_pgagent_job_lifecycle_and_run_now(live):
+    # The harness driver attaches to the scratch database for every scope.
+    maintenance = DATABASE
+    if query("SELECT count(*) FROM pg_namespace WHERE nspname='pgagent'", database=maintenance) != [(0,)]:
+        pytest.skip('a pgagent schema already exists on this server; the stand-in would collide')
+    query(STAND_IN_PGAGENT, database=maintenance)
+    name = f'ui_ops_job_{UNIQUE}'
+    try:
+        plan = run_server_scope(live, 'pgagent-job', 'create', {
+            'jobname': name, 'jobenabled': True, 'jobjclid': 1, 'jobhostagent': '', 'jobdesc': "it's nightly",
+            'jsteps': [{'jstname': 'vac', 'jstkind': 'sql', 'jstconntype': 'local', 'jstdbname': DATABASE,
+                        'jstcode': 'VACUUM'},
+                       {'jstname': 'report', 'jstkind': 'batch', 'jstonerror': 'i', 'jstcode': 'echo done'}],
+            'jschedules': [{'jscname': 'daily', 'jscstart': '2026-01-01 02:00:00+00', 'jscminutes': '0',
+                            'jschours': '2', 'jscweekdays': '0, 1, 2, 3, 4, 5, 6',
+                            'jscmonthdays': ', '.join(str(i) for i in range(32)),
+                            'jscmonths': ', '.join(str(i) for i in range(12))}]})
+        assert plan['command_preview']['statement'].startswith('DO $$')
+        (jobid,), = query(f"SELECT jobid FROM pgagent.pga_job WHERE jobname='{name}'", database=maintenance)
+        native = job_native(jobid)
+        assert [s['jstname'] for s in native['job_facts']['jsteps']] == ['report', 'vac']
+        assert native['job_facts']['jschedules'][0]['jschours'] == '2'
+        # Alter: disable, rewrite one step, drop the other, add a second schedule, keep the first.
+        steps = {s['jstname']: s for s in native['job_facts']['jsteps']}
+        schedules = native['job_facts']['jschedules']
+        run_server_scope(live, 'pgagent-job', 'alter', {
+            'jobenabled': False,
+            'jsteps': [dict(steps['vac'], jstcode='VACUUM ANALYZE')],
+            'jschedules': schedules + [{'jscname': 'weekly', 'jscstart': '2026-01-04 03:00:00+00',
+                                        'jscminutes': '15', 'jschours': '3', 'jscweekdays': '0',
+                                        'jscmonthdays': '', 'jscmonths': ''}]}, native)
+        native = job_native(jobid)
+        assert native['job_facts']['jobenabled'] is False
+        assert [(s['jstname'], s['jstcode']) for s in native['job_facts']['jsteps']] == [('vac', 'VACUUM ANALYZE')]
+        assert [s['jscname'] for s in native['job_facts']['jschedules']] == ['daily', 'weekly']
+        assert query(f"SELECT jscweekdays[1], jscweekdays[2] FROM pgagent.pga_schedule WHERE jscname='weekly'",
+                     database=maintenance) == [(True, False)]
+        # Run now: the next run is set to the present.
+        assert query(f"SELECT jobnextrun FROM pgagent.pga_job WHERE jobid={jobid}", database=maintenance) == [(None,)]
+        plan, outcome = run(live, 'run-now', kind='pgagent-job', native=native)
+        assert plan['command_preview']['statement'] == f'UPDATE pgagent.pga_job SET jobnextrun = now() WHERE jobid = {jobid}'
+        assert query(f"SELECT jobnextrun IS NOT NULL FROM pgagent.pga_job WHERE jobid={jobid}",
+                     database=maintenance) == [(True,)]
+        # Drop cascades to steps and schedules.
+        run_server_scope(live, 'pgagent-job', 'drop', {'confirmation': name}, native)
+        assert query(f"SELECT count(*) FROM pgagent.pga_job WHERE jobid={jobid}", database=maintenance) == [(0,)]
+        assert query(f"SELECT count(*) FROM pgagent.pga_jobstep WHERE jstjobid={jobid}", database=maintenance) == [(0,)]
+    finally:
+        query('DROP SCHEMA IF EXISTS pgagent CASCADE', database=maintenance)

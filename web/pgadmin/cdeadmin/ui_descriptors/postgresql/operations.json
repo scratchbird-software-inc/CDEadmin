@@ -743,6 +743,20 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. ALTER TABLE/INDEX/MATERIALIZED VIEW ALL IN TABLESPACE ... SET TABLESPACE, one transaction; it takes an exclusive lock on each moved relation. Live check uses tablespace_dir."
+    },
+    {
+      "operation_id": "run-now",
+      "resource_kind": "pgagent-job",
+      "title": "Run now",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py against a stand-in pgagent schema on PostgreSQL 18.3 (the demo image cannot install pgAgent; not checked against a real agent). Sets jobnextrun = now(); the agent picks the job up at its next poll. M6, 2026-11-11."
     }
   ]
 }

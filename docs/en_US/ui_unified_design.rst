@@ -432,6 +432,25 @@ view resources, kept beside the provider-native maintenance operations
 because it offers every VACUUM option and the constraint-backed index
 cases the native forms do not. Not opened in a browser.
 
+M6 seventh slice (2026-11-11), pgAgent jobs: the provider tree's pgAgent
+job node gains create, alter, drop and run now through the provider's
+native route. The job carries its steps and schedules as grids, as the
+inherited job dialog did: a row with an id updates that step or schedule,
+a row without one adds it, and an existing id left out removes it. Create
+compiles to one ``DO`` block in which the new job id flows into its steps
+and schedules, alter to plain update, insert and delete statements, drop
+to one delete that pgAgent cascades, and run now to the inherited
+``jobnextrun = now()``. Every value is a literal; a step connection string
+may not carry a password, and remote steps are refused on a pgAgent whose
+step table has no connection-string column. The provider's capture now
+attaches each job's steps, schedules and that column's presence so the
+editor opens with current values. Schedules and steps are not separate
+editable kinds; they are edited on the job, which is where the inherited
+dialog edited them. Verified live against a stand-in pgagent schema on the
+demo server, because the demo image cannot install pgAgent; not checked
+against a real agent, and the picker-less positions fields (minutes,
+hours, days, months as comma lists) were not exercised in a browser.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
