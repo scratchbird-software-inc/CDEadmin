@@ -7,10 +7,10 @@
 //
 //////////////////////////////////////////////////////////////
 
+import pgAdmin from 'sources/pgadmin';
 import {
   isProviderContextNode, providerContextMenuItems,
-  providerTreeContextActions, registerProviderMenuCategories,
-} from 'pgbrowser/ProviderContextMenu';
+  providerTreeContextActions, registerProviderMenuCategories, openInheritedTool} from 'pgbrowser/ProviderContextMenu';
 
 const action = (overrides={}) => ({
   schema: 'cdeadmin.context-action.v1',
@@ -148,6 +148,19 @@ describe('provider-owned Object Explorer menus', () => {
     ]});
     expect(menus.map(menu => menu.commandId)).toEqual(['engine.mariadb.dashboard', 'database.mariadb.dashboard_editor']);
     expect(menus.every(menu => typeof menu.commandHandler === 'function')).toBe(true);
+  });
+  it('admits and dispatches the inherited PostgreSQL utilities declared for provider nodes', () => {
+    // M6 (2026-11-11): backup, restore, import/export and psql open through the identity bridge.
+    const menus = providerContextMenuItems({cde_context_actions: [
+      action({command_id: 'database.postgresql.backup', handler: 'open_inherited_tool', label: 'Backup...',
+        menu_group: 'backup', arguments: {tool: 'backup', database_target_id: 'postgresql-database:16384'}}),
+    ]});
+    expect(menus.map(menu => menu.commandId)).toEqual(['database.postgresql.backup']);
+    const backupObjects = jest.fn();
+    pgAdmin.Browser.Backup = {backupObjects};
+    openInheritedTool('backup', 'item-1');
+    expect(backupObjects).toHaveBeenCalledWith(null, 'item-1');
+    expect(() => openInheritedTool('vacuum', 'item-1')).toThrow(/not known/);
   });
   it('admits the PostgreSQL per-database dashboard the provider tree declares', () => {
     // M2 (2026-11-10): the inherited database node's dashboard, re-declared for provider nodes.

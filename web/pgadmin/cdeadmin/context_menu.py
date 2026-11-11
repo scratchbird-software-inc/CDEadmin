@@ -49,6 +49,9 @@ _HANDLERS = frozenset({
     'open_firebird_docker',
     'open_firebird_dashboard_editor',
     'refresh_node',
+    # Inherited PostgreSQL utilities (backup, restore, import/export, psql)
+    # opened from a provider-tree node; arguments.tool names the utility.
+    'open_inherited_tool',
     # To Diagram: the browser offers the user's diagrams as a submenu.
     'add_to_diagram',
     'register_endpoint',

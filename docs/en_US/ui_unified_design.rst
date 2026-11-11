@@ -403,6 +403,23 @@ two confirm. Observed live on PostgreSQL 18.3: table ownership moved
 between two roles, the dropped-owned role's objects gone, and indexes
 then every relation moved from a scratch tablespace to pg_default.
 
+M6 fourth slice (2026-11-11), the inherited utilities as openers: backup,
+restore and the psql terminal on a provider-tree database node, backup and
+restore on schema and table resources (restore also on function, trigger
+and index), and import/export on tables, each declared in the engine's
+tools file with the ``open_inherited_tool`` handler. The utilities
+themselves are unchanged apart from one read: a client identity bridge
+(``legacyNodeData`` in the tree utilities) turns a PostgreSQL provider
+database target into the inherited database node keyed by its OID and a
+provider resource into the inherited node its legacy route names, and the
+tree hierarchy walk every inherited dialog relies on applies it, so the
+dialogs see the same server, database, schema and table entries they see
+on the inherited tree. The server node keeps its inherited menus, so
+backup globals, backup server and psql at server scope were never lost.
+Verified by unit tests of the bridge, the hierarchy walk and the handler,
+and by the running application serving the opener actions on the demo
+database node; the dialogs were not opened in a browser.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

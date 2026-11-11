@@ -84,3 +84,33 @@ export function retrieveAncestorOfTypeDatabase(pgBrowser, item, errorAlertTitle)
 
   return databaseInfo;
 }
+
+const PG_DATABASE_TARGET = /^postgresql-database:(\d+)$/;
+
+/**
+ * The inherited node data a PostgreSQL provider-tree item stands for (the
+ * M2 identity bridge, consumed client side since M6, 2026-11-11). A
+ * provider database target becomes a `database` node keyed by its OID; a
+ * provider resource becomes the legacy node its `cde_legacy_route` names
+ * (schema, table, ...). Other items come back unchanged, so the inherited
+ * tools (backup, restore, import/export, psql, maintenance) read the same
+ * `_type`/`_id`/`_label` they read on the inherited tree.
+ */
+export function legacyNodeData(data) {
+  if(!data || typeof data !== 'object') return data;
+  if(data._type === 'cde_database_target') {
+    const match = PG_DATABASE_TARGET.exec(String(data._id ?? ''));
+    if(!match) return data;
+    const label = data.cde_database ?? data.label ?? data._label;
+    return {...data, _type: 'database', _id: Number(match[1]), _label: label, label,
+      cde_bridged_from: 'cde_database_target'};
+  }
+  const route = data.cde_legacy_route;
+  if(data._type === 'cde_resource' && route && typeof route.node_type === 'string' && route.oid != null) {
+    const label = data.label ?? data._label;
+    const parentId = route.tid ?? route.scid ?? route.did;
+    return {...data, _type: route.node_type, _id: route.oid, _pid: parentId, _label: label, label,
+      cde_bridged_from: 'cde_resource'};
+  }
+  return data;
+}

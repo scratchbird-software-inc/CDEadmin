@@ -13,6 +13,44 @@ import {TreeFake} from './tree_fake';
 
 const context = describe;
 
+import {legacyNodeData} from '../../../pgadmin/static/js/tree/tree_utils';
+
+describe('provider-tree identity bridge (M6, 2026-11-11)', () => {
+  const target = {_type: 'cde_database_target', _id: 'postgresql-database:16384', label: 'demo', cde_database: 'demo'};
+  const schema = {_type: 'cde_resource', cde_resource_kind: 'schema', label: 'public', cde_resource_id: 'postgresql:pg_namespace/2200',
+    cde_legacy_route: {gid: 1, sid: 7, did: 16384, scid: 2200, tid: null, oid: 2200, node_type: 'schema'}};
+  const table = {_type: 'cde_resource', cde_resource_kind: 'table', label: 'orders',
+    cde_legacy_route: {gid: 1, sid: 7, did: 16384, scid: 2200, tid: null, oid: 24601, node_type: 'table'}};
+  it('turns a PostgreSQL database target and routed resources into their inherited nodes', () => {
+    expect(legacyNodeData(target)).toMatchObject({_type: 'database', _id: 16384, _label: 'demo', label: 'demo',
+      cde_bridged_from: 'cde_database_target'});
+    expect(legacyNodeData(schema)).toMatchObject({_type: 'schema', _id: 2200, _pid: 2200, _label: 'public'});
+    expect(legacyNodeData(table)).toMatchObject({_type: 'table', _id: 24601, _pid: 2200, _label: 'orders'});
+  });
+  it('leaves other items alone', () => {
+    const firebird = {_type: 'cde_database_target', _id: 'firebird:employee', label: 'employee.fdb'};
+    expect(legacyNodeData(firebird)).toBe(firebird);
+    const unrouted = {_type: 'cde_resource', label: 'x', cde_legacy_route: {node_type: null, oid: 5}};
+    expect(legacyNodeData(unrouted)).toBe(unrouted);
+    const server = {_type: 'server', _id: 7};
+    expect(legacyNodeData(server)).toBe(server);
+    expect(legacyNodeData(undefined)).toBeUndefined();
+  });
+  it('gives the inherited tools a server/database/schema/table hierarchy from provider nodes', () => {
+    const pgBrowser = {Nodes: {server: {hasId: true}, database: {hasId: true}, schema: {hasId: true}, table: {hasId: true}}};
+    const tree = TreeFake.build({
+      id: 'root', children: [{id: 'server_7', data: {_type: 'server', _id: 7, label: 'pg'}, children: [
+        {id: 'db', data: target, children: [{id: 'schemas', data: {_type: 'cde_resource_group', label: 'Schemas'}, children: [
+          {id: 'public', data: schema, children: [{id: 'tables', data: {_type: 'cde_resource_group', label: 'Tables'}, children: [
+            {id: 'orders', data: table}]}]}]}]}]}]}, pgBrowser);
+    // TreeFake carries its own copy of the walk; the bridge lives in the real one.
+    const info = Tree.prototype.getTreeNodeHierarchy.call(tree, tree.findNode('/browser/server_7/db/schemas/public/tables/orders'));
+    expect(info).toMatchObject({server: {_id: 7}, database: {_id: 16384, _label: 'demo'}});
+    expect(info.schema).toMatchObject({_id: 2200, _label: 'public'});
+    expect(info.table).toMatchObject({_id: 24601, _label: 'orders'});
+  });
+});
+
 const treeTests = (treeClass, setDefaultCallBack) => {
   let tree;
   beforeEach(() => {

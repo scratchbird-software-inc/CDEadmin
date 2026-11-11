@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import getApiInstance from 'sources/api_instance';
+import {legacyNodeData} from 'sources/tree/tree_utils';
 import ImportExportSchema from './import_export.ui';
 import { getNodeListByName, getNodeAjaxOptions } from '../../../../browser/static/js/node_ajax';
 import { AllPermissionTypes } from '../../../../browser/static/js/constants';
@@ -120,7 +121,8 @@ define([
     callback_import_export: function(args, item) {
       let i = item || pgBrowser.tree.selected(),
         server_data = null;
-      let isQueryExport = pgBrowser.tree.itemData(i)?._type == 'database' ? true : false;
+      // A provider-tree item stands for its inherited node (M6).
+      let isQueryExport = legacyNodeData(pgBrowser.tree.itemData(i))?._type == 'database' ? true : false;
 
       while (i) {
         let node_data = pgBrowser.tree.itemData(i);

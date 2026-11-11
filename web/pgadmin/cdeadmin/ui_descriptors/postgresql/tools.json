@@ -1,7 +1,7 @@
 {
   "schema": "cdeadmin.ui-tools.v1",
   "engine": "postgresql",
-  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries.",
+  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries. M6 (2026-11-11): the inherited backup, restore, import/export and psql utilities are declared as openers (handler open_inherited_tool); the client identity bridge (legacyNodeData) lets them read a provider node as the inherited node it stands for.",
   "tools": [
     {
       "command_id": "endpoint.{engine_id}.bi_questions",
@@ -114,6 +114,119 @@
       "arguments": {
         "tab": "administration",
         "resource_kind": "access-method"
+      }
+    },
+    {
+      "command_id": "database.postgresql.backup",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Backup...",
+      "description": "The inherited pg_dump backup dialog for this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.backup",
+      "group": "backup",
+      "priority": 10,
+      "arguments": {
+        "tool": "backup"
+      }
+    },
+    {
+      "command_id": "database.postgresql.restore",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Restore...",
+      "description": "The inherited pg_restore dialog for this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.restore",
+      "group": "restore",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "restore"
+      }
+    },
+    {
+      "command_id": "database.postgresql.psql",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "PSQL Tool",
+      "description": "The inherited psql terminal connected to this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "database",
+      "priority": 40,
+      "arguments": {
+        "tool": "psql"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.backup",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Backup...",
+      "description": "The inherited pg_dump backup dialog for this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.backup",
+      "group": "backup",
+      "priority": 10,
+      "arguments": {
+        "tool": "backup"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.restore",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Restore...",
+      "description": "The inherited pg_restore dialog for this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.restore",
+      "group": "restore",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "restore"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table",
+          "function",
+          "trigger",
+          "index"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.import_export",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Import/Export Data...",
+      "description": "The inherited COPY-based import/export dialog for this table.",
+      "handler": "open_inherited_tool",
+      "icon": "action.export",
+      "group": "object",
+      "priority": 20,
+      "mutation": "write",
+      "arguments": {
+        "tool": "import_export"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
       }
     }
   ]

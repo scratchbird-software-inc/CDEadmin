@@ -94,6 +94,32 @@ def test_builders_still_emit_the_migrated_entries():
         profile('sqlite', route_kind='embedded_file'), system, catalog, database_target_id='t1'))
 
 
+def test_postgresql_provider_tree_declares_the_inherited_utilities():
+    """M6 (2026-11-11): backup, restore, import/export and psql open from
+    provider-tree nodes through the identity bridge; declared per scope."""
+    database = {item['command_id']: item for item in database_target_context_actions(
+        profile('postgresql'), {'target_id': 'postgresql-database:16384', 'display_name': 'demo'})}
+    for name, tool in (('backup', 'backup'), ('restore', 'restore'), ('psql', 'psql')):
+        action = database[f'database.postgresql.{name}']
+        assert action['handler'] == 'open_inherited_tool'
+        assert action['arguments']['tool'] == tool
+        assert action['arguments']['database_target_id'] == 'postgresql-database:16384'
+    catalog = {'objects': [{'resource_kind': kind, 'title': kind, 'operations': [], 'editor': {'sections': []}}
+                           for kind in ('schema', 'table', 'view')]}
+    def offered(kind, native=None):
+        resource = {'resource_id': f'{kind}:r', 'resource_kind': kind, 'display_name': 'r', 'display_path': ['r'],
+                    **({'native': native} if native else {})}
+        return set(ids(resource_context_actions(profile('postgresql'), resource, catalog,
+                                                database_target_id='postgresql-database:16384')))
+    assert {'resource.postgresql.backup', 'resource.postgresql.restore'} <= offered('schema')
+    assert 'resource.postgresql.import_export' not in offered('schema')
+    assert {'resource.postgresql.backup', 'resource.postgresql.restore',
+            'resource.postgresql.import_export'} <= offered('table')
+    assert not {'resource.postgresql.backup', 'resource.postgresql.restore',
+                'resource.postgresql.import_export'} & offered('view')
+    assert 'resource.postgresql.backup' not in offered('table', {'system_object': True})
+
+
 def test_browse_data_follows_each_connector_manifest():
     """Owner direction 2026-11-05: Browse data opens the editor with a read of
     every column. 2026-11-06: on every connector, for the resource kinds its

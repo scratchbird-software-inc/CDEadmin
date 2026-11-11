@@ -9,7 +9,7 @@
 
 import { getNodeListByName } from '../../../../browser/static/js/node_ajax';
 import getApiInstance from 'sources/api_instance';
-import {retrieveAncestorOfTypeServer} from 'sources/tree/tree_utils';
+import {retrieveAncestorOfTypeServer, legacyNodeData} from 'sources/tree/tree_utils';
 import RestoreSchema, {getRestoreSaveOptSchema, getRestoreDisableOptionSchema, getRestoreMiscellaneousSchema, getRestoreTypeObjSchema, getRestoreSectionSchema} from './restore.ui';
 import pgAdmin from 'sources/pgadmin';
 import { AllPermissionTypes } from '../../../../browser/static/js/constants';
@@ -118,7 +118,8 @@ define('tools.restore', [
       let that = this,
         tree = pgBrowser.tree,
         i = treeItem || tree.selected(),
-        data = i ? tree.itemData(i) : undefined,
+        // A provider-tree item stands for its inherited node (M6).
+        data = i ? legacyNodeData(tree.itemData(i)) : undefined,
         treeNodeInfo = pgBrowser.tree.getTreeNodeHierarchy(treeItem);
 
       const serverInformation = retrieveAncestorOfTypeServer(pgBrowser, treeItem, gettext('Restore Error')),
