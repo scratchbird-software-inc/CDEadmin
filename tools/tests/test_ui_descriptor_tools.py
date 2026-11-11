@@ -118,6 +118,12 @@ def test_postgresql_provider_tree_declares_the_inherited_utilities():
     assert not {'resource.postgresql.backup', 'resource.postgresql.restore',
                 'resource.postgresql.import_export'} & offered('view')
     assert 'resource.postgresql.backup' not in offered('table', {'system_object': True})
+    # Grant wizard and search objects follow the same opener pattern.
+    for name in ('grant_wizard', 'search_objects'):
+        assert database[f'database.postgresql.{name}']['arguments']['tool'] == name
+    assert {'resource.postgresql.grant_wizard', 'resource.postgresql.search_objects'} <= offered('schema')
+    assert 'resource.postgresql.grant_wizard' not in offered('table')
+    assert 'resource.postgresql.search_objects' in offered('table')
 
 
 def test_browse_data_follows_each_connector_manifest():

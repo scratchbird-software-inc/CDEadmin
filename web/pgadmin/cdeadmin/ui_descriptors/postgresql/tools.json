@@ -228,6 +228,79 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "database.postgresql.grant_wizard",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Grant Wizard...",
+      "description": "The inherited bulk privilege wizard over this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "grant_wizard"
+      }
+    },
+    {
+      "command_id": "database.postgresql.search_objects",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Search Objects...",
+      "description": "The inherited catalog search over this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.search",
+      "group": "information",
+      "priority": 10,
+      "arguments": {
+        "tool": "search_objects"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.grant_wizard",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Grant Wizard...",
+      "description": "The inherited bulk privilege wizard over this schema.",
+      "handler": "open_inherited_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 30,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "grant_wizard"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.search_objects",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Search Objects...",
+      "description": "The inherited catalog search, started from this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.search",
+      "group": "information",
+      "priority": 40,
+      "arguments": {
+        "tool": "search_objects"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
     }
   ]
 }

@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 import GrantWizard from './GrantWizard';
 import { AllPermissionTypes, BROWSER_PANELS } from '../../../../browser/static/js/constants';
+import { legacyNodeData } from 'sources/tree/tree_utils';
 
 
 // Grant Wizard
@@ -73,10 +74,11 @@ define([
     },
 
     // Callback to draw Wizard Dialog
-    start_grant_wizard: function() {
+    start_grant_wizard: function(_action, treeItem) {
       let t = pgBrowser.tree,
-        i = t.selected(),
-        d = this.d = i ? t.itemData(i) : undefined,
+        i = treeItem || t.selected(),
+        // A provider-tree item stands for its inherited node (M6).
+        d = this.d = i ? legacyNodeData(t.itemData(i)) : undefined,
         info = this.info = pgBrowser.tree.getTreeNodeHierarchy(i);
 
       let sid = info.server._id,

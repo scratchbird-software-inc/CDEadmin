@@ -420,6 +420,12 @@ Verified by unit tests of the bridge, the hierarchy walk and the handler,
 and by the running application serving the opener actions on the demo
 database node; the dialogs were not opened in a browser.
 
+M6 fifth slice (2026-11-11): the grant wizard (database and schema scope)
+and search objects (database, schema and table scope) join the openers
+through the same handler and identity bridge; the grant wizard now takes
+the clicked item rather than the tree selection, so a provider node opens
+it with its schema preselected. Not opened in a browser.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
