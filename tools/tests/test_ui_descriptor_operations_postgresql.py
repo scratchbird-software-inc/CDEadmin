@@ -595,3 +595,95 @@ def test_refresh_materialized_view(live):
     assert one("SELECT relispopulated FROM pg_class WHERE oid = 'public.m_mv'::regclass") is False
     maintain(live, 'refresh', 'materialized-view', 'm_mv')
     assert one('SELECT count(*) FROM public.m_mv') == 12
+
+
+# -- M4 (2026-11-11): the sequence editor's lifecycle, provider-native, observed live ------------
+def sequence_native(schema, name):
+    """The target as the provider tree lists it: captured row plus pg_sequence facts."""
+    rows = query(f"""SELECT c.relpersistence, c.relacl::text[], d.description,
+                            s.seqstart, s.seqincrement, s.seqmin, s.seqmax, s.seqcache, s.seqcycle
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     JOIN pg_sequence s ON s.seqrelid=c.oid
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    persistence, acl, comment, start, increment, minimum, maximum, cache, cycle = rows[0]
+    return {'schema': schema, 'name': name, 'comment': comment,
+            'catalog_row': {'relname': name, 'relpersistence': persistence, 'relacl': acl},
+            'children': {'pg_sequence': [{'seqstart': start, 'seqincrement': increment, 'seqmin': minimum,
+                                          'seqmax': maximum, 'seqcache': cache, 'seqcycle': cycle}]}}
+
+
+def run_sequence(live, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, 'sequence', native) if native else None
+    request = {'resource_kind': 'sequence', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation_id == 'drop'), plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    outcome = result['provider_result']
+    assert outcome['transaction_outcome'] == 'committed', outcome
+    return plan
+
+
+@pytest.fixture
+def sequence_reader():
+    reader = 'ui_ops_reader_' + UNIQUE
+    query('CREATE SCHEMA "Seq schema"; CREATE TABLE "Seq schema".owner_t (id bigint); '
+          f'CREATE ROLE {reader}')
+    try:
+        yield reader
+    finally:
+        # The role is cluster-wide; the scratch database goes with the module fixture.
+        query('DROP SCHEMA "Seq schema" CASCADE')
+        query(f'DROP ROLE {reader}')
+
+
+@live_only
+def test_sequence_lifecycle_round_trips(live, sequence_reader):
+    reader = sequence_reader
+    plan = run_sequence(live, 'create', {
+        'schema': 'Seq schema', 'name': 'ticket no', 'comment': "it's", 'increment': 2, 'start': 10,
+        'minimum': 1, 'maximum': 1000, 'cache': 5, 'cycled': True, 'relpersistence': 'logged',
+        'owned_table': 'owner_t', 'owned_column': 'id',
+        'relacl': [{'grantee': reader, 'privileges': 'rU'}],
+        'securities': []})
+    assert plan['command_preview']['statement'].startswith('CREATE SEQUENCE "Seq schema"."ticket no"')
+    native = sequence_native('Seq schema', 'ticket no')
+    assert native['comment'] == "it's"
+    assert native['children']['pg_sequence'][0] == {
+        'seqstart': 10, 'seqincrement': 2, 'seqmin': 1, 'seqmax': 1000, 'seqcache': 5, 'seqcycle': True}
+    assert any(item.startswith(f'{reader}=rU/') for item in native['catalog_row']['relacl'])
+    assert query("SELECT refobjsubid FROM pg_depend WHERE objid='\"Seq schema\".\"ticket no\"'::regclass "
+                 "AND deptype='a'") == [(1,)]
+    # Alter: only the differences run; the unchanged counters stay as they were.
+    plan = run_sequence(live, 'alter', {
+        'name': 'ticket_number', 'schema': 'Seq schema', 'comment': '', 'current_value': 500,
+        # A cleared number never reaches the compiler (the validator drops nulls), so a
+        # bound is removed through its flag.
+        'increment': 2, 'start': 10, 'minimum': 1, 'maximum': 1000, 'no_maximum': True, 'cache': 5,
+        'cycled': False,
+        'relpersistence': 'unlogged', 'owned_by_none': True, 'revoke': [{'grantee': reader}],
+        'relacl': [{'grantee': reader, 'privileges': 'r', 'with_grant': True}]}, native)
+    statement = plan['command_preview']['statement']
+    assert 'INCREMENT BY' not in statement and 'NO MAXVALUE NO CYCLE' in statement
+    native = sequence_native('Seq schema', 'ticket_number')
+    assert native['comment'] is None and native['catalog_row']['relpersistence'] == 'u'
+    assert native['children']['pg_sequence'][0]['seqmax'] == 9223372036854775807
+    assert native['children']['pg_sequence'][0]['seqcycle'] is False
+    assert query("SELECT nextval('\"Seq schema\".ticket_number')") == [(500,)]
+    assert query("SELECT count(*) FROM pg_depend WHERE objid='\"Seq schema\".ticket_number'::regclass "
+                 "AND deptype='a'") == [(0,)]
+    assert [item for item in native['catalog_row']['relacl'] if item.startswith(reader)] == [
+        f'{reader}=r*/{SETTINGS["user"]}']
+    # Drop needs the typed name and refuses a wrong one before anything runs.
+    provider, route = live
+    with pytest.raises(Exception):
+        run_sequence(live, 'drop', {'confirmation': 'other', 'cascade': False}, native)
+    run_sequence(live, 'drop', {'confirmation': 'ticket_number', 'cascade': False}, native)
+    assert query("SELECT count(*) FROM pg_class WHERE relname='ticket_number'") == [(0,)]

@@ -429,6 +429,7 @@ def adapt_catalog(catalog):
     maintenance = MAINTENANCE_OPERATIONS
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
+        'sequence',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -443,6 +444,9 @@ def adapt_catalog(catalog):
         if kind == 'large-object':
             from .large_objects import form
             return form(operation_id, field)
+        if kind == 'sequence':
+            from .sequences import form as sequence_form
+            return sequence_form(operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -580,7 +584,9 @@ def adapt_catalog(catalog):
                 operation['mutation_class'] = mutation_classes[operation_id]
                 operation['confirmation_required'] = (kind, operation_id) in CONFIRMED
                 operation['target_required'] = True
-            elif kind in native_form_kinds:
+            elif kind in native_form_kinds and not (
+                    kind == 'sequence' and operation_id == 'inspect'):
+                # Sequence inspection is the provider tree's own (M3).
                 operation['form'] = native_form(
                     kind, operation_id, resource['title']
                 )

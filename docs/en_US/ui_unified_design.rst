@@ -201,6 +201,18 @@ The inspector's *Statistics* section shows several inherited rows (a pgAgent
 run log, per-index counters) as one table with the rows' keys as columns;
 one object's statistics stay a name and value grid.
 
+M4 first slice (2026-11-11), the sequence editor: create, alter and drop on
+a PostgreSQL provider-tree sequence run through the provider's own native
+route (validate, plan with the exact statement text, apply inside one
+transaction on a private attachment), like the advanced-object forms. The
+dialog's field ids follow the inherited sequence dialog (owner, comment,
+current value, increment, start, minimum, maximum, cache, cycled,
+persistence, owned-by table and column, privileges, security labels); alter
+emits only the clauses that differ from the captured facts, grants are
+additive with an explicit revoke list, and drop needs the typed name.
+Inspection of a sequence stays the provider tree's own. The inherited
+dialog remains reachable through the inherited tree.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

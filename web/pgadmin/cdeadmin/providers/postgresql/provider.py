@@ -1122,6 +1122,10 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'transform':
                 native.update(data_type=raw['data_type_identity'], language=raw['language_name'],
                               name=raw['data_type_identity'] + ' / ' + raw['language_name'])
+            if item['resource_kind'] == 'sequence':
+                # The alter dialog's initial values (M4, 2026-11-11).
+                from .sequences import facts as sequence_facts
+                native['sequence_facts'] = sequence_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
