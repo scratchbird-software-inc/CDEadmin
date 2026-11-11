@@ -52,6 +52,9 @@ class ViewMapTests(unittest.TestCase):
         self.assertEqual(
             {'gid': 1, 'sid': 7, 'did': 10, 'scid': 2200, 'fnid': 16610},
             views.view_kwargs(chain('trigger_function')))
+        self.assertEqual(
+            {'gid': 1, 'sid': 7, 'did': 10, 'scid': 2200, 'tid': 16601,
+             'clid': 3}, views.view_kwargs(chain('column', oid=3)))
         self.assertEqual({'gid': 1, 'sid': 7, 'did': 10, 'eid': 16610},
                          views.view_kwargs(chain('extension', scid=None)))
         self.assertEqual({'gid': 1, 'sid': 7, 'rid': 16610},

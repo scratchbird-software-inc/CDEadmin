@@ -162,8 +162,12 @@ keys); one object's statistics show as a name and value list. Third slice
 the inherited tree's *Login/Group Roles* and *Tablespaces* collections beside
 its databases; their members come from the inherited node templates at server
 scope, each with its identity chain, so the same inherited SQL, dependencies
-and (for tablespaces) statistics apply. Columns, system objects, replica nodes
-and pgAgent are later slices.
+and (for tablespaces) statistics apply. Fourth slice (2026-11-11): tables,
+partitioned tables, views, materialized views and foreign tables carry a
+*Columns* group whose members come from the attribute facts the catalog capture
+already holds; each column has its identity chain, so the inherited column SQL,
+statistics and dependencies apply. System objects, replica nodes and pgAgent
+are later slices.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

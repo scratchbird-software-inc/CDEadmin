@@ -31,6 +31,7 @@ CONSTRAINT_NODE_TYPES = {
 LEGACY_NODE_TYPES = {
     'database': 'database',
     'schema': 'schema',
+    'column': 'column',
     'table': 'table',
     'partitioned-table': 'table',
     'view': 'view',

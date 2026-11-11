@@ -421,6 +421,54 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         with self.assertRaisesRegex(PostgreSQLProviderError, 'no longer exists'):
             self.provider.inspect_resource(resource)
 
+    def test_relations_list_their_columns_as_children(self):
+        table = {'resource_id': 'postgresql:pg_class:16393',
+                 'resource_kind': 'table', 'display_name': 'assets',
+                 'display_path': ['appdb', 'service', 'assets'],
+                 'native': {'catalog': 'pg_class', 'oid': 16393,
+                            'schema': 'service', 'catalog_row': {},
+                            'children': {'pg_attribute': [
+                                {'attname': 'asset_id', 'attnum': 1,
+                                 'attnotnull': True,
+                                 'formatted_type': 'integer'},
+                                {'attname': 'tag', 'attnum': 2,
+                                 'attnotnull': False,
+                                 'formatted_type': 'character varying(40)',
+                                 'comment': 'label'}]}}}
+        schema = {'resource_id': 'postgresql:pg_namespace:16500',
+                  'resource_kind': 'schema', 'display_name': 'service',
+                  'display_path': ['appdb', 'service'],
+                  'native': {'catalog': 'pg_namespace', 'oid': 16500,
+                             'schema': None, 'catalog_row': {}}}
+        self.provider.capture_catalog = Mock(
+            return_value={'resources': [schema, table]})
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        listed = self.provider.list_resources(parent)
+        self.assertEqual(['schema', 'table', 'column', 'column'],
+                         [item['resource_kind'] for item in listed])
+        tag = listed[3]
+        self.assertEqual('postgresql:pg_class:16393:attnum:2',
+                         tag['resource_id'])
+        # Flat under the branch root like every captured resource; the
+        # navigator nests it under the table.
+        self.assertEqual(listed[1]['parent_resource_id'],
+                         tag['parent_resource_id'])
+        self.assertEqual(['appdb', 'service', 'assets', 'tag'],
+                         tag['display_path'])
+        extension = tag['extensions']['postgresql']
+        self.assertEqual({'sid': 7, 'did': 10, 'scid': 16500, 'tid': 16393,
+                          'oid': 2, 'node_type': 'column'},
+                         extension['legacy_route'])
+        self.assertEqual('character varying(40)',
+                         extension['native']['data_type'])
+        self.assertEqual('postgresql:pg_class:16393',
+                         extension['native']['navigator_parent_resource_id'])
+        # Inspecting a column finds it in the same listing.
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(tag)
+        self.assertEqual(tag['resource_id'], inspected['resource_id'])
+
     def test_server_scope_lists_databases_roles_and_tablespaces(self):
         rows = {
             'database': [{'did': 10, 'name': 'appdb'}],

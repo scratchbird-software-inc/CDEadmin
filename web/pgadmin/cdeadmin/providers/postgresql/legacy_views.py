@@ -76,6 +76,7 @@ VIEW_SPECS = {
                         text=True),
     'fts_template': _spec(_SCHEMA + 'fts_templates', 'FtsTemplateView',
                           'tid', text=True),
+    'column': _spec(_TABLE + 'columns', 'ColumnsView', 'clid', owner='tid'),
     'index': _spec(_TABLE + 'indexes', 'IndexesView', 'idx', owner='tid'),
     'trigger': _spec(_TABLE + 'triggers', 'TriggerView', 'trid',
                      owner='tid'),
@@ -119,12 +120,15 @@ VIEW_SPECS = {
 # Cluster-level node types: no database in the chain; their inherited
 # views carry their own dependency routes.
 CLUSTER_NODE_TYPES = frozenset({'role', 'tablespace'})
+# Node types whose dependencies come through the view's own routes: the
+# cluster-level views and columns (which filter pg_depend by attribute).
+ROUTE_DEPENDENCY_NODE_TYPES = CLUSTER_NODE_TYPES | {'column'}
 
 # Node types whose inherited view has a statistics method.
 STATISTICS_NODE_TYPES = frozenset({
     'database', 'table', 'mview', 'sequence', 'index', 'function',
     'procedure', 'trigger_function', 'subscription', 'primary_key',
-    'unique_constraint', 'tablespace',
+    'unique_constraint', 'tablespace', 'column',
 })
 
 # Node types whose inherited view needs an id the chain does not carry yet
@@ -248,9 +252,9 @@ def inherited_dependencies(chain, connection):
     """(dependencies, dependents) as the inherited panels listed them."""
     spec = VIEW_SPECS[chain['node_type']]
     view = _view(spec)
-    if chain['node_type'] in CLUSTER_NODE_TYPES:
-        # The cluster-level views override the helpers with their own
-        # signatures and state; their route methods set that state up.
+    if chain['node_type'] in ROUTE_DEPENDENCY_NODE_TYPES:
+        # These views override the helpers with their own signatures and
+        # state; their route methods set that state up.
         kwargs = view_kwargs(chain)
         results = []
         for method in ('dependencies', 'dependents'):

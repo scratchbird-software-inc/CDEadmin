@@ -71,6 +71,9 @@ EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
                            'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
                            'role', 'tablespace'})
+# Relation kinds whose pg_attribute facts become column children (M3).
+COLUMN_OWNER_KINDS = frozenset({'table', 'partitioned-table', 'view',
+                                'materialized-view', 'foreign-table'})
 # Kinds listed at server scope (M3, 2026-11-11): the inherited tree's
 # server-level collections beside the databases.
 SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace')
@@ -680,7 +683,8 @@ class PostgreSQLProvider:
     def resource_contributions(cls):
         """Describe PostgreSQL explorer behavior without common branching."""
         resource_kinds = (frozenset(POSTGRESQL_ADMIN_OPERATIONS)
-                          | CATALOG_KINDS | CAPTURE_RESOURCE_KINDS)
+                          | CATALOG_KINDS | CAPTURE_RESOURCE_KINDS
+                          | {'column'})
         return {
             'inspectors': (
                 ResourceInspectorContribution(
@@ -1046,7 +1050,7 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'transform':
                 native.update(data_type=raw['data_type_identity'], language=raw['language_name'],
                               name=raw['data_type_identity'] + ' / ' + raw['language_name'])
-            result.append({
+            resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
                 'resource_kind': {'policy': 'row-policy'}.get(
@@ -1064,8 +1068,64 @@ class PostgreSQLProvider:
                     'legacy_route': legacy_route(
                         route['server_id'], route['database_id'],
                         item['resource_kind'], item['native'], schemas,
-                        backed)}}})
+                        backed)}}}
+            result.append(resource)
+            # M3 (2026-11-11): columns as children of relations, from the
+            # pg_attribute facts capture already attaches; the inherited
+            # column node is keyed by the relation OID and the attribute
+            # number.
+            if item['resource_kind'] in COLUMN_OWNER_KINDS:
+                result.extend(self._column_resources(
+                    resource, item, route, schemas))
         return result
+
+    def _column_resources(self, relation, item, route, schemas):
+        native = item.get('native') or {}
+        rows = (native.get('children') or {}).get('pg_attribute') or []
+        chain = relation['extensions']['postgresql']['legacy_route']
+        columns = []
+        for row in rows:
+            name = row.get('attname')
+            attnum = row.get('attnum')
+            if not isinstance(name, str) or not isinstance(attnum, int):
+                continue
+            column_native = normalize_resource_properties({
+                'catalog': 'pg_attribute', 'oid': native.get('oid'),
+                'attnum': attnum, 'name': name,
+                'schema': native.get('schema'),
+                'data_type': row.get('formatted_type'),
+                'not_null': row.get('attnotnull'),
+                'comment': row.get('comment'),
+                'default_expression': row.get('default_expression'),
+                'navigator_parent_resource_id': relation['resource_id'],
+                'catalog_row': row})
+            columns.append({
+                'identity': self._identity(),
+                'endpoint_id': self.context.endpoint_id,
+                'resource_id': f"{relation['resource_id']}:attnum:{attnum}",
+                'identity_kind': 'postgresql-catalog-oid',
+                'resource_kind': 'column', 'model_family': 'relational',
+                'display_name': name,
+                'display_path': list(relation['display_path']) + [name],
+                # Captured resources are listed flat under the branch root;
+                # the navigator nests them by navigator_parent_resource_id.
+                'parent_resource_id': relation['parent_resource_id'],
+                'authority_path': list(relation['authority_path']) + [
+                    'pg_attribute', str(attnum)],
+                'is_virtual': False, 'generation': relation['generation'],
+                'capability_ids': ['postgresql.catalog.read'],
+                'extensions': {'postgresql': {
+                    'server_id': route['server_id'],
+                    'database_id': route['database_id'],
+                    'catalog_kind': 'column', 'object_id': native.get('oid'),
+                    'attnum': attnum, 'capture_identity': True,
+                    'native': column_native,
+                    'legacy_route': {
+                        'sid': route['server_id'],
+                        'did': route['database_id'],
+                        'scid': chain.get('scid'), 'tid': native.get('oid'),
+                        'oid': attnum, 'node_type': 'column'}}}})
+        return columns
 
     def _resource(self, parent, route, catalog_kind, row):
         id_field = 'did' if catalog_kind == 'database' else 'oid'
