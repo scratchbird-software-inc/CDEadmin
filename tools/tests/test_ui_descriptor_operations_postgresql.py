@@ -1393,3 +1393,119 @@ def test_event_trigger_lifecycle_round_trips(live):
     finally:
         query("DROP EVENT TRIGGER IF EXISTS ui_ops_notes; DROP EVENT TRIGGER IF EXISTS ui_ops_quiet; "
               "DROP FUNCTION public.ui_ops_note()")
+
+
+# -- M4 (2026-11-11): role and tablespace editors from the server scope, provider-native, live -----
+def run_server_scope(live, kind, operation_id, draft, native=None):
+    provider, _route = live
+    resource = target(None, kind, native) if native else None
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (kind, operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+def role_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.cluster import role_facts
+    rows = query(f"""SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolinherit, r.rolconnlimit, r.rolvaliduntil::text,
+                            d.description, r.rolconfig::text[]
+                     FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid=r.oid AND d.classoid='pg_authid'::regclass
+                     WHERE r.rolname='{name}'""")
+    assert len(rows) == 1, name
+    login, superuser, createdb, inherit, limit, until, comment, config = rows[0]
+    native = {'name': name, 'catalog_metadata': {'rolname': name, 'rolcanlogin': login, 'rolsuper': superuser,
+                                                 'description': comment}}
+    native['role_facts'] = role_facts(native)
+    native.update(createdb=createdb, inherit=inherit, limit=limit, until=until, config=config or [])
+    return native
+
+
+@live_only
+def test_role_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('role changes need a superuser')
+    group, member, name = f'ui_ops_grp_{UNIQUE}', f'ui_ops_mem_{UNIQUE}', f'ui_ops_role_{UNIQUE}'
+    query(f'CREATE ROLE {group}; CREATE ROLE {member}')
+    try:
+        run_server_scope(live, 'role', 'create', {
+            'rolname': name, 'rolcanlogin': True, 'rolsuper': False, 'rolcreatedb': True, 'rolinherit': False,
+            'rolconnlimit': 5, 'rolvaliduntil': '2030-01-01 00:00:00+00',
+            'rolmembership': [{'role': group, 'admin': True}], 'rolmembers': [{'role': member}],
+            'variables': [{'name': 'work_mem', 'value': '4MB'}], 'description': "it's"})
+        native = role_native(name)
+        assert (native['role_facts']['rolcanlogin'], native['createdb'], native['inherit'], native['limit'],
+                native['role_facts']['description']) == (True, True, False, 5, "it's")
+        assert native['until'].startswith('2030-01-01') and native['config'] == ['work_mem=4MB']
+        assert query(f"SELECT admin_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}'::regrole") == [(True,)]
+        assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}'::regrole "
+                     f"AND member='{member}'::regrole") == [(1,)]
+        run_server_scope(live, 'role', 'alter', {
+            'rolname': name + '_r', 'rolcanlogin': '', 'rolcreatedb': 'no', 'rolinherit': 'yes',
+            'rolconnlimit': -1, 'rolvaliduntil': 'infinity',
+            'revoke_membership': [{'role': group, 'admin_only': True}],
+            'revoke_members': [{'role': member}],
+            'reset_variables': [{'name': 'work_mem'}],
+            'variables': [{'name': 'statement_timeout', 'value': '5s'}], 'description': ''}, native)
+        native = role_native(name + '_r')
+        assert (native['role_facts']['rolcanlogin'], native['createdb'], native['inherit'], native['limit'],
+                native['until'], native['role_facts']['description']) == (True, False, True, -1, 'infinity', None)
+        assert native['config'] == ['statement_timeout=5s']
+        assert query(f"SELECT admin_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}_r'::regrole") == [(False,)]
+        assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}_r'::regrole") == [(0,)]
+        with pytest.raises(Exception):
+            run_server_scope(live, 'role', 'drop', {'confirmation': 'other'}, native)
+        run_server_scope(live, 'role', 'drop', {'confirmation': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_roles WHERE rolname LIKE '{name}%'") == [(0,)]
+    finally:
+        query(f'DROP ROLE IF EXISTS {name}; DROP ROLE IF EXISTS {name}_r; DROP ROLE {member}; DROP ROLE {group}')
+
+
+def tablespace_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.cluster import tablespace_facts
+    rows = query(f"""SELECT pg_get_userbyid(spcowner), spcoptions::text[], shobj_description(oid, 'pg_tablespace'),
+                            spcacl::text[]
+                     FROM pg_tablespace WHERE spcname='{name}'""")
+    assert len(rows) == 1, name
+    owner, options, comment, acl = rows[0]
+    native = {'name': name, 'catalog_metadata': {'name': name, 'description': comment}}
+    native['tablespace_facts'] = tablespace_facts(native)
+    native.update(owner=owner, options=options or [], acl=acl or [])
+    return native
+
+
+@live_only
+def test_tablespace_lifecycle_round_trips(live):
+    directory = SETTINGS.get('tablespace_dir')
+    if not directory:
+        pytest.skip('tablespace_dir (a server-host directory owned by the server user) is not set')
+    owner, name = f'ui_ops_tsowner_{UNIQUE}', f'ui_ops_ts_{UNIQUE}'
+    query(f'CREATE ROLE {owner}')
+    try:
+        plan = run_server_scope(live, 'tablespace', 'create', {
+            'name': name, 'spcuser': owner, 'spclocation': directory,
+            'spcoptions': [{'name': 'random_page_cost', 'value': 1.5}]})
+        assert plan['command_preview']['statement'].startswith(f'CREATE TABLESPACE "{name}"')
+        native = tablespace_native(name)
+        assert (native['owner'], native['options']) == (owner, ['random_page_cost=1.5'])
+        run_server_scope(live, 'tablespace', 'alter', {
+            'name': name + '_r', 'spcoptions': [{'name': 'seq_page_cost', 'value': '0.5'}],
+            'reset_options': [{'name': 'random_page_cost'}], 'spcacl': [{'grantee': owner}],
+            'description': 'ssd'}, native)
+        native = tablespace_native(name + '_r')
+        assert (native['options'], native['tablespace_facts']['description']) == (['seq_page_cost=0.5'], 'ssd')
+        assert any(item.startswith(f'{owner}=C/') for item in native['acl'])
+        run_server_scope(live, 'tablespace', 'drop', {'confirmation': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_tablespace WHERE spcname LIKE '{name}%'") == [(0,)]
+    finally:
+        # DROP TABLESPACE refuses a multi-statement string (an implicit transaction block): one per call.
+        query(f'DROP TABLESPACE IF EXISTS {name}')
+        query(f'DROP TABLESPACE IF EXISTS {name}_r')
+        query(f'DROP ROLE {owner}')

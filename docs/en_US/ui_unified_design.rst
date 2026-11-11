@@ -283,7 +283,18 @@ inherited dialog does; a rule with event, condition, INSTEAD or ALSO and
 its commands, altered through CREATE OR REPLACE, enable state, comment and
 rename. Transition tables and constraint triggers, which YugabyteDB
 refuses, are offered here. Internal constraint triggers belong to their
-constraint and are not edited.
+constraint and are not edited. Eleventh slice (2026-11-11), the role and
+tablespace editors from the server scope: a role with login, superuser,
+create database, create role, inherit, replication and bypass-RLS
+attributes, connection limit, expiry, membership of and members with the
+admin option, per-role parameters and a comment, altered through rename,
+the attributes a user chooses to change, membership granted and revoked,
+parameters set and reset, and the comment; passwords never travel in a
+plan and stay with the inherited dialog. A tablespace is created with
+owner, location and options as one statement outside a transaction, as
+PostgreSQL requires, altered through rename, owner, options, privileges
+and comment, and dropped outside a transaction. This closes the M4 editor
+list of the parity matrix.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

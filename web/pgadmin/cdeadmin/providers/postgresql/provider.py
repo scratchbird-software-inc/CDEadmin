@@ -400,9 +400,11 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL provider route is invalid'
             )
-        # Database create and alter run from the server scope (M4): the
-        # attachment is the maintenance database, so no database id.
-        optional = request.get('resource_kind') == 'database'
+        # Database, role and tablespace changes run from the server scope
+        # (M4): the attachment is the maintenance database, so no database
+        # id.
+        optional = request.get('resource_kind') in {'database', 'role',
+                                                    'tablespace'}
         return {
             'server_id': _required_int(route, 'server_id'),
             'database_id': (route.get('database_id') if optional and
@@ -1304,6 +1306,12 @@ class PostgreSQLProvider:
             # The alter dialog's initial values (M4, 2026-11-11).
             from .databases import facts as database_facts
             native['database_facts'] = database_facts(native)
+        if catalog_kind == 'role':
+            from .cluster import role_facts
+            native['role_facts'] = role_facts(native)
+        if catalog_kind == 'tablespace':
+            from .cluster import tablespace_facts
+            native['tablespace_facts'] = tablespace_facts(native)
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,
