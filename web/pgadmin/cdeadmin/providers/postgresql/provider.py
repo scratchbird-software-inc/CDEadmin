@@ -1114,6 +1114,10 @@ class PostgreSQLProvider:
         schemas = schema_oids(capture['resources'])
         backed = constraint_indexes(capture['resources'])
         wrappers = foreign_server_wrappers(capture['resources'])
+        wrapper_names = {int(r['native']['oid']): r['display_name']
+                         for r in capture['resources']
+                         if (r.get('native') or {}).get('catalog')
+                         == 'pg_foreign_data_wrapper'}
         relations = {int(r['native']['oid']): (r['native'].get('schema'),
                                               r['display_name'])
                      for r in capture['resources']
@@ -1176,6 +1180,13 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
+            if item['resource_kind'] in {'foreign-data-wrapper',
+                                         'foreign-server', 'user-mapping'}:
+                from .foreign_objects import FACTS as foreign_facts
+                key, reader = foreign_facts[item['resource_kind']]
+                native[key] = (reader(native, wrapper_names)
+                               if item['resource_kind'] == 'foreign-server'
+                               else reader(native))
             if item['resource_kind'] in {'cast', 'collation', 'language'}:
                 from .catalog_objects import FACTS as catalog_facts
                 key, reader = catalog_facts[item['resource_kind']]

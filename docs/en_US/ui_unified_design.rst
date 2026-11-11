@@ -309,6 +309,17 @@ handler, inline and validator functions, trusted or not, or from the
 server's template, with owner and comment; alter renames and changes the
 owner and comment, since handlers and trust are fixed once created.
 Nondeterministic collations, which YugabyteDB refuses, are offered here.
+Second slice (2026-11-11), the foreign data wrapper, foreign server and
+user mapping editors: a wrapper with handler, validator, options, owner
+and comment, altered through rename, owner, handler and validator set or
+removed, options added, set or dropped, and comment; a server with type,
+version, wrapper, options, owner and comment, altered through rename,
+owner, version, options and comment, while the wrapper and type stay
+fixed; a user mapping for a role, PUBLIC or the current user on a server
+with options, altered through its options. The capture redacts these
+options, so changes are explicit rows rather than a diff, and options that
+carry a credential (password, passfile, SSL password and key) are refused
+here and stay with the inherited dialog, so a plan never shows a secret.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

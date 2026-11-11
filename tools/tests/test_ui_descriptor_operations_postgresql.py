@@ -1590,3 +1590,87 @@ def test_cast_collation_and_language_lifecycles_round_trip(live):
         query('DROP CAST IF EXISTS (text AS integer)')
         query('DROP LANGUAGE IF EXISTS ui_ops_lang; DROP LANGUAGE IF EXISTS ui_ops_lang2')
         query('DROP SCHEMA "Cat schema" CASCADE')
+
+
+# -- M5 (2026-11-11): foreign data wrapper, server and user mapping editors, provider-native, live --
+def foreign_native(kind, name, server=None):
+    from pgadmin.cdeadmin.providers.postgresql.foreign_objects import FACTS
+    if kind == 'foreign-data-wrapper':
+        rows = query(f"""SELECT w.fdwoptions::text[], d.description, w.fdwhandler::regproc::text,
+                                w.fdwvalidator::regproc::text
+                         FROM pg_foreign_data_wrapper w
+                         LEFT JOIN pg_description d ON d.objoid=w.oid AND d.classoid='pg_foreign_data_wrapper'::regclass
+                         WHERE w.fdwname='{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][1], 'catalog_row': {'fdwname': name}}
+        native.update(options=rows[0][0] or [], handler=rows[0][2], validator=rows[0][3])
+        native['wrapper_facts'] = FACTS[kind][1](native)
+    elif kind == 'foreign-server':
+        rows = query(f"""SELECT s.srvfdw::int, s.srvtype, s.srvversion, s.srvoptions::text[], d.description, w.fdwname
+                         FROM pg_foreign_server s JOIN pg_foreign_data_wrapper w ON w.oid=s.srvfdw
+                         LEFT JOIN pg_description d ON d.objoid=s.oid AND d.classoid='pg_foreign_server'::regclass
+                         WHERE s.srvname='{name}'""")
+        assert len(rows) == 1, name
+        fdw, typ, version, options, comment, fdwname = rows[0]
+        native = {'name': name, 'comment': comment,
+                  'catalog_row': {'srvname': name, 'srvfdw': str(fdw), 'srvtype': typ, 'srvversion': version}}
+        native['options'] = options or []
+        native['server_facts'] = FACTS[kind][1](native, {fdw: fdwname})
+    else:
+        rows = query(f"""SELECT (pg_identify_object('pg_user_mapping'::regclass, u.oid, 0)).identity,
+                                u.umoptions::text[]
+                         FROM pg_user_mapping u JOIN pg_foreign_server s ON s.oid=u.umserver
+                         WHERE s.srvname='{server}' AND pg_get_userbyid(u.umuser)='{name}'""")
+        assert len(rows) == 1, (name, server)
+        native = {'name': f'{name} / {server}', 'sql_identity': rows[0][0], 'catalog_row': {'options_redacted': True}}
+        native['options'] = rows[0][1] or []
+        native['mapping_facts'] = FACTS[kind][1](native)
+    return native
+
+
+@live_only
+def test_foreign_objects_lifecycle_round_trips(live):
+    try:
+        run_kind(live, 'foreign-data-wrapper', 'create', {
+            'name': 'ui ops fdw', 'fdwoptions': [{'name': 'debug', 'value': 'on'}], 'description': "it's"})
+        wrapper = foreign_native('foreign-data-wrapper', 'ui ops fdw')
+        assert (wrapper['options'], wrapper['comment']) == (['debug=on'], "it's")
+        run_kind(live, 'foreign-data-wrapper', 'alter', {
+            'name': 'ui_ops_fdw', 'set_options': [{'name': 'debug', 'value': 'off'}],
+            'add_options': [{'name': 'level', 'value': '2'}], 'description': ''}, wrapper)
+        wrapper = foreign_native('foreign-data-wrapper', 'ui_ops_fdw')
+        assert (sorted(wrapper['options']), wrapper['comment']) == (['debug=off', 'level=2'], None)
+        run_kind(live, 'foreign-server', 'create', {
+            'name': 'ui ops srv', 'fdwname': 'ui_ops_fdw', 'fsrvtype': 'pg', 'fsrvversion': '18',
+            'fsrvoptions': [{'name': 'host', 'value': '127.0.0.1'}, {'name': 'dbname', 'value': 'x'}],
+            'description': 'remote'})
+        server = foreign_native('foreign-server', 'ui ops srv')
+        assert (server['server_facts']['fdwname'], server['server_facts']['fsrvtype'],
+                sorted(server['options'])) == ('ui_ops_fdw', 'pg', ['dbname=x', 'host=127.0.0.1'])
+        run_kind(live, 'foreign-server', 'alter', {
+            'name': 'ui_ops_srv', 'fsrvversion': '19', 'drop_options': [{'name': 'dbname'}],
+            'set_options': [{'name': 'host', 'value': '127.0.0.2'}], 'description': ''}, server)
+        server = foreign_native('foreign-server', 'ui_ops_srv')
+        assert (server['server_facts']['fsrvversion'], server['options'], server['comment']) == (
+            '19', ['host=127.0.0.2'], None)
+        run_kind(live, 'user-mapping', 'create', {
+            'name': SETTINGS['user'], 'server': 'ui_ops_srv', 'umoptions': [{'name': 'user', 'value': 'reader'}]})
+        mapping = foreign_native('user-mapping', SETTINGS['user'], 'ui_ops_srv')
+        assert mapping['options'] == ['user=reader']
+        # A credential option is refused when the plan is compiled, before anything runs.
+        provider, route = live
+        with pytest.raises(Exception, match='credential'):
+            provider.plan_visual_admin({
+                'resource_kind': 'user-mapping', 'operation_id': 'alter',
+                'target_resource': target(None, 'user-mapping', mapping), '_provider_route': route,
+                'draft': {'add_options': [{'name': 'password', 'value': 'x'}]}})
+        run_kind(live, 'user-mapping', 'alter', {'set_options': [{'name': 'user', 'value': 'writer'}]}, mapping)
+        mapping = foreign_native('user-mapping', SETTINGS['user'], 'ui_ops_srv')
+        assert mapping['options'] == ['user=writer']
+        run_kind(live, 'user-mapping', 'drop', {'confirmation': mapping['name']}, mapping)
+        run_kind(live, 'foreign-server', 'drop', {'confirmation': 'ui_ops_srv'}, server)
+        run_kind(live, 'foreign-data-wrapper', 'drop', {'confirmation': 'ui_ops_fdw'}, wrapper)
+        assert query("SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname LIKE 'ui%'") == [(0,)]
+    finally:
+        query('DROP FOREIGN DATA WRAPPER IF EXISTS "ui ops fdw" CASCADE')
+        query('DROP FOREIGN DATA WRAPPER IF EXISTS ui_ops_fdw CASCADE')
