@@ -75,7 +75,10 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # (create, enable or disable, drop, inspect) and FLASHBACK TABLE.
         # 2534 with TiDB row-region splits and ADMIN CHECK on tables and
         # indexes (the global index is a field of index create).
-        self.assertEqual(2534, result['graphical_operation_count'])
+        # 2535 with the MySQL index alter (visibility then rename, added
+        # 2026-11-05) qualified natively and added to the dialect contract
+        # on 2026-11-10; the gate had refused MySQL's 154 tasks meanwhile.
+        self.assertEqual(2535, result['graphical_operation_count'])
         large_object = next(item for item in self.catalogs['postgresql-native']['descriptor']['objects']
             if item['resource_kind'] == 'large-object')
         self.assertEqual({'inspect', 'create', 'read', 'write', 'truncate', 'alter', 'grant', 'revoke', 'drop',

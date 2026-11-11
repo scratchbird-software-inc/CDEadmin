@@ -352,6 +352,9 @@ class RelationalInventoryTests(unittest.TestCase):
                 self.source = source
 
             def fetchall(self):
+                if 'CREATE_OPTIONS' in self.source:
+                    # Table-option facts (2026-11-05): none here.
+                    return []
                 if 'information_schema.TABLES' in self.source:
                     return [('app', 'widgets', 'BASE TABLE')]
                 if 'FROM information_schema.PLUGINS' in self.source:
@@ -395,6 +398,9 @@ class RelationalInventoryTests(unittest.TestCase):
                 self.source = source
 
             def fetchall(self):
+                if 'CREATE_OPTIONS' in self.source:
+                    # Table-option facts (2026-11-05): none here.
+                    return []
                 if 'information_schema.TABLES' in self.source:
                     return [
                         ('app', 'live_view', 'VIEW'),
@@ -507,6 +513,9 @@ class RelationalInventoryTests(unittest.TestCase):
                         ('app', 'utf8mb4', 'utf8mb4_0900_ai_ci', 'NO'),
                         ('sibling', 'utf8mb4', 'utf8mb4_0900_ai_ci', 'NO'),
                     ]
+                if 'CREATE_OPTIONS' in self.source:
+                    # Table-option facts (2026-11-05): none here.
+                    return []
                 if 'information_schema.TABLES' in self.source:
                     return [
                         ('app', 'widgets', 'BASE TABLE'),
@@ -572,6 +581,9 @@ class RelationalInventoryTests(unittest.TestCase):
                 self.source = source
 
             def fetchall(self):
+                if 'CREATE_OPTIONS' in self.source:
+                    # Table-option facts (2026-11-05): none here.
+                    return []
                 if 'information_schema.TABLES' in self.source:
                     return [('app', 'widgets', 'BASE TABLE')]
                 if 'information_schema.GLOBAL_STATUS' in self.source:
@@ -636,6 +648,9 @@ class RelationalInventoryTests(unittest.TestCase):
                         'app', 'utf8mb4', 'utf8mb4_general_ci',
                         'MariaDB application database',
                     )]
+                if 'CREATE_OPTIONS' in self.source:
+                    # Table-option facts (2026-11-05): none here.
+                    return []
                 if 'information_schema.TABLES' in self.source:
                     return [('app', 'widgets', 'BASE TABLE')]
                 return []

@@ -24,10 +24,15 @@ def qualify(options, output):
                    'target_resource': {'display_name': name, 'display_path': path},
                    '_provider_route': {'host': options.get('host', 'localhost')}}
         assert not MYSQL_ADMINISTRATION.validate(request)['errors']
-        statement = MYSQL_ADMINISTRATION._compile(request)['statements'][0]
-        cursor.execute(statement['source'], statement['parameters'])
+        # An index alter composes visibility and rename as ordered statements
+        # (2026-11-05); every statement of a task runs, in order.
+        statements = MYSQL_ADMINISTRATION._compile(request)['statements']
+        for statement in statements:
+            cursor.execute(statement['source'], statement['parameters'])
         from tools.mysql_task_evidence import record
         record(proof, request)
+        proof['task_evidence']['visual_admin.' + kind + '.' + operation][
+            'statements'] = [statement['source'] for statement in statements]
     try:
         cursor.execute('SELECT VERSION()')
         proof['native_version'] = cursor.fetchone()[0]
@@ -72,12 +77,23 @@ def qualify(options, output):
             primary = next(row for row in observed if row['resource_kind'] == 'index' and row['display_path'] == [database,'t`é','PRIMARY'])
             assert not {'rename','visibility'} & set(primary['native']['administration']['allowed_operations'])
             execute('index', 'visibility', 'renamed`é', {'visibility': 'VISIBLE'})
+            # The family editor's index alter: visibility on the current
+            # name, then the rename.
+            execute('index', 'alter', 'renamed`é',
+                    {'visible': False, 'new_name': 'i`é'})
+            cursor.execute(
+                'SELECT INDEX_NAME, IS_VISIBLE '
+                'FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=%s '
+                'AND TABLE_NAME=%s AND INDEX_NAME<>%s',
+                (database, 't`é', 'PRIMARY'))
+            assert cursor.fetchall() == [('i`é', 'NO')]
             cursor.execute('SELECT id,v FROM ' + table)
             assert cursor.fetchall() == [(1,42)]
             for kind,name in (('PROCEDURE','p`é'),('FUNCTION','f`é')): cursor.execute('DROP ' + kind + ' ' + db + '.' + identifier(name))
             cursor.execute('DROP TABLE ' + table)
             proof['checks'].append({'sql_mode': mode, 'routine_body_and_determinism_retained': True,
                                     'comment_bound_replaced_and_native_empty_noop_observed': True, 'index_identity_visibility_and_unique_enforcement': True,
+                                    'index_alter_visibility_then_rename': True,
                                     'native_catalog_controls': True})
         proof['passed'] = True
     finally:
