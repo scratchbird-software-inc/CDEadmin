@@ -144,6 +144,18 @@ from a driver only the inherited Connect opens, and saved passwords are stored
 as credential bundles the driver would pass through), so the opt-in lives on the
 preserved registration rather than on a second manifest.
 
+Owner direction 2026-11-08, M3 first slice (2026-11-11): a PostgreSQL provider
+node's inspector now carries the reverse-engineered SQL (the ``ddl`` section),
+the dependencies and the dependents that the inherited tree's panels showed,
+produced by the inherited node views through the node's identity chain, so
+pgAdmin's tested SQL templates are reused rather than rewritten. An index that
+backs a primary key, unique or exclusion constraint routes to the constraint
+node, as the inherited tree lists it. Every section reports its own state
+(``inherited`` or ``unavailable: <reason>``); user mappings and foreign servers
+are unavailable until the chain carries the foreign-data-wrapper id, and
+password literals in inherited SQL are redacted. Statistics, server-scope roles
+and tablespaces, columns, system objects and pgAgent are later M3 slices.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

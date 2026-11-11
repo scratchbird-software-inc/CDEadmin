@@ -55,7 +55,7 @@ from .native_admin import (
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .support_policy import admission_error, public_version
-from .legacy_identity import legacy_route, schema_oids
+from .legacy_identity import constraint_indexes, legacy_route, schema_oids
 from .preserved_surface import (
     SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
@@ -932,7 +932,7 @@ class PostgreSQLProvider:
                     if row['resource_id'] == payload['resource_id']]
             if len(rows) != 1:
                 raise PostgreSQLProviderError('Selected native catalog object no longer exists')
-            return rows[0]
+            return self._with_inherited_inspection(rows[0])
         catalog_kind = extension.get('catalog_kind')
         object_id = _required_int(extension, 'object_id')
         rows = self._catalog.read(catalog_kind, extension, object_id)
@@ -942,11 +942,49 @@ class PostgreSQLProvider:
             )
         return self._resource(payload, extension, catalog_kind, rows[0])
 
+    def _with_inherited_inspection(self, resource):
+        """Add the inherited panels' SQL and dependencies to one resource.
+
+        M3 (owner direction 2026-11-08): the provider node shows what the
+        inherited tree showed, produced by the inherited views through the
+        identity chain. Runs only inside a request, where those views have
+        the session and the default connection; otherwise, and on any
+        failure, the resource is returned unchanged except for a state.
+        """
+        from flask import has_request_context
+        extension = resource['extensions']['postgresql']
+        native = extension.get('native')
+        chain = extension.get('legacy_route')
+        if not isinstance(native, dict) or not isinstance(chain, dict):
+            return resource
+        if not has_request_context():
+            native['inherited_inspection'] = {
+                'states': {'all': 'unavailable: outside a request'}}
+            return resource
+        from .legacy_views import inherited_inspection
+
+        def connection_for(database_id):
+            manager = self._driver.connection_manager(chain['sid'])
+            return (manager.connection(did=database_id)
+                    if database_id is not None else manager.connection())
+        inspected = inherited_inspection(chain, connection_for)
+        if 'ddl' in inspected:
+            native['ddl'] = inspected['ddl']
+        if 'dependencies' in inspected:
+            # The captured pg_depend rows stay available under their own key.
+            if 'dependencies' in native:
+                native['dependency_rows'] = native['dependencies']
+            native['dependencies'] = inspected['dependencies']
+            native['dependents'] = inspected['dependents']
+        native['inherited_inspection'] = {'states': inspected['states']}
+        return resource
+
     def _captured_resources(self, parent, route):
         capture = self.capture_catalog(route, include_system=False)
         # Legacy identity chain (parity matrix blocker 5): the schema OIDs
         # come from the captured namespaces, so the chain costs no query.
         schemas = schema_oids(capture['resources'])
+        backed = constraint_indexes(capture['resources'])
         result = []
         for item in capture['resources']:
             native = copy.deepcopy(item['native'])
@@ -978,7 +1016,8 @@ class PostgreSQLProvider:
                     'capture_identity': True, 'native': normalize_resource_properties(native),
                     'legacy_route': legacy_route(
                         route['server_id'], route['database_id'],
-                        item['resource_kind'], item['native'], schemas)}}})
+                        item['resource_kind'], item['native'], schemas,
+                        backed)}}})
         return result
 
     def _resource(self, parent, route, catalog_kind, row):

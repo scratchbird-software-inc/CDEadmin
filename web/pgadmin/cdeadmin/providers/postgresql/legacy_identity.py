@@ -106,6 +106,21 @@ def schema_oids(resources):
     return result
 
 
+def constraint_indexes(resources):
+    """Map an index OID -> (contype, constraint OID) for indexes that back
+    a primary key, unique or exclusion constraint. The inherited tree shows
+    those as constraint nodes, never as indexes."""
+    result = {}
+    for item in resources:
+        native = item.get('native') or {}
+        if native.get('catalog') != 'pg_constraint':
+            continue
+        row = native.get('catalog_row') or {}
+        if row.get('contype') in ('p', 'u', 'x') and row.get('conindid'):
+            result[int(row['conindid'])] = (row['contype'], native.get('oid'))
+    return result
+
+
 def legacy_node_type(resource_kind, native):
     """Return the legacy node type for a captured resource, or ``None``."""
     row = native.get('catalog_row') or {}
@@ -123,17 +138,24 @@ def legacy_node_type(resource_kind, native):
 
 
 def legacy_route(server_id, database_id, resource_kind, native,
-                 schemas):
+                 schemas, backed=None):
     """Return the legacy route chain for one captured resource.
 
-    ``schemas`` maps schema name to OID (see :func:`schema_oids`). The
-    result always carries ``sid``, ``did`` and ``oid``; ``scid`` and
-    ``tid`` are ``None`` when the object has no schema or no owning
-    relation, and ``node_type`` is ``None`` when the legacy tree has no
-    node for the kind. ``gid`` is added by the tree layer, which knows
-    the server group.
+    ``schemas`` maps schema name to OID (see :func:`schema_oids`) and
+    ``backed`` maps index OID to its constraint (see
+    :func:`constraint_indexes`). The result always carries ``sid``,
+    ``did`` and ``oid``; ``scid`` and ``tid`` are ``None`` when the object
+    has no schema or no owning relation, and ``node_type`` is ``None``
+    when the legacy tree has no node for the kind. ``gid`` is added by the
+    tree layer, which knows the server group. An index that backs a
+    constraint routes to the constraint node; its OID stays the index OID.
     """
     node_type = legacy_node_type(resource_kind, native)
+    object_id = native.get('oid')
+    backing = (backed or {}).get(object_id) if node_type == 'index' else None
+    if backing:
+        # The inherited constraint nodes are keyed by the index OID.
+        node_type = CONSTRAINT_NODE_TYPES.get(backing[0])
     schema = native.get('schema')
     scid = schemas.get(schema) if schema else None
     if resource_kind == 'schema':
@@ -154,6 +176,6 @@ def legacy_route(server_id, database_id, resource_kind, native,
         'did': database_id,
         'scid': scid,
         'tid': tid,
-        'oid': native.get('oid'),
+        'oid': object_id,
         'node_type': node_type,
     }

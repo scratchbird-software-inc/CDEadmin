@@ -36,10 +36,10 @@ RESOURCES = [
              parent='postgresql:pg_class:16601'),
     captured('pg_constraint', 16611, 'constraint', 'orders_pkey',
              schema='sales', parent='postgresql:pg_class:16601',
-             row={'contype': 'p', 'contypid': 0}),
+             row={'contype': 'p', 'contypid': 0, 'conindid': 16610}),
     captured('pg_constraint', 16612, 'constraint', 'orders_customer_fk',
              schema='sales', parent='postgresql:pg_class:16601',
-             row={'contype': 'f', 'contypid': 0}),
+             row={'contype': 'f', 'contypid': 0, 'conindid': 16690}),
     captured('pg_constraint', 16620, 'constraint', 'positive_amount',
              schema='sales', row={'contype': 'c', 'contypid': 16619}),
     captured('pg_trigger', 16630, 'trigger', 'orders_audit', schema='sales',
@@ -116,6 +116,19 @@ class LegacyRouteTests(unittest.TestCase):
         route = self.route(13)
         self.assertIsNone(route['node_type'])
         self.assertEqual(2200, route['scid'])
+
+    def test_an_index_backing_a_constraint_routes_to_the_constraint(self):
+        backed = identity.constraint_indexes(RESOURCES)
+        # Foreign keys point conindid at the referenced index; not backing.
+        self.assertEqual({16610: ('p', 16611)}, backed)
+        item = RESOURCES[3]
+        route = identity.legacy_route(7, 10, item['resource_kind'],
+                                      item['native'], self.schemas, backed)
+        self.assertEqual('primary_key', route['node_type'])
+        self.assertEqual(16610, route['oid'])  # keyed by the index OID
+        self.assertEqual(16601, route['tid'])
+        # Without the map the index is routed as an index, as before.
+        self.assertEqual('index', self.route(3)['node_type'])
 
     def test_every_capture_kind_is_mapped(self):
         # A new capture kind must be placed in the table, even as None,
