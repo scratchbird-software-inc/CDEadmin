@@ -55,7 +55,9 @@ from .native_admin import (
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
 from .support_policy import admission_error, public_version
-from .legacy_identity import legacy_route, schema_oids
+from .legacy_identity import (
+    constraint_indexes, foreign_server_wrappers, implicit_type_ids,
+    legacy_route, schema_oids)
 from .preserved_surface import (
     SURFACE_ID, adapt_catalog, concept_declarations, administration_operations,
 )
@@ -69,7 +71,21 @@ LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
-                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'})
+                           'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
+                           'role', 'tablespace', 'replica-node',
+                           'pgagent-job'})
+# Server-level kinds below the server root (M3, 2026-11-11): the inherited
+# tree's Login/Group Roles, Tablespaces, Replica Nodes and pgAgent Jobs
+# collections.
+SERVER_LEVEL_KINDS = frozenset({'role', 'tablespace', 'replica-node',
+                                'pgagent-job'})
+# Relation kinds whose pg_attribute facts become column children (M3).
+COLUMN_OWNER_KINDS = frozenset({'table', 'partitioned-table', 'view',
+                                'materialized-view', 'foreign-table'})
+# Kinds listed at server scope (M3, 2026-11-11): the inherited tree's
+# server-level collections beside the databases.
+SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace', 'replica-node',
+                      'pgagent-job')
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -194,6 +210,8 @@ class PostgreSQLCatalogSource:
             raise PostgreSQLProviderError('PostgreSQL server is unavailable')
         if catalog_kind == 'database':
             return self._databases(manager, object_id)
+        if catalog_kind in SERVER_LEVEL_KINDS:
+            return self._cluster_objects(manager, catalog_kind, object_id)
         database_id = _required_int(route, 'database_id')
         connection = manager.connection(did=database_id)
         if catalog_kind in {'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object'}:
@@ -248,6 +266,41 @@ class PostgreSQLCatalogSource:
         rows = self._rows(status, result)
         if len(rows) > 1000:
             raise PostgreSQLProviderError('Advanced-object catalog exceeds 1000 objects; narrow the scope')
+        return rows
+
+    def _cluster_objects(self, manager, catalog_kind, object_id):
+        """Roles, tablespaces, replica nodes and pgAgent jobs from the
+        inherited node templates."""
+        connection = manager.connection()
+        if catalog_kind == 'pgagent-job':
+            # The inherited pgAgent Jobs collection (maintenance database):
+            # the job row with its agent, class and last log status.
+            sql = self._renderer('pga_job/sql/pre3.4/properties.sql',
+                                 jid=object_id, conn=connection)
+            status, result = connection.execute_dict(sql)
+            return [{**row, 'name': row.get('jobname')}
+                    for row in self._rows(status, result)]
+        if catalog_kind == 'replica-node':
+            # The inherited Replica Nodes collection: pg_stat_replication
+            # rows joined to their slots, keyed by the walsender pid. The
+            # properties template carries the name and every column.
+            template = 'replica_nodes/sql/#{0}#/properties.sql'.format(
+                manager.version)
+            sql = self._renderer(template, pid=object_id, conn=connection)
+            status, result = connection.execute_dict(sql)
+            return self._rows(status, result)
+        if catalog_kind == 'role':
+            template = 'roles/sql/#{0}#/nodes.sql'.format(manager.version)
+            sql = self._renderer(template, rid=object_id, conn=connection)
+        else:
+            template = 'tablespaces/sql/#{0}#/nodes.sql'.format(
+                manager.version)
+            sql = self._renderer(template, tsid=object_id, conn=connection)
+        status, result = connection.execute_dict(sql)
+        rows = self._rows(status, result)
+        if catalog_kind == 'role':
+            # The inherited role template names the role rolname.
+            rows = [{**row, 'name': row.get('rolname')} for row in rows]
         return rows
 
     def _databases(self, manager, object_id):
@@ -657,7 +710,8 @@ class PostgreSQLProvider:
     def resource_contributions(cls):
         """Describe PostgreSQL explorer behavior without common branching."""
         resource_kinds = (frozenset(POSTGRESQL_ADMIN_OPERATIONS)
-                          | CATALOG_KINDS | CAPTURE_RESOURCE_KINDS)
+                          | CATALOG_KINDS | CAPTURE_RESOURCE_KINDS
+                          | {'column'})
         return {
             'inspectors': (
                 ResourceInspectorContribution(
@@ -896,6 +950,10 @@ class PostgreSQLProvider:
         payload['verified_runtime'] = {
             'engine': 'PostgreSQL',
             'server_version': runtime_version,
+            # The endpoint service records engine_id/version (survey B6,
+            # 2026-11-10); both spellings are carried.
+            'engine_id': 'postgresql',
+            'version': runtime_version,
             'driver': LEGACY_DRIVER_TYPE,
             'driver_version': driver_version,
             'verification_state': 'verified',
@@ -910,6 +968,16 @@ class PostgreSQLProvider:
         if payload.get('resource_kind') == 'server' and route.get('database_id') is not None:
             return self._captured_resources(payload, route)
         catalog_kind = extension.get('child_kind')
+        if (payload.get('resource_kind') == 'server' and
+                catalog_kind == 'database' and
+                extension.get('database_id') is None):
+            # Server scope: the inherited tree's databases, roles and
+            # tablespaces (M3, 2026-11-11).
+            return [
+                self._resource(payload, extension, kind, row)
+                for kind in SERVER_SCOPE_KINDS
+                for row in self._catalog.read(kind, extension)
+            ]
         rows = self._catalog.read(catalog_kind, extension)
         return [
             self._resource(payload, extension, catalog_kind, row)
@@ -921,14 +989,19 @@ class PostgreSQLProvider:
         payload = _mapping(request)
         extension = _extension(payload)
         if extension.get('capture_identity'):
+            # M3 performance (2026-11-11): the explorer hands inspect the
+            # listed resource itself, so re-capturing the whole database to
+            # find it again was waste on every click. One catalog row
+            # confirms the object still exists; the inherited views then
+            # add their panels to the listed resource.
             route = {key: extension[key] for key in ('server_id', 'database_id')}
-            parent = {'resource_id': payload.get('parent_resource_id'),
-                      'authority_path': payload.get('authority_path', [])[:-2]}
-            rows = [row for row in self._captured_resources(parent, route)
-                    if row['resource_id'] == payload['resource_id']]
-            if len(rows) != 1:
+            native = extension.get('native') or {}
+            if not self._native_object_exists(route, native,
+                                              extension.get('attnum')):
                 raise PostgreSQLProviderError('Selected native catalog object no longer exists')
-            return rows[0]
+            resource = copy.deepcopy(payload)
+            resource.pop('route', None)
+            return self._with_inherited_inspection(resource)
         catalog_kind = extension.get('catalog_kind')
         object_id = _required_int(extension, 'object_id')
         rows = self._catalog.read(catalog_kind, extension, object_id)
@@ -936,15 +1009,111 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL resource identity did not resolve exactly once'
             )
-        return self._resource(payload, extension, catalog_kind, rows[0])
+        # The payload is the resource itself; _resource builds from its
+        # parent, so the identity (authority and display paths) must be
+        # rebuilt from the resource's own, not appended to them.
+        parent = {
+            'resource_id': payload.get('parent_resource_id'),
+            'authority_path': list(payload.get('authority_path', []))[:-2],
+            'display_path': (list(payload.get('display_path', []))[:-1]
+                             if catalog_kind not in SERVER_LEVEL_KINDS
+                             else []),
+            'generation': payload.get('generation'),
+        }
+        return self._with_inherited_inspection(
+            self._resource(parent, extension, catalog_kind, rows[0]))
 
-    def _captured_resources(self, parent, route):
-        capture = self.capture_catalog(route, include_system=False)
+    def _with_inherited_inspection(self, resource):
+        """Add the inherited panels' SQL and dependencies to one resource.
+
+        M3 (owner direction 2026-11-08): the provider node shows what the
+        inherited tree showed, produced by the inherited views through the
+        identity chain. Runs only inside a request, where those views have
+        the session and the default connection; otherwise, and on any
+        failure, the resource is returned unchanged except for a state.
+        """
+        from flask import has_request_context
+        extension = resource['extensions']['postgresql']
+        native = extension.get('native')
+        chain = extension.get('legacy_route')
+        if not isinstance(native, dict) or not isinstance(chain, dict):
+            return resource
+        if not has_request_context():
+            native['inherited_inspection'] = {
+                'states': {'all': 'unavailable: outside a request'}}
+            return resource
+        from .legacy_views import inherited_inspection
+
+        def connection_for(database_id):
+            manager = self._driver.connection_manager(chain['sid'])
+            return (manager.connection(did=database_id)
+                    if database_id is not None else manager.connection())
+        inspected = inherited_inspection(chain, connection_for)
+        if 'ddl' in inspected:
+            native['ddl'] = inspected['ddl']
+        if 'statistics' in inspected:
+            native['statistics'] = inspected['statistics']
+        if 'dependencies' in inspected:
+            # The captured pg_depend rows stay available under their own key.
+            if 'dependencies' in native:
+                native['dependency_rows'] = native['dependencies']
+            native['dependencies'] = inspected['dependencies']
+            native['dependents'] = inspected['dependents']
+        native['inherited_inspection'] = {'states': inspected['states']}
+        return resource
+
+    def _native_object_exists(self, route, native, attnum=None):
+        """Confirm one captured object on a private attachment."""
+        from .catalog_capture import existence_query
+        try:
+            query = existence_query(native.get('catalog'), native.get('oid'),
+                                    attnum)
+        except ValueError as exc:
+            raise PostgreSQLProviderError(str(exc)) from None
+        opened = self.open_session({'route': route})
+        try:
+            state = self._sessions[opened['session_id']]
+            with state.lock:
+                self._ensure_native_connection(state)
+                status, result = state.connection.execute_dict(query)
+        finally:
+            self.close_session(opened)
+        if not status:
+            raise PostgreSQLProviderError(
+                'PostgreSQL catalog lookup failed')
+        return len((result or {}).get('rows', [])) == 1
+
+    @staticmethod
+    def _show_system_objects():
+        """The inherited tree's "Show system objects" preference (M3,
+        2026-11-11): the provider tree follows the same user choice. False
+        outside a user session or when the preference is unavailable."""
+        try:
+            from pgadmin.utils.preferences import Preferences
+            preference = Preferences.module('browser', create=False)
+            return bool(preference.preference('show_system_objects').get())
+        except Exception:
+            return False
+
+    def _captured_resources(self, parent, route, include_system=None):
+        if include_system is None:
+            include_system = self._show_system_objects()
+        capture = self.capture_catalog(route, include_system=include_system)
         # Legacy identity chain (parity matrix blocker 5): the schema OIDs
         # come from the captured namespaces, so the chain costs no query.
         schemas = schema_oids(capture['resources'])
+        backed = constraint_indexes(capture['resources'])
+        wrappers = foreign_server_wrappers(capture['resources'])
+        relations = {int(r['native']['oid']): (r['native'].get('schema'),
+                                              r['display_name'])
+                     for r in capture['resources']
+                     if (r.get('native') or {}).get('catalog') == 'pg_class'}
+        # Array and relation row types stay out, as on the inherited tree.
+        hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
         for item in capture['resources']:
+            if item['resource_id'] in hidden_types:
+                continue
             native = copy.deepcopy(item['native'])
             native['name'] = item['display_name']
             raw = native.get('catalog_row', {})
@@ -957,7 +1126,20 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'transform':
                 native.update(data_type=raw['data_type_identity'], language=raw['language_name'],
                               name=raw['data_type_identity'] + ' / ' + raw['language_name'])
-            result.append({
+            if item['resource_kind'] == 'sequence':
+                # The alter dialog's initial values (M4, 2026-11-11).
+                from .sequences import facts as sequence_facts
+                native['sequence_facts'] = sequence_facts(native)
+            if item['resource_kind'] == 'extension':
+                from .extensions import facts as extension_facts
+                native['extension_facts'] = extension_facts(native)
+            if item['resource_kind'] == 'policy':
+                from .policies import facts as policy_facts
+                native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] == 'schema':
+                from .schemas import facts as schema_facts
+                native['schema_facts'] = schema_facts(native)
+            resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
                 'resource_kind': {'policy': 'row-policy'}.get(
@@ -974,11 +1156,69 @@ class PostgreSQLProvider:
                     'capture_identity': True, 'native': normalize_resource_properties(native),
                     'legacy_route': legacy_route(
                         route['server_id'], route['database_id'],
-                        item['resource_kind'], item['native'], schemas)}}})
+                        item['resource_kind'], item['native'], schemas,
+                        backed, wrappers)}}}
+            result.append(resource)
+            # M3 (2026-11-11): columns as children of relations, from the
+            # pg_attribute facts capture already attaches; the inherited
+            # column node is keyed by the relation OID and the attribute
+            # number.
+            if item['resource_kind'] in COLUMN_OWNER_KINDS:
+                result.extend(self._column_resources(
+                    resource, item, route, schemas))
         return result
 
+    def _column_resources(self, relation, item, route, schemas):
+        native = item.get('native') or {}
+        rows = (native.get('children') or {}).get('pg_attribute') or []
+        chain = relation['extensions']['postgresql']['legacy_route']
+        columns = []
+        for row in rows:
+            name = row.get('attname')
+            attnum = row.get('attnum')
+            if not isinstance(name, str) or not isinstance(attnum, int):
+                continue
+            column_native = normalize_resource_properties({
+                'catalog': 'pg_attribute', 'oid': native.get('oid'),
+                'attnum': attnum, 'name': name,
+                'schema': native.get('schema'),
+                'data_type': row.get('formatted_type'),
+                'not_null': row.get('attnotnull'),
+                'comment': row.get('comment'),
+                'default_expression': row.get('default_expression'),
+                'navigator_parent_resource_id': relation['resource_id'],
+                'catalog_row': row})
+            columns.append({
+                'identity': self._identity(),
+                'endpoint_id': self.context.endpoint_id,
+                'resource_id': f"{relation['resource_id']}:attnum:{attnum}",
+                'identity_kind': 'postgresql-catalog-oid',
+                'resource_kind': 'column', 'model_family': 'relational',
+                'display_name': name,
+                'display_path': list(relation['display_path']) + [name],
+                # Captured resources are listed flat under the branch root;
+                # the navigator nests them by navigator_parent_resource_id.
+                'parent_resource_id': relation['parent_resource_id'],
+                'authority_path': list(relation['authority_path']) + [
+                    'pg_attribute', str(attnum)],
+                'is_virtual': False, 'generation': relation['generation'],
+                'capability_ids': ['postgresql.catalog.read'],
+                'extensions': {'postgresql': {
+                    'server_id': route['server_id'],
+                    'database_id': route['database_id'],
+                    'catalog_kind': 'column', 'object_id': native.get('oid'),
+                    'attnum': attnum, 'capture_identity': True,
+                    'native': column_native,
+                    'legacy_route': {
+                        'sid': route['server_id'],
+                        'did': route['database_id'],
+                        'scid': chain.get('scid'), 'tid': native.get('oid'),
+                        'oid': attnum, 'node_type': 'column'}}}})
+        return columns
+
     def _resource(self, parent, route, catalog_kind, row):
-        id_field = 'did' if catalog_kind == 'database' else 'oid'
+        id_field = {'database': 'did', 'replica-node': 'pid',
+                    'pgagent-job': 'jobid'}.get(catalog_kind, 'oid')
         object_id = row.get(id_field)
         name = row.get('name')
         if object_id is None or not isinstance(name, str):
@@ -988,6 +1228,11 @@ class PostgreSQLProvider:
         authority_path = list(parent.get('authority_path', []))
         authority_path.extend((catalog_kind, str(object_id)))
         display_path = list(parent.get('display_path', []))
+        if catalog_kind in SERVER_LEVEL_KINDS:
+            # Server-level objects: the navigator places a kind's members
+            # one level below the branch, so their path is their own name
+            # (the server root carries the server's).
+            display_path = []
         display_path.append(name)
         resource_id = 'postgresql:' + '/'.join(authority_path)
         resource_route = {
@@ -995,9 +1240,18 @@ class PostgreSQLProvider:
             for key in ('server_id', 'database_id', 'schema_id')
             if key in route
         }
+        legacy = None
+        if catalog_kind == 'database' or catalog_kind in SERVER_LEVEL_KINDS:
+            legacy = {'sid': route.get('server_id'),
+                      'did': object_id if catalog_kind == 'database' else None,
+                      'scid': None, 'tid': None, 'oid': object_id,
+                      'node_type': {'replica-node': 'replica_nodes',
+                                    'pgagent-job': 'pga_job'}.get(
+                          catalog_kind, catalog_kind)}
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,
+            **({'legacy_route': legacy} if legacy else {}),
             'legacy_metadata': dict(row),
             'native': normalize_resource_properties({
                 **{key: row[key] for key in ('schema', 'name', 'index_method', 'data_type', 'language', 'left_type', 'right_type', 'identity_arguments', 'sql_identity', 'oid') if key in row},

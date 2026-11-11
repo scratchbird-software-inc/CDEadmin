@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 import unittest
@@ -30,12 +31,6 @@ if 'pgadmin' not in sys.modules:
     pgadmin_package = ModuleType('pgadmin')
     pgadmin_package.__path__ = [str(WEB / 'pgadmin')]
     sys.modules['pgadmin'] = pgadmin_package
-if 'pgadmin.utils' not in sys.modules:
-    pgadmin_utils_package = ModuleType('pgadmin.utils')
-    pgadmin_utils_package.__path__ = [str(WEB / 'pgadmin/utils')]
-    sys.modules['pgadmin.utils'] = pgadmin_utils_package
-if 'config' not in sys.modules:
-    sys.modules['config'] = ModuleType('config')
 
 from pgadmin.cdeadmin.core import (  # noqa: E402
     EndpointContext,
@@ -313,6 +308,10 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual(
             '18.3', discovered['verified_runtime']['server_version']
         )
+        # The endpoint service records engine_id/version (survey B6).
+        self.assertEqual('postgresql',
+                         discovered['verified_runtime']['engine_id'])
+        self.assertEqual('18.3', discovered['verified_runtime']['version'])
         self.assertEqual(
             LEGACY_DRIVER_TYPE, discovered['verified_runtime']['driver']
         )
@@ -417,11 +416,256 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
              'node_type': None},
             resource['extensions']['postgresql']['legacy_route'])
         self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=False)
-        inspected = self.provider.inspect_resource(resource)
+        # The provider tree follows the inherited "Show system objects"
+        # preference (M3); a system object inspects from a capture that
+        # includes system objects whatever the preference says.
+        self.provider.capture_catalog = Mock(return_value=capture)
+        with patch.object(type(self.provider), '_show_system_objects',
+                          staticmethod(lambda: True)):
+            self.provider.list_resources(parent)
+        self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=True)
+        # Inspect confirms the listed object with one catalog row instead
+        # of re-capturing the database (M3 performance, 2026-11-11).
+        self.provider.capture_catalog = Mock(return_value=capture)
+        connection = self.driver.manager._connection
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(
+                {**resource, 'route': {'server_id': 7, 'database_id': 10}})
         self.assertEqual(inspected['resource_id'], resource['resource_id'])
-        self.provider.capture_catalog.return_value = {'resources': []}
-        with self.assertRaisesRegex(PostgreSQLProviderError, 'no longer exists'):
+        self.assertNotIn('route', inspected)
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_opfamily WHERE oid = 91',
+            connection.executions[-1][0])
+        self.provider.capture_catalog.assert_not_called()
+        # The private attachment is released again.
+        self.assertTrue(self.driver.manager.release_calls)
+        self.assertEqual({}, self.provider._sessions)
+        with patch.object(connection, 'execute_dict',
+                          return_value=(True, {'rows': []})), \
+                self.assertRaisesRegex(PostgreSQLProviderError,
+                                       'no longer exists'):
             self.provider.inspect_resource(resource)
+        with patch.object(connection, 'execute_dict',
+                          return_value=(False, 'boom')), \
+                self.assertRaisesRegex(PostgreSQLProviderError,
+                                       'lookup failed'):
+            self.provider.inspect_resource(resource)
+
+    def test_existence_query_admits_only_captured_catalogs(self):
+        from pgadmin.cdeadmin.providers.postgresql.catalog_capture import (
+            existence_query)
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_class WHERE oid = 16393',
+            existence_query('pg_class', 16393))
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = 16393 '
+            'AND attnum = 2 AND NOT attisdropped',
+            existence_query('pg_attribute', 16393, 2))
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_largeobject_metadata WHERE oid = 5',
+            existence_query('pg_largeobject', 5))
+        for bad in (('pg_shadow', 1), ('pg_class; --', 1),
+                    ('pg_class', '16393'), ('pg_class', True),
+                    ('pg_attribute', 16393), ('pg_attribute', 16393, 0)):
+            with self.assertRaises(ValueError):
+                existence_query(*bad)
+
+    def test_implicit_types_stay_hidden_as_on_the_inherited_tree(self):
+        def typ(oid, name, typrelid=0):
+            return {'resource_id': f'postgresql:pg_type:{oid}',
+                    'resource_kind': 'type', 'display_name': name,
+                    'display_path': ['appdb', 'service', name],
+                    'native': {'catalog': 'pg_type', 'oid': oid,
+                               'schema': 'service', 'catalog_row': {
+                                   # OIDs arrive as text in captured rows.
+                                   'typname': name,
+                                   'typrelid': str(typrelid)}}}
+        table = {'resource_id': 'postgresql:pg_class:16393',
+                 'resource_kind': 'table', 'display_name': 'assets',
+                 'display_path': ['appdb', 'service', 'assets'],
+                 'native': {'catalog': 'pg_class', 'oid': 16393,
+                            'schema': 'service',
+                            'catalog_row': {'relkind': 'r'}}}
+        composite = {**table, 'resource_id': 'postgresql:pg_class:16500',
+                     'resource_kind': 'composite-type',
+                     'native': {**table['native'], 'oid': 16500,
+                                'catalog_row': {'relkind': 'c'}}}
+        capture = {'resources': [
+            table, composite, typ(16394, 'assets', 16393),
+            typ(16395, '_assets'), typ(16501, 'address', 16500),
+            typ(16502, '_address'), typ(16600, 'mood')]}
+        self.provider.capture_catalog = Mock(return_value=capture)
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        names = [r['display_name'] for r in self.provider.list_resources(
+            parent) if r['resource_kind'] == 'type']
+        self.assertEqual(['address', 'mood'], names)
+        # With system objects shown the inherited node lists row types too,
+        # but never array types.
+        with patch.object(type(self.provider), '_show_system_objects',
+                          staticmethod(lambda: True)):
+            names = [r['display_name'] for r in self.provider.list_resources(
+                parent) if r['resource_kind'] == 'type']
+        self.assertEqual(['assets', 'address', 'mood'], names)
+
+    def test_relations_list_their_columns_as_children(self):
+        table = {'resource_id': 'postgresql:pg_class:16393',
+                 'resource_kind': 'table', 'display_name': 'assets',
+                 'display_path': ['appdb', 'service', 'assets'],
+                 'native': {'catalog': 'pg_class', 'oid': 16393,
+                            'schema': 'service', 'catalog_row': {},
+                            'children': {'pg_attribute': [
+                                {'attname': 'asset_id', 'attnum': 1,
+                                 'attnotnull': True,
+                                 'formatted_type': 'integer'},
+                                {'attname': 'tag', 'attnum': 2,
+                                 'attnotnull': False,
+                                 'formatted_type': 'character varying(40)',
+                                 'comment': 'label'}]}}}
+        schema = {'resource_id': 'postgresql:pg_namespace:16500',
+                  'resource_kind': 'schema', 'display_name': 'service',
+                  'display_path': ['appdb', 'service'],
+                  'native': {'catalog': 'pg_namespace', 'oid': 16500,
+                             'schema': None, 'catalog_row': {}}}
+        self.provider.capture_catalog = Mock(
+            return_value={'resources': [schema, table]})
+        parent = {**parent_resource('database'), 'resource_kind': 'server',
+                  'route': {'server_id': 7, 'database_id': 10}}
+        listed = self.provider.list_resources(parent)
+        self.assertEqual(['schema', 'table', 'column', 'column'],
+                         [item['resource_kind'] for item in listed])
+        tag = listed[3]
+        self.assertEqual('postgresql:pg_class:16393:attnum:2',
+                         tag['resource_id'])
+        # Flat under the branch root like every captured resource; the
+        # navigator nests it under the table.
+        self.assertEqual(listed[1]['parent_resource_id'],
+                         tag['parent_resource_id'])
+        self.assertEqual(['appdb', 'service', 'assets', 'tag'],
+                         tag['display_path'])
+        extension = tag['extensions']['postgresql']
+        self.assertEqual({'sid': 7, 'did': 10, 'scid': 16500, 'tid': 16393,
+                          'oid': 2, 'node_type': 'column'},
+                         extension['legacy_route'])
+        self.assertEqual('character varying(40)',
+                         extension['native']['data_type'])
+        self.assertEqual('postgresql:pg_class:16393',
+                         extension['native']['navigator_parent_resource_id'])
+        # Inspecting a column finds it in the same listing.
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(tag)
+        self.assertEqual(tag['resource_id'], inspected['resource_id'])
+
+    def test_server_scope_lists_databases_roles_and_tablespaces(self):
+        rows = {
+            'database': [{'did': 10, 'name': 'appdb'}],
+            'role': [{'oid': 16400, 'name': 'app_owner'}],
+            'tablespace': [{'oid': 1663, 'name': 'pg_default'}],
+            # Replica Nodes and pgAgent Jobs (M3): listed at server scope
+            # too; none here.
+            'replica-node': [], 'pgagent-job': [],
+        }
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'],
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        listed = self.provider.list_resources(root)
+        self.assertEqual(['database', 'role', 'tablespace'],
+                         [item['resource_kind'] for item in listed])
+        chains = [item['extensions']['postgresql']['legacy_route']
+                  for item in listed]
+        self.assertEqual({'sid': 7, 'did': 10, 'scid': None, 'tid': None,
+                          'oid': 10, 'node_type': 'database'}, chains[0])
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 16400, 'node_type': 'role'}, chains[1])
+        self.assertEqual('tablespace', chains[2]['node_type'])
+        self.assertEqual(['app_owner'], listed[1]['display_path'])
+        self.assertEqual(['demo', 'appdb'], listed[0]['display_path'])
+
+    def test_server_scope_lists_replica_nodes_by_walsender_pid(self):
+        rows = {'database': [], 'role': [], 'tablespace': [],
+                'pgagent-job': [],
+                'replica-node': [{'pid': 4242, 'name': 'Standby [10.0.0.9]',
+                                  'state': 'streaming',
+                                  'slot_name': 'standby_a'}]}
+        reads = []
+
+        def read(kind, route, object_id=None):
+            reads.append((kind, object_id))
+            return rows[kind]
+        self.provider._catalog = SimpleNamespace(read=read)
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        listed = self.provider.list_resources(root)
+        self.assertEqual(['replica-node'],
+                         [item['resource_kind'] for item in listed])
+        node = listed[0]
+        self.assertEqual('postgresql:postgresql/endpoint/e1/replica-node/'
+                         '4242', node['resource_id'])
+        self.assertEqual(['Standby [10.0.0.9]'], node['display_path'])
+        extension = node['extensions']['postgresql']
+        self.assertEqual(4242, extension['object_id'])
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 4242, 'node_type': 'replica_nodes'},
+                         extension['legacy_route'])
+        self.assertEqual('streaming',
+                         extension['native']['catalog_metadata']['state'])
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(node)
+        self.assertEqual(('replica-node', 4242), reads[-1])
+        for key in ('resource_id', 'display_path', 'authority_path'):
+            self.assertEqual(node[key], inspected[key], key)
+
+    def test_server_scope_lists_pgagent_jobs_by_job_id(self):
+        rows = {'database': [], 'role': [], 'tablespace': [],
+                'replica-node': [],
+                'pgagent-job': [{'jobid': 3, 'jobname': 'nightly vacuum',
+                                 'jobenabled': True, 'jlgstatus': 's',
+                                 'jobclass': 'Routine Maintenance',
+                                 'name': 'nightly vacuum'}]}
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        job = self.provider.list_resources(root)[0]
+        self.assertEqual('pgagent-job', job['resource_kind'])
+        self.assertEqual('postgresql:postgresql/endpoint/e1/pgagent-job/3',
+                         job['resource_id'])
+        self.assertEqual(['nightly vacuum'], job['display_path'])
+        extension = job['extensions']['postgresql']
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 3, 'node_type': 'pga_job'},
+                         extension['legacy_route'])
+        self.assertEqual('Routine Maintenance',
+                         extension['native']['catalog_metadata']['jobclass'])
+
+    def test_server_scope_inspect_keeps_the_listed_identity(self):
+        rows = {'role': [{'oid': 16400, 'name': 'app_owner'}]}
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        self.provider._catalog.read = lambda kind, route, object_id=None: (
+            rows['role'] if kind == 'role' else [])
+        listed = [item for item in self.provider.list_resources(root)
+                  if item['resource_kind'] == 'role'][0]
+        with patch('flask.has_request_context', lambda: False):
+            inspected = self.provider.inspect_resource(listed)
+        for key in ('resource_id', 'authority_path', 'display_path',
+                    'parent_resource_id', 'generation'):
+            self.assertEqual(listed[key], inspected[key], key)
 
     def test_resource_contributions_are_postgresql_owned_and_read_only(self):
         contributions = self.provider.resource_contributions()
@@ -857,6 +1101,56 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
             WEB / 'pgadmin/browser/server_groups/servers/databases'
         )
         self.assertTrue(any(preserved.rglob('nodes.sql')))
+
+    def test_catalog_source_lists_roles_and_tablespaces_from_templates(self):
+        manager = FakeManager()
+        driver = FakeDriver(manager)
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(driver, renderer)
+        manager._connection.execute_dict = Mock(side_effect=(
+            (True, {'rows': [{'oid': 10, 'rolname': 'app_owner',
+                              'rolcanlogin': True}]}),
+            (True, {'rows': [{'oid': 1663, 'name': 'pg_default'}]}),
+        ))
+        roles = source.read('role', {'server_id': 7})
+        spaces = source.read('tablespace', {'server_id': 7})
+        templates = [call.args[0] for call in renderer.call_args_list]
+        self.assertEqual(['roles/sql/#18.3#/nodes.sql',
+                          'tablespaces/sql/#18.3#/nodes.sql'], templates)
+        self.assertEqual('rid', [k for k in renderer.call_args_list[0].kwargs
+                                 if k.endswith('id')][0])
+        # The inherited role template names the role rolname.
+        self.assertEqual('app_owner', roles[0]['name'])
+        self.assertEqual('pg_default', spaces[0]['name'])
+
+    def test_catalog_source_lists_pgagent_jobs_from_the_properties_template(
+            self):
+        manager = FakeManager()
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
+        manager._connection.execute_dict = Mock(return_value=(
+            True, {'rows': [{'jobid': 3, 'jobname': 'nightly vacuum'}]}))
+        rows = source.read('pgagent-job', {'server_id': 7}, 3)
+        # The inherited job template names the job jobname.
+        self.assertEqual('nightly vacuum', rows[0]['name'])
+        self.assertEqual('pga_job/sql/pre3.4/properties.sql',
+                         renderer.call_args.args[0])
+        self.assertEqual(3, renderer.call_args.kwargs['jid'])
+
+    def test_catalog_source_lists_replica_nodes_from_the_properties_template(
+            self):
+        manager = FakeManager()
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
+        manager._connection.execute_dict = Mock(return_value=(
+            True, {'rows': [{'pid': 4242, 'name': 'Standby [10.0.0.9]'}]}))
+        rows = source.read('replica-node', {'server_id': 7})
+        self.assertEqual('Standby [10.0.0.9]', rows[0]['name'])
+        self.assertEqual('replica_nodes/sql/#18.3#/properties.sql',
+                         renderer.call_args.args[0])
+        self.assertIsNone(renderer.call_args.kwargs['pid'])
+        source.read('replica-node', {'server_id': 7}, 4242)
+        self.assertEqual(4242, renderer.call_args.kwargs['pid'])
 
     def test_advanced_catalog_binds_native_scope_and_retains_identity(self):
         manager = FakeManager()

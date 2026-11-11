@@ -1858,6 +1858,16 @@ class EndpointService:
             for namespace in ('cache_namespace', 'session_namespace'):
                 identity[namespace] = str(uuid.uuid5(uuid.UUID(identity[namespace]),
                                                     f'postgresql-database:{selected_oid}'))
+        # The provider tree follows the inherited "Show system objects"
+        # preference (M3, 2026-11-11). Listings are cached per namespace,
+        # so each state of the preference has a cache of its own.
+        from pgadmin.cdeadmin.providers.postgresql.provider import (
+            PostgreSQLProvider,
+        )
+        if PostgreSQLProvider._show_system_objects():
+            identity['cache_namespace'] = str(uuid.uuid5(
+                uuid.UUID(identity['cache_namespace']),
+                'postgresql-system-objects'))
         identity_context = EndpointContext.from_identity(identity)
         admitted_permissions = self.provider_registry.admitted_permissions(
             identity_context

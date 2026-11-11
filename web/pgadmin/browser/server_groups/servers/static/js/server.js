@@ -92,6 +92,21 @@ define('pgadmin.node.server', [
         });
 
         pgBrowser.add_menus([{
+          // Owner decision 2026-11-10: a PostgreSQL registration may be
+          // browsed through the provider tree, chosen per server. The
+          // registration keeps its inherited connect and tools.
+          name: 'use_provider_tree', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'use_provider_tree',
+          priority: 6, label: gettext('Browse with the provider tree'),
+          enable: (node) => !node?.cde_endpoint && !node?.cde_provider_tree &&
+            node?.cde_profile_id === 'postgresql-native',
+        },{
+          name: 'use_inherited_tree', node: 'server', module: this,
+          applies: ['object', 'context'], callback: 'use_inherited_tree',
+          priority: 6, label: gettext('Browse with the inherited object tree'),
+          enable: (node) => !node?.cde_endpoint && !!node?.cde_provider_tree &&
+            node?.cde_profile_id === 'postgresql-native',
+        },{
           name: 'postgresql_monitor', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'open_postgresql_monitor',
           priority: 7, label: gettext('PostgreSQL dashboard...'),
@@ -451,7 +466,11 @@ define('pgadmin.node.server', [
           const localProfile = data?.cde_endpoint &&
             (isProviderRegistrationWorkspace(initialTab, initialContext) ||
               initialTab === 'sqlite-recovery' && data.cde_profile_id === 'sqlite-native');
-          const postgresReady = ['semantic', 'studio'].includes(initialTab) &&
+          // A connected inherited PostgreSQL server serves these provider
+          // workspace tabs (database.js opens them directly; M2 2026-11-10
+          // adds the provider-tree database openers).
+          const postgresReady = ['semantic', 'studio', 'export', 'postgresql-test-data',
+            'postgresql-large-object-files', 'administration'].includes(initialTab) &&
             !data?.cde_endpoint && data?.connected;
           if (!providerReady && !postgresReady && !localProfile) {
             if(data?.cde_endpoint) {
@@ -891,6 +910,34 @@ define('pgadmin.node.server', [
         },
 
         /* Cleat saved database server password */
+        use_provider_tree: function(args) {
+          return this.callbacks.choose_object_tree.call(this, args, true);
+        },
+        use_inherited_tree: function(args) {
+          return this.callbacks.choose_object_tree.call(this, args, false);
+        },
+        choose_object_tree: function(args, enabled) {
+          let input = args || {},
+            obj = this,
+            t = pgBrowser.tree,
+            i = input.item || t.selected(),
+            d = i ? t.itemData(i) : undefined;
+          if (!d) return;
+          getApiInstance().put(
+            obj.generate_url(i, 'provider_tree', d, true), {enabled}
+          ).then(({data: res}) => {
+            if (res.success == 1) {
+              pgAdmin.Browser.notifier.success(res.info);
+              t.itemData(i).cde_provider_tree = res.data.cde_provider_tree;
+              // Reload the branch so the chosen tree is served.
+              obj.callbacks.refresh.call(obj, null, i);
+            } else {
+              pgAdmin.Browser.notifier.errorText(res.info);
+            }
+          }).catch(function(error) {
+            pgAdmin.Browser.notifier.pgRespErrorNotify(error);
+          });
+        },
         clear_saved_password: function(args){
           let input = args || {},
             obj = this,

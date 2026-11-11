@@ -60,6 +60,33 @@ RELATION_KINDS = {
 ROUTINE_KINDS = {
     'p': 'procedure', 'a': 'aggregate', 'w': 'window-function', 'f': 'function',
 }
+CAPTURED_CATALOGS = frozenset(
+    {'pg_database', 'pg_attribute', 'pg_largeobject'}
+    | {row[0] for row in CATALOGS + GLOBAL}
+)
+
+
+def existence_query(catalog, oid, attnum=None):
+    """One-row lookup that says whether a captured object still exists.
+
+    M3 performance (2026-11-11): inspect used to re-capture the whole
+    database to find the listed object again. The catalog name is admitted
+    from the capture's own list and the ids are checked integers, so the
+    text needs no parameters and runs on any admitted connection.
+    """
+    if catalog not in CAPTURED_CATALOGS or type(oid) is not int or \
+            not 0 <= oid <= 4294967295:
+        raise ValueError('Select an explicit native catalog identity')
+    if catalog == 'pg_attribute':
+        if type(attnum) is not int or not 1 <= attnum <= 32767:
+            raise ValueError('Select an explicit native column number')
+        return (f'SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = '
+                f'{oid} AND attnum = {attnum} AND NOT attisdropped')
+    if catalog == 'pg_largeobject':
+        catalog = 'pg_largeobject_metadata'
+    return f'SELECT 1 FROM pg_catalog.{catalog} WHERE oid = {oid}'
+
+
 CAPTURE_RESOURCE_KINDS = frozenset(
     {'database', 'domain'} | {row[1] for row in CATALOGS + GLOBAL}
     | set(RELATION_KINDS.values()) | set(ROUTINE_KINDS.values())
@@ -195,7 +222,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                 if catalog == 'pg_class':
                     native += " || jsonb_build_object('partition_bound_sql', pg_catalog.pg_get_expr(c.relpartbound,c.oid,false), 'partition_key_sql', CASE WHEN c.relkind='p' THEN pg_catalog.pg_get_partkeydef(c.oid) END)"
                 if catalog == 'pg_policy':
-                    native += " || jsonb_build_object('using_sql', pg_catalog.pg_get_expr(c.polqual,c.polrelid,false), 'check_sql', pg_catalog.pg_get_expr(c.polwithcheck,c.polrelid,false))"
+                    native += " || jsonb_build_object('using_sql', pg_catalog.pg_get_expr(c.polqual,c.polrelid,false), 'check_sql', pg_catalog.pg_get_expr(c.polwithcheck,c.polrelid,false), 'roles_sql', (SELECT COALESCE(array_agg(CASE WHEN r = 0 THEN 'public' ELSE pg_catalog.pg_get_userbyid(r) END ORDER BY r), ARRAY[]::text[]) FROM unnest(c.polroles) r))"
                 if catalog == 'pg_foreign_server':
                     native += " - 'srvoptions'"
                 if catalog == 'pg_foreign_data_wrapper':

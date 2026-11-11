@@ -36,10 +36,10 @@ RESOURCES = [
              parent='postgresql:pg_class:16601'),
     captured('pg_constraint', 16611, 'constraint', 'orders_pkey',
              schema='sales', parent='postgresql:pg_class:16601',
-             row={'contype': 'p', 'contypid': 0}),
+             row={'contype': 'p', 'contypid': 0, 'conindid': 16610}),
     captured('pg_constraint', 16612, 'constraint', 'orders_customer_fk',
              schema='sales', parent='postgresql:pg_class:16601',
-             row={'contype': 'f', 'contypid': 0}),
+             row={'contype': 'f', 'contypid': 0, 'conindid': 16690}),
     captured('pg_constraint', 16620, 'constraint', 'positive_amount',
              schema='sales', row={'contype': 'c', 'contypid': 16619}),
     captured('pg_trigger', 16630, 'trigger', 'orders_audit', schema='sales',
@@ -55,6 +55,8 @@ RESOURCES = [
              schema=None, parent='postgresql:pg_foreign_server:16655'),
     captured('pg_language', 13, 'language', 'plpgsql', schema=None),
     captured('pg_conversion', 16670, 'conversion', 'latin1_to_utf8'),
+    captured('pg_foreign_server', 16655, 'foreign-server', 'remote',
+             schema=None, row={'srvfdw': '16654'}),
 ]
 
 
@@ -64,8 +66,9 @@ class LegacyRouteTests(unittest.TestCase):
 
     def route(self, index):
         item = RESOURCES[index]
-        return identity.legacy_route(7, 10, item['resource_kind'],
-                                     item['native'], self.schemas)
+        return identity.legacy_route(
+            7, 10, item['resource_kind'], item['native'], self.schemas,
+            wrappers=identity.foreign_server_wrappers(RESOURCES))
 
     def test_schema_oids_come_from_captured_namespaces(self):
         self.assertEqual({'public': 2200, 'sales': 16500}, self.schemas)
@@ -106,6 +109,15 @@ class LegacyRouteTests(unittest.TestCase):
         self.assertEqual('user_mapping', route['node_type'])
         self.assertEqual(16655, route['tid'])
         self.assertIsNone(route['scid'])
+        # The wrapper id rides along for the inherited views (M3 follow-up).
+        self.assertEqual(16654, route['fid'])
+
+    def test_foreign_server_carries_its_wrapper(self):
+        route = self.route(14)
+        self.assertEqual('foreign_server', route['node_type'])
+        self.assertEqual(16654, route['fid'])
+        self.assertIsNone(route['tid'])
+        self.assertNotIn('fid', self.route(12))
 
     def test_cluster_level_objects_have_no_schema(self):
         route = self.route(12)
@@ -116,6 +128,19 @@ class LegacyRouteTests(unittest.TestCase):
         route = self.route(13)
         self.assertIsNone(route['node_type'])
         self.assertEqual(2200, route['scid'])
+
+    def test_an_index_backing_a_constraint_routes_to_the_constraint(self):
+        backed = identity.constraint_indexes(RESOURCES)
+        # Foreign keys point conindid at the referenced index; not backing.
+        self.assertEqual({16610: ('p', 16611)}, backed)
+        item = RESOURCES[3]
+        route = identity.legacy_route(7, 10, item['resource_kind'],
+                                      item['native'], self.schemas, backed)
+        self.assertEqual('primary_key', route['node_type'])
+        self.assertEqual(16610, route['oid'])  # keyed by the index OID
+        self.assertEqual(16601, route['tid'])
+        # Without the map the index is routed as an index, as before.
+        self.assertEqual('index', self.route(3)['node_type'])
 
     def test_every_capture_kind_is_mapped(self):
         # A new capture kind must be placed in the table, even as None,

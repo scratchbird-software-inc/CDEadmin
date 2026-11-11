@@ -7,12 +7,11 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {act, fireEvent, screen, waitFor, within, useLayoutEffect, useState, render, bootstrap,
-  ProviderWorkspaceContent, DatabaseTargetWorkspace, ObjectInspectorSection, ResultControls,
-  RecordListAdminField, ServerProfileWorkspace, VisualAdministration, VisualAdminField,
-  inspectorSections, initialObjectDraft, visibleFieldOptions, changedFieldDraft,
-  administrationResourceId, administrationOutcomeValue, ProviderWorkspaceModule, modelFixtures,
-  getApiInstance, requestSQLSource, firebirdManifest, installSharedHooks, installWorkspaceHooks,
+import {
+  fireEvent, screen, waitFor, within, render, bootstrap, ProviderWorkspaceContent,
+  DatabaseTargetWorkspace, ObjectInspectorSection, ResultControls, ServerProfileWorkspace,
+  VisualAdministration, inspectorSections, initialObjectDraft, changedFieldDraft,
+  ProviderWorkspaceModule, firebirdManifest, installSharedHooks, installWorkspaceHooks,
 } from './providerWorkspaceContentShared';
 
 jest.mock('../../../pgadmin/static/js/api_instance');
@@ -284,6 +283,36 @@ describe('ProviderWorkspaceContent (properties, forms and catalogs)', () => {
         whiteSpace: 'normal', textOverflow: 'clip', overflowWrap: 'anywhere'});
     }
     expect(panel.querySelector('span')).toHaveStyle({overflowWrap: 'anywhere'});
+  });
+
+  it('shows several statistics rows as one table', () => {
+    render(<ObjectInspectorSection initialSection="statistics" resource={{
+      display_name: 'nightly vacuum', resource_kind: 'pgagent-job',
+      extensions: {postgresql: {native: {
+        property_sections: ['properties', 'statistics'],
+        statistics: [
+          {Run: 2, Status: 's', Duration: '00:00:02'},
+          {Run: 1, Status: 'f', Duration: '00:00:09', Note: 'retry'},
+        ]}}}}} />);
+    const table = screen.getByRole('table', {name: 'Statistics rows'});
+    expect(within(table).getAllByRole('columnheader').map((cell) =>
+      cell.textContent)).toEqual(['Run', 'Status', 'Duration', 'Note']);
+    const cells = within(table).getAllByRole('cell').map((cell) =>
+      cell.textContent);
+    expect(cells).toEqual(['2', 's', '00:00:02', 'Not set',
+      '1', 'f', '00:00:09', 'retry']);
+    expect(screen.queryByRole('list')).toBeNull();
+  });
+
+  it('keeps one object\'s statistics as a name and value grid', () => {
+    render(<ObjectInspectorSection initialSection="statistics" resource={{
+      display_name: 'assets', resource_kind: 'table',
+      extensions: {postgresql: {native: {
+        property_sections: ['properties', 'statistics'],
+        statistics: {'Table size': '16 kB', 'Live tuples': 3}}}}}} />);
+    expect(screen.queryByRole('table', {name: 'Statistics rows'})).toBeNull();
+    expect(screen.getByRole('table', {name: 'Native provider properties'}))
+      .toHaveTextContent('Live tuples');
   });
 
   it.each([false, true])('supports host-owned or bounded scrolling (%s)', (containedScroll) => {

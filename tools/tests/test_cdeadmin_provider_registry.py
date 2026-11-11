@@ -31,12 +31,6 @@ if 'pgadmin' not in sys.modules:
     pgadmin_package = ModuleType('pgadmin')
     pgadmin_package.__path__ = [str(WEB / 'pgadmin')]
     sys.modules['pgadmin'] = pgadmin_package
-if 'pgadmin.utils' not in sys.modules:
-    pgadmin_utils_package = ModuleType('pgadmin.utils')
-    pgadmin_utils_package.__path__ = [str(WEB / 'pgadmin/utils')]
-    sys.modules['pgadmin.utils'] = pgadmin_utils_package
-if 'config' not in sys.modules:
-    sys.modules['config'] = ModuleType('config')
 
 from pgadmin.cdeadmin.core import (  # noqa: E402
     EndpointContext,

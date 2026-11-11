@@ -149,4 +149,18 @@ describe('provider-owned Object Explorer menus', () => {
     expect(menus.map(menu => menu.commandId)).toEqual(['engine.mariadb.dashboard', 'database.mariadb.dashboard_editor']);
     expect(menus.every(menu => typeof menu.commandHandler === 'function')).toBe(true);
   });
+  it('admits the PostgreSQL per-database dashboard the provider tree declares', () => {
+    // M2 (2026-11-10): the inherited database node's dashboard, re-declared for provider nodes.
+    const menus = providerContextMenuItems({cde_context_actions: [
+      action({command_id: 'database.postgresql.monitoring', handler: 'open_postgresql_monitor',
+        label: 'PostgreSQL dashboard...', menu_group: 'availability',
+        arguments: {database_target_id: 'postgresql-database:16384'}}),
+      action({command_id: 'database.postgresql.monitoring_policy', handler: 'open_postgresql_monitor',
+        label: 'Configure PostgreSQL monitoring...', menu_group: 'availability', mutation_class: 'admin',
+        arguments: {database_target_id: 'postgresql-database:16384', policy_mode: true}}),
+    ]});
+    expect(menus.map(menu => menu.commandId)).toEqual([
+      'database.postgresql.monitoring', 'database.postgresql.monitoring_policy']);
+    expect(menus.every(menu => typeof menu.commandHandler === 'function')).toBe(true);
+  });
 });

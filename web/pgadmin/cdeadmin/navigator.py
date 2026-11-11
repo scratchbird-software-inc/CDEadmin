@@ -29,6 +29,11 @@ class ProviderNavigatorError(ValueError):
 
 _KIND_LABELS = {
     'character-set': 'Character sets',
+    # Irregular plurals the generic rule gets wrong (seen on the PostgreSQL
+    # system branch, 2026-11-11).
+    'operator-class': 'Operator classes',
+    'operator-family': 'Operator families',
+    'text-search-dictionary': 'Text search dictionaries',
     'constraint': 'Constraints',
     'database': 'Databases',
     'domain': 'Domains',
@@ -53,6 +58,8 @@ _KIND_LABELS = {
     'procedure': 'Procedures',
     'publication': 'Replication objects',
     'replication-channel': 'Replication objects',
+    'replica-node': 'Replica Nodes',
+    'pgagent-job': 'pgAgent Jobs',
     'resource-group': 'Resource groups',
     'role': 'Roles',
     'authentication-mapping': 'Local authentication mappings',

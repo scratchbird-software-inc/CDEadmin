@@ -31,6 +31,7 @@ CONSTRAINT_NODE_TYPES = {
 LEGACY_NODE_TYPES = {
     'database': 'database',
     'schema': 'schema',
+    'column': 'column',
     'table': 'table',
     'partitioned-table': 'table',
     'view': 'view',
@@ -106,6 +107,41 @@ def schema_oids(resources):
     return result
 
 
+def _oid(value):
+    """An OID from the capture (int, or text in ``to_jsonb`` rows)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def foreign_server_wrappers(resources):
+    """Map foreign server OID -> its foreign-data-wrapper OID."""
+    result = {}
+    for item in resources:
+        native = item.get('native') or {}
+        if native.get('catalog') == 'pg_foreign_server':
+            wrapper = _oid((native.get('catalog_row') or {}).get('srvfdw'))
+            if wrapper:
+                result[_oid(native.get('oid'))] = wrapper
+    return result
+
+
+def constraint_indexes(resources):
+    """Map an index OID -> (contype, constraint OID) for indexes that back
+    a primary key, unique or exclusion constraint. The inherited tree shows
+    those as constraint nodes, never as indexes."""
+    result = {}
+    for item in resources:
+        native = item.get('native') or {}
+        if native.get('catalog') != 'pg_constraint':
+            continue
+        row = native.get('catalog_row') or {}
+        if row.get('contype') in ('p', 'u', 'x') and row.get('conindid'):
+            result[int(row['conindid'])] = (row['contype'], native.get('oid'))
+    return result
+
+
 def legacy_node_type(resource_kind, native):
     """Return the legacy node type for a captured resource, or ``None``."""
     row = native.get('catalog_row') or {}
@@ -123,17 +159,27 @@ def legacy_node_type(resource_kind, native):
 
 
 def legacy_route(server_id, database_id, resource_kind, native,
-                 schemas):
+                 schemas, backed=None, wrappers=None):
     """Return the legacy route chain for one captured resource.
 
-    ``schemas`` maps schema name to OID (see :func:`schema_oids`). The
-    result always carries ``sid``, ``did`` and ``oid``; ``scid`` and
-    ``tid`` are ``None`` when the object has no schema or no owning
-    relation, and ``node_type`` is ``None`` when the legacy tree has no
-    node for the kind. ``gid`` is added by the tree layer, which knows
-    the server group.
+    ``schemas`` maps schema name to OID (see :func:`schema_oids`) and
+    ``backed`` maps index OID to its constraint (see
+    :func:`constraint_indexes`). The result always carries ``sid``,
+    ``did`` and ``oid``; ``scid`` and ``tid`` are ``None`` when the object
+    has no schema or no owning relation, and ``node_type`` is ``None``
+    when the legacy tree has no node for the kind. ``gid`` is added by the
+    tree layer, which knows the server group. An index that backs a
+    constraint routes to the constraint node; its OID stays the index OID.
+    ``wrappers`` maps foreign server OID to wrapper OID (see
+    :func:`foreign_server_wrappers`): foreign servers and user mappings
+    carry the wrapper as ``fid``, which their inherited views take.
     """
     node_type = legacy_node_type(resource_kind, native)
+    object_id = native.get('oid')
+    backing = (backed or {}).get(object_id) if node_type == 'index' else None
+    if backing:
+        # The inherited constraint nodes are keyed by the index OID.
+        node_type = CONSTRAINT_NODE_TYPES.get(backing[0])
     schema = native.get('schema')
     scid = schemas.get(schema) if schema else None
     if resource_kind == 'schema':
@@ -149,11 +195,49 @@ def legacy_route(server_id, database_id, resource_kind, native,
         tid = inherits[0].get('inhparent') if inherits else None
     elif node_type == 'user_mapping':
         tid = _parent_oid(native, 'pg_foreign_server')
-    return {
+    chain = {
         'sid': server_id,
         'did': database_id,
         'scid': scid,
         'tid': tid,
-        'oid': native.get('oid'),
+        'oid': object_id,
         'node_type': node_type,
     }
+    if node_type == 'foreign_server':
+        chain['fid'] = _oid((native.get('catalog_row') or {}).get('srvfdw'))
+    elif node_type == 'user_mapping':
+        chain['fid'] = (wrappers or {}).get(tid)
+    return chain
+
+
+def implicit_type_ids(resources, include_system=False):
+    """Resource ids of captured types the inherited Types node hides.
+
+    The inherited node (``types/.../nodes.sql``) lists neither array types
+    (names starting with an underscore) nor, unless system objects are
+    shown, the row types of relations other than free-standing composite
+    types. The provider tree follows it (M3 follow-up, 2026-11-11).
+    """
+    relkinds = {}
+    for item in resources:
+        native = item.get('native') or {}
+        if native.get('catalog') == 'pg_class':
+            relkinds[_oid(native.get('oid'))] = (
+                native.get('catalog_row') or {}).get('relkind')
+    hidden = set()
+    for item in resources:
+        native = item.get('native') or {}
+        if native.get('catalog') != 'pg_type' or \
+                item.get('resource_kind') != 'type':
+            continue
+        row = native.get('catalog_row') or {}
+        name = row.get('typname') or item.get('display_name') or ''
+        if name.startswith('_'):
+            hidden.add(item['resource_id'])
+            continue
+        # The captured row carries OIDs as text.
+        relation = _oid(row.get('typrelid'))
+        if (not include_system and relation and
+                relkinds.get(relation, 'c') != 'c'):
+            hidden.add(item['resource_id'])
+    return hidden

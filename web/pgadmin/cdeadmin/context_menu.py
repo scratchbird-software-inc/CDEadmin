@@ -45,6 +45,7 @@ _HANDLERS = frozenset({
     'open_sqlite_fleet', 'open_sqlite_dashboard_editor',
     'open_firebird_fleet',
     'open_postgresql_fleet', 'open_postgresql_dashboard_editor',
+    'open_postgresql_monitor',
     'open_firebird_docker',
     'open_firebird_dashboard_editor',
     'refresh_node',

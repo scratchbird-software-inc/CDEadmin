@@ -52,6 +52,9 @@ from pgadmin.utils.preferences import Preferences
 from .... import socketio as sio
 from pgadmin.utils import get_complete_file_path
 from pgadmin.settings.utils import with_object_filters
+from pgadmin.cdeadmin.endpoints.postgresql_tree import (
+    provider_tree_enabled, set_provider_tree, record_inherited_connect,
+)
 from pgadmin.cdeadmin.endpoints import (
     EndpointRegistrationError,
     active_secret_fields,
@@ -144,11 +147,15 @@ def inherited_postgresql_tools_apply(profile):
 
     Schema Diff and the Query Tool's connection switcher are PostgreSQL
     tools driven through the psycopg3 manager. A provider endpoint of
-    another engine has no such manager and must stay off their lists; a
-    PostgreSQL provider endpoint is verified through that same manager,
-    so it stays listed (parity matrix blocker 8, owner direction
-    2026-11-08: PostgreSQL moves onto the provider tree without losing
-    its tools).
+    another engine has no such manager and must stay off their lists. A
+    PostgreSQL registration served by the provider tree stays listed
+    (parity matrix blocker 8, owner direction 2026-11-08: PostgreSQL
+    moves onto the provider tree without losing its tools). Note,
+    2026-11-10: no PostgreSQL provider-endpoint registration exists yet;
+    the survey in Claude-temp-directory/2026-11-10-pg-m2 found that the
+    provider-endpoint verification path never opens the psycopg3
+    manager, so the opt-in must keep the inherited connect path for the
+    listed tools to work.
     """
     return (profile['workflow'] != 'provider_endpoint' or
             profile.get('engine_id') == 'postgresql')
@@ -274,6 +281,9 @@ def _runtime_node_fields(server):
             runtime, 'verified_runtime_version', None),
         'version_support': _version_support(server),
         'cde_passwordless': _passwordless(server),
+        # Owner decision 2026-11-10: a PostgreSQL registration may be
+        # browsed through the provider tree, chosen per server.
+        'cde_provider_tree': provider_tree_enabled(server),
     }
 
 
@@ -306,6 +316,77 @@ def _unsupported_operations(visual_admin, resource_kind):
                 for operation in item.get('operations', [])
                 if operation.get('native_supported') is False)
     return []
+
+
+# Server-level collections of the inherited PostgreSQL tree, offered on the
+# provider tree with the inherited labels (M3, 2026-11-11).
+_PROVIDER_TREE_SERVER_GROUPS = (
+    ('role', 'Login/Group Roles'),
+    ('tablespace', 'Tablespaces'),
+    ('replica-node', 'Replica Nodes'),
+    ('pgagent-job', 'pgAgent Jobs'),
+)
+
+
+def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
+    """Group nodes for roles, tablespaces and replica nodes under a
+    provider-tree server.
+
+    Their children come from the provider navigator at server scope,
+    where the PostgreSQL provider lists the inherited roles, tablespaces
+    and replica-node templates' rows with their identity chains. Replica
+    Nodes and pgAgent Jobs appear under their inherited modules' own
+    rules: replication slots exist ('log'); the pgagent schema is usable in
+    the maintenance database.
+    """
+    nodes = []
+    replication, pgagent = None, False
+    if manager is not None:
+        try:
+            replication = get_replication_type(
+                manager.connection(), manager.version)
+        except Exception:
+            replication = None
+        try:
+            from pgadmin.browser.server_groups.servers.pgagent import (
+                blueprint as pgagent_module)
+            pgagent = bool(pgagent_module.backend_supported(manager, sid=sid))
+        except Exception:
+            pgagent = False
+    for resource_kind, label in _PROVIDER_TREE_SERVER_GROUPS:
+        if resource_kind == 'replica-node' and replication != 'log':
+            continue
+        if resource_kind == 'pgagent-job' and not pgagent:
+            continue
+        state = {
+            'scope': 'kind', 'target_id': _CDE_SERVER_SCOPE_TARGET,
+            # The navigator cuts the server's own name off resource paths
+            # when the state names it, as the database states do.
+            'display_name': server.name,
+            'parent_path': [], 'resource_kind': resource_kind,
+        }
+        token = encode_navigator_state(state)
+        node_id = hashlib.sha256(token.encode('ascii')).hexdigest()[:24]
+        nodes.append({
+            'id': f'cde_resource_group_{node_id}',
+            'label': gettext(label),
+            'icon': 'icon-coll-object',
+            'icon_key': f'object.{resource_kind}',
+            'inode': True,
+            'expandable': True,
+            'node_kind': 'container',
+            '_type': 'cde_resource_group',
+            '_id': node_id,
+            '_pid': sid,
+            'module': 'pgadmin.node.server',
+            'children_url': _cde_navigator_url(gid, sid, state),
+            'cde_endpoint': True,
+            'cde_engine_id': profile['engine_id'],
+            'cde_profile_id': profile['profile_id'],
+            'cde_resource_kind': resource_kind,
+            'cde_context_actions': [],
+        })
+    return nodes
 
 
 def _cde_legacy_route(gid, resource):
@@ -1001,6 +1082,7 @@ class ServerNode(PGChildNodeView):
             'get': 'connect_status', 'post': 'connect', 'delete': 'disconnect'
         }],
         'verify_endpoint': [{'post': 'verify_endpoint'}],
+        'provider_tree': [{'put': 'provider_tree'}],
         'cde_routes': [{
             'get': 'cde_routes', 'post': 'cde_routes',
             'put': 'cde_routes', 'delete': 'cde_routes',
@@ -1052,7 +1134,76 @@ class ServerNode(PGChildNodeView):
                         'The endpoint database navigator is unavailable.'
                     ),
                 )
+        if server is not None and provider_tree_enabled(server):
+            provider_nodes = self._provider_tree_children(
+                gid, sid, server, profile)
+            if provider_nodes is not None:
+                return provider_nodes
         return super().children(gid=gid, sid=sid)
+
+    def _provider_tree_children(self, gid, sid, server, profile):
+        """Serve a preserved PostgreSQL server through the provider tree.
+
+        Owner decision 2026-11-10 (M2, option 1): the registration keeps
+        the inherited Connect, driver and tools; only the branch below
+        the server changes. The inherited connect runs before expansion,
+        so an unconnected server falls back to the inherited tree rather
+        than failing. Database nodes are the preserved-PostgreSQL
+        catalog's targets (``postgresql-database:<oid>``), and their
+        children come from the shared workspace navigator, which already
+        serves preserved PostgreSQL by OID.
+        """
+        from pgadmin.cdeadmin.providers.postgresql.support_policy import (
+            public_version,
+        )
+        if _is_non_owner(server):
+            return None
+        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+        if not manager.connection().connected():
+            return None
+        try:
+            catalog = endpoint_service_for_app(
+                current_app).database_catalog(server)
+            nodes = _cde_database_nodes(
+                gid, sid, profile, catalog,
+                runtime_version=public_version(manager.version),
+            )
+            # M3 (2026-11-11): the inherited tree's server-level
+            # collections, served by the provider navigator at server scope.
+            nodes.extend(_provider_tree_server_groups(
+                gid, sid, profile, server, manager))
+            return make_json_response(data=nodes)
+        except (EndpointRegistrationError, ProviderNavigatorError) as exc:
+            return make_json_response(
+                status=409, success=0, errormsg=str(exc))
+
+    @permissions_required(AllPermissionTypes.object_register_server)
+    @pga_login_required
+    def provider_tree(self, gid, sid):
+        """Choose the provider or the inherited tree for this server."""
+        server = get_server(sid)
+        if server is None:
+            return bad_request(self.not_found_error_msg())
+        if _is_non_owner(server):
+            return forbidden(errormsg=gettext(
+                'Only the server owner can choose its object tree.'))
+        data = request.form if request.form else json.loads(
+            request.data or '{}')
+        enabled = data.get('enabled')
+        if isinstance(enabled, str):
+            enabled = enabled.lower() in {'true', '1', 'yes'}
+        try:
+            stored = set_provider_tree(server, bool(enabled))
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            return bad_request(str(exc))
+        return make_json_response(
+            success=1,
+            info=gettext('This server now uses the provider tree.')
+            if stored else
+            gettext('This server now uses the inherited object tree.'),
+            data={'cde_provider_tree': stored})
 
     def update_connection_parameter(self, data, server, sharedserver=None):
         """
@@ -3930,6 +4081,17 @@ class ServerNode(PGChildNodeView):
 
             current_app.logger.info('Connection Established for server: \
                 %s - %s' % (server.id, server.name))
+            # Owner decision 2026-11-10 (M2 option 1): the inherited
+            # Connect is the verification of a PostgreSQL registration, so
+            # record the observed runtime on its endpoint identity. The
+            # connection stands whether or not this bookkeeping succeeds.
+            try:
+                record_inherited_connect(server, manager.version, db.session)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception(
+                    'Could not record the PostgreSQL runtime for server#%s',
+                    server.id)
             # Update the recovery and wal pause option for the server
             # if connected successfully
             _, _, in_recovery, wal_paused =\

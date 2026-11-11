@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+/* global beforeAll, afterAll, beforeEach, afterEach */
 // Shared setup for the ProviderWorkspaceContent specs. The single 4,670-line spec was
 // split on 2026-11-10 so jest can spread its 327 tests across workers; test bodies are
 // unchanged. jest.mock calls stay in each spec file because jest hoists them per file.

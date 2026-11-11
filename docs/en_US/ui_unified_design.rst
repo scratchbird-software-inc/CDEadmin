@@ -130,6 +130,103 @@ Where PostgreSQL fits
 
 PostgreSQL keeps its SQL templates and backend, but its UI moves behind the same descriptor so the six engines are treated identically by the shell. Practically: the PG ``*.ui.js`` schemas are the reference for the canonical tab vocabulary, and are migrated last, family by family, once the shared editor renders the other five engines. Until then the shell routes ``legacy_preserved`` kinds to the existing pgAdmin dialogs. Nothing PG currently does regresses; the migration is validated by the existing 70 ``*.ui.spec.js`` tests plus the new family tests.
 
+Owner decision, 2026-11-10 (PostgreSQL M2, per-server tree choice): a PostgreSQL
+registration keeps its preserved workflow (inherited Connect, driver, saved
+password and every inherited tool) and can be browsed, per server, through the
+provider tree instead of the inherited object tree (*Browse with the provider
+tree* / *Browse with the inherited object tree* on the server menu). The choice
+is presentation only. Under the provider tree the database nodes are the
+preserved catalog's targets by OID and object nodes come from the shared
+workspace navigator, each carrying the inherited identity chain. Registering
+PostgreSQL as a provider endpoint was surveyed the same day and cannot verify
+today (the endpoint route carries no server id, the provider reads the version
+from a driver only the inherited Connect opens, and saved passwords are stored
+as credential bundles the driver would pass through), so the opt-in lives on the
+preserved registration rather than on a second manifest.
+
+Owner direction 2026-11-08, M3 first slice (2026-11-11): a PostgreSQL provider
+node's inspector now carries the reverse-engineered SQL (the ``ddl`` section),
+the dependencies and the dependents that the inherited tree's panels showed,
+produced by the inherited node views through the node's identity chain, so
+pgAdmin's tested SQL templates are reused rather than rewritten. An index that
+backs a primary key, unique or exclusion constraint routes to the constraint
+node, as the inherited tree lists it. Every section reports its own state
+(``inherited`` or ``unavailable: <reason>``); user mappings and foreign servers
+are unavailable until the chain carries the foreign-data-wrapper id, and
+password literals in inherited SQL are redacted. Second slice (2026-11-11):
+the ``statistics`` section carries the inherited statistics for the kinds
+whose inherited node had them (databases, tables, materialized views,
+sequences, indexes, functions and procedures, subscriptions, primary and unique
+keys); one object's statistics show as a name and value list. Third slice
+(2026-11-11): a PostgreSQL server browsed through the provider tree carries
+the inherited tree's *Login/Group Roles* and *Tablespaces* collections beside
+its databases; their members come from the inherited node templates at server
+scope, each with its identity chain, so the same inherited SQL, dependencies
+and (for tablespaces) statistics apply. Fourth slice (2026-11-11): tables,
+partitioned tables, views, materialized views and foreign tables carry a
+*Columns* group whose members come from the attribute facts the catalog capture
+already holds; each column has its identity chain, so the inherited column SQL,
+statistics and dependencies apply. Fifth slice (2026-11-11): system objects
+follow the inherited *Show system objects* preference; when it is on, the
+provider capture includes them and the database branch gains the navigator's
+*sys* group (system schemas such as ``pg_catalog`` and ``information_schema``,
+casts, languages, access methods), each object inspecting as any other. Each
+state of the preference has a listing cache of its own, so turning it on or
+off takes effect on the next expansion. Unlike the inherited tree, temporary
+schemas (``pg_temp_*``) appear among the system schemas. Sixth slice
+(2026-11-11): inspecting a captured provider node no longer re-captures the
+whole database to find the node again; the explorer hands the listed resource
+to the provider, which confirms the object with one catalog row on a private
+attachment and then adds the inherited sections. A node whose object is gone
+reports that it no longer exists. Seventh slice (2026-11-11): a provider-tree
+server carries the inherited *Replica Nodes* collection under the inherited
+module's own rule (only when the server has replication slots); its members
+are the inherited template's rows (streaming walsenders joined to their
+slots, named ``Standby [address]`` and keyed by the walsender pid), with the
+row's columns as properties. The inherited node shows properties only, so the
+SQL, statistics and dependency sections report that state. Eighth slice
+(2026-11-11): the inherited *pgAgent Jobs* collection, under the inherited
+module's own rule (the ``pgagent`` schema usable in the maintenance database);
+each job is the inherited properties row (class, agent, last run status, next
+run), with the inherited job SQL (job, steps and schedules) and the inherited
+run-log statistics. Jobs live in pgAgent's tables, not in ``pg_depend``, so
+the dependency section says so. This closes the M3 parity list; the
+inherited tree's job steps and schedules as child nodes are not offered.
+Follow-ups (2026-11-11): the provider's *Types* group hides array types and
+relation row types as the inherited node does (row types return when system
+objects are shown); and the identity chain carries the foreign-data-wrapper
+id, so foreign servers and user mappings inspect with the inherited SQL
+(password literals redacted) and dependencies instead of reporting the gap.
+The inspector's *Statistics* section shows several inherited rows (a pgAgent
+run log, per-index counters) as one table with the rows' keys as columns;
+one object's statistics stay a name and value grid.
+
+M4 first slice (2026-11-11), the sequence editor: create, alter and drop on
+a PostgreSQL provider-tree sequence run through the provider's own native
+route (validate, plan with the exact statement text, apply inside one
+transaction on a private attachment), like the advanced-object forms. The
+dialog's field ids follow the inherited sequence dialog (owner, comment,
+current value, increment, start, minimum, maximum, cache, cycled,
+persistence, owned-by table and column, privileges, security labels); alter
+emits only the clauses that differ from the captured facts, grants are
+additive with an explicit revoke list, and drop needs the typed name.
+Inspection of a sequence stays the provider tree's own. The inherited
+dialog remains reachable through the inherited tree. Second slice
+(2026-11-11), the extension editor on the same route: create with schema,
+version, CASCADE and comment; alter updates to a version, moves relocatable
+extensions between schemas and sets the comment; drop needs the typed name.
+Third slice (2026-11-11), the row security policy editor: create with the
+table, permissive or restrictive, the command, roles, USING and WITH CHECK
+expressions and a comment; alter changes roles, expressions, comment and
+name while the type and command stay fixed, as PostgreSQL fixes them; drop
+needs the typed name. Expressions are admitted only when PostgreSQL's own
+parser reads them as one balanced expression. The capture now names a
+policy's roles so the dialog can show them. Fourth slice (2026-11-11), the
+schema editor: create with owner, comment, privileges, default privileges
+for new tables, sequences, functions and types, and security labels; alter
+renames, changes the owner and comment, grants and revokes; drop with
+CASCADE needs the typed name.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
