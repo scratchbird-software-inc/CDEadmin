@@ -63,6 +63,7 @@ const profiles = {
     'matrix.storymap@1': ['storymap'],
     'erd.crowfoot@1': ['erd', 1],
     'cube.dimensional@1': ['erd', 1],
+    'bi.analytics@1': ['erd', 1],
     'panels.pyramid@1': ['pyramid'],
     'panels.venn@1': ['venn'],
     'uml.sequence@1': ['sequence'],

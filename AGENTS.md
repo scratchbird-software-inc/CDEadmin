@@ -328,6 +328,42 @@ Owner decisions, 2026-11-08 (BI):
   remote devices, and can also display dashboards itself.
 - ScratchRobin has the option of using AI.
 
+Owner decisions, 2026-11-10 (BI questions and dashboards):
+- Shared DDN libraries and `DDNViewerSurface` render BI charts and composed
+  dashboards across all supported chart profiles; Chart.js stays only during
+  transition.
+- Merge BI questions and the visual SQL builder onto one SBsql-shaped
+  structured query model (with multi-table joins and fan-out warnings),
+  retiring the separate ad-hoc builder model while keeping `sql_to_question`
+  fidelity reporting (`exact`, `lossy`, `none`) and keeping filter values as
+  bound parameters when viewing or opening dialect SQL.
+- Store both questions and dashboards in DDN (`designs.db` and Git), with
+  dashboards referencing questions by design ID; exclude users, grants,
+  recipients and secrets from DDN text, and flag saved filter values for
+  review.
+- Accepting a question or dashboard version makes it active without
+  switching on outward effects; subscriptions/alerts, embeds and
+  publication to the dashboard server remain separate, reviewed switches.
+- Dashboard interaction defaults: card click cross-filters by default with a
+  per-card override (`cross_filter`, `highlight`, `none`), filters
+  auto-apply, filter state is personal unless pinned by the author, and
+  drill-through carries the full active filter context.
+- Omit BI write-back in the first release (defer action buttons routed
+  through native-operation review).
+- Imported monitoring `metric_panel` cards hold static snapshots in BI (do
+  not claim live collector values, and never reuse BI questions for
+  monitoring; read-only collector bindings are deferred).
+- Optional AI mode uses bring-your-own-key drafting that searches existing
+  questions first and produces only a draft question or diff for a person to
+  review; agents never accept, merge or publish.
+- The remote dashboard server runs as a display-only viewer mode of the
+  ScratchRobin process under an explicit publishing identity chosen at
+  publication, with device tokens that can only narrow via fixed filters.
+- Import Apache Superset UUID-keyed YAML ZIP bundles into Draft DDN with an
+  explicit loss report first, followed by Metabase serialization/export
+  bundles into Draft DDN with an explicit loss report (clean-room
+  PostgreSQL-licensed implementations only).
+
 ## Screen and form design (owner direction, 2026-11-08)
 
 Screen mock-ups and forms are designed with a specialised DDN designer:

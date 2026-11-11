@@ -570,6 +570,255 @@ export class DesignStoreClient {
     );
   }
 
+  createBiQuestion(
+    projectId,
+    {
+      key,
+      title,
+      question = null,
+      endpointId = 'default-endpoint',
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'create_question',
+        key,
+        title,
+        question,
+        endpoint_id: endpointId,
+        note,
+      })
+    );
+  }
+
+  createBiDashboard(projectId, {key, title, dashboard = null, note = ''}) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'create_dashboard',
+        key,
+        title,
+        dashboard,
+        note,
+      })
+    );
+  }
+
+  importBiSuperset(
+    projectId,
+    {
+      bundle = null,
+      zipBase64 = null,
+      endpointId = 'default-endpoint',
+      keyPrefix = 'superset',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'import_superset',
+        bundle,
+        zip_base64: zipBase64,
+        endpoint_id: endpointId,
+        key_prefix: keyPrefix,
+      })
+    );
+  }
+
+  importBiMetabase(
+    projectId,
+    {
+      bundle = null,
+      bundleBase64 = null,
+      endpointId = 'default-endpoint',
+      keyPrefix = 'metabase',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'import_metabase',
+        bundle,
+        bundle_base64: bundleBase64,
+        endpoint_id: endpointId,
+        key_prefix: keyPrefix,
+      })
+    );
+  }
+
+  getBiModel(projectId, designId, {version = null} = {}) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/bi/model${suffix}`
+      )
+    );
+  }
+
+  saveBiModel(
+    projectId,
+    designId,
+    {
+      expectedHeadVersion = null,
+      question = null,
+      dashboard = null,
+      ddnText = null,
+      questionNotes = null,
+      dashboardNotes = null,
+      pinnedPositions = null,
+      status = 'draft',
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/bi/model`,
+        {
+          expected_head_version: expectedHeadVersion,
+          question,
+          dashboard,
+          ddn_text: ddnText,
+          question_notes: questionNotes,
+          dashboard_notes: dashboardNotes,
+          pinned_positions: pinnedPositions,
+          status,
+          note,
+        }
+      )
+    );
+  }
+
+  biSqlBridge(
+    projectId,
+    designId,
+    {
+      action = 'compile_sql',
+      version = null,
+      question = null,
+      dashboard = null,
+      dialect = 'sqlite',
+      parameterValues = null,
+      sql = '',
+      name = '',
+      endpointId = 'default-endpoint',
+      parameterTypes = null,
+      saveVersion = false,
+      note = '',
+      cardId = '',
+      activeFilters = null,
+      crossFilters = null,
+      clickedRow = null,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/bi/sql-bridge`,
+        {
+          action,
+          version,
+          question,
+          dashboard,
+          dialect,
+          parameter_values: parameterValues,
+          sql,
+          name,
+          endpoint_id: endpointId,
+          parameter_types: parameterTypes,
+          save_version: saveVersion,
+          note,
+          card_id: cardId,
+          active_filters: activeFilters,
+          cross_filters: crossFilters,
+          clicked_row: clickedRow,
+        }
+      )
+    );
+  }
+
+  listBiOutwardEffects(projectId, designId) {
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/bi/outward-review`
+      )
+    );
+  }
+
+  reviewBiOutwardEffect(
+    projectId,
+    designId,
+    {
+      effectKind,
+      enabled = false,
+      config = null,
+      publisherUserId = null,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/bi/outward-review`,
+        {
+          action: 'review',
+          effect_kind: effectKind,
+          enabled: Boolean(enabled),
+          config,
+          publisher_user_id: publisherUserId,
+        }
+      )
+    );
+  }
+
+  mintBiDeviceToken(
+    projectId,
+    designId,
+    {
+      publicationId,
+      deviceLabel = 'kiosk',
+      lockedFilters = null,
+      expiresAt = null,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/bi/outward-review`,
+        {
+          action: 'mint_token',
+          publication_id: publicationId,
+          device_label: deviceLabel,
+          locked_filters: lockedFilters,
+          expires_at: expiresAt,
+        }
+      )
+    );
+  }
+
+  proposeBiAiDraft(
+    projectId,
+    {
+      prompt,
+      endpointId = 'default-endpoint',
+      schemaHint = null,
+      targetDesignId = null,
+      byokApiKey = null,
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/bi/ai-draft`, {
+        prompt,
+        endpoint_id: endpointId,
+        schema_hint: schemaHint,
+        target_design_id: targetDesignId,
+        byok_api_key: byokApiKey,
+      })
+    );
+  }
+
   gitOperation(
     projectId,
     designId,
@@ -897,6 +1146,71 @@ export class SharedDDNTaskController {
         desiredVersion: this.session?.design?.version?.version ?? null,
         ...options,
       }
+    );
+  }
+
+  getBiModel({version = null} = {}) {
+    return this.client.getBiModel(this.projectId, this.designId, {
+      version: version ?? this.session?.design?.version?.version ?? null,
+    });
+  }
+
+  async saveBiModel({
+    question = null,
+    dashboard = null,
+    ddnText = null,
+    questionNotes = null,
+    dashboardNotes = null,
+    status = 'draft',
+    note = '',
+  } = {}) {
+    if (!this.session) {
+      throw new Error('Load the BI design session before saving.');
+    }
+    const res = await this.client.saveBiModel(this.projectId, this.designId, {
+      expectedHeadVersion: this.session.design.head_version,
+      question,
+      dashboard,
+      ddnText,
+      questionNotes,
+      dashboardNotes,
+      pinnedPositions: this.pinnedPositions,
+      status,
+      note,
+    });
+    await this.load({version: res.design.version.version});
+    this._emit({type: 'saved', version: res.design.version.version});
+    return res;
+  }
+
+  async biSqlBridge(options = {}) {
+    const res = await this.client.biSqlBridge(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
+    if (options?.saveVersion && res?.saved?.design?.version?.version) {
+      await this.load({version: res.saved.design.version.version});
+    }
+    return res;
+  }
+
+  listBiOutwardEffects() {
+    return this.client.listBiOutwardEffects(this.projectId, this.designId);
+  }
+
+  reviewBiOutwardEffect(options = {}) {
+    return this.client.reviewBiOutwardEffect(
+      this.projectId,
+      this.designId,
+      options
+    );
+  }
+
+  mintBiDeviceToken(options = {}) {
+    return this.client.mintBiDeviceToken(
+      this.projectId,
+      this.designId,
+      options
     );
   }
 

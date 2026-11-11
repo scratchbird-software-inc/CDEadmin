@@ -72,3 +72,21 @@ export {
   cubeModuleDefinition,
   registerCubeModule,
 } from './cubeModule.js';
+export {
+  BI_CHART_TYPE_OPTIONS,
+  BIDesignerSurface,
+} from './BIDesignerSurface';
+export {
+  BI_DESIGN_CREATE_EVENT,
+  BI_DESIGN_OPEN_EVENT,
+  BIDesignsNavigator,
+  openBIDesign,
+  requestBIDesignCreate,
+} from './BIDesignsNavigator';
+export {
+  BI_DASHBOARD_DESIGN_ASSET_TYPE,
+  BI_DESIGNER_MODULE_ID,
+  BI_QUESTION_DESIGN_ASSET_TYPE,
+  biDesignerModuleDefinition,
+  registerBIDesignerModule,
+} from './biDesignerModule.js';

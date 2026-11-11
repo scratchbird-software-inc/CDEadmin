@@ -63,7 +63,11 @@ on the open designer toolbar. The cross-engine comparison module uses the label
 task-specific Cube Designer likewise registers only *New Cube…* and *Cubes* on
 the *Tools* menu while keeping *Save Cube Checkpoint*, *Preview Materialized
 Aggregate Plan*, *Accept & Apply Cube* and *Open in Cube Designer* on the open
-designer toolbar.
+designer toolbar. The task-specific BI Questions & Dashboards Designer
+similarly registers only *New BI Question or Dashboard…* and *BI Questions &
+Dashboards* on the *Tools* menu while keeping *Open in BI Designer*, *Save BI
+Checkpoint*, *Open SQL Bridge*, *Review Outward Effects* and *Accept BI
+Version* on the open designer toolbar.
 
 Window
 ======

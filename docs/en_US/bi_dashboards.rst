@@ -31,9 +31,11 @@ monitoring dashboards. Top level: ``name``, ``description``, ``collection_id``,
     ``text``
         ``text: {markdown}``, up to 20000 characters.
     ``metric_panel``
-        A monitoring panel bound to a collector channel: ``panel_id``,
-        ``columns`` and ``rows`` (``id, measure, value, unit, rate``). It has
-        no query; live values come from the collector, never from a question.
+        A static monitoring snapshot imported from a collector channel:
+        ``panel_id``, ``columns`` and ``rows`` (``id, measure, value, unit,
+        rate``). It carries no query and holds a frozen snapshot rather than a
+        live collector stream (monitoring dashboards remain display-only views
+        over collectors and never reuse BI questions).
 
 ``filters``
     Dashboard filters: ``id``, ``name``, ``type`` (string, integer, number,
@@ -172,3 +174,31 @@ shapes, defaults, required, domains, multiple, range, cross-filter exclusion,
 drill-through), live board runs on SQLite and DuckDB (filter binding,
 injection through a filter value, per-card errors, caching, pinned revisions),
 the migration round trip and the monitoring conversion.
+
+Unified DDN BI dashboard designer, kiosk server and importers (2026-11-10)
+==========================================================================
+
+``pgadmin.cdeadmin.design_store.bi_ddn`` and
+``cdeadmin_ui/integrations/ddn/BIDesignerSurface.jsx`` implement the
+task-specific DDN BI dashboard designer on ``designs.db``:
+
+* **Composed DDN views and wiring**: Dashboards render tabs via
+  ``panels.composed@1`` and card/filter lineage via ``bi.analytics@1`` in the
+  shared ``DDNViewerSurface``. Cards reference ``question`` designs by design
+  ID (pinned version by default, with an opt-in to follow the latest accepted
+  version). Imported ``metric_panel`` cards hold static snapshots only.
+  Write-back and action buttons are refused in the first release.
+* **Interaction defaults**: Card clicks cross-filter by default (with per-card
+  ``inherit``/``cross_filter``/``highlight``/``none`` overrides), dashboard
+  filters auto-apply, viewer filter state stays personal unless author-pinned,
+  and drill-through carries active dashboard and cross-filter context.
+* **Reviewed outward effects and remote dashboard server**: Accepting a
+  dashboard activates the version without enabling subscriptions, embeds or
+  remote publication. Publishing to the display-only dashboard server
+  (``GET /cdeadmin/api/bi-server/dashboards/<publication_id>``) requires a
+  separate reviewed switch under an explicit ``publisher_user_id``, with
+  HMAC-signed device tokens that can only narrow results via locked filters.
+* **Clean-room Superset and Metabase importers**: Clean-room PostgreSQL-licensed
+  importers read Apache Superset YAML ZIP exports and Metabase serialization
+  bundles into ``Draft`` ``question`` and ``dashboard`` DDN designs with
+  explicit loss reports and stripped principals/recipients/secrets.

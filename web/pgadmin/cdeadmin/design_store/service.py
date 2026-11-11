@@ -68,17 +68,29 @@ _ALLOWED_ADVANCE = {
 class DesignStoreError(ValueError):
     """Invalid design-store request or state transition."""
 
+    status_code = 400
+    code = 'invalid_request'
+
 
 class DesignStoreNotFound(DesignStoreError):
     """Requested design, version, element, binding or blob was not found."""
+
+    status_code = 404
+    code = 'not_found'
 
 
 class DesignStoreConflict(DesignStoreError):
     """Optimistic concurrency failure, base-version drift or conflict."""
 
+    status_code = 409
+    code = 'conflict'
+
 
 class DesignStoreForbidden(DesignStoreError):
     """Caller is not authorized to perform the requested store operation."""
+
+    status_code = 403
+    code = 'forbidden'
 
 
 def _utc_now() -> str:

@@ -11,8 +11,18 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from typing import Any
 
+from .bi_ddn import (
+    BIDesignSync,
+    carry_drill_filter_context,
+    compile_bi_question_sql,
+    ddn_to_dashboard,
+    ddn_to_question,
+    sql_to_bi_question_model,
+)
 from .cube_ddn import (
     CubeDesignSync,
     ddn_to_semantic_model,
@@ -50,6 +60,19 @@ def _semantic_service_for_app(app):
         return SemanticModelService()
     except Exception:
         return None
+
+
+def _bi_sync_for_app(
+    app,
+    store: DesignStore,
+    proc: StoreDDNProcess,
+) -> BIDesignSync:
+    secret = str(
+        app.config.get('CDEADMIN_BI_DEVICE_SECRET')
+        or app.config.get('SECRET_KEY')
+        or 'scratchrobin-bi-device-secret'
+    )
+    return BIDesignSync(store, proc, token_secret=secret)
 
 
 def init_app(app, project_asset_service=None) -> DesignStore:
@@ -266,6 +289,73 @@ def _register_routes(app, project_asset_service) -> None:
                     note=str(body.get('note') or ''),
                 )['design']
             )
+        if mode == 'create_question':
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).create_question(
+                    project_id=project_id,
+                    key=str(body.get('key') or ''),
+                    title=str(
+                        body.get('title') or body.get('key') or 'New Question'
+                    ),
+                    actor_id=uid,
+                    question=body.get('question'),
+                    endpoint_id=str(
+                        body.get('endpoint_id') or 'default-endpoint'
+                    ),
+                    note=str(body.get('note') or ''),
+                )['design']
+            )
+        if mode == 'create_dashboard':
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).create_dashboard(
+                    project_id=project_id,
+                    key=str(body.get('key') or ''),
+                    title=str(
+                        body.get('title') or body.get('key') or 'New Dashboard'
+                    ),
+                    actor_id=uid,
+                    dashboard=body.get('dashboard'),
+                    note=str(body.get('note') or ''),
+                )['design']
+            )
+        if mode == 'import_superset':
+            raw_bundle = body.get('bundle')
+            if raw_bundle is None and body.get('zip_base64'):
+                raw_bundle = base64.b64decode(str(body['zip_base64']))
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).import_superset_zip(
+                    raw_bundle or {},
+                    project_id=project_id,
+                    actor_id=uid,
+                    endpoint_id=str(
+                        body.get('endpoint_id') or 'default-endpoint'
+                    ),
+                    key_prefix=str(body.get('key_prefix') or 'superset'),
+                )
+            )
+        if mode == 'import_metabase':
+            raw_bundle = body.get('bundle')
+            if raw_bundle is None and body.get('bundle_base64'):
+                raw_bundle = base64.b64decode(str(body['bundle_base64']))
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).import_metabase_bundle(
+                    raw_bundle or {},
+                    project_id=project_id,
+                    actor_id=uid,
+                    endpoint_id=str(
+                        body.get('endpoint_id') or 'default-endpoint'
+                    ),
+                    key_prefix=str(body.get('key_prefix') or 'metabase'),
+                )
+            )
         return invoke(
             lambda store, _proc: store.create_design(
                 project_id=project_id,
@@ -422,6 +512,36 @@ def _register_routes(app, project_asset_service) -> None:
                     ),
                     'materialization_review_plan': (
                         accepted['materialization_review_plan']
+                    ),
+                }
+            if design['kind'] in ('question', 'dashboard'):
+                if bool(body.get('require_git_review', False)) and not (
+                    str(body.get('git_review_ref') or '').strip()
+                ):
+                    raise DesignStoreForbidden(
+                        'Git review reference is required before accepting '
+                        'this BI design'
+                    )
+                approval = (
+                    str(body.get('git_review_ref') or '').strip()
+                    or str(body.get('comment') or '').strip()
+                    or None
+                )
+                accepted = _bi_sync_for_app(
+                    current_app, store, proc
+                ).accept_bi_design(
+                    design_id,
+                    version,
+                    actor_id=uid,
+                    approval_ref=approval,
+                    authorized=has_perm,
+                    actor_kind=str(body.get('actor_kind') or 'human'),
+                )
+                return {
+                    **accepted['design'],
+                    'outward_effects_activated': False,
+                    'active_outward_effects': (
+                        accepted['active_outward_effects']
                     ),
                 }
             return proc.accept_with_policy(
@@ -910,5 +1030,280 @@ def _register_routes(app, project_asset_service) -> None:
             )
 
         return invoke(_plan)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/bi/model',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def bi_model_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        if request.method == 'GET':
+            _check_project_access(
+                project_asset_service, uid, role_ids, project_id, 'viewer'
+            )
+            version = request.args.get('version', type=int)
+
+            def _read_bi(store: DesignStore, proc: StoreDDNProcess):
+                design = store.get_design(design_id, version=version)
+                sync = _bi_sync_for_app(current_app, store, proc)
+                effects = sync.list_outward_effects(design_id)
+                if design['kind'] == 'question':
+                    parsed = ddn_to_question(design['version']['ddn_text'])
+                    return {
+                        'design': design,
+                        'bi_kind': 'question',
+                        'bi': parsed,
+                        'outward_effects': effects,
+                    }
+                if design['kind'] == 'dashboard':
+                    parsed = ddn_to_dashboard(design['version']['ddn_text'])
+                    return {
+                        'design': design,
+                        'bi_kind': 'dashboard',
+                        'bi': parsed,
+                        'outward_effects': effects,
+                    }
+                raise DesignStoreError(
+                    f'Design {design_id!r} is not a BI question or dashboard'
+                )
+
+            return invoke(_read_bi)
+
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+
+        def _save_bi(store: DesignStore, proc: StoreDDNProcess):
+            design = store.get_design(design_id)
+            sync = _bi_sync_for_app(current_app, store, proc)
+            expected = int(
+                body.get('expected_head_version') or design['head_version']
+            )
+            if design['kind'] == 'question':
+                return sync.save_question(
+                    design_id,
+                    expected_head_version=expected,
+                    actor_id=uid,
+                    question=body.get('question'),
+                    ddn_text=body.get('ddn_text'),
+                    question_notes=str(body.get('question_notes') or ''),
+                    pinned_positions=body.get('pinned_positions'),
+                    status=str(body.get('status') or 'draft'),
+                    note=str(body.get('note') or 'Updated BI question'),
+                )
+            if design['kind'] == 'dashboard':
+                return sync.save_dashboard(
+                    design_id,
+                    expected_head_version=expected,
+                    actor_id=uid,
+                    dashboard=body.get('dashboard'),
+                    ddn_text=body.get('ddn_text'),
+                    dashboard_notes=str(body.get('dashboard_notes') or ''),
+                    pinned_positions=body.get('pinned_positions'),
+                    status=str(body.get('status') or 'draft'),
+                    note=str(body.get('note') or 'Updated BI dashboard'),
+                )
+            raise DesignStoreError(
+                f'Design {design_id!r} is not a BI question or dashboard'
+            )
+
+        return invoke(_save_bi)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/bi/sql-bridge',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def bi_sql_bridge(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        body = request.get_json(silent=True) or {}
+        action = str(body.get('action') or 'compile_sql')
+        needed = 'editor' if body.get('save_version') else 'viewer'
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, needed
+        )
+
+        def _bridge(store: DesignStore, proc: StoreDDNProcess):
+            design = store.get_design(
+                design_id, version=body.get('version')
+            )
+            if action == 'compile_sql':
+                q_model = body.get('question')
+                if q_model is None:
+                    q_model = ddn_to_question(
+                        design['version']['ddn_text']
+                    )['question']
+                return compile_bi_question_sql(
+                    q_model,
+                    dialect=str(body.get('dialect') or 'sqlite'),
+                    parameter_values=body.get('parameter_values'),
+                )
+            if action == 'from_sql':
+                mapped = sql_to_bi_question_model(
+                    str(body.get('sql') or ''),
+                    name=str(body.get('name') or design['title']),
+                    endpoint_id=str(
+                        body.get('endpoint_id') or 'default-endpoint'
+                    ),
+                    parameter_types=body.get('parameter_types'),
+                )
+                if body.get('save_version'):
+                    saved = _bi_sync_for_app(
+                        current_app, store, proc
+                    ).save_question(
+                        design_id,
+                        expected_head_version=design['head_version'],
+                        actor_id=uid,
+                        question=mapped['question'],
+                        note=str(
+                            body.get('note')
+                            or f"Imported SQL ({mapped['fidelity']} fidelity)"
+                        ),
+                    )
+                    return {**mapped, 'saved': saved}
+                return mapped
+            if action == 'drill_context':
+                d_model = body.get('dashboard')
+                if d_model is None:
+                    d_model = ddn_to_dashboard(
+                        design['version']['ddn_text']
+                    )['dashboard']
+                return carry_drill_filter_context(
+                    d_model,
+                    card_id=str(body.get('card_id') or ''),
+                    active_filters=body.get('active_filters'),
+                    cross_filters=body.get('cross_filters'),
+                    clicked_row=body.get('clicked_row'),
+                )
+            raise DesignStoreError(
+                f'Unsupported BI SQL bridge action: {action!r}'
+            )
+
+        return invoke(_bridge)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/bi/outward-review',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def bi_outward_review(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        if request.method == 'GET':
+            _check_project_access(
+                project_asset_service, uid, role_ids, project_id, 'viewer'
+            )
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).list_outward_effects(design_id)
+            )
+
+        access = _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        has_perm = _ACCESS_RANK.get(access, 0) >= _ACCESS_RANK['manager']
+        body = request.get_json(silent=True) or {}
+        if body.get('has_scratchrobin_permission') is False:
+            has_perm = False
+        action = str(body.get('action') or 'review')
+
+        def _review_or_mint(store: DesignStore, proc: StoreDDNProcess):
+            sync = _bi_sync_for_app(current_app, store, proc)
+            if action == 'mint_token':
+                if not has_perm:
+                    raise DesignStoreForbidden(
+                        'Manager access is required to mint device tokens'
+                    )
+                token = sync.mint_device_token(
+                    str(body.get('publication_id') or ''),
+                    device_label=str(body.get('device_label') or 'kiosk'),
+                    locked_filters=body.get('locked_filters'),
+                    expires_at=body.get('expires_at'),
+                )
+                return {'device_token': token}
+            pub_uid = body.get('publisher_user_id')
+            return sync.review_outward_effect(
+                design_id,
+                effect_kind=str(body.get('effect_kind') or ''),
+                enabled=bool(body.get('enabled', False)),
+                config=body.get('config'),
+                reviewer_id=uid,
+                publisher_user_id=(
+                    int(pub_uid) if pub_uid is not None else None
+                ),
+                authorized=has_perm,
+                actor_kind=str(body.get('actor_kind') or 'human'),
+            )
+
+        return invoke(_review_or_mint)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/bi/ai-draft',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def bi_ai_draft(project_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, proc: _bi_sync_for_app(
+                current_app, store, proc
+            ).propose_ai_draft(
+                project_id=project_id,
+                prompt=str(body.get('prompt') or ''),
+                actor_id=uid,
+                endpoint_id=str(
+                    body.get('endpoint_id') or 'default-endpoint'
+                ),
+                schema_hint=body.get('schema_hint'),
+                target_design_id=body.get('target_design_id'),
+                byok_api_key=body.get('byok_api_key'),
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/bi-server/dashboards/<publication_id>',
+        methods=['GET'],
+    )
+    def bi_dashboard_server_view(publication_id: str):
+        auth_header = request.headers.get('Authorization') or ''
+        token = ''
+        if auth_header.lower().startswith('bearer '):
+            token = auth_header[7:].strip()
+        if not token:
+            token = str(request.args.get('token') or '').strip()
+        raw_filters = request.args.get('filters')
+        req_filters: dict[str, Any] = {}
+        if raw_filters:
+            try:
+                parsed_f = json.loads(raw_filters)
+                if isinstance(parsed_f, dict):
+                    req_filters = parsed_f
+            except ValueError as exc:
+                return (
+                    jsonify(
+                        success=0,
+                        errormsg=f'Invalid filters query JSON: {exc}',
+                    ),
+                    400,
+                )
+        view_id = request.args.get('view') or None
+        return invoke(
+            lambda store, proc: _bi_sync_for_app(
+                current_app, store, proc
+            ).render_dashboard_server_view(
+                publication_id,
+                device_token=token,
+                requested_filters=req_filters,
+                view_id=view_id,
+            )
+        )
 
     app.register_blueprint(api)

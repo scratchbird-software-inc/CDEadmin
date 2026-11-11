@@ -60,6 +60,7 @@ const labels = {
     "matrix.storymap@1": "User story map",
     "erd.crowfoot@1": "Crow’s-foot ERD",
     "cube.dimensional@1": "Dimensional cube",
+    "bi.analytics@1": "BI analytics & wiring",
     "panels.pyramid@1": "Pyramid",
     "panels.venn@1": "Venn diagram",
     "uml.sequence@1": "Sequence diagram",

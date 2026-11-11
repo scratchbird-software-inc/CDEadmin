@@ -5758,6 +5758,18 @@
     "cube-create": {
       "reference": "SR-F-010023",
       "title": "New cube"
+    },
+    "bi-designer": {
+      "reference": "SR-F-010024",
+      "title": "BI question and dashboard designer"
+    },
+    "bi-designs-navigator": {
+      "reference": "SR-F-010025",
+      "title": "BI questions and dashboards navigator"
+    },
+    "bi-design-create": {
+      "reference": "SR-F-010026",
+      "title": "New BI question or dashboard"
     }
   }
 }

@@ -254,3 +254,33 @@ Residual risk: a lexical guard cannot see through dynamic SQL or an engine-speci
 function it does not list. Run raw questions through a database principal that only
 has SELECT on what the user may read. Engine-level read-only sessions (for example
 ``BEGIN READ ONLY`` on PostgreSQL) need Data Studio support and are not done.
+
+Unified DDN BI question designer and SBsql query model (2026-11-10)
+===================================================================
+
+Owner decisions (2026-11-10) place BI question and dashboard design on the
+unified ``designs.db`` SQLite design store and shared DDN libraries
+(``pgadmin.cdeadmin.design_store.bi_ddn`` and
+``cdeadmin_ui/integrations/ddn/BIDesignerSurface.jsx``):
+
+* **Shared DDN rendering**: All twelve BI chart types render through the
+  shared DDN profiles and ``DDNViewerSurface`` (``table.records@1``,
+  ``chart.basic@1`` with ``bar``/``line``/``area``/``point``/``pie`` marks,
+  ``chart.gauge@1``, ``chart.histogram@1``, ``timeline.basic@1``,
+  ``chart.force@1`` and ``chart.dotplot@1``), alongside query lineage in the
+  reviewed ``bi.analytics@1`` consumer profile.
+* **Unified SBsql query model**: BI questions and
+  ``pgadmin.cdeadmin.sdk.sql_builder`` share one structured ``sbsql@1`` query
+  representation with multi-table joins, aggregate fan-out warnings on
+  ``one_to_many``/``many_to_many``/``cross`` joins, bidirectional SQL bridging
+  with ``exact``/``lossy``/``none`` fidelity reporting, and dialect compilation
+  where filter values are always bound as positional parameters.
+* **Store, Git and outward-effect separation**: Question designs are stored in
+  ``designs.db`` and exported to Git without users, grants, recipients or
+  secrets; saved filter literal/default values are flagged for review. Editing
+  a query resets ``verification_tier`` to ``draft``. Accepting a version makes
+  it active without enabling subscriptions/alerts or embeds, which remain
+  separate reviewed switches.
+* **Optional BYOK AI drafting**: Searches existing BI questions via FTS5 first
+  and proposes only a draft question or diff; AI agents are refused on
+  acceptance and outward-effect activation.

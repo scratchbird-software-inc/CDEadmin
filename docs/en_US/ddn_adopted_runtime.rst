@@ -149,6 +149,13 @@ remote geography, routing or geocoding.
    role-playing dimensions, measure groups and materialized aggregate nodes,
    rendered alongside ``matrix.relations@1`` and ``table.records@1`` in the
    shared ``DDNViewerSurface``.
+6. **BI analytics & lineage profile (2026-11-10)**:
+   ``tools/dependency_patches/ddn_bi_analytics.py`` (reviewed in
+   ``tools/dependency_patches/ddn-bi-analytics.md`` and recorded in
+   ``resource-manifest.json`` under ``consumer_patches.bi_analytics``) adds the
+   ``bi.analytics@1`` graph profile for BI question lineage and dashboard
+   filter/card wiring alongside ``chart.*@1``, ``timeline.basic@1``,
+   ``table.records@1`` and ``panels.composed@1`` in ``DDNViewerSurface``.
 
 Legacy source and evidence
 ==========================

@@ -84,7 +84,7 @@ export function resolvedText(entries, profile) {
             return entry;
         if (['ddn@1', 'mindmap.basic@1', 'concept.map@1'].includes(profile) && entry.definition.record.category !== 'relation')
             return entry;
-        if ((profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1') && ['columns', 'draft', 'notes'].includes(str(entry.appearance?.record.body, str(entry.effective.body))))
+        if ((profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1' || profile === 'bi.analytics@1') && ['columns', 'draft', 'notes'].includes(str(entry.appearance?.record.body, str(entry.effective.body))))
             return entry;
         const font = str(pathValue(entry.effective, 'style.font')), size = num(pathValue(entry.effective, 'style.font_size'), 16), color = str(pathValue(entry.effective, 'text.color'));
         return { ...entry, item: { ...entry.item, primitives: entry.item.primitives.map(primitive => primitive.kind === 'text' ? { ...primitive, runs: primitive.runs.map(run => ({ ...run, fontKey: font || run.fontKey, style: { ...run.style, 'font-size': num(run.style['font-size'], 14) * size / 16, ...(color ? { fill: color } : {}) } })) } : primitive) } };
@@ -501,7 +501,7 @@ export function decorateEdge(edge, nodes, all, profile, frame, labelObstacles, r
         targetMark = role === 'uml.generalization' || role === 'uml.realization' ? 'triangle' : role === 'uml.extension' ? 'filled' : role === 'petri.inhibitor' ? 'circle' : /assoc|uml\.link|commpath|family\.partner|network\.attaches|fbd\.wire|ladder\.series|bpmn\.conversationlink/.test(role) ? 'none' : 'open';
     if (role === 'sysml.composition' && !sourceMark)
         sourceMark = 'filled-diamond';
-    if (profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1') {
+    if (profile === 'erd.crowfoot@1' || profile === 'cube.dimensional@1' || profile === 'bi.analytics@1') {
         const chen = object(metadata(record, 'x_chen'));
         const cardinal = (value) => { const c = object(value); return c.max === 'many' ? c.min === 0 ? 'zeromany' : 'many' : c.min === 0 ? 'zeroone' : 'one'; };
         sourceMark = str(pathValue(record, 'properties.source_mark'), cardinal(chen.from));

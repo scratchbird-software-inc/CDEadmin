@@ -29,6 +29,7 @@ import {tracingModuleDefinition} from 'sources/cdeadmin_ui/modules/tracing/modul
 import {ddnModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/module';
 import {erdModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/erdModule';
 import {cubeModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/cubeModule';
+import {biDesignerModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/biDesignerModule';
 import {migrationModuleDefinition} from 'sources/cdeadmin_ui/modules/migration/module';
 import {mlVectorModuleDefinition} from 'sources/cdeadmin_ui/modules/ml_vector/module';
 import {qualityModuleDefinition} from 'sources/cdeadmin_ui/modules/quality/module';
@@ -38,8 +39,8 @@ const DEFINITIONS = [etlModuleDefinition, contractModuleDefinition, aiModuleDefi
   schemaCompareModuleDefinition, lineageModuleDefinition, cdcModuleDefinition,
   replicationModuleDefinition, apiModuleDefinition, biModuleDefinition,
   tracingModuleDefinition, ddnModuleDefinition, erdModuleDefinition,
-  cubeModuleDefinition, migrationModuleDefinition, mlVectorModuleDefinition,
-  qualityModuleDefinition];
+  cubeModuleDefinition, biDesignerModuleDefinition, migrationModuleDefinition,
+  mlVectorModuleDefinition, qualityModuleDefinition];
 
 const registry = {register() {}, get() {}, list: () => [], active() {}};
 
@@ -60,7 +61,8 @@ describe('Tools menu module commands', () => {
   it('lists only commands that start from the menu', () => {
     const onTools = commands().filter((command) => command.surfaces.includes('tools'))
       .map((command) => command.id).sort();
-    expect(onTools).toEqual(['cube.designer.new', 'cube.designer.show',
+    expect(onTools).toEqual(['bi.designer.new', 'bi.designer.show',
+      'cube.designer.new', 'cube.designer.show',
       'ddn.diagrams.new', 'ddn.diagrams.show', 'erd.designer.new',
       'erd.designer.show', 'schema_compare.session.create']);
   });
@@ -72,7 +74,9 @@ describe('Tools menu module commands', () => {
       'ddn.designer.save', 'erd.designer.open', 'erd.designer.save',
       'erd.designer.convert', 'erd.designer.alter_plan', 'erd.designer.accept',
       'cube.designer.open', 'cube.designer.save',
-      'cube.designer.materialization_plan', 'cube.designer.accept']) {
+      'cube.designer.materialization_plan', 'cube.designer.accept',
+      'bi.designer.open', 'bi.designer.save', 'bi.designer.sql_bridge',
+      'bi.designer.outward_review', 'bi.designer.accept']) {
       expect(byId[id].surfaces).toEqual(['toolbar']);
     }
     // Owner direction 2026-11-08: the proof-of-concept DDN viewer and designer
@@ -91,6 +95,7 @@ describe('Tools menu module commands', () => {
       await command.execute({}, context);
     }
     expect(opened).toEqual(expect.arrayContaining(['schema_compare.compare_setup',
-      'activity.diagrams', 'activity.erd_models', 'activity.cubes']));
+      'activity.diagrams', 'activity.erd_models', 'activity.cubes',
+      'activity.bi_designs']));
   });
 });

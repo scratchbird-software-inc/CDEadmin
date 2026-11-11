@@ -97,9 +97,12 @@ def refresh(source, work, destination, intake_tool):
     cache_review = patch.with_name('ddn-registry-pack-cache.md')
     cube_patch = patch.with_name('ddn_cube_dimensional.py')
     cube_review = patch.with_name('ddn-cube-dimensional.md')
+    bi_patch = patch.with_name('ddn_bi_analytics.py')
+    bi_review = patch.with_name('ddn-bi-analytics.md')
     tool_files = (
         Path(__file__), intake_tool, patch, review,
         cache_patch, cache_review, cube_patch, cube_review,
+        bi_patch, bi_review,
         Path(__file__).with_name('ddn_toolchain.py'),
     )
     tool_hashes = {p.name: digest(p) for p in tool_files}
@@ -163,6 +166,26 @@ def refresh(source, work, destination, intake_tool):
                 name, before['files'][name]
             )
         }
+        bi_spec = importlib.util.spec_from_file_location(
+            'ddn_bi_analytics', bi_patch
+        )
+        bi_module = importlib.util.module_from_spec(bi_spec)
+        bi_spec.loader.exec_module(bi_module)
+        bi_module.apply(snapshot)
+        subprocess.run(
+            [
+                sys.executable, '-B',
+                'project/ddn/packages/profiles/tools/generate.py',
+            ],
+            cwd=snapshot, check=True, capture_output=True,
+        )
+        bi_patched = {
+            name: digest(snapshot / name)
+            for name in before['files']
+            if digest(snapshot / name) != cube_patched.get(
+                name, patched.get(name, before['files'][name])
+            )
+        }
         spec = importlib.util.spec_from_file_location(
             'ddn_registry_pack_cache', cache_patch
         )
@@ -172,8 +195,11 @@ def refresh(source, work, destination, intake_tool):
         cached = {
             name: digest(snapshot / name)
             for name in before['files']
-            if digest(snapshot / name) != cube_patched.get(
-                name, patched.get(name, before['files'][name])
+            if digest(snapshot / name) != bi_patched.get(
+                name,
+                cube_patched.get(
+                    name, patched.get(name, before['files'][name])
+                ),
             )
         }
         isolated_tools = snapshot / '.work/tools/toolchain'
@@ -224,6 +250,11 @@ def refresh(source, work, destination, intake_tool):
                             'tool': digest(cube_patch),
                             'review': digest(cube_review),
                             'changed_inputs': cube_patched,
+                        },
+                        'bi_analytics': {
+                            'tool': digest(bi_patch),
+                            'review': digest(bi_review),
+                            'changed_inputs': bi_patched,
                         },
                         'registry_pack_cache': {
                             'tool': digest(cache_patch),

@@ -69,7 +69,7 @@ function SettingsPanel({state, collections, dispatch}) {
       options={choices.map((value) => ({value, label: refreshLabel(value)}))}
       onChange={(value) => dispatch({type: 'setAutoRefresh', seconds: value})} />
     {state.settings.monitoring && <Box sx={{fontSize: '0.8125rem'}}>
-      {gettext('Monitoring dashboard bound to channel %s. Its panels show collector values.', state.settings.monitoring.channel)}
+      {gettext('Monitoring snapshot imported from channel %s. Imported BI metric panels hold static snapshot values, not live collector streams.', state.settings.monitoring.channel)}
     </Box>}
   </Box>;
 }
