@@ -202,3 +202,28 @@ task-specific DDN BI dashboard designer on ``designs.db``:
   importers read Apache Superset YAML ZIP exports and Metabase serialization
   bundles into ``Draft`` ``question`` and ``dashboard`` DDN designs with
   explicit loss reports and stripped principals/recipients/secrets.
+
+Post-first-release BI write-back review and collector bindings (2026-11-11)
+===========================================================================
+
+* **Action buttons routed through native-operation review**: BI questions remain
+  strictly read-only, while BI dashboards in ``bi_ddn.py`` and
+  ``BIDesignerSurface.jsx`` may declare structured ``action_buttons``
+  (``insert_row``, ``update_row``, ``delete_row``, ``provider_operation``)
+  stored in DDN as ``query_operation`` elements wired to ``dashboard_wiring``.
+  ``POST /cdeadmin/api/projects/<project_id>/designs/<design_id>/bi/action-review``
+  refuses non-human actors, display-only kiosk device tokens, unaccepted
+  dashboards (unless ``dry_run``) and unkeyed ``UPDATE``/``DELETE`` buttons,
+  compiles parameterized dialect SQL with destructive-data-loss warnings, and
+  submits an ``OperationRequest(approval_required=True)`` to ``OperationBus`` in
+  ``awaiting_approval`` stage without executing SQL directly.
+* **Read-only collector bindings on metric_panel cards**: Imported monitoring
+  ``metric_panel`` cards remain ``static`` snapshots by default. Authors may
+  opt a ``metric_panel`` card into ``snapshot_mode: "collector_read_only"``
+  with a typed ``collector_binding`` (``engine``, ``server_id``, ``target_id``,
+  ``metric_group``, ``metric_keys``, ``freshness_budget_seconds``).
+  ``POST /cdeadmin/api/projects/<project_id>/designs/<design_id>/bi/collector-panel``
+  calls only the engine's read-only ``MonitoringHost.snapshot``, rechecks viewer
+  authorization, reports ``live``/``stale``/``collector_disabled``/``unauthorized``
+  freshness, never starts or mutates collectors, and never reuses BI questions
+  for monitoring.

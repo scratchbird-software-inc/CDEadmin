@@ -355,4 +355,244 @@ describe('Task-specific Cube Designer', () => {
     ]);
     expect(byId['cube.designer.accept'].surfaces).toEqual(['toolbar']);
   });
+
+  it('edits parent-child hierarchies, semi-additive measures, perspectives, translations and exports SML v1.8 & Apache Ossie with loss report', async () => {
+    let curVer = 1;
+    let curModel = sampleCubeModel();
+
+    const mockClient = {
+      openSession: jest.fn(async () =>
+        makeCubeSession({status: 'draft', version: curVer})
+      ),
+      getCubeModel: jest.fn(async () => ({
+        cube: {model: curModel, element_ids: {}, notes: []},
+      })),
+      saveCubeModel: jest.fn(async (_proj, _id, payload) => {
+        curVer += 1;
+        if (payload.model) curModel = payload.model;
+        return {
+          design: makeCubeSession({status: 'draft', version: curVer}).design,
+          cube: {model: curModel, element_ids: {}, notes: []},
+          active_drift: {has_active_changes: false, active_changes: []},
+        };
+      }),
+      previewCubeMaterializationPlan: jest.fn(async () => ({
+        has_database_changes: true,
+        requires_native_review: true,
+        applied_immediately: false,
+        destructive_warning: 'Materialization changes require native review.',
+        grain_warnings: [
+          'Materialization agg_bad omits semi-additive time dimension snap_date.',
+        ],
+        sql_preview: '-- review SQL',
+      })),
+      exportCubeInterchange: jest.fn(async (_proj, _id, opts) => {
+        if (opts?.format === 'ossie') {
+          return {
+            format: 'apache-ossie@0.2.0',
+            yaml: 'version: 0.2.0\nsemantic_models:\n  - name: sales_cube\n',
+            loss_report: {
+              format: 'apache-ossie@0.2.0',
+              fidelity: 'lossy',
+              loss_count: 2,
+              items: [
+                {
+                  category: 'parent_child_hierarchy',
+                  item_name: 'Reporting Line',
+                  reason: 'Parent-child closure unsupported in Apache Ossie 0.2.0.',
+                },
+                {
+                  category: 'semi_additive_measure',
+                  item_name: 'Closing Balance',
+                  reason: 'Semi-additive time semantics degraded.',
+                },
+              ],
+            },
+          };
+        }
+        return {
+          format: 'sml@1.8',
+          manifest_yaml: 'sml_version: "1.8"\nmodel: sales_cube\n',
+          files: {'models/sales_cube.yml': 'unique_name: sales_cube\n'},
+          loss_report: {
+            format: 'sml@1.8',
+            fidelity: 'exact',
+            loss_count: 0,
+            items: [],
+          },
+        };
+      }),
+    };
+
+    const Themed = withTheme(CubeDesignerSurface);
+    render(
+      <Themed
+        projectId="analytics"
+        designId="019a0000-0000-7000-8000-000000000020"
+        client={mockClient}
+      />
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', {name: 'Cube Designer'})
+      ).toBeInTheDocument()
+    );
+
+    // 1. Parent-child ragged hierarchy dimension
+    fireEvent.click(screen.getByRole('button', {name: 'Add dimension…'}));
+    const dimDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dimDialog).getByLabelText(/Dimension name/i), {
+      target: {value: 'Org Rep'},
+    });
+    fireEvent.change(within(dimDialog).getByLabelText(/^Key column/i), {
+      target: {value: 'rep_id'},
+    });
+    const hierSelect = within(dimDialog).getByLabelText(/Hierarchy kind/i);
+    fireEvent.mouseDown(hierSelect);
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: /Parent-child recursive hierarchy/i,
+      })
+    );
+    fireEvent.change(within(dimDialog).getByLabelText(/Parent key column/i), {
+      target: {value: 'manager_id'},
+    });
+    fireEvent.click(
+      within(dimDialog).getByLabelText(/Allow ragged \/ unbalanced/i)
+    );
+    fireEvent.click(
+      within(dimDialog).getByRole('button', {name: 'Save dimension'})
+    );
+    await waitFor(() =>
+      expect(curModel.dimensions[0]?.hierarchies[0]).toMatchObject({
+        hierarchy_kind: 'parent_child',
+        parent_field: {source_id: 'orders', field: 'manager_id'},
+        ragged: true,
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 2. Semi-additive measure (LAST NON-EMPTY)
+    fireEvent.click(screen.getByRole('button', {name: 'Add measure…'}));
+    const measDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(measDialog).getByLabelText(/Measure name/i), {
+      target: {value: 'Closing Balance'},
+    });
+    const aggSelect = within(measDialog).getByLabelText(/^Aggregation$/i);
+    fireEvent.mouseDown(aggSelect);
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: /LAST NON-EMPTY \(semi-additive\)/i,
+      })
+    );
+    fireEvent.change(within(measDialog).getByLabelText(/Measure column/i), {
+      target: {value: 'balance_amt'},
+    });
+    fireEvent.change(
+      within(measDialog).getByLabelText(/Semi-additive time dimension ID/i),
+      {target: {value: 'org_rep'}}
+    );
+    fireEvent.click(
+      within(measDialog).getByRole('button', {name: 'Save measure'})
+    );
+    await waitFor(() =>
+      expect(curModel.measures[0]).toMatchObject({
+        id: 'closing_balance',
+        aggregation: 'last_non_empty',
+        semi_additive_dimension: 'org_rep',
+        certification: {status: 'uncertified'},
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 3. Perspectives & Translations dialogs
+    fireEvent.click(screen.getByRole('button', {name: 'Perspectives…'}));
+    const perspDialog = await screen.findByRole('dialog');
+    fireEvent.change(within(perspDialog).getByLabelText(/Perspective name/i), {
+      target: {value: 'Executive Sales'},
+    });
+    fireEvent.click(
+      within(perspDialog).getByRole('button', {name: 'Save perspective'})
+    );
+    await waitFor(() =>
+      expect(curModel.perspectives[0]).toMatchObject({
+        id: 'executive_sales',
+        name: 'Executive Sales',
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Translations…'}));
+    const transDialog = await screen.findByRole('dialog');
+    fireEvent.change(
+      within(transDialog).getByLabelText(/Localized cube caption/i),
+      {target: {value: 'Cube des ventes'}}
+    );
+    fireEvent.change(within(transDialog).getByLabelText(/Translated entries/i), {
+      target: {value: 'measure:closing_balance=Solde de cloture'},
+    });
+    fireEvent.click(
+      within(transDialog).getByRole('button', {name: 'Save translation'})
+    );
+    await waitFor(() =>
+      expect(curModel.translations[0]).toMatchObject({
+        locale: 'fr-CA',
+        caption: 'Cube des ventes',
+        entries: [
+          {
+            target_kind: 'measure',
+            target_id: 'closing_balance',
+            caption: 'Solde de cloture',
+          },
+        ],
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 4. Semi-additive grain warning in materialization plan
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Materialization plan…'})
+    );
+    const matDialog = await screen.findByRole('dialog');
+    expect(
+      await within(matDialog).findByText(/Semi-additive grain warning:/i)
+    ).toBeInTheDocument();
+    fireEvent.click(within(matDialog).getByRole('button', {name: 'Close'}));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 5. External SML v1.8 (primary) and Apache Ossie v0.2.0 (lossy) export
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Export SML / Ossie…'})
+    );
+    const expDialog = await screen.findByRole('dialog');
+    expect(
+      await within(expDialog).findByText(/Export format: sml@1\.8/i)
+    ).toBeInTheDocument();
+
+    const fmtSelect = within(expDialog).getByLabelText(/Interchange format/i);
+    fireEvent.mouseDown(fmtSelect);
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: /Apache Ossie v0\.2\.0/i,
+      })
+    );
+    expect(
+      await within(expDialog).findByText(/Export format: apache-ossie@0\.2\.0/i)
+    ).toBeInTheDocument();
+    expect(
+      within(expDialog).getByDisplayValue(/parent_child_hierarchy/)
+    ).toBeInTheDocument();
+    fireEvent.click(within(expDialog).getByRole('button', {name: 'Close'}));
+  });
 });

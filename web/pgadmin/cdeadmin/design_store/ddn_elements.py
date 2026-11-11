@@ -26,11 +26,11 @@ WORKSPACE_FORMAT = ddn.FORMAT
 
 _VERSION_RE = re.compile(r'^\s*version\s+(\S+)\s*$', re.MULTILINE)
 _HEADER_DECL_RE = re.compile(
-    r'^(element|relation|view)\s+"((?:[^"\\]|"")*)"'
-    r'(?:\s+as\s+"((?:[^"\\]|"")*)")?\s*$',
+    r'^(element|relation|view)\s+"((?:[^"]|"")*)"'
+    r'(?:\s+as\s+"((?:[^"]|"")*)")?\s*$',
     re.MULTILINE,
 )
-_PROP_STR_RE = re.compile(r'^\s+(\w+)\s+"((?:[^"\\]|"")*)"\s*$')
+_PROP_STR_RE = re.compile(r'^\s+(\w+)\s+"((?:[^"]|"")*)"\s*$')
 
 
 def _unquote(raw: str) -> str:

@@ -34,6 +34,8 @@ from pgadmin.cdeadmin.design_store import (
     DesignStoreConflict,
     ddn_to_semantic_model,
     diff_cube_ddn,
+    export_cube_to_ossie,
+    export_cube_to_sml,
     init_routes_app,
     inspect_ddn_text,
     is_uuid7,
@@ -42,9 +44,12 @@ from pgadmin.cdeadmin.design_store import (
 )
 from pgadmin.cdeadmin.design_store.routes import SEMANTIC_SERVICE_EXTENSION_KEY
 from pgadmin.cdeadmin.semantic_models import (
+    SemanticModelError,
     SemanticModelService,
+    localize_model,
     public_model,
     validate_model,
+    validate_query,
 )
 from pgadmin.cdeadmin.semantic_models.compiler import compile_sql
 
@@ -559,6 +564,516 @@ class CubeDesignerTests(unittest.TestCase):
             self.assertEqual(plan_resp.status_code, 200)
             self.assertTrue(
                 plan_resp.get_json()['data']['requires_native_review']
+            )
+
+    def test_parent_child_recursive_hierarchy_execution_and_ddn(self):
+        pc_raw = {
+            'contract_version': '1.0.0',
+            'name': 'Org Quota Cube',
+            'semantic_family': 'relational',
+            'sources': [
+                {
+                    'id': 'quotas',
+                    'resource_id': 'table:main:quotas',
+                    'kind': 'table',
+                    'classification': 'fact',
+                    'relation': ['quotas'],
+                    'grain': [{'source_id': 'quotas', 'field': 'quota_id'}],
+                },
+                {
+                    'id': 'reps',
+                    'resource_id': 'table:main:reps',
+                    'kind': 'table',
+                    'classification': 'dimension',
+                    'relation': ['reps'],
+                    'grain': [{'source_id': 'reps', 'field': 'rep_id'}],
+                },
+            ],
+            'joins': [{
+                'id': 'quotas_reps',
+                'left_source': 'quotas',
+                'right_source': 'reps',
+                'join_type': 'inner',
+                'cardinality': 'many-to-one',
+                'active': True,
+                'predicates': [{
+                    'left': {'source_id': 'quotas', 'field': 'rep_id'},
+                    'operator': 'eq',
+                    'right': {'source_id': 'reps', 'field': 'rep_id'},
+                }],
+            }],
+            'dimensions': [{
+                'id': 'org_rep',
+                'name': 'Org Representative',
+                'type': 'categorical',
+                'field': {'source_id': 'reps', 'field': 'rep_id'},
+                'key_field': {'source_id': 'reps', 'field': 'rep_id'},
+                'name_field': {'source_id': 'reps', 'field': 'rep_name'},
+                'hierarchies': [{
+                    'id': 'reporting_line',
+                    'name': 'Reporting Line',
+                    'hierarchy_kind': 'parent_child',
+                    'child_field': {'source_id': 'reps', 'field': 'rep_id'},
+                    'parent_field': {
+                        'source_id': 'reps', 'field': 'manager_id'
+                    },
+                    'name_field': {'source_id': 'reps', 'field': 'rep_name'},
+                    'max_depth': 6,
+                    'ragged': True,
+                }],
+            }],
+            'measures': [{
+                'id': 'total_quota',
+                'name': 'Total Quota',
+                'aggregation': 'sum',
+                'field': {'source_id': 'quotas', 'field': 'amount'},
+            }],
+        }
+        cube = validate_model(pc_raw)
+        ddn_text, _ = semantic_model_to_ddn(cube)
+        roundtripped = ddn_to_semantic_model(ddn_text)['model']
+        self.assertEqual(roundtripped['dimensions'], cube['dimensions'])
+
+        query = validate_query(
+            roundtripped,
+            {
+                'axes': {'rows': ['org_rep']},
+                'measures': ['total_quota'],
+                'order_by': [{'id': 'org_rep', 'direction': 'asc'}],
+            },
+        )
+        setup_sql = [
+            'CREATE TABLE reps ('
+            'rep_id INTEGER, manager_id INTEGER, rep_name TEXT)',
+            'CREATE TABLE quotas (quota_id INTEGER, rep_id INTEGER, '
+            'amount DOUBLE PRECISION)',
+            "INSERT INTO reps VALUES (1, NULL, 'CEO'), (2, 1, 'VP Sales'),"
+            " (3, 2, 'Alice'), (4, 2, 'Bob'), (5, 1, 'Advisor')",
+            'INSERT INTO quotas VALUES (10, 1, 100.0), (11, 2, 0.0),'
+            ' (12, 3, 200.0), (13, 4, 50.0), (14, 5, 40.0)',
+        ]
+        from pgadmin.cdeadmin.design_store.cube_ddn import _PORTABLE_DIALECTS
+
+        sqlite_dialect = _PORTABLE_DIALECTS['sqlite']
+        compiled_sq = compile_sql(roundtripped, query, sqlite_dialect)
+        self.assertTrue(
+            compiled_sq['source'].lstrip().startswith('WITH RECURSIVE')
+        )
+        with sqlite3.connect(':memory:') as sconn:
+            for stmt in setup_sql:
+                sconn.execute(stmt)
+            sq_rows = sconn.execute(compiled_sq['source']).fetchall()
+        # CEO(1) = 100+0+200+50+40=390; VP(2) = 0+200+50=250;
+        # Alice(3)=200; Bob(4)=50; Advisor(5)=40
+        self.assertEqual(
+            sq_rows,
+            [(1, 390.0), (2, 250.0), (3, 200.0), (4, 50.0), (5, 40.0)],
+        )
+
+        duck_dialect = _PORTABLE_DIALECTS['duckdb']
+        compiled_dk = compile_sql(roundtripped, query, duck_dialect)
+        dconn = duckdb.connect(':memory:')
+        try:
+            for stmt in setup_sql:
+                dconn.execute(stmt)
+            dk_rows = dconn.execute(compiled_dk['source']).fetchall()
+        finally:
+            dconn.close()
+        self.assertEqual(dk_rows, sq_rows)
+
+    def test_semi_additive_measures_and_grain_warnings(self):
+        inv_raw = {
+            'contract_version': '1.0.0',
+            'name': 'Warehouse Balances',
+            'semantic_family': 'relational',
+            'sources': [{
+                'id': 'balances',
+                'resource_id': 'table:main:balances',
+                'kind': 'table',
+                'classification': 'fact',
+                'relation': ['balances'],
+                'grain': [
+                    {'source_id': 'balances', 'field': 'snap_date'},
+                    {'source_id': 'balances', 'field': 'warehouse'},
+                ],
+            }],
+            'dimensions': [
+                {
+                    'id': 'snap_date',
+                    'name': 'Snapshot Date',
+                    'type': 'time',
+                    'field': {'source_id': 'balances', 'field': 'snap_date'},
+                },
+                {
+                    'id': 'warehouse',
+                    'name': 'Warehouse',
+                    'type': 'categorical',
+                    'field': {'source_id': 'balances', 'field': 'warehouse'},
+                },
+            ],
+            'measures': [
+                {
+                    'id': 'units_moved',
+                    'name': 'Units Moved',
+                    'aggregation': 'sum',
+                    'field': {'source_id': 'balances', 'field': 'moved'},
+                },
+                {
+                    'id': 'closing_raw',
+                    'name': 'Closing Raw',
+                    'aggregation': 'last_value',
+                    'semi_additive_dimension': 'snap_date',
+                    'within_group_aggregation': 'sum',
+                    'field': {'source_id': 'balances', 'field': 'on_hand'},
+                },
+                {
+                    'id': 'closing_non_empty',
+                    'name': 'Closing Non-Empty',
+                    'aggregation': 'last_non_empty',
+                    'semi_additive_dimension': 'snap_date',
+                    'within_group_aggregation': 'sum',
+                    'field': {'source_id': 'balances', 'field': 'on_hand'},
+                },
+                {
+                    'id': 'opening_balance',
+                    'name': 'Opening Balance',
+                    'aggregation': 'first_non_empty',
+                    'semi_additive_dimension': 'snap_date',
+                    'within_group_aggregation': 'sum',
+                    'field': {'source_id': 'balances', 'field': 'on_hand'},
+                },
+                {
+                    'id': 'avg_daily_balance',
+                    'name': 'Average Daily Balance',
+                    'aggregation': 'avg_over_time',
+                    'semi_additive_dimension': 'snap_date',
+                    'within_group_aggregation': 'sum',
+                    'field': {'source_id': 'balances', 'field': 'on_hand'},
+                },
+                {
+                    'id': 'closing_vs_opening_delta',
+                    'name': 'Closing vs Opening Delta',
+                    'aggregation': 'none',
+                    'expression': {
+                        'operator': 'subtract',
+                        'left': {'measure': 'closing_non_empty'},
+                        'right': {'measure': 'opening_balance'},
+                    },
+                },
+            ],
+            'materializations': [{
+                'id': 'bad_grain_agg',
+                'name': 'Warehouse Only Rollup',
+                'strategy': 'materialized_view',
+                'enabled': True,
+                'grain_dimensions': ['warehouse'],
+                'measures': ['closing_non_empty'],
+                'target_relation': ['agg_wh_bad'],
+            }],
+        }
+        cube = validate_model(inv_raw)
+        ddn_text, _ = semantic_model_to_ddn(cube)
+        parsed = ddn_to_semantic_model(ddn_text)['model']
+        self.assertEqual(parsed['measures'], cube['measures'])
+
+        plan = preview_cube_materialization_plan(
+            None, parsed, target_engine='postgresql'
+        )
+        self.assertGreaterEqual(len(plan['grain_warnings']), 1)
+        self.assertIn('snap_date', plan['grain_warnings'][0])
+
+        query = validate_query(
+            parsed,
+            {
+                'axes': {'rows': ['warehouse']},
+                'measures': [
+                    'units_moved',
+                    'closing_raw',
+                    'closing_non_empty',
+                    'opening_balance',
+                    'avg_daily_balance',
+                    'closing_vs_opening_delta',
+                ],
+                'order_by': [{'id': 'warehouse', 'direction': 'asc'}],
+            },
+        )
+        setup_sql = [
+            'CREATE TABLE balances ('
+            'snap_date TEXT, warehouse TEXT, on_hand DOUBLE PRECISION, '
+            'moved DOUBLE PRECISION)',
+            "INSERT INTO balances VALUES "
+            "('2026-01-01', 'East', 100.0, 10.0),"
+            "('2026-01-02', 'East', 150.0, 20.0),"
+            "('2026-01-03', 'East', 170.0, 5.0),"
+            "('2026-01-01', 'West', 80.0, 8.0),"
+            "('2026-01-02', 'West', 120.0, 12.0),"
+            "('2026-01-03', 'West', NULL, 4.0)",
+        ]
+        from pgadmin.cdeadmin.design_store.cube_ddn import _PORTABLE_DIALECTS
+
+        sqlite_dialect = _PORTABLE_DIALECTS['sqlite']
+        compiled_sq = compile_sql(parsed, query, sqlite_dialect)
+        with sqlite3.connect(':memory:') as sconn:
+            for stmt in setup_sql:
+                sconn.execute(stmt)
+            sq_rows = sconn.execute(compiled_sq['source']).fetchall()
+        # East: moved=35, closing_raw=170, closing_non_empty=170,
+        #       opening=100, avg=(100+150+170)/3=140, delta=70
+        # West: moved=24, closing_raw=None, closing_non_empty=120,
+        #       opening=80, avg=(80+120)/2=100, delta=40
+        self.assertEqual(len(sq_rows), 2)
+        self.assertEqual(sq_rows[0][0], 'East')
+        self.assertAlmostEqual(sq_rows[0][1], 35.0)
+        self.assertAlmostEqual(sq_rows[0][2], 170.0)
+        self.assertAlmostEqual(sq_rows[0][3], 170.0)
+        self.assertAlmostEqual(sq_rows[0][4], 100.0)
+        self.assertAlmostEqual(sq_rows[0][5], 140.0)
+        self.assertAlmostEqual(sq_rows[0][6], 70.0)
+        self.assertEqual(sq_rows[1][0], 'West')
+        self.assertAlmostEqual(sq_rows[1][1], 24.0)
+        self.assertIsNone(sq_rows[1][2])
+        self.assertAlmostEqual(sq_rows[1][3], 120.0)
+        self.assertAlmostEqual(sq_rows[1][4], 80.0)
+        self.assertAlmostEqual(sq_rows[1][5], 100.0)
+        self.assertAlmostEqual(sq_rows[1][6], 40.0)
+
+        duck_dialect = _PORTABLE_DIALECTS['duckdb']
+        compiled_dk = compile_sql(parsed, query, duck_dialect)
+        dconn = duckdb.connect(':memory:')
+        try:
+            for stmt in setup_sql:
+                dconn.execute(stmt)
+            dk_rows = dconn.execute(compiled_dk['source']).fetchall()
+        finally:
+            dconn.close()
+        self.assertEqual(dk_rows[0][0], 'East')
+        self.assertAlmostEqual(dk_rows[0][3], 170.0)
+        self.assertIsNone(dk_rows[1][2])
+        self.assertAlmostEqual(dk_rows[1][3], 120.0)
+
+    def test_perspectives_translations_and_interchange_exports(self):
+        raw = _sample_c3_cube()
+        raw['security'] = {
+            'row_filters': [{
+                'field': {'source_id': 'orders', 'field': 'customer_id'},
+                'operator': 'eq',
+                'value': 'secret_tenant_val',
+            }],
+            'tenant_filter': {
+                'field': {'source_id': 'orders', 'field': 'customer_id'},
+                'principal_claim': 'tenant_id',
+                'required': True,
+            },
+            'roles': [],
+        }
+        raw['perspectives'] = [{
+            'id': 'exec_sales',
+            'name': 'Executive Sales',
+            'description': 'Focused executive subset',
+            'dimensions': ['customer', 'order_date'],
+            'measures': ['gross_sales', 'priority_sales'],
+            'default_measure': 'gross_sales',
+        }]
+        raw['translations'] = [
+            {
+                'locale': 'fr-CA',
+                'caption': 'Cube des commandes',
+                'description': 'Modèle dimensionnel',
+                'entries': [
+                    {
+                        'kind': 'dimension',
+                        'target_id': 'customer',
+                        'caption': 'Client',
+                    },
+                    {
+                        'kind': 'measure',
+                        'target_id': 'gross_sales',
+                        'caption': 'Ventes brutes',
+                    },
+                    {
+                        'kind': 'perspective',
+                        'target_id': 'exec_sales',
+                        'caption': 'Ventes direction',
+                    },
+                ],
+            },
+            {
+                'locale': 'es',
+                'caption': 'Cubo de pedidos',
+                'entries': [{
+                    'kind': 'measure',
+                    'target_id': 'gross_sales',
+                    'caption': 'Ventas brutas',
+                }],
+            },
+        ]
+        cube = validate_model(raw)
+
+        # Perspective query enforcement: ship_date is excluded from exec_sales.
+        ok_q = validate_query(
+            cube,
+            {
+                'perspective': 'exec_sales',
+                'rows': ['customer'],
+                'measures': ['gross_sales'],
+            },
+        )
+        self.assertEqual(ok_q['perspective'], 'exec_sales')
+        with self.assertRaises(SemanticModelError):
+            validate_query(
+                cube,
+                {
+                    'perspective': 'exec_sales',
+                    'rows': ['ship_date'],
+                    'measures': ['gross_sales'],
+                },
+            )
+        with self.assertRaises(SemanticModelError):
+            validate_query(
+                cube,
+                {
+                    'perspective': 'exec_sales',
+                    'axes': {'rows': ['customer']},
+                    'measures': ['priority_orders'],
+                },
+            )
+
+        # Localization exact & prefix fallback
+        fr_model = localize_model(cube, 'fr-CA')
+        self.assertEqual(fr_model['name'], 'Cube des commandes')
+        self.assertEqual(fr_model['dimensions'][0]['name'], 'Client')
+        self.assertEqual(fr_model['measures'][0]['name'], 'Ventes brutes')
+        es_mx_model = localize_model(cube, 'es-MX')
+        self.assertEqual(es_mx_model['name'], 'Cubo de pedidos')
+
+        # Invalid translation target rejected
+        bad_trans = copy.deepcopy(raw)
+        bad_trans['translations'][0]['entries'].append({
+            'kind': 'measure',
+            'target_id': 'nonexistent_measure',
+            'caption': 'Oups',
+        })
+        with self.assertRaises(SemanticModelError):
+            validate_model(bad_trans)
+
+        # Lossless DDN round-trip & 3-way merge of perspectives + translations
+        base_ddn, eids = semantic_model_to_ddn(cube)
+        parsed = ddn_to_semantic_model(base_ddn)['model']
+        self.assertEqual(parsed['perspectives'], cube['perspectives'])
+        self.assertEqual(parsed['translations'], cube['translations'])
+
+        active_cube = copy.deepcopy(cube)
+        active_cube['perspectives'].append({
+            'id': 'shipping_ops',
+            'name': 'Shipping Ops',
+            'dimensions': ['ship_date'],
+            'measures': ['priority_orders'],
+        })
+        active_ddn, _ = semantic_model_to_ddn(active_cube, element_ids=eids)
+
+        draft_cube = copy.deepcopy(cube)
+        draft_cube['translations'].append({
+            'locale': 'de-DE',
+            'caption': 'Bestellwürfel',
+            'entries': [],
+        })
+        draft_ddn, _ = semantic_model_to_ddn(draft_cube, element_ids=eids)
+
+        merged = diff_cube_ddn(base_ddn, active_ddn, draft_ddn)
+        self.assertEqual(merged['conflicts'], [])
+        merged_parsed = ddn_to_semantic_model(
+            merged['merged_ddn_text']
+        )['model']
+        self.assertEqual(
+            {p['id'] for p in merged_parsed['perspectives']},
+            {'exec_sales', 'shipping_ops'},
+        )
+        self.assertEqual(
+            {t['locale'] for t in merged_parsed['translations']},
+            {'fr-CA', 'es', 'de-DE'},
+        )
+
+        # SML v1.8 export (primary) & Apache Ossie v0.2.0 lossy export
+        sml = export_cube_to_sml(cube)
+        self.assertEqual(sml['format'], 'sml@1.8')
+        self.assertIn('sml_manifest.yml', sml['files'])
+        self.assertIn('perspectives/exec_sales.yml', sml['files'])
+        self.assertIn('locales/fr-CA.yml', sml['files'])
+        all_sml_text = '\n'.join(sml['files'].values())
+        self.assertNotIn('tenant_id', all_sml_text)
+        self.assertNotIn('secret_tenant_val', all_sml_text)
+        self.assertEqual(
+            sml['loss_report']['items'][0]['category'],
+            'security_policy_excluded',
+        )
+
+        ossie = export_cube_to_ossie(cube, include_custom_extensions=True)
+        self.assertEqual(ossie['format'], 'apache-ossie@0.2.0')
+        self.assertEqual(ossie['loss_report']['fidelity'], 'lossy')
+        ossie_cats = {i['category'] for i in ossie['loss_report']['items']}
+        self.assertIn('role_playing_dimension', ossie_cats)
+        self.assertIn('filtered_measure', ossie_cats)
+        self.assertIn('perspective', ossie_cats)
+        self.assertIn('translation', ossie_cats)
+        self.assertIn('materialization_plan', ossie_cats)
+        self.assertIn('security_policy_excluded', ossie_cats)
+        self.assertNotIn('tenant_id', ossie['yaml'])
+        self.assertNotIn('secret_tenant_val', ossie['yaml'])
+
+        ossie_no_ext = export_cube_to_ossie(
+            cube, include_custom_extensions=False
+        )
+        self.assertNotIn(
+            'custom_extensions', ossie_no_ext['document']['semantic_models'][0]
+        )
+
+        # Verify HTTP export & locale routes
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Flask(__name__)
+            app.secret_key = 'test-cube-interchange'
+            app.config['TESTING'] = True
+            app.config['LOGIN_DISABLED'] = True
+            app.config['CDEADMIN_DESIGN_STORE_PATH'] = f'{tmp}/designs.db'
+            app.extensions[SEMANTIC_SERVICE_EXTENSION_KEY] = (
+                SemanticModelService(repository=_MemorySemanticRepo())
+            )
+            init_routes_app(app)
+            client = app.test_client()
+            c_resp = client.post(
+                '/cdeadmin/api/projects/p1/designs',
+                json={
+                    'mode': 'create_cube',
+                    'key': 'intl-cube',
+                    'title': 'Intl Cube',
+                    'model': cube,
+                },
+            )
+            did = c_resp.get_json()['data']['id']
+
+            loc_resp = client.get(
+                f'/cdeadmin/api/projects/p1/designs/{did}'
+                '/cube/model?locale=fr-CA'
+            )
+            self.assertEqual(loc_resp.status_code, 200)
+            self.assertEqual(
+                loc_resp.get_json()['data']['localized_model']['name'],
+                'Cube des commandes',
+            )
+
+            sml_http = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{did}/cube/export',
+                json={'format': 'sml'},
+            )
+            self.assertEqual(sml_http.status_code, 200)
+            self.assertEqual(sml_http.get_json()['data']['format'], 'sml@1.8')
+
+            ossie_http = client.get(
+                f'/cdeadmin/api/projects/p1/designs/{did}'
+                '/cube/export?format=ossie&include_custom_extensions=0'
+            )
+            self.assertEqual(ossie_http.status_code, 200)
+            self.assertEqual(
+                ossie_http.get_json()['data']['format'], 'apache-ossie@0.2.0'
             )
 
 

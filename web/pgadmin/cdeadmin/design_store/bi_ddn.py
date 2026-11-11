@@ -23,8 +23,16 @@ Implements the 2026-11-08 and 2026-11-10 owner decisions (E1-E10):
   switching on subscriptions/alerts, embeds or dashboard-server publication.
 - E5: Default card click cross-filters (per-card override), auto-apply filters,
   personal filter state unless author-pinned, drill-through carries context.
-- E6: No BI write-back or action buttons in the first release.
-- E7: Imported monitoring ``metric_panel`` cards hold static snapshots in BI.
+- E6: BI write-back action buttons are declarative DDN elements that never
+  execute directly: triggering an action button validates bounded parameters
+  and key columns and submits an ``OperationRequest`` with
+  ``approval_required=True`` into ``OperationBus`` for native-operation review.
+  Raw mutation SQL in BI questions remains forbidden.
+- E7: Imported monitoring ``metric_panel`` cards hold static snapshots by
+  default; opt-in ``collector_read_only`` bindings read the monitoring host's
+  read-only ``snapshot(...)`` under the viewer's own authorization without
+  enabling or configuring collectors and without reusing BI questions for
+  monitoring.
 - E8: Optional BYOK AI drafting searches existing questions first and produces
   only an ordinary draft or diff; agents never accept, merge or publish.
 - E9: Display-only remote dashboard server mode under an explicit publishing
@@ -129,13 +137,49 @@ FORBIDDEN_DDN_KEYS = frozenset({
     'dsn',
 })
 
-# Owner decision E6: no BI write-back in the first release.
+# Owner decision E6: raw write-back flags and mutation SQL remain forbidden;
+# structured dashboard action_buttons must route through OperationBus review.
 FORBIDDEN_WRITEBACK_KEYS = frozenset({
     'write_back',
     'writeback',
-    'action_buttons',
     'mutation_sql',
+    'writeback_sql',
 })
+
+ACTION_BUTTON_KINDS = frozenset({
+    'insert_row',
+    'update_row',
+    'delete_row',
+    'provider_operation',
+})
+ACTION_PARAMETER_SOURCES = frozenset({
+    'prompt',
+    'filter',
+    'selected_row',
+    'literal',
+})
+BI_WRITEBACK_ADAPTER_ID = 'bi-writeback-review'
+
+METRIC_PANEL_SNAPSHOT_MODES = frozenset({
+    'static',
+    'collector_read_only',
+})
+COLLECTOR_ENGINES = frozenset({
+    'firebird',
+    'postgresql',
+    'mysql',
+    'mariadb',
+    'duckdb',
+    'sqlite',
+})
+MONITORING_HOST_EXTENSIONS: dict[str, str] = {
+    'firebird': 'cdeadmin_monitoring_host',
+    'postgresql': 'cdeadmin_postgresql_monitoring_host',
+    'mysql': 'cdeadmin_mysql_monitoring_host',
+    'mariadb': 'cdeadmin_mariadb_monitoring_host',
+    'duckdb': 'cdeadmin_duckdb_monitoring_host',
+    'sqlite': 'cdeadmin_sqlite_monitoring_host',
+}
 
 _NON_SELECT_RE = re.compile(
     r'^\s*(insert|update|delete|merge|drop|alter|create|truncate|grant|'
@@ -255,20 +299,38 @@ def _all_builder_options_enabled() -> dict[str, dict[str, Any]]:
     }
 
 
-def _ensure_no_writeback(payload: Any) -> None:
-    """Enforce E6: reject write-back definitions or mutation SQL."""
+def _ensure_no_writeback(
+    payload: Any,
+    *,
+    allow_dashboard_actions: bool = False,
+) -> None:
+    """Enforce E6: reject unreviewed write-back flags or raw mutation SQL."""
     if isinstance(payload, Mapping):
         for key, val in payload.items():
             key_s = str(key).lower()
             if key_s in FORBIDDEN_WRITEBACK_KEYS and val:
                 raise DesignStoreError(
-                    'BI write-back and action buttons are not supported in '
-                    'this release'
+                    'Direct BI write-back and raw mutation SQL are forbidden; '
+                    'use reviewed dashboard action_buttons routed through '
+                    'native-operation review'
                 )
-            _ensure_no_writeback(val)
+            if (
+                not allow_dashboard_actions
+                and key_s in ('action_buttons', 'action_button')
+                and val is not None
+            ):
+                raise DesignStoreError(
+                    'BI questions are strictly read-only and cannot declare '
+                    'action_buttons'
+                )
+            _ensure_no_writeback(
+                val, allow_dashboard_actions=allow_dashboard_actions
+            )
     elif isinstance(payload, list):
         for item in payload:
-            _ensure_no_writeback(item)
+            _ensure_no_writeback(
+                item, allow_dashboard_actions=allow_dashboard_actions
+            )
 
 
 def _ensure_no_sensitive_fields(payload: Any, path: str = 'root') -> None:
@@ -1876,6 +1938,269 @@ def ddn_to_question(ddn_text: str) -> dict[str, Any]:
     }
 
 
+def _validate_collector_binding(
+    raw: Any,
+    card_id: str,
+) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        raise DesignStoreError(
+            f'collector_read_only metric_panel {card_id!r} requires a '
+            'collector_binding object'
+        )
+    forbidden_collector_keys = {
+        'enable_collector',
+        'policy',
+        'credentials',
+        'question_id',
+        'question_design_id',
+        'sql',
+    }
+    bad_keys = sorted(forbidden_collector_keys & {str(k) for k in raw})
+    if bad_keys:
+        raise DesignStoreError(
+            f'collector_binding on card {card_id!r} cannot configure '
+            f'collectors or reference BI questions ({", ".join(bad_keys)})'
+        )
+    engine = str(raw.get('engine') or '').strip().lower()
+    if engine not in COLLECTOR_ENGINES:
+        raise DesignStoreError(
+            f'Unsupported collector_binding.engine {engine!r} on card '
+            f'{card_id!r}'
+        )
+    sid = raw.get('server_id')
+    if isinstance(sid, bool) or not isinstance(sid, int) or sid < 1:
+        raise DesignStoreError(
+            f'collector_binding.server_id on card {card_id!r} must be a '
+            'positive integer'
+        )
+    target_raw = raw.get('target_id')
+    target_id = (
+        str(target_raw).strip()[:255]
+        if target_raw not in (None, '')
+        else None
+    )
+    metric_group = _safe_ident(raw.get('metric_group') or 'summary', 'summary')
+    raw_keys = raw.get('metric_keys')
+    if not isinstance(raw_keys, list) or not raw_keys:
+        raise DesignStoreError(
+            f'collector_binding.metric_keys on card {card_id!r} must be a '
+            'non-empty array'
+        )
+    metric_keys = []
+    for k_item in raw_keys[:64]:
+        k_clean = str(k_item or '').strip()
+        if not k_clean or len(k_clean) > 128:
+            raise DesignStoreError(
+                f'Invalid metric_key in collector_binding on card {card_id!r}'
+            )
+        if k_clean not in metric_keys:
+            metric_keys.append(k_clean)
+    budget = raw.get('freshness_budget_seconds', 60)
+    if (
+        isinstance(budget, bool)
+        or not isinstance(budget, int)
+        or not 5 <= budget <= 86400
+    ):
+        raise DesignStoreError(
+            'collector_binding.freshness_budget_seconds must be 5..86400'
+        )
+    return {
+        'engine': engine,
+        'server_id': sid,
+        'target_id': target_id,
+        'metric_group': metric_group,
+        'metric_keys': metric_keys,
+        'freshness_budget_seconds': budget,
+    }
+
+
+def _validate_action_buttons(
+    raw_buttons: list[Any] | None,
+    card_ids: set[str],
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for idx, braw in enumerate(raw_buttons or []):
+        if not isinstance(braw, Mapping):
+            raise DesignStoreError('action_button entry must be an object')
+        _ensure_no_sensitive_fields(braw, f'action_buttons[{idx}]')
+        for raw_sql_key in ('sql', 'raw_sql', 'mutation_sql', 'writeback_sql'):
+            if braw.get(raw_sql_key):
+                raise DesignStoreError(
+                    f'Action button cannot embed raw SQL ({raw_sql_key}); '
+                    'mutations are compiled from structured bindings for '
+                    'native-operation review'
+                )
+        aid = _safe_ident(braw.get('id') or f'action_{idx + 1}', 'action')
+        if aid in seen_ids:
+            raise DesignStoreError(f'Duplicate action_button id: {aid!r}')
+        seen_ids.add(aid)
+        label = str(braw.get('label') or '').strip()[:128]
+        if not label:
+            raise DesignStoreError(f'Action button {aid!r} requires a label')
+        op_kind = str(braw.get('operation_kind') or '').strip()
+        if op_kind not in ACTION_BUTTON_KINDS:
+            raise DesignStoreError(
+                f'Unsupported action_button operation_kind: {op_kind!r}'
+            )
+        card_id_raw = str(braw.get('card_id') or '').strip()
+        if card_id_raw and card_id_raw not in card_ids:
+            raise DesignStoreError(
+                f'Action button {aid!r} references unknown card '
+                f'{card_id_raw!r}'
+            )
+        endpoint_id = str(
+            braw.get('target_endpoint_id') or 'default-endpoint'
+        ).strip()[:128]
+        if not endpoint_id:
+            raise DesignStoreError(
+                f'Action button {aid!r} requires target_endpoint_id'
+            )
+        rel_raw = braw.get('target_relation') or []
+        if op_kind != 'provider_operation':
+            if not isinstance(rel_raw, list) or not (1 <= len(rel_raw) <= 3):
+                raise DesignStoreError(
+                    f'Action button {aid!r} ({op_kind}) requires '
+                    'target_relation with 1..3 identifier parts'
+                )
+        target_relation = [
+            _safe_ident(part, 'rel')
+            for part in (rel_raw if isinstance(rel_raw, list) else [])
+            if str(part or '').strip()
+        ]
+        if op_kind != 'provider_operation' and not target_relation:
+            raise DesignStoreError(
+                f'Action button {aid!r} requires non-empty target_relation'
+            )
+        key_cols_raw = braw.get('key_columns') or []
+        if not isinstance(key_cols_raw, list):
+            raise DesignStoreError('action_button.key_columns must be a list')
+        key_columns = [
+            _safe_ident(c, 'id')
+            for c in key_cols_raw
+            if str(c or '').strip()
+        ]
+        if op_kind in {'update_row', 'delete_row'} and not key_columns:
+            raise DesignStoreError(
+                f'Action button {aid!r} ({op_kind}) requires non-empty '
+                'key_columns to prevent unbounded table mutations'
+            )
+        bindings_raw = braw.get('parameter_bindings') or []
+        if not isinstance(bindings_raw, list):
+            raise DesignStoreError(
+                'action_button.parameter_bindings must be a list'
+            )
+        norm_bindings: list[dict[str, Any]] = []
+        seen_params: set[str] = set()
+        for b_idx, p_raw in enumerate(bindings_raw[:64]):
+            if not isinstance(p_raw, Mapping):
+                raise DesignStoreError(
+                    'action_button parameter_binding must be an object'
+                )
+            p_name = _safe_ident(
+                p_raw.get('name')
+                or p_raw.get('parameter_name')
+                or p_raw.get('column')
+                or f'p_{b_idx + 1}',
+                'param',
+            )
+            if p_name in seen_params:
+                raise DesignStoreError(
+                    f'Duplicate parameter binding {p_name!r} on action {aid!r}'
+                )
+            seen_params.add(p_name)
+            col_name = _safe_ident(
+                p_raw.get('column') or p_name, p_name
+            )
+            src_raw = str(p_raw.get('source') or 'prompt').strip()
+            src_kind = (
+                'selected_row' if src_raw == 'row_column' else src_raw
+            )
+            if src_kind not in ACTION_PARAMETER_SOURCES:
+                raise DesignStoreError(
+                    f'Unsupported parameter binding source {src_kind!r}'
+                )
+            p_type = str(p_raw.get('type') or 'string')
+            if p_type not in PARAMETER_TYPES:
+                p_type = 'string'
+            p_entry: dict[str, Any] = {
+                'name': p_name,
+                'column': col_name,
+                'source': src_kind,
+                'source_ref': str(
+                    p_raw.get('source_ref') or p_name
+                ).strip()[:128],
+                'type': p_type,
+                'required': bool(p_raw.get('required', True)),
+            }
+            if 'default' in p_raw and p_raw['default'] is not None:
+                p_entry['default'] = copy.deepcopy(p_raw['default'])
+            norm_bindings.append(p_entry)
+
+        bound_cols = {b['column'] for b in norm_bindings}
+        if op_kind == 'insert_row' and not bound_cols:
+            raise DesignStoreError(
+                f'insert_row action button {aid!r} requires at least one '
+                'column parameter_binding'
+            )
+        if op_kind == 'update_row':
+            non_key_cols = bound_cols - set(key_columns)
+            if not non_key_cols:
+                raise DesignStoreError(
+                    f'update_row action button {aid!r} requires at least one '
+                    'non-key column binding to update'
+                )
+            missing_keys = set(key_columns) - bound_cols
+            if missing_keys:
+                raise DesignStoreError(
+                    f'Action button {aid!r} is missing parameter_bindings '
+                    f'for key_columns: {sorted(missing_keys)}'
+                )
+        if op_kind == 'delete_row':
+            missing_keys = set(key_columns) - bound_cols
+            if missing_keys:
+                raise DesignStoreError(
+                    f'delete_row action button {aid!r} is missing '
+                    f'parameter_bindings for key_columns: '
+                    f'{sorted(missing_keys)}'
+                )
+
+        capability_id = str(
+            braw.get('capability_id') or f'bi.writeback.{op_kind}'
+        ).strip()[:128]
+        if op_kind == 'delete_row':
+            risk_class = 'destructive'
+        else:
+            req_risk = str(braw.get('risk_class') or 'write').strip()
+            risk_class = (
+                req_risk
+                if req_risk in {'write', 'admin', 'destructive'}
+                else 'write'
+            )
+        if braw.get('approval_required') is False:
+            raise DesignStoreError(
+                f'Action button {aid!r} cannot disable native-operation '
+                'review (approval_required must be True)'
+            )
+        out.append({
+            'id': aid,
+            'label': label,
+            'card_id': card_id_raw or None,
+            'operation_kind': op_kind,
+            'capability_id': capability_id,
+            'target_endpoint_id': endpoint_id,
+            'target_relation': target_relation,
+            'key_columns': key_columns,
+            'parameter_bindings': norm_bindings,
+            'risk_class': risk_class,
+            'confirmation_message': str(
+                braw.get('confirmation_message') or ''
+            )[:512],
+            'approval_required': True,
+        })
+    return out
+
+
 def default_dashboard_model(
     name: str = 'New Dashboard',
     *,
@@ -1883,6 +2208,7 @@ def default_dashboard_model(
     cards: list[dict[str, Any]] | None = None,
     filters: list[dict[str, Any]] | None = None,
     links: list[dict[str, Any]] | None = None,
+    action_buttons: list[dict[str, Any]] | None = None,
     interaction: Mapping[str, Any] | None = None,
     description: str = '',
 ) -> dict[str, Any]:
@@ -1991,17 +2317,32 @@ def default_dashboard_model(
             card['text'] = {'markdown': str(t_obj.get('markdown') or '')}
         else:
             mp = craw.get('metric_panel') or {}
-            # Owner decision E7: imported metric_panel cards in BI hold static
-            # snapshots only (never live collector feeds or BI questions).
-            card['metric_panel'] = {
+            snap_mode = str(mp.get('snapshot_mode') or 'static').strip()
+            if snap_mode not in METRIC_PANEL_SNAPSHOT_MODES:
+                raise DesignStoreError(
+                    f'Unsupported metric_panel snapshot_mode {snap_mode!r} '
+                    f'on card {cid!r}'
+                )
+            mp_norm: dict[str, Any] = {
                 'panel_id': str(mp.get('panel_id') or cid),
-                'snapshot_mode': 'static',
+                'snapshot_mode': snap_mode,
                 'columns': copy.deepcopy(list(mp.get('columns') or [
                     {'id': 'measure', 'label': 'Measure'},
                     {'id': 'value', 'label': 'Snapshot Value'},
                 ])),
                 'rows': copy.deepcopy(list(mp.get('rows') or [])),
             }
+            if snap_mode == 'collector_read_only':
+                mp_norm['collector_binding'] = _validate_collector_binding(
+                    mp.get('collector_binding'), cid
+                )
+            elif mp.get('collector_binding'):
+                raise DesignStoreError(
+                    f'Static metric_panel {cid!r} cannot carry '
+                    'collector_binding unless snapshot_mode is '
+                    'collector_read_only'
+                )
+            card['metric_panel'] = mp_norm
         norm_cards.append(card)
 
     norm_filters: list[dict[str, Any]] = []
@@ -2037,6 +2378,9 @@ def default_dashboard_model(
             'field_map': copy.deepcopy(dict(lraw.get('field_map') or {})),
         })
 
+    card_id_set = {c['id'] for c in norm_cards}
+    norm_actions = _validate_action_buttons(action_buttons, card_id_set)
+
     dashboard = {
         'contract_version': '1.0.0',
         'name': title,
@@ -2047,7 +2391,9 @@ def default_dashboard_model(
         'links': norm_links,
         'interaction': norm_interaction,
     }
-    _ensure_no_writeback(dashboard)
+    if action_buttons is not None or norm_actions:
+        dashboard['action_buttons'] = norm_actions
+    _ensure_no_writeback(dashboard, allow_dashboard_actions=True)
     _ensure_no_sensitive_fields(dashboard)
     dashboard['review_flags'] = {
         'saved_filter_values': collect_saved_filter_value_flags(dashboard),
@@ -2056,7 +2402,7 @@ def default_dashboard_model(
 
 
 def validate_bi_dashboard(raw: Mapping[str, Any]) -> dict[str, Any]:
-    _ensure_no_writeback(raw)
+    _ensure_no_writeback(raw, allow_dashboard_actions=True)
     _ensure_no_sensitive_fields(raw)
     return default_dashboard_model(
         name=str(raw.get('name') or 'New Dashboard'),
@@ -2064,6 +2410,11 @@ def validate_bi_dashboard(raw: Mapping[str, Any]) -> dict[str, Any]:
         cards=list(raw.get('cards') or []),
         filters=list(raw.get('filters') or []),
         links=list(raw.get('links') or []),
+        action_buttons=(
+            list(raw.get('action_buttons') or [])
+            if 'action_buttons' in raw
+            else None
+        ),
         interaction=raw.get('interaction'),
         description=str(raw.get('description') or ''),
     )
@@ -2252,9 +2603,33 @@ def dashboard_to_ddn(
                 {
                     'card_id': cid,
                     'type': 'metric_panel',
-                    'snapshot_mode': 'static',
+                    'snapshot_mode': mp['snapshot_mode'],
                 },
             ))
+            if mp['snapshot_mode'] == 'collector_read_only':
+                cb = mp['collector_binding']
+                cb_el = _alloc_id(id_map, f'collector:{cid}')
+                cb_title = f"Collector {cb['engine']}:{cb['server_id']}"
+                elements.append((
+                    cb_el,
+                    'binding',
+                    cb_title,
+                    {
+                        'card_id': cid,
+                        'binding_mode': 'collector_read_only',
+                        'engine': cb['engine'],
+                        'server_id': cb['server_id'],
+                        'target_id': cb.get('target_id'),
+                        'metric_group': cb['metric_group'],
+                    },
+                ))
+                relations.append((
+                    _alloc_id(id_map, f'rel:card_collector:{cid}'),
+                    'uses',
+                    c_el,
+                    cb_el,
+                    'collector_read_only',
+                ))
 
         relations.append((
             _alloc_id(id_map, f'rel:dash_part:{cid}'),
@@ -2292,6 +2667,33 @@ def dashboard_to_ddn(
                     target_el,
                     str(tgt.get('parameter') or tgt.get('field') or flt['id']),
                 ))
+
+    for act in dashboard.get('action_buttons') or []:
+        aid = act['id']
+        a_el = _alloc_id(id_map, f'action:{aid}')
+        elements.append((
+            a_el,
+            'query_operation',
+            act['label'],
+            {
+                'action_button_id': aid,
+                'operation_kind': act['operation_kind'],
+                'risk_class': act['risk_class'],
+                'approval_required': True,
+            },
+        ))
+        owner_el = (
+            id_map.get(f"card:{act['card_id']}")
+            if act.get('card_id')
+            else None
+        ) or root_id
+        relations.append((
+            _alloc_id(id_map, f'rel:action_uses:{aid}'),
+            'uses',
+            owner_el,
+            a_el,
+            f"{act['operation_kind']} (review)",
+        ))
 
     root_rec_id = _alloc_id(id_map, 'record:dashboard:root')
     element_rec_ids = {
@@ -2696,6 +3098,98 @@ def _narrow_filter_value(locked_val: Any, requested_val: Any, key: str) -> Any:
             f'Requested filter {key!r} conflicts with locked device filter'
         )
     return copy.deepcopy(locked_val)
+
+
+def _parse_iso_dt(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+class BIWriteBackReviewAdapter:
+    """OperationBus review adapter for BI dashboard write-back actions (E6).
+
+    Validates and previews bounded parameterized DML for native-operation
+    review. Never executes SQL directly without provider handoff after explicit
+    approval.
+    """
+
+    @staticmethod
+    def validate(operation: Mapping[str, Any]) -> dict[str, Any]:
+        req = operation.get('request') or {}
+        payload = req.get('payload') or {}
+        sql_preview = str(payload.get('sql_preview') or '').strip()
+        valid = bool(
+            req.get('approval_required') is True
+            and sql_preview
+            and payload.get('target_endpoint_id')
+        )
+        return {
+            'valid': valid,
+            'checked_parameters': sorted(
+                (payload.get('bound_parameters') or {}).keys()
+            ),
+            'key_columns': list(payload.get('key_columns') or []),
+        }
+
+    @staticmethod
+    def preview(operation: Mapping[str, Any]) -> dict[str, Any]:
+        req = operation.get('request') or {}
+        payload = req.get('payload') or {}
+        return {
+            'sql_preview': payload.get('sql_preview', ''),
+            'bound_parameters': copy.deepcopy(
+                payload.get('bound_parameters') or {}
+            ),
+            'target_endpoint_id': payload.get('target_endpoint_id'),
+            'target_relation': list(payload.get('target_relation') or []),
+            'risk_class': req.get('risk_class', 'write'),
+            'destructive_warning': payload.get('destructive_warning', ''),
+            'requires_native_approval': True,
+            'executed': False,
+        }
+
+    @staticmethod
+    def start(operation: Mapping[str, Any]):
+        from pgadmin.cdeadmin.operations import OperationStateError
+
+        raise OperationStateError(
+            'BI write-back actions require native provider execution handoff '
+            'after approval; BI never executes mutation SQL directly'
+        )
+
+    @staticmethod
+    def inspect(operation: Mapping[str, Any]):
+        from pgadmin.cdeadmin.operations import OperationStateError
+
+        raise OperationStateError('No active BI write-back provider execution')
+
+    @staticmethod
+    def cancel(operation: Mapping[str, Any]):
+        from pgadmin.cdeadmin.operations import OperationStateError
+
+        raise OperationStateError('No active BI write-back provider execution')
+
+    @staticmethod
+    def validate_post_state(operation: Mapping[str, Any]):
+        from pgadmin.cdeadmin.operations import OperationStateError
+
+        raise OperationStateError('No active BI write-back provider execution')
+
+
+def _ensure_bi_writeback_adapter_registered(bus: Any) -> None:
+    from pgadmin.cdeadmin.operations import AdapterRegistrationError
+
+    try:
+        bus.register_adapter(BI_WRITEBACK_ADAPTER_ID, BIWriteBackReviewAdapter)
+    except AdapterRegistrationError:
+        pass
 
 
 class BIDesignSync:
@@ -3280,8 +3774,451 @@ class BIDesignSync:
                 'can_export': False,
                 'can_open_sql': False,
                 'can_accept': False,
+                'can_trigger_actions': False,
             },
             'session': session,
+        }
+
+    # ------------------------------------------------------------------
+    # BI Write-Back Action Review via OperationBus (E6) &
+    # Read-Only Monitoring Collector Snapshot Bindings (E7)
+    # ------------------------------------------------------------------
+
+    def prepare_action_button_review(
+        self,
+        dashboard_design_id: str,
+        *,
+        action_button_id: str,
+        actor_id: int,
+        parameter_values: Mapping[str, Any] | None = None,
+        prompt_values: Mapping[str, Any] | None = None,
+        active_filters: Mapping[str, Any] | None = None,
+        selected_row: Mapping[str, Any] | None = None,
+        version: int | None = None,
+        dialect: str = 'postgresql',
+        operation_bus: Any = None,
+        approvers: list[str] | tuple[str, ...] = (),
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+        actor_kind: str = 'human',
+        device_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate a BI action button and submit to ``OperationBus`` review.
+
+        Never executes mutation SQL directly against any database. All BI
+        write-back actions enter ``OperationBus`` with
+        ``approval_required=True`` (`stage == 'awaiting_approval'`).
+        """
+        self._require_human(
+            actor_kind, 'submit BI action button for native-operation review'
+        )
+        if device_token:
+            raise DesignStoreForbidden(
+                'Display-only remote dashboard viewers cannot trigger '
+                'action buttons'
+            )
+
+        design = self.store.get_design(dashboard_design_id)
+        if design['kind'] != 'dashboard':
+            raise DesignStoreError(
+                f'Design {dashboard_design_id!r} is not a dashboard'
+            )
+        if not dry_run:
+            active_ver = design.get('active_version')
+            if active_ver is None:
+                raise DesignStoreConflict(
+                    'Dashboard must have an accepted active version before '
+                    'submitting BI action buttons for native-operation review'
+                )
+            if version is not None and int(version) != int(active_ver):
+                raise DesignStoreConflict(
+                    'BI action buttons can only be submitted from the '
+                    'currently accepted dashboard version'
+                )
+            doc = self.store.get_design(
+                dashboard_design_id, version=active_ver
+            )
+        elif version is not None:
+            doc = self.store.get_design(dashboard_design_id, version=version)
+        else:
+            doc = design
+
+        parsed = ddn_to_dashboard(doc['version']['ddn_text'])
+        dashboard = parsed['dashboard']
+        act = next(
+            (
+                b for b in (dashboard.get('action_buttons') or [])
+                if b['id'] == action_button_id
+            ),
+            None,
+        )
+        if act is None:
+            raise DesignStoreNotFound(
+                f'Action button {action_button_id!r} was not found on '
+                f'dashboard {dashboard_design_id!r}'
+            )
+
+        flat_params = dict(parameter_values or {})
+        prompts = dict(prompt_values or {})
+        filters_ctx = dict(active_filters or {})
+        row_ctx = dict(selected_row or {})
+
+        bound_params: dict[str, Any] = {}
+        col_to_param: dict[str, str] = {}
+        for binding in act['parameter_bindings']:
+            p_name = binding['name']
+            src_kind = binding['source']
+            src_ref = binding['source_ref']
+            val: Any = None
+            has_val = False
+            if src_kind == 'prompt' and (
+                src_ref in prompts or p_name in prompts
+            ):
+                val = prompts.get(src_ref, prompts.get(p_name))
+                has_val = val is not None
+            elif src_kind == 'filter' and src_ref in filters_ctx:
+                val = filters_ctx[src_ref]
+                has_val = val is not None
+            elif src_kind == 'selected_row' and src_ref in row_ctx:
+                val = row_ctx[src_ref]
+                has_val = val is not None
+            elif src_kind == 'literal' and 'default' in binding:
+                val = binding['default']
+                has_val = val is not None
+            if not has_val and (
+                p_name in flat_params or src_ref in flat_params
+            ):
+                val = flat_params.get(p_name, flat_params.get(src_ref))
+                has_val = val is not None
+            if not has_val and 'default' in binding:
+                val = binding['default']
+                has_val = val is not None
+
+            if binding['required'] and (not has_val or val == ''):
+                raise DesignStoreError(
+                    f"Action button {act['id']!r} is missing required "
+                    f"parameter {p_name!r}"
+                )
+            bound_params[p_name] = val
+            col_to_param[binding['column']] = p_name
+
+        op_kind = act['operation_kind']
+        key_cols = list(act['key_columns'])
+        if op_kind in {'update_row', 'delete_row'}:
+            if not key_cols:
+                raise DesignStoreError(
+                    f'Action button {act["id"]!r} requires key_columns'
+                )
+            for kcol in key_cols:
+                kp = col_to_param.get(kcol)
+                if kp is None or bound_params.get(kp) in (None, ''):
+                    raise DesignStoreError(
+                        f'Action button {act["id"]!r} requires a non-empty '
+                        f'key value for column {kcol!r}'
+                    )
+
+        eng = str(dialect or 'postgresql').strip().lower()
+        rel_sql = '.'.join(
+            _quote_sql_ident(part, eng) for part in act['target_relation']
+        )
+        if op_kind == 'insert_row':
+            cols = [b['column'] for b in act['parameter_bindings']]
+            cols_sql = ', '.join(_quote_sql_ident(c, eng) for c in cols)
+            vals_sql = ', '.join(
+                f':{col_to_param[c]}' for c in cols
+            )
+            sql_stmt = (
+                f'INSERT INTO {rel_sql} ({cols_sql}) VALUES ({vals_sql});'
+            )
+            warning = (
+                'Native review required: inserts a new row into '
+                f'{rel_sql} using bound parameters.'
+            )
+        elif op_kind == 'update_row':
+            set_cols = [
+                b['column'] for b in act['parameter_bindings']
+                if b['column'] not in key_cols
+            ]
+            set_sql = ', '.join(
+                f'{_quote_sql_ident(c, eng)} = :{col_to_param[c]}'
+                for c in set_cols
+            )
+            where_sql = ' AND '.join(
+                f'{_quote_sql_ident(k, eng)} = :{col_to_param[k]}'
+                for k in key_cols
+            )
+            sql_stmt = f'UPDATE {rel_sql} SET {set_sql} WHERE {where_sql};'
+            warning = (
+                f'WARNING: Updating {rel_sql} overwrites existing cell '
+                'values and may not be reversible unless the target database '
+                'retains row versions.'
+            )
+        elif op_kind == 'delete_row':
+            where_sql = ' AND '.join(
+                f'{_quote_sql_ident(k, eng)} = :{col_to_param[k]}'
+                for k in key_cols
+            )
+            sql_stmt = f'DELETE FROM {rel_sql} WHERE {where_sql};'
+            warning = (
+                f'DESTRUCTIVE WARNING: Deleting from {rel_sql} permanently '
+                'removes row data and is not reversible unless the target '
+                'database retains historical versions.'
+            )
+        else:
+            sql_stmt = (
+                f"-- Provider operation {act['capability_id']} on "
+                f"{act['target_endpoint_id']}"
+            )
+            warning = (
+                f"Native review required before invoking provider operation "
+                f"{act['capability_id']}."
+            )
+
+        if dry_run:
+            return {
+                'dry_run': True,
+                'action_button_id': act['id'],
+                'operation_kind': op_kind,
+                'risk_class': act['risk_class'],
+                'target_endpoint_id': act['target_endpoint_id'],
+                'target_relation': act['target_relation'],
+                'sql': sql_stmt,
+                'bound_parameters': bound_params,
+                'destructive_warning': warning,
+                'requires_native_review': True,
+                'executed_immediately': False,
+            }
+
+        from pgadmin.cdeadmin.operations import OperationBus, OperationRequest
+
+        bus = operation_bus or OperationBus()
+        _ensure_bi_writeback_adapter_registered(bus)
+        principal = f'user:{int(actor_id)}'
+        target_res = (
+            'table:' + ':'.join(act['target_relation'])
+            if act['target_relation']
+            else f"endpoint:{act['target_endpoint_id']}"
+        )
+        op_req = OperationRequest(
+            operation_kind=f'bi.{op_kind}',
+            capability_id=act['capability_id'],
+            risk_class=act['risk_class'],
+            adapter_id=BI_WRITEBACK_ADAPTER_ID,
+            target_resource_id=target_res,
+            payload={
+                'dashboard_design_id': dashboard_design_id,
+                'dashboard_version': int(doc['version']['version']),
+                'action_button_id': act['id'],
+                'action_label': act['label'],
+                'target_endpoint_id': act['target_endpoint_id'],
+                'target_relation': act['target_relation'],
+                'dialect': eng,
+                'sql_preview': sql_stmt,
+                'bound_parameters': bound_params,
+                'key_columns': key_cols,
+                'destructive_warning': warning,
+            },
+            approval_required=True,
+        )
+        idem = idempotency_key or uuid7()
+        submitted = bus.submit(
+            op_req,
+            principal=principal,
+            idempotency_key=idem,
+            approvers=tuple(approvers),
+        )
+        op_id = submitted['operation_id']
+        bus.validate(op_id, principal)
+        previewed = bus.preview(op_id, principal)
+        return {
+            'operation_id': op_id,
+            'stage': previewed['stage'],
+            'action_button_id': act['id'],
+            'operation_kind': op_kind,
+            'risk_class': act['risk_class'],
+            'target_endpoint_id': act['target_endpoint_id'],
+            'target_relation': act['target_relation'],
+            'sql': sql_stmt,
+            'bound_parameters': bound_params,
+            'destructive_warning': warning,
+            'requires_native_review': True,
+            'executed_immediately': False,
+            'operation': previewed,
+        }
+
+    def read_collector_metric_panel(
+        self,
+        dashboard_design_id: str,
+        *,
+        card_id: str,
+        actor_id: int,
+        version: int | None = None,
+        monitoring_hosts: Mapping[str, Any] | None = None,
+        app: Any = None,
+        now_iso: str | None = None,
+    ) -> dict[str, Any]:
+        """Read a BI ``metric_panel`` card without mutating any collector (E7).
+
+        - Static cards return their stored static snapshot rows.
+        - ``collector_read_only`` cards call the owning engine's read-only
+          ``MonitoringHost.snapshot(actor_id, server_id, target_id)``,
+          rechecking viewer authorization and never starting, enabling or
+          modifying any collector or executing any BI question.
+        """
+        doc = self.store.get_design(dashboard_design_id, version=version)
+        if doc['kind'] != 'dashboard':
+            raise DesignStoreError(
+                f'Design {dashboard_design_id!r} is not a dashboard'
+            )
+        parsed = ddn_to_dashboard(doc['version']['ddn_text'])
+        card = next(
+            (c for c in parsed['dashboard']['cards'] if c['id'] == card_id),
+            None,
+        )
+        if card is None or card['type'] != 'metric_panel':
+            raise DesignStoreNotFound(
+                f'metric_panel card {card_id!r} was not found on dashboard '
+                f'{dashboard_design_id!r}'
+            )
+        mp = card['metric_panel']
+        if mp['snapshot_mode'] == 'static':
+            return {
+                'card_id': card_id,
+                'snapshot_mode': 'static',
+                'collector_state': 'not_applicable',
+                'freshness_status': 'static_snapshot',
+                'observed_at': None,
+                'age_seconds': None,
+                'columns': copy.deepcopy(mp['columns']),
+                'rows': copy.deepcopy(mp['rows']),
+                'collector_mutated': False,
+            }
+
+        cb = mp['collector_binding']
+        engine = cb['engine']
+        host = None
+        if monitoring_hosts is not None:
+            host = monitoring_hosts.get(engine)
+        if host is None and app is not None:
+            ext_key = MONITORING_HOST_EXTENSIONS.get(engine)
+            if ext_key:
+                host = getattr(app, 'extensions', {}).get(ext_key)
+
+        if host is None or not callable(getattr(host, 'snapshot', None)):
+            return {
+                'card_id': card_id,
+                'snapshot_mode': 'collector_read_only',
+                'engine': engine,
+                'collector_state': 'unavailable',
+                'freshness_status': 'host_unavailable',
+                'observed_at': None,
+                'age_seconds': None,
+                'columns': copy.deepcopy(mp['columns']),
+                'rows': [],
+                'collector_mutated': False,
+            }
+
+        try:
+            snap = host.snapshot(
+                int(actor_id),
+                int(cb['server_id']),
+                cb.get('target_id'),
+            )
+        except PermissionError:
+            return {
+                'card_id': card_id,
+                'snapshot_mode': 'collector_read_only',
+                'engine': engine,
+                'collector_state': 'unauthorized',
+                'freshness_status': 'unauthorized',
+                'observed_at': None,
+                'age_seconds': None,
+                'columns': copy.deepcopy(mp['columns']),
+                'rows': [],
+                'collector_mutated': False,
+            }
+
+        state = str((snap or {}).get('state') or 'disabled')
+        samples = list((snap or {}).get('samples') or [])
+        if state == 'disabled' or not samples:
+            return {
+                'card_id': card_id,
+                'snapshot_mode': 'collector_read_only',
+                'engine': engine,
+                'collector_state': state,
+                'freshness_status': (
+                    'collector_disabled'
+                    if state == 'disabled'
+                    else 'no_samples'
+                ),
+                'observed_at': None,
+                'age_seconds': None,
+                'columns': copy.deepcopy(mp['columns']),
+                'rows': [],
+                'collector_mutated': False,
+            }
+
+        latest = samples[-1] if isinstance(samples[-1], Mapping) else {}
+        observed_at = str(
+            latest.get('observed_at')
+            or latest.get('collected_at')
+            or latest.get('timestamp')
+            or (snap or {}).get('observed_at')
+            or ''
+        ) or None
+
+        age_seconds: float | None = None
+        freshness = 'live'
+        ref_now = _parse_iso_dt(now_iso) if now_iso else datetime.now(
+            timezone.utc
+        )
+        obs_dt = _parse_iso_dt(observed_at)
+        if obs_dt is not None and ref_now is not None:
+            age_seconds = max(
+                0.0, round((ref_now - obs_dt).total_seconds(), 3)
+            )
+            if age_seconds > float(cb['freshness_budget_seconds']):
+                freshness = 'stale'
+
+        group_name = cb['metric_group']
+        metrics_bag: dict[str, Any] = {}
+        if isinstance(latest.get(group_name), Mapping):
+            metrics_bag.update(latest[group_name])
+        if isinstance(latest.get('metrics'), Mapping):
+            metrics_bag.update(latest['metrics'])
+            if isinstance(latest['metrics'].get(group_name), Mapping):
+                metrics_bag.update(latest['metrics'][group_name])
+        for k_top, v_top in latest.items():
+            if not isinstance(v_top, (Mapping, list)):
+                metrics_bag.setdefault(str(k_top), v_top)
+
+        rows = []
+        for idx, m_key in enumerate(cb['metric_keys']):
+            rows.append({
+                'id': f'col_{idx + 1}',
+                'measure': m_key,
+                'value': (
+                    str(metrics_bag[m_key])
+                    if m_key in metrics_bag and metrics_bag[m_key] is not None
+                    else 'N/A'
+                ),
+                'observed_at': observed_at or '',
+            })
+
+        return {
+            'card_id': card_id,
+            'snapshot_mode': 'collector_read_only',
+            'engine': engine,
+            'server_id': cb['server_id'],
+            'target_id': cb.get('target_id'),
+            'collector_state': state,
+            'freshness_status': freshness,
+            'freshness_budget_seconds': cb['freshness_budget_seconds'],
+            'observed_at': observed_at,
+            'age_seconds': age_seconds,
+            'columns': copy.deepcopy(mp['columns']),
+            'rows': rows,
+            'collector_mutated': False,
         }
 
     # ------------------------------------------------------------------

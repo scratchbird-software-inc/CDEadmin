@@ -14,10 +14,12 @@ Implements the 2026-11-08 and 2026-11-10 owner decisions (C1-C4):
   the ScratchRobin semantic-model store holds the active implementation.
 - C2: Dimension usage matrix rendered as ``matrix.relations@1`` and
   aggregation plan grid rendered as ``table.records@1`` in the shared viewer.
-- C3: Dimension entities (key/name/sort/attributes), role-playing dimensions
-  with ``active`` flag, measure groups + dimension usage, filtered measures,
-  and aggregation/materialization plans.
-- C4: External SML / Ossie export deferred until after first release.
+- C3: Dimension entities (key/name/sort/attributes), level & parent-child
+  hierarchies, role-playing dimensions with ``active`` flag, measure groups +
+  dimension usage, filtered & semi-additive measures, perspectives,
+  translations, and aggregation/materialization plans.
+- C4: External SML (v1.8) and Apache Ossie (v0.2.0) export with explicit loss
+  reporting.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ import re
 from typing import Any
 
 from pgadmin.cdeadmin.semantic_models import (
+    SEMI_ADDITIVE_AGGREGATIONS,
     SemanticModelError,
     public_model,
     validate_model,
@@ -377,6 +380,15 @@ def semantic_model_to_ddn(
         ['Measures', str(len(normalized['measures']))],
         ['Aggregations', str(len(normalized['materializations']))],
     ]
+    if normalized.get('perspectives'):
+        cube_rows.append([
+            'Perspectives', str(len(normalized['perspectives'])),
+        ])
+    if normalized.get('translations'):
+        locales_lbl = ', '.join(
+            t['locale'] for t in normalized['translations']
+        )
+        cube_rows.append(['Translations', locales_lbl])
     lines.extend([
         f'element {_q(cube_el_id)} as "cube"',
         '    with',
@@ -404,6 +416,8 @@ def semantic_model_to_ddn(
         'joins': normalized['joins'],
         'relationships': normalized['relationships'],
         'has_explicit_measure_groups': 'measure_groups' in normalized,
+        'has_explicit_perspectives': 'perspectives' in normalized,
+        'has_explicit_translations': 'translations' in normalized,
         'parameters': normalized['parameters'],
         'default_filters': normalized['default_filters'],
         'security': normalized['security'],
@@ -497,10 +511,20 @@ def semantic_model_to_ddn(
                 _field_label(attr.get('field')),
             ])
         for hier in dim.get('hierarchies', []):
-            lvl_names = ' > '.join(
-                lvl['name'] for lvl in hier.get('levels', [])
-            )
-            d_rows.append([f"Hierarchy: {hier['name']}", lvl_names])
+            if hier.get('hierarchy_kind') == 'parent_child':
+                c_lbl = _field_label(hier.get('child_field'))
+                p_lbl = _field_label(hier.get('parent_field'))
+                d_max = hier.get('max_depth', 16)
+                d_rows.append([
+                    f"Hierarchy (P-C): {hier['name']}",
+                    f'{c_lbl} -> {p_lbl} (max {d_max})',
+                ])
+            else:
+                lvl_names = ' > '.join(
+                    lvl['name'] for lvl in hier.get('levels', [])
+                )
+                tag = ' (ragged)' if hier.get('ragged') else ''
+                d_rows.append([f"Hierarchy{tag}: {hier['name']}", lvl_names])
 
         lines.extend([
             f'element {_q(del_id)} as "dimension"',
@@ -582,10 +606,19 @@ def semantic_model_to_ddn(
         measure_el_ids[mid] = mel_id
         star_items.append(mel_id)
         m_rows = [['Aggregation', measure['aggregation'].upper()]]
+        if measure['aggregation'] in SEMI_ADDITIVE_AGGREGATIONS:
+            sa_dim = measure.get('semi_additive_dimension') or ''
+            w_agg = measure.get('within_group_aggregation', 'sum')
+            m_rows.append([
+                'Semi-additive',
+                f"{measure['aggregation']} over {sa_dim} ({w_agg})",
+            ])
         if measure.get('field'):
             m_rows.append(['Field', _field_label(measure['field'])])
         elif measure.get('expression'):
             m_rows.append(['Expression', _json_str(measure['expression'])])
+        if measure.get('display_folder'):
+            m_rows.append(['Folder', measure['display_folder']])
         if measure.get('format'):
             m_rows.append(['Format', measure['format']])
         m_filters = measure.get('filters') or []
@@ -705,6 +738,96 @@ def semantic_model_to_ddn(
                     '',
                 ])
 
+    for persp in normalized.get('perspectives', []):
+        pid = persp['id']
+        pel_id = _alloc_id(id_map, f'perspective:{pid}')
+        prec_id = _alloc_id(id_map, f'record:perspective:{pid}')
+        star_items.append(pel_id)
+        p_rows = [
+            [
+                'Dimensions',
+                ', '.join(persp.get('dimensions') or []) or '(none)',
+            ],
+            ['Measures', ', '.join(persp.get('measures') or []) or '(groups)'],
+        ]
+        if persp.get('measure_groups'):
+            p_rows.append([
+                'Measure groups', ', '.join(persp['measure_groups']),
+            ])
+        if persp.get('default_measure'):
+            p_rows.append(['Default measure', persp['default_measure']])
+        lines.extend([
+            f'element {_q(pel_id)} as "semantic_model"',
+            '    with',
+            f'        id {_q(pel_id)}',
+            f'        title {_q(persp["name"])}',
+        ])
+        if persp.get('description'):
+            lines.append(f'        subtitle {_q(persp["description"])}')
+        _emit_inline_table(
+            lines,
+            [('scope', 'Scope'), ('included', 'Included')],
+            p_rows,
+        )
+        lines.append('')
+        _emit_companion_record(
+            lines,
+            prec_id,
+            block_kind='perspective',
+            subject_id=pel_id,
+            logical_name=pid,
+            fields={'perspective_json': _json_str(persp)},
+        )
+        prel_id = _alloc_id(id_map, f'rel:perspective_of:{pid}')
+        star_items.append(prel_id)
+        lines.extend([
+            f'relation {_q(prel_id)} as "derives"',
+            f'    endpoint {_q(pel_id)}',
+            f'    endpoint {_q(cube_el_id)}',
+            '    with',
+            f'        id {_q(prel_id)}',
+            '        title "perspective"',
+            '',
+        ])
+        for p_dim in persp.get('dimensions', []):
+            if p_dim in dim_el_ids:
+                ud_id = _alloc_id(id_map, f'rel:persp_dim:{pid}:{p_dim}')
+                star_items.append(ud_id)
+                lines.extend([
+                    f'relation {_q(ud_id)} as "uses"',
+                    f'    endpoint {_q(pel_id)}',
+                    f'    endpoint {_q(dim_el_ids[p_dim])}',
+                    '    with',
+                    f'        id {_q(ud_id)}',
+                    '        title "exposes"',
+                    '',
+                ])
+        for p_meas in persp.get('measures', []):
+            if p_meas in measure_el_ids:
+                um_id = _alloc_id(id_map, f'rel:persp_meas:{pid}:{p_meas}')
+                star_items.append(um_id)
+                lines.extend([
+                    f'relation {_q(um_id)} as "uses"',
+                    f'    endpoint {_q(pel_id)}',
+                    f'    endpoint {_q(measure_el_ids[p_meas])}',
+                    '    with',
+                    f'        id {_q(um_id)}',
+                    '        title "exposes"',
+                    '',
+                ])
+
+    for tr in normalized.get('translations', []):
+        tid = tr['id']
+        trec_id = _alloc_id(id_map, f'record:translation:{tid}')
+        _emit_companion_record(
+            lines,
+            trec_id,
+            block_kind='translation',
+            subject_id=cube_el_id,
+            logical_name=tr['locale'],
+            fields={'translation_json': _json_str(tr)},
+        )
+
     preserved_envelope['element_ids'] = dict(id_map)
     _emit_companion_record(
         lines,
@@ -820,7 +943,7 @@ def _extract_notes(block_body: str) -> list[str]:
     notes: list[str] = []
     in_notes = False
     notes_indent = 0
-    item_re = re.compile(r'^\s+item\s+"((?:[^"\\]|"")*)"\s*$')
+    item_re = re.compile(r'^\s+item\s+"((?:[^"]|"")*)"\s*$')
     for line in block_body.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -870,6 +993,8 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
     measures: list[dict[str, Any]] = []
     measure_groups: list[dict[str, Any]] = []
     materializations: list[dict[str, Any]] = []
+    perspectives: list[dict[str, Any]] = []
+    translations: list[dict[str, Any]] = []
 
     for block in blocks:
         x_rec = _extract_x_record(block)
@@ -926,6 +1051,19 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
             materializations.append(mat)
             element_ids[f"materialization:{mat['id']}"] = subj_id
             element_ids[f"record:materialization:{mat['id']}"] = block['id']
+        elif bkind == 'perspective' and rec.get('perspective_json'):
+            persp = json.loads(rec['perspective_json'])
+            if subj_id in titles_by_id:
+                persp['name'] = titles_by_id[subj_id]
+            if subj_id in subtitles_by_id:
+                persp['description'] = subtitles_by_id[subj_id]
+            perspectives.append(persp)
+            element_ids[f"perspective:{persp['id']}"] = subj_id
+            element_ids[f"record:perspective:{persp['id']}"] = block['id']
+        elif bkind == 'translation' and rec.get('translation_json'):
+            tr = json.loads(rec['translation_json'])
+            translations.append(tr)
+            element_ids[f"record:translation:{tr['id']}"] = block['id']
 
     if not envelope and not cube_name:
         raise DesignStoreError(
@@ -968,6 +1106,10 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
     if envelope.get('has_explicit_measure_groups') or measure_groups:
         if envelope.get('has_explicit_measure_groups', True):
             raw_model['measure_groups'] = measure_groups
+    if envelope.get('has_explicit_perspectives') or perspectives:
+        raw_model['perspectives'] = perspectives
+    if envelope.get('has_explicit_translations') or translations:
+        raw_model['translations'] = translations
 
     try:
         validated = public_model(validate_model(raw_model))
@@ -982,7 +1124,12 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
 
 
 def _index_by_id(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {item['id']: item for item in items if 'id' in item}
+    out: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = item.get('id') or item.get('locale')
+        if key:
+            out[str(key)] = item
+    return out
 
 
 def diff_cube_ddn(
@@ -1007,6 +1154,8 @@ def diff_cube_ddn(
         'dimensions',
         'measures',
         'measure_groups',
+        'perspectives',
+        'translations',
         'parameters',
         'materializations',
     )
@@ -1066,7 +1215,7 @@ def diff_cube_ddn(
 
     for sec in sections:
         if (
-            sec == 'measure_groups'
+            sec in {'measure_groups', 'perspectives', 'translations'}
             and sec not in base_m
             and sec not in active_m
             and sec not in draft_m
@@ -1204,6 +1353,42 @@ def preview_cube_materialization_plan(
     highlights: dict[str, str] = {}
     differences: list[dict[str, Any]] = []
     statements: list[str] = []
+    grain_warnings: list[str] = []
+    measures_by_id = _index_by_id(candidate_model.get('measures', []))
+    dims_by_id = _index_by_id(candidate_model.get('dimensions', []))
+
+    def _check_mat_grain(mat_obj: dict[str, Any]) -> list[str]:
+        warnings_local: list[str] = []
+        grain_set = set(mat_obj.get('grain_dimensions') or [])
+        mat_meas = list(
+            mat_obj.get('measures')
+            or [m['id'] for m in measures_by_id.values()]
+        )
+        for mid in mat_meas:
+            m_obj = measures_by_id.get(mid)
+            if not m_obj:
+                continue
+            if m_obj.get('aggregation') not in SEMI_ADDITIVE_AGGREGATIONS:
+                continue
+            sa_dim_id = m_obj.get('semi_additive_dimension')
+            sa_dim = dims_by_id.get(sa_dim_id or '')
+            admitted_time_keys = {sa_dim_id} if sa_dim_id else set()
+            if sa_dim:
+                for h_obj in sa_dim.get('hierarchies', []):
+                    for lvl in h_obj.get('levels', []):
+                        if lvl.get('field') == sa_dim.get('field'):
+                            admitted_time_keys.add(lvl['id'])
+            if not (grain_set & admitted_time_keys):
+                msg = (
+                    f"Aggregate '{mat_obj['name']}' materializes "
+                    f"semi-additive measure '{m_obj['name']}' "
+                    f"({m_obj['aggregation']}) without its time dimension "
+                    f"'{sa_dim_id}' in grain_dimensions; rolled-up snapshot "
+                    'values cannot be re-aggregated safely across finer '
+                    'time periods.'
+                )
+                warnings_local.append(msg)
+        return warnings_local
 
     supports_mat_view = engine in ('postgresql', 'duckdb')
     create_kw = (
@@ -1233,12 +1418,15 @@ def preview_cube_materialization_plan(
             )
             if after.get('enabled'):
                 statements.append(ddl)
+            mat_warns = _check_mat_grain(after)
+            grain_warnings.extend(mat_warns)
             differences.append({
                 'materialization_id': mat_id,
                 'name': after['name'],
                 'change_kind': kind,
                 'target_relation': rel_parts,
                 'sql': ddl,
+                'warnings': mat_warns,
             })
         elif before is not None and after is None:
             highlights[mat_id] = 'dropped'
@@ -1277,13 +1465,22 @@ def preview_cube_materialization_plan(
                 ddl = f'{drop_kw} {rel_sql};'
                 if before.get('enabled'):
                     statements.append(ddl)
+            mat_warns = _check_mat_grain(after)
+            grain_warnings.extend(mat_warns)
             differences.append({
                 'materialization_id': mat_id,
                 'name': after['name'],
                 'change_kind': kind,
                 'target_relation': rel_parts,
                 'sql': ddl,
+                'warnings': mat_warns,
             })
+
+    for mat_id, after in sorted(after_map.items()):
+        if before_map.get(mat_id) == after:
+            for warn in _check_mat_grain(after):
+                if warn not in grain_warnings:
+                    grain_warnings.append(warn)
 
     highlighted_ddn, _ = semantic_model_to_ddn(
         candidate_model,
@@ -1295,6 +1492,7 @@ def preview_cube_materialization_plan(
         'has_database_changes': bool(statements),
         'differences': differences,
         'statements': statements,
+        'grain_warnings': grain_warnings,
         'sql_preview': '\n\n'.join(statements),
         'highlighted_ddn_text': highlighted_ddn,
         'requires_native_review': True,
@@ -1727,3 +1925,35 @@ class CubeDesignSync:
         raise DesignStoreError(
             f'Unsupported leave_accepted mode: {mode!r}'
         )
+
+    def export_interchange(
+        self,
+        design_id: str,
+        *,
+        fmt: str,
+        version: int | None = None,
+        include_custom_extensions: bool = True,
+    ) -> dict[str, Any]:
+        """Export a Cube design to SML (v1.8) or Apache Ossie (v0.2.0)."""
+        from .cube_interchange import export_cube_to_ossie, export_cube_to_sml
+
+        doc = self.store.get_design(design_id, version=version)
+        parsed = ddn_to_semantic_model(doc['version']['ddn_text'])
+        target_fmt = str(fmt or '').strip().lower()
+        if target_fmt in {'sml', 'sml@1.8'}:
+            exported = export_cube_to_sml(parsed['model'])
+        elif target_fmt in {'ossie', 'apache-ossie', 'apache-ossie@0.2.0'}:
+            exported = export_cube_to_ossie(
+                parsed['model'],
+                include_custom_extensions=include_custom_extensions,
+            )
+        else:
+            raise DesignStoreError(
+                f'Unsupported cube interchange export format: {fmt!r}'
+            )
+        return {
+            'design_id': design_id,
+            'version': doc['version']['version'],
+            'status': doc['version']['status'],
+            **exported,
+        }

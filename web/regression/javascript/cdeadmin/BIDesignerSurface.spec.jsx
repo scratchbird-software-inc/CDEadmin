@@ -566,4 +566,152 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
       );
     });
   });
+
+  it('routes BI dashboard action buttons through native-operation review and reads live read-only collector snapshots', async () => {
+    const session = makeDashboardSession({status: 'accepted'});
+    const dashWithActionAndCollector = {
+      ...sampleDashboardModel(),
+      cards: [
+        ...sampleDashboardModel().cards,
+        {
+          id: 'live_pg_panel',
+          tab_id: 'main',
+          type: 'metric_panel',
+          title: 'PG Live Throughput',
+          click_behavior: 'inherit',
+          layout: {x: 12, y: 0, w: 12, h: 8},
+          metric_panel: {
+            panel_id: 'pg_live',
+            snapshot_mode: 'collector_read_only',
+            collector_binding: {
+              engine: 'postgresql',
+              server_id: 'srv-1',
+              target_id: 'db-1',
+              metric_group: 'throughput',
+              metric_keys: ['tps'],
+              freshness_budget_seconds: 120,
+            },
+            columns: [
+              {id: 'measure', label: 'Measure'},
+              {id: 'value', label: 'Value'},
+            ],
+            rows: [],
+          },
+        },
+      ],
+      action_buttons: [
+        {
+          id: 'purge_order',
+          label: 'Purge Cancelled Order',
+          operation_kind: 'delete_row',
+          target_endpoint_id: 'ep-pg',
+          target_relation: ['public', 'orders'],
+          key_columns: ['order_id'],
+          parameter_bindings: [
+            {
+              name: 'order_id',
+              column: 'order_id',
+              source: 'selected_row',
+              source_ref: 'order_id',
+              type: 'integer',
+              required: true,
+            },
+          ],
+          approval_required: true,
+        },
+      ],
+    };
+
+    const client = {
+      openSession: jest.fn().mockResolvedValue(session),
+      getBiModel: jest.fn().mockResolvedValue({
+        design: session.design,
+        bi_kind: 'dashboard',
+        bi: {dashboard: dashWithActionAndCollector, dashboard_notes: ''},
+        outward_effects: [],
+      }),
+      submitBiActionReview: jest.fn().mockResolvedValue({
+        operation_id: 'op-review-99',
+        stage: 'awaiting_approval',
+        requires_native_review: true,
+        executed_immediately: false,
+        destructive_warning:
+          'DESTRUCTIVE WARNING: Deleting from "public"."orders" permanently removes row data.',
+        sql: 'DELETE FROM "public"."orders" WHERE "order_id" = :order_id;',
+      }),
+      readBiCollectorPanel: jest.fn().mockResolvedValue({
+        card_id: 'live_pg_panel',
+        snapshot_mode: 'collector_read_only',
+        collector_state: 'running',
+        freshness_status: 'live',
+        observed_at: '2026-11-11T15:00:00Z',
+        rows: [{id: 'tps', measure: 'tps', value: 412.5}],
+      }),
+    };
+
+    const Themed = withTheme(BIDesignerSurface);
+    render(
+      <Themed
+        projectId="analytics"
+        designId={session.design.id}
+        kind="dashboard"
+        client={client}
+      />
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Read-only collector metric_panel card\(s\) \(1\)/i)
+      ).toBeInTheDocument()
+    );
+
+    // 1. Read-only collector snapshot refresh
+    fireEvent.click(
+      screen.getByRole('button', {name: /Collector Snapshots \(2\)/i})
+    );
+    const colDialog = await screen.findByRole('dialog');
+    expect(
+      await within(colDialog).findByText(
+        /Mode: collector_read_only · Collector state: running · Freshness: live/i
+      )
+    ).toBeInTheDocument();
+    expect(within(colDialog).getByDisplayValue(/412\.5/)).toBeInTheDocument();
+    fireEvent.click(within(colDialog).getByRole('button', {name: 'Close'}));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 2. BI Action Button -> native-operation review (awaiting_approval)
+    fireEvent.click(
+      screen.getByRole('button', {name: /Action Buttons \(1\)/i})
+    );
+    const actDialog = await screen.findByRole('dialog');
+    fireEvent.change(
+      within(actDialog).getByLabelText(/Bound Parameter Values JSON/i),
+      {target: {value: '{"order_id": 101}'}}
+    );
+    fireEvent.click(
+      within(actDialog).getByRole('button', {name: /Submit to Native Review/i})
+    );
+    await waitFor(() =>
+      expect(client.submitBiActionReview).toHaveBeenCalledWith(
+        'analytics',
+        session.design.id,
+        expect.objectContaining({
+          actionButtonId: 'purge_order',
+          parameterValues: {order_id: 101},
+          dryRun: false,
+        })
+      )
+    );
+    expect(
+      await within(actDialog).findByText(
+        /Operation queued: op-review-99 · Stage: awaiting_approval/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(actDialog).getByText(/DESTRUCTIVE WARNING:/i)
+    ).toBeInTheDocument();
+    fireEvent.click(within(actDialog).getByRole('button', {name: 'Close'}));
+  });
 });

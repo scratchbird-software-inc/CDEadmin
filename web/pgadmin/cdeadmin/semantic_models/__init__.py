@@ -10,9 +10,11 @@
 """CDEadmin semantic model and cube workspace services."""
 
 from .models import (
+    SEMI_ADDITIVE_AGGREGATIONS,
     SemanticCompilationUnavailable,
     SemanticModelConflict,
     SemanticModelError,
+    localize_model,
     public_model,
     validate_model,
     validate_query,
@@ -34,8 +36,9 @@ def init_app(app):
 
 
 __all__ = (
-    'DatabaseSemanticModelRepository', 'SemanticCompilationUnavailable',
+    'DatabaseSemanticModelRepository', 'SEMI_ADDITIVE_AGGREGATIONS',
+    'SemanticCompilationUnavailable',
     'SemanticModelConflict', 'SemanticModelError', 'SemanticModelService',
-    'init_app', 'public_model', 'validate_model', 'validate_query',
-    'SEMANTIC_PROFILE_SCHEMA', 'analytical_profile',
+    'init_app', 'localize_model', 'public_model', 'validate_model',
+    'validate_query', 'SEMANTIC_PROFILE_SCHEMA', 'analytical_profile',
 )

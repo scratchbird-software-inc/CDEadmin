@@ -469,10 +469,13 @@ export class DesignStoreClient {
     );
   }
 
-  getCubeModel(projectId, designId, {version = null} = {}) {
+  getCubeModel(projectId, designId, {version = null, locale = null} = {}) {
     const params = new URLSearchParams();
     if (version !== null && version !== undefined) {
       params.set('version', String(version));
+    }
+    if (locale) {
+      params.set('locale', String(locale));
     }
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return callApi(() =>
@@ -565,6 +568,28 @@ export class DesignStoreClient {
           base_version: baseVersion,
           desired_version: desiredVersion,
           target_engine: targetEngine,
+        }
+      )
+    );
+  }
+
+  exportCubeInterchange(
+    projectId,
+    designId,
+    {
+      format = 'sml',
+      version = null,
+      includeCustomExtensions = true,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/cube/export',
+        {
+          format,
+          version,
+          include_custom_extensions: Boolean(includeCustomExtensions),
         }
       )
     );
@@ -811,6 +836,54 @@ export class DesignStoreClient {
           device_label: deviceLabel,
           locked_filters: lockedFilters,
           expires_at: expiresAt,
+        }
+      )
+    );
+  }
+
+  submitBiActionReview(
+    projectId,
+    designId,
+    {
+      actionButtonId,
+      parameterValues = {},
+      dialect = 'postgresql',
+      version = null,
+      dryRun = false,
+      approvers = [],
+      idempotencyKey = null,
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/bi/action-review',
+        {
+          action_button_id: actionButtonId,
+          parameter_values: parameterValues,
+          dialect,
+          version,
+          dry_run: Boolean(dryRun),
+          approvers,
+          idempotency_key: idempotencyKey,
+        }
+      )
+    );
+  }
+
+  readBiCollectorPanel(
+    projectId,
+    designId,
+    {cardId, version = null, nowIso = null} = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/bi/collector-panel',
+        {
+          card_id: cardId,
+          version,
+          now_iso: nowIso,
         }
       )
     );
@@ -1248,9 +1321,10 @@ export class SharedDDNTaskController {
     });
   }
 
-  getCubeModel({version = null} = {}) {
+  getCubeModel({version = null, locale = null} = {}) {
     return this.client.getCubeModel(this.projectId, this.designId, {
       version: version ?? this.session?.design?.version?.version ?? null,
+      locale,
     });
   }
 
@@ -1317,6 +1391,13 @@ export class SharedDDNTaskController {
     );
   }
 
+  exportCubeInterchange(options = {}) {
+    return this.client.exportCubeInterchange(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
+  }
+
   getBiModel({version = null} = {}) {
     return this.client.getBiModel(this.projectId, this.designId, {
       version: version ?? this.session?.design?.version?.version ?? null,
@@ -1380,6 +1461,20 @@ export class SharedDDNTaskController {
       this.designId,
       options
     );
+  }
+
+  submitBiActionReview(options = {}) {
+    return this.client.submitBiActionReview(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
+  }
+
+  readBiCollectorPanel(options = {}) {
+    return this.client.readBiCollectorPanel(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
   }
 
   getScreenMeshModel({version = null} = {}) {

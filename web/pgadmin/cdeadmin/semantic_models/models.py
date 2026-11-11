@@ -24,9 +24,20 @@ from .profiles import analytical_profile
 
 CONTRACT_VERSION = '1.0.0'
 MODEL_STATUSES = frozenset({'draft', 'published', 'archived'})
+SEMI_ADDITIVE_AGGREGATIONS = frozenset({
+    'last_value', 'first_value', 'last_non_empty', 'first_non_empty',
+    'avg_over_time',
+})
+WITHIN_GROUP_AGGREGATIONS = frozenset({'sum', 'min', 'max', 'avg', 'count'})
 AGGREGATIONS = frozenset({
     'sum', 'count', 'count_distinct', 'min', 'max', 'avg', 'none',
+}) | SEMI_ADDITIVE_AGGREGATIONS
+HIERARCHY_KINDS = frozenset({'level', 'parent_child'})
+TRANSLATION_TARGET_KINDS = frozenset({
+    'model', 'dimension', 'attribute', 'hierarchy', 'level', 'measure',
+    'measure_group', 'perspective',
 })
+_LOCALE_RE = re.compile(r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$')
 CALCULATION_OPERATORS = frozenset({
     'add', 'subtract', 'multiply', 'divide',
 })
@@ -258,11 +269,23 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
     dimensions = array(model.get('dimensions', []), 'model.dimensions')
     dimension_ids = _unique(dimensions, 'model.dimensions')
     level_ids = set()
+    hierarchy_ids = set()
+    parent_child_ids = set()
+    attribute_ids = set()
+    time_dimension_ids = []
     for dimension in dimensions:
         identifier(dimension.get('id'), 'dimension.id')
         dimension['name'] = required_text(
             dimension.get('name'), 'dimension.name', 256
         )
+        if 'description' in dimension:
+            dimension['description'] = str(
+                dimension.get('description') or ''
+            )[:2048]
+        if 'display_folder' in dimension:
+            dimension['display_folder'] = str(
+                dimension.get('display_folder') or ''
+            )[:256]
         dimension['dimension_kind'] = identifier(
             dimension.get('dimension_kind', profile['dimension_kinds'][0]),
             'dimension.dimension_kind',
@@ -305,6 +328,7 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                     'fiscal year start month must be between 1 and 12'
                 )
             time['fiscal_year_start_month'] = fiscal_month
+            time_dimension_ids.append(dimension['id'])
         dimension['time_intelligence'] = time
         dimension['provider_config'] = mapping(
             dimension.get('provider_config', {}),
@@ -313,16 +337,88 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
         hierarchies = array(
             dimension.get('hierarchies', []), 'dimension.hierarchies', 64
         )
-        _unique(hierarchies, 'dimension.hierarchies')
+        dim_hier_ids = _unique(hierarchies, 'dimension.hierarchies')
+        if dim_hier_ids & hierarchy_ids:
+            raise SemanticModelError('hierarchy identifiers must be unique')
+        hierarchy_ids.update(dim_hier_ids)
         for hierarchy in hierarchies:
             hierarchy['name'] = required_text(
                 hierarchy.get('name'), 'hierarchy.name', 256
             )
-            levels = array(
-                hierarchy.get('levels', []), 'hierarchy.levels', 64
-            )
-            if not levels:
-                raise SemanticModelError('hierarchy.levels must not be empty')
+            h_kind = hierarchy.get('hierarchy_kind', 'level')
+            if h_kind not in HIERARCHY_KINDS:
+                raise SemanticModelError(
+                    'hierarchy.hierarchy_kind is unsupported'
+                )
+            if 'hierarchy_kind' in hierarchy or h_kind != 'level':
+                hierarchy['hierarchy_kind'] = h_kind
+            if 'ragged' in hierarchy or h_kind == 'parent_child':
+                hierarchy['ragged'] = bool(
+                    hierarchy.get('ragged', h_kind == 'parent_child')
+                )
+            if h_kind == 'parent_child':
+                _validate_field_reference(
+                    hierarchy.get('child_field'), source_ids
+                )
+                _validate_field_reference(
+                    hierarchy.get('parent_field'), source_ids
+                )
+                child_src = hierarchy['child_field']['source_id']
+                parent_src = hierarchy['parent_field']['source_id']
+                if child_src != parent_src:
+                    raise SemanticModelError(
+                        'parent-child hierarchy fields must share a source'
+                    )
+                if hierarchy.get('name_field') is not None:
+                    _validate_field_reference(
+                        hierarchy['name_field'], source_ids
+                    )
+                root_val = hierarchy.get('root_parent_value')
+                if root_val is not None and (
+                    isinstance(root_val, bool)
+                    or not isinstance(root_val, (int, str))
+                ):
+                    raise SemanticModelError(
+                        'parent-child root_parent_value must be int, str '
+                        'or null'
+                    )
+                max_depth = hierarchy.get('max_depth', 16)
+                if (
+                    isinstance(max_depth, bool)
+                    or not isinstance(max_depth, int)
+                    or not 1 <= max_depth <= 64
+                ):
+                    raise SemanticModelError(
+                        'parent-child max_depth must be between 1 and 64'
+                    )
+                hierarchy['max_depth'] = max_depth
+                raw_levels = hierarchy.get('levels')
+                if raw_levels:
+                    levels = array(raw_levels, 'hierarchy.levels', 64)
+                else:
+                    levels = [{
+                        'id': f"{hierarchy['id']}_member",
+                        'name': hierarchy['name'],
+                        'field': copy.deepcopy(hierarchy['child_field']),
+                    }]
+                hierarchy['levels'] = levels
+                if hierarchy['id'] in level_ids or (
+                    hierarchy['id'] in dimension_ids
+                ):
+                    raise SemanticModelError(
+                        'parent-child hierarchy id collides with level or '
+                        'dimension'
+                    )
+                level_ids.add(hierarchy['id'])
+                parent_child_ids.add(hierarchy['id'])
+            else:
+                levels = array(
+                    hierarchy.get('levels', []), 'hierarchy.levels', 64
+                )
+                if not levels:
+                    raise SemanticModelError(
+                        'hierarchy.levels must not be empty'
+                    )
             for level in levels:
                 level_id = identifier(level.get('id'), 'level.id')
                 if level_id in level_ids:
@@ -347,6 +443,7 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                         'attribute identifiers must be unique'
                     )
                 level_ids.add(attr_id)
+                attribute_ids.add(attr_id)
                 attr['name'] = required_text(
                     attr.get('name'), 'attribute.name', 256
                 )
@@ -378,12 +475,24 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
     for measure in measures:
         identifier(measure.get('id'), 'measure.id')
         measure['name'] = required_text(measure.get('name'), 'measure.name')
+        if 'description' in measure:
+            measure['description'] = str(
+                measure.get('description') or ''
+            )[:2048]
+        if 'display_folder' in measure:
+            measure['display_folder'] = str(
+                measure.get('display_folder') or ''
+            )[:256]
         aggregation = measure.get('aggregation', 'sum')
         if aggregation not in AGGREGATIONS:
             raise SemanticModelError('measure.aggregation is unsupported')
         measure['aggregation'] = aggregation
         expression = measure.get('expression')
         if expression is not None:
+            if aggregation in SEMI_ADDITIVE_AGGREGATIONS:
+                raise SemanticModelError(
+                    'semi-additive measure cannot use calculated expression'
+                )
             measure['aggregation'] = 'none'
             measure['field'] = None
             _validate_expression(expression, measure_ids, measure['id'])
@@ -391,6 +500,28 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
             measure['field'] = None
         else:
             _validate_field_reference(measure.get('field'), source_ids)
+        if measure['aggregation'] in SEMI_ADDITIVE_AGGREGATIONS:
+            sa_dim = measure.get('semi_additive_dimension')
+            if sa_dim is None and time_dimension_ids:
+                sa_dim = time_dimension_ids[0]
+            if sa_dim is None:
+                raise SemanticModelError(
+                    'semi-additive measure requires semi_additive_dimension '
+                    'or a declared time dimension'
+                )
+            sa_dim = identifier(sa_dim, 'measure.semi_additive_dimension')
+            if sa_dim not in dimension_ids:
+                raise SemanticModelError(
+                    'measure.semi_additive_dimension references an unknown '
+                    'dimension'
+                )
+            measure['semi_additive_dimension'] = sa_dim
+            within_agg = measure.get('within_group_aggregation', 'sum')
+            if within_agg not in WITHIN_GROUP_AGGREGATIONS:
+                raise SemanticModelError(
+                    'measure.within_group_aggregation is unsupported'
+                )
+            measure['within_group_aggregation'] = within_agg
         measure['format'] = str(measure.get('format') or '')[:128]
         measure['measure_kind'] = identifier(
             measure.get('measure_kind', (
@@ -781,6 +912,167 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
             report.get('parameters', {}), 'report.parameters'
         )
     model['reports'] = reports
+    perspective_ids = set()
+    if 'perspectives' in model:
+        perspectives = array(
+            model.get('perspectives', []), 'model.perspectives', 64
+        )
+        perspective_ids = _unique(perspectives, 'model.perspectives')
+        for persp in perspectives:
+            persp['name'] = required_text(
+                persp.get('name'), 'perspective.name', 256
+            )
+            persp['description'] = str(persp.get('description') or '')[:2048]
+            p_dims = array(
+                persp.get('dimensions', []), 'perspective.dimensions', 128
+            )
+            if any(item not in dimension_ids for item in p_dims):
+                raise SemanticModelError(
+                    'perspective.dimensions references an unknown dimension'
+                )
+            persp['dimensions'] = list(p_dims)
+            p_measures = array(
+                persp.get('measures', []), 'perspective.measures', 256
+            )
+            if any(item not in measure_ids for item in p_measures):
+                raise SemanticModelError(
+                    'perspective.measures references an unknown measure'
+                )
+            persp['measures'] = list(p_measures)
+            p_groups = array(
+                persp.get('measure_groups', []),
+                'perspective.measure_groups', 64,
+            )
+            if any(item not in measure_group_ids for item in p_groups):
+                raise SemanticModelError(
+                    'perspective.measure_groups has an unknown measure group'
+                )
+            persp['measure_groups'] = list(p_groups)
+            p_hiers = array(
+                persp.get('hierarchies', []), 'perspective.hierarchies', 128
+            )
+            if any(item not in hierarchy_ids for item in p_hiers):
+                raise SemanticModelError(
+                    'perspective.hierarchies references an unknown hierarchy'
+                )
+            persp['hierarchies'] = list(p_hiers)
+            if not persp['measures'] and not persp['measure_groups']:
+                raise SemanticModelError(
+                    'perspective must include at least one measure or group'
+                )
+            default_measure = persp.get('default_measure')
+            if default_measure is not None:
+                default_measure = identifier(
+                    default_measure, 'perspective.default_measure'
+                )
+                exposed_measures = set(persp['measures'])
+                if model.get('measure_groups'):
+                    for grp in model['measure_groups']:
+                        if grp['id'] in persp['measure_groups']:
+                            exposed_measures.update(grp['measures'])
+                if default_measure not in exposed_measures:
+                    raise SemanticModelError(
+                        'perspective.default_measure must be in perspective'
+                    )
+                persp['default_measure'] = default_measure
+        model['perspectives'] = perspectives
+
+    if 'translations' in model:
+        translations = array(
+            model.get('translations', []), 'model.translations', 64
+        )
+        valid_targets = {
+            'model': {model['name'], 'model'},
+            'dimension': set(dimension_ids),
+            'attribute': set(attribute_ids),
+            'hierarchy': set(hierarchy_ids),
+            'level': set(level_ids) - set(attribute_ids),
+            'measure': set(measure_ids),
+            'measure_group': set(measure_group_ids),
+            'perspective': set(perspective_ids),
+        }
+        seen_locales = set()
+        normalized_translations = []
+        for raw_tr in translations:
+            tr = mapping(raw_tr, 'translation')
+            locale = required_text(tr.get('locale'), 'translation.locale', 32)
+            if not _LOCALE_RE.fullmatch(locale):
+                raise SemanticModelError(
+                    'translation.locale must be a valid BCP-47 locale tag'
+                )
+            locale_key = locale.lower()
+            if locale_key in seen_locales:
+                raise SemanticModelError(
+                    'translation locales must be unique'
+                )
+            seen_locales.add(locale_key)
+            tr_id = identifier(
+                tr.get('id') or f"loc_{locale.replace('-', '_')}",
+                'translation.id',
+            )
+            raw_entries = tr.get('entries', [])
+            norm_entries = []
+            if isinstance(raw_entries, Mapping):
+                for composite_key, entry_val in sorted(raw_entries.items()):
+                    entry_map = mapping(entry_val, 'translation.entry')
+                    if ':' in str(composite_key):
+                        t_kind, t_id = str(composite_key).split(':', 1)
+                    else:
+                        t_kind = entry_map.get('target_kind', 'model')
+                        t_id = str(composite_key)
+                    norm_entries.append({
+                        'target_kind': t_kind,
+                        'target_id': t_id,
+                        **entry_map,
+                    })
+            else:
+                norm_entries = [
+                    mapping(item, 'translation.entry')
+                    for item in array(raw_entries, 'translation.entries', 1024)
+                ]
+            checked_entries = []
+            seen_targets = set()
+            for entry in norm_entries:
+                t_kind = entry.get('target_kind') or entry.get('kind')
+                if t_kind not in TRANSLATION_TARGET_KINDS:
+                    raise SemanticModelError(
+                        'translation.entry.target_kind is unsupported'
+                    )
+                t_id = required_text(
+                    entry.get('target_id'),
+                    'translation.entry.target_id', 128,
+                )
+                if t_kind != 'model' and t_id not in valid_targets[t_kind]:
+                    raise SemanticModelError(
+                        f'translation references unknown {t_kind}: {t_id}'
+                    )
+                pair = (t_kind, t_id)
+                if pair in seen_targets:
+                    raise SemanticModelError(
+                        'duplicate translation entry for the same object'
+                    )
+                seen_targets.add(pair)
+                checked_entries.append({
+                    'target_kind': t_kind,
+                    'target_id': t_id,
+                    'caption': str(entry.get('caption') or '')[:256],
+                    'description': str(entry.get('description') or '')[:2048],
+                    'display_folder': str(
+                        entry.get('display_folder') or ''
+                    )[:256],
+                })
+            checked_entries.sort(
+                key=lambda item: (item['target_kind'], item['target_id'])
+            )
+            normalized_translations.append({
+                'id': tr_id,
+                'locale': locale,
+                'caption': str(tr.get('caption') or '')[:256],
+                'description': str(tr.get('description') or '')[:2048],
+                'entries': checked_entries,
+            })
+        model['translations'] = normalized_translations
+
     model['annotations'] = mapping(
         model.get('annotations', {}), 'model.annotations'
     )
@@ -788,7 +1080,10 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
         'source_ids': sorted(source_ids),
         'dimension_ids': sorted(dimension_ids),
         'level_ids': sorted(level_ids),
+        'hierarchy_ids': sorted(hierarchy_ids),
+        'parent_child_ids': sorted(parent_child_ids),
         'measure_ids': sorted(measure_ids),
+        'perspective_ids': sorted(perspective_ids),
         'parameter_ids': sorted(parameter_ids),
         'visualization_ids': sorted(visualization_ids),
         'dashboard_ids': sorted(dashboard_ids),
@@ -1131,8 +1426,13 @@ def _validate_windows(value, symbols, selected_measures):
 
 def validate_query(model, value):
     query = mapping(value, 'query')
+    if '_symbols' not in model:
+        model = validate_model(model)
     symbols = model['_symbols']
     axes = mapping(query.get('axes', {}), 'query.axes')
+    for axis in ('rows', 'columns', 'pages'):
+        if axis not in axes and axis in query:
+            axes[axis] = query[axis]
     admitted_levels = set(symbols['level_ids']) | set(symbols['dimension_ids'])
     for axis in ('rows', 'columns', 'pages'):
         items = array(axes.get(axis, []), f'query.axes.{axis}', 32)
@@ -1146,6 +1446,42 @@ def validate_query(model, value):
         raise SemanticModelError('query.measures has an unknown measure')
     query['axes'] = axes
     query['measures'] = selected_measures
+    perspective_id = query.get('perspective')
+    if perspective_id is not None:
+        perspective_id = identifier(perspective_id, 'query.perspective')
+        perspectives_by_id = {
+            item['id']: item for item in model.get('perspectives', [])
+        }
+        persp = perspectives_by_id.get(perspective_id)
+        if persp is None:
+            raise SemanticModelError('query.perspective is unknown')
+        exposed_measures = set(persp['measures'])
+        for grp in model.get('measure_groups', []):
+            if grp['id'] in persp.get('measure_groups', []):
+                exposed_measures.update(grp['measures'])
+        if any(item not in exposed_measures for item in selected_measures):
+            raise SemanticModelError(
+                'query measure is not exposed by the selected perspective'
+            )
+        exposed_axes = set(persp['dimensions'])
+        allowed_hiers = set(persp.get('hierarchies', []))
+        for dim in model['dimensions']:
+            if dim['id'] not in persp['dimensions']:
+                continue
+            for attr in dim.get('attributes', []):
+                exposed_axes.add(attr['id'])
+            for hier in dim.get('hierarchies', []):
+                if allowed_hiers and hier['id'] not in allowed_hiers:
+                    continue
+                exposed_axes.add(hier['id'])
+                for lvl in hier.get('levels', []):
+                    exposed_axes.add(lvl['id'])
+        for axis in ('rows', 'columns', 'pages'):
+            if any(item not in exposed_axes for item in axes[axis]):
+                raise SemanticModelError(
+                    'query axis item is not exposed by perspective'
+                )
+        query['perspective'] = perspective_id
     query['filters'] = _validate_filters(
         query.get('filters', []), set(symbols['source_ids']),
         {item['id']: item for item in model['parameters']}
@@ -1182,6 +1518,11 @@ def validate_query(model, value):
         )
     if target is not None and target not in admitted_levels:
         raise SemanticModelError('query drill target is unknown')
+    if target is not None and query.get('perspective') is not None:
+        if target not in exposed_axes:
+            raise SemanticModelError(
+                'query drill target is not exposed by perspective'
+            )
     detail_fields = array(
         drill.get('detail_fields', []), 'query.drill.detail_fields', 64
     )
@@ -1229,3 +1570,77 @@ def public_model(model):
     value = copy.deepcopy(model)
     value.pop('_symbols', None)
     return value
+
+
+def localize_model(model_value, locale: str):
+    """Return a public copy of ``model_value`` overlaid with ``locale``."""
+    validated = public_model(validate_model(model_value))
+    requested = str(locale or '').strip().lower()
+    if not requested:
+        return validated
+    translations = validated.get('translations', [])
+    if not translations:
+        return validated
+
+    matched = next(
+        (t for t in translations if t['locale'].lower() == requested),
+        None,
+    )
+    if matched is None and '-' in requested:
+        lang_prefix = requested.split('-', 1)[0]
+        matched = next(
+            (
+                t for t in translations
+                if t['locale'].lower() == lang_prefix
+                or t['locale'].lower().startswith(lang_prefix + '-')
+            ),
+            None,
+        )
+    if matched is None:
+        return validated
+
+    localized = copy.deepcopy(validated)
+    if matched.get('caption'):
+        localized['name'] = matched['caption']
+    if matched.get('description'):
+        localized['description'] = matched['description']
+
+    entry_map = {
+        (e['target_kind'], e['target_id']): e
+        for e in matched.get('entries', [])
+    }
+    model_entry = entry_map.get(('model', 'model')) or entry_map.get(
+        ('model', validated['name'])
+    )
+    if model_entry:
+        if model_entry.get('caption'):
+            localized['name'] = model_entry['caption']
+        if model_entry.get('description'):
+            localized['description'] = model_entry['description']
+
+    def _apply(obj, kind):
+        hit = entry_map.get((kind, obj['id']))
+        if not hit:
+            return
+        if hit.get('caption'):
+            obj['name'] = hit['caption']
+        if hit.get('description'):
+            obj['description'] = hit['description']
+        if hit.get('display_folder'):
+            obj['display_folder'] = hit['display_folder']
+
+    for dim in localized.get('dimensions', []):
+        _apply(dim, 'dimension')
+        for attr in dim.get('attributes', []):
+            _apply(attr, 'attribute')
+        for hier in dim.get('hierarchies', []):
+            _apply(hier, 'hierarchy')
+            for lvl in hier.get('levels', []):
+                _apply(lvl, 'level')
+    for meas in localized.get('measures', []):
+        _apply(meas, 'measure')
+    for grp in localized.get('measure_groups', []):
+        _apply(grp, 'measure_group')
+    for persp in localized.get('perspectives', []):
+        _apply(persp, 'perspective')
+    return localized

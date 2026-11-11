@@ -308,3 +308,29 @@ built on ``DesignStore``, ``StoreDDNProcess`` and the shared
   others are merged through 3-way DDN diff before acceptance; materialized
   aggregate database changes are highlighted for native-operation review and
   never executed automatically.
+
+Post-first-release Cube modeling and SML/Ossie interchange (2026-11-11)
+-----------------------------------------------------------------------
+
+* **Parent-child and ragged hierarchies**: dimensions in
+  ``semantic_models/models.py`` and ``cube_ddn.py`` support
+  ``hierarchy_kind: "parent_child"`` (``child_field``, ``parent_field``,
+  ``name_field``, ``root_parent_value``, ``max_depth``) and ``ragged`` flags.
+  ``semantic_models/compiler.py`` compiles bounded ``WITH RECURSIVE``
+  transitive-closure CTE rollups across PostgreSQL, DuckDB, SQLite, Firebird 5,
+  MySQL and MariaDB.
+* **Semi-additive measures**: measures support ``last_value``, ``first_value``,
+  ``last_non_empty``, ``first_non_empty`` and ``avg_over_time`` over a declared
+  ``semi_additive_dimension`` and ``within_group_aggregation``, compiled via
+  portable window/rollup subqueries with null-safe dimension joins.
+  Materialization previews emit explicit grain warnings whenever a
+  semi-additive measure's time dimension is omitted from ``grain_dimensions``.
+* **Perspectives and translations**: cube models and DDN documents round-trip
+  named ``perspectives`` (enforced by ``validate_query`` when a query names a
+  perspective) and BCP-47 ``translations`` resolved by ``localize_model``.
+* **External SML v1.8 and Apache Ossie v0.2.0 export**:
+  ``design_store/cube_interchange.py`` and
+  ``POST /cdeadmin/api/projects/<project_id>/designs/<design_id>/cube/export``
+  export clean-room PostgreSQL-licensed SML v1.8 multi-file YAML bundles first,
+  and Apache Ossie v0.2.0 YAML/JSON documents second with an explicit itemized
+  ``loss_report`` and optional secret-free ``custom_extensions``.

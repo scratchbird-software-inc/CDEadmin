@@ -82,6 +82,24 @@ const FILTER_SCOPE_OPTIONS = Object.freeze([
   {value: 'author_pinned', label: 'Author-pinned shared default'},
 ]);
 
+const ACTION_OPERATION_OPTIONS = Object.freeze([
+  {value: 'update_row', label: 'Update Row (keyed parameterized UPDATE)'},
+  {value: 'insert_row', label: 'Insert Row (parameterized INSERT)'},
+  {value: 'delete_row', label: 'Delete Row (keyed parameterized DELETE)'},
+  {value: 'provider_operation', label: 'Provider Native Operation'},
+]);
+
+const SNAPSHOT_MODE_OPTIONS = Object.freeze([
+  {
+    value: 'static',
+    label: 'Static snapshot (default — never polls live collector)',
+  },
+  {
+    value: 'collector_read_only',
+    label: 'Read-only live collector binding (MonitoringHost.snapshot)',
+  },
+]);
+
 function statusTone(status) {
   if (status === 'accepted') return 'success';
   if (status === 'in_review') return 'warning';
@@ -201,6 +219,35 @@ export function BIDesignerSurface({
     clickBehavior: 'inherit',
     markdown: '',
     panelId: '',
+    snapshotMode: 'static',
+    collectorEngine: 'postgresql',
+    collectorServerId: '1',
+    collectorTargetId: '',
+    collectorMetricGroup: 'throughput',
+    collectorMetricKeysCsv: 'tps, active_sessions',
+    collectorFreshnessBudget: '120',
+  });
+
+  // Dashboard Write-Back Action Buttons & Native Review dialog (E6)
+  const [actionBtnOpen, setActionBtnOpen] = useState(false);
+  const [actionBtnDraft, setActionBtnDraft] = useState({
+    label: '',
+    operationKind: 'update_row',
+    targetEndpointId: 'default-endpoint',
+    targetRelation: 'public.orders',
+    keyColumnsCsv: 'order_id',
+    bindingsCsv: 'order_id:filter:order_id, status:prompt:new_status',
+    selectedActionId: '',
+    dialect: 'postgresql',
+    parameterValuesJson: '{}',
+    reviewResult: null,
+  });
+
+  // Read-only Collector Metric Panel Snapshot dialog (E7)
+  const [collectorOpen, setCollectorOpen] = useState(false);
+  const [collectorDraft, setCollectorDraft] = useState({
+    cardId: '',
+    snapshotResult: null,
   });
 
   const [interactionOpen, setInteractionOpen] = useState(false);
@@ -351,10 +398,24 @@ export function BIDesignerSurface({
     questionModel?.review_flags?.saved_filter_values ||
     dashboardModel?.review_flags?.saved_filter_values ||
     [];
-  const staticMetricCards = useMemo(
+  const allMetricCards = useMemo(
     () =>
       (dashboardModel?.cards || []).filter((c) => c.type === 'metric_panel'),
     [dashboardModel]
+  );
+  const staticMetricCards = useMemo(
+    () =>
+      allMetricCards.filter(
+        (c) => (c.metric_panel?.snapshot_mode || 'static') === 'static'
+      ),
+    [allMetricCards]
+  );
+  const collectorMetricCards = useMemo(
+    () =>
+      allMetricCards.filter(
+        (c) => c.metric_panel?.snapshot_mode === 'collector_read_only'
+      ),
+    [allMetricCards]
   );
 
   const openQuestionEditor = () => {
@@ -610,10 +671,29 @@ export function BIDesignerSurface({
       } else if (cardDraft.type === 'text') {
         nextCard.text = {markdown: cardDraft.markdown};
       } else {
+        const mode = cardDraft.snapshotMode || 'static';
         nextCard.metric_panel = {
           panel_id: cardDraft.panelId.trim() || cid,
-          snapshot_mode: 'static',
+          snapshot_mode: mode,
         };
+        if (mode === 'collector_read_only') {
+          const metricKeys = cardDraft.collectorMetricKeysCsv
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          nextCard.metric_panel.collector_binding = {
+            engine: cardDraft.collectorEngine || 'postgresql',
+            server_id: Math.max(1, Number(cardDraft.collectorServerId) || 1),
+            target_id: cardDraft.collectorTargetId.trim() || null,
+            metric_group:
+              cardDraft.collectorMetricGroup.trim() || 'throughput',
+            metric_keys: metricKeys.length ? metricKeys : ['tps'],
+            freshness_budget_seconds: Math.max(
+              5,
+              Number(cardDraft.collectorFreshnessBudget) || 120
+            ),
+          };
+        }
       }
       const nextDashboard = {
         ...dashboardModel,
@@ -828,6 +908,117 @@ export function BIDesignerSurface({
     }
   };
 
+  const handleAddActionButton = async () => {
+    if (!dashboardModel) return;
+    setBusyAction(true);
+    setSurfaceError('');
+    try {
+      const aid = slugId(
+        actionBtnDraft.label,
+        `act_${(dashboardModel.action_buttons?.length || 0) + 1}`
+      );
+      const relParts = actionBtnDraft.targetRelation
+        .split('.')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const keyCols = actionBtnDraft.keyColumnsCsv
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const bindings = actionBtnDraft.bindingsCsv
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const [col, src, pName] = entry.split(':').map((x) => x.trim());
+          return {
+            column: col || 'id',
+            source: src || 'prompt',
+            parameter_name: pName || col || 'id',
+            required: true,
+          };
+        });
+      const nextBtn = {
+        id: aid,
+        label: actionBtnDraft.label.trim() || aid,
+        operation_kind: actionBtnDraft.operationKind,
+        target_endpoint_id:
+          actionBtnDraft.targetEndpointId.trim() || 'default-endpoint',
+        target_relation: relParts,
+        key_columns: keyCols,
+        parameter_bindings: bindings,
+        approval_required: true,
+      };
+      const nextDashboard = {
+        ...dashboardModel,
+        action_buttons: [
+          ...(dashboardModel.action_buttons || []).filter((b) => b.id !== aid),
+          nextBtn,
+        ],
+      };
+      const saved = await runToolbarCommand('bi.designer.save', () =>
+        controller.saveBiModel({
+          dashboard: nextDashboard,
+          note: `Added write-back action button ${nextBtn.label}`,
+        })
+      );
+      setActionBtnDraft((cur) => ({...cur, selectedActionId: aid, label: ''}));
+      await refreshAll(saved.design.version.version);
+    } catch (err) {
+      setSurfaceError(err?.message || 'Failed to save action button.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleTriggerActionReview = async (dryRun = false) => {
+    const actionId =
+      actionBtnDraft.selectedActionId ||
+      dashboardModel?.action_buttons?.[0]?.id ||
+      '';
+    if (!actionId) return;
+    setBusyAction(true);
+    setSurfaceError('');
+    try {
+      const paramVals = JSON.parse(actionBtnDraft.parameterValuesJson || '{}');
+      const res = await controller.submitBiActionReview({
+        actionButtonId: actionId,
+        parameterValues: paramVals,
+        dialect: actionBtnDraft.dialect,
+        dryRun,
+      });
+      setActionBtnDraft((cur) => ({...cur, reviewResult: res}));
+    } catch (err) {
+      setSurfaceError(err?.message || 'Failed to prepare native review.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleReadCollectorSnapshot = async (explicitCardId = null) => {
+    const targetCardId =
+      explicitCardId ||
+      collectorDraft.cardId ||
+      allMetricCards[0]?.id ||
+      '';
+    if (!targetCardId) return;
+    setBusyAction(true);
+    setSurfaceError('');
+    try {
+      const snap = await controller.readBiCollectorPanel({
+        cardId: targetCardId,
+      });
+      setCollectorDraft({
+        cardId: targetCardId,
+        snapshotResult: snap,
+      });
+    } catch (err) {
+      setSurfaceError(err?.message || 'Failed to read collector snapshot.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
   const handleGitAction = async (action) => {
     setBusyAction(true);
     setSurfaceError('');
@@ -956,6 +1147,34 @@ export function BIDesignerSurface({
             >
               Filters & Clicks…
             </Button>
+            <Button
+              disabled={busyAction}
+              onClick={() => {
+                setActionBtnDraft((cur) => ({
+                  ...cur,
+                  selectedActionId:
+                    cur.selectedActionId ||
+                    dashboardModel.action_buttons?.[0]?.id ||
+                    '',
+                }));
+                setActionBtnOpen(true);
+              }}
+            >
+              Action Buttons ({dashboardModel.action_buttons?.length || 0})…
+            </Button>
+            {allMetricCards.length > 0 && (
+              <Button
+                disabled={busyAction}
+                onClick={() => {
+                  const firstId =
+                    collectorDraft.cardId || allMetricCards[0]?.id || '';
+                  setCollectorOpen(true);
+                  if (firstId) handleReadCollectorSnapshot(firstId);
+                }}
+              >
+                Collector Snapshots ({allMetricCards.length})…
+              </Button>
+            )}
           </>
         )}
         <Button
@@ -1040,6 +1259,14 @@ export function BIDesignerSurface({
         <Alert severity="info" sx={{m: 1}}>
           Imported monitoring metric_panel card(s) ({staticMetricCards.length})
           hold static snapshots in BI and do not poll live collectors.
+        </Alert>
+      )}
+
+      {collectorMetricCards.length > 0 && (
+        <Alert severity="info" sx={{m: 1}}>
+          Read-only collector metric_panel card(s) (
+          {collectorMetricCards.length}) read MonitoringHost.snapshot on demand
+          with viewer authorization and never start or mutate collectors.
         </Alert>
       )}
 
@@ -1360,13 +1587,65 @@ export function BIDesignerSurface({
             />
           )}
           {cardDraft.type === 'metric_panel' && (
-            <TextField
-              label="Source Monitoring Panel ID (static snapshot)"
-              value={cardDraft.panelId}
-              onChange={(e) =>
-                setCardDraft((c) => ({...c, panelId: e.target.value}))
-              }
-            />
+            <>
+              <TextField
+                label="Source Monitoring Panel ID"
+                value={cardDraft.panelId}
+                onChange={(e) =>
+                  setCardDraft((c) => ({...c, panelId: e.target.value}))
+                }
+              />
+              <Select
+                label="Metric Panel Snapshot Mode"
+                value={cardDraft.snapshotMode}
+                options={SNAPSHOT_MODE_OPTIONS}
+                onChange={(val) =>
+                  setCardDraft((c) => ({...c, snapshotMode: val}))
+                }
+              />
+              {cardDraft.snapshotMode === 'collector_read_only' && (
+                <>
+                  <Select
+                    label="Collector Engine"
+                    value={cardDraft.collectorEngine}
+                    options={DIALECT_OPTIONS}
+                    onChange={(val) =>
+                      setCardDraft((c) => ({...c, collectorEngine: val}))
+                    }
+                  />
+                  <TextField
+                    label="Collector Server ID"
+                    value={cardDraft.collectorServerId}
+                    onChange={(e) =>
+                      setCardDraft((c) => ({
+                        ...c,
+                        collectorServerId: e.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Collector Metric Group"
+                    value={cardDraft.collectorMetricGroup}
+                    onChange={(e) =>
+                      setCardDraft((c) => ({
+                        ...c,
+                        collectorMetricGroup: e.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Collector Metric Keys (comma-separated)"
+                    value={cardDraft.collectorMetricKeysCsv}
+                    onChange={(e) =>
+                      setCardDraft((c) => ({
+                        ...c,
+                        collectorMetricKeysCsv: e.target.value,
+                      }))
+                    }
+                  />
+                </>
+              )}
+            </>
           )}
           <Box sx={{display: 'flex', gap: 1, justifyContent: 'flex-end'}}>
             <Button onClick={() => setCardOpen(false)}>Cancel</Button>
@@ -1678,6 +1957,220 @@ export function BIDesignerSurface({
               Git status: {JSON.stringify(gitDraft.driftResult)}
             </Alert>
           )}
+        </Box>
+      </Dialog>
+
+      {/* Dashboard Write-Back Action Buttons & Native Review Dialog (E6) */}
+      <Dialog
+        open={actionBtnOpen}
+        title="BI Write-Back Action Buttons (Native-Operation Review)"
+        onClose={() => setActionBtnOpen(false)}
+      >
+        <Box sx={{display: 'flex', flexDirection: 'column', gap: 1.5, p: 1}}>
+          <Alert severity="warning">
+            BI action buttons never execute SQL directly. Triggering an action
+            submits a parameterized operation to OperationBus in
+            awaiting_approval stage for human native-operation review.
+          </Alert>
+          {canEdit && (
+            <>
+              <TextField
+                label="New Action Button Label"
+                value={actionBtnDraft.label}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({...c, label: e.target.value}))
+                }
+              />
+              <Select
+                label="Action Operation Kind"
+                value={actionBtnDraft.operationKind}
+                options={ACTION_OPERATION_OPTIONS}
+                onChange={(val) =>
+                  setActionBtnDraft((c) => ({...c, operationKind: val}))
+                }
+              />
+              <TextField
+                label="Target Endpoint ID"
+                value={actionBtnDraft.targetEndpointId}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({
+                    ...c,
+                    targetEndpointId: e.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Target Relation (schema.table)"
+                value={actionBtnDraft.targetRelation}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({
+                    ...c,
+                    targetRelation: e.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Key Columns (comma-separated, required for UPDATE/DELETE)"
+                value={actionBtnDraft.keyColumnsCsv}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({
+                    ...c,
+                    keyColumnsCsv: e.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Parameter Bindings (col:source:param, comma-separated)"
+                value={actionBtnDraft.bindingsCsv}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({
+                    ...c,
+                    bindingsCsv: e.target.value,
+                  }))
+                }
+              />
+              <Button
+                disabled={busyAction || !actionBtnDraft.label.trim()}
+                onClick={handleAddActionButton}
+              >
+                Save Action Button to Draft
+              </Button>
+            </>
+          )}
+          {(dashboardModel?.action_buttons || []).length > 0 && (
+            <>
+              <Select
+                label="Configured Action Button"
+                value={
+                  actionBtnDraft.selectedActionId ||
+                  dashboardModel.action_buttons[0].id
+                }
+                options={dashboardModel.action_buttons.map((b) => ({
+                  value: b.id,
+                  label: `${b.label} (${b.operation_kind})`,
+                }))}
+                onChange={(val) =>
+                  setActionBtnDraft((c) => ({...c, selectedActionId: val}))
+                }
+              />
+              <Select
+                label="SQL Preview Dialect"
+                value={actionBtnDraft.dialect}
+                options={DIALECT_OPTIONS}
+                onChange={(val) =>
+                  setActionBtnDraft((c) => ({...c, dialect: val}))
+                }
+              />
+              <TextArea
+                label="Bound Parameter Values JSON"
+                value={actionBtnDraft.parameterValuesJson}
+                onChange={(e) =>
+                  setActionBtnDraft((c) => ({
+                    ...c,
+                    parameterValuesJson: e.target.value,
+                  }))
+                }
+              />
+              <Box sx={{display: 'flex', gap: 1}}>
+                <Button
+                  disabled={busyAction}
+                  onClick={() => handleTriggerActionReview(true)}
+                >
+                  Preview Dry-Run SQL
+                </Button>
+                {!readOnly && sessionState.status === 'accepted' && (
+                  <Button
+                    disabled={busyAction}
+                    onClick={() => handleTriggerActionReview(false)}
+                  >
+                    Submit to Native Review
+                  </Button>
+                )}
+              </Box>
+            </>
+          )}
+          {actionBtnDraft.reviewResult && (
+            <>
+              <Alert severity="warning">
+                {actionBtnDraft.reviewResult.destructive_warning}
+              </Alert>
+              {actionBtnDraft.reviewResult.operation_id && (
+                <Alert severity="success">
+                  Operation queued: {actionBtnDraft.reviewResult.operation_id} ·
+                  Stage: {actionBtnDraft.reviewResult.stage}
+                </Alert>
+              )}
+              <TextArea
+                label="Parameterized Native-Review SQL"
+                readOnly
+                value={actionBtnDraft.reviewResult.sql || ''}
+              />
+            </>
+          )}
+          <Box sx={{display: 'flex', gap: 1, justifyContent: 'flex-end'}}>
+            <Button onClick={() => setActionBtnOpen(false)}>Close</Button>
+          </Box>
+        </Box>
+      </Dialog>
+
+      {/* Read-Only Collector Metric Panel Snapshot Dialog (E7) */}
+      <Dialog
+        open={collectorOpen}
+        title="Metric Panel Collector Snapshot (Read-Only)"
+        onClose={() => setCollectorOpen(false)}
+      >
+        <Box sx={{display: 'flex', flexDirection: 'column', gap: 1.5, p: 1}}>
+          {allMetricCards.length > 0 && (
+            <Select
+              label="Metric Panel Card"
+              value={collectorDraft.cardId || allMetricCards[0].id}
+              options={allMetricCards.map((c) => ({
+                value: c.id,
+                label: `${c.title} (${
+                  c.metric_panel?.snapshot_mode || 'static'
+                })`,
+              }))}
+              onChange={(val) => handleReadCollectorSnapshot(val)}
+            />
+          )}
+          <Button
+            disabled={busyAction || !allMetricCards.length}
+            onClick={() => handleReadCollectorSnapshot()}
+          >
+            Refresh Read-Only Snapshot
+          </Button>
+          {collectorDraft.snapshotResult && (
+            <>
+              <Alert
+                severity={
+                  collectorDraft.snapshotResult.freshness_status === 'live' ||
+                  collectorDraft.snapshotResult.freshness_status ===
+                    'static_snapshot'
+                    ? 'success'
+                    : 'warning'
+                }
+              >
+                Mode: {collectorDraft.snapshotResult.snapshot_mode} · Collector
+                state: {collectorDraft.snapshotResult.collector_state} ·
+                Freshness: {collectorDraft.snapshotResult.freshness_status}
+                {collectorDraft.snapshotResult.observed_at
+                  ? ` · Observed: ${collectorDraft.snapshotResult.observed_at}`
+                  : ''}
+              </Alert>
+              <TextArea
+                label="Snapshot Rows JSON"
+                readOnly
+                value={JSON.stringify(
+                  collectorDraft.snapshotResult.rows || [],
+                  null,
+                  2
+                )}
+              />
+            </>
+          )}
+          <Box sx={{display: 'flex', gap: 1, justifyContent: 'flex-end'}}>
+            <Button onClick={() => setCollectorOpen(false)}>Close</Button>
+          </Box>
         </Box>
       </Dialog>
     </Box>

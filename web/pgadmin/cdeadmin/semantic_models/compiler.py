@@ -17,7 +17,12 @@ import uuid
 from decimal import Decimal
 from typing import Mapping
 
-from .models import SemanticModelError, validate_model, validate_query
+from .models import (
+    SEMI_ADDITIVE_AGGREGATIONS,
+    SemanticModelError,
+    validate_model,
+    validate_query,
+)
 
 
 def compile_sql(model_value, query_value, dialect):
@@ -129,6 +134,8 @@ def compile_sql(model_value, query_value, dialect):
         return f"{quote(source['alias'])}.{quote(reference['field'])}"
 
     levels = {}
+    parent_child_hierarchies = {}
+    dimensions_by_id = {item['id']: item for item in model['dimensions']}
     for dimension in model['dimensions']:
         levels[dimension['id']] = {
             'id': dimension['id'], 'name': dimension['name'],
@@ -137,8 +144,25 @@ def compile_sql(model_value, query_value, dialect):
         for attr in dimension.get('attributes', []):
             levels[attr['id']] = attr
         for hierarchy in dimension.get('hierarchies', []):
-            for level in hierarchy['levels']:
-                levels[level['id']] = level
+            if hierarchy.get('hierarchy_kind') == 'parent_child':
+                parent_child_hierarchies[hierarchy['id']] = (
+                    dimension, hierarchy, True
+                )
+                parent_child_hierarchies.setdefault(
+                    dimension['id'], (dimension, hierarchy, False)
+                )
+                levels[hierarchy['id']] = {
+                    'id': hierarchy['id'],
+                    'name': hierarchy['name'],
+                    'field': (
+                        hierarchy.get('name_field')
+                        or hierarchy['child_field']
+                    ),
+                    'parent_child': True,
+                }
+            else:
+                for level in hierarchy.get('levels', []):
+                    levels[level['id']] = level
     measures = {item['id']: item for item in model['measures']}
     parameter_values = {
         item['id']: item.get('default') for item in model['parameters']
@@ -153,8 +177,66 @@ def compile_sql(model_value, query_value, dialect):
     drill = query['drill']
     if drill['mode'] == 'down' and drill.get('target_level') not in axis_ids:
         axis_ids.append(drill['target_level'])
+
+    active_pc = [
+        item for item in axis_ids
+        if item in parent_child_hierarchies and drill['mode'] != 'through'
+    ]
+    recursive_ctes = []
+    pc_joins = []
+    pc_exprs = {}
+    seen_pc_hiers = set()
+    for hid in active_pc:
+        _pc_dim, pc_hier, use_name_col = parent_child_hierarchies[hid]
+        hier_id = pc_hier['id']
+        cte_alias = quote(f'__pc_{hier_id}')
+        anc_id = quote('ancestor_id')
+        anc_name = quote('ancestor_name')
+        desc_id = quote('descendant_id')
+        depth_col = quote('pc_depth')
+        if hier_id not in seen_pc_hiers:
+            seen_pc_hiers.add(hier_id)
+            d_alias = quote(f'__pcd_{hier_id}')
+            c_alias = quote(f'__pcc_{hier_id}')
+            ch_alias = quote(f'__pcch_{hier_id}')
+            pc_src = sources[pc_hier['child_field']['source_id']]
+            pc_rel = '.'.join(quote(part) for part in pc_src['relation'])
+            child_col = quote(pc_hier['child_field']['field'])
+            parent_col = quote(pc_hier['parent_field']['field'])
+            name_ref = pc_hier.get('name_field') or pc_hier['child_field']
+            name_col = quote(name_ref['field'])
+            max_depth = int(pc_hier.get('max_depth', 16))
+            cte_sql = (
+                f'{cte_alias} ({anc_id}, {anc_name}, {desc_id}, '
+                f'{depth_col}) AS ('
+                f'SELECT {d_alias}.{child_col}, {d_alias}.{name_col}, '
+                f'{d_alias}.{child_col}, 0 FROM {pc_rel} AS {d_alias} '
+                f'UNION ALL '
+                f'SELECT {c_alias}.{anc_id}, {c_alias}.{anc_name}, '
+                f'{ch_alias}.{child_col}, {c_alias}.{depth_col} + 1 '
+                f'FROM {cte_alias} AS {c_alias} '
+                f'INNER JOIN {pc_rel} AS {ch_alias} '
+                f'ON {ch_alias}.{parent_col} = {c_alias}.{desc_id} '
+                f'WHERE {c_alias}.{depth_col} < {max_depth})'
+            )
+            recursive_ctes.append(cte_sql)
+            pc_joins.append(
+                f' INNER JOIN {cte_alias} ON {cte_alias}.{desc_id} = '
+                f"{field(pc_hier['child_field'])}"
+            )
+        pc_exprs[hid] = (
+            f'{cte_alias}.{anc_name}'
+            if (use_name_col and pc_hier.get('name_field'))
+            else f'{cte_alias}.{anc_id}'
+        )
+
+    def axis_sql_expr(item_id):
+        if item_id in pc_exprs:
+            return pc_exprs[item_id]
+        return field(levels[item_id]['field'])
+
     selections = [
-        f"{field(levels[item]['field'])} AS {quote(item)}"
+        f'{axis_sql_expr(item)} AS {quote(item)}'
         for item in axis_ids
     ]
     aggregate_names = {
@@ -162,15 +244,93 @@ def compile_sql(model_value, query_value, dialect):
         'min': 'MIN', 'max': 'MAX', 'avg': 'AVG', 'none': '',
     }
 
-    def measure_expression(measure_id, stack=frozenset()):
+    axis_field_pairs = {
+        (levels[item]['field']['source_id'], levels[item]['field']['field'])
+        for item in axis_ids
+        if item not in pc_exprs
+    }
+
+    def _semi_additive_time_ref(measure):
+        sa_dim_id = measure['semi_additive_dimension']
+        sa_dim = dimensions_by_id[sa_dim_id]
+        return (
+            sa_dim.get('sort_field')
+            or sa_dim.get('key_field')
+            or sa_dim['field']
+        )
+
+    def _is_rolled_up_semi_additive(measure):
+        if drill['mode'] == 'through':
+            return False
+        if measure['aggregation'] not in SEMI_ADDITIVE_AGGREGATIONS:
+            return False
+        t_ref = _semi_additive_time_ref(measure)
+        return (t_ref['source_id'], t_ref['field']) not in axis_field_pairs
+
+    def _collect_leaf_measures(measure_id, stack=frozenset()):
         if measure_id in stack:
             raise SemanticModelError('calculated measure cycle is unsupported')
+        m_obj = measures[measure_id]
+        if m_obj.get('expression') is None:
+            return [measure_id]
+        found = []
+
+        def _walk(node):
+            if 'measure' in node:
+                for leaf in _collect_leaf_measures(
+                    node['measure'], stack | frozenset({measure_id})
+                ):
+                    if leaf not in found:
+                        found.append(leaf)
+            elif 'operator' in node:
+                _walk(node['left'])
+                _walk(node['right'])
+
+        _walk(m_obj['expression'])
+        return found
+
+    all_leaf_ids = []
+    for q_mid in query['measures']:
+        for leaf_id in _collect_leaf_measures(q_mid):
+            if leaf_id not in all_leaf_ids:
+                all_leaf_ids.append(leaf_id)
+
+    rolled_semi_ids = [
+        mid for mid in all_leaf_ids
+        if _is_rolled_up_semi_additive(measures[mid])
+    ]
+
+    def _within_agg_sql(measure):
+        within_agg = measure.get('within_group_aggregation', 'sum')
+        m_filters = measure.get('filters') or []
+        m_cond = ' AND '.join(
+            _compile_filter(item, field, dialect, parameter_values, binder)
+            for item in m_filters
+        )
+        if within_agg == 'count' and measure.get('field') is None:
+            if m_cond:
+                return f'COUNT(CASE WHEN {m_cond} THEN 1 END)'
+            return 'COUNT(*)'
+        operand = field(measure['field'])
+        if m_cond:
+            operand = f'CASE WHEN {m_cond} THEN {operand} END'
+        return f'{aggregate_names[within_agg]}({operand})'
+
+    def measure_expression(measure_id, stack=frozenset(), leaf_lookup=None):
+        if measure_id in stack:
+            raise SemanticModelError('calculated measure cycle is unsupported')
+        if leaf_lookup and measure_id in leaf_lookup:
+            return leaf_lookup[measure_id]
         measure = measures[measure_id]
         if measure.get('expression') is not None:
             return calculation(
-                measure['expression'], stack | frozenset({measure_id})
+                measure['expression'],
+                stack | frozenset({measure_id}),
+                leaf_lookup=leaf_lookup,
             )
         aggregation = measure['aggregation']
+        if aggregation in SEMI_ADDITIVE_AGGREGATIONS:
+            return _within_agg_sql(measure)
         m_filters = measure.get('filters') or []
         m_cond = ' AND '.join(
             _compile_filter(item, field, dialect, parameter_values, binder)
@@ -189,16 +349,18 @@ def compile_sql(model_value, query_value, dialect):
             return operand
         return f'{aggregate_names[aggregation]}({operand})'
 
-    def calculation(node, stack):
+    def calculation(node, stack, leaf_lookup=None):
         if 'measure' in node:
-            return measure_expression(node['measure'], stack)
+            return measure_expression(
+                node['measure'], stack, leaf_lookup=leaf_lookup
+            )
         if 'literal' in node:
             return str(node['literal'])
         operators = {
             'add': '+', 'subtract': '-', 'multiply': '*', 'divide': '/',
         }
-        left = calculation(node['left'], stack)
-        right = calculation(node['right'], stack)
+        left = calculation(node['left'], stack, leaf_lookup=leaf_lookup)
+        right = calculation(node['right'], stack, leaf_lookup=leaf_lookup)
         if node['operator'] == 'divide':
             right = f'NULLIF({right}, 0)'
         return f'({left} {operators[node["operator"]]} {right})'
@@ -261,6 +423,8 @@ def compile_sql(model_value, query_value, dialect):
             )
     if joined != set(sources):
         raise SemanticModelError('every source must be connected by a join')
+    if pc_joins:
+        from_clause += ''.join(pc_joins)
 
     filters = (
         model['default_filters'] + model['security']['row_filters'] +
@@ -305,29 +469,179 @@ def compile_sql(model_value, query_value, dialect):
         else:
             end = binder.literal(time_intelligence['end'], dialect)
             predicates.append(f'{time_field} BETWEEN {start} AND {end}')
-    source = 'SELECT ' + ', '.join(selections) + ' FROM ' + from_clause
-    if predicates:
-        source += ' WHERE ' + ' AND '.join(predicates)
-    group_fields = [field(levels[item]['field']) for item in axis_ids]
-    if comparison_expression is not None:
-        group_fields.append(comparison_expression)
-    if drill['mode'] != 'through' and group_fields and any(
-        measures[item]['aggregation'] != 'none' or
-        measures[item].get('expression') is not None
-        for item in query['measures']
-    ):
-        group_keyword = 'GROUP BY'
-        if query['totals'] and dialect['supports_rollup']:
-            if rollup_style == 'with_rollup':
-                source += (
-                    ' GROUP BY ' + ', '.join(group_fields) + ' WITH ROLLUP'
+
+    if rolled_semi_ids:
+        part_items = list(axis_ids) + (
+            ['__semantic_period'] if comparison_expression is not None else []
+        )
+        part_exprs = [axis_sql_expr(item) for item in axis_ids] + (
+            [comparison_expression]
+            if comparison_expression is not None else []
+        )
+        part_selects = [
+            f'{axis_sql_expr(item)} AS {quote(item)}' for item in axis_ids
+        ]
+        if comparison_expression is not None:
+            part_selects.append(
+                f'{comparison_expression} AS {quote("__semantic_period")}'
+            )
+        regular_leaf_ids = [
+            mid for mid in all_leaf_ids if mid not in rolled_semi_ids
+        ]
+        base_alias = quote('__sem_base')
+        leaf_lookup = {
+            mid: f'{base_alias}.{quote("__m_" + mid)}'
+            for mid in regular_leaf_ids
+        }
+        base_selects = list(part_selects) + [
+            f'{measure_expression(mid)} AS {quote("__m_" + mid)}'
+            for mid in regular_leaf_ids
+        ]
+        if not base_selects:
+            base_selects.append('1 AS ' + quote('__sem_anchor'))
+        base_sql = (
+            'SELECT ' + ', '.join(base_selects) + ' FROM ' + from_clause
+        )
+        if predicates:
+            base_sql += ' WHERE ' + ' AND '.join(predicates)
+        if part_exprs:
+            base_sql += ' GROUP BY ' + ', '.join(part_exprs)
+
+        sa_joins = []
+        time_col = quote('__sa_time')
+        val_col = quote('__sa_val')
+        rn_col = quote('__sa_rn')
+        for idx, sa_mid in enumerate(rolled_semi_ids):
+            sa_m = measures[sa_mid]
+            sa_agg = sa_m['aggregation']
+            t_expr = field(_semi_additive_time_ref(sa_m))
+            w_expr = _within_agg_sql(sa_m)
+            p_alias = quote(f'__sap_{idx}')
+            g_alias = quote(f'__sag_{idx}')
+            j_alias = quote(f'__sa_{idx}')
+            period_sql = (
+                'SELECT '
+                + ', '.join(
+                    part_selects + [
+                        f'{t_expr} AS {time_col}',
+                        f'{w_expr} AS {val_col}',
+                    ]
+                )
+                + ' FROM ' + from_clause
+            )
+            if predicates:
+                period_sql += ' WHERE ' + ' AND '.join(predicates)
+            period_sql += ' GROUP BY ' + ', '.join(part_exprs + [t_expr])
+            if sa_agg in {'last_non_empty', 'first_non_empty'}:
+                period_sql += f' HAVING {w_expr} IS NOT NULL'
+
+            part_refs_p = [
+                f'{p_alias}.{quote(col)}' for col in part_items
+            ]
+            if sa_agg == 'avg_over_time':
+                sa_sub_sql = (
+                    'SELECT '
+                    + ', '.join(
+                        part_refs_p + [
+                            f'AVG({p_alias}.{val_col}) AS {val_col}',
+                        ]
+                    )
+                    + f' FROM ({period_sql}) AS {p_alias}'
+                )
+                if part_refs_p:
+                    sa_sub_sql += ' GROUP BY ' + ', '.join(part_refs_p)
+            else:
+                direction = (
+                    'DESC'
+                    if sa_agg in {'last_value', 'last_non_empty'}
+                    else 'ASC'
+                )
+                part_clause = (
+                    ('PARTITION BY ' + ', '.join(part_refs_p) + ' ')
+                    if part_refs_p else ''
+                )
+                order_clause = f'ORDER BY {p_alias}.{time_col} {direction}'
+                ranked_sql = (
+                    'SELECT '
+                    + ', '.join(
+                        part_refs_p + [
+                            f'{p_alias}.{val_col}',
+                            f'ROW_NUMBER() OVER ({part_clause}{order_clause})'
+                            f' AS {rn_col}',
+                        ]
+                    )
+                    + f' FROM ({period_sql}) AS {p_alias}'
+                )
+                part_refs_g = [
+                    f'{g_alias}.{quote(col)}' for col in part_items
+                ]
+                sa_sub_sql = (
+                    'SELECT '
+                    + ', '.join(part_refs_g + [f'{g_alias}.{val_col}'])
+                    + f' FROM ({ranked_sql}) AS {g_alias}'
+                    + f' WHERE {g_alias}.{rn_col} = 1'
+                )
+
+            if part_items:
+                join_cond = ' AND '.join(
+                    f'(({base_alias}.{quote(col)} = {j_alias}.{quote(col)}) '
+                    f'OR ({base_alias}.{quote(col)} IS NULL '
+                    f'AND {j_alias}.{quote(col)} IS NULL))'
+                    for col in part_items
                 )
             else:
-                source += (
-                    ' GROUP BY ROLLUP (' + ', '.join(group_fields) + ')'
-                )
-        else:
-            source += ' ' + group_keyword + ' ' + ', '.join(group_fields)
+                join_cond = '1 = 1'
+            sa_joins.append(
+                f' LEFT JOIN ({sa_sub_sql}) AS {j_alias} ON {join_cond}'
+            )
+            leaf_lookup[sa_mid] = f'{j_alias}.{val_col}'
+
+        outer_selects = [
+            f'{base_alias}.{quote(item)} AS {quote(item)}'
+            for item in axis_ids
+        ]
+        for measure_id in query['measures']:
+            expr = measure_expression(measure_id, leaf_lookup=leaf_lookup)
+            if query['windows'] and window_input_cast and any(
+                item['measure_id'] == measure_id
+                for item in query['windows']
+            ):
+                expr = f'CAST({expr} AS {window_input_cast})'
+            outer_selects.append(f'{expr} AS {quote(measure_id)}')
+        if comparison_expression is not None:
+            outer_selects.append(
+                f'{base_alias}.{quote("__semantic_period")} '
+                f'AS {quote("__semantic_period")}'
+            )
+        source = (
+            'SELECT ' + ', '.join(outer_selects) +
+            f' FROM ({base_sql}) AS {base_alias}' +
+            ''.join(sa_joins)
+        )
+    else:
+        source = 'SELECT ' + ', '.join(selections) + ' FROM ' + from_clause
+        if predicates:
+            source += ' WHERE ' + ' AND '.join(predicates)
+        group_fields = [axis_sql_expr(item) for item in axis_ids]
+        if comparison_expression is not None:
+            group_fields.append(comparison_expression)
+        if drill['mode'] != 'through' and group_fields and any(
+            measures[item]['aggregation'] != 'none' or
+            measures[item].get('expression') is not None
+            for item in query['measures']
+        ):
+            group_keyword = 'GROUP BY'
+            if query['totals'] and dialect['supports_rollup']:
+                if rollup_style == 'with_rollup':
+                    source += (
+                        ' GROUP BY ' + ', '.join(group_fields) + ' WITH ROLLUP'
+                    )
+                else:
+                    source += (
+                        ' GROUP BY ROLLUP (' + ', '.join(group_fields) + ')'
+                    )
+            else:
+                source += ' ' + group_keyword + ' ' + ', '.join(group_fields)
     output_order = [quote(item) for item in axis_ids]
     if comparison_expression is not None:
         output_order.append(quote('__semantic_period'))
@@ -337,6 +651,8 @@ def compile_sql(model_value, query_value, dialect):
             percent_change_result_cast=percent_change_result_cast,
             percent_change_numerator_cast=percent_change_numerator_cast,
         )
+    if recursive_ctes:
+        source = 'WITH RECURSIVE ' + ', '.join(recursive_ctes) + ' ' + source
     native_rollup_without_order = bool(
         query['totals'] and dialect['supports_rollup'] and
         not rollup_allows_order_by

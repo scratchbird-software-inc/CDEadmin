@@ -1174,6 +1174,377 @@ class BIDesignerBackendTests(unittest.TestCase):
             self.assertIn('metric_panel_static_snapshot', loss_codes)
             self.assertIn('archived_status_imported_as_draft', loss_codes)
 
+    def test_e6_action_buttons_ddn_verifier_and_operation_bus_review(self):
+        from pgadmin.cdeadmin.operations import OperationBus
+
+        # Questions remain strictly read-only: action_buttons rejected
+        with self.assertRaises(DesignStoreError):
+            default_question_model(
+                name='BadQ',
+                visualization={
+                    'type': 'table',
+                    'settings': {'action_buttons': []},
+                },
+            )
+
+        # Unkeyed update/delete or approval_required=False rejected
+        with self.assertRaises(DesignStoreError):
+            default_dashboard_model(
+                name='UnkeyedUpdate',
+                action_buttons=[{
+                    'id': 'u1',
+                    'label': 'Update All',
+                    'operation_kind': 'update_row',
+                    'target_endpoint_id': 'ep-1',
+                    'target_relation': ['public', 'orders'],
+                    'key_columns': [],
+                    'parameter_bindings': [{
+                        'column': 'status',
+                        'source': 'prompt',
+                        'parameter_name': 'new_status',
+                    }],
+                }],
+            )
+        with self.assertRaises(DesignStoreError):
+            default_dashboard_model(
+                name='SkipApproval',
+                action_buttons=[{
+                    'id': 'i1',
+                    'label': 'Insert',
+                    'operation_kind': 'insert_row',
+                    'target_endpoint_id': 'ep-1',
+                    'target_relation': ['public', 'orders'],
+                    'approval_required': False,
+                    'parameter_bindings': [{
+                        'column': 'status',
+                        'source': 'prompt',
+                        'parameter_name': 'new_status',
+                    }],
+                }],
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Flask(__name__)
+            app.secret_key = 'test-e6-secret'
+            app.config['TESTING'] = True
+            app.config['LOGIN_DISABLED'] = True
+            app.config['CDEADMIN_DESIGN_STORE_PATH'] = f'{tmp}/designs.db'
+            bus = OperationBus()
+            app.extensions['cdeadmin_operation_bus'] = bus
+            store = init_routes_app(app)
+            sync = BIDesignSync(store)
+
+            q = sync.create_question(
+                project_id='p1', key='q-orders', title='Orders', actor_id=1
+            )
+            q_id = q['design']['id']
+            store.advance_status(q_id, 1, 'in_review', actor_id=1)
+            sync.accept_bi_design(q_id, 1, actor_id=1)
+
+            dash_model = default_dashboard_model(
+                name='Order Triage Board',
+                cards=[{
+                    'id': 'c_orders',
+                    'tab_id': 'main',
+                    'type': 'question',
+                    'title': 'Orders Table',
+                    'question': {'question_design_id': q_id},
+                    'visualization': {'type': 'table'},
+                }],
+                action_buttons=[
+                    {
+                        'id': 'approve_order',
+                        'label': 'Approve Order',
+                        'card_id': 'c_orders',
+                        'operation_kind': 'update_row',
+                        'target_endpoint_id': 'ep-pg',
+                        'target_relation': ['public', 'orders'],
+                        'key_columns': ['order_id'],
+                        'parameter_bindings': [
+                            {
+                                'column': 'order_id',
+                                'source': 'row_column',
+                                'parameter_name': 'order_id',
+                                'required': True,
+                            },
+                            {
+                                'column': 'status',
+                                'source': 'prompt',
+                                'parameter_name': 'new_status',
+                                'required': True,
+                            },
+                        ],
+                    },
+                    {
+                        'id': 'purge_order',
+                        'label': 'Purge Cancelled Order',
+                        'operation_kind': 'delete_row',
+                        'target_endpoint_id': 'ep-pg',
+                        'target_relation': ['public', 'orders'],
+                        'key_columns': ['order_id'],
+                        'parameter_bindings': [{
+                            'column': 'order_id',
+                            'source': 'row_column',
+                            'parameter_name': 'order_id',
+                            'required': True,
+                        }],
+                    },
+                ],
+            )
+            d_created = sync.create_dashboard(
+                project_id='p1',
+                key='triage-board',
+                title='Order Triage Board',
+                actor_id=1,
+                dashboard=dash_model,
+            )
+            d_id = d_created['design']['id']
+            ddn_text = d_created['design']['version']['ddn_text']
+
+            # DDN round-trip & bundled ddn-verifier.js check
+            parsed = ddn_to_dashboard(ddn_text)['dashboard']
+            self.assertEqual(
+                parsed['action_buttons'], dash_model['action_buttons']
+            )
+            verified = _verify_ddn_texts_with_node({'e6_dash': ddn_text})
+            self.assertEqual(verified['e6_dash']['errors'], [])
+
+            # Draft dashboard: dry_run succeeds, live submission blocked
+            dry = sync.prepare_action_button_review(
+                d_id,
+                action_button_id='approve_order',
+                parameter_values={
+                    'order_id': 101,
+                    'new_status': "approved'; DROP TABLE orders; --",
+                },
+                actor_id=1,
+                dry_run=True,
+            )
+            self.assertTrue(dry['dry_run'])
+            self.assertFalse(dry['executed_immediately'])
+            self.assertNotIn('DROP TABLE', dry['sql'])
+            self.assertIn(':new_status', dry['sql'])
+
+            with self.assertRaises(DesignStoreConflict):
+                sync.prepare_action_button_review(
+                    d_id,
+                    action_button_id='approve_order',
+                    parameter_values={'order_id': 101, 'new_status': 'ok'},
+                    actor_id=1,
+                )
+
+            # Accept dashboard and verify guardrails + OperationBus submission
+            store.advance_status(d_id, 1, 'in_review', actor_id=1)
+            sync.accept_bi_design(d_id, 1, actor_id=1)
+
+            with self.assertRaises(DesignStoreForbidden):
+                sync.prepare_action_button_review(
+                    d_id,
+                    action_button_id='approve_order',
+                    parameter_values={'order_id': 101, 'new_status': 'ok'},
+                    actor_id=1,
+                    actor_kind='agent',
+                )
+            with self.assertRaises(DesignStoreForbidden):
+                sync.prepare_action_button_review(
+                    d_id,
+                    action_button_id='approve_order',
+                    parameter_values={'order_id': 101, 'new_status': 'ok'},
+                    actor_id=1,
+                    device_token='srbikiosk.v1.any',
+                )
+
+            client = app.test_client()
+            rev_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/action-review',
+                json={
+                    'action_button_id': 'purge_order',
+                    'parameter_values': {'order_id': 101},
+                    'dialect': 'postgresql',
+                    'approvers': ['user:99'],
+                },
+            )
+            self.assertEqual(rev_resp.status_code, 200)
+            rev_data = rev_resp.get_json()['data']
+            self.assertEqual(rev_data['stage'], 'awaiting_approval')
+            self.assertTrue(rev_data['requires_native_review'])
+            self.assertFalse(rev_data['executed_immediately'])
+            self.assertIn(
+                'DESTRUCTIVE WARNING', rev_data['destructive_warning']
+            )
+            self.assertEqual(
+                rev_data['sql'],
+                'DELETE FROM "public"."orders" WHERE "order_id" = :order_id;',
+            )
+            self.assertEqual(rev_data['bound_parameters'], {'order_id': 101})
+
+            # Display-only kiosk Bearer token rejected with 403 on HTTP route
+            kiosk_mut = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/action-review',
+                headers={'Authorization': 'Bearer srbikiosk.v1.tok'},
+                json={
+                    'action_button_id': 'purge_order',
+                    'parameter_values': {'order_id': 101},
+                },
+            )
+            self.assertEqual(kiosk_mut.status_code, 403)
+
+    def test_e7_collector_read_only_metric_panels_and_ddn_verifier(self):
+        class _FakeMonitoringHost:
+            def __init__(self):
+                self.calls = []
+                self.mode = 'live'
+
+            def snapshot(self, actor_id, server_id, target_id=None):
+                self.calls.append((actor_id, server_id, target_id))
+                if self.mode == 'unauthorized':
+                    raise PermissionError('Denied collector read')
+                if self.mode == 'disabled':
+                    return {'state': 'disabled', 'samples': []}
+                return {
+                    'state': 'running',
+                    'samples': [{
+                        'observed_at': '2026-11-11T15:00:00Z',
+                        'throughput': {
+                            'tps': 412.5,
+                            'active_sessions': 14,
+                        },
+                    }],
+                }
+
+            def start(self, *args, **kwargs):
+                raise AssertionError('BI must never start a collector')
+
+            def enable(self, *args, **kwargs):
+                raise AssertionError('BI must never enable a collector')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Flask(__name__)
+            app.secret_key = 'test-e7-secret'
+            app.config['TESTING'] = True
+            app.config['LOGIN_DISABLED'] = True
+            app.config['CDEADMIN_DESIGN_STORE_PATH'] = f'{tmp}/designs.db'
+            fake_host = _FakeMonitoringHost()
+            app.extensions['cdeadmin_postgresql_monitoring_host'] = fake_host
+            store = init_routes_app(app)
+            sync = BIDesignSync(store)
+
+            dash_model = default_dashboard_model(
+                name='Ops Collector Board',
+                cards=[
+                    {
+                        'id': 'c_static',
+                        'tab_id': 'main',
+                        'type': 'metric_panel',
+                        'title': 'Imported Static Snapshot',
+                        'metric_panel': {
+                            'panel_id': 'cpu_static',
+                            'rows': [
+                                {'id': 'r1', 'measure': 'cpu', 'value': 9}
+                            ],
+                        },
+                    },
+                    {
+                        'id': 'c_live',
+                        'tab_id': 'main',
+                        'type': 'metric_panel',
+                        'title': 'PG Throughput (Read-Only)',
+                        'metric_panel': {
+                            'panel_id': 'pg_throughput',
+                            'snapshot_mode': 'collector_read_only',
+                            'collector_binding': {
+                                'engine': 'postgresql',
+                                'server_id': 7,
+                                'target_id': 'db_prod',
+                                'metric_group': 'throughput',
+                                'metric_keys': ['tps', 'active_sessions'],
+                                'freshness_budget_seconds': 60,
+                            },
+                        },
+                    },
+                ],
+            )
+            self.assertEqual(
+                dash_model['cards'][0]['metric_panel']['snapshot_mode'],
+                'static',
+            )
+            created = sync.create_dashboard(
+                project_id='p1',
+                key='ops-board',
+                title='Ops Collector Board',
+                actor_id=1,
+                dashboard=dash_model,
+            )
+            d_id = created['design']['id']
+            ddn_text = created['design']['version']['ddn_text']
+
+            parsed = ddn_to_dashboard(ddn_text)['dashboard']
+            self.assertEqual(parsed['cards'], dash_model['cards'])
+            verified = _verify_ddn_texts_with_node({'e7_dash': ddn_text})
+            self.assertEqual(verified['e7_dash']['errors'], [])
+
+            client = app.test_client()
+            # 1. Static card never calls MonitoringHost
+            st_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/collector-panel',
+                json={'card_id': 'c_static'},
+            )
+            self.assertEqual(st_resp.status_code, 200)
+            self.assertEqual(
+                st_resp.get_json()['data']['freshness_status'],
+                'static_snapshot',
+            )
+            self.assertEqual(fake_host.calls, [])
+
+            # 2. Live sample within 60s budget -> freshness_status == 'live'
+            live_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/collector-panel',
+                json={
+                    'card_id': 'c_live',
+                    'now_iso': '2026-11-11T15:00:30Z',
+                },
+            )
+            self.assertEqual(live_resp.status_code, 200)
+            live_data = live_resp.get_json()['data']
+            self.assertEqual(live_data['freshness_status'], 'live')
+            self.assertFalse(live_data['collector_mutated'])
+            self.assertEqual(len(live_data['rows']), 2)
+            self.assertEqual(fake_host.calls[-1], (1, 7, 'db_prod'))
+
+            # 3. Sample older than 60s budget -> freshness_status == 'stale'
+            stale_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/collector-panel',
+                json={
+                    'card_id': 'c_live',
+                    'now_iso': '2026-11-11T15:05:00Z',
+                },
+            )
+            self.assertEqual(
+                stale_resp.get_json()['data']['freshness_status'], 'stale'
+            )
+
+            # 4. Disabled collector -> collector_disabled (never started)
+            fake_host.mode = 'disabled'
+            dis_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/collector-panel',
+                json={'card_id': 'c_live'},
+            )
+            self.assertEqual(
+                dis_resp.get_json()['data']['freshness_status'],
+                'collector_disabled',
+            )
+
+            # 5. Unauthorized viewer -> unauthorized (no privilege escalation)
+            fake_host.mode = 'unauthorized'
+            unauth_resp = client.post(
+                f'/cdeadmin/api/projects/p1/designs/{d_id}/bi/collector-panel',
+                json={'card_id': 'c_live'},
+            )
+            self.assertEqual(
+                unauth_resp.get_json()['data']['freshness_status'],
+                'unauthorized',
+            )
+
 
 if __name__ == '__main__':
     unittest.main()

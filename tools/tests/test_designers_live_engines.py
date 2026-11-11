@@ -825,3 +825,234 @@ def test_live_mysql_and_mariadb_readonly_qualification(tmp_path, engine, port):
         assert int(res['rows'][0][1]) == 7
     finally:
         conn.close()
+
+
+def test_live_cube_parent_child_and_semi_additive_across_engines(tmp_path):
+    """Execute parent-child WITH RECURSIVE & semi-additive SQL on 4 engines."""
+    from pgadmin.cdeadmin.semantic_models import validate_model, validate_query
+    from pgadmin.cdeadmin.semantic_models.compiler import compile_sql
+
+    cube = validate_model({
+        'contract_version': '1.0.0',
+        'name': 'Team Balances Cube',
+        'semantic_family': 'relational',
+        'sources': [
+            {
+                'id': 'BALANCES',
+                'resource_id': 'table:main:BALANCES',
+                'kind': 'table',
+                'classification': 'fact',
+                'relation': ['BALANCES'],
+                'grain': [
+                    {'source_id': 'BALANCES', 'field': 'SNAP_DAY'},
+                    {'source_id': 'BALANCES', 'field': 'TEAM_ID'},
+                ],
+            },
+            {
+                'id': 'TEAMS',
+                'resource_id': 'table:main:TEAMS',
+                'kind': 'table',
+                'classification': 'dimension',
+                'relation': ['TEAMS'],
+                'grain': [{'source_id': 'TEAMS', 'field': 'TEAM_ID'}],
+            },
+        ],
+        'joins': [{
+            'id': 'bal_teams',
+            'left_source': 'BALANCES',
+            'right_source': 'TEAMS',
+            'join_type': 'inner',
+            'cardinality': 'many-to-one',
+            'active': True,
+            'predicates': [{
+                'left': {'source_id': 'BALANCES', 'field': 'TEAM_ID'},
+                'operator': 'eq',
+                'right': {'source_id': 'TEAMS', 'field': 'TEAM_ID'},
+            }],
+        }],
+        'dimensions': [
+            {
+                'id': 'team',
+                'name': 'Team',
+                'type': 'categorical',
+                'field': {'source_id': 'TEAMS', 'field': 'TEAM_ID'},
+                'hierarchies': [{
+                    'id': 'team_tree',
+                    'name': 'Team Tree',
+                    'hierarchy_kind': 'parent_child',
+                    'child_field': {'source_id': 'TEAMS', 'field': 'TEAM_ID'},
+                    'parent_field': {
+                        'source_id': 'TEAMS', 'field': 'PARENT_ID'
+                    },
+                    'max_depth': 5,
+                    'ragged': True,
+                }],
+            },
+            {
+                'id': 'snap_day',
+                'name': 'Snapshot Day',
+                'type': 'time',
+                'field': {'source_id': 'BALANCES', 'field': 'SNAP_DAY'},
+            },
+        ],
+        'measures': [
+            {
+                'id': 'closing_bal',
+                'name': 'Closing Non-Empty Balance',
+                'aggregation': 'last_non_empty',
+                'semi_additive_dimension': 'snap_day',
+                'within_group_aggregation': 'sum',
+                'field': {'source_id': 'BALANCES', 'field': 'AMOUNT'},
+            },
+            {
+                'id': 'total_flow',
+                'name': 'Total Flow',
+                'aggregation': 'sum',
+                'field': {'source_id': 'BALANCES', 'field': 'FLOW'},
+            },
+        ],
+    })
+    query = validate_query(
+        cube,
+        {
+            'axes': {'rows': ['team']},
+            'measures': ['closing_bal', 'total_flow'],
+            'order_by': [{'id': 'team', 'direction': 'asc'}],
+        },
+    )
+
+    ddl_and_seed = [
+        'CREATE TABLE TEAMS (TEAM_ID INTEGER NOT NULL PRIMARY KEY, '
+        'PARENT_ID INTEGER)',
+        'CREATE TABLE BALANCES (SNAP_DAY INTEGER NOT NULL, '
+        'TEAM_ID INTEGER NOT NULL, AMOUNT DOUBLE PRECISION, '
+        'FLOW DOUBLE PRECISION)',
+        'INSERT INTO TEAMS VALUES (1, NULL)',
+        'INSERT INTO TEAMS VALUES (2, 1)',
+        'INSERT INTO BALANCES VALUES (1, 1, 50.0, 5.0)',
+        'INSERT INTO BALANCES VALUES (2, 1, 60.0, 10.0)',
+        'INSERT INTO BALANCES VALUES (1, 2, 100.0, 20.0)',
+        'INSERT INTO BALANCES VALUES (2, 2, NULL, 4.0)',
+    ]
+    # Team 1 rolls up Team 1 + Team 2:
+    # Day 1 sum = 50+100 = 150; Day 2 sum = 60+NULL = 60 -> last_non_empty=60
+    # Total flow for Team 1 + Team 2 = 5+10+20+4 = 39
+    # Team 2 alone: Day 1 = 100, Day 2 = NULL -> last_non_empty=100; flow=24
+    expected = [(1, 60.0, 39.0), (2, 100.0, 24.0)]
+
+    from pgadmin.cdeadmin.design_store.cube_ddn import _PORTABLE_DIALECTS
+
+    # 1. SQLite
+    sq_sql = compile_sql(
+        cube, query, _PORTABLE_DIALECTS['sqlite']
+    )['source']
+    with sqlite3.connect(':memory:') as sconn:
+        for st in ddl_and_seed:
+            sconn.execute(st)
+        assert sconn.execute(sq_sql).fetchall() == expected
+
+    # 2. DuckDB
+    dk_sql = compile_sql(
+        cube, query, _PORTABLE_DIALECTS['duckdb']
+    )['source']
+    dconn = duckdb.connect(':memory:')
+    try:
+        for st in ddl_and_seed:
+            dconn.execute(st)
+        assert dconn.execute(dk_sql).fetchall() == expected
+    finally:
+        dconn.close()
+
+    # 3. Firebird 5 Embedded
+    import firebird.driver as fbd
+
+    fb_sql = compile_sql(
+        cube, query, _PORTABLE_DIALECTS['firebird']
+    )['source']
+    fconn = fbd.create_database(str(tmp_path / 'cube_pc_sa.fdb'))
+    try:
+        fcur = fconn.cursor()
+        for st in ddl_and_seed[:2]:
+            fcur.execute(st)
+        fconn.commit()
+        for st in ddl_and_seed[2:]:
+            fcur.execute(st)
+        fconn.commit()
+        fcur.execute(fb_sql)
+        fb_rows = [
+            (int(r[0]), float(r[1]), float(r[2])) for r in fcur.fetchall()
+        ]
+        fcur.close()
+        assert fb_rows == expected
+    finally:
+        fconn.close()
+
+    # 4. Read-only semi-additive query against live MySQL 9.7 if running
+    if _port_open('127.0.0.1', 53306):
+        import mysql.connector
+
+        mysql_cube = validate_model({
+            'contract_version': '1.0.0',
+            'name': 'MySQL Demo Semi-Additive',
+            'semantic_family': 'relational',
+            'sources': [{
+                'id': 'wo',
+                'resource_id': 'table:cdeadmin_demo:work_orders',
+                'kind': 'table',
+                'classification': 'fact',
+                'relation': ['cdeadmin_demo', 'work_orders'],
+                'grain': [{'source_id': 'wo', 'field': 'work_order_id'}],
+            }],
+            'dimensions': [
+                {
+                    'id': 'status',
+                    'name': 'Status',
+                    'type': 'categorical',
+                    'field': {'source_id': 'wo', 'field': 'status'},
+                },
+                {
+                    'id': 'wo_seq',
+                    'name': 'Work Order Sequence',
+                    'type': 'time',
+                    'field': {'source_id': 'wo', 'field': 'work_order_id'},
+                },
+            ],
+            'measures': [{
+                'id': 'latest_priority',
+                'name': 'Latest Priority',
+                'aggregation': 'last_non_empty',
+                'semi_additive_dimension': 'wo_seq',
+                'within_group_aggregation': 'max',
+                'field': {'source_id': 'wo', 'field': 'priority'},
+            }],
+        })
+        mq = validate_query(
+            mysql_cube,
+            {
+                'axes': {'rows': ['status']},
+                'measures': ['latest_priority'],
+                'order_by': [{'id': 'status', 'direction': 'asc'}],
+            },
+        )
+        msql = compile_sql(
+            mysql_cube,
+            mq,
+            _PORTABLE_DIALECTS['mysql'],
+        )['source']
+        mconn = mysql.connector.connect(
+            host='127.0.0.1',
+            port=53306,
+            user='cdeadmin_demo',
+            password=DEMO_PASSWORD,
+            database='cdeadmin_demo',
+            connection_timeout=5,
+        )
+        try:
+            mcur = mconn.cursor()
+            mcur.execute(msql)
+            mrows = mcur.fetchall()
+            mcur.close()
+            assert len(mrows) >= 1
+            assert any(r[0] == 'open' for r in mrows)
+        finally:
+            mconn.close()

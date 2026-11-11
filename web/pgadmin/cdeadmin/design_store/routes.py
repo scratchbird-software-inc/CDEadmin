@@ -988,11 +988,19 @@ def _register_routes(app, project_asset_service) -> None:
                 project_asset_service, uid, role_ids, project_id, 'viewer'
             )
             version = request.args.get('version', type=int)
+            locale = (request.args.get('locale') or '').strip()
 
             def _read_cube(store: DesignStore, _proc: StoreDDNProcess):
                 design = store.get_design(design_id, version=version)
                 parsed = ddn_to_semantic_model(design['version']['ddn_text'])
-                return {'design': design, 'cube': parsed}
+                out: dict[str, Any] = {'design': design, 'cube': parsed}
+                if locale:
+                    from pgadmin.cdeadmin.semantic_models import localize_model
+
+                    out['localized_model'] = localize_model(
+                        parsed['model'], locale
+                    )
+                return out
 
             return invoke(_read_cube)
 
@@ -1119,6 +1127,40 @@ def _register_routes(app, project_asset_service) -> None:
             )
 
         return invoke(_plan)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/cube/export',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def cube_export_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        if request.method == 'GET':
+            fmt = str(request.args.get('format') or 'sml')
+            version = request.args.get('version', type=int)
+            inc_ext = request.args.get(
+                'include_custom_extensions', '1'
+            ) not in ('0', 'false')
+        else:
+            body = request.get_json(silent=True) or {}
+            fmt = str(body.get('format') or 'sml')
+            ver_raw = body.get('version')
+            version = int(ver_raw) if ver_raw is not None else None
+            inc_ext = bool(body.get('include_custom_extensions', True))
+        return invoke(
+            lambda store, proc: CubeDesignSync(
+                store, proc, _semantic_service_for_app(current_app)
+            ).export_interchange(
+                design_id,
+                fmt=fmt,
+                version=version,
+                include_custom_extensions=inc_ext,
+            )
+        )
 
     @api.route(
         '/cdeadmin/api/projects/<project_id>/designs/<design_id>/bi/model',
@@ -1329,6 +1371,90 @@ def _register_routes(app, project_asset_service) -> None:
             )
 
         return invoke(_review_or_mint)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/bi/action-review',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def bi_action_review_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+        auth_header = request.headers.get('Authorization') or ''
+        bearer_tok = (
+            auth_header[7:].strip()
+            if auth_header.lower().startswith('bearer ')
+            else None
+        )
+        dev_tok = body.get('device_token') or bearer_tok
+
+        def _submit_action(store: DesignStore, proc: StoreDDNProcess):
+            from pgadmin.cdeadmin.operations import OperationBus
+
+            bus = current_app.extensions.get('cdeadmin_operation_bus')
+            if bus is None:
+                bus = OperationBus()
+                current_app.extensions['cdeadmin_operation_bus'] = bus
+            ver_raw = body.get('version')
+            return _bi_sync_for_app(
+                current_app, store, proc
+            ).prepare_action_button_review(
+                design_id,
+                action_button_id=str(body.get('action_button_id') or ''),
+                parameter_values=body.get('parameter_values'),
+                prompt_values=body.get('prompt_values'),
+                active_filters=body.get('active_filters'),
+                selected_row=body.get('selected_row'),
+                actor_id=uid,
+                actor_kind=str(body.get('actor_kind') or 'human'),
+                device_token=dev_tok,
+                version=int(ver_raw) if ver_raw is not None else None,
+                dialect=str(body.get('dialect') or 'postgresql'),
+                operation_bus=bus,
+                approvers=tuple(body.get('approvers') or ()),
+                idempotency_key=body.get('idempotency_key'),
+                dry_run=bool(body.get('dry_run', False)),
+            )
+
+        return invoke(_submit_action)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/bi/collector-panel',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def bi_collector_panel_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        if request.method == 'GET':
+            card_id = str(request.args.get('card_id') or '')
+            version = request.args.get('version', type=int)
+            now_iso = request.args.get('now_iso') or None
+        else:
+            body = request.get_json(silent=True) or {}
+            card_id = str(body.get('card_id') or '')
+            ver_raw = body.get('version')
+            version = int(ver_raw) if ver_raw is not None else None
+            now_iso = body.get('now_iso') or None
+        return invoke(
+            lambda store, proc: _bi_sync_for_app(
+                current_app, store, proc
+            ).read_collector_metric_panel(
+                design_id,
+                card_id=card_id,
+                actor_id=uid,
+                version=version,
+                app=current_app,
+                now_iso=now_iso,
+            )
+        )
 
     @api.route(
         '/cdeadmin/api/projects/<project_id>/bi/ai-draft',
