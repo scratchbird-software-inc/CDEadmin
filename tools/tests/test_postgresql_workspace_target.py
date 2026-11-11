@@ -40,6 +40,23 @@ def test_explicit_database_binding(workspace):
     assert context.cache_namespace != server.endpoint_profile.cache_namespace
 
 
+def test_system_objects_preference_has_its_own_cache(workspace):
+    service, server, _, _ = workspace
+    target = 'postgresql-database:42'
+    with patch('pgadmin.cdeadmin.providers.postgresql.provider.'
+               'PostgreSQLProvider._show_system_objects', lambda: False):
+        plain, _, _ = service.workspace(server, database_target_id=target)
+    with patch('pgadmin.cdeadmin.providers.postgresql.provider.'
+               'PostgreSQLProvider._show_system_objects', lambda: True):
+        with_system, _, _ = service.workspace(server,
+                                              database_target_id=target)
+    assert with_system.cache_namespace != plain.cache_namespace
+    assert with_system.cache_namespace == str(uuid.uuid5(
+        uuid.UUID(plain.cache_namespace), 'postgresql-system-objects'))
+    # The session is the same connection either way.
+    assert with_system.session_namespace == plain.session_namespace
+
+
 def test_server_scope_is_explicit(workspace):
     service, server, manager, _ = workspace
     _, endpoint, _ = service.workspace(server)

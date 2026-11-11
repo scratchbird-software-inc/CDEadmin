@@ -166,8 +166,15 @@ and (for tablespaces) statistics apply. Fourth slice (2026-11-11): tables,
 partitioned tables, views, materialized views and foreign tables carry a
 *Columns* group whose members come from the attribute facts the catalog capture
 already holds; each column has its identity chain, so the inherited column SQL,
-statistics and dependencies apply. System objects, replica nodes and pgAgent
-are later slices.
+statistics and dependencies apply. Fifth slice (2026-11-11): system objects
+follow the inherited *Show system objects* preference; when it is on, the
+provider capture includes them and the database branch gains the navigator's
+*sys* group (system schemas such as ``pg_catalog`` and ``information_schema``,
+casts, languages, access methods), each object inspecting as any other. Each
+state of the preference has a listing cache of its own, so turning it on or
+off takes effect on the next expansion. Unlike the inherited tree, temporary
+schemas (``pg_temp_*``) appear among the system schemas. Replica nodes and
+pgAgent are later slices.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -965,7 +965,12 @@ class PostgreSQLProvider:
             route = {key: extension[key] for key in ('server_id', 'database_id')}
             parent = {'resource_id': payload.get('parent_resource_id'),
                       'authority_path': payload.get('authority_path', [])[:-2]}
-            rows = [row for row in self._captured_resources(parent, route)
+            # A system object is only in a capture that includes them.
+            native = extension.get('native') or {}
+            include_system = (True if native.get('system_object') is True
+                              else None)
+            rows = [row for row in self._captured_resources(
+                        parent, route, include_system)
                     if row['resource_id'] == payload['resource_id']]
             if len(rows) != 1:
                 raise PostgreSQLProviderError('Selected native catalog object no longer exists')
@@ -1030,8 +1035,22 @@ class PostgreSQLProvider:
         native['inherited_inspection'] = {'states': inspected['states']}
         return resource
 
-    def _captured_resources(self, parent, route):
-        capture = self.capture_catalog(route, include_system=False)
+    @staticmethod
+    def _show_system_objects():
+        """The inherited tree's "Show system objects" preference (M3,
+        2026-11-11): the provider tree follows the same user choice. False
+        outside a user session or when the preference is unavailable."""
+        try:
+            from pgadmin.utils.preferences import Preferences
+            preference = Preferences.module('browser', create=False)
+            return bool(preference.preference('show_system_objects').get())
+        except Exception:
+            return False
+
+    def _captured_resources(self, parent, route, include_system=None):
+        if include_system is None:
+            include_system = self._show_system_objects()
+        capture = self.capture_catalog(route, include_system=include_system)
         # Legacy identity chain (parity matrix blocker 5): the schema OIDs
         # come from the captured namespaces, so the chain costs no query.
         schemas = schema_oids(capture['resources'])

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 import unittest
@@ -415,6 +416,21 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
              'node_type': None},
             resource['extensions']['postgresql']['legacy_route'])
         self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=False)
+        # The provider tree follows the inherited "Show system objects"
+        # preference (M3); a system object inspects from a capture that
+        # includes system objects whatever the preference says.
+        self.provider.capture_catalog = Mock(return_value=capture)
+        with patch.object(type(self.provider), '_show_system_objects',
+                          staticmethod(lambda: True)):
+            self.provider.list_resources(parent)
+        self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=True)
+        system = copy.deepcopy(resource)
+        system['extensions']['postgresql']['native']['system_object'] = True
+        self.provider.capture_catalog = Mock(return_value=capture)
+        with patch('flask.has_request_context', lambda: False):
+            self.provider.inspect_resource(system)
+        self.provider.capture_catalog.assert_called_once_with(
+            {'server_id': 7, 'database_id': 10}, include_system=True)
         inspected = self.provider.inspect_resource(resource)
         self.assertEqual(inspected['resource_id'], resource['resource_id'])
         self.provider.capture_catalog.return_value = {'resources': []}

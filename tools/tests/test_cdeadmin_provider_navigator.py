@@ -553,3 +553,15 @@ class ProviderNavigatorTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class KindLabelTests(unittest.TestCase):
+    def test_irregular_plurals_are_spelled(self):
+        from pgadmin.cdeadmin.navigator import kind_label
+        self.assertEqual('Operator classes', kind_label('operator-class'))
+        self.assertEqual('Operator families', kind_label('operator-family'))
+        self.assertEqual('Text search dictionaries',
+                         kind_label('text-search-dictionary'))
+        self.assertEqual('Text search parsers',
+                         kind_label('text-search-parser'))
+
