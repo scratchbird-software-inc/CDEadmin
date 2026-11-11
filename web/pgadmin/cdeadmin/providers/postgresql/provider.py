@@ -1171,6 +1171,9 @@ class PostgreSQLProvider:
             if item['resource_kind'] in {'function', 'procedure'}:
                 from .routines import facts as routine_facts
                 native['routine_facts'] = routine_facts(native)
+            if item['resource_kind'] == 'index':
+                from .indexes import facts as index_facts
+                native['index_facts'] = index_facts(native)
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)

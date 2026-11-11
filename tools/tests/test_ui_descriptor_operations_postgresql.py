@@ -1199,3 +1199,67 @@ def test_routine_lifecycle_round_trips(live):
                      "WHERE n.nspname='Fn schema'") == [(0,)]
     finally:
         query('DROP SCHEMA "Fn schema" CASCADE')
+
+
+# -- M4 (2026-11-11): index editor, provider-native, observed live --------------------------------
+def index_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.indexes import facts
+    rows = query(f"""SELECT pg_get_indexdef(c.oid), d.description
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{name}' AND c.relkind='i'""")
+    assert len(rows) == 1, (schema, name)
+    native = {'schema': schema, 'name': name, 'comment': rows[0][1], 'definition': rows[0][0],
+              'catalog_row': {'relname': name}}
+    native['index_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_index_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Ix schema"; CREATE TABLE "Ix schema".orders (id int, email text, status text, '
+          'priority int, note text)')
+    try:
+        run_kind(live, 'index', 'create', {
+            'name': 'ix one', 'schema': 'Ix schema', 'table': 'orders', 'amname': 'btree', 'indisunique': True,
+            'indnullsnotdistinct': True,
+            'columns': [{'colname': 'lower(email)', 'is_exp': True, 'collspcname': '"C"',
+                         'op_class': 'text_pattern_ops', 'sort_order': 'DESC', 'nulls': 'FIRST'},
+                        {'colname': 'status'}],
+            'include': [{'colname': 'note'}], 'fillfactor': 70, 'description': "it's"})
+        native = index_native('Ix schema', 'ix one')
+        facts = native['index_facts']
+        assert (facts['indisunique'], facts['indnullsnotdistinct'], facts['include'], native['comment']) == (
+            True, True, ['note'], "it's")
+        assert facts['columns'][0]['sort_order'] == 'DESC' and facts['columns'][0]['is_exp']
+        assert facts['storage_parameters'] == [{'name': 'fillfactor', 'value': '70'}]
+        run_kind(live, 'index', 'alter', {
+            'name': 'ix_two', 'columns': facts['columns'], 'fillfactor': 90,
+            'storage_parameters': [{'name': 'deduplicate_items', 'value': False}],
+            'indisclustered': True, 'description': ''}, native)
+        native = index_native('Ix schema', 'ix_two')
+        assert sorted(item['name'] for item in native['index_facts']['storage_parameters']) == [
+            'deduplicate_items', 'fillfactor']
+        assert native['comment'] is None
+        assert query("SELECT indisclustered FROM pg_index WHERE indexrelid='\"Ix schema\".ix_two'::regclass") == [(True,)]
+        run_kind(live, 'index', 'alter', {'reset_parameters': [{'name': 'deduplicate_items'}]}, native)
+        native = index_native('Ix schema', 'ix_two')
+        assert [item['name'] for item in native['index_facts']['storage_parameters']] == ['fillfactor']
+        # A BRIN index, which YugabyteDB refuses, and a concurrent build and drop in autocommit.
+        # The predicate goes on the BRIN index: the server refuses CLUSTER on a partial index.
+        run_kind(live, 'index', 'create', {'name': 'ix_brin', 'schema': 'Ix schema', 'table': 'orders',
+                                           'amname': 'brin', 'columns': [{'colname': 'id'}],
+                                           'storage_parameters': [{'name': 'pages_per_range', 'value': 32}],
+                                           'indconstraint': 'priority > 1'})
+        brin = index_native('Ix schema', 'ix_brin')['index_facts']
+        assert (brin['amname'], brin['indconstraint']) == ('brin', 'priority > 1')
+        run_kind(live, 'index', 'create', {'name': 'ix_conc', 'schema': 'Ix schema', 'table': 'orders',
+                                           'isconcurrent': True, 'columns': [{'colname': 'priority'}]})
+        conc = index_native('Ix schema', 'ix_conc')
+        run_kind(live, 'index', 'drop', {'confirmation': 'ix_conc', 'concurrently': True}, conc)
+        with pytest.raises(Exception):
+            run_kind(live, 'index', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'index', 'drop', {'confirmation': 'ix_two'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname IN ('ix_two', 'ix_conc')") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Ix schema" CASCADE')

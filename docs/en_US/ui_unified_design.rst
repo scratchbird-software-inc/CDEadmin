@@ -262,7 +262,15 @@ routine by its catalog identity. The alter dialog reads the current
 definition back through PostgreSQL's own parser, so its values are exact.
 C-language routines, support and window functions, privileges and security
 labels stay with the inherited dialog. A trigger function is a function
-returning ``trigger``.
+returning ``trigger``. Ninth slice (2026-11-11), the index editor: columns
+or expressions with collation, operator class, sort order and NULLs
+placement, any access method the server has (BRIN and GiST, which
+YugabyteDB refuses, included), unique, NULLs not distinct, include columns,
+fill factor and other storage parameters, tablespace, a WHERE predicate and
+comment; alter renames, moves tablespace, sets or resets storage
+parameters, clusters the table on the index and sets the comment, while the
+columns stay fixed. A concurrent build or drop runs alone outside a
+transaction. Reindex was already native.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
