@@ -29,17 +29,29 @@ MAINTENANCE_OPERATIONS = {
     # the inherited server menu's reload, restore point and WAL replay control.
     'server': frozenset({'reload', 'restore-point', 'wal-replay-pause',
                          'wal-replay-resume'}),
+    # Role and tablespace operations that act inside one database (M6,
+    # 2026-11-11): the dialog picks the database; the plan's route runs there.
+    'role': frozenset({'reassign-owned', 'drop-owned'}),
+    'tablespace': frozenset({'move-objects'}),
 }
+#: Operations whose database comes from the dialog's `database` reference.
+DATABASE_PICKED = frozenset({('role', 'reassign-owned'), ('role', 'drop-owned'),
+                             ('tablespace', 'move-objects')})
+_DATABASE_REFERENCE = __import__('re').compile(r'postgresql:pg_database/([1-9][0-9]{0,9})')
+MOVE_OBJECT_TYPES = {'all': ('TABLE', 'INDEX', 'MATERIALIZED VIEW'), 'tables': ('TABLE',),
+                     'indexes': ('INDEX',), 'materialized-views': ('MATERIALIZED VIEW',)}
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).
 CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
     ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
+    ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
     'truncate': 'destructive', 'refresh': 'admin',
     'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
     'wal-replay-resume': 'admin',
+    'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
 }
 
 _OPTIONS = {
@@ -60,6 +72,9 @@ _OPTIONS = {
     ('server', 'restore-point'): {'name'},
     ('server', 'wal-replay-pause'): set(),
     ('server', 'wal-replay-resume'): set(),
+    ('role', 'reassign-owned'): {'database', 'new_owner'},
+    ('role', 'drop-owned'): {'database', 'cascade', 'confirmation'},
+    ('tablespace', 'move-objects'): {'database', 'object_type', 'new_tablespace', 'owner'},
 }
 _RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
@@ -119,6 +134,8 @@ def compile_operation(kind, operation, native, draft):
     autocommit = False
     if kind == 'server':
         return _server_operation(operation, draft)
+    if key in DATABASE_PICKED:
+        return _database_picked_operation(kind, operation, native, draft)
     if kind in {'schema', 'database'}:
         target = _identifier(_name(native.get('name'), 'name'), 'name')
     else:
@@ -177,6 +194,51 @@ def compile_operation(kind, operation, native, draft):
     }
 
 
+def database_reference_oid(value):
+    """The pg_database OID a dialog's database reference names."""
+    match = _DATABASE_REFERENCE.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        _refuse('choose the database the operation runs in')
+    return int(match.group(1))
+
+
+def _database_picked_operation(kind, operation, native, draft):
+    """REASSIGN OWNED, DROP OWNED and ALTER ... ALL IN TABLESPACE: one
+    transaction in the database the dialog picked (plan route), on the
+    objects of that database only."""
+    from .native_admin import _identifier, _name
+    database_reference_oid(draft.get('database'))
+    name = _name(native.get('name'), 'name')
+    target = _identifier(name, 'name')
+    options = []
+    if operation == 'reassign-owned':
+        new_owner = _identifier(_name(draft.get('new_owner'), 'new_owner'), 'new_owner')
+        statement = f'REASSIGN OWNED BY {target} TO {new_owner}'
+    elif operation == 'drop-owned':
+        if _name(draft.get('confirmation'), 'confirmation') != name:
+            _refuse('drop confirmation does not match object name')
+        cascade = _flag(draft, 'cascade')
+        options = ['CASCADE'] if cascade else []
+        statement = f'DROP OWNED BY {target}' + (' CASCADE' if cascade else ' RESTRICT')
+    else:
+        object_type = draft.get('object_type', 'all')
+        if object_type not in MOVE_OBJECT_TYPES:
+            _refuse('object_type must be one of ' + ', '.join(sorted(MOVE_OBJECT_TYPES)))
+        new_tablespace = _identifier(_name(draft.get('new_tablespace'), 'new_tablespace'), 'new_tablespace')
+        if draft.get('new_tablespace') == name:
+            _refuse('choose a different tablespace to move the objects to')
+        owner = draft.get('owner')
+        owned = '' if owner in (None, '') else ' OWNED BY ' + _identifier(_name(owner, 'owner'), 'owner')
+        options = [object_type]
+        statement = ';\n'.join(f'ALTER {word} ALL IN TABLESPACE {target}{owned} SET TABLESPACE {new_tablespace}'
+                                for word in MOVE_OBJECT_TYPES[object_type])
+    return {
+        'statement': statement, 'read_only': False, 'autocommit': False,
+        'maintenance': {'action': operation, 'object_kind': kind, 'object': name,
+                        'options': options, 'transaction_mode': 'transaction'},
+    }
+
+
 def _server_operation(operation, draft):
     """One server-wide function call; the result row is the receipt."""
     from .native_admin import _literal
@@ -229,10 +291,30 @@ def form(kind, operation, field):
     elif operation == 'restore-point':
         fields = [field('name', 'Restore point name', required=True,
                         help='Recorded in the WAL; a recovery_target_name for point-in-time recovery.')]
+    database = field('database', 'Database', 'reference', required=True, reference_kind='database',
+                     reference_value='resource_id', help='Only the objects of this database are affected.')
+    if operation == 'reassign-owned':
+        fields = [database, field('new_owner', 'New owner', 'reference', required=True, reference_kind='role')]
+    elif operation == 'drop-owned':
+        fields = [database, boolean('cascade', 'Cascade to dependent objects'),
+                  field('confirmation', 'Type the role name to confirm', required=True)]
+    elif operation == 'move-objects':
+        fields = [database,
+                  field('object_type', 'Objects to move', 'select', default='all', options=[
+                      {'value': 'all', 'label': 'Tables, indexes and materialized views'},
+                      {'value': 'tables', 'label': 'Tables'}, {'value': 'indexes', 'label': 'Indexes'},
+                      {'value': 'materialized-views', 'label': 'Materialized views'}]),
+                  field('new_tablespace', 'New tablespace', 'reference', required=True, reference_kind='tablespace'),
+                  field('owner', 'Only objects owned by', 'reference', reference_kind='role',
+                        help='Leave empty to move every object in the tablespace.')]
     titles = {'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
               'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
               'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
-              'wal-replay-resume': 'Resume WAL replay'}
+              'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',
+              'drop-owned': 'Drop owned objects', 'move-objects': 'Move objects to another tablespace'}
+    if kind in {'role', 'tablespace'}:
+        return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:server:{kind}',
+                'title': titles[operation], 'fields': fields}
     if kind == 'server':
         return {'form_id': f'postgresql-server-{operation}', 'form_key': 'native:postgresql:server:server',
                 'title': titles[operation], 'fields': fields}

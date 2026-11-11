@@ -390,6 +390,19 @@ Observed live on PostgreSQL 18.3: dead tuples cleared at both scopes,
 statistics recorded for the materialized view, and a held session
 terminated by the forced drop.
 
+M6 third slice (2026-11-11), role and tablespace operations that act
+inside one database: reassign owned objects and drop owned objects on a
+role, and move objects to another tablespace (tables, indexes,
+materialized views or all three, optionally only those owned by one role)
+on a tablespace. These objects live at server scope while the statements
+act on one database's objects, so the dialog picks the database from a
+reference field and the plan's route runs in that database; the node's
+own route is not used, matching the inherited dialogs' database choice.
+Drop owned takes a typed-name confirmation and is destructive; the other
+two confirm. Observed live on PostgreSQL 18.3: table ownership moved
+between two roles, the dropped-owned role's objects gone, and indexes
+then every relation moved from a scratch tablespace to pg_default.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

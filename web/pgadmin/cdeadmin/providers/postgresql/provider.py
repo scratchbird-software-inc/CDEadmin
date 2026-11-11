@@ -410,6 +410,18 @@ class PostgreSQLProvider:
             # (M6): it always runs from the server scope attachment.
             return {'server_id': _required_int(route, 'server_id'),
                     'database_id': None}
+        from .maintenance import DATABASE_PICKED, database_reference_oid
+        if (kind, request.get('operation_id')) in DATABASE_PICKED:
+            # The dialog picks the database these run in (M6).
+            draft = request.get('draft') or {}
+            try:
+                picked = database_reference_oid(
+                    draft.get('database') if isinstance(draft, Mapping)
+                    else None)
+            except Exception as exc:
+                raise PostgreSQLProviderError(str(exc)) from exc
+            return {'server_id': _required_int(route, 'server_id'),
+                    'database_id': picked}
         return {
             'server_id': _required_int(route, 'server_id'),
             'database_id': (route.get('database_id') if optional and

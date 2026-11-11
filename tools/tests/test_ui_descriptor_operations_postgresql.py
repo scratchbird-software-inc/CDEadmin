@@ -59,7 +59,8 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'vacuum@table', 'analyze@table', 'reindex@table', 'cluster@table', 'truncate@table',
           'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
           'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
-          'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database'}
+          'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database',
+          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -173,6 +174,51 @@ def test_database_drop_compiles_with_force_from_the_server_scope():
         == {'server_id': 3, 'database_id': 9}
     fields = provider_form_fields('drop', 'database')
     assert fields['confirmation']['required'] and not fields['force']['required']
+
+
+def test_database_picked_operations_compile_and_route_to_the_picked_database():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider, PostgreSQLProviderError
+    db = 'postgresql:pg_database/16384'
+    role = {'name': 'r"1'}
+    assert compile_maintenance('role', 'reassign-owned', role, {'database': db, 'new_owner': 'o;2'}) == {
+        'statement': 'REASSIGN OWNED BY "r""1" TO "o;2"', 'read_only': False, 'autocommit': False,
+        'maintenance': {'action': 'reassign-owned', 'object_kind': 'role', 'object': 'r"1', 'options': [],
+                        'transaction_mode': 'transaction'}}
+    assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1'})['statement'] == \
+        'DROP OWNED BY "r""1" RESTRICT'
+    assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1', 'cascade': True})[
+        'statement'] == 'DROP OWNED BY "r""1" CASCADE'
+    space = {'name': 'old'}
+    assert compile_maintenance('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'new'})[
+        'statement'] == ('ALTER TABLE ALL IN TABLESPACE "old" SET TABLESPACE "new";\n'
+                         'ALTER INDEX ALL IN TABLESPACE "old" SET TABLESPACE "new";\n'
+                         'ALTER MATERIALIZED VIEW ALL IN TABLESPACE "old" SET TABLESPACE "new"')
+    assert compile_maintenance('tablespace', 'move-objects', space, {
+        'database': db, 'new_tablespace': 'new', 'object_type': 'indexes', 'owner': 'app'})['statement'] == \
+        'ALTER INDEX ALL IN TABLESPACE "old" OWNED BY "app" SET TABLESPACE "new"'
+    for kind, op, native, draft in [
+            ('role', 'reassign-owned', role, {'new_owner': 'x'}),                       # no database picked
+            ('role', 'reassign-owned', role, {'database': 'pg_database/1', 'new_owner': 'x'}),
+            ('role', 'reassign-owned', role, {'database': db}),                         # no new owner
+            ('role', 'drop-owned', role, {'database': db, 'confirmation': 'other'}),
+            ('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'old'}),
+            ('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'new', 'object_type': 'views'})]:
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance(kind, op, native, draft)
+    # The plan's route runs in the picked database, whatever the node's route carried.
+    assert PostgreSQLProvider._native_admin_route({
+        'resource_kind': 'role', 'operation_id': 'reassign-owned', '_provider_route': {'server_id': 2},
+        'draft': {'database': db}}) == {'server_id': 2, 'database_id': 16384}
+    with pytest.raises(PostgreSQLProviderError):
+        PostgreSQLProvider._native_admin_route({'resource_kind': 'tablespace', 'operation_id': 'move-objects',
+                                                '_provider_route': {'server_id': 2}, 'draft': {}})
+    for op, kind in (('reassign-owned', 'role'), ('drop-owned', 'role'), ('move-objects', 'tablespace')):
+        fields = provider_form_fields(op, kind)
+        assert fields['database'] == {
+            'field_id': 'database', 'label': 'Database', 'control': 'reference', 'required': True,
+            'reference_kind': 'database', 'reference_value': 'resource_id',
+            'help': 'Only the objects of this database are affected.'}, op
 
 
 def test_server_operations_compile_without_a_target():
@@ -2016,3 +2062,78 @@ def test_database_drop_with_force_terminates_sessions(live):
     finally:
         held.close()
         query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)', database=SETTINGS.get('database', 'postgres'))
+
+
+# -- M6 (2026-11-11): role REASSIGN/DROP OWNED and tablespace move, database picked in the dialog --
+def run_picked(live, kind, operation_id, native, values, confirmation=None):
+    provider, route = live
+    operation = OPERATIONS[f'{operation_id}@{kind}']
+    draft = operation_draft(operation, values, confirmation=confirmation)
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': target(None, kind, native),
+               '_provider_route': {'server_id': route['server_id']}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] is True, plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    outcome = result['provider_result']
+    assert outcome['transaction_outcome'] == 'committed', outcome
+    return plan, outcome
+
+
+@live_only
+def test_reassign_and_drop_owned_act_in_the_picked_database(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('REASSIGN OWNED needs a superuser or membership in both roles')
+    provider, route = live
+    picked = f"postgresql:pg_database/{route['database_id']}"
+    old, new = f'ui_ops_old_{UNIQUE}', f'ui_ops_new_{UNIQUE}'
+    query(f'CREATE ROLE {old}; CREATE ROLE {new}')
+    try:
+        query(f'CREATE TABLE public.m_own (id int); ALTER TABLE public.m_own OWNER TO {old}')
+        query(f'CREATE SEQUENCE public.m_own_seq; ALTER SEQUENCE public.m_own_seq OWNER TO {new}')
+        plan, outcome = run_picked(live, 'role', 'reassign-owned', role_native(old), {'database': picked, 'new_owner': new})
+        assert plan['command_preview']['statement'] == f'REASSIGN OWNED BY "{old}" TO "{new}"'
+        assert one("SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid='public.m_own'::regclass") == new
+        plan, outcome = run_picked(live, 'role', 'drop-owned', role_native(new), {'database': picked},
+                                   confirmation=new)
+        assert plan['command_preview']['statement'] == f'DROP OWNED BY "{new}" RESTRICT'
+        assert one("SELECT count(*) FROM pg_class WHERE relname IN ('m_own', 'm_own_seq')") == 0
+        # The picked database is the plan's route, not the node's server-scope route.
+        assert plan['provider_payload']['route']['database_id'] == route['database_id'] if 'provider_payload' in plan \
+            else True
+    finally:
+        query('DROP TABLE IF EXISTS public.m_own; DROP SEQUENCE IF EXISTS public.m_own_seq')
+        query(f'DROP OWNED BY {old}, {new}; DROP ROLE {old}; DROP ROLE {new}')
+
+
+@live_only
+def test_move_objects_between_tablespaces(live):
+    directory = SETTINGS.get('tablespace_dir')
+    if not directory:
+        pytest.skip('tablespace_dir (a server-host directory owned by the server user) is not set')
+    provider, route = live
+    picked = f"postgresql:pg_database/{route['database_id']}"
+    name = f'ui_ops_mv_{UNIQUE}'
+    query(f'CREATE TABLESPACE "{name}" LOCATION \'{directory}\'', database=SETTINGS.get('database', 'postgres'))
+    try:
+        query(f'CREATE TABLE public.m_move (id int PRIMARY KEY USING INDEX TABLESPACE "{name}") TABLESPACE "{name}"')
+        query(f'CREATE INDEX m_move_ix ON public.m_move (id) TABLESPACE "{name}"')
+        spaces = lambda: dict(query("SELECT c.relname, coalesce(t.spcname, 'pg_default') FROM pg_class c "
+                                    "LEFT JOIN pg_tablespace t ON t.oid=c.reltablespace "
+                                    "WHERE c.relname IN ('m_move', 'm_move_ix', 'm_move_pkey')"))
+        assert set(spaces().values()) == {name}
+        plan, outcome = run_picked(live, 'tablespace', 'move-objects', tablespace_native(name),
+                                   {'database': picked, 'new_tablespace': 'pg_default', 'object_type': 'indexes'})
+        assert plan['command_preview']['statement'] == \
+            f'ALTER INDEX ALL IN TABLESPACE "{name}" SET TABLESPACE "pg_default"'
+        assert spaces() == {'m_move': name, 'm_move_ix': 'pg_default', 'm_move_pkey': 'pg_default'}
+        plan, outcome = run_picked(live, 'tablespace', 'move-objects', tablespace_native(name),
+                                   {'database': picked, 'new_tablespace': 'pg_default'})
+        assert outcome['maintenance_receipt']['options'] == ['all']
+        assert set(spaces().values()) == {'pg_default'}
+    finally:
+        query('DROP TABLE IF EXISTS public.m_move')
+        query(f'DROP TABLESPACE IF EXISTS "{name}"', database=SETTINGS.get('database', 'postgres'))

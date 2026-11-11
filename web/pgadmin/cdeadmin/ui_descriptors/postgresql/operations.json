@@ -618,6 +618,131 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database."
+    },
+    {
+      "operation_id": "reassign-owned",
+      "resource_kind": "role",
+      "title": "Reassign owned objects",
+      "menu": {
+        "category": "security",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "new_owner",
+          "label": "New owner",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "role"
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did."
+    },
+    {
+      "operation_id": "drop-owned",
+      "resource_kind": "role",
+      "title": "Drop owned objects",
+      "menu": {
+        "category": "security",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade to dependent objects",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. Also revokes the role's privileges in that database."
+    },
+    {
+      "operation_id": "move-objects",
+      "resource_kind": "tablespace",
+      "title": "Move objects to another tablespace",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Objects to move",
+          "control": "select",
+          "required": false,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "Tables, indexes and materialized views"
+            },
+            {
+              "value": "tables",
+              "label": "Tables"
+            },
+            {
+              "value": "indexes",
+              "label": "Indexes"
+            },
+            {
+              "value": "materialized-views",
+              "label": "Materialized views"
+            }
+          ]
+        },
+        {
+          "field_id": "new_tablespace",
+          "label": "New tablespace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "tablespace"
+        },
+        {
+          "field_id": "owner",
+          "label": "Only objects owned by",
+          "control": "reference",
+          "required": false,
+          "reference_kind": "role",
+          "help": "Leave empty to move every object in the tablespace."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. ALTER TABLE/INDEX/MATERIALIZED VIEW ALL IN TABLESPACE ... SET TABLESPACE, one transaction; it takes an exclusive lock on each moved relation. Live check uses tablespace_dir."
     }
   ]
 }
