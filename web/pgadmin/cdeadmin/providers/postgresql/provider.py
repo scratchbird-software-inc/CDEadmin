@@ -1116,6 +1116,20 @@ class PostgreSQLProvider:
                                               r['display_name'])
                      for r in capture['resources']
                      if (r.get('native') or {}).get('catalog') == 'pg_class'}
+        # Domain constraints and composite attributes for the type editors.
+        domain_constraints, attributes = {}, {}
+        for r in capture['resources']:
+            n = r.get('native') or {}
+            if n.get('catalog') == 'pg_constraint':
+                owner = (n.get('catalog_row') or {}).get('contypid')
+                if owner not in (None, '0', 0):
+                    domain_constraints.setdefault(int(owner), []).append(
+                        {'name': r['display_name'],
+                         'definition': n.get('definition'),
+                         'catalog_row': n.get('catalog_row')})
+            if n.get('catalog') == 'pg_class':
+                attributes[int(n['oid'])] = (
+                    n.get('children') or {}).get('pg_attribute') or []
         # Array and relation row types stay out, as on the inherited tree.
         hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
@@ -1144,6 +1158,13 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'policy':
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] == 'domain':
+                from .types import domain_facts
+                native['domain_facts'] = domain_facts(
+                    native, domain_constraints)
+            if item['resource_kind'] == 'type':
+                from .types import type_facts
+                native['type_facts'] = type_facts(native, attributes)
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)

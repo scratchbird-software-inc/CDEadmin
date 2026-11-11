@@ -944,3 +944,125 @@ def test_database_create_and_alter_round_trip(live):
         query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
         query(f'DROP DATABASE IF EXISTS "{name}_r" WITH (FORCE)')
         query(f'DROP ROLE {owner}; DROP ROLE {reader}')
+
+
+# -- M4 (2026-11-11): domain and type editors, provider-native, observed live ---------------------
+def run_kind(live, kind, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, kind, native) if native else None
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (kind, operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+def domain_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.types import domain_facts
+    rows = query(f"""SELECT t.oid::int, t.typnotnull, t.typdefault, d.description
+                     FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_type'::regclass
+                     WHERE n.nspname='{schema}' AND t.typname='{name}' AND t.typtype='d'""")
+    assert len(rows) == 1, (schema, name)
+    oid, notnull, default, comment = rows[0]
+    checks = query(f"""SELECT conname, pg_get_constraintdef(oid), convalidated FROM pg_constraint
+                       WHERE contypid={oid} AND contype='c' ORDER BY conname""")
+    native = {'schema': schema, 'name': name, 'oid': oid, 'comment': comment,
+              'catalog_row': {'typname': name, 'typtype': 'd', 'typnotnull': notnull, 'typdefault': default}}
+    native['domain_facts'] = domain_facts(native, {oid: [
+        {'name': c[0], 'definition': c[1], 'catalog_row': {'convalidated': c[2]}} for c in checks]})
+    return native
+
+
+def type_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.types import type_facts
+    rows = query(f"""SELECT t.oid::int, t.typtype, t.typrelid::int, d.description
+                     FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_type'::regclass
+                     WHERE n.nspname='{schema}' AND t.typname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    oid, typtype, relid, comment = rows[0]
+    labels = query(f'SELECT enumlabel, enumsortorder FROM pg_enum WHERE enumtypid={oid}')
+    attributes = query(f"""SELECT attname, format_type(atttypid, atttypmod), attisdropped FROM pg_attribute
+                           WHERE attrelid={relid} AND attnum > 0 ORDER BY attnum""") if relid else []
+    native = {'schema': schema, 'name': name, 'oid': oid, 'comment': comment,
+              'catalog_row': {'typname': name, 'typtype': typtype, 'typrelid': str(relid)},
+              'children': {'pg_enum': [{'enumlabel': l, 'enumsortorder': o} for l, o in labels]}}
+    native['type_facts'] = type_facts(native, {relid: [
+        {'attname': a, 'formatted_type': t, 'attisdropped': d} for a, t, d in attributes]})
+    return native
+
+
+@live_only
+def test_domain_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Dom schema"')
+    try:
+        run_kind(live, 'domain', 'create', {
+            'name': 'pos code', 'basensp': 'Dom schema', 'basetype': 'varchar(10)', 'collname': '"C"',
+            'typdefault': "'x'", 'typnotnull': True, 'description': "it's",
+            'constraints': [{'conname': 'not blank', 'consrc': "VALUE <> ''", 'convalidated': False}]})
+        native = domain_native('Dom schema', 'pos code')
+        facts = native['domain_facts']
+        assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (True, "'x'::character varying", "it's")
+        assert facts['constraints'] == [{'conname': 'not blank', 'consrc': "((VALUE)::text <> ''::text)",
+                                         'convalidated': False}]
+        plan = run_kind(live, 'domain', 'alter', {
+            'name': 'code', 'basensp': 'Dom schema', 'typnotnull': False, 'typdefault': '',
+            'description': '', 'validate_constraints': [{'conname': 'not blank'}],
+            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}]}, native)
+        assert 'SET SCHEMA' not in plan['command_preview']['statement']
+        native = domain_native('Dom schema', 'code')
+        facts = native['domain_facts']
+        assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (False, None, None)
+        assert [(c['conname'], c['convalidated']) for c in facts['constraints']] == [
+            ('not blank', True), ('short', True)]
+        run_kind(live, 'domain', 'drop', {'confirmation': 'code', 'cascade': False}, native)
+        assert query("SELECT count(*) FROM pg_type WHERE typname='code'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Dom schema" CASCADE')
+
+
+@live_only
+def test_type_lifecycle_round_trips(live):
+    query('CREATE SCHEMA typ_schema')
+    try:
+        run_kind(live, 'type', 'create', {'name': 'mood', 'schema': 'typ_schema', 'typtype': 'e',
+                                         'enum': [{'label': 'sad'}, {'label': 'ok'}], 'description': 'how'})
+        native = type_native('typ_schema', 'mood')
+        assert [item['label'] for item in native['type_facts']['enum']] == ['sad', 'ok']
+        # Enum: rename and add values (ADD VALUE commits with the transaction in PostgreSQL 12+).
+        run_kind(live, 'type', 'alter', {
+            'rename_values': [{'from': 'ok', 'to': 'fine'}],
+            'add_values': [{'label': 'great', 'after': 'fine'}, {'label': 'awful', 'before': 'sad'}],
+            'description': '', 'name': 'feeling'}, native)
+        native = type_native('typ_schema', 'feeling')
+        assert [item['label'] for item in sorted(native['type_facts']['enum'], key=lambda i: i['label'])] == \
+            ['awful', 'fine', 'great', 'sad']
+        assert query("SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid "
+                     "WHERE t.typname='feeling' ORDER BY enumsortorder") == [('awful',), ('sad',), ('fine',), ('great',)]
+        run_kind(live, 'type', 'create', {'name': 'addr', 'schema': 'typ_schema', 'typtype': 'c',
+                                         'composite': [{'member_name': 'street', 'type': 'text'},
+                                                       {'member_name': 'zip', 'type': 'varchar(10)'}]})
+        native = type_native('typ_schema', 'addr')
+        run_kind(live, 'type', 'alter', {
+            'drop_attributes': [{'member_name': 'zip'}],
+            'rename_attributes': [{'member_name': 'street', 'to': 'road'}],
+            'alter_attributes': [{'member_name': 'road', 'type': 'varchar(80)'}],
+            'add_attributes': [{'member_name': 'city', 'type': 'text'}]}, native)
+        native = type_native('typ_schema', 'addr')
+        assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(80)'},
+                                                     {'member_name': 'city', 'type': 'text'}]
+        run_kind(live, 'type', 'create', {'name': 'floatrange', 'schema': 'typ_schema', 'typtype': 'r',
+                                         'typname': 'float8', 'rngsubdiff': 'float8mi'})
+        assert query("SELECT count(*) FROM pg_range r JOIN pg_type t ON t.oid=r.rngtypid WHERE t.typname='floatrange'") == [(1,)]
+        with pytest.raises(Exception):
+            run_kind(live, 'type', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'type', 'drop', {'confirmation': 'addr'}, native)
+        assert query("SELECT count(*) FROM pg_type WHERE typname='addr'") == [(0,)]
+    finally:
+        query('DROP SCHEMA typ_schema CASCADE')

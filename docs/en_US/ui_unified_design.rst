@@ -231,7 +231,17 @@ statement outside a transaction, as PostgreSQL requires, with owner,
 template, encoding, locale provider and locales, tablespace, connection
 limit and the allow-connections and template flags; alter renames, changes
 the owner, limit, flags, comment and privileges in one transaction, and a
-tablespace change runs alone. Drop stays with the inherited dialog.
+tablespace change runs alone. Drop stays with the inherited dialog. Sixth
+slice (2026-11-11), the domain and type editors: a domain is created from a
+base type with collation, default, NOT NULL, check constraints, owner and
+comment, and altered through rename, owner, NOT NULL, default, added,
+dropped and validated constraints, comment and schema; a composite,
+enumeration or range type is created with owner and comment, and altered
+through owner, comment, rename, schema, enumeration values added (before or
+after a value) or renamed, and composite attributes added, dropped,
+renamed or retyped. External and shell types, type privileges and security
+labels stay with the inherited dialog. Type names are admitted by
+PostgreSQL's own parser and spelled canonically.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
