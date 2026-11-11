@@ -197,6 +197,9 @@ relation row types as the inherited node does (row types return when system
 objects are shown); and the identity chain carries the foreign-data-wrapper
 id, so foreign servers and user mappings inspect with the inherited SQL
 (password literals redacted) and dependencies instead of reporting the gap.
+The inspector's *Statistics* section shows several inherited rows (a pgAgent
+run log, per-index counters) as one table with the rows' keys as columns;
+one object's statistics stay a name and value grid.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

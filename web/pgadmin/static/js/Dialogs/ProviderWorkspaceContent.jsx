@@ -697,6 +697,42 @@ NativePropertyValue.propTypes = {
   compact: PropTypes.bool,
 };
 
+function isRowList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((row) =>
+    row && typeof row === 'object' && !Array.isArray(row));
+}
+
+/* Several statistics rows (a pgAgent run log, per-index counters) read as
+ * one table with the rows' keys as columns rather than as a numbered list
+ * of property grids (M3 follow-up, 2026-11-11). Keys appear in the order
+ * the provider sent them, union across rows. */
+function RowsTable({rows, label}) {
+  const columns = [];
+  rows.forEach((row) => Object.keys(row).forEach((key) => {
+    if (!columns.includes(key)) columns.push(key);
+  }));
+  const cell = {p: 0.75, overflowWrap: 'anywhere', borderRight: 1,
+    borderBottom: 1, borderColor: 'divider', whiteSpace: 'nowrap'};
+  return <Box sx={{overflowX: 'auto'}}>
+    <Box role="table" aria-label={label}
+      sx={{display: 'grid', minWidth: 'max-content',
+        gridTemplateColumns: `repeat(${columns.length}, minmax(80px, auto))`,
+        borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
+      {columns.map((name) => <Box key={name} role="columnheader"
+        sx={{...cell, fontWeight: 600}}>{name.replaceAll('_', ' ')}</Box>)}
+      {rows.map((row, index) => columns.map((name) =>
+        <Box key={`${index}:${name}`} role="cell" sx={cell}>
+          <NativePropertyValue value={row[name]} depth={2} compact />
+        </Box>))}
+    </Box>
+  </Box>;
+}
+
+RowsTable.propTypes = {
+  rows: PropTypes.arrayOf(PropTypes.object).isRequired,
+  label: PropTypes.string,
+};
+
 export function ObjectInspectorSection({resource, descriptor, loading,
   tabbed=false, containedScroll=true, onRefresh, onOperation, initialSection, selectedMember}) {
   const sections = inspectorSections(resource, descriptor);
@@ -760,9 +796,12 @@ export function ObjectInspectorSection({resource, descriptor, loading,
               {item.title}
             </Button>)}
         </Box>}
-      <NativePropertyValue compact={!containedScroll} value={sectionPayload(
-        section, resource, descriptor
-      )} />
+      {(() => {
+        const payload = sectionPayload(section, resource, descriptor);
+        return section === 'statistics' && isRowList(payload) ?
+          <RowsTable rows={payload} label={gettext('Statistics rows')} /> :
+          <NativePropertyValue compact={!containedScroll} value={payload} />;
+      })()}
     </Box>
   </Box>;
 }
