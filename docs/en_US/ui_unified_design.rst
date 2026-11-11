@@ -211,7 +211,10 @@ persistence, owned-by table and column, privileges, security labels); alter
 emits only the clauses that differ from the captured facts, grants are
 additive with an explicit revoke list, and drop needs the typed name.
 Inspection of a sequence stays the provider tree's own. The inherited
-dialog remains reachable through the inherited tree.
+dialog remains reachable through the inherited tree. Second slice
+(2026-11-11), the extension editor on the same route: create with schema,
+version, CASCADE and comment; alter updates to a version, moves relocatable
+extensions between schemas and sets the comment; drop needs the typed name.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

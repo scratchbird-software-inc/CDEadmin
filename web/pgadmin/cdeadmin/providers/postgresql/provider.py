@@ -1126,6 +1126,9 @@ class PostgreSQLProvider:
                 # The alter dialog's initial values (M4, 2026-11-11).
                 from .sequences import facts as sequence_facts
                 native['sequence_facts'] = sequence_facts(native)
+            if item['resource_kind'] == 'extension':
+                from .extensions import facts as extension_facts
+                native['extension_facts'] = extension_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',

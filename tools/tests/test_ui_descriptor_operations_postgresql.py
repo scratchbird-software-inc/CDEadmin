@@ -687,3 +687,57 @@ def test_sequence_lifecycle_round_trips(live, sequence_reader):
         run_sequence(live, 'drop', {'confirmation': 'other', 'cascade': False}, native)
     run_sequence(live, 'drop', {'confirmation': 'ticket_number', 'cascade': False}, native)
     assert query("SELECT count(*) FROM pg_class WHERE relname='ticket_number'") == [(0,)]
+
+
+# -- M4 (2026-11-11): the extension editor's lifecycle, provider-native, observed live -----------
+def extension_native(name):
+    rows = query(f"""SELECT n.nspname, x.extversion, x.extrelocatable, d.description
+                     FROM pg_extension x JOIN pg_namespace n ON n.oid=x.extnamespace
+                     LEFT JOIN pg_description d ON d.objoid=x.oid AND d.classoid='pg_extension'::regclass
+                     WHERE x.extname='{name}'""")
+    assert len(rows) == 1, name
+    schema, version, relocatable, comment = rows[0]
+    return {'schema': schema, 'name': name, 'comment': comment,
+            'catalog_row': {'extname': name, 'extversion': version, 'extrelocatable': relocatable}}
+
+
+def run_extension(live, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, 'extension', native) if native else None
+    request = {'resource_kind': 'extension', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation_id == 'drop'), plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+@live_only
+def test_extension_lifecycle_round_trips(live):
+    if not query("SELECT 1 FROM pg_available_extensions WHERE name='pg_trgm'"):
+        pytest.skip('pg_trgm is not available on this server')
+    query('CREATE SCHEMA "Ext schema"; CREATE SCHEMA ext_moved')
+    try:
+        plan = run_extension(live, 'create', {'name': 'pg_trgm', 'schema': 'Ext schema', 'cascade': False,
+                                              'comment': "it's"})
+        assert plan['command_preview']['statement'].startswith(
+            'CREATE EXTENSION "pg_trgm" WITH SCHEMA "Ext schema"')
+        native = extension_native('pg_trgm')
+        assert (native['schema'], native['comment']) == ('Ext schema', "it's")
+        # Alter: only the schema and comment differ; the version stays (no UPDATE TO in the plan).
+        plan = run_extension(live, 'alter', {'schema': 'ext_moved', 'version': native['catalog_row']['extversion'],
+                                             'comment': ''}, native)
+        assert 'UPDATE TO' not in plan['command_preview']['statement']
+        native = extension_native('pg_trgm')
+        assert (native['schema'], native['comment']) == ('ext_moved', None)
+        with pytest.raises(Exception):
+            run_extension(live, 'drop', {'confirmation': 'other', 'cascade': False}, native)
+        run_extension(live, 'drop', {'confirmation': 'pg_trgm', 'cascade': False}, native)
+        assert query("SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == [(0,)]
+    finally:
+        query('DROP EXTENSION IF EXISTS pg_trgm; DROP SCHEMA "Ext schema" CASCADE; DROP SCHEMA ext_moved CASCADE')

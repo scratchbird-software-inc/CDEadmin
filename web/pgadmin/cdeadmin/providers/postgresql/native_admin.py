@@ -20,8 +20,8 @@ from .preserved_surface import administration_operations
 POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
-    # M4 (2026-11-11): the first object-family editor on the provider tree.
-    'sequence',
+    # M4 (2026-11-11): object-family editors on the provider tree.
+    'sequence', 'extension',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -323,6 +323,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind == 'sequence':
         from .sequences import compile_operation as compile_sequence
         return compile_sequence(operation, native, draft)
+    if kind == 'extension':
+        from .extensions import compile_operation as compile_extension
+        return compile_extension(operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':
