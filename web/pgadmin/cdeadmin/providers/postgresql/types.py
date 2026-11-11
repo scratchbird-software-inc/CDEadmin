@@ -168,6 +168,11 @@ def _alter_domain(native, draft):
                      'validated constraints'):
         statements.append(f'ALTER DOMAIN {qualified} VALIDATE CONSTRAINT '
                           + _identifier(row.get('conname'), 'constraint'))
+    for row in _rows(draft, 'rename_constraints', 'renamed constraints'):
+        # The inherited domain-constraint node's own edit (M5 review).
+        statements.append(f'ALTER DOMAIN {qualified} RENAME CONSTRAINT '
+                          + _identifier(row.get('conname'), 'constraint')
+                          + ' TO ' + _identifier(row.get('to'), 'new name'))
     for row in _rows(draft, 'add_constraints', 'added constraints'):
         statements.append(_check(qualified, row))
     if 'description' in draft and (draft['description'] or None) != (
@@ -423,7 +428,10 @@ def domain_form(operation, field):
                   _grid(field, 'drop_constraints', 'Drop constraints',
                         name_column),
                   _grid(field, 'validate_constraints',
-                        'Validate constraints', name_column)]
+                        'Validate constraints', name_column),
+                  _grid(field, 'rename_constraints', 'Rename constraints',
+                        name_column + [_column('to', 'New name',
+                                               required=True)])]
     return {'form_id': f'postgresql-domain-{operation}',
             'form_key': 'native:postgresql:schema:domain',
             'title': f'{operation.title()} domain', 'fields': fields}

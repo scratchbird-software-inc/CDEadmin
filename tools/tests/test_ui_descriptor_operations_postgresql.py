@@ -1014,13 +1014,14 @@ def test_domain_lifecycle_round_trips(live):
         plan = run_kind(live, 'domain', 'alter', {
             'name': 'code', 'basensp': 'Dom schema', 'typnotnull': False, 'typdefault': '',
             'description': '', 'validate_constraints': [{'conname': 'not blank'}],
-            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}]}, native)
+            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}],
+            'rename_constraints': [{'conname': 'not blank', 'to': 'not_blank'}]}, native)
         assert 'SET SCHEMA' not in plan['command_preview']['statement']
         native = domain_native('Dom schema', 'code')
         facts = native['domain_facts']
         assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (False, None, None)
         assert [(c['conname'], c['convalidated']) for c in facts['constraints']] == [
-            ('not blank', True), ('short', True)]
+            ('not_blank', True), ('short', True)]
         run_kind(live, 'domain', 'drop', {'confirmation': 'code', 'cascade': False}, native)
         assert query("SELECT count(*) FROM pg_type WHERE typname='code'") == [(0,)]
     finally:

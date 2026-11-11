@@ -104,6 +104,7 @@ def test_domain_alter_emits_only_differences():
         'typdefault': '', 'owner': 'dba', 'description': '',
         'drop_constraints': [{'conname': 'code_check'}],
         'validate_constraints': [{'conname': 'later'}],
+        'rename_constraints': [{'conname': 'code_check', 'to': 'not_blank'}],
         'add_constraints': [{'conname': 'later', 'consrc': 'VALUE <> \'z\'',
                              'convalidated': False}]}) == [
         'ALTER DOMAIN "service"."code" RENAME TO "ticket_code"',
@@ -112,6 +113,8 @@ def test_domain_alter_emits_only_differences():
         'ALTER DOMAIN "service"."ticket_code" OWNER TO "dba"',
         'ALTER DOMAIN "service"."ticket_code" DROP CONSTRAINT "code_check"',
         'ALTER DOMAIN "service"."ticket_code" VALIDATE CONSTRAINT "later"',
+        'ALTER DOMAIN "service"."ticket_code" RENAME CONSTRAINT "code_check" '
+        'TO "not_blank"',
         'ALTER DOMAIN "service"."ticket_code" ADD CONSTRAINT "later" CHECK '
         "(VALUE <> 'z') NOT VALID",
         'COMMENT ON DOMAIN "service"."ticket_code" IS NULL',

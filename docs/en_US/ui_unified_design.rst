@@ -342,7 +342,16 @@ parser with its start, get-token, end, lextypes and headline functions and
 a template with its init and lexize functions, where a changed function is
 drop and create, as the inherited dialogs do; all with rename and schema
 move. The preserved surface has no concept for these kinds, so the
-provider admits them explicitly.
+provider admits them explicitly. M5 close-out (2026-11-11): domain
+constraints are the domain editor's rows (add, drop, validate, and now
+rename, which is the inherited child node's own edit) and their inspection
+rides the identity chain, so no standalone kind is needed; the operator
+kind, which the provider already created, altered and dropped natively, is
+now declared in the capabilities descriptor so the provider tree lists it
+with its native form; the aggregate kind keeps its native form (a parsed
+full definition on create, and owner, schema, rename and comment on
+alter), while the routine form's recorded gap for aggregates stays
+accurate. This closes the M5 list of the parity matrix.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
