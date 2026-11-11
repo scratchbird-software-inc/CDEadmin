@@ -25,6 +25,8 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'domain', 'type', 'view', 'materialized-view', 'function',
     'procedure', 'index', 'trigger', 'event-trigger', 'rule', 'role',
     'tablespace',
+    # M5 (2026-11-11).
+    'cast', 'collation', 'language',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -356,6 +358,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind in {'role', 'tablespace'}:
         from .cluster import compile_operation as compile_cluster
         return compile_cluster(kind, operation, native, draft)
+    if kind in {'cast', 'collation', 'language'}:
+        from .catalog_objects import compile_operation as compile_catalog
+        return compile_catalog(kind, operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

@@ -1176,6 +1176,10 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
+            if item['resource_kind'] in {'cast', 'collation', 'language'}:
+                from .catalog_objects import FACTS as catalog_facts
+                key, reader = catalog_facts[item['resource_kind']]
+                native[key] = reader(native)
             if item['resource_kind'] in {'trigger', 'rule', 'event-trigger'}:
                 from .triggers import (
                     event_trigger_facts, rule_facts, trigger_facts)

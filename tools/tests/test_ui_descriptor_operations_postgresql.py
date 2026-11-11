@@ -1509,3 +1509,84 @@ def test_tablespace_lifecycle_round_trips(live):
         query(f'DROP TABLESPACE IF EXISTS {name}')
         query(f'DROP TABLESPACE IF EXISTS {name}_r')
         query(f'DROP ROLE {owner}')
+
+
+# -- M5 (2026-11-11): cast, collation and language editors, provider-native, observed live --------
+def catalog_object_native(kind, name, schema=None):
+    from pgadmin.cdeadmin.providers.postgresql.catalog_objects import FACTS
+    if kind == 'cast':
+        rows = query(f"""SELECT c.castcontext, c.castmethod, d.description,
+                                (pg_identify_object('pg_cast'::regclass, c.oid, 0)).identity
+                         FROM pg_cast c LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_cast'::regclass
+                         WHERE format_type(c.castsource, NULL) || ' AS ' || format_type(c.casttarget, NULL) = '{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][2], 'sql_identity': rows[0][3],
+                  'catalog_row': {'castcontext': rows[0][0], 'castmethod': rows[0][1]}}
+    elif kind == 'collation':
+        rows = query(f"""SELECT c.collprovider, c.colllocale, c.collcollate, c.collctype, c.collisdeterministic,
+                                c.collicurules, c.collversion, d.description, pg_get_userbyid(c.collowner)
+                         FROM pg_collation c JOIN pg_namespace n ON n.oid=c.collnamespace
+                         LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_collation'::regclass
+                         WHERE n.nspname='{schema}' AND c.collname='{name}'""")
+        assert len(rows) == 1, (schema, name)
+        provider, locale, collate, ctype, deterministic, rules, version, comment, owner = rows[0]
+        native = {'schema': schema, 'name': name, 'comment': comment, 'owner': owner,
+                  'catalog_row': {'collname': name, 'collprovider': provider, 'colllocale': locale,
+                                  'collcollate': collate, 'collctype': ctype, 'collisdeterministic': deterministic,
+                                  'collicurules': rules, 'collversion': version}}
+    else:
+        rows = query(f"""SELECT l.lanpltrusted, l.lanispl, d.description, pg_get_userbyid(l.lanowner)
+                         FROM pg_language l LEFT JOIN pg_description d ON d.objoid=l.oid AND d.classoid='pg_language'::regclass
+                         WHERE l.lanname='{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][2], 'owner': rows[0][3],
+                  'catalog_row': {'lanname': name, 'lanpltrusted': rows[0][0], 'lanispl': rows[0][1]}}
+    key, reader = FACTS[kind]
+    native[key] = reader(native)
+    return native
+
+
+@live_only
+def test_cast_collation_and_language_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Cat schema"; CREATE FUNCTION "Cat schema".to_int(text) RETURNS integer LANGUAGE sql '
+          "IMMUTABLE AS 'SELECT 42'")
+    try:
+        run_kind(live, 'cast', 'create', {
+            'srctyp': 'text', 'trgtyp': 'integer', 'castmethod': 'function',
+            'proname': '"Cat schema".to_int(text)', 'castcontext': 'assignment', 'description': "it's"})
+        cast = catalog_object_native('cast', 'text AS integer')
+        assert (cast['cast_facts']['castcontext'], cast['cast_facts']['castmethod'], cast['comment']) == (
+            'assignment', 'function', "it's")
+        assert query("SELECT 'x'::text::integer") == [(42,)]
+        run_kind(live, 'cast', 'drop', {'confirmation': 'text AS integer'}, cast)
+        assert query("SELECT count(*) FROM pg_cast WHERE castsource='text'::regtype AND casttarget='integer'::regtype") == [(0,)]
+        run_kind(live, 'collation', 'create', {
+            'name': 'c one', 'schema': 'Cat schema', 'provider': 'icu', 'locale': 'en-US',
+            'is_deterministic': False, 'description': 'c'})
+        collation = catalog_object_native('collation', 'c one', 'Cat schema')
+        facts = collation['collation_facts']
+        assert (facts['provider'], facts['locale'], facts['is_deterministic'], collation['comment']) == (
+            'icu', 'en-US', False, 'c')
+        run_kind(live, 'collation', 'alter', {'name': 'c_two', 'description': '', 'refresh_version': True}, collation)
+        collation = catalog_object_native('collation', 'c_two', 'Cat schema')
+        assert collation['comment'] is None
+        # A changed locale drops and recreates with the merged definition.
+        run_kind(live, 'collation', 'alter', {'locale': 'de-DE', 'is_deterministic': False}, collation)
+        collation = catalog_object_native('collation', 'c_two', 'Cat schema')
+        assert (collation['collation_facts']['locale'], collation['collation_facts']['is_deterministic']) == (
+            'de-DE', False)
+        run_kind(live, 'collation', 'drop', {'confirmation': 'c_two'}, collation)
+        run_kind(live, 'language', 'create', {
+            'name': 'ui_ops_lang', 'trusted': True, 'lanproc': 'plpgsql_call_handler',
+            'laninl': 'plpgsql_inline_handler', 'lanval': 'plpgsql_validator', 'description': 'twin'})
+        language = catalog_object_native('language', 'ui_ops_lang')
+        assert (language['language_facts']['trusted'], language['comment']) == (True, 'twin')
+        run_kind(live, 'language', 'alter', {'description': '', 'name': 'ui_ops_lang2'}, language)
+        language = catalog_object_native('language', 'ui_ops_lang2')
+        assert language['comment'] is None
+        run_kind(live, 'language', 'drop', {'confirmation': 'ui_ops_lang2'}, language)
+        assert query("SELECT count(*) FROM pg_language WHERE lanname LIKE 'ui_ops%'") == [(0,)]
+    finally:
+        query('DROP CAST IF EXISTS (text AS integer)')
+        query('DROP LANGUAGE IF EXISTS ui_ops_lang; DROP LANGUAGE IF EXISTS ui_ops_lang2')
+        query('DROP SCHEMA "Cat schema" CASCADE')

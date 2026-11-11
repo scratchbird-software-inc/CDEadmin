@@ -296,6 +296,20 @@ PostgreSQL requires, altered through rename, owner, options, privileges
 and comment, and dropped outside a transaction. This closes the M4 editor
 list of the parity matrix.
 
+M5 first slice (2026-11-11), the cast, collation and language editors on
+the same route: a cast from a source to a target type with a function,
+binary coercion or I/O conversion, in explicit, assignment or implicit
+context, with a comment, and dropped; the preserved surface admits no cast
+alter, so none is offered. A collation from a locale, from LC_COLLATE and
+LC_CTYPE, or copied from another, with provider, determinism, rules and
+version, owner and comment; alter renames, moves schema, changes the
+owner and comment, refreshes the version, and drops and recreates for a
+changed locale, as the inherited dialog does. A procedural language with
+handler, inline and validator functions, trusted or not, or from the
+server's template, with owner and comment; alter renames and changes the
+owner and comment, since handlers and trust are fixed once created.
+Nondeterministic collations, which YugabyteDB refuses, are offered here.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
