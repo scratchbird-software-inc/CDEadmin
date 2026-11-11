@@ -962,19 +962,19 @@ class PostgreSQLProvider:
         payload = _mapping(request)
         extension = _extension(payload)
         if extension.get('capture_identity'):
+            # M3 performance (2026-11-11): the explorer hands inspect the
+            # listed resource itself, so re-capturing the whole database to
+            # find it again was waste on every click. One catalog row
+            # confirms the object still exists; the inherited views then
+            # add their panels to the listed resource.
             route = {key: extension[key] for key in ('server_id', 'database_id')}
-            parent = {'resource_id': payload.get('parent_resource_id'),
-                      'authority_path': payload.get('authority_path', [])[:-2]}
-            # A system object is only in a capture that includes them.
             native = extension.get('native') or {}
-            include_system = (True if native.get('system_object') is True
-                              else None)
-            rows = [row for row in self._captured_resources(
-                        parent, route, include_system)
-                    if row['resource_id'] == payload['resource_id']]
-            if len(rows) != 1:
+            if not self._native_object_exists(route, native,
+                                              extension.get('attnum')):
                 raise PostgreSQLProviderError('Selected native catalog object no longer exists')
-            return self._with_inherited_inspection(rows[0])
+            resource = copy.deepcopy(payload)
+            resource.pop('route', None)
+            return self._with_inherited_inspection(resource)
         catalog_kind = extension.get('catalog_kind')
         object_id = _required_int(extension, 'object_id')
         rows = self._catalog.read(catalog_kind, extension, object_id)
@@ -1034,6 +1034,27 @@ class PostgreSQLProvider:
             native['dependents'] = inspected['dependents']
         native['inherited_inspection'] = {'states': inspected['states']}
         return resource
+
+    def _native_object_exists(self, route, native, attnum=None):
+        """Confirm one captured object on a private attachment."""
+        from .catalog_capture import existence_query
+        try:
+            query = existence_query(native.get('catalog'), native.get('oid'),
+                                    attnum)
+        except ValueError as exc:
+            raise PostgreSQLProviderError(str(exc)) from None
+        opened = self.open_session({'route': route})
+        try:
+            state = self._sessions[opened['session_id']]
+            with state.lock:
+                self._ensure_native_connection(state)
+                status, result = state.connection.execute_dict(query)
+        finally:
+            self.close_session(opened)
+        if not status:
+            raise PostgreSQLProviderError(
+                'PostgreSQL catalog lookup failed')
+        return len((result or {}).get('rows', [])) == 1
 
     @staticmethod
     def _show_system_objects():

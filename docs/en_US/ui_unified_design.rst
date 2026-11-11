@@ -173,8 +173,12 @@ provider capture includes them and the database branch gains the navigator's
 casts, languages, access methods), each object inspecting as any other. Each
 state of the preference has a listing cache of its own, so turning it on or
 off takes effect on the next expansion. Unlike the inherited tree, temporary
-schemas (``pg_temp_*``) appear among the system schemas. Replica nodes and
-pgAgent are later slices.
+schemas (``pg_temp_*``) appear among the system schemas. Sixth slice
+(2026-11-11): inspecting a captured provider node no longer re-captures the
+whole database to find the node again; the explorer hands the listed resource
+to the provider, which confirms the object with one catalog row on a private
+attachment and then adds the inherited sections. A node whose object is gone
+reports that it no longer exists. Replica nodes and pgAgent are later slices.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

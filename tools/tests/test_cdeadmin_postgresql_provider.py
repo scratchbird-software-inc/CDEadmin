@@ -424,18 +424,51 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
                           staticmethod(lambda: True)):
             self.provider.list_resources(parent)
         self.provider.capture_catalog.assert_called_once_with(parent['route'], include_system=True)
-        system = copy.deepcopy(resource)
-        system['extensions']['postgresql']['native']['system_object'] = True
+        # Inspect confirms the listed object with one catalog row instead
+        # of re-capturing the database (M3 performance, 2026-11-11).
         self.provider.capture_catalog = Mock(return_value=capture)
+        connection = self.driver.manager._connection
         with patch('flask.has_request_context', lambda: False):
-            self.provider.inspect_resource(system)
-        self.provider.capture_catalog.assert_called_once_with(
-            {'server_id': 7, 'database_id': 10}, include_system=True)
-        inspected = self.provider.inspect_resource(resource)
+            inspected = self.provider.inspect_resource(
+                {**resource, 'route': {'server_id': 7, 'database_id': 10}})
         self.assertEqual(inspected['resource_id'], resource['resource_id'])
-        self.provider.capture_catalog.return_value = {'resources': []}
-        with self.assertRaisesRegex(PostgreSQLProviderError, 'no longer exists'):
+        self.assertNotIn('route', inspected)
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_opfamily WHERE oid = 91',
+            connection.executions[-1][0])
+        self.provider.capture_catalog.assert_not_called()
+        # The private attachment is released again.
+        self.assertTrue(self.driver.manager.release_calls)
+        self.assertEqual({}, self.provider._sessions)
+        with patch.object(connection, 'execute_dict',
+                          return_value=(True, {'rows': []})), \
+                self.assertRaisesRegex(PostgreSQLProviderError,
+                                       'no longer exists'):
             self.provider.inspect_resource(resource)
+        with patch.object(connection, 'execute_dict',
+                          return_value=(False, 'boom')), \
+                self.assertRaisesRegex(PostgreSQLProviderError,
+                                       'lookup failed'):
+            self.provider.inspect_resource(resource)
+
+    def test_existence_query_admits_only_captured_catalogs(self):
+        from pgadmin.cdeadmin.providers.postgresql.catalog_capture import (
+            existence_query)
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_class WHERE oid = 16393',
+            existence_query('pg_class', 16393))
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = 16393 '
+            'AND attnum = 2 AND NOT attisdropped',
+            existence_query('pg_attribute', 16393, 2))
+        self.assertEqual(
+            'SELECT 1 FROM pg_catalog.pg_largeobject_metadata WHERE oid = 5',
+            existence_query('pg_largeobject', 5))
+        for bad in (('pg_shadow', 1), ('pg_class; --', 1),
+                    ('pg_class', '16393'), ('pg_class', True),
+                    ('pg_attribute', 16393), ('pg_attribute', 16393, 0)):
+            with self.assertRaises(ValueError):
+                existence_query(*bad)
 
     def test_relations_list_their_columns_as_children(self):
         table = {'resource_id': 'postgresql:pg_class:16393',
