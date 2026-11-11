@@ -85,6 +85,61 @@ export const defaultTabsData = [
   },
 ];
 
+export function bindDesignerOpenEvents(
+  ensureSurfaceHost, notifyError, targetWindow = window
+) {
+  const handlers = [
+    [
+      'cdeadmin:erd-model-open',
+      (event) => ensureSurfaceHost().open('diagram.erd.designer', {
+        toolInstanceId:
+          `diagram.erd.designer:${event.detail.projectId}:${event.detail.designId}`,
+        restoreRef: event.detail.designId,
+        projectId: event.detail.projectId,
+        title: event.detail.title || 'Data Model (ERD) Designer',
+      }),
+    ],
+    [
+      'cdeadmin:cube-open',
+      (event) => ensureSurfaceHost().open('diagram.cube.designer', {
+        toolInstanceId:
+          `diagram.cube.designer:${event.detail.projectId}:${event.detail.designId}`,
+        restoreRef: event.detail.designId,
+        projectId: event.detail.projectId,
+        title: event.detail.title || 'Cube Designer',
+      }),
+    ],
+    [
+      'cdeadmin:bi-design-open',
+      (event) => ensureSurfaceHost().open('diagram.bi.designer', {
+        toolInstanceId:
+          `diagram.bi.designer:${event.detail.projectId}:${event.detail.designId}`,
+        restoreRef: event.detail.designId,
+        projectId: event.detail.projectId,
+        title: event.detail.title || 'BI Question & Dashboard Designer',
+      }, {kind: event.detail.kind || 'question'}),
+    ],
+    [
+      'cdeadmin:screen-mesh-open',
+      (event) => ensureSurfaceHost().open('diagram.screen_mesh.designer', {
+        toolInstanceId:
+          `diagram.screen_mesh.designer:${event.detail.projectId}:${event.detail.designId}`,
+        restoreRef: event.detail.designId,
+        projectId: event.detail.projectId,
+        title: event.detail.title || 'Screen Mesh Designer',
+      }, {kind: event.detail.kind || 'screen'}),
+    ],
+  ];
+  const removers = handlers.map(([eventName, invoke]) => {
+    const listener = (event) => Promise.resolve(invoke(event)).catch(
+      (error) => notifyError?.(error.message)
+    );
+    targetWindow.addEventListener(eventName, listener);
+    return () => targetWindow.removeEventListener(eventName, listener);
+  });
+  return () => removers.forEach((remove) => remove());
+}
+
 const getMorePanelGroup = (tabsData) => {
   return {
     ...getDefaultGroup(),
@@ -380,6 +435,11 @@ function Layouts({browser, platform}) {
     window.addEventListener('cdeadmin:lineage-open', open);
     return () => window.removeEventListener('cdeadmin:lineage-open', open);
   }, [ensureSurfaceHost, pgAdmin]);
+  useEffect(() => bindDesignerOpenEvents(
+    ensureSurfaceHost,
+    (message) => pgAdmin.Browser.notifier.error(message),
+    window
+  ), [ensureSurfaceHost, pgAdmin]);
   const openAsset = async (project, asset) => {
     try {
       if(asset.asset_type === NOTEBOOK_TYPE) {

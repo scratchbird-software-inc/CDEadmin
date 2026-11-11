@@ -290,7 +290,6 @@ def _emit_inline_table(
 ) -> None:
     if not rows:
         return
-    lines.append('        body "columns"')
     lines.append('        data')
     lines.append('            columns')
     for col_id, col_label in columns:
@@ -464,10 +463,10 @@ def semantic_model_to_ddn(
         star_items.append(own_rel)
         lines.extend([
             f'relation {_q(own_rel)} as "owns"',
+            f'    endpoint {_q(cube_el_id)}',
+            f'    endpoint {_q(gel_id)}',
             '    with',
             f'        id {_q(own_rel)}',
-            f'        from {_q(cube_el_id)}',
-            f'        to {_q(gel_id)}',
             '        title "measure group"',
             '',
         ])
@@ -535,10 +534,10 @@ def semantic_model_to_ddn(
             active_tag = 'active' if dim.get('active', True) else 'inactive'
             lines.extend([
                 f'relation {_q(rel_id)} as "derives"',
+                f'    endpoint {_q(dim_el_ids[dim["id"]])}',
+                f'    endpoint {_q(dim_el_ids[role_of])}',
                 '    with',
                 f'        id {_q(rel_id)}',
-                f'        from {_q(dim_el_ids[dim["id"]])}',
-                f'        to {_q(dim_el_ids[role_of])}',
                 f'        title {_q(f"role ({active_tag})")}',
                 '',
             ])
@@ -563,10 +562,10 @@ def semantic_model_to_ddn(
                 label = f'{gran} [{label}]'
             lines.extend([
                 f'relation {_q(urel_id)} as "uses"',
+                f'    endpoint {_q(gel_id)}',
+                f'    endpoint {_q(dim_el_ids[did])}',
                 '    with',
                 f'        id {_q(urel_id)}',
-                f'        from {_q(gel_id)}',
-                f'        to {_q(dim_el_ids[did])}',
                 f'        title {_q(label)}',
                 '        properties',
                 '            source_mark "many"',
@@ -628,10 +627,10 @@ def semantic_model_to_ddn(
         star_items.append(mrel_id)
         lines.extend([
             f'relation {_q(mrel_id)} as "aggregates"',
+            f'    endpoint {_q(owner_mg)}',
+            f'    endpoint {_q(mel_id)}',
             '    with',
             f'        id {_q(mrel_id)}',
-            f'        from {_q(owner_mg)}',
-            f'        to {_q(mel_id)}',
             f'        title {_q(measure["aggregation"])}',
             '',
         ])
@@ -698,10 +697,10 @@ def semantic_model_to_ddn(
                 star_items.append(arel_id)
                 lines.extend([
                     f'relation {_q(arel_id)} as "derives"',
+                    f'    endpoint {_q(measure_el_ids[m_ref])}',
+                    f'    endpoint {_q(ael_id)}',
                     '    with',
                     f'        id {_q(arel_id)}',
-                    f'        from {_q(measure_el_ids[m_ref])}',
-                    f'        to {_q(ael_id)}',
                     '        title "materializes"',
                     '',
                 ])
@@ -735,6 +734,15 @@ def semantic_model_to_ddn(
     lines.append('')
 
     # 2. Dimension usage matrix view (matrix.relations@1)
+    matrix_rel_role = 'uses' if dim_el_ids else 'owns'
+    matrix_rows = (
+        list(group_el_ids.values()) if dim_el_ids else [cube_el_id]
+    )
+    matrix_cols = (
+        list(dim_el_ids.values())
+        if dim_el_ids
+        else list(group_el_ids.values()) or [cube_el_id]
+    )
     lines.extend([
         f'view "cube_usage_matrix" as {_q(USAGE_MATRIX_PROFILE)}',
         '    with',
@@ -749,6 +757,23 @@ def semantic_model_to_ddn(
             lines.append(f'                    id {_q(item_id)}')
     else:
         lines.append('            include empty list')
+    lines.extend([
+        '        projection',
+        '            options',
+        f'                relation {_q(matrix_rel_role)}',
+        '                rows',
+    ])
+    for r_id in matrix_rows:
+        lines.extend([
+            '                    item',
+            f'                        id {_q(r_id)}',
+        ])
+    lines.append('                columns')
+    for c_id in matrix_cols:
+        lines.extend([
+            '                    item',
+            f'                        id {_q(c_id)}',
+        ])
     lines.append('')
 
     # 3. Aggregation plan grid view (table.records@1)
@@ -767,8 +792,6 @@ def semantic_model_to_ddn(
         for rec_el_id in agg_record_ids:
             lines.append('                    item')
             lines.append(f'                        id {_q(rec_el_id)}')
-    else:
-        lines.append('                records empty list')
     lines.append('                columns')
     grid_cols = [
         ('rule_name', 'Rule'),

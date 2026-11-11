@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from typing import Any
+
+import config as app_config_module
 
 from .bi_ddn import (
     BIDesignSync,
@@ -79,12 +82,39 @@ def _bi_sync_for_app(
     return BIDesignSync(store, proc, token_secret=secret)
 
 
+def _resolve_app_store_path(app) -> str | None:
+    explicit_env = os.environ.get('CDEADMIN_DESIGN_STORE_PATH')
+    if explicit_env:
+        return explicit_env
+    cfg_path = app.config.get('CDEADMIN_DESIGN_STORE_PATH')
+    default_init = getattr(
+        app_config_module, '_DEFAULT_CDEADMIN_DESIGN_STORE_PATH', None
+    )
+    sqlite_cfg = app.config.get('SQLITE_PATH')
+    data_dir_cfg = app.config.get('DATA_DIR')
+    if cfg_path and cfg_path != default_init:
+        return str(cfg_path)
+    if sqlite_cfg:
+        sqlite_dir = os.path.dirname(os.path.abspath(str(sqlite_cfg)))
+        if default_init and sqlite_dir != os.path.dirname(
+            os.path.abspath(str(default_init))
+        ):
+            return os.path.join(sqlite_dir, 'designs.db')
+    if data_dir_cfg:
+        data_dir = os.path.abspath(str(data_dir_cfg))
+        if default_init and data_dir != os.path.dirname(
+            os.path.abspath(str(default_init))
+        ):
+            return os.path.join(data_dir, 'designs.db')
+    return str(cfg_path) if cfg_path else None
+
+
 def init_app(app, project_asset_service=None) -> DesignStore:
     """Register the shared DesignStore, StoreDDNProcess and HTTP blueprint."""
     existing = app.extensions.get(APP_EXTENSION_KEY)
     if existing is not None:
         return existing
-    db_path = app.config.get('CDEADMIN_DESIGN_STORE_PATH')
+    db_path = _resolve_app_store_path(app)
     store = DesignStore(db_path=db_path)
     process = StoreDDNProcess(store)
     app.extensions[APP_EXTENSION_KEY] = store
@@ -358,6 +388,28 @@ def _register_routes(app, project_asset_service) -> None:
                         body.get('endpoint_id') or 'default-endpoint'
                     ),
                     key_prefix=str(body.get('key_prefix') or 'metabase'),
+                )
+            )
+        if mode == 'import_legacy_bi':
+            bi_svc = current_app.extensions.get('cdeadmin_bi_service')
+            return invoke(
+                lambda store, proc: _bi_sync_for_app(
+                    current_app, store, proc
+                ).import_legacy_bi_store(
+                    body.get('bundle'),
+                    project_id=project_id,
+                    actor_id=uid,
+                    endpoint_id=str(
+                        body.get('endpoint_id') or 'default-endpoint'
+                    ),
+                    key_prefix=str(body.get('key_prefix') or 'legacy_bi'),
+                    bi_service=bi_svc,
+                    dashboard_service=(
+                        getattr(bi_svc, 'dashboards', None)
+                        if bi_svc is not None
+                        else None
+                    ),
+                    semantic_service=_semantic_service_for_app(current_app),
                 )
             )
         if mode == 'create_screen_mesh':

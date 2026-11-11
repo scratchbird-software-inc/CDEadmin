@@ -488,4 +488,82 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
     const def = biDesignerModuleDefinition();
     expect(def.id).toBe('cdeadmin.bi_designer');
   });
+
+  it('migrates legacy ScratchRobin BI store into Draft DDN and builds DDN chart workspaces', async () => {
+    const {buildChart, buildDdnChartWorkspace} = await import(
+      'sources/cdeadmin_ui/modules/bi/chartData'
+    );
+    const built = buildChart(
+      'bar',
+      {
+        columns: [
+          {key: 'region', name: 'Region', type: 'text'},
+          {key: 'amount', name: 'Amount', type: 'numeric'},
+        ],
+        rows: [
+          {region: 'EU', amount: 120},
+          {region: 'US', amount: 195},
+        ],
+      },
+      {x: 'region', y: ['amount']}
+    );
+    const ws = buildDdnChartWorkspace(built, 'Regional Sales');
+    expect(ws.schema).toBe('ddn-source-workspace@1');
+    expect(ws.files['main.ddn']).toContain('view "chart_preview" as "chart.basic@1"');
+    expect(ws.files['main.ddn']).toContain('mark "bar"');
+
+    const onOpen = jest.fn();
+    const projectClient = {
+      listProjects: jest.fn().mockResolvedValue([
+        {project_id: 'analytics', name: 'Analytics', access: 'owner'},
+      ]),
+    };
+    const designClient = {
+      listDesigns: jest.fn().mockResolvedValue([]),
+      importBiLegacy: jest.fn().mockResolvedValue({
+        source_format: 'legacy_scratchrobin_bi',
+        status: 'draft',
+        questions: [{id: 'q-leg', kind: 'question', title: 'Legacy Revenue'}],
+        dashboards: [{id: 'd-leg', kind: 'dashboard', title: 'Legacy Board'}],
+        loss_report: {
+          source_format: 'legacy_scratchrobin_bi',
+          loss_count: 2,
+          items: [{code: 'legacy_alerts_not_auto_enabled'}],
+        },
+      }),
+    };
+
+    const ThemedNav = withTheme(BIDesignsNavigator);
+    render(
+      <ThemedNav
+        designClient={designClient}
+        projectClient={projectClient}
+        onOpenDesign={onOpen}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: /New BI design…/i})).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole('button', {name: /New BI design…/i}));
+    const createDialog = await screen.findByRole('dialog');
+    fireEvent.mouseDown(within(createDialog).getByLabelText(/^Mode$/i));
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: /Migrate Legacy ScratchRobin BI/i,
+      })
+    );
+    fireEvent.click(
+      within(createDialog).getByRole('button', {name: /^Continue$/i})
+    );
+    await waitFor(() => {
+      expect(designClient.importBiLegacy).toHaveBeenCalledWith(
+        'analytics',
+        expect.objectContaining({bundle: null, endpointId: 'default-endpoint'})
+      );
+      expect(onOpen).toHaveBeenCalledWith(
+        'analytics',
+        expect.objectContaining({id: 'd-leg', kind: 'dashboard'})
+      );
+    });
+  });
 });

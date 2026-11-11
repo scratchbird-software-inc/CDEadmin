@@ -193,12 +193,12 @@ export function ERDModelsNavigator({
         physicalTables:
           entityName && draft.initialRole === 'physical'
             ? [
-                {
-                  name: entityName,
-                  engine: 'sqlite',
-                  fields: [{name: 'id', datatype: 'INTEGER', nullable: false}],
-                },
-              ]
+              {
+                name: entityName,
+                engine: 'sqlite',
+                fields: [{name: 'id', datatype: 'INTEGER', nullable: false}],
+              },
+            ]
             : [],
       });
 

@@ -266,6 +266,7 @@ def startup_measurement(source: Path, policy):
             'SERVER_MODE': False, 'TESTING': True, 'CONFIG_DATABASE_URI': '',
             'DATA_DIR': str(data), 'SQLITE_PATH': str(data / 'pgadmin4.db'),
             'CDEADMIN_OPERATION_STORE_PATH': str(data / 'operations.json'),
+            'CDEADMIN_DESIGN_STORE_PATH': str(data / 'designs.db'),
             'LOG_FILE': str(data / 'application.log'),
             'SESSION_DB_PATH': str(data / 'sessions'),
             'STORAGE_DIR': str(data / 'storage'),

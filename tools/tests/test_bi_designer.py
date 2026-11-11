@@ -990,6 +990,190 @@ class BIDesignerBackendTests(unittest.TestCase):
                 len(imp_resp.get_json()['data']['questions']), 1
             )
 
+            # Legacy ScratchRobin BI JSON cutover bridge -> Draft DDN
+            legacy_resp = client.post(
+                '/cdeadmin/api/projects/p1/designs',
+                json={
+                    'mode': 'import_legacy_bi',
+                    'endpoint_id': 'ep-legacy',
+                    'bundle': {
+                        'alerts': [{'id': 'a1'}],
+                        'embeds': [{'id': 'e1'}],
+                        'questions': [
+                            {
+                                'question_id': 'lq-builder',
+                                'status': 'active',
+                                'definition': {
+                                    'name': 'Legacy Regional Revenue',
+                                    'collection_id': 'col-1',
+                                    'query': {
+                                        'kind': 'builder',
+                                        'builder': {
+                                            'source': {
+                                                'relation': [
+                                                    'public', 'orders'
+                                                ]
+                                            },
+                                            'columns': [
+                                                {'column': 'region'}
+                                            ],
+                                            'group_by': [
+                                                {'column': 'region'}
+                                            ],
+                                            'aggregations': [
+                                                {
+                                                    'function': 'sum',
+                                                    'column': 'amount',
+                                                    'alias': 'rev',
+                                                }
+                                            ],
+                                            'filters': [
+                                                {
+                                                    'column': 'region',
+                                                    'operator': 'eq',
+                                                    'parameter_id': 'reg_p',
+                                                }
+                                            ],
+                                            'order_by': [
+                                                {
+                                                    'column': 'region',
+                                                    'direction': 'asc',
+                                                }
+                                            ],
+                                            'limit': 50,
+                                        },
+                                    },
+                                    'parameters': [
+                                        {
+                                            'id': 'reg_p',
+                                            'name': 'Region',
+                                            'type': 'string',
+                                        }
+                                    ],
+                                    'visualization': {'type': 'bar'},
+                                },
+                            },
+                            {
+                                'question_id': 'lq-sem',
+                                'status': 'archived',
+                                'definition': {
+                                    'name': 'Legacy Semantic Question',
+                                    'semantic_model': {'id': 'sm-99'},
+                                    'query': {
+                                        'kind': 'semantic',
+                                        'builder': {
+                                            'group_by': ['tier'],
+                                            'aggregations': [
+                                                {'measure_id': 'mrr'}
+                                            ],
+                                        },
+                                    },
+                                    'visualization': {'type': 'line'},
+                                },
+                            },
+                        ],
+                        'dashboards': [
+                            {
+                                'dashboard_id': 'ld-1',
+                                'status': 'active',
+                                'definition': {
+                                    'name': 'Legacy Executive Board',
+                                    'tabs': [{'id': 'main', 'name': 'Main'}],
+                                    'cards': [
+                                        {
+                                            'id': 'c_rev',
+                                            'tab_id': 'main',
+                                            'type': 'question',
+                                            'title': 'Regional Revenue',
+                                            'layout': {
+                                                'x': 0, 'y': 0,
+                                                'w': 12, 'h': 8,
+                                            },
+                                            'question': {
+                                                'question_id': 'lq-builder',
+                                                'revision': 1,
+                                            },
+                                        },
+                                        {
+                                            'id': 'c_mon',
+                                            'tab_id': 'main',
+                                            'type': 'metric_panel',
+                                            'title': 'CPU Snapshot',
+                                            'layout': {
+                                                'x': 12, 'y': 0,
+                                                'w': 12, 'h': 8,
+                                            },
+                                            'metric_panel': {
+                                                'panel_id': 'cpu',
+                                                'columns': [
+                                                    {
+                                                        'id': 'measure',
+                                                        'label': 'Measure',
+                                                    }
+                                                ],
+                                                'rows': [
+                                                    {
+                                                        'id': 'r1',
+                                                        'measure': '42%',
+                                                    }
+                                                ],
+                                            },
+                                        },
+                                    ],
+                                    'filters': [
+                                        {
+                                            'id': 'f_reg',
+                                            'name': 'Region',
+                                            'type': 'string',
+                                            'widget': 'select',
+                                            'operator': 'eq',
+                                            'targets': [
+                                                {
+                                                    'card_id': 'c_rev',
+                                                    'parameter_id': 'reg_p',
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                    'drill_throughs': [
+                                        {
+                                            'id': 'dt1',
+                                            'source_card_id': 'c_rev',
+                                            'target': {
+                                                'kind': 'question',
+                                                'question_id': 'lq-sem',
+                                                'revision': 1,
+                                                'parameters': {
+                                                    'tier': {
+                                                        'column': 'region'
+                                                    }
+                                                },
+                                            },
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                    },
+                },
+            )
+            self.assertEqual(legacy_resp.status_code, 200)
+            legacy_data = legacy_resp.get_json()['data']
+            self.assertEqual(legacy_data['status'], 'draft')
+            self.assertEqual(
+                legacy_data['source_format'], 'legacy_scratchrobin_bi'
+            )
+            self.assertEqual(len(legacy_data['questions']), 2)
+            self.assertEqual(len(legacy_data['dashboards']), 1)
+            loss_codes = {
+                item['code'] for item in legacy_data['loss_report']['items']
+            }
+            self.assertIn('legacy_alerts_not_auto_enabled', loss_codes)
+            self.assertIn('legacy_embeds_not_auto_enabled', loss_codes)
+            self.assertIn('legacy_semantic_query_converted', loss_codes)
+            self.assertIn('metric_panel_static_snapshot', loss_codes)
+            self.assertIn('archived_status_imported_as_draft', loss_codes)
+
 
 if __name__ == '__main__':
     unittest.main()

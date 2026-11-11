@@ -991,6 +991,8 @@ def compile_bi_question_sql(
         return '.'.join(qident(p) for p in parts)
 
     def qrel(parts: list[str]) -> str:
+        if eng == 'firebird':
+            return qident(parts[-1])
         return '.'.join(qident(p) for p in parts)
 
     select_exprs: list[str] = []
@@ -1157,17 +1159,35 @@ def execute_bi_question_connection(
     )
     sql = compiled['sql']
     params = compiled['bound_params']
-    if dialect == 'duckdb':
+    eng = compiled['dialect']
+    if eng in ('duckdb', 'firebird'):
         ordered_vals: list[Any] = []
 
-        def _duck_ph(match: re.Match[str]) -> str:
+        def _qmark_ph(match: re.Match[str]) -> str:
             ordered_vals.append(params[match.group(1)])
             return '?'
 
-        exec_sql = re.sub(r':([A-Za-z_][A-Za-z0-9_]*)', _duck_ph, sql)
-        cur = conn.execute(exec_sql, ordered_vals)
-    else:
+        exec_sql = re.sub(r':([A-Za-z_][A-Za-z0-9_]*)', _qmark_ph, sql)
+        if eng == 'duckdb' and hasattr(conn, 'execute'):
+            cur = conn.execute(exec_sql, ordered_vals)
+        else:
+            cur = conn.cursor()
+            cur.execute(exec_sql, ordered_vals)
+    elif eng in ('mysql', 'mariadb', 'postgresql'):
+        ordered_vals = []
+
+        def _fmt_ph(match: re.Match[str]) -> str:
+            ordered_vals.append(params[match.group(1)])
+            return '%s'
+
+        exec_sql = re.sub(r':([A-Za-z_][A-Za-z0-9_]*)', _fmt_ph, sql)
+        cur = conn.cursor() if hasattr(conn, 'cursor') else conn
+        cur.execute(exec_sql, tuple(ordered_vals))
+    elif hasattr(conn, 'execute'):
         cur = conn.execute(sql, params)
+    else:
+        cur = conn.cursor()
+        cur.execute(sql, params)
     cols = [desc[0] for desc in (cur.description or ())]
     rows = [list(r) for r in cur.fetchall()]
     return {
@@ -1776,10 +1796,10 @@ def question_to_ddn(
     for rel_id, rel_role, src_id, dst_id, label in relations:
         lines.extend([
             f'relation {_q(rel_id)} as {_q(rel_role)}',
+            f'    endpoint {_q(src_id)}',
+            f'    endpoint {_q(dst_id)}',
             '    with',
             f'        id {_q(rel_id)}',
-            f'        from {_q(src_id)}',
-            f'        to {_q(dst_id)}',
             f'        title {_q(label)}',
             '',
         ])
@@ -2333,10 +2353,10 @@ def dashboard_to_ddn(
     for rel_id, rel_role, src_id, dst_id, label in relations:
         lines.extend([
             f'relation {_q(rel_id)} as {_q(rel_role)}',
+            f'    endpoint {_q(src_id)}',
+            f'    endpoint {_q(dst_id)}',
             '    with',
             f'        id {_q(rel_id)}',
-            f'        from {_q(src_id)}',
-            f'        to {_q(dst_id)}',
             f'        title {_q(label)}',
             '',
         ])
@@ -4065,3 +4085,631 @@ class BIDesignSync:
                 'items': losses,
             },
         }
+
+    def import_legacy_bi_store(
+        self,
+        bundle: Mapping[str, Any] | None = None,
+        *,
+        project_id: str,
+        actor_id: int,
+        endpoint_id: str = 'default-endpoint',
+        key_prefix: str = 'legacy_bi',
+        bi_service: Any = None,
+        dashboard_service: Any = None,
+        semantic_service: Any = None,
+    ) -> dict[str, Any]:
+        """Migrate legacy ScratchRobin JSON BI items to Draft DDN.
+
+        Reads either an explicit JSON export ``bundle`` or live rows from
+        ``bi_service`` / ``dashboard_service`` in ``cdeadmin.db`` without
+        mutating or deleting legacy configuration-database rows. Every item is
+        written to ``designs.db`` as ``Draft`` with an explicit loss report.
+        """
+        raw_payload: dict[str, Any]
+        if bundle and isinstance(bundle, Mapping) and (
+            bundle.get('questions')
+            or bundle.get('dashboards')
+            or bundle.get('alerts')
+            or bundle.get('embeds')
+            or bundle.get('grants')
+        ):
+            raw_payload = dict(bundle)
+        elif bi_service is not None:
+            q_summaries = bi_service.list_questions(actor_id, endpoint_id)
+            q_records = [
+                bi_service.get_question(
+                    actor_id, endpoint_id, item['question_id']
+                )
+                for item in q_summaries
+            ]
+            d_svc = dashboard_service or getattr(
+                bi_service, 'dashboards', None
+            )
+            d_records = []
+            if d_svc is not None:
+                d_summaries = d_svc.list(actor_id, endpoint_id)
+                d_records = [
+                    d_svc.get(actor_id, endpoint_id, item['dashboard_id'])
+                    for item in d_summaries
+                ]
+            raw_payload = {
+                'questions': q_records,
+                'dashboards': d_records,
+            }
+        else:
+            raw_payload = dict(bundle or {})
+
+        cleaned, stripped_fields = _strip_sensitive_fields(raw_payload)
+        losses: list[dict[str, Any]] = [
+            {
+                'code': 'credential_or_grant_excluded',
+                'severity': 'info',
+                'detail': f'Excluded sensitive field {path} from DDN import',
+            }
+            for path in stripped_fields
+        ]
+        for runtime_key, code_name in (
+            ('alerts', 'legacy_alerts_not_auto_enabled'),
+            ('subscriptions', 'legacy_subscriptions_not_auto_enabled'),
+            ('embeds', 'legacy_embeds_not_auto_enabled'),
+            ('shares', 'legacy_shares_excluded_from_ddn'),
+        ):
+            if cleaned.get(runtime_key):
+                losses.append({
+                    'code': code_name,
+                    'severity': 'warning',
+                    'detail': (
+                        f'Legacy {runtime_key} remain runtime switches '
+                        f'outside DDN text and are not auto-activated.'
+                    ),
+                })
+
+        semantic_lookup: dict[str, Mapping[str, Any]] = {}
+        for sm in cleaned.get('semantic_models') or []:
+            if isinstance(sm, Mapping) and sm.get('id'):
+                semantic_lookup[str(sm['id'])] = sm
+
+        question_design_map: dict[str, dict[str, Any]] = {}
+        imported_questions: list[dict[str, Any]] = []
+
+        for idx, q_entry in enumerate(cleaned.get('questions') or []):
+            if not isinstance(q_entry, Mapping):
+                continue
+            q_id = str(
+                q_entry.get('question_id')
+                or q_entry.get('id')
+                or f'q_{idx + 1}'
+            )
+            defn = (
+                q_entry.get('definition')
+                if isinstance(q_entry.get('definition'), Mapping)
+                else q_entry
+            )
+            converted = convert_legacy_bi_question(
+                defn,
+                endpoint_id=endpoint_id,
+                semantic_models=semantic_lookup,
+                semantic_service=semantic_service,
+                actor_id=actor_id,
+            )
+            q_model = converted['question']
+            q_losses = list(converted['losses'])
+            if q_entry.get('status') == 'archived':
+                q_losses.append({
+                    'code': 'archived_status_imported_as_draft',
+                    'severity': 'info',
+                    'detail': (
+                        f'Archived legacy question {q_id!r} imported as Draft.'
+                    ),
+                })
+            losses.extend(q_losses)
+            q_key = f"{key_prefix}_q_{_safe_ident(q_id, f'q_{idx + 1}')}"
+            ddn_text, _ = question_to_ddn(q_model)
+            q_design = self.store.import_ddn(
+                project_id=project_id,
+                key=q_key,
+                kind='question',
+                title=q_model['name'],
+                ddn_or_workspace=ddn_text,
+                actor_id=actor_id,
+                origin='import:legacy_bi',
+                loss_report={
+                    'source_format': 'legacy_scratchrobin_bi',
+                    'source_question_id': q_id,
+                    'items': q_losses,
+                },
+                observe_resources=True,
+                note=(
+                    f"Migrated legacy ScratchRobin BI question "
+                    f"{q_model['name']} ({q_id}) as Draft"
+                ),
+            )
+            question_design_map[q_id] = {
+                'design': q_design,
+                'question': q_model,
+            }
+            imported_questions.append(q_design)
+
+        imported_dashboards: list[dict[str, Any]] = []
+        for idx, d_entry in enumerate(cleaned.get('dashboards') or []):
+            if not isinstance(d_entry, Mapping):
+                continue
+            d_id = str(
+                d_entry.get('dashboard_id')
+                or d_entry.get('id')
+                or f'd_{idx + 1}'
+            )
+            defn = (
+                d_entry.get('definition')
+                if isinstance(d_entry.get('definition'), Mapping)
+                else d_entry
+            )
+            converted_d = convert_legacy_bi_dashboard(
+                defn,
+                question_design_map=question_design_map,
+            )
+            d_model = converted_d['dashboard']
+            d_losses = list(converted_d['losses'])
+            if d_entry.get('status') == 'archived':
+                d_losses.append({
+                    'code': 'archived_status_imported_as_draft',
+                    'severity': 'info',
+                    'detail': (
+                        f'Archived legacy dashboard {d_id!r} imported '
+                        f'as Draft.'
+                    ),
+                })
+            losses.extend(d_losses)
+            d_key = f"{key_prefix}_d_{_safe_ident(d_id, f'd_{idx + 1}')}"
+            d_ddn, _ = dashboard_to_ddn(d_model)
+            d_design = self.store.import_ddn(
+                project_id=project_id,
+                key=d_key,
+                kind='dashboard',
+                title=d_model['name'],
+                ddn_or_workspace=d_ddn,
+                actor_id=actor_id,
+                origin='import:legacy_bi',
+                loss_report={
+                    'source_format': 'legacy_scratchrobin_bi',
+                    'source_dashboard_id': d_id,
+                    'items': d_losses,
+                },
+                note=(
+                    f"Migrated legacy ScratchRobin BI dashboard "
+                    f"{d_model['name']} ({d_id}) as Draft"
+                ),
+            )
+            self._sync_dashboard_dependencies(
+                d_design['id'], d_design['head_version'], d_model
+            )
+            imported_dashboards.append(d_design)
+
+        return {
+            'source_format': 'legacy_scratchrobin_bi',
+            'status': 'draft',
+            'questions': imported_questions,
+            'dashboards': imported_dashboards,
+            'loss_report': {
+                'source_format': 'legacy_scratchrobin_bi',
+                'loss_count': len(losses),
+                'items': losses,
+            },
+        }
+
+
+def convert_legacy_bi_question(
+    raw_question: Mapping[str, Any],
+    *,
+    endpoint_id: str = 'default-endpoint',
+    semantic_models: Mapping[str, Mapping[str, Any]] | None = None,
+    semantic_service: Any = None,
+    actor_id: int = 1,
+) -> dict[str, Any]:
+    """Convert a legacy JSON ``BIQuestion`` definition to unified Draft DDN."""
+    losses: list[dict[str, Any]] = []
+    name = str(raw_question.get('name') or 'Migrated Question')
+    description = str(raw_question.get('description') or '')
+    if raw_question.get('collection_id'):
+        losses.append({
+            'code': 'collection_mapped_to_project',
+            'severity': 'info',
+            'detail': (
+                f"Legacy collection_id {raw_question['collection_id']!r} "
+                f"replaced by project scope in designs.db."
+            ),
+        })
+
+    viz_raw = raw_question.get('visualization') or {'type': 'table'}
+    vis_type = str(viz_raw.get('type') or 'table')
+    if vis_type not in CHART_PROFILE_MAP:
+        losses.append({
+            'code': 'unsupported_visualization_type',
+            'severity': 'warning',
+            'detail': (
+                f'Legacy visualization type {vis_type!r} mapped to table.'
+            ),
+        })
+        vis_type = 'table'
+    viz = {
+        'type': vis_type,
+        'settings': copy.deepcopy(dict(viz_raw.get('settings') or {})),
+    }
+    params = list(raw_question.get('parameters') or [])
+    rpol = dict(raw_question.get('result_policy') or {})
+
+    qspec = raw_question.get('query') or {}
+    qkind = str(qspec.get('kind') or 'builder')
+    if qkind == 'sql':
+        sql_text = str(qspec.get('sql') or 'SELECT 1 AS value')
+        model = default_question_model(
+            name=name,
+            endpoint_id=endpoint_id,
+            raw_sql=sql_text,
+            parameters=params,
+            visualization=viz,
+            result_policy=rpol,
+        )
+    elif qkind == 'semantic':
+        sm_ref = raw_question.get('semantic_model') or {}
+        sm_id = str(sm_ref.get('id') or 'semantic_model')
+        sm_def: Mapping[str, Any] | None = (semantic_models or {}).get(sm_id)
+        if sm_def is None and semantic_service is not None:
+            try:
+                loaded_sm = semantic_service.get_model(
+                    actor_id, endpoint_id, sm_id
+                )
+                sm_def = loaded_sm.get('definition') or loaded_sm
+            except Exception:
+                sm_def = None
+        b = qspec.get('builder') or {}
+        rel = ['main', _safe_ident(f'cube_{sm_id[:8]}', 'cube')]
+        if isinstance(sm_def, Mapping):
+            sources = sm_def.get('sources') or []
+            if sources and isinstance(sources[0], Mapping):
+                src_rel = sources[0].get('relation')
+                if isinstance(src_rel, list) and src_rel:
+                    rel = _rel_parts(src_rel)
+        losses.append({
+            'code': 'legacy_semantic_query_converted',
+            'severity': 'warning',
+            'detail': (
+                f'Legacy semantic builder query on semantic_model {sm_id!r} '
+                f'converted to Draft SBsql; review cube field bindings.'
+            ),
+        })
+        alias = rel[-1]
+        cols = [
+            {
+                'column': [alias, _safe_ident(g, f'dim_{i + 1}')],
+                'alias': _safe_ident(g, f'dim_{i + 1}'),
+            }
+            for i, g in enumerate(b.get('group_by') or [])
+        ]
+        measures = [
+            {
+                'function': 'sum',
+                'column': [
+                    alias,
+                    _safe_ident(
+                        (m.get('measure_id') if isinstance(m, Mapping) else m),
+                        f'm_{i + 1}',
+                    ),
+                ],
+                'alias': _safe_ident(
+                    (m.get('measure_id') if isinstance(m, Mapping) else m),
+                    f'm_{i + 1}',
+                ),
+            }
+            for i, m in enumerate(b.get('aggregations') or [])
+        ] or [{'function': 'count', 'column': None, 'alias': 'row_count'}]
+        model = default_question_model(
+            name=name,
+            endpoint_id=endpoint_id,
+            sbsql={
+                'from': {'relation': rel, 'alias': alias},
+                'columns': cols,
+                'measures': measures,
+                'limit': int(b.get('limit') or 500),
+            },
+            parameters=params,
+            visualization=viz,
+            result_policy=rpol,
+        )
+    else:
+        b = qspec.get('builder') or {}
+        src = b.get('source') or {}
+        rel = _rel_parts(src.get('relation') or ['main', 'items'])
+        alias = rel[-1]
+        seen_cols: set[str] = set()
+        cols = []
+        for entry in list(b.get('group_by') or []) + list(
+            b.get('columns') or []
+        ):
+            c_obj = (
+                {'column': entry}
+                if isinstance(entry, str)
+                else dict(entry or {})
+            )
+            cname = _safe_ident(c_obj.get('column'), 'col')
+            calias = _safe_ident(c_obj.get('alias') or cname, cname)
+            if calias not in seen_cols:
+                seen_cols.add(calias)
+                cols.append({'column': [alias, cname], 'alias': calias})
+        measures = []
+        for idx, agg in enumerate(b.get('aggregations') or []):
+            if not isinstance(agg, Mapping):
+                continue
+            fn = str(agg.get('function') or 'count')
+            col_raw = agg.get('column')
+            m_alias = _safe_ident(
+                agg.get('alias') or f'{fn}_{col_raw or (idx + 1)}',
+                f'm_{idx + 1}',
+            )
+            measures.append({
+                'function': fn,
+                'column': (
+                    [alias, _safe_ident(col_raw, 'val')] if col_raw else None
+                ),
+                'alias': m_alias,
+            })
+        sbsql_filters = []
+        for flt in b.get('filters') or []:
+            if not isinstance(flt, Mapping):
+                continue
+            fcol = _safe_ident(flt.get('column'), 'col')
+            fentry: dict[str, Any] = {
+                'column': [alias, fcol],
+                'operator': str(flt.get('operator') or 'eq'),
+            }
+            if flt.get('parameter_id') is not None:
+                fentry['parameter'] = _safe_ident(
+                    flt['parameter_id'], 'param'
+                )
+            else:
+                fentry['value'] = copy.deepcopy(flt.get('value'))
+            sbsql_filters.append(fentry)
+        order_by = [
+            {
+                'expr': _safe_ident(o.get('column'), 'col'),
+                'direction': str(o.get('direction') or 'asc'),
+            }
+            for o in (b.get('order_by') or [])
+            if isinstance(o, Mapping) and o.get('column')
+        ]
+        model = default_question_model(
+            name=name,
+            endpoint_id=endpoint_id,
+            sbsql={
+                'from': {'relation': rel, 'alias': alias},
+                'columns': cols,
+                'measures': measures,
+                'filters': sbsql_filters,
+                'order_by': order_by,
+                'limit': int(b.get('limit') or 500),
+            },
+            parameters=params,
+            visualization=viz,
+            result_policy=rpol,
+        )
+    model['description'] = description
+    return {'question': model, 'losses': losses}
+
+
+def convert_legacy_bi_dashboard(
+    raw_dashboard: Mapping[str, Any],
+    *,
+    question_design_map: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Convert a legacy JSON ``BIDashboard`` definition to Draft DDN."""
+    losses: list[dict[str, Any]] = []
+    name = str(raw_dashboard.get('name') or 'Migrated Dashboard')
+    description = str(raw_dashboard.get('description') or '')
+    if raw_dashboard.get('collection_id'):
+        losses.append({
+            'code': 'collection_mapped_to_project',
+            'severity': 'info',
+            'detail': (
+                f"Legacy collection_id {raw_dashboard['collection_id']!r} "
+                f"replaced by project scope in designs.db."
+            ),
+        })
+
+    tabs = [
+        {
+            'id': _safe_ident(t.get('id'), 'main'),
+            'name': str(t.get('name') or 'Main'),
+        }
+        for t in (
+            raw_dashboard.get('tabs') or [{'id': 'main', 'name': 'Main'}]
+        )
+        if isinstance(t, Mapping)
+    ] or [{'id': 'main', 'name': 'Main'}]
+    valid_tab_ids = {t['id'] for t in tabs}
+
+    cards: list[dict[str, Any]] = []
+    for idx, craw in enumerate(raw_dashboard.get('cards') or []):
+        if not isinstance(craw, Mapping):
+            continue
+        cid = _safe_ident(craw.get('id') or f'card_{idx + 1}', 'card')
+        tab_id = _safe_ident(
+            craw.get('tab_id') or tabs[0]['id'], tabs[0]['id']
+        )
+        if tab_id not in valid_tab_ids:
+            tab_id = tabs[0]['id']
+        ctype = str(craw.get('type') or 'text')
+        lay = craw.get('layout') or {}
+        layout_box = {
+            'x': max(0, min(23, int(lay.get('x') or 0))),
+            'y': max(0, int(lay.get('y') or idx * 8)),
+            'w': max(1, min(24, int(lay.get('w') or 12))),
+            'h': max(1, min(100, int(lay.get('h') or 8))),
+        }
+        title = str(craw.get('title') or cid)
+        if ctype == 'question':
+            qref = craw.get('question') or {}
+            legacy_qid = str(qref.get('question_id') or '')
+            mapped = question_design_map.get(legacy_qid)
+            if mapped is None:
+                losses.append({
+                    'code': 'missing_legacy_question',
+                    'severity': 'warning',
+                    'detail': (
+                        f'Card {cid!r} references legacy question '
+                        f'{legacy_qid!r} which was not in the migrated set.'
+                    ),
+                })
+                continue
+            vis_ov = craw.get('visualization') or (
+                mapped['question'].get('visualization') or {'type': 'bar'}
+            )
+            vtype = str(vis_ov.get('type') or 'bar')
+            if vtype not in CHART_PROFILE_MAP:
+                vtype = 'table'
+            cards.append({
+                'id': cid,
+                'tab_id': tab_id,
+                'type': 'question',
+                'title': title or mapped['question']['name'],
+                'layout': layout_box,
+                'question': {
+                    'question_design_id': mapped['design']['id'],
+                    'pinned_version': 1,
+                    'follow_latest_accepted': False,
+                },
+                'visualization': {
+                    'type': vtype,
+                    'settings': copy.deepcopy(
+                        dict(vis_ov.get('settings') or {})
+                    ),
+                },
+            })
+        elif ctype == 'text':
+            t_obj = craw.get('text') or {}
+            cards.append({
+                'id': cid,
+                'tab_id': tab_id,
+                'type': 'text',
+                'title': title,
+                'layout': layout_box,
+                'text': {'markdown': str(t_obj.get('markdown') or '')},
+            })
+        elif ctype == 'metric_panel':
+            mp = craw.get('metric_panel') or {}
+            losses.append({
+                'code': 'metric_panel_static_snapshot',
+                'severity': 'info',
+                'detail': (
+                    f'Legacy monitoring metric_panel {cid!r} imported as a '
+                    f'static snapshot card (live collector feeds stay in '
+                    f'monitoring).'
+                ),
+            })
+            cards.append({
+                'id': cid,
+                'tab_id': tab_id,
+                'type': 'metric_panel',
+                'title': title,
+                'layout': layout_box,
+                'metric_panel': {
+                    'panel_id': str(mp.get('panel_id') or cid),
+                    'snapshot_mode': 'static',
+                    'columns': copy.deepcopy(list(mp.get('columns') or [
+                        {'id': 'measure', 'label': 'Measure'},
+                        {'id': 'value', 'label': 'Snapshot Value'},
+                    ])),
+                    'rows': copy.deepcopy(list(mp.get('rows') or [])),
+                },
+            })
+
+    kept_card_ids = {c['id'] for c in cards}
+    filters: list[dict[str, Any]] = []
+    for fraw in raw_dashboard.get('filters') or []:
+        if not isinstance(fraw, Mapping):
+            continue
+        fid = _safe_ident(fraw.get('id'), 'flt')
+        targets = []
+        for tgt in fraw.get('targets') or []:
+            if not isinstance(tgt, Mapping):
+                continue
+            tcid = _safe_ident(tgt.get('card_id'), 'card')
+            if tcid not in kept_card_ids:
+                continue
+            if tgt.get('parameter_id'):
+                targets.append({
+                    'card_id': tcid,
+                    'parameter': _safe_ident(tgt['parameter_id'], 'param'),
+                })
+            elif isinstance(tgt.get('field'), Mapping):
+                fld = tgt['field']
+                targets.append({
+                    'card_id': tcid,
+                    'field': str(fld.get('column') or fld.get('field') or ''),
+                })
+        fentry: dict[str, Any] = {
+            'id': fid,
+            'name': str(fraw.get('name') or fid),
+            'type': str(fraw.get('type') or 'string'),
+            'widget': str(fraw.get('widget') or 'text'),
+            'operator': str(fraw.get('operator') or 'eq'),
+            'required': bool(fraw.get('required', False)),
+            'targets': targets,
+        }
+        if 'default' in fraw and fraw['default'] is not None:
+            fentry['default'] = copy.deepcopy(fraw['default'])
+        filters.append(fentry)
+
+    links: list[dict[str, Any]] = []
+    for dt in raw_dashboard.get('drill_throughs') or []:
+        if not isinstance(dt, Mapping):
+            continue
+        src_cid = _safe_ident(dt.get('source_card_id'), 'card')
+        if src_cid not in kept_card_ids:
+            continue
+        tgt = dt.get('target') or {}
+        if tgt.get('kind') == 'question':
+            mapped_q = question_design_map.get(
+                str(tgt.get('question_id') or '')
+            )
+            if mapped_q is None:
+                losses.append({
+                    'code': 'unresolved_drill_target',
+                    'severity': 'warning',
+                    'detail': (
+                        f"Drill-through {dt.get('id')!r} targets unmigrated "
+                        f"question {tgt.get('question_id')!r}."
+                    ),
+                })
+                continue
+            fmap: dict[str, str] = {}
+            for param_id, src_spec in (tgt.get('parameters') or {}).items():
+                if isinstance(src_spec, Mapping) and src_spec.get('column'):
+                    fmap[str(src_spec['column'])] = str(param_id)
+            links.append({
+                'id': _safe_ident(dt.get('id') or 'drill', 'drill'),
+                'card_id': src_cid,
+                'kind': 'drill_through',
+                'target_design_id': mapped_q['design']['id'],
+                'carry_filter_context': True,
+                'field_map': fmap,
+            })
+        else:
+            losses.append({
+                'code': 'external_drill_target_deferred',
+                'severity': 'info',
+                'detail': (
+                    f"Drill-through {dt.get('id')!r} to dashboard target "
+                    f"{tgt.get('dashboard_id')!r} recorded in loss report; "
+                    f"re-link to target dashboard design ID if needed."
+                ),
+            })
+
+    d_model = default_dashboard_model(
+        name=name,
+        tabs=tabs,
+        cards=cards,
+        filters=filters,
+        links=links,
+        description=description,
+    )
+    return {'dashboard': d_model, 'losses': losses}

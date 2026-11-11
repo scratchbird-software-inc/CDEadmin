@@ -129,6 +129,9 @@ def isolated_profile(profile, environment=None, home=None, identity=None):
         'CDEADMIN_OPERATION_STORE_PATH': _join(
             data, 'cdeadmin-operations.json', windows=windows
         ),
+        'CDEADMIN_DESIGN_STORE_PATH': _join(
+            data, 'designs.db', windows=windows
+        ),
         'SESSION_DB_PATH': _join(data, 'sessions', windows=windows),
         'STORAGE_DIR': _join(data, 'storage', windows=windows),
         'SESSION_COOKIE_NAME': common['cookie'],

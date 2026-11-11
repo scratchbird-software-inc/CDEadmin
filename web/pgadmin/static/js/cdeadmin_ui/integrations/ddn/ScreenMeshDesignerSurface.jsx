@@ -411,15 +411,15 @@ export function ScreenMeshDesignerSurface({
     const columns =
       newControl.role === 'ui.grid'
         ? parseCsvList(newControl.columnsCsv).map((colName, idx) => ({
-            id:
+          id:
               colName
                 .toLowerCase()
                 .replace(/[^a-z0-9_]+/g, '_')
                 .replace(/^_+|_+$/g, '') || `col_${idx + 1}`,
-            name: colName,
-            width: 140,
-            datatype: 'text',
-          }))
+          name: colName,
+          width: 140,
+          datatype: 'text',
+        }))
         : [];
     const options = ['ui.dropdown', 'ui.radio', 'ui.tabs', 'ui.list'].includes(
       newControl.role

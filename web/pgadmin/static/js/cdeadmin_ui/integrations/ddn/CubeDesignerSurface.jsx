@@ -213,7 +213,7 @@ export function CubeDesignerSurface({
         if (res?.cube) {
           setCubePayload(res.cube);
         }
-      } catch (_err) {
+      } catch {
         // Session workspace remains valid even if optional model fetch fails.
       }
     },

@@ -140,3 +140,78 @@ function baseOptions(scales, xTitle) {
     }} : {}),
   };
 }
+
+function ddnQuote(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+/**
+ * Build a standalone ddn-next-1 workspace for DDNViewerSurface from a
+ * buildChart() result so BI chart previews can render through the shared DDN
+ * viewer (owner decision E1; Chart.js stays only during transition).
+ */
+export function buildDdnChartWorkspace(chart, title = 'Chart') {
+  if(!chart || chart.kind !== 'chart') return null;
+  const labels = chart.data?.labels || [];
+  const dataset = chart.data?.datasets?.[0] || {label: 'value', data: []};
+  const isScatter = chart.type === 'scatter';
+  const profile = chart.type === 'pie' ? 'chart.pie@1' : 'chart.basic@1';
+  const mark = chart.type === 'bar' ? 'bar' : chart.type === 'scatter' ? 'point' : 'line';
+  const rows = isScatter ?
+    (dataset.data || []).map((pt, idx) => [`r_${idx + 1}`, Number(pt?.x ?? 0), Number(pt?.y ?? 0)]) :
+    labels.map((lbl, idx) => [`r_${idx + 1}`, String(lbl ?? ''), Number(dataset.data?.[idx] ?? 0)]);
+  const xType = isScatter ? 'number' : 'text';
+  const lines = [
+    'version "ddn-next-1"',
+    'data "chart_rows"',
+    '    with',
+    '        id "chart_rows"',
+    '        key "row_id"',
+    '        columns',
+    '            item',
+    '                id "row_id"',
+    '                type "text"',
+    '            item',
+    '                id "x_val"',
+    `                type ${ddnQuote(xType)}`,
+    '            item',
+    '                id "y_val"',
+    '                type "number"',
+  ];
+  if(!rows.length) {
+    lines.push('        rows empty list');
+  } else {
+    lines.push('        rows');
+    rows.forEach(([rid, xVal, yVal]) => {
+      lines.push('            item');
+      lines.push(`                item ${ddnQuote(rid)}`);
+      lines.push(`                item ${isScatter ? Number(xVal) : ddnQuote(xVal)}`);
+      lines.push(`                item ${Number(yVal)}`);
+    });
+  }
+  lines.push(
+    '',
+    `view "chart_preview" as ${ddnQuote(profile)}`,
+    '    with',
+    '        id "chart_preview"',
+    `        title ${ddnQuote(title || 'Chart')}`,
+    '        selection',
+    '            include empty list',
+    '        projection',
+    '            options',
+    '                records',
+    '                    item',
+    '                        id "chart_rows"',
+    '                x "x_val"',
+    '                y "y_val"',
+  );
+  if(profile === 'chart.basic@1') {
+    lines.push(`                mark ${ddnQuote(mark)}`);
+  }
+  return {
+    schema: 'ddn-source-workspace@1',
+    entry: 'main.ddn',
+    view: 'chart_preview',
+    files: {'main.ddn': `${lines.join('\n')}\n`},
+  };
+}

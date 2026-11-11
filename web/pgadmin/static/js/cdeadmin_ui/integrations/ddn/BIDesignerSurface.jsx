@@ -367,16 +367,16 @@ export function BIDesignerSurface({
       baseAlias: sbsql?.from?.alias || 'orders',
       columnsCsv: sbsql
         ? sbsql.columns
-            .map((c) => `${c.column.join('.')}:${c.alias}`)
-            .join(', ')
+          .map((c) => `${c.column.join('.')}:${c.alias}`)
+          .join(', ')
         : 'orders.region:region',
       measuresCsv: sbsql
         ? sbsql.measures
-            .map(
-              (m) =>
-                `${m.function}:${m.column ? m.column.join('.') : '*'}:${m.alias}`
-            )
-            .join(', ')
+          .map(
+            (m) =>
+              `${m.function}:${m.column ? m.column.join('.') : '*'}:${m.alias}`
+          )
+          .join(', ')
         : 'sum:orders.amount:total_amount',
       joinRelation: firstJoin ? firstJoin.relation.join('.') : '',
       joinAlias: firstJoin?.alias || '',
@@ -1519,17 +1519,17 @@ export function BIDesignerSurface({
             options={
               biKind === 'dashboard'
                 ? [
-                    {value: 'subscription', label: 'Scheduled Subscription / Alert'},
-                    {value: 'embed', label: 'External Embed'},
-                    {
-                      value: 'dashboard_server',
-                      label: 'Remote Dashboard Server Publication',
-                    },
-                  ]
+                  {value: 'subscription', label: 'Scheduled Subscription / Alert'},
+                  {value: 'embed', label: 'External Embed'},
+                  {
+                    value: 'dashboard_server',
+                    label: 'Remote Dashboard Server Publication',
+                  },
+                ]
                 : [
-                    {value: 'subscription', label: 'Scheduled Subscription / Alert'},
-                    {value: 'embed', label: 'External Embed'},
-                  ]
+                  {value: 'subscription', label: 'Scheduled Subscription / Alert'},
+                  {value: 'embed', label: 'External Embed'},
+                ]
             }
             onChange={(val) =>
               setOutwardDraft((c) => ({...c, effectKind: val}))

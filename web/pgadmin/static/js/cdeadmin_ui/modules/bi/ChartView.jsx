@@ -13,6 +13,8 @@ import gettext from 'sources/gettext';
 import BaseChart from 'sources/chartjs';
 import {Box} from '../../primitives/Layout';
 import {EmptyState} from '../../feedback/EmptyState';
+import {DDNViewerSurface} from '../../integrations/ddn/DDNViewerSurface';
+import {buildDdnChartWorkspace} from './chartData';
 
 function metricText(value) {
   if(value === null || value === undefined) return '—';
@@ -25,7 +27,7 @@ function metricText(value) {
  * Draw a buildChart() result with the shared BaseChart wrapper. `chart` must
  * be referentially stable between renders (the wrapper redraws on change).
  */
-export default function ChartView({chart, title, onMark, height = 340}) {
+export default function ChartView({chart, title, onMark, height = 340, renderer = 'chartjs'}) {
   const id = useId();
   // Chart.js keeps the options it was created with, so the click handler reads the latest callback.
   const latest = useRef(onMark);
@@ -36,6 +38,10 @@ export default function ChartView({chart, title, onMark, height = 340}) {
       if(elements?.length) latest.current?.({index: elements[0].index, datasetIndex: elements[0].datasetIndex});
     },
   } : chart.options, [chart, Boolean(onMark)]);
+  const ddnWorkspace = useMemo(
+    () => renderer === 'ddn' ? buildDdnChartWorkspace(chart, title) : null,
+    [renderer, chart, title]
+  );
   if(chart.kind === 'empty') return <EmptyState message={chart.reason} />;
   if(chart.kind === 'metric') {
     return <Box role="img" aria-label={gettext('%s: %s', chart.label, metricText(chart.value))}
@@ -45,6 +51,11 @@ export default function ChartView({chart, title, onMark, height = 340}) {
     </Box>;
   }
   if(chart.kind !== 'chart') return null;
+  if(renderer === 'ddn' && ddnWorkspace) {
+    return <Box role="img" aria-label={title} sx={{height, position: 'relative', minWidth: 0}}>
+      <DDNViewerSurface workspace={ddnWorkspace} view="chart_preview" />
+    </Box>;
+  }
   return <Box role="img" aria-label={title} sx={{height, position: 'relative', minWidth: 0}}>
     <BaseChart id={`bi-chart-${id.replace(/[^A-Za-z0-9_-]/g, '')}`} type={chart.type}
       data={chart.data} options={options} />
@@ -56,4 +67,5 @@ ChartView.propTypes = {
   title: PropTypes.string.isRequired,
   onMark: PropTypes.func,
   height: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  renderer: PropTypes.oneOf(['chartjs', 'ddn']),
 };

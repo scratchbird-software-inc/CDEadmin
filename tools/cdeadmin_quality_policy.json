@@ -34,7 +34,7 @@
     "maximum_bytes": 77623060
   },
   "startup": {
-    "route_count": 1410,
+    "route_count": 1441,
     "wall_seconds_maximum": 8.0,
     "wall_seconds_platform_maximum": {
       "darwin:x86_64": 25.0,
@@ -56,7 +56,8 @@
       "cdeadmin_report_delivery_service",
       "cdeadmin_report_scheduler_service",
       "cdeadmin_operation_bus",
-      "cdeadmin_provider_workspace"
+      "cdeadmin_provider_workspace",
+      "cdeadmin_design_store"
     ]
   },
   "contract_benchmark": {

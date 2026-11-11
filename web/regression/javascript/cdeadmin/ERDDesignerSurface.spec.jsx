@@ -54,12 +54,12 @@ function makeSession({suspect = true} = {}) {
       },
       bindings: suspect
         ? [
-            {
-              id: '019a0000-0000-7000-8000-000000000099',
-              state: 'suspect',
-              target_ref: 'sqlite:table:main.customers',
-            },
-          ]
+          {
+            id: '019a0000-0000-7000-8000-000000000099',
+            state: 'suspect',
+            target_ref: 'sqlite:table:main.customers',
+          },
+        ]
         : [],
     },
     workspace: {

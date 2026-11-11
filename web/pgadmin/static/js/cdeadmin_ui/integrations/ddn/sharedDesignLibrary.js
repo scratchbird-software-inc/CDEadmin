@@ -406,7 +406,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/erd/alter-plan`,
+          '/erd/alter-plan',
         {
           base_version: baseVersion,
           desired_version: desiredVersion,
@@ -516,7 +516,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/cube/sync-active`,
+          '/cube/sync-active',
         {note}
       )
     );
@@ -536,7 +536,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/cube/leave-accepted`,
+          '/cube/leave-accepted',
         {
           mode,
           target_version: targetVersion,
@@ -560,7 +560,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/cube/materialization-plan`,
+          '/cube/materialization-plan',
         {
           base_version: baseVersion,
           desired_version: desiredVersion,
@@ -644,6 +644,24 @@ export class DesignStoreClient {
     );
   }
 
+  importBiLegacy(
+    projectId,
+    {
+      bundle = null,
+      endpointId = 'default-endpoint',
+      keyPrefix = 'legacy_bi',
+    } = {}
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'import_legacy_bi',
+        bundle,
+        endpoint_id: endpointId,
+        key_prefix: keyPrefix,
+      })
+    );
+  }
+
   getBiModel(projectId, designId, {version = null} = {}) {
     const params = new URLSearchParams();
     if (version !== null && version !== undefined) {
@@ -716,7 +734,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/bi/sql-bridge`,
+          '/bi/sql-bridge',
         {
           action,
           version,
@@ -743,7 +761,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.get(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/bi/outward-review`
+          '/bi/outward-review'
       )
     );
   }
@@ -761,7 +779,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/bi/outward-review`,
+          '/bi/outward-review',
         {
           action: 'review',
           effect_kind: effectKind,
@@ -786,7 +804,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/bi/outward-review`,
+          '/bi/outward-review',
         {
           action: 'mint_token',
           publication_id: publicationId,
@@ -897,7 +915,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/screen-mesh/model`,
+          '/screen-mesh/model',
         {
           expected_head_version: expectedHeadVersion,
           mesh,
@@ -918,7 +936,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/screen-mesh/screenshot`,
+          '/screen-mesh/screenshot',
         {
           image_base64: imageBase64,
           media_type: mediaType,
@@ -937,7 +955,7 @@ export class DesignStoreClient {
     return callApi(() =>
       this.api.post(
         `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
-          `/screen-mesh/redact`,
+          '/screen-mesh/redact',
         {
           regions,
           screen_id: screenId,

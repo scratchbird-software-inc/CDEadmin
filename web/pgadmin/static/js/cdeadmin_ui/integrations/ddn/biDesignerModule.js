@@ -91,7 +91,7 @@ export function biDesignerModuleDefinition() {
               kind:
                 descriptor.assetType === BI_DASHBOARD_DESIGN_ASSET_TYPE
                   ? 'dashboard'
-                  : descriptor.kind || 'question',
+                  : context.kind || descriptor.kind || 'question',
               client,
               readOnly: context.readOnly === true,
               executeCommand: surfaceCommandExecutor(context),
@@ -148,15 +148,18 @@ export function biDesignerModuleDefinition() {
                 'Workbench surface opening authority is unavailable.'
               );
             }
-            return context.openSurface('diagram.bi.designer', {
-              toolInstanceId:
-                args.toolInstanceId ??
-                `diagram.bi.designer:${args.projectId}:${args.designId}`,
-              restoreRef: args.designId,
-              projectId: args.projectId,
-              kind: args.kind ?? 'question',
-              title: args.title,
-            });
+            return context.openSurface(
+              'diagram.bi.designer',
+              {
+                toolInstanceId:
+                  args.toolInstanceId ??
+                  `diagram.bi.designer:${args.projectId}:${args.designId}`,
+                restoreRef: args.designId,
+                projectId: args.projectId,
+                title: args.title,
+              },
+              {kind: args.kind ?? 'question'}
+            );
           },
         },
         toolbarActionCommand(

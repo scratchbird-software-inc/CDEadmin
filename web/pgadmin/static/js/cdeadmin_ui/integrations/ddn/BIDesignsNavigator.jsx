@@ -179,6 +179,24 @@ export function BIDesignsNavigator({
         });
       }
 
+      if (draft.mode === 'import_legacy_bi') {
+        const rawText = draft.bundleJsonOrBase64.trim();
+        const parsedBundle = rawText ? JSON.parse(rawText) : null;
+        const imported = await designClient.importBiLegacy(projectId, {
+          bundle: parsedBundle,
+          endpointId: draft.endpointId.trim() || 'default-endpoint',
+        });
+        setImportSummary(imported.loss_report || null);
+        await refresh();
+        setOpen(false);
+        const firstTarget =
+          imported.dashboards?.[0] || imported.questions?.[0] || null;
+        if (firstTarget) {
+          onOpenDesign(projectId, firstTarget);
+        }
+        return;
+      }
+
       if (draft.mode === 'import_superset' || draft.mode === 'import_metabase') {
         const rawText = draft.bundleJsonOrBase64.trim();
         if (!rawText) {
@@ -196,15 +214,15 @@ export function BIDesignsNavigator({
         const imported =
           draft.mode === 'import_superset'
             ? await designClient.importBiSuperset(projectId, {
-                bundle: parsedBundle,
-                zipBase64: encodedArchive,
-                endpointId: draft.endpointId.trim() || 'default-endpoint',
-              })
+              bundle: parsedBundle,
+              zipBase64: encodedArchive,
+              endpointId: draft.endpointId.trim() || 'default-endpoint',
+            })
             : await designClient.importBiMetabase(projectId, {
-                bundle: parsedBundle,
-                bundleBase64: encodedArchive,
-                endpointId: draft.endpointId.trim() || 'default-endpoint',
-              });
+              bundle: parsedBundle,
+              bundleBase64: encodedArchive,
+              endpointId: draft.endpointId.trim() || 'default-endpoint',
+            });
         setImportSummary(imported.loss_report || null);
         await refresh();
         setOpen(false);
@@ -224,14 +242,14 @@ export function BIDesignsNavigator({
       const created =
         draft.mode === 'new_dashboard'
           ? await designClient.createBiDashboard(projectId, {
-              key,
-              title: trimmedTitle,
-            })
+            key,
+            title: trimmedTitle,
+          })
           : await designClient.createBiQuestion(projectId, {
-              key,
-              title: trimmedTitle,
-              endpointId: draft.endpointId.trim() || 'default-endpoint',
-            });
+            key,
+            title: trimmedTitle,
+            endpointId: draft.endpointId.trim() || 'default-endpoint',
+          });
 
       await refresh();
       setOpen(false);
@@ -350,6 +368,11 @@ export function BIDesignsNavigator({
                 value: 'import_metabase',
                 label: 'Import Metabase serialization bundle (Draft)',
               },
+              {
+                value: 'import_legacy_bi',
+                label:
+                  'Migrate Legacy ScratchRobin BI (JSON / Store -> Draft DDN)',
+              },
             ]}
             onChange={(val) => setDraft((cur) => ({...cur, mode: val}))}
           />
@@ -366,8 +389,12 @@ export function BIDesignsNavigator({
           ) : (
             <TextArea
               autoFocus
-              required
-              label="Bundle JSON or Base64 Archive"
+              required={draft.mode !== 'import_legacy_bi'}
+              label={
+                draft.mode === 'import_legacy_bi'
+                  ? 'Optional Legacy BI JSON Bundle (leave empty to read live store)'
+                  : 'Bundle JSON or Base64 Archive'
+              }
               value={draft.bundleJsonOrBase64}
               onChange={(e) =>
                 setDraft((cur) => ({
