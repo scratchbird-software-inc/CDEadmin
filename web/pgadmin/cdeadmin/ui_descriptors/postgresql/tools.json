@@ -341,6 +341,79 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "resource.postgresql.script_insert",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "INSERT Script",
+      "description": "Open the query editor holding an INSERT script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 30,
+      "arguments": {
+        "tab": "studio",
+        "script": "insert"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table",
+          "view"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.script_update",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "UPDATE Script",
+      "description": "Open the query editor holding an UPDATE script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 31,
+      "arguments": {
+        "tab": "studio",
+        "script": "update"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.script_delete",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "DELETE Script",
+      "description": "Open the query editor holding a DELETE script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 32,
+      "arguments": {
+        "tab": "studio",
+        "script": "delete"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
     }
   ]
 }

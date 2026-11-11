@@ -113,6 +113,28 @@ def test_postgresql_builder_quotes_like_the_inherited_route():
         build(b.postgresql, res('sequence', ['public', 's']), [], profile='postgresql-native')
 
 
+def test_postgresql_scripts_follow_the_inherited_shapes():
+    # M7 (2026-11-11): the inherited Scripts menu's INSERT/UPDATE/DELETE.
+    table = res('table', ['demo', 'public', 'assets'], script='insert')
+    catalog = [res('column', ['demo', 'public', 'assets', name]) for name in ('asset_id', 'Tag')]
+    assert build(b.postgresql, table, catalog, profile='postgresql-native') == (
+        'INSERT INTO public.assets(\n\tasset_id, "Tag")\n\tVALUES (?, ?);')
+    assert build(b.postgresql, dict(table, script='update'), catalog, profile='postgresql-native') == (
+        'UPDATE public.assets\n\tSET asset_id=?, "Tag"=?\n\tWHERE <condition>;')
+    assert build(b.postgresql, dict(table, script='delete'), [], profile='postgresql-native') == (
+        'DELETE FROM public.assets\n\tWHERE <condition>;')
+    assert build(b.postgresql, table, [], profile='postgresql-native') == '-- Please create column(s) first...'
+    assert build(b.postgresql, dict(table, script='select'), catalog, profile='postgresql-native') == (
+        'SELECT asset_id, "Tag"\nFROM public.assets')
+    # Views insert but never update or delete; materialized views only select.
+    view_catalog = [res('column', ['demo', 's', 'v', 'k'])]
+    assert build(b.postgresql, res('view', ['demo', 's', 'v'], script='insert'), view_catalog,
+                 profile='postgresql-native') == 'INSERT INTO s.v(\n\tk)\n\tVALUES (?);'
+    for kind, script in (('view', 'update'), ('materialized-view', 'insert'), ('table', 'merge')):
+        with pytest.raises(BrowseUnavailable):
+            build(b.postgresql, res(kind, ['demo', 's', 'r'], script=script), catalog, profile='postgresql-native')
+
+
 @pytest.mark.parametrize('manifest,module,profile_id,kinds',
                          [item for item in _declarations()
                           if item[3] and item[2] != 'postgresql-native'])

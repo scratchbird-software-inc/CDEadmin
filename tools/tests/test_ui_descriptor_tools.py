@@ -127,6 +127,11 @@ def test_postgresql_provider_tree_declares_the_inherited_utilities():
     assert database['database.postgresql.maintenance']['arguments']['tool'] == 'maintenance'
     assert 'resource.postgresql.maintenance' in offered('table')
     assert 'resource.postgresql.maintenance' not in offered('view')
+    # Scripts (M7): the inherited Scripts menu's kinds per relation.
+    assert {'resource.postgresql.script_insert', 'resource.postgresql.script_update',
+            'resource.postgresql.script_delete'} <= offered('table')
+    assert 'resource.postgresql.script_insert' in offered('view')
+    assert 'resource.postgresql.script_update' not in offered('view')
 
 
 def test_browse_data_follows_each_connector_manifest():

@@ -484,6 +484,17 @@ triggers are enabled again. Truncate with cascade and restart identity
 was already native. Observed live on PostgreSQL 18.3: the count, the
 counters reset, and a trigger's enabled state toggled.
 
+M7 second slice (2026-11-11), scripts: the inherited Scripts menu's
+INSERT, UPDATE and DELETE scripts open from provider-tree relations (the
+SELECT script is Browse data) with the same placeholders and condition
+marker the inherited node wrote, offered per relation kind as the
+inherited nodes offered them (views insert only, materialized views
+select only). They ride the Browse data channel: the studio source
+request and the workspace's browse action carry a script kind, which the
+provider's builder renders; the text is placed in the editor and not run.
+The CREATE script is the provider tree's DDL state. Observed through the
+running application on the demo table; not opened in a browser.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

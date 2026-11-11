@@ -2669,11 +2669,15 @@ class ProviderWorkspaceService:
         """
         if not isinstance(request, dict) or set(request).difference({
                 'resource_id', 'database_target_id', 'language_profile',
-                'client_sql_dialect'}):
+                'client_sql_dialect', 'script'}):
             raise ProviderWorkspaceError('browse data request is invalid')
         options = {}
         if isinstance(request.get('language_profile'), str):
             options['language_profile'] = request['language_profile']
+        # A script (insert, update, delete) instead of the browse read
+        # (M7, 2026-11-11); the provider decides which it offers.
+        if isinstance(request.get('script'), str) and request['script']:
+            options['script'] = request['script']
         if request.get('client_sql_dialect') in (1, 3):
             options['client_sql_dialect'] = request['client_sql_dialect']
         resource_id = request.get('resource_id')
