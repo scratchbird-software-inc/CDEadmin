@@ -451,6 +451,16 @@ demo server, because the demo image cannot install pgAgent; not checked
 against a real agent, and the picker-less positions fields (minutes,
 hours, days, months as comma lists) were not exercised in a browser.
 
+M6 eighth slice (2026-11-11), Browse data on the provider tree: the
+PostgreSQL manifest now declares the relation kinds its editor can read
+(table, partitioned table, partition, view, materialized view, foreign
+table), so the shared menu offers Browse data on those nodes, and the
+provider answers the workspace's browse request with a SELECT of every
+column from the cached catalog, quoted exactly as the inherited route
+quotes (pgAdmin's keyword-aware identifier quoting), as schema.name; the
+text is placed in the editor and not run. Observed through the running
+application on the demo server's service.assets table.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

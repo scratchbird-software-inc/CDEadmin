@@ -55,6 +55,9 @@ BUILDER_PROFILE = {
 
 def provider(profile_id):
     """A stand-in carrying a connector's real profile, in its module."""
+    if profile_id == 'postgresql-native':
+        # Not a pilot provider: its builder reads no profile.
+        return type('Provider', (), {'__module__': 'pgadmin.cdeadmin.providers.postgresql.provider'})()
     for manifest, module in BUILTIN_PACKAGES:
         document = json.loads((PROVIDERS / manifest).read_text())
         if document['identity']['profile_id'] != profile_id:
@@ -85,15 +88,34 @@ def _declarations():
         yield manifest, module, document['identity']['profile_id'], kinds
 
 
-def test_every_connector_but_legacy_postgresql_declares_browse_data():
+def test_every_connector_declares_browse_data():
     declared = {profile: kinds for _m, _mod, profile, kinds in _declarations()}
-    assert declared.pop('postgresql-native') == []
+    # PostgreSQL joined on the provider tree (M6, 2026-11-11).
+    assert declared['postgresql-native'] == [
+        'table', 'partitioned-table', 'partition', 'view',
+        'materialized-view', 'foreign-table']
     assert all(declared.values()), declared
-    assert len(declared) == 26
+    assert len(declared) == 27
+
+
+def test_postgresql_builder_quotes_like_the_inherited_route():
+    # The provider tree's path starts with the database; the text does not.
+    table = res('table', ['demo', 'public', 'assets'])
+    catalog = [res('column', ['demo', 'public', 'assets', name])
+               for name in ('asset_id', 'Tag', 'serial number', 'select',
+                            'amount')]
+    assert build(b.postgresql, table, catalog, profile='postgresql-native') == (
+        'SELECT asset_id, "Tag", "serial number", "select", amount\n'
+        'FROM public.assets')
+    view = res('view', ['Sales', 'open_orders'])
+    assert build(b.postgresql, view, [], profile='postgresql-native') == 'SELECT *\nFROM "Sales".open_orders'
+    with pytest.raises(BrowseUnavailable):
+        build(b.postgresql, res('sequence', ['public', 's']), [], profile='postgresql-native')
 
 
 @pytest.mark.parametrize('manifest,module,profile_id,kinds',
-                         [item for item in _declarations() if item[3]])
+                         [item for item in _declarations()
+                          if item[3] and item[2] != 'postgresql-native'])
 def test_declared_kinds_are_profile_kinds_with_a_builder(
         manifest, module, profile_id, kinds):
     loaded = importlib.import_module(module)

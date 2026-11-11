@@ -49,6 +49,7 @@
   "registration": {
     "display_name": "PostgreSQL",
     "workflow": "legacy_preserved",
+    "browse_data": {"resource_kinds": ["table", "partitioned-table", "partition", "view", "materialized-view", "foreign-table"]},
     "default_port": 5432,
     "default": true,
     "target_adapter_version": "9.17.0",

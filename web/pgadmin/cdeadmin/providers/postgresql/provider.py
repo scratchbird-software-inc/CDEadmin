@@ -1585,6 +1585,21 @@ class PostgreSQLProvider:
                 'PostgreSQL delegated connection failed'
             )
 
+    def browse_source(self, request, catalog=()):
+        """Browse data (owner direction 2026-11-06) for the provider tree
+        (M6, 2026-11-11): editor text reading every column of one relation,
+        built from the cached catalog; nothing runs here."""
+        from pgadmin.cdeadmin.sdk.browse import BrowseUnavailable, native_of
+        from ..browse_builders import postgresql as build
+        self.permissions.require('data_read')
+        payload = dict(request) if isinstance(request, Mapping) else {}
+        try:
+            source = build(self, payload, native_of(payload),
+                           list(catalog or ()), 'postgresql-sql')
+        except BrowseUnavailable as exc:
+            raise PostgreSQLProviderError(str(exc)) from exc
+        return {'source': source, 'language_profile': 'postgresql-sql'}
+
     def source_tooling(self, language_profile):
         if language_profile != 'postgresql-sql':
             raise PostgreSQLProviderError('PostgreSQL SQL language binding required')

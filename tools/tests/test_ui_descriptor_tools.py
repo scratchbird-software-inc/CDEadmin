@@ -164,6 +164,7 @@ def test_browse_data_follows_each_connector_manifest():
         assert not [command for command in ids(resource_context_actions(
             item, column, None, database_target_id='t1'))
             if command.endswith('.browse_data')]
-    assert len(offered) == 26 and 'postgresql-native' not in offered
+    # PostgreSQL joined on the provider tree (M6, 2026-11-11).
+    assert len(offered) == 27 and 'postgresql-native' in offered
     for path in DESCRIPTORS.glob('*/tools.json'):
         assert 'browse_data' not in path.read_text(encoding='utf-8'), path

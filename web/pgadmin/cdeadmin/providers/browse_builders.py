@@ -212,6 +212,22 @@ def _pg_wire(provider, resource, native, catalog):
         reserved=contract_keywords(provider, _pg_reserved)))
 
 
+def postgresql(self, resource, native, catalog, language):
+    """PostgreSQL on the provider tree (M6, 2026-11-11). Names are quoted
+    exactly as the inherited Browse data route quotes them: pgAdmin's
+    keyword-aware ``Driver.qtIdent`` (owner direction 2026-11-06), so the
+    two paths render the same text."""
+    _kind(resource, 'table', 'partitioned-table', 'partition', 'view',
+          'materialized-view', 'foreign-table')
+    from pgadmin.utils.driver.psycopg3 import Driver
+    columns = path_columns(resource, catalog)
+    # The provider tree's path starts with the database; PostgreSQL reads a
+    # relation as schema.name (the inherited route's form).
+    relation = list(resource.get('display_path') or ())[-2:]
+    return sql_select(columns, relation,
+                      lambda name: Driver.qtIdent(None, str(name)))
+
+
 def cockroachdb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view', 'materialized-view')
     return _pg_wire(self, resource, native, catalog)
