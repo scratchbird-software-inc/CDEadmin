@@ -102,7 +102,11 @@ export function legacyNodeData(data) {
     const match = PG_DATABASE_TARGET.exec(String(data._id ?? ''));
     if(!match) return data;
     const label = data.cde_database ?? data.label ?? data._label;
-    return {...data, _type: 'database', _id: Number(match[1]), _label: label, label,
+    // The provider tree attaches to a database when it is browsed, so the
+    // inherited Dashboard tab (activity with cancel and terminate, locks,
+    // prepared transactions) treats it as connected; the dashboard routes
+    // resolve the OID through the maintenance connection either way.
+    return {...data, _type: 'database', _id: Number(match[1]), _label: label, label, connected: true,
       cde_bridged_from: 'cde_database_target'};
   }
   const route = data.cde_legacy_route;

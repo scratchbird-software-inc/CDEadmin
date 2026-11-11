@@ -461,6 +461,20 @@ quotes (pgAdmin's keyword-aware identifier quoting), as schema.name; the
 text is placed in the editor and not run. Observed through the running
 application on the demo server's service.assets table.
 
+M6 ninth slice (2026-11-11), the dashboard: the inherited Dashboard tab
+follows the selected node through the same identity bridge, so a
+provider-tree database node or any object under it shows the inherited
+server and database dashboards (activity with cancel and terminate,
+locks, prepared transactions, configuration, logs, system statistics,
+replication) exactly as the inherited database node did; the bridged
+database carries the connected flag the tab requires, since the provider
+tree attaches to a database when it is browsed, and the dashboard routes
+resolve the database OID through the maintenance connection either way.
+The provider-backed per-database PostgreSQL dashboard and its monitoring
+settings were already declared for the provider tree (M2). This closes
+the M6 list of the parity matrix. The tab was not watched in a browser;
+the routes it calls were observed answering for the demo database by OID.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

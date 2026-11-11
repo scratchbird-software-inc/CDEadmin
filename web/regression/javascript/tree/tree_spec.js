@@ -23,7 +23,7 @@ describe('provider-tree identity bridge (M6, 2026-11-11)', () => {
     cde_legacy_route: {gid: 1, sid: 7, did: 16384, scid: 2200, tid: null, oid: 24601, node_type: 'table'}};
   it('turns a PostgreSQL database target and routed resources into their inherited nodes', () => {
     expect(legacyNodeData(target)).toMatchObject({_type: 'database', _id: 16384, _label: 'demo', label: 'demo',
-      cde_bridged_from: 'cde_database_target'});
+      connected: true, cde_bridged_from: 'cde_database_target'});
     expect(legacyNodeData(schema)).toMatchObject({_type: 'schema', _id: 2200, _pid: 2200, _label: 'public'});
     expect(legacyNodeData(table)).toMatchObject({_type: 'table', _id: 24601, _pid: 2200, _label: 'orders'});
   });
