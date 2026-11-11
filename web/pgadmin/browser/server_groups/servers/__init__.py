@@ -324,6 +324,7 @@ _PROVIDER_TREE_SERVER_GROUPS = (
     ('role', 'Login/Group Roles'),
     ('tablespace', 'Tablespaces'),
     ('replica-node', 'Replica Nodes'),
+    ('pgagent-job', 'pgAgent Jobs'),
 )
 
 
@@ -334,19 +335,28 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
     Their children come from the provider navigator at server scope,
     where the PostgreSQL provider lists the inherited roles, tablespaces
     and replica-node templates' rows with their identity chains. Replica
-    Nodes appears under the inherited module's own rule: only when the
-    server's replication type is logical/physical slots ('log').
+    Nodes and pgAgent Jobs appear under their inherited modules' own
+    rules: replication slots exist ('log'); the pgagent schema is usable in
+    the maintenance database.
     """
     nodes = []
-    replication = None
+    replication, pgagent = None, False
     if manager is not None:
         try:
             replication = get_replication_type(
                 manager.connection(), manager.version)
         except Exception:
             replication = None
+        try:
+            from pgadmin.browser.server_groups.servers.pgagent import (
+                blueprint as pgagent_module)
+            pgagent = bool(pgagent_module.backend_supported(manager, sid=sid))
+        except Exception:
+            pgagent = False
     for resource_kind, label in _PROVIDER_TREE_SERVER_GROUPS:
         if resource_kind == 'replica-node' and replication != 'log':
+            continue
+        if resource_kind == 'pgagent-job' and not pgagent:
             continue
         state = {
             'scope': 'kind', 'target_id': _CDE_SERVER_SCOPE_TARGET,

@@ -115,6 +115,8 @@ VIEW_SPECS = {
                   did=False),
     'tablespace': _spec(_SERVERS + 'tablespaces', 'TablespaceView', 'tsid',
                         scid=False, did=False),
+    'pga_job': _spec(_SERVERS + 'pgagent', 'JobView', 'jid', scid=False,
+                     did=False),
 }
 
 # Cluster-level node types: no database in the chain; their inherited
@@ -128,8 +130,12 @@ ROUTE_DEPENDENCY_NODE_TYPES = CLUSTER_NODE_TYPES | {'column'}
 STATISTICS_NODE_TYPES = frozenset({
     'database', 'table', 'mview', 'sequence', 'index', 'function',
     'procedure', 'trigger_function', 'subscription', 'primary_key',
-    'unique_constraint', 'tablespace', 'column',
+    'unique_constraint', 'tablespace', 'column', 'pga_job',
 })
+
+# Node types whose inherited node has no dependency panels: pgAgent jobs
+# live in pgagent tables, not in pg_depend.
+NO_DEPENDENCY_PANELS = frozenset({'pga_job'})
 
 # Node types whose inherited view needs an id the chain does not carry yet
 # (the foreign-data-wrapper OID): reported as unavailable, not attempted.
@@ -316,6 +322,10 @@ def inherited_inspection(chain, connection_for=None):
     except Exception as exc:
         result['states']['statistics'] = (
             f'unavailable: {type(exc).__name__}: {exc}')
+    if node_type in NO_DEPENDENCY_PANELS:
+        result['states']['dependencies'] = (
+            'unavailable: the inherited node has no dependency panels')
+        return result
     if connection_for is None:
         result['states']['dependencies'] = 'unavailable: no connection'
         return result

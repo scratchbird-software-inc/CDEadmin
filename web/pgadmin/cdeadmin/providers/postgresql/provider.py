@@ -70,16 +70,20 @@ APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
 CATALOG_KINDS = frozenset({'database', 'schema', 'table', 'conversion',
                            'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
-                           'role', 'tablespace', 'replica-node'})
+                           'role', 'tablespace', 'replica-node',
+                           'pgagent-job'})
 # Server-level kinds below the server root (M3, 2026-11-11): the inherited
-# tree's Login/Group Roles, Tablespaces and Replica Nodes collections.
-SERVER_LEVEL_KINDS = frozenset({'role', 'tablespace', 'replica-node'})
+# tree's Login/Group Roles, Tablespaces, Replica Nodes and pgAgent Jobs
+# collections.
+SERVER_LEVEL_KINDS = frozenset({'role', 'tablespace', 'replica-node',
+                                'pgagent-job'})
 # Relation kinds whose pg_attribute facts become column children (M3).
 COLUMN_OWNER_KINDS = frozenset({'table', 'partitioned-table', 'view',
                                 'materialized-view', 'foreign-table'})
 # Kinds listed at server scope (M3, 2026-11-11): the inherited tree's
 # server-level collections beside the databases.
-SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace', 'replica-node')
+SERVER_SCOPE_KINDS = ('database', 'role', 'tablespace', 'replica-node',
+                      'pgagent-job')
 TABULAR_RENDER_CAPABILITY = 'postgresql.result.tabular.render'
 
 TOOL_DISPOSITIONS = {
@@ -263,9 +267,17 @@ class PostgreSQLCatalogSource:
         return rows
 
     def _cluster_objects(self, manager, catalog_kind, object_id):
-        """Roles, tablespaces and replica nodes from the inherited node
-        templates."""
+        """Roles, tablespaces, replica nodes and pgAgent jobs from the
+        inherited node templates."""
         connection = manager.connection()
+        if catalog_kind == 'pgagent-job':
+            # The inherited pgAgent Jobs collection (maintenance database):
+            # the job row with its agent, class and last log status.
+            sql = self._renderer('pga_job/sql/pre3.4/properties.sql',
+                                 jid=object_id, conn=connection)
+            status, result = connection.execute_dict(sql)
+            return [{**row, 'name': row.get('jobname')}
+                    for row in self._rows(status, result)]
         if catalog_kind == 'replica-node':
             # The inherited Replica Nodes collection: pg_stat_replication
             # rows joined to their slots, keyed by the walsender pid. The
@@ -1181,8 +1193,8 @@ class PostgreSQLProvider:
         return columns
 
     def _resource(self, parent, route, catalog_kind, row):
-        id_field = {'database': 'did', 'replica-node': 'pid'}.get(
-            catalog_kind, 'oid')
+        id_field = {'database': 'did', 'replica-node': 'pid',
+                    'pgagent-job': 'jobid'}.get(catalog_kind, 'oid')
         object_id = row.get(id_field)
         name = row.get('name')
         if object_id is None or not isinstance(name, str):
@@ -1209,7 +1221,8 @@ class PostgreSQLProvider:
             legacy = {'sid': route.get('server_id'),
                       'did': object_id if catalog_kind == 'database' else None,
                       'scid': None, 'tid': None, 'oid': object_id,
-                      'node_type': {'replica-node': 'replica_nodes'}.get(
+                      'node_type': {'replica-node': 'replica_nodes',
+                                    'pgagent-job': 'pga_job'}.get(
                           catalog_kind, catalog_kind)}
         resource_route.update({
             'catalog_kind': catalog_kind,

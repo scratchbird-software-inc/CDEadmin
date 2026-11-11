@@ -523,8 +523,9 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
             'database': [{'did': 10, 'name': 'appdb'}],
             'role': [{'oid': 16400, 'name': 'app_owner'}],
             'tablespace': [{'oid': 1663, 'name': 'pg_default'}],
-            # Replica Nodes (M3): listed at server scope too; none here.
-            'replica-node': [],
+            # Replica Nodes and pgAgent Jobs (M3): listed at server scope
+            # too; none here.
+            'replica-node': [], 'pgagent-job': [],
         }
         self.provider._catalog = SimpleNamespace(
             read=lambda kind, route, object_id=None: rows[kind])
@@ -548,6 +549,7 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
 
     def test_server_scope_lists_replica_nodes_by_walsender_pid(self):
         rows = {'database': [], 'role': [], 'tablespace': [],
+                'pgagent-job': [],
                 'replica-node': [{'pid': 4242, 'name': 'Standby [10.0.0.9]',
                                   'state': 'streaming',
                                   'slot_name': 'standby_a'}]}
@@ -581,6 +583,32 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual(('replica-node', 4242), reads[-1])
         for key in ('resource_id', 'display_path', 'authority_path'):
             self.assertEqual(node[key], inspected[key], key)
+
+    def test_server_scope_lists_pgagent_jobs_by_job_id(self):
+        rows = {'database': [], 'role': [], 'tablespace': [],
+                'replica-node': [],
+                'pgagent-job': [{'jobid': 3, 'jobname': 'nightly vacuum',
+                                 'jobenabled': True, 'jlgstatus': 's',
+                                 'jobclass': 'Routine Maintenance',
+                                 'name': 'nightly vacuum'}]}
+        self.provider._catalog = SimpleNamespace(
+            read=lambda kind, route, object_id=None: rows[kind])
+        root = {**parent_resource('server'), 'resource_kind': 'server',
+                'authority_path': ['postgresql', 'endpoint', 'e1'],
+                'display_path': ['demo'], 'generation': 'g1',
+                'extensions': {'postgresql': {
+                    'child_kind': 'database', 'server_id': 7}}}
+        job = self.provider.list_resources(root)[0]
+        self.assertEqual('pgagent-job', job['resource_kind'])
+        self.assertEqual('postgresql:postgresql/endpoint/e1/pgagent-job/3',
+                         job['resource_id'])
+        self.assertEqual(['nightly vacuum'], job['display_path'])
+        extension = job['extensions']['postgresql']
+        self.assertEqual({'sid': 7, 'did': None, 'scid': None, 'tid': None,
+                          'oid': 3, 'node_type': 'pga_job'},
+                         extension['legacy_route'])
+        self.assertEqual('Routine Maintenance',
+                         extension['native']['catalog_metadata']['jobclass'])
 
     def test_server_scope_inspect_keeps_the_listed_identity(self):
         rows = {'role': [{'oid': 16400, 'name': 'app_owner'}]}
@@ -1056,6 +1084,20 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
         # The inherited role template names the role rolname.
         self.assertEqual('app_owner', roles[0]['name'])
         self.assertEqual('pg_default', spaces[0]['name'])
+
+    def test_catalog_source_lists_pgagent_jobs_from_the_properties_template(
+            self):
+        manager = FakeManager()
+        renderer = Mock(return_value='SELECT preserved_catalog')
+        source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
+        manager._connection.execute_dict = Mock(return_value=(
+            True, {'rows': [{'jobid': 3, 'jobname': 'nightly vacuum'}]}))
+        rows = source.read('pgagent-job', {'server_id': 7}, 3)
+        # The inherited job template names the job jobname.
+        self.assertEqual('nightly vacuum', rows[0]['name'])
+        self.assertEqual('pga_job/sql/pre3.4/properties.sql',
+                         renderer.call_args.args[0])
+        self.assertEqual(3, renderer.call_args.kwargs['jid'])
 
     def test_catalog_source_lists_replica_nodes_from_the_properties_template(
             self):

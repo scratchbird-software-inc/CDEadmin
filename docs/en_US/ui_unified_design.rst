@@ -184,8 +184,14 @@ module's own rule (only when the server has replication slots); its members
 are the inherited template's rows (streaming walsenders joined to their
 slots, named ``Standby [address]`` and keyed by the walsender pid), with the
 row's columns as properties. The inherited node shows properties only, so the
-SQL, statistics and dependency sections report that state. pgAgent is a later
-slice.
+SQL, statistics and dependency sections report that state. Eighth slice
+(2026-11-11): the inherited *pgAgent Jobs* collection, under the inherited
+module's own rule (the ``pgagent`` schema usable in the maintenance database);
+each job is the inherited properties row (class, agent, last run status, next
+run), with the inherited job SQL (job, steps and schedules) and the inherited
+run-log statistics. Jobs live in pgAgent's tables, not in ``pg_depend``, so
+the dependency section says so. This closes the M3 parity list; the
+inherited tree's job steps and schedules as child nodes are not offered.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

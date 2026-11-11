@@ -130,6 +130,10 @@ class WiringTests(unittest.TestCase):
             '\ndef ')[0]
         self.assertIn("replication != 'log'", groups)
         self.assertIn('get_replication_type(', groups)
+        # pgAgent Jobs follows the inherited module's backend_supported.
+        self.assertIn("('pgagent-job', 'pgAgent Jobs')", text)
+        self.assertIn('pgagent_module.backend_supported(manager, sid=sid)',
+                      groups)
         self.assertIn('_provider_tree_server_groups(', text.split(
             'def _provider_tree_children(')[1].split('    def ')[0])
         # The inherited Connect records the runtime (owner decision

@@ -60,6 +60,9 @@ class ViewMapTests(unittest.TestCase):
         self.assertEqual({'gid': 1, 'sid': 7, 'rid': 16610},
                          views.view_kwargs(chain('role', did=None,
                                                  scid=None)))
+        self.assertEqual({'gid': 1, 'sid': 7, 'jid': 3},
+                         views.view_kwargs(chain('pga_job', did=None,
+                                                 scid=None, oid=3)))
         self.assertEqual({'gid': 1, 'sid': 7, 'did': 16610},
                          views.view_kwargs(chain('database', oid=16610)))
         self.assertEqual(
@@ -212,6 +215,15 @@ class InspectionTests(unittest.TestCase):
             chain(None))['states']['all'])
         self.assertIn('foreign-data-wrapper id', views.inherited_inspection(
             chain('user_mapping'))['states']['all'])
+        with patch.object(views, 'inherited_sql',
+                          lambda c: (True, 'DO $$ ... pgagent.pga_job $$')), \
+                patch.object(views, 'inherited_statistics',
+                             lambda c: (True, [{'Run': 1}])):
+            result = views.inherited_inspection(
+                chain('pga_job', did=None, scid=None, tid=None, oid=3),
+                lambda d: 'c')
+        self.assertEqual([{'Run': 1}], result['statistics'])
+        self.assertIn('no dependency panels', result['states']['dependencies'])
         self.assertIn('properties only', views.inherited_inspection(
             chain('replica_nodes', did=None, scid=None, tid=None),
             lambda d: 'c')['states']['all'])

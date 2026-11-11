@@ -59,6 +59,7 @@ _KIND_LABELS = {
     'publication': 'Replication objects',
     'replication-channel': 'Replication objects',
     'replica-node': 'Replica Nodes',
+    'pgagent-job': 'pgAgent Jobs',
     'resource-group': 'Resource groups',
     'role': 'Roles',
     'authentication-mapping': 'Local authentication mappings',
