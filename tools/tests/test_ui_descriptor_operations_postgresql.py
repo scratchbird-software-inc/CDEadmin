@@ -873,3 +873,260 @@ def test_schema_lifecycle_round_trips(live):
     finally:
         query('DROP SCHEMA IF EXISTS "Sch ema" CASCADE; DROP SCHEMA IF EXISTS schema_two CASCADE')
         query(f'DROP OWNED BY {owner}, {reader}; DROP ROLE {owner}; DROP ROLE {reader}')
+
+
+# -- M4 (2026-11-11): database create and alter from the server scope, provider-native, live -----
+def database_native(name):
+    rows = query(f"""SELECT d.oid::int, t.spcname, d.datallowconn, d.datistemplate, pg_get_userbyid(d.datdba),
+                            d.datconnlimit, s.description, d.datacl::text[]
+                     FROM pg_database d JOIN pg_tablespace t ON t.oid=d.dattablespace
+                     LEFT JOIN pg_shdescription s ON s.objoid=d.oid AND s.classoid='pg_database'::regclass
+                     WHERE d.datname='{name}'""")
+    assert len(rows) == 1, name
+    did, spcname, allow, template, owner, limit, comment, acl = rows[0]
+    from pgadmin.cdeadmin.providers.postgresql.databases import facts
+    native = {'name': name, 'catalog_metadata': {'did': did, 'name': name, 'spcname': spcname,
+                                                 'datallowconn': allow, 'is_template': template,
+                                                 'description': comment}, 'catalog_row': {'datconnlimit': limit}}
+    native['database_facts'] = facts(native)
+    native.update(owner=owner, acl=acl or [])
+    return native
+
+
+def run_database(live, operation_id, draft, native=None):
+    provider, _route = live
+    # Server scope: the route names the server only; the attachment is the maintenance database.
+    resource = target(None, 'database', native) if native else None
+    request = {'resource_kind': 'database', 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] is False, plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+@live_only
+def test_database_create_and_alter_round_trip(live):
+    owner, reader = 'ui_ops_dbowner_' + UNIQUE, 'ui_ops_dbreader_' + UNIQUE
+    name = f'ui_ops_created_{UNIQUE}'
+    query(f'CREATE ROLE {owner}; CREATE ROLE {reader}')
+    try:
+        plan = run_database(live, 'create', {
+            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8',
+            'datlocaleprovider': 'libc', 'datcollate': 'C', 'datctype': 'C', 'datconnlimit': 7,
+            'datallowconn': True, 'is_template': False})
+        assert plan['command_preview']['statement'].startswith(f'CREATE DATABASE "{name}" WITH OWNER')
+        native = database_native(name)
+        assert (native['owner'], native['database_facts']['datconnlimit']) == (owner, 7)
+        plan = run_database(live, 'alter', {
+            'name': name, 'spcname': native['database_facts']['spcname'], 'datconnlimit': 3,
+            'datallowconn': True, 'is_template': False, 'comments': "it's",
+            # A grant to the owner folds into the owner's implicit full entry; grant to another role.
+            'datacl': [{'grantee': reader, 'privileges': 'c'}]}, native)
+        assert 'RENAME' not in plan['command_preview']['statement']
+        native = database_native(name)
+        assert (native['database_facts']['datconnlimit'], native['database_facts']['comments']) == (3, "it's")
+        assert any(item.startswith(f'{reader}=c/') for item in native['acl'])
+        # A tablespace change runs alone in autocommit (same tablespace name: the server accepts a no-op move
+        # only for a different one, so this checks the plan shape with pg_default -> pg_default refused by us).
+        with pytest.raises(Exception):
+            run_database(live, 'alter', {'spcname': 'pg_default', 'comments': 'x'}, dict(
+                native, database_facts=dict(native['database_facts'], spcname='other')))
+        # Rename runs from the maintenance database, which is not the renamed one.
+        run_database(live, 'alter', {'name': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}_r'") == [(1,)]
+    finally:
+        query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        query(f'DROP DATABASE IF EXISTS "{name}_r" WITH (FORCE)')
+        query(f'DROP ROLE {owner}; DROP ROLE {reader}')
+
+
+# -- M4 (2026-11-11): domain and type editors, provider-native, observed live ---------------------
+def run_kind(live, kind, operation_id, draft, native=None):
+    provider, route = live
+    resource = target(None, kind, native) if native else None
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': route, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (kind, operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+def domain_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.types import domain_facts
+    rows = query(f"""SELECT t.oid::int, t.typnotnull, t.typdefault, d.description
+                     FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_type'::regclass
+                     WHERE n.nspname='{schema}' AND t.typname='{name}' AND t.typtype='d'""")
+    assert len(rows) == 1, (schema, name)
+    oid, notnull, default, comment = rows[0]
+    checks = query(f"""SELECT conname, pg_get_constraintdef(oid), convalidated FROM pg_constraint
+                       WHERE contypid={oid} AND contype='c' ORDER BY conname""")
+    native = {'schema': schema, 'name': name, 'oid': oid, 'comment': comment,
+              'catalog_row': {'typname': name, 'typtype': 'd', 'typnotnull': notnull, 'typdefault': default}}
+    native['domain_facts'] = domain_facts(native, {oid: [
+        {'name': c[0], 'definition': c[1], 'catalog_row': {'convalidated': c[2]}} for c in checks]})
+    return native
+
+
+def type_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.types import type_facts
+    rows = query(f"""SELECT t.oid::int, t.typtype, t.typrelid::int, d.description
+                     FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_type'::regclass
+                     WHERE n.nspname='{schema}' AND t.typname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    oid, typtype, relid, comment = rows[0]
+    labels = query(f'SELECT enumlabel, enumsortorder FROM pg_enum WHERE enumtypid={oid}')
+    attributes = query(f"""SELECT attname, format_type(atttypid, atttypmod), attisdropped FROM pg_attribute
+                           WHERE attrelid={relid} AND attnum > 0 ORDER BY attnum""") if relid else []
+    native = {'schema': schema, 'name': name, 'oid': oid, 'comment': comment,
+              'catalog_row': {'typname': name, 'typtype': typtype, 'typrelid': str(relid)},
+              'children': {'pg_enum': [{'enumlabel': l, 'enumsortorder': o} for l, o in labels]}}
+    native['type_facts'] = type_facts(native, {relid: [
+        {'attname': a, 'formatted_type': t, 'attisdropped': d} for a, t, d in attributes]})
+    return native
+
+
+@live_only
+def test_domain_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Dom schema"')
+    try:
+        run_kind(live, 'domain', 'create', {
+            'name': 'pos code', 'basensp': 'Dom schema', 'basetype': 'varchar(10)', 'collname': '"C"',
+            'typdefault': "'x'", 'typnotnull': True, 'description': "it's",
+            'constraints': [{'conname': 'not blank', 'consrc': "VALUE <> ''", 'convalidated': False}]})
+        native = domain_native('Dom schema', 'pos code')
+        facts = native['domain_facts']
+        assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (True, "'x'::character varying", "it's")
+        assert facts['constraints'] == [{'conname': 'not blank', 'consrc': "((VALUE)::text <> ''::text)",
+                                         'convalidated': False}]
+        plan = run_kind(live, 'domain', 'alter', {
+            'name': 'code', 'basensp': 'Dom schema', 'typnotnull': False, 'typdefault': '',
+            'description': '', 'validate_constraints': [{'conname': 'not blank'}],
+            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}]}, native)
+        assert 'SET SCHEMA' not in plan['command_preview']['statement']
+        native = domain_native('Dom schema', 'code')
+        facts = native['domain_facts']
+        assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (False, None, None)
+        assert [(c['conname'], c['convalidated']) for c in facts['constraints']] == [
+            ('not blank', True), ('short', True)]
+        run_kind(live, 'domain', 'drop', {'confirmation': 'code', 'cascade': False}, native)
+        assert query("SELECT count(*) FROM pg_type WHERE typname='code'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Dom schema" CASCADE')
+
+
+@live_only
+def test_type_lifecycle_round_trips(live):
+    query('CREATE SCHEMA typ_schema')
+    try:
+        run_kind(live, 'type', 'create', {'name': 'mood', 'schema': 'typ_schema', 'typtype': 'e',
+                                         'enum': [{'label': 'sad'}, {'label': 'ok'}], 'description': 'how'})
+        native = type_native('typ_schema', 'mood')
+        assert [item['label'] for item in native['type_facts']['enum']] == ['sad', 'ok']
+        # Enum: rename and add values (ADD VALUE commits with the transaction in PostgreSQL 12+).
+        run_kind(live, 'type', 'alter', {
+            'rename_values': [{'from': 'ok', 'to': 'fine'}],
+            'add_values': [{'label': 'great', 'after': 'fine'}, {'label': 'awful', 'before': 'sad'}],
+            'description': '', 'name': 'feeling'}, native)
+        native = type_native('typ_schema', 'feeling')
+        assert [item['label'] for item in sorted(native['type_facts']['enum'], key=lambda i: i['label'])] == \
+            ['awful', 'fine', 'great', 'sad']
+        assert query("SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid "
+                     "WHERE t.typname='feeling' ORDER BY enumsortorder") == [('awful',), ('sad',), ('fine',), ('great',)]
+        run_kind(live, 'type', 'create', {'name': 'addr', 'schema': 'typ_schema', 'typtype': 'c',
+                                         'composite': [{'member_name': 'street', 'type': 'text'},
+                                                       {'member_name': 'zip', 'type': 'varchar(10)'}]})
+        native = type_native('typ_schema', 'addr')
+        run_kind(live, 'type', 'alter', {
+            'drop_attributes': [{'member_name': 'zip'}],
+            'rename_attributes': [{'member_name': 'street', 'to': 'road'}],
+            'alter_attributes': [{'member_name': 'road', 'type': 'varchar(80)'}],
+            'add_attributes': [{'member_name': 'city', 'type': 'text'}]}, native)
+        native = type_native('typ_schema', 'addr')
+        assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(80)'},
+                                                     {'member_name': 'city', 'type': 'text'}]
+        run_kind(live, 'type', 'create', {'name': 'floatrange', 'schema': 'typ_schema', 'typtype': 'r',
+                                         'typname': 'float8', 'rngsubdiff': 'float8mi'})
+        assert query("SELECT count(*) FROM pg_range r JOIN pg_type t ON t.oid=r.rngtypid WHERE t.typname='floatrange'") == [(1,)]
+        with pytest.raises(Exception):
+            run_kind(live, 'type', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'type', 'drop', {'confirmation': 'addr'}, native)
+        assert query("SELECT count(*) FROM pg_type WHERE typname='addr'") == [(0,)]
+    finally:
+        query('DROP SCHEMA typ_schema CASCADE')
+
+
+# -- M4 (2026-11-11): view and materialized view editors, provider-native, observed live ----------
+def view_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.views import facts
+    rows = query(f"""SELECT c.relkind, c.reloptions::text[], c.relispopulated, pg_get_viewdef(c.oid), d.description,
+                            pg_get_userbyid(c.relowner)
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass AND d.objsubid=0
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    relkind, options, populated, definition, comment, owner = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'relname': name, 'relkind': relkind, 'reloptions': options,
+                              'relispopulated': populated}}
+    native['view_facts'] = facts(native)
+    native['owner'] = owner
+    return native
+
+
+@live_only
+def test_view_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "View schema"; CREATE TABLE "View schema".t (id int, owner text)')
+    try:
+        run_kind(live, 'view', 'create', {
+            'name': 'mine', 'schema': 'View schema', 'definition': 'SELECT id, owner FROM "View schema".t',
+            'check_option': 'local', 'security_barrier': True, 'security_invoker': False, 'comment': "it's"})
+        native = view_native('View schema', 'mine')
+        facts = native['view_facts']
+        assert (facts['check_option'], facts['security_barrier'], native['comment']) == ('local', True, "it's")
+        plan = run_kind(live, 'view', 'alter', {
+            'name': 'mine', 'schema': 'View schema', 'definition': facts['definition'],
+            'check_option': 'no', 'security_barrier': False, 'security_invoker': True, 'comment': ''}, native)
+        assert 'CREATE OR REPLACE' not in plan['command_preview']['statement']
+        native = view_native('View schema', 'mine')
+        facts = native['view_facts']
+        assert (facts['check_option'], facts['security_barrier'], facts['security_invoker'], native['comment']) == (
+            'no', False, True, None)
+        # CREATE OR REPLACE VIEW may add columns at the end but never drop or reorder them (server rule).
+        run_kind(live, 'view', 'alter', {
+            'name': 'ours', 'definition': 'SELECT id, owner, id > 0 AS positive FROM "View schema".t',
+            'check_option': 'cascaded'}, native)
+        native = view_native('View schema', 'ours')
+        assert native['view_facts']['check_option'] == 'cascaded' and 'positive' in native['view_facts']['definition']
+        run_kind(live, 'view', 'drop', {'confirmation': 'ours'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname='ours'") == [(0,)]
+        # Materialized view: created without data, fill factor set, query replaced by drop and create.
+        run_kind(live, 'materialized-view', 'create', {
+            'name': 'load', 'schema': 'View schema', 'definition': 'SELECT count(*) AS n FROM "View schema".t',
+            'with_data': False, 'fillfactor': 80})
+        native = view_native('View schema', 'load')
+        assert (native['view_facts']['with_data'], native['view_facts']['fillfactor']) == (False, 80)
+        run_kind(live, 'materialized-view', 'alter', {'fillfactor': 80, 'reset_fillfactor': True, 'comment': 'rows'},
+                 native)
+        native = view_native('View schema', 'load')
+        assert (native['view_facts']['fillfactor'], native['comment']) == (None, 'rows')
+        run_kind(live, 'materialized-view', 'alter', {
+            'definition': 'SELECT count(*) AS n, max(id) AS top FROM "View schema".t', 'with_data': True}, native)
+        native = view_native('View schema', 'load')
+        assert native['view_facts']['with_data'] is True and 'max(id)' in native['view_facts']['definition']
+        run_kind(live, 'materialized-view', 'drop', {'confirmation': 'load'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname='load'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "View schema" CASCADE')

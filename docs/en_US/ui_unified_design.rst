@@ -225,7 +225,33 @@ policy's roles so the dialog can show them. Fourth slice (2026-11-11), the
 schema editor: create with owner, comment, privileges, default privileges
 for new tables, sequences, functions and types, and security labels; alter
 renames, changes the owner and comment, grants and revokes; drop with
-CASCADE needs the typed name.
+CASCADE needs the typed name. Fifth slice (2026-11-11), the database editor
+from the server scope, attached to the maintenance database: create is one
+statement outside a transaction, as PostgreSQL requires, with owner,
+template, encoding, locale provider and locales, tablespace, connection
+limit and the allow-connections and template flags; alter renames, changes
+the owner, limit, flags, comment and privileges in one transaction, and a
+tablespace change runs alone. Drop stays with the inherited dialog. Sixth
+slice (2026-11-11), the domain and type editors: a domain is created from a
+base type with collation, default, NOT NULL, check constraints, owner and
+comment, and altered through rename, owner, NOT NULL, default, added,
+dropped and validated constraints, comment and schema; a composite,
+enumeration or range type is created with owner and comment, and altered
+through owner, comment, rename, schema, enumeration values added (before or
+after a value) or renamed, and composite attributes added, dropped,
+renamed or retyped. External and shell types, type privileges and security
+labels stay with the inherited dialog. Type names are admitted by
+PostgreSQL's own parser and spelled canonically. Seventh slice
+(2026-11-11), the view and materialized view editors: a view is created
+from one SELECT with the check option, security barrier and security
+invoker, owner and comment, and altered through rename, schema, owner,
+options set or reset, comment, and a changed query as CREATE OR REPLACE; a
+materialized view is created with access method, fill factor, tablespace
+and WITH or WITHOUT DATA, and altered through rename, schema, owner,
+tablespace, fill factor, comment, and a changed query as drop and create in
+one transaction, as the inherited dialog does. The query is admitted only
+when PostgreSQL's own parser reads it as one SELECT. WITH CHECK OPTION,
+which YugabyteDB refuses, is offered here.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
