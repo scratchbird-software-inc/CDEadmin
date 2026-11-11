@@ -8,8 +8,10 @@ DIALECT = ROOT / 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_dialect_9_7_
 def test_task_inventory_and_failed_specialized_receipts_cannot_close_coverage():
     # 105 at the gate's introduction; 154 after the masking, failover,
     # server-link, rewrite-rule, XA, key-cache, page-tracking, keyring and
-    # spatial-reference-system tasks. A change here must be a declared task.
-    assert len(declared()) == 154
+    # spatial-reference-system tasks; 155 with the index alter (2026-11-05,
+    # qualified and added to the contract 2026-11-10). A change here must
+    # be a declared task.
+    assert len(declared()) == 155
     dialect = json.loads(DIALECT.read_text())
     rows = dialect['task_templates']
     assert len(rows) == len({row['task_id'] for row in rows})

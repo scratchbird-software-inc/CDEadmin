@@ -33,13 +33,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'web'))
 sys.path.insert(0, str(ROOT / 'tools'))
-for name, folder in (('pgadmin', 'web/pgadmin'), ('pgadmin.utils', 'web/pgadmin/utils')):
-    if name not in sys.modules:
-        package = ModuleType(name)
-        package.__path__ = [str(ROOT / folder)]
-        sys.modules[name] = package
-if 'config' not in sys.modules:
-    sys.modules['config'] = ModuleType('config')
+# Only the top-level package is stubbed. Stubbing pgadmin.utils or config
+# shadowed the real modules for every later test in the session
+# (2026-11-10): tests that import get_complete_file_path from pgadmin.utils
+# then failed.
+if 'pgadmin' not in sys.modules:
+    package = ModuleType('pgadmin')
+    package.__path__ = [str(ROOT / 'web/pgadmin')]
+    sys.modules['pgadmin'] = package
 
 from pgadmin.cdeadmin.core import EndpointContext  # noqa: E402
 from pgadmin.cdeadmin.providers.postgresql.provider import (  # noqa: E402
