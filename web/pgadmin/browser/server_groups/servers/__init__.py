@@ -53,7 +53,7 @@ from .... import socketio as sio
 from pgadmin.utils import get_complete_file_path
 from pgadmin.settings.utils import with_object_filters
 from pgadmin.cdeadmin.endpoints.postgresql_tree import (
-    provider_tree_enabled, set_provider_tree,
+    provider_tree_enabled, set_provider_tree, record_inherited_connect,
 )
 from pgadmin.cdeadmin.endpoints import (
     EndpointRegistrationError,
@@ -4005,6 +4005,17 @@ class ServerNode(PGChildNodeView):
 
             current_app.logger.info('Connection Established for server: \
                 %s - %s' % (server.id, server.name))
+            # Owner decision 2026-11-10 (M2 option 1): the inherited
+            # Connect is the verification of a PostgreSQL registration, so
+            # record the observed runtime on its endpoint identity. The
+            # connection stands whether or not this bookkeeping succeeds.
+            try:
+                record_inherited_connect(server, manager.version, db.session)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception(
+                    'Could not record the PostgreSQL runtime for server#%s',
+                    server.id)
             # Update the recovery and wal pause option for the server
             # if connected successfully
             _, _, in_recovery, wal_paused =\

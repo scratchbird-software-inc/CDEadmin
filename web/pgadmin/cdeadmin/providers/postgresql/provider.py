@@ -896,6 +896,10 @@ class PostgreSQLProvider:
         payload['verified_runtime'] = {
             'engine': 'PostgreSQL',
             'server_version': runtime_version,
+            # The endpoint service records engine_id/version (survey B6,
+            # 2026-11-10); both spellings are carried.
+            'engine_id': 'postgresql',
+            'version': runtime_version,
             'driver': LEGACY_DRIVER_TYPE,
             'driver_version': driver_version,
             'verification_state': 'verified',

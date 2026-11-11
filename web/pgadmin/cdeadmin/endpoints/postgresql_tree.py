@@ -14,6 +14,7 @@ below, so no schema change is needed and the flag is cleared with the
 endpoint.
 """
 import json
+from datetime import datetime, timezone
 
 PROVIDER_TREE_KEY = 'postgresql_provider_tree'
 EXTENSION_SCHEMA = 'cdeadmin.endpoint.extensions.v1'
@@ -73,3 +74,39 @@ def set_provider_tree(server, enabled):
     extension.profile_data = json.dumps(
         data, sort_keys=True, separators=(',', ':'))
     return bool(enabled)
+
+
+INHERITED_CONNECT_EVIDENCE = 'postgresql-inherited-connect'
+
+
+def record_inherited_connect(server, native_version, session):
+    """Record the runtime the inherited Connect observed.
+
+    Under the owner's option 1 (2026-11-10) endpoint verification for a
+    PostgreSQL registration is the inherited Connect, so the version
+    gates that read the endpoint's verified runtime (the provider tree's
+    node fields and descriptor gates) must learn the version here. The
+    version is rendered as PostgreSQL's public ``major.minor``; the
+    survey's B6 finding (the provider reports ``engine``/``server_version``
+    while verification records ``engine_id``/``version``) is sidestepped
+    by writing the identity directly. Returns the recorded version, or
+    ``None`` when the registration is not preserved PostgreSQL or has no
+    runtime identity. ``session`` is committed by this function.
+    """
+    from pgadmin.cdeadmin.providers.postgresql.support_policy import (
+        public_version,
+    )
+    if not is_preserved_postgresql(server):
+        return None
+    runtime = getattr(getattr(server, 'endpoint_profile', None),
+                      'runtime_identity', None)
+    if runtime is None:
+        return None
+    version = public_version(native_version)
+    runtime.verified_runtime_family = 'postgresql'
+    runtime.verified_runtime_version = version
+    runtime.verification_state = 'verified'
+    runtime.verification_evidence_reference = INHERITED_CONNECT_EVIDENCE
+    runtime.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.commit()
+    return version

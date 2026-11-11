@@ -313,6 +313,10 @@ class PostgreSQLProviderContractTests(unittest.TestCase):
         self.assertEqual(
             '18.3', discovered['verified_runtime']['server_version']
         )
+        # The endpoint service records engine_id/version (survey B6).
+        self.assertEqual('postgresql',
+                         discovered['verified_runtime']['engine_id'])
+        self.assertEqual('18.3', discovered['verified_runtime']['version'])
         self.assertEqual(
             LEGACY_DRIVER_TYPE, discovered['verified_runtime']['driver']
         )

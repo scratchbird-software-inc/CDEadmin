@@ -67,6 +67,47 @@ class FlagTests(unittest.TestCase):
             tree.set_provider_tree(server(preserved=False), True)
 
 
+class InheritedConnectRecordTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(tree, 'is_preserved_postgresql',
+                               lambda s: s._preserved)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.session = SimpleNamespace(commits=0)
+        self.session.commit = lambda: setattr(
+            self.session, 'commits', self.session.commits + 1)
+
+    def runtime_server(self, preserved=True):
+        runtime = SimpleNamespace(
+            verified_runtime_family=None, verified_runtime_version=None,
+            verification_state='unverified', verified_at=None,
+            verification_evidence_reference=None)
+        return SimpleNamespace(endpoint_profile=SimpleNamespace(
+            runtime_identity=runtime), _preserved=preserved)
+
+    def test_connect_records_public_version_and_verified_state(self):
+        item = self.runtime_server()
+        self.assertEqual('16.15', tree.record_inherited_connect(
+            item, 160015, self.session))
+        runtime = item.endpoint_profile.runtime_identity
+        self.assertEqual('postgresql', runtime.verified_runtime_family)
+        self.assertEqual('16.15', runtime.verified_runtime_version)
+        self.assertEqual('verified', runtime.verification_state)
+        self.assertEqual(tree.INHERITED_CONNECT_EVIDENCE,
+                         runtime.verification_evidence_reference)
+        self.assertIsNotNone(runtime.verified_at)
+        self.assertEqual(1, self.session.commits)
+
+    def test_other_engines_and_missing_identity_are_left_alone(self):
+        self.assertIsNone(tree.record_inherited_connect(
+            self.runtime_server(preserved=False), 160015, self.session))
+        self.assertIsNone(tree.record_inherited_connect(
+            SimpleNamespace(endpoint_profile=SimpleNamespace(
+                runtime_identity=None), _preserved=True),
+            160015, self.session))
+        self.assertEqual(0, self.session.commits)
+
+
 class WiringTests(unittest.TestCase):
     """The choice is exposed on the node, settable by a route and offered
     on the server menu; these pin the wiring the Flask-bound module
@@ -80,6 +121,11 @@ class WiringTests(unittest.TestCase):
         self.assertIn('def provider_tree(self, gid, sid)', text)
         self.assertIn('provider_tree_enabled(server)', text.split(
             'def children(self, gid, sid)')[1].split('def ')[0])
+        # The inherited Connect records the runtime (owner decision
+        # 2026-11-10) and never fails the connection over it.
+        connect = text.split('    def connect(self, gid, sid')[1]
+        self.assertIn('record_inherited_connect(server, manager.version',
+                      connect)
 
     def test_server_menu_offers_both_trees(self):
         text = SERVERS_JS.read_text(encoding='utf-8')
