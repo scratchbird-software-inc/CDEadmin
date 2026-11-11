@@ -7,6 +7,7 @@
     "partition",
     "foreign-table"
   ],
+  "form_reference": "SR-F-020066",
   "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [],

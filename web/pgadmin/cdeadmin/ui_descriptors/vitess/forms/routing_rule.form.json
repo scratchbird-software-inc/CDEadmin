@@ -5,6 +5,7 @@
   "resource_kinds": [
     "routing-rule"
   ],
+  "form_reference": "SR-F-020089",
   "status": "complete",
   "engine_tab_title": "Vitess",
   "notes": "Routing rules. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess keeps one global rule set and replaces it whole (ApplyRoutingRules), so the editor reopens with the current rules and alter sends the edited set. One target per rule: ApplyRoutingRules accepts several, but vtgate then refuses to route the table (live, 23.0.3). The provider's JSON 'apply' operation stays for the legacy dialog. Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): reopen, add a rule and query through it, reopen and add a second with the first kept, the provider post-state check confirms each, a two-target rule is refused at plan. Keyspace and shard routing rules added 2026-10-30: each rule set the edit sends is replaced whole (ApplyKeyspaceRoutingRules, ApplyShardRoutingRules) and read back; a shard rule must name a shard the target keyspace has (vtctld accepts one it lacks). Mirror rules are shown read only.",

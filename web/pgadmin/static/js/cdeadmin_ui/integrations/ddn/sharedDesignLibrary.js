@@ -819,6 +819,156 @@ export class DesignStoreClient {
     );
   }
 
+  listDescriptorForms(engine = '') {
+    const params = new URLSearchParams();
+    if (engine) params.set('engine', String(engine));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(`/cdeadmin/api/ui/descriptor-forms${suffix}`)
+    );
+  }
+
+  createScreenMesh(
+    projectId,
+    {key, title, mesh = null, formReference = null, note = ''}
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'create_screen_mesh',
+        key,
+        title,
+        mesh,
+        form_reference: formReference,
+        note,
+      })
+    );
+  }
+
+  importDescriptorMesh(
+    projectId,
+    {
+      key = null,
+      engine = null,
+      formKey = null,
+      formReference = null,
+      qaManifest = null,
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/designs`, {
+        mode: 'import_descriptor_mesh',
+        key,
+        engine,
+        form_key: formKey,
+        form_reference: formReference,
+        qa_manifest: qaManifest,
+        note,
+      })
+    );
+  }
+
+  getScreenMeshModel(projectId, designId, {version = null} = {}) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/screen-mesh/model${suffix}`
+      )
+    );
+  }
+
+  saveScreenMeshModel(
+    projectId,
+    designId,
+    {
+      expectedHeadVersion = null,
+      mesh = null,
+      ddnText = null,
+      pinnedPositions = null,
+      status = 'draft',
+      note = '',
+    }
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/screen-mesh/model`,
+        {
+          expected_head_version: expectedHeadVersion,
+          mesh,
+          ddn_text: ddnText,
+          pinned_positions: pinnedPositions,
+          status,
+          note,
+        }
+      )
+    );
+  }
+
+  uploadScreenMeshScreenshot(
+    projectId,
+    designId,
+    {imageBase64, mediaType = 'image/png', screenId = null, note = ''}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/screen-mesh/screenshot`,
+        {
+          image_base64: imageBase64,
+          media_type: mediaType,
+          screen_id: screenId,
+          note,
+        }
+      )
+    );
+  }
+
+  redactScreenMeshScreenshot(
+    projectId,
+    designId,
+    {regions, screenId = null, note = ''}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/screen-mesh/redact`,
+        {
+          regions,
+          screen_id: screenId,
+          note,
+        }
+      )
+    );
+  }
+
+  queryScreenMeshUsage(
+    projectId,
+    {targetRef = '', targetKind = '', includeSuspect = true} = {}
+  ) {
+    const params = new URLSearchParams();
+    if (targetRef) params.set('target_ref', String(targetRef));
+    if (targetKind) params.set('target_kind', String(targetKind));
+    params.set('include_suspect', includeSuspect ? '1' : '0');
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/screen-mesh/usage?${params.toString()}`
+      )
+    );
+  }
+
+  screenMeshBlobUrl(projectId, designId, sha256) {
+    return (
+      `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+      `/blobs/${segment(sha256)}`
+    );
+  }
+
   gitOperation(
     projectId,
     designId,
@@ -1211,6 +1361,74 @@ export class SharedDDNTaskController {
       this.projectId,
       this.designId,
       options
+    );
+  }
+
+  getScreenMeshModel({version = null} = {}) {
+    return this.client.getScreenMeshModel(this.projectId, this.designId, {
+      version: version ?? this.session?.design?.version?.version ?? null,
+    });
+  }
+
+  async saveScreenMeshModel({
+    mesh = null,
+    ddnText = null,
+    status = 'draft',
+    note = '',
+  } = {}) {
+    if (!this.session) {
+      throw new Error('Load the Screen Mesh session before saving.');
+    }
+    const res = await this.client.saveScreenMeshModel(
+      this.projectId,
+      this.designId,
+      {
+        expectedHeadVersion: this.session.design.head_version,
+        mesh,
+        ddnText,
+        pinnedPositions: this.pinnedPositions,
+        status,
+        note,
+      }
+    );
+    await this.load({version: res.design.version.version});
+    this._emit({type: 'saved', version: res.design.version.version});
+    return res;
+  }
+
+  async uploadScreenMeshScreenshot(options = {}) {
+    const res = await this.client.uploadScreenMeshScreenshot(
+      this.projectId,
+      this.designId,
+      options
+    );
+    if (res?.design?.version?.version) {
+      await this.load({version: res.design.version.version});
+    }
+    return res;
+  }
+
+  async redactScreenMeshScreenshot(options = {}) {
+    const res = await this.client.redactScreenMeshScreenshot(
+      this.projectId,
+      this.designId,
+      options
+    );
+    if (res?.design?.version?.version) {
+      await this.load({version: res.design.version.version});
+    }
+    return res;
+  }
+
+  queryScreenMeshUsage(options = {}) {
+    return this.client.queryScreenMeshUsage(this.projectId, options);
+  }
+
+  screenMeshBlobUrl(sha256) {
+    return this.client.screenMeshBlobUrl(
+      this.projectId,
+      this.designId,
+      sha256
     );
   }
 

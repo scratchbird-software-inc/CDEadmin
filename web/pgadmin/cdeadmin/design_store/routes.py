@@ -28,6 +28,10 @@ from .cube_ddn import (
     ddn_to_semantic_model,
     preview_cube_materialization_plan,
 )
+from .screen_mesh_ddn import (
+    ScreenMeshSync,
+    list_available_descriptor_forms,
+)
 from .service import (
     APP_EXTENSION_KEY,
     DesignStore,
@@ -135,7 +139,7 @@ def _check_project_access(
 
 
 def _register_routes(app, project_asset_service) -> None:
-    from flask import Blueprint, current_app, jsonify, request
+    from flask import Blueprint, Response, current_app, jsonify, request
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
 
@@ -354,6 +358,39 @@ def _register_routes(app, project_asset_service) -> None:
                         body.get('endpoint_id') or 'default-endpoint'
                     ),
                     key_prefix=str(body.get('key_prefix') or 'metabase'),
+                )
+            )
+        if mode == 'create_screen_mesh':
+            return invoke(
+                lambda store, proc: ScreenMeshSync(
+                    store, proc
+                ).create_screen_mesh(
+                    project_id=project_id,
+                    key=str(body.get('key') or ''),
+                    title=str(
+                        body.get('title')
+                        or body.get('key')
+                        or 'New Screen Mesh'
+                    ),
+                    actor_id=uid,
+                    mesh=body.get('mesh'),
+                    form_reference=body.get('form_reference'),
+                    note=str(body.get('note') or ''),
+                )['design']
+            )
+        if mode == 'import_descriptor_mesh':
+            return invoke(
+                lambda store, proc: ScreenMeshSync(
+                    store, proc
+                ).import_descriptor_form(
+                    project_id=project_id,
+                    actor_id=uid,
+                    key=body.get('key'),
+                    engine=body.get('engine'),
+                    form_key=body.get('form_key'),
+                    form_reference=body.get('form_reference'),
+                    qa_manifest=body.get('qa_manifest'),
+                    note=str(body.get('note') or ''),
                 )
             )
         return invoke(
@@ -1303,6 +1340,188 @@ def _register_routes(app, project_asset_service) -> None:
                 device_token=token,
                 requested_filters=req_filters,
                 view_id=view_id,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/ui/descriptor-forms',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def ui_descriptor_forms_list():
+        engine_filter = (request.args.get('engine') or '').strip().lower()
+        return invoke(
+            lambda _store, _proc: [
+                item
+                for item in list_available_descriptor_forms()
+                if not engine_filter or item['engine'].lower() == engine_filter
+            ]
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/model',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def screen_mesh_model_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        if request.method == 'GET':
+            _check_project_access(
+                project_asset_service, uid, role_ids, project_id, 'viewer'
+            )
+            version = request.args.get('version', type=int)
+            return invoke(
+                lambda store, proc: ScreenMeshSync(
+                    store, proc
+                ).get_screen_mesh(design_id, version=version)
+            )
+
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+
+        def _save_mesh(store: DesignStore, proc: StoreDDNProcess):
+            design = store.get_design(design_id)
+            expected = int(
+                body.get('expected_head_version') or design['head_version']
+            )
+            return ScreenMeshSync(store, proc).save_screen_mesh(
+                design_id,
+                expected_head_version=expected,
+                actor_id=uid,
+                mesh=body.get('mesh'),
+                ddn_text=body.get('ddn_text'),
+                pinned_positions=body.get('pinned_positions'),
+                status=str(body.get('status') or 'draft'),
+                note=str(body.get('note') or 'Updated Screen Mesh'),
+            )
+
+        return invoke(_save_mesh)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/screenshot',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def screen_mesh_screenshot_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        screen_id: str | None = None
+        note = 'Attached screenshot to Screen Mesh'
+        if request.files and 'file' in request.files:
+            uploaded = request.files['file']
+            raw_bytes = uploaded.read()
+            media_type = uploaded.mimetype or 'image/png'
+            screen_id = request.form.get('screen_id') or None
+            note = request.form.get('note') or note
+        else:
+            body = request.get_json(silent=True) or {}
+            b64 = str(body.get('image_base64') or '').strip()
+            if ',' in b64 and b64.startswith('data:'):
+                header, b64 = b64.split(',', 1)
+                media_type = (
+                    header.split(';')[0][5:] or 'image/png'
+                )
+            else:
+                media_type = str(body.get('media_type') or 'image/png')
+            if not b64:
+                return (
+                    jsonify(
+                        success=0,
+                        errormsg='Screenshot upload requires file or base64',
+                    ),
+                    400,
+                )
+            raw_bytes = base64.b64decode(b64)
+            screen_id = body.get('screen_id') or None
+            note = str(body.get('note') or note)
+
+        return invoke(
+            lambda store, proc: ScreenMeshSync(store, proc).attach_screenshot(
+                design_id,
+                actor_id=uid,
+                data=raw_bytes,
+                media_type=media_type,
+                screen_id=screen_id,
+                note=note,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/redact',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def screen_mesh_redact_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        body = request.get_json(silent=True) or {}
+        regions = list(body.get('regions') or [])
+        return invoke(
+            lambda store, proc: ScreenMeshSync(store, proc).redact_screenshot(
+                design_id,
+                actor_id=uid,
+                regions=regions,
+                screen_id=body.get('screen_id') or None,
+                note=str(
+                    body.get('note') or 'Redacted sensitive screenshot regions'
+                ),
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/blobs/<sha256>',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def design_blob_get_route(
+        project_id: str, design_id: str, sha256: str
+    ):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        store = store_for_app(current_app)
+        try:
+            store.get_design(design_id)
+            blob = store.get_blob(sha256)
+        except DesignStoreError as exc:
+            return jsonify(success=0, errormsg=str(exc)), exc.status_code
+        resp = Response(blob['bytes'], mimetype=blob['media_type'])
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/screen-mesh/usage',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def screen_mesh_usage_route(project_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        target_ref = request.args.get('target_ref') or None
+        target_kind = request.args.get('target_kind') or None
+        include_suspect = request.args.get('include_suspect', '1') not in (
+            '0',
+            'false',
+        )
+        return invoke(
+            lambda store, proc: ScreenMeshSync(store, proc).query_usage(
+                project_id=project_id,
+                target_ref=target_ref,
+                target_kind=target_kind,
+                include_suspect=include_suspect,
             )
         )
 

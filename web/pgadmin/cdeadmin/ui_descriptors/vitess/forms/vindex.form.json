@@ -5,6 +5,7 @@
   "resource_kinds": [
     "vindex"
   ],
+  "form_reference": "SR-F-020095",
   "status": "complete",
   "engine_tab_title": "Vitess",
   "notes": "Vindex. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own.",

@@ -23,6 +23,7 @@ import PropTypes from 'prop-types';
 import {Box, Grid, ScrollArea, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Tab} from '../navigation/TabsAndBreadcrumbs';
+import FormReference from '../navigation/FormReference';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
@@ -229,6 +230,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
     <Box component="h2" sx={{m: 0, px: 2, py: 1.5, fontSize: '1rem', borderBottom: '1px solid', borderColor: 'divider'}}>
       {heading}
     </Box>
+    {form.form_reference && <FormReference reference={form.form_reference} />}
     {form.status !== 'complete' && <Banner status="info">
       {form.status === 'draft' ? `This ${form.family_title.toLowerCase()} form is a draft: fields are listed, round-trip verification is pending.` :
         'This form is a skeleton; the engine descriptor has no fields yet.'}

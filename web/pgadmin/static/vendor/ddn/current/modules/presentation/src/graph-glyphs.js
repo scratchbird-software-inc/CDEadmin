@@ -352,6 +352,37 @@ export function nodeGlyph(role, record, b, options) {
     else if (role === 'ui.image') {
         ps.push(box(b, '#f1f5f9', '#64748b'), line([x, y], [x + w, y + h], '#94a3b8'), line([x + w, y], [x, y + h], '#94a3b8'));
     }
+    else if (role === 'ui.radio') {
+        ps.push(oval({ x, y: cy - 10, width: 20, height: 20 }, '#fff', '#64748b'));
+        if (m('x_ui').checked)
+            ps.push(oval({ x: x + 5, y: cy - 5, width: 10, height: 10 }, '#334155', '#334155'));
+        ps.push(label(options.title, x + 28, cy + 5));
+        title = false;
+    }
+    else if (role === 'ui.dropdown') {
+        ps.push(box(b, '#fff', '#64748b'), path(`M${x + w - 22},${cy - 4}L${x + w - 16},${cy + 3}L${x + w - 10},${cy - 4}`, 'none', '#475569', 2), label(options.title, x + 10, cy + 5));
+        title = false;
+    }
+    else if (role === 'ui.tabs') {
+        const opts = array(m('x_ui').options).map(String);
+        const tabs = opts.length ? opts.slice(0, 5) : [options.title || 'Tab 1', 'Tab 2'];
+        const tw = Math.min(110, Math.max(48, (w - 8) / tabs.length));
+        ps.push(box({ x, y: y + 22, width: w, height: Math.max(18, h - 22) }, '#fff', '#64748b'));
+        tabs.forEach((t, i) => ps.push(box({ x: x + i * tw, y, width: tw - 2, height: 22 }, i === 0 ? '#fff' : '#e2e8f0', '#64748b'), label(t, x + i * tw + 8, y + 15, 11, '#334155')));
+        title = false;
+    }
+    else if (role === 'ui.grid') {
+        const cols = array(m('x_ui').columns);
+        const nCols = Math.max(2, Math.min(6, cols.length || 3));
+        ps.push(box(b, '#fff', '#64748b'), box({ x, y, width: w, height: 24 }, '#f1f5f9', '#64748b'));
+        for (let i = 1; i < nCols; i++)
+            ps.push(line([x + (w * i) / nCols, y], [x + (w * i) / nCols, y + h], '#cbd5e1', 1));
+        for (let r = 1; r <= 2; r++)
+            ps.push(line([x, y + 24 + r * 20], [x + w, y + 24 + r * 20], '#e2e8f0', 1));
+    }
+    else if (role === 'ui.region') {
+        ps.push(box(b, 'none', '#0284c7', 2, '6 3'));
+    }
     else if (role === 'flow.annotation') {
         ps.push(path(`M${x + 16},${y}H${x}V${y + h}H${x + 16}`, 'none', stroke));
     }

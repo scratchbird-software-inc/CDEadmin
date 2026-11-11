@@ -1469,6 +1469,133 @@ class DesignStore:
             finally:
                 conn.close()
 
+    def list_design_assets(
+        self,
+        design_id: str,
+        *,
+        version: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """List attached binary assets for ``design_id`` (and ``version``)."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                if version is None:
+                    drow = conn.execute(
+                        'SELECT head_version FROM design WHERE id = ?',
+                        (design_id,),
+                    ).fetchone()
+                    if drow is None:
+                        raise DesignStoreNotFound(
+                            f'Design {design_id!r} was not found'
+                        )
+                    version = int(drow['head_version'])
+                rows = conn.execute(
+                    """
+                    SELECT da.design_id, da.version, da.path, da.sha256,
+                           ab.media_type, ab.size, ab.created_at
+                    FROM design_asset da
+                    JOIN asset_blob ab ON ab.sha256 = da.sha256
+                    WHERE da.design_id = ? AND da.version = ?
+                    ORDER BY da.path ASC
+                    """,
+                    (design_id, int(version)),
+                ).fetchall()
+                return [dict(r) for r in rows]
+            finally:
+                conn.close()
+
+    def replace_and_purge_blob(
+        self,
+        *,
+        design_id: str,
+        version: int,
+        path: str,
+        old_sha256: str,
+        media_type: str,
+        new_data: bytes,
+    ) -> dict[str, Any]:
+        """Destructively replace a screenshot blob on ``design_id`` (F4).
+
+        Stores ``new_data`` in ``asset_blob``, re-points every ``design_asset``
+        row on ``design_id`` that referenced ``old_sha256`` (plus ``(design_id,
+        version, path)``) to ``new_sha256``, and deletes ``old_sha256`` from
+        ``asset_blob`` when no ``design_asset`` row references it so unredacted
+        screenshot bytes are never retained in ``designs.db``.
+        """
+        if not isinstance(media_type, str) or not media_type.strip():
+            raise DesignStoreError('media_type is required')
+        raw = bytes(new_data)
+        size = len(raw)
+        if size > MAX_BLOB_BYTES:
+            raise DesignStoreError(
+                f'Blob size {size} exceeds the 16 MiB cap ({MAX_BLOB_BYTES})'
+            )
+        new_sha256 = hashlib.sha256(raw).hexdigest()
+        clean_path = str(path or '').strip()
+        if (
+            not clean_path
+            or clean_path.startswith('/')
+            or '..' in clean_path.split('/')
+        ):
+            raise DesignStoreError('Invalid design asset path')
+        now = _utc_now()
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO asset_blob (
+                        sha256, media_type, bytes, size, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(sha256) DO NOTHING
+                    """,
+                    (new_sha256, media_type.strip(), raw, size, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO design_asset (design_id, version, path, sha256)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(design_id, version, path) DO UPDATE SET
+                        sha256 = excluded.sha256
+                    """,
+                    (design_id, int(version), clean_path, new_sha256),
+                )
+                if old_sha256 and old_sha256 != new_sha256:
+                    conn.execute(
+                        """
+                        UPDATE design_asset
+                        SET sha256 = ?
+                        WHERE design_id = ? AND sha256 = ?
+                        """,
+                        (new_sha256, design_id, old_sha256),
+                    )
+                    cur = conn.execute(
+                        """
+                        DELETE FROM asset_blob
+                        WHERE sha256 = ?
+                          AND NOT EXISTS (
+                              SELECT 1 FROM design_asset WHERE sha256 = ?
+                          )
+                        """,
+                        (old_sha256, old_sha256),
+                    )
+                    purged = cur.rowcount > 0
+                else:
+                    purged = False
+                conn.commit()
+                return {
+                    'design_id': design_id,
+                    'version': int(version),
+                    'path': clean_path,
+                    'old_sha256': old_sha256,
+                    'sha256': new_sha256,
+                    'media_type': media_type.strip(),
+                    'size': size,
+                    'purged_original': purged,
+                }
+            finally:
+                conn.close()
+
     # ------------------------------------------------------------------
     # DDN Export / Import and Physical ERD Bridge
     # ------------------------------------------------------------------

@@ -30,6 +30,7 @@ import {ddnModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/module';
 import {erdModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/erdModule';
 import {cubeModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/cubeModule';
 import {biDesignerModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/biDesignerModule';
+import {screenMeshModuleDefinition} from 'sources/cdeadmin_ui/integrations/ddn/screenMeshModule';
 import {migrationModuleDefinition} from 'sources/cdeadmin_ui/modules/migration/module';
 import {mlVectorModuleDefinition} from 'sources/cdeadmin_ui/modules/ml_vector/module';
 import {qualityModuleDefinition} from 'sources/cdeadmin_ui/modules/quality/module';
@@ -39,8 +40,8 @@ const DEFINITIONS = [etlModuleDefinition, contractModuleDefinition, aiModuleDefi
   schemaCompareModuleDefinition, lineageModuleDefinition, cdcModuleDefinition,
   replicationModuleDefinition, apiModuleDefinition, biModuleDefinition,
   tracingModuleDefinition, ddnModuleDefinition, erdModuleDefinition,
-  cubeModuleDefinition, biDesignerModuleDefinition, migrationModuleDefinition,
-  mlVectorModuleDefinition, qualityModuleDefinition];
+  cubeModuleDefinition, biDesignerModuleDefinition, screenMeshModuleDefinition,
+  migrationModuleDefinition, mlVectorModuleDefinition, qualityModuleDefinition];
 
 const registry = {register() {}, get() {}, list: () => [], active() {}};
 
@@ -64,7 +65,8 @@ describe('Tools menu module commands', () => {
     expect(onTools).toEqual(['bi.designer.new', 'bi.designer.show',
       'cube.designer.new', 'cube.designer.show',
       'ddn.diagrams.new', 'ddn.diagrams.show', 'erd.designer.new',
-      'erd.designer.show', 'schema_compare.session.create']);
+      'erd.designer.show', 'schema_compare.session.create',
+      'screen_mesh.designer.new', 'screen_mesh.designer.show']);
   });
 
   it('keeps the module actions for their own tools', () => {
@@ -76,7 +78,9 @@ describe('Tools menu module commands', () => {
       'cube.designer.open', 'cube.designer.save',
       'cube.designer.materialization_plan', 'cube.designer.accept',
       'bi.designer.open', 'bi.designer.save', 'bi.designer.sql_bridge',
-      'bi.designer.outward_review', 'bi.designer.accept']) {
+      'bi.designer.outward_review', 'bi.designer.accept',
+      'screen_mesh.designer.open', 'screen_mesh.designer.save',
+      'screen_mesh.designer.redact', 'screen_mesh.designer.accept']) {
       expect(byId[id].surfaces).toEqual(['toolbar']);
     }
     // Owner direction 2026-11-08: the proof-of-concept DDN viewer and designer
@@ -96,6 +100,6 @@ describe('Tools menu module commands', () => {
     }
     expect(opened).toEqual(expect.arrayContaining(['schema_compare.compare_setup',
       'activity.diagrams', 'activity.erd_models', 'activity.cubes',
-      'activity.bi_designs']));
+      'activity.bi_designs', 'activity.screen_meshes']));
   });
 });

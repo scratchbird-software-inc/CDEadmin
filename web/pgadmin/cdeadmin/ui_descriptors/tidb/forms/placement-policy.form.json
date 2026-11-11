@@ -5,6 +5,7 @@
   "resource_kinds": [
     "placement-policy"
   ],
+  "form_reference": "SR-F-020079",
   "status": "complete",
   "engine_tab_title": "TiDB",
   "notes": "Placement policy. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15); field ids are the provider dialog's own. Round trip verified live on TiDB 8.5.6 (test_engine_object_editors_round_trip, 2026-10-29).",

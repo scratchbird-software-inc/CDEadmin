@@ -5,6 +5,7 @@
   "resource_kinds": [
     "vschema"
   ],
+  "form_reference": "SR-F-020096",
   "status": "complete",
   "engine_tab_title": "Vitess",
   "notes": "Keyspace VSchema. Engine-object editor (owner direction 2026-10-29, ui_unified_design.rst decision 15). Vitess replaces a keyspace's VSchema whole (vtctld ApplyVSchema), so the editor reopens with the current VSchema and alter sends only the sections changed; the provider reads the VSchema at execute time, refuses if a sent section changed since it was opened, merges, checks what vtctld accepts but vtgate cannot serve, applies, and confirms vtgate serves the keyspace without error. Row order in Table vindexes sets each table's primary vindex (its first row). Round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, live 23.0.3): one edit adds a lookup vindex, a table with primary and lookup vindexes and a sequence column (inserts draw ids, fill the lookup, and route by it); a reference table to a registered source is served; a missing source, unsharding a two-shard keyspace, and an edit after an out-of-band change are refused with the VSchema unchanged; the original VSchemas are restored exactly.",

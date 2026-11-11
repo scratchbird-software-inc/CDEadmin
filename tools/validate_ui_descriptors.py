@@ -147,6 +147,22 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
     errors: list[str] = []
     schemas = SchemaSet(DESCRIPTORS / "schema")
     summary = {"engines": {}, "families": []}
+    form_refs_path = (
+        REPO
+        / "web"
+        / "pgadmin"
+        / "static"
+        / "js"
+        / "cdeadmin_ui"
+        / "navigation"
+        / "formReferences.json"
+    )
+    registered_form_refs = {
+        entry["reference"]
+        for entry in load(form_refs_path).get("forms", {}).values()
+        if isinstance(entry, dict) and entry.get("reference")
+    }
+    seen_descriptor_form_refs: dict[str, str] = {}
 
     families = {}
     for path in sorted((DESCRIPTORS / "families").glob("*.family.json")):
@@ -231,6 +247,23 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
             rel = f"{engine}/forms/{form_path.name}"
             doc = load(form_path)
             schemas.check(doc, schemas.schemas["form.schema.json"], schemas.schemas["form.schema.json"], rel, errors)
+            fref = doc.get("form_reference")
+            if not fref:
+                errors.append(
+                    f"{rel}: missing required form_reference (SR-F registry)"
+                )
+            elif fref not in registered_form_refs:
+                errors.append(
+                    f"{rel}: form_reference {fref!r} is not in "
+                    "formReferences.json"
+                )
+            elif fref in seen_descriptor_form_refs:
+                errors.append(
+                    f"{rel}: duplicate form_reference {fref!r} already used "
+                    f"by {seen_descriptor_form_refs[fref]}"
+                )
+            else:
+                seen_descriptor_form_refs[fref] = rel
             family = doc.get("family")
             if family == "engine_object":
                 # Owner direction 2026-10-29 (decision 15): one form per kind.

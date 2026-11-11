@@ -6,6 +6,7 @@
     "view",
     "materialized-view"
   ],
+  "form_reference": "SR-F-020069",
   "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [

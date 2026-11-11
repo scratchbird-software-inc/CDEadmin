@@ -156,6 +156,15 @@ remote geography, routing or geocoding.
    ``bi.analytics@1`` graph profile for BI question lineage and dashboard
    filter/card wiring alongside ``chart.*@1``, ``timeline.basic@1``,
    ``table.records@1`` and ``panels.composed@1`` in ``DDNViewerSurface``.
+7. **Screen Mesh wireframe profile expansion (2026-11-10)**:
+   ``tools/dependency_patches/ddn_screen_mesh.py`` (reviewed in
+   ``tools/dependency_patches/ddn-screen-mesh.md`` and recorded in
+   ``resource-manifest.json`` under ``consumer_patches.screen_mesh``) expands
+   ``wireframe.ui@1`` with ``ui.grid`` (named columns), ``ui.dropdown``,
+   ``ui.radio``, ``ui.tabs`` and first-class rectangular ``ui.region`` hotspot
+   elements alongside ``binds`` / ``bindfield`` data bindings and bounded
+   non-executable ``navigation`` relations rendered as both wireframe and
+   derived ``screen_flow`` views in ``DDNViewerSurface``.
 
 Legacy source and evidence
 ==========================

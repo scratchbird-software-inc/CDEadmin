@@ -90,3 +90,25 @@ export {
   biDesignerModuleDefinition,
   registerBIDesignerModule,
 } from './biDesignerModule.js';
+export {
+  SCREEN_MESH_ACCESS_OPTIONS,
+  SCREEN_MESH_ACTION_OPTIONS,
+  SCREEN_MESH_BINDING_KIND_OPTIONS,
+  SCREEN_MESH_CONTROL_ROLE_OPTIONS,
+  SCREEN_MESH_TRIGGER_OPTIONS,
+  ScreenMeshDesignerSurface,
+} from './ScreenMeshDesignerSurface';
+export {
+  SCREEN_MESH_CREATE_EVENT,
+  SCREEN_MESH_OPEN_EVENT,
+  ScreenMeshesNavigator,
+  openScreenMeshDesign,
+  requestScreenMeshCreate,
+} from './ScreenMeshesNavigator';
+export {
+  SCREEN_FLOW_DESIGN_ASSET_TYPE,
+  SCREEN_MESH_DESIGN_ASSET_TYPE,
+  SCREEN_MESH_MODULE_ID,
+  registerScreenMeshModule,
+  screenMeshModuleDefinition,
+} from './screenMeshModule.js';

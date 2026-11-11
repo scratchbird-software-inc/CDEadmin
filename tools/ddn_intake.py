@@ -99,10 +99,12 @@ def refresh(source, work, destination, intake_tool):
     cube_review = patch.with_name('ddn-cube-dimensional.md')
     bi_patch = patch.with_name('ddn_bi_analytics.py')
     bi_review = patch.with_name('ddn-bi-analytics.md')
+    screen_patch = patch.with_name('ddn_screen_mesh.py')
+    screen_review = patch.with_name('ddn-screen-mesh.md')
     tool_files = (
         Path(__file__), intake_tool, patch, review,
         cache_patch, cache_review, cube_patch, cube_review,
-        bi_patch, bi_review,
+        bi_patch, bi_review, screen_patch, screen_review,
         Path(__file__).with_name('ddn_toolchain.py'),
     )
     tool_hashes = {p.name: digest(p) for p in tool_files}
@@ -186,6 +188,29 @@ def refresh(source, work, destination, intake_tool):
                 name, patched.get(name, before['files'][name])
             )
         }
+        screen_spec = importlib.util.spec_from_file_location(
+            'ddn_screen_mesh', screen_patch
+        )
+        screen_module = importlib.util.module_from_spec(screen_spec)
+        screen_spec.loader.exec_module(screen_module)
+        screen_module.apply(snapshot)
+        subprocess.run(
+            [
+                sys.executable, '-B',
+                'project/ddn/packages/profiles/tools/generate.py',
+            ],
+            cwd=snapshot, check=True, capture_output=True,
+        )
+        screen_patched = {
+            name: digest(snapshot / name)
+            for name in before['files']
+            if digest(snapshot / name) != bi_patched.get(
+                name,
+                cube_patched.get(
+                    name, patched.get(name, before['files'][name])
+                ),
+            )
+        }
         spec = importlib.util.spec_from_file_location(
             'ddn_registry_pack_cache', cache_patch
         )
@@ -195,10 +220,13 @@ def refresh(source, work, destination, intake_tool):
         cached = {
             name: digest(snapshot / name)
             for name in before['files']
-            if digest(snapshot / name) != bi_patched.get(
+            if digest(snapshot / name) != screen_patched.get(
                 name,
-                cube_patched.get(
-                    name, patched.get(name, before['files'][name])
+                bi_patched.get(
+                    name,
+                    cube_patched.get(
+                        name, patched.get(name, before['files'][name])
+                    ),
                 ),
             )
         }
@@ -255,6 +283,11 @@ def refresh(source, work, destination, intake_tool):
                             'tool': digest(bi_patch),
                             'review': digest(bi_review),
                             'changed_inputs': bi_patched,
+                        },
+                        'screen_mesh': {
+                            'tool': digest(screen_patch),
+                            'review': digest(screen_review),
+                            'changed_inputs': screen_patched,
                         },
                         'registry_pack_cache': {
                             'tool': digest(cache_patch),

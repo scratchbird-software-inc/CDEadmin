@@ -1,9 +1,0 @@
-/*! DDN — Diagram Design Notation
- * Copyright (c) 2026 ScratchBird Software Inc. and DDN contributors.
- * SPDX-License-Identifier: GPL-2.0-or-later
- * Free and open-source software. See LICENSE and NOTICE.md.
- * Sponsored by ScratchBird Software Inc. — https://scratchbird.ca
- * Public project: https://github.com/ScratchBird-Software-Inc/Diagram-Design-Notation
- */
-(()=>{"use strict";const n=globalThis.DDN_MODULES;if(!n)throw Error("Missing DDN module runtime");n.register({id:"chunk-f623f14ab921f0512e8f",version:"ddn-next-1",dependencies:["chunk-1c3f4fc02860f1c156c5","chunk-59974dd9ace9f69bfa03","chunk-84b71bfba0c4e50d7b65","chunk-92b94b966303e019c8f6","chunk-97475266026a4fb4b29e","chunk-af90fbd5ea23449bfb98","chunk-ca045c4c7058f5a4a2cc"],modules:[{id:"shared/view-picker-XBXSJAGU.js",bytes:853,sha256:"461a3e52fd4e3237c2f3654b8c3a1a7e4d08c5c44f74af34ba64d861f6f3c712",dependencies:["shared/chunk-YKN6JMLC.js","shared/chunk-PI4JMVTV.js","shared/chunk-ZBMLKZE7.js","shared/chunk-M46UAEHU.js","shared/chunk-6VIIWAXQ.js","shared/chunk-MKA4DFRE.js","shared/chunk-XLWNFKME.js"]}],hash:"d8e27d7257df9f91b2cd8926eb5a1d58a1029b518d4f797d7b3002fff0f17485"},{"shared/view-picker-XBXSJAGU.js":function(s,e,c,h){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.viewTypePicker=e.profileDisplayName=e.diagramHeader=void 0;const a=c("shared/chunk-YKN6JMLC.js");Object.defineProperty(e,"viewTypePicker",{enumerable:!0,get:function(){return a.a}});const d=c("shared/chunk-PI4JMVTV.js");Object.defineProperty(e,"profileDisplayName",{enumerable:!0,get:function(){return d.b}}),Object.defineProperty(e,"diagramHeader",{enumerable:!0,get:function(){return d.c}}),c("shared/chunk-ZBMLKZE7.js"),c("shared/chunk-M46UAEHU.js"),c("shared/chunk-6VIIWAXQ.js"),c("shared/chunk-MKA4DFRE.js"),c("shared/chunk-XLWNFKME.js")}})})();
-

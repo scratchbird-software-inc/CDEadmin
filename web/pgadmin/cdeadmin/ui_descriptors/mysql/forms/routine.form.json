@@ -1,1 +1,725 @@
-{"schema":"cdeadmin.ui-form.v1","engine":"mysql","family":"routine","resource_kinds":["procedure","function","event"],"status":"complete","engine_tab_title":"MySQL","omitted_tabs":[],"gaps":[{"concept":"Body and signature edits","reason":"Native ALTER PROCEDURE/FUNCTION changes characteristics, not the signature, body, definer or determinism. Existing explicit DROP/CREATE and DDN workflows remain separate; the family never silently replaces a routine."},{"concept":"Privilege changes","reason":"Privileges use separate native grant/revoke operations. Family grid diff dispatch remains Decision9."},{"concept":"Imported libraries and non-SQL runtimes","reason":"Community can retain native library definitions; non-SQL execution depends on a separately implemented runtime. Closed Enterprise MLE execution remains post beta, not an emulated SQL routine."},{"concept":"Name changes","reason":"Native event rename, including a move to another database, is a separate typed Maintenance operation until the shared family dispatch contract in Decision9 is available."}],"fields":[{"field_id":"variant","label":"Variant","control":"select","tab":"General","ui_only":true,"editable_after_create":false,"default":"procedure","options":[{"value":"procedure","label":"Procedure"},{"value":"function","label":"Function"},{"value":"scheduled","label":"Scheduled event"}]},{"field_id":"name","label":"Name","control":"text","tab":"General","required":true,"editable_after_create":false},{"field_id":"parent","label":"Database","control":"reference","tab":"General","modes":["create"],"reference_kind":"database","required":true,"visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"database","label":"Database","control":"reference","tab":"General","modes":["create"],"reference_kind":"database","required":true,"visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"comment","label":"Comment","control":"text","tab":"General","default_path":["routine_comment"],"help":"An empty ALTER comment is ignored by native MySQL9.7; leave this field absent to preserve it.","record_key":"routine_comment","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"event_comment","label":"Comment","control":"text","tab":"General","backend_field_id":"comment","record_key":"event_comment","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"clear_comment","label":"Clear comment","control":"boolean","tab":"General","default":false,"visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"returns","label":"Returns","control":"text","tab":"General","required":true,"default_path":["returns"],"help":"Native return type including its length, precision and optional character-set/collation modifiers.","editable_after_create":false,"record_key":"returns","visible_when":{"field":"variant","equals":"function"}},{"field_id":"if_not_exists","label":"If not exists","control":"boolean","tab":"General","modes":["create"],"default":false},{"field_id":"parameters","label":"Parameters","control":"grid","tab":"Parameters","columns":[{"field_id":"name","label":"Name","control":"text","required":true},{"field_id":"mode","label":"Mode","control":"select","options":[{"value":"IN","label":"IN"},{"value":"OUT","label":"OUT"},{"value":"INOUT","label":"INOUT"}],"default":"IN"},{"field_id":"type","label":"Type","control":"text","required":true},{"field_id":"character_set","label":"Character set","control":"text"},{"field_id":"collation","label":"Collation","control":"text"}],"reorderable":true,"default":[],"default_path":["parameter_records"],"help":"Parameter defaults are not part of the native MySQL9.7 routine grammar. Procedure output parameters use OUT or INOUT; functions accept input parameters.","editable_after_create":false,"record_key":"parameter_records","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"body","label":"Body","control":"code","tab":"Definition","language":"sql","required":true,"default_path":["routine_definition"],"editable_after_create":false,"record_key":"routine_definition","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"body_create","label":"Body","control":"code","tab":"Definition","modes":["create"],"backend_field_id":"body","language":"sql","required":true,"visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"body_alter","label":"Body","control":"code","tab":"Definition","modes":["alter"],"backend_field_id":"body","language":"sql","help":"Leave absent to preserve the existing event body.","record_key":"event_definition","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"security_create","label":"Security","control":"select","tab":"Options","modes":["create"],"options":[{"value":"DEFINER","label":"DEFINER"},{"value":"INVOKER","label":"INVOKER"}],"backend_field_id":"sql_security","default":"DEFINER","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"data_access_create","label":"Data access","control":"select","tab":"Options","modes":["create"],"options":[{"value":"CONTAINS SQL","label":"CONTAINS SQL"},{"value":"NO SQL","label":"NO SQL"},{"value":"READS SQL DATA","label":"READS SQL DATA"},{"value":"MODIFIES SQL DATA","label":"MODIFIES SQL DATA"}],"backend_field_id":"data_access","default":"CONTAINS SQL","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"security_alter","label":"Security","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"DEFINER","label":"DEFINER"},{"value":"INVOKER","label":"INVOKER"}],"backend_field_id":"sql_security","default":"UNCHANGED","record_key":"security_type","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"data_access_alter","label":"Data access","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"CONTAINS SQL","label":"CONTAINS SQL"},{"value":"NO SQL","label":"NO SQL"},{"value":"READS SQL DATA","label":"READS SQL DATA"},{"value":"MODIFIES SQL DATA","label":"MODIFIES SQL DATA"}],"backend_field_id":"data_access","default":"UNCHANGED","record_key":"sql_data_access","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"deterministic","label":"Deterministic","control":"boolean","tab":"Options","default":false,"editable_after_create":false,"record_derive":{"cases":[{"key":"is_deterministic","equals":"YES","value":true}],"default":false},"visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"language","label":"Language","control":"select","tab":"Options","options":[{"value":"SQL","label":"SQL"}],"default":"SQL","editable_after_create":false,"visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"schedule_create","label":"Schedule","control":"text","tab":"Options","modes":["create"],"backend_field_id":"schedule","required":true,"help":"Native AT or EVERY schedule expression. Leave absent on alter to preserve it.","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"completion_create","label":"On completion","control":"select","tab":"Options","modes":["create"],"options":[{"value":"PRESERVE","label":"PRESERVE"},{"value":"NOT PRESERVE","label":"NOT PRESERVE"}],"backend_field_id":"completion","default":"NOT PRESERVE","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"status_create","label":"Status","control":"select","tab":"Options","modes":["create"],"options":[{"value":"ENABLE","label":"ENABLE"},{"value":"DISABLE","label":"DISABLE"},{"value":"DISABLE ON REPLICA","label":"DISABLE ON REPLICA"}],"backend_field_id":"status","default":"ENABLE","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"schedule_alter","label":"Schedule","control":"text","tab":"Options","modes":["alter"],"backend_field_id":"schedule","required":false,"help":"Native AT or EVERY schedule expression. Leave absent on alter to preserve it.","record_key":"schedule","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"completion_alter","label":"On completion","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"PRESERVE","label":"PRESERVE"},{"value":"NOT PRESERVE","label":"NOT PRESERVE"}],"backend_field_id":"completion","default":"UNCHANGED","record_key":"on_completion","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"status_alter","label":"Status","control":"select","tab":"Options","modes":["alter"],"options":[{"value":"UNCHANGED","label":"Unchanged"},{"value":"ENABLE","label":"ENABLE"},{"value":"DISABLE","label":"DISABLE"},{"value":"DISABLE ON REPLICA","label":"DISABLE ON REPLICA"}],"backend_field_id":"status","default":"UNCHANGED","record_derive":{"cases":[{"key":"status","equals":"ENABLED","value":"ENABLE"},{"key":"status","equals":"DISABLED","value":"DISABLE"},{"key":"status","equals":"SLAVESIDE_DISABLED","value":"DISABLE ON REPLICA"},{"key":"status","equals":"REPLICA_SIDE_DISABLED","value":"DISABLE ON REPLICA"}],"default":"UNCHANGED"},"visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"time_zone","label":"Time zone","control":"text","tab":"Options","help":"Native session time zone for this independently owned operation; omission preserves its connection setting.","record_key":"time_zone","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"definer_user","label":"Definer user","control":"text","tab":"Engine","editable_after_create":false,"record_key":"definer","record_pattern":"^(.*)@[^@]*$","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"definer_host","label":"Definer host","control":"text","tab":"Engine","editable_after_create":false,"record_key":"definer","record_pattern":"@([^@]*)$","visible_when":{"field":"variant","in":["procedure","function"]}},{"field_id":"event_definer_user","label":"Definer user","control":"text","tab":"Engine","backend_field_id":"definer_user","record_key":"definer","record_pattern":"^(.*)@[^@]*$","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"event_definer_host","label":"Definer host","control":"text","tab":"Engine","backend_field_id":"definer_host","record_key":"definer","record_pattern":"@([^@]*)$","visible_when":{"field":"variant","equals":"scheduled"}},{"field_id":"confirmation","label":"Confirmation","control":"text","tab":"Engine","modes":["alter"],"required":true,"help":"Enter the selected routine name."}],"notes":"One form for procedures, functions and scheduled events (merged 2026-11-05: the descriptor service serves one form per family, so the separate function and event forms were never served); the variant comes from the kind. Routines: create binds the native routine compiler with its review (SQL mode identity and MySQL Shell 9.7 grammar); editing binds ALTER PROCEDURE/FUNCTION, which changes only the comment, SQL security and data access, so the body, parameters, return type, determinism, language and definer show locked on reopen and the characteristics pre-fill with their current values. Events: create and ALTER EVENT with every option; omitted options stay unchanged, and the schedule pre-fills from SHOW CREATE EVENT. Round-tripped 2026-11-05 on the MySQL 9.7.0 demo (tools/tests/test_ui_descriptor_roundtrip_mysql.py)."}
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "routine",
+  "resource_kinds": [
+    "procedure",
+    "function",
+    "event"
+  ],
+  "form_reference": "SR-F-020055",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "Body and signature edits",
+      "reason": "Native ALTER PROCEDURE/FUNCTION changes characteristics, not the signature, body, definer or determinism. Existing explicit DROP/CREATE and DDN workflows remain separate; the family never silently replaces a routine."
+    },
+    {
+      "concept": "Privilege changes",
+      "reason": "Privileges use separate native grant/revoke operations. Family grid diff dispatch remains Decision9."
+    },
+    {
+      "concept": "Imported libraries and non-SQL runtimes",
+      "reason": "Community can retain native library definitions; non-SQL execution depends on a separately implemented runtime. Closed Enterprise MLE execution remains post beta, not an emulated SQL routine."
+    },
+    {
+      "concept": "Name changes",
+      "reason": "Native event rename, including a move to another database, is a separate typed Maintenance operation until the shared family dispatch contract in Decision9 is available."
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "variant",
+      "label": "Variant",
+      "control": "select",
+      "tab": "General",
+      "ui_only": true,
+      "editable_after_create": false,
+      "default": "procedure",
+      "options": [
+        {
+          "value": "procedure",
+          "label": "Procedure"
+        },
+        {
+          "value": "function",
+          "label": "Function"
+        },
+        {
+          "value": "scheduled",
+          "label": "Scheduled event"
+        }
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Name",
+      "control": "text",
+      "tab": "General",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "parent",
+      "label": "Database",
+      "control": "reference",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "reference_kind": "database",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "database",
+      "label": "Database",
+      "control": "reference",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "reference_kind": "database",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "default_path": [
+        "routine_comment"
+      ],
+      "help": "An empty ALTER comment is ignored by native MySQL9.7; leave this field absent to preserve it.",
+      "record_key": "routine_comment",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "event_comment",
+      "label": "Comment",
+      "control": "text",
+      "tab": "General",
+      "backend_field_id": "comment",
+      "record_key": "event_comment",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "clear_comment",
+      "label": "Clear comment",
+      "control": "boolean",
+      "tab": "General",
+      "default": false,
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "returns",
+      "label": "Returns",
+      "control": "text",
+      "tab": "General",
+      "required": true,
+      "default_path": [
+        "returns"
+      ],
+      "help": "Native return type including its length, precision and optional character-set/collation modifiers.",
+      "editable_after_create": false,
+      "record_key": "returns",
+      "visible_when": {
+        "field": "variant",
+        "equals": "function"
+      }
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "If not exists",
+      "control": "boolean",
+      "tab": "General",
+      "modes": [
+        "create"
+      ],
+      "default": false
+    },
+    {
+      "field_id": "parameters",
+      "label": "Parameters",
+      "control": "grid",
+      "tab": "Parameters",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mode",
+          "label": "Mode",
+          "control": "select",
+          "options": [
+            {
+              "value": "IN",
+              "label": "IN"
+            },
+            {
+              "value": "OUT",
+              "label": "OUT"
+            },
+            {
+              "value": "INOUT",
+              "label": "INOUT"
+            }
+          ],
+          "default": "IN"
+        },
+        {
+          "field_id": "type",
+          "label": "Type",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "character_set",
+          "label": "Character set",
+          "control": "text"
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "text"
+        }
+      ],
+      "reorderable": true,
+      "default": [],
+      "default_path": [
+        "parameter_records"
+      ],
+      "help": "Parameter defaults are not part of the native MySQL9.7 routine grammar. Procedure output parameters use OUT or INOUT; functions accept input parameters.",
+      "editable_after_create": false,
+      "record_key": "parameter_records",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "body",
+      "label": "Body",
+      "control": "code",
+      "tab": "Definition",
+      "language": "sql",
+      "required": true,
+      "default_path": [
+        "routine_definition"
+      ],
+      "editable_after_create": false,
+      "record_key": "routine_definition",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "body_create",
+      "label": "Body",
+      "control": "code",
+      "tab": "Definition",
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "body",
+      "language": "sql",
+      "required": true,
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "body_alter",
+      "label": "Body",
+      "control": "code",
+      "tab": "Definition",
+      "modes": [
+        "alter"
+      ],
+      "backend_field_id": "body",
+      "language": "sql",
+      "help": "Leave absent to preserve the existing event body.",
+      "record_key": "event_definition",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "security_create",
+      "label": "Security",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "DEFINER",
+          "label": "DEFINER"
+        },
+        {
+          "value": "INVOKER",
+          "label": "INVOKER"
+        }
+      ],
+      "backend_field_id": "sql_security",
+      "default": "DEFINER",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "data_access_create",
+      "label": "Data access",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "CONTAINS SQL",
+          "label": "CONTAINS SQL"
+        },
+        {
+          "value": "NO SQL",
+          "label": "NO SQL"
+        },
+        {
+          "value": "READS SQL DATA",
+          "label": "READS SQL DATA"
+        },
+        {
+          "value": "MODIFIES SQL DATA",
+          "label": "MODIFIES SQL DATA"
+        }
+      ],
+      "backend_field_id": "data_access",
+      "default": "CONTAINS SQL",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "security_alter",
+      "label": "Security",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "DEFINER",
+          "label": "DEFINER"
+        },
+        {
+          "value": "INVOKER",
+          "label": "INVOKER"
+        }
+      ],
+      "backend_field_id": "sql_security",
+      "default": "UNCHANGED",
+      "record_key": "security_type",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "data_access_alter",
+      "label": "Data access",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "CONTAINS SQL",
+          "label": "CONTAINS SQL"
+        },
+        {
+          "value": "NO SQL",
+          "label": "NO SQL"
+        },
+        {
+          "value": "READS SQL DATA",
+          "label": "READS SQL DATA"
+        },
+        {
+          "value": "MODIFIES SQL DATA",
+          "label": "MODIFIES SQL DATA"
+        }
+      ],
+      "backend_field_id": "data_access",
+      "default": "UNCHANGED",
+      "record_key": "sql_data_access",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "deterministic",
+      "label": "Deterministic",
+      "control": "boolean",
+      "tab": "Options",
+      "default": false,
+      "editable_after_create": false,
+      "record_derive": {
+        "cases": [
+          {
+            "key": "is_deterministic",
+            "equals": "YES",
+            "value": true
+          }
+        ],
+        "default": false
+      },
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "language",
+      "label": "Language",
+      "control": "select",
+      "tab": "Options",
+      "options": [
+        {
+          "value": "SQL",
+          "label": "SQL"
+        }
+      ],
+      "default": "SQL",
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "schedule_create",
+      "label": "Schedule",
+      "control": "text",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "schedule",
+      "required": true,
+      "help": "Native AT or EVERY schedule expression. Leave absent on alter to preserve it.",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "completion_create",
+      "label": "On completion",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "PRESERVE",
+          "label": "PRESERVE"
+        },
+        {
+          "value": "NOT PRESERVE",
+          "label": "NOT PRESERVE"
+        }
+      ],
+      "backend_field_id": "completion",
+      "default": "NOT PRESERVE",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "status_create",
+      "label": "Status",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "ENABLE",
+          "label": "ENABLE"
+        },
+        {
+          "value": "DISABLE",
+          "label": "DISABLE"
+        },
+        {
+          "value": "DISABLE ON REPLICA",
+          "label": "DISABLE ON REPLICA"
+        }
+      ],
+      "backend_field_id": "status",
+      "default": "ENABLE",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "schedule_alter",
+      "label": "Schedule",
+      "control": "text",
+      "tab": "Options",
+      "modes": [
+        "alter"
+      ],
+      "backend_field_id": "schedule",
+      "required": false,
+      "help": "Native AT or EVERY schedule expression. Leave absent on alter to preserve it.",
+      "record_key": "schedule",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "completion_alter",
+      "label": "On completion",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "PRESERVE",
+          "label": "PRESERVE"
+        },
+        {
+          "value": "NOT PRESERVE",
+          "label": "NOT PRESERVE"
+        }
+      ],
+      "backend_field_id": "completion",
+      "default": "UNCHANGED",
+      "record_key": "on_completion",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "status_alter",
+      "label": "Status",
+      "control": "select",
+      "tab": "Options",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ENABLE",
+          "label": "ENABLE"
+        },
+        {
+          "value": "DISABLE",
+          "label": "DISABLE"
+        },
+        {
+          "value": "DISABLE ON REPLICA",
+          "label": "DISABLE ON REPLICA"
+        }
+      ],
+      "backend_field_id": "status",
+      "default": "UNCHANGED",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "status",
+            "equals": "ENABLED",
+            "value": "ENABLE"
+          },
+          {
+            "key": "status",
+            "equals": "DISABLED",
+            "value": "DISABLE"
+          },
+          {
+            "key": "status",
+            "equals": "SLAVESIDE_DISABLED",
+            "value": "DISABLE ON REPLICA"
+          },
+          {
+            "key": "status",
+            "equals": "REPLICA_SIDE_DISABLED",
+            "value": "DISABLE ON REPLICA"
+          }
+        ],
+        "default": "UNCHANGED"
+      },
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "time_zone",
+      "label": "Time zone",
+      "control": "text",
+      "tab": "Options",
+      "help": "Native session time zone for this independently owned operation; omission preserves its connection setting.",
+      "record_key": "time_zone",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "definer_user",
+      "label": "Definer user",
+      "control": "text",
+      "tab": "Engine",
+      "editable_after_create": false,
+      "record_key": "definer",
+      "record_pattern": "^(.*)@[^@]*$",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "definer_host",
+      "label": "Definer host",
+      "control": "text",
+      "tab": "Engine",
+      "editable_after_create": false,
+      "record_key": "definer",
+      "record_pattern": "@([^@]*)$",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "event_definer_user",
+      "label": "Definer user",
+      "control": "text",
+      "tab": "Engine",
+      "backend_field_id": "definer_user",
+      "record_key": "definer",
+      "record_pattern": "^(.*)@[^@]*$",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "event_definer_host",
+      "label": "Definer host",
+      "control": "text",
+      "tab": "Engine",
+      "backend_field_id": "definer_host",
+      "record_key": "definer",
+      "record_pattern": "@([^@]*)$",
+      "visible_when": {
+        "field": "variant",
+        "equals": "scheduled"
+      }
+    },
+    {
+      "field_id": "confirmation",
+      "label": "Confirmation",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "alter"
+      ],
+      "required": true,
+      "help": "Enter the selected routine name."
+    }
+  ],
+  "notes": "One form for procedures, functions and scheduled events (merged 2026-11-05: the descriptor service serves one form per family, so the separate function and event forms were never served); the variant comes from the kind. Routines: create binds the native routine compiler with its review (SQL mode identity and MySQL Shell 9.7 grammar); editing binds ALTER PROCEDURE/FUNCTION, which changes only the comment, SQL security and data access, so the body, parameters, return type, determinism, language and definer show locked on reopen and the characteristics pre-fill with their current values. Events: create and ALTER EVENT with every option; omitted options stay unchanged, and the schedule pre-fills from SHOW CREATE EVENT. Round-tripped 2026-11-05 on the MySQL 9.7.0 demo (tools/tests/test_ui_descriptor_roundtrip_mysql.py)."
+}

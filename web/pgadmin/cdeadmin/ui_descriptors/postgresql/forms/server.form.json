@@ -5,6 +5,7 @@
   "resource_kinds": [
     "server"
   ],
+  "form_reference": "SR-F-020065",
   "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [

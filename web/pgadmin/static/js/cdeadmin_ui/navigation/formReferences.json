@@ -6,15 +6,42 @@
       "reference": "SR-F-010000",
       "title": "DuckDB catalog and DDN diagrams"
     },
-    "duckdb-dashboard": {"reference": "SR-F-010001", "title": "DuckDB dashboard viewer"},
-    "duckdb-monitoring-policy": {"reference": "SR-F-010002", "title": "DuckDB monitoring policy"},
-    "duckdb-dashboard-editor": {"reference": "SR-F-010003", "title": "DuckDB dashboard editor"},
-    "duckdb-catalog-designer": {"reference": "SR-F-010004", "title": "DuckDB DDN catalog designer"},
-    "duckdb-test-data": {"reference": "SR-F-010005", "title": "DuckDB native test-data recipes"},
-    "duckdb-copy": {"reference": "SR-F-010006", "title": "DuckDB native table COPY preview"},
-    "duckdb-attachment": {"reference": "SR-F-010007", "title": "DuckDB session attachment preview"},
-    "duckdb-extensions": {"reference": "SR-F-010011", "title": "DuckDB original-session extension installation and loading"},
-    "duckdb-server-catalog-ddn": {"reference": "SR-F-010008", "title": "DuckDB registered-file DDN catalog"},
+    "duckdb-dashboard": {
+      "reference": "SR-F-010001",
+      "title": "DuckDB dashboard viewer"
+    },
+    "duckdb-monitoring-policy": {
+      "reference": "SR-F-010002",
+      "title": "DuckDB monitoring policy"
+    },
+    "duckdb-dashboard-editor": {
+      "reference": "SR-F-010003",
+      "title": "DuckDB dashboard editor"
+    },
+    "duckdb-catalog-designer": {
+      "reference": "SR-F-010004",
+      "title": "DuckDB DDN catalog designer"
+    },
+    "duckdb-test-data": {
+      "reference": "SR-F-010005",
+      "title": "DuckDB native test-data recipes"
+    },
+    "duckdb-copy": {
+      "reference": "SR-F-010006",
+      "title": "DuckDB native table COPY preview"
+    },
+    "duckdb-attachment": {
+      "reference": "SR-F-010007",
+      "title": "DuckDB session attachment preview"
+    },
+    "duckdb-extensions": {
+      "reference": "SR-F-010011",
+      "title": "DuckDB original-session extension installation and loading"
+    },
+    "duckdb-server-catalog-ddn": {
+      "reference": "SR-F-010008",
+      "title": "DuckDB registered-file DDN catalog"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"
@@ -5770,6 +5797,506 @@
     "bi-design-create": {
       "reference": "SR-F-010026",
       "title": "New BI question or dashboard"
+    },
+    "screen-mesh-designer": {
+      "reference": "SR-F-010027",
+      "title": "Screen mesh designer"
+    },
+    "screen-meshes-navigator": {
+      "reference": "SR-F-010028",
+      "title": "Screen meshes navigator"
+    },
+    "screen-mesh-create": {
+      "reference": "SR-F-010029",
+      "title": "New screen mesh"
+    },
+    "descriptor-form:cockroachdb:database": {
+      "reference": "SR-F-020001",
+      "title": "cockroachdb database descriptor form"
+    },
+    "descriptor-form:cockroachdb:index": {
+      "reference": "SR-F-020002",
+      "title": "cockroachdb index descriptor form"
+    },
+    "descriptor-form:cockroachdb:role": {
+      "reference": "SR-F-020003",
+      "title": "cockroachdb role descriptor form"
+    },
+    "descriptor-form:cockroachdb:routine": {
+      "reference": "SR-F-020004",
+      "title": "cockroachdb routine descriptor form"
+    },
+    "descriptor-form:cockroachdb:row-policy": {
+      "reference": "SR-F-020005",
+      "title": "cockroachdb row-policy descriptor form"
+    },
+    "descriptor-form:cockroachdb:sequence": {
+      "reference": "SR-F-020006",
+      "title": "cockroachdb sequence descriptor form"
+    },
+    "descriptor-form:cockroachdb:server": {
+      "reference": "SR-F-020007",
+      "title": "cockroachdb server descriptor form"
+    },
+    "descriptor-form:cockroachdb:table": {
+      "reference": "SR-F-020008",
+      "title": "cockroachdb table descriptor form"
+    },
+    "descriptor-form:cockroachdb:trigger": {
+      "reference": "SR-F-020009",
+      "title": "cockroachdb trigger descriptor form"
+    },
+    "descriptor-form:cockroachdb:type": {
+      "reference": "SR-F-020010",
+      "title": "cockroachdb type descriptor form"
+    },
+    "descriptor-form:cockroachdb:view": {
+      "reference": "SR-F-020011",
+      "title": "cockroachdb view descriptor form"
+    },
+    "descriptor-form:dolt:database": {
+      "reference": "SR-F-020012",
+      "title": "dolt database descriptor form"
+    },
+    "descriptor-form:dolt:index": {
+      "reference": "SR-F-020013",
+      "title": "dolt index descriptor form"
+    },
+    "descriptor-form:dolt:role": {
+      "reference": "SR-F-020014",
+      "title": "dolt role descriptor form"
+    },
+    "descriptor-form:dolt:routine": {
+      "reference": "SR-F-020015",
+      "title": "dolt routine descriptor form"
+    },
+    "descriptor-form:dolt:server": {
+      "reference": "SR-F-020016",
+      "title": "dolt server descriptor form"
+    },
+    "descriptor-form:dolt:table": {
+      "reference": "SR-F-020017",
+      "title": "dolt table descriptor form"
+    },
+    "descriptor-form:dolt:trigger": {
+      "reference": "SR-F-020018",
+      "title": "dolt trigger descriptor form"
+    },
+    "descriptor-form:dolt:view": {
+      "reference": "SR-F-020019",
+      "title": "dolt view descriptor form"
+    },
+    "descriptor-form:duckdb:database": {
+      "reference": "SR-F-020020",
+      "title": "duckdb database descriptor form"
+    },
+    "descriptor-form:duckdb:index": {
+      "reference": "SR-F-020021",
+      "title": "duckdb index descriptor form"
+    },
+    "descriptor-form:duckdb:routine": {
+      "reference": "SR-F-020022",
+      "title": "duckdb routine descriptor form"
+    },
+    "descriptor-form:duckdb:sequence": {
+      "reference": "SR-F-020023",
+      "title": "duckdb sequence descriptor form"
+    },
+    "descriptor-form:duckdb:server": {
+      "reference": "SR-F-020024",
+      "title": "duckdb server descriptor form"
+    },
+    "descriptor-form:duckdb:table": {
+      "reference": "SR-F-020025",
+      "title": "duckdb table descriptor form"
+    },
+    "descriptor-form:duckdb:type": {
+      "reference": "SR-F-020026",
+      "title": "duckdb type descriptor form"
+    },
+    "descriptor-form:duckdb:view": {
+      "reference": "SR-F-020027",
+      "title": "duckdb view descriptor form"
+    },
+    "descriptor-form:firebird:database": {
+      "reference": "SR-F-020028",
+      "title": "firebird database descriptor form"
+    },
+    "descriptor-form:firebird:index": {
+      "reference": "SR-F-020029",
+      "title": "firebird index descriptor form"
+    },
+    "descriptor-form:firebird:role": {
+      "reference": "SR-F-020030",
+      "title": "firebird role descriptor form"
+    },
+    "descriptor-form:firebird:routine": {
+      "reference": "SR-F-020031",
+      "title": "firebird routine descriptor form"
+    },
+    "descriptor-form:firebird:sequence": {
+      "reference": "SR-F-020032",
+      "title": "firebird sequence descriptor form"
+    },
+    "descriptor-form:firebird:server": {
+      "reference": "SR-F-020033",
+      "title": "firebird server descriptor form"
+    },
+    "descriptor-form:firebird:table": {
+      "reference": "SR-F-020034",
+      "title": "firebird table descriptor form"
+    },
+    "descriptor-form:firebird:trigger": {
+      "reference": "SR-F-020035",
+      "title": "firebird trigger descriptor form"
+    },
+    "descriptor-form:firebird:type": {
+      "reference": "SR-F-020036",
+      "title": "firebird type descriptor form"
+    },
+    "descriptor-form:firebird:view": {
+      "reference": "SR-F-020037",
+      "title": "firebird view descriptor form"
+    },
+    "descriptor-form:immudb:database": {
+      "reference": "SR-F-020038",
+      "title": "immudb database descriptor form"
+    },
+    "descriptor-form:immudb:index": {
+      "reference": "SR-F-020039",
+      "title": "immudb index descriptor form"
+    },
+    "descriptor-form:immudb:role": {
+      "reference": "SR-F-020040",
+      "title": "immudb role descriptor form"
+    },
+    "descriptor-form:immudb:server": {
+      "reference": "SR-F-020041",
+      "title": "immudb server descriptor form"
+    },
+    "descriptor-form:immudb:table": {
+      "reference": "SR-F-020042",
+      "title": "immudb table descriptor form"
+    },
+    "descriptor-form:mariadb:database": {
+      "reference": "SR-F-020043",
+      "title": "mariadb database descriptor form"
+    },
+    "descriptor-form:mariadb:index": {
+      "reference": "SR-F-020044",
+      "title": "mariadb index descriptor form"
+    },
+    "descriptor-form:mariadb:role": {
+      "reference": "SR-F-020045",
+      "title": "mariadb role descriptor form"
+    },
+    "descriptor-form:mariadb:routine": {
+      "reference": "SR-F-020046",
+      "title": "mariadb routine descriptor form"
+    },
+    "descriptor-form:mariadb:sequence": {
+      "reference": "SR-F-020047",
+      "title": "mariadb sequence descriptor form"
+    },
+    "descriptor-form:mariadb:server": {
+      "reference": "SR-F-020048",
+      "title": "mariadb server descriptor form"
+    },
+    "descriptor-form:mariadb:table": {
+      "reference": "SR-F-020049",
+      "title": "mariadb table descriptor form"
+    },
+    "descriptor-form:mariadb:trigger": {
+      "reference": "SR-F-020050",
+      "title": "mariadb trigger descriptor form"
+    },
+    "descriptor-form:mariadb:view": {
+      "reference": "SR-F-020051",
+      "title": "mariadb view descriptor form"
+    },
+    "descriptor-form:mysql:database": {
+      "reference": "SR-F-020052",
+      "title": "mysql database descriptor form"
+    },
+    "descriptor-form:mysql:index": {
+      "reference": "SR-F-020053",
+      "title": "mysql index descriptor form"
+    },
+    "descriptor-form:mysql:role": {
+      "reference": "SR-F-020054",
+      "title": "mysql role descriptor form"
+    },
+    "descriptor-form:mysql:routine": {
+      "reference": "SR-F-020055",
+      "title": "mysql routine descriptor form"
+    },
+    "descriptor-form:mysql:server": {
+      "reference": "SR-F-020056",
+      "title": "mysql server descriptor form"
+    },
+    "descriptor-form:mysql:table": {
+      "reference": "SR-F-020057",
+      "title": "mysql table descriptor form"
+    },
+    "descriptor-form:mysql:trigger": {
+      "reference": "SR-F-020058",
+      "title": "mysql trigger descriptor form"
+    },
+    "descriptor-form:mysql:view": {
+      "reference": "SR-F-020059",
+      "title": "mysql view descriptor form"
+    },
+    "descriptor-form:postgresql:database": {
+      "reference": "SR-F-020060",
+      "title": "postgresql database descriptor form"
+    },
+    "descriptor-form:postgresql:index": {
+      "reference": "SR-F-020061",
+      "title": "postgresql index descriptor form"
+    },
+    "descriptor-form:postgresql:role": {
+      "reference": "SR-F-020062",
+      "title": "postgresql role descriptor form"
+    },
+    "descriptor-form:postgresql:routine": {
+      "reference": "SR-F-020063",
+      "title": "postgresql routine descriptor form"
+    },
+    "descriptor-form:postgresql:sequence": {
+      "reference": "SR-F-020064",
+      "title": "postgresql sequence descriptor form"
+    },
+    "descriptor-form:postgresql:server": {
+      "reference": "SR-F-020065",
+      "title": "postgresql server descriptor form"
+    },
+    "descriptor-form:postgresql:table": {
+      "reference": "SR-F-020066",
+      "title": "postgresql table descriptor form"
+    },
+    "descriptor-form:postgresql:trigger": {
+      "reference": "SR-F-020067",
+      "title": "postgresql trigger descriptor form"
+    },
+    "descriptor-form:postgresql:type": {
+      "reference": "SR-F-020068",
+      "title": "postgresql type descriptor form"
+    },
+    "descriptor-form:postgresql:view": {
+      "reference": "SR-F-020069",
+      "title": "postgresql view descriptor form"
+    },
+    "descriptor-form:sqlite:database": {
+      "reference": "SR-F-020070",
+      "title": "sqlite database descriptor form"
+    },
+    "descriptor-form:sqlite:index": {
+      "reference": "SR-F-020071",
+      "title": "sqlite index descriptor form"
+    },
+    "descriptor-form:sqlite:server": {
+      "reference": "SR-F-020072",
+      "title": "sqlite server descriptor form"
+    },
+    "descriptor-form:sqlite:table": {
+      "reference": "SR-F-020073",
+      "title": "sqlite table descriptor form"
+    },
+    "descriptor-form:sqlite:trigger": {
+      "reference": "SR-F-020074",
+      "title": "sqlite trigger descriptor form"
+    },
+    "descriptor-form:sqlite:view": {
+      "reference": "SR-F-020075",
+      "title": "sqlite view descriptor form"
+    },
+    "descriptor-form:tidb:changefeed": {
+      "reference": "SR-F-020076",
+      "title": "tidb changefeed descriptor form"
+    },
+    "descriptor-form:tidb:database": {
+      "reference": "SR-F-020077",
+      "title": "tidb database descriptor form"
+    },
+    "descriptor-form:tidb:index": {
+      "reference": "SR-F-020078",
+      "title": "tidb index descriptor form"
+    },
+    "descriptor-form:tidb:placement-policy": {
+      "reference": "SR-F-020079",
+      "title": "tidb placement-policy descriptor form"
+    },
+    "descriptor-form:tidb:resource-group": {
+      "reference": "SR-F-020080",
+      "title": "tidb resource-group descriptor form"
+    },
+    "descriptor-form:tidb:role": {
+      "reference": "SR-F-020081",
+      "title": "tidb role descriptor form"
+    },
+    "descriptor-form:tidb:sequence": {
+      "reference": "SR-F-020082",
+      "title": "tidb sequence descriptor form"
+    },
+    "descriptor-form:tidb:server": {
+      "reference": "SR-F-020083",
+      "title": "tidb server descriptor form"
+    },
+    "descriptor-form:tidb:table": {
+      "reference": "SR-F-020084",
+      "title": "tidb table descriptor form"
+    },
+    "descriptor-form:tidb:view": {
+      "reference": "SR-F-020085",
+      "title": "tidb view descriptor form"
+    },
+    "descriptor-form:vitess:index": {
+      "reference": "SR-F-020086",
+      "title": "vitess index descriptor form"
+    },
+    "descriptor-form:vitess:keyspace": {
+      "reference": "SR-F-020087",
+      "title": "vitess keyspace descriptor form"
+    },
+    "descriptor-form:vitess:routine": {
+      "reference": "SR-F-020088",
+      "title": "vitess routine descriptor form"
+    },
+    "descriptor-form:vitess:routing_rule": {
+      "reference": "SR-F-020089",
+      "title": "vitess routing_rule descriptor form"
+    },
+    "descriptor-form:vitess:sequence": {
+      "reference": "SR-F-020090",
+      "title": "vitess sequence descriptor form"
+    },
+    "descriptor-form:vitess:server": {
+      "reference": "SR-F-020091",
+      "title": "vitess server descriptor form"
+    },
+    "descriptor-form:vitess:shard": {
+      "reference": "SR-F-020092",
+      "title": "vitess shard descriptor form"
+    },
+    "descriptor-form:vitess:table": {
+      "reference": "SR-F-020093",
+      "title": "vitess table descriptor form"
+    },
+    "descriptor-form:vitess:view": {
+      "reference": "SR-F-020094",
+      "title": "vitess view descriptor form"
+    },
+    "descriptor-form:vitess:vindex": {
+      "reference": "SR-F-020095",
+      "title": "vitess vindex descriptor form"
+    },
+    "descriptor-form:vitess:vschema": {
+      "reference": "SR-F-020096",
+      "title": "vitess vschema descriptor form"
+    },
+    "descriptor-form:xtdb:database": {
+      "reference": "SR-F-020097",
+      "title": "xtdb database descriptor form"
+    },
+    "descriptor-form:xtdb:role": {
+      "reference": "SR-F-020098",
+      "title": "xtdb role descriptor form"
+    },
+    "descriptor-form:xtdb:server": {
+      "reference": "SR-F-020099",
+      "title": "xtdb server descriptor form"
+    },
+    "descriptor-form:xtdb:table": {
+      "reference": "SR-F-020100",
+      "title": "xtdb table descriptor form"
+    },
+    "descriptor-form:yugabytedb:cast": {
+      "reference": "SR-F-020101",
+      "title": "yugabytedb cast descriptor form"
+    },
+    "descriptor-form:yugabytedb:changefeed": {
+      "reference": "SR-F-020102",
+      "title": "yugabytedb changefeed descriptor form"
+    },
+    "descriptor-form:yugabytedb:collation": {
+      "reference": "SR-F-020103",
+      "title": "yugabytedb collation descriptor form"
+    },
+    "descriptor-form:yugabytedb:database": {
+      "reference": "SR-F-020104",
+      "title": "yugabytedb database descriptor form"
+    },
+    "descriptor-form:yugabytedb:extension": {
+      "reference": "SR-F-020105",
+      "title": "yugabytedb extension descriptor form"
+    },
+    "descriptor-form:yugabytedb:foreign-server": {
+      "reference": "SR-F-020106",
+      "title": "yugabytedb foreign-server descriptor form"
+    },
+    "descriptor-form:yugabytedb:index": {
+      "reference": "SR-F-020107",
+      "title": "yugabytedb index descriptor form"
+    },
+    "descriptor-form:yugabytedb:operator": {
+      "reference": "SR-F-020108",
+      "title": "yugabytedb operator descriptor form"
+    },
+    "descriptor-form:yugabytedb:publication": {
+      "reference": "SR-F-020109",
+      "title": "yugabytedb publication descriptor form"
+    },
+    "descriptor-form:yugabytedb:role": {
+      "reference": "SR-F-020110",
+      "title": "yugabytedb role descriptor form"
+    },
+    "descriptor-form:yugabytedb:routine": {
+      "reference": "SR-F-020111",
+      "title": "yugabytedb routine descriptor form"
+    },
+    "descriptor-form:yugabytedb:row-policy": {
+      "reference": "SR-F-020112",
+      "title": "yugabytedb row-policy descriptor form"
+    },
+    "descriptor-form:yugabytedb:rule": {
+      "reference": "SR-F-020113",
+      "title": "yugabytedb rule descriptor form"
+    },
+    "descriptor-form:yugabytedb:schedule": {
+      "reference": "SR-F-020114",
+      "title": "yugabytedb schedule descriptor form"
+    },
+    "descriptor-form:yugabytedb:sequence": {
+      "reference": "SR-F-020115",
+      "title": "yugabytedb sequence descriptor form"
+    },
+    "descriptor-form:yugabytedb:server": {
+      "reference": "SR-F-020116",
+      "title": "yugabytedb server descriptor form"
+    },
+    "descriptor-form:yugabytedb:table": {
+      "reference": "SR-F-020117",
+      "title": "yugabytedb table descriptor form"
+    },
+    "descriptor-form:yugabytedb:tablespace": {
+      "reference": "SR-F-020118",
+      "title": "yugabytedb tablespace descriptor form"
+    },
+    "descriptor-form:yugabytedb:trigger": {
+      "reference": "SR-F-020119",
+      "title": "yugabytedb trigger descriptor form"
+    },
+    "descriptor-form:yugabytedb:type": {
+      "reference": "SR-F-020120",
+      "title": "yugabytedb type descriptor form"
+    },
+    "descriptor-form:yugabytedb:user-mapping": {
+      "reference": "SR-F-020121",
+      "title": "yugabytedb user-mapping descriptor form"
+    },
+    "descriptor-form:yugabytedb:view": {
+      "reference": "SR-F-020122",
+      "title": "yugabytedb view descriptor form"
     }
   }
 }

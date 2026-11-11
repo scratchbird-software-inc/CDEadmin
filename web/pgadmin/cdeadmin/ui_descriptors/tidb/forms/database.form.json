@@ -5,6 +5,7 @@
   "resource_kinds": [
     "database"
   ],
+  "form_reference": "SR-F-020077",
   "status": "complete",
   "engine_tab_title": "TiDB",
   "omitted_tabs": [],

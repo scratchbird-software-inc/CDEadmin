@@ -67,7 +67,11 @@ designer toolbar. The task-specific BI Questions & Dashboards Designer
 similarly registers only *New BI Question or Dashboard…* and *BI Questions &
 Dashboards* on the *Tools* menu while keeping *Open in BI Designer*, *Save BI
 Checkpoint*, *Open SQL Bridge*, *Review Outward Effects* and *Accept BI
-Version* on the open designer toolbar.
+Version* on the open designer toolbar. The task-specific Screen Mesh Designer
+registers only *New Screen Mesh…* and *Screen Meshes* on the *Tools* menu while
+keeping *Open in Screen Mesh Designer*, *Save Screen Mesh Checkpoint*, *Redact
+Screenshot Regions* and *Accept Screen Mesh Version* on the open designer
+toolbar.
 
 Window
 ======

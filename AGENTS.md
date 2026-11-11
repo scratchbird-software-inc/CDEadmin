@@ -377,6 +377,23 @@ the screen mesh (a wireframe of a form) or a screenshot, linked into the
 rest of the diagrams, for example to the data a form shows. A full form
 designer that builds working forms is outside ScratchRobin's scope.
 
+Owner decisions, 2026-11-10 (screen mesh designer):
+- Expand `wireframe.ui@1` in ScratchRobin's reviewed consumer capture with a
+  first-class `ui.region` element carrying rectangular bounds and bindings
+  alongside `ui.grid` (with named columns), `ui.dropdown`, `ui.radio` and
+  `ui.tabs` controls.
+- Model screen-to-screen navigation with a `navigation` relation (`control` or
+  `ui.region` -> `ui.frame` screen with bounded non-executable trigger/action
+  metadata) in `wireframe.ui@1`, and render the derived screen-flow view from
+  those relations rather than a separate flow profile.
+- Stamp `form_reference` (`SR-F` codes from `formReferences.json`) on the
+  `ui_descriptors` form files and support importing ScratchRobin's own `SR-F`
+  descriptor forms (and optional QA screenshot manifests) as `Draft` screen
+  meshes.
+- Destructively replace the stored `asset_blob` image when redacting regions on
+  a screenshot so unredacted screenshot bytes are never retained in
+  `designs.db`.
+
 ## Dashboard viewer, collector and history separation
 
 Owner correction, 2026-10-10: engine/server/database dashboards are display-only.

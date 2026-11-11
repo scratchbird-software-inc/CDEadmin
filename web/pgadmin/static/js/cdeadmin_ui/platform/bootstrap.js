@@ -22,6 +22,9 @@ import {
   BI_DESIGNER_MODULE_ID, registerBIDesignerModule,
 } from '../integrations/ddn/biDesignerModule';
 import {
+  SCREEN_MESH_MODULE_ID, registerScreenMeshModule,
+} from '../integrations/ddn/screenMeshModule';
+import {
   PLATFORM_SERVICE_IDS, registerCorePlatformServices,
 } from './PlatformServices';
 import {
@@ -148,6 +151,9 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
   if(!moduleRegistry.has(BI_DESIGNER_MODULE_ID)) {
     registerBIDesignerModule({modules: moduleRegistry, services: serviceRegistry, api});
   }
+  if(!moduleRegistry.has(SCREEN_MESH_MODULE_ID)) {
+    registerScreenMeshModule({modules: moduleRegistry, services: serviceRegistry, api});
+  }
   if(!moduleRegistry.has(SCHEMA_COMPARE_MODULE_ID)) registerSchemaCompareModule({
     modules: moduleRegistry, services: serviceRegistry, api,
   });
@@ -200,6 +206,7 @@ export function initializeCDEadminPlatform({api, services: serviceOptions}={}) {
       moduleRegistry.activate(ERD_MODULE_ID),
       moduleRegistry.activate(CUBE_MODULE_ID),
       moduleRegistry.activate(BI_DESIGNER_MODULE_ID),
+      moduleRegistry.activate(SCREEN_MESH_MODULE_ID),
       moduleRegistry.activate(SCHEMA_COMPARE_MODULE_ID),
       moduleRegistry.activate(LINEAGE_MODULE_ID),
       moduleRegistry.activate(QUALITY_MODULE_ID),

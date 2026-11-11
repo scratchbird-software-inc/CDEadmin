@@ -33,10 +33,14 @@ Updated 2026-11-10 (owner decision): The intake also applies
 `ddn_cube_dimensional.py` ([ddn-cube-dimensional.md](ddn-cube-dimensional.md))
 to register the `cube.dimensional@1` dimensional cube profile in ScratchRobin's
 isolated DDN capture alongside `matrix.relations@1` and `table.records@1`,
-recorded under `consumer_patches.cube_dimensional`, and `ddn_bi_analytics.py`
+recorded under `consumer_patches.cube_dimensional`; `ddn_bi_analytics.py`
 ([ddn-bi-analytics.md](ddn-bi-analytics.md)) to register the `bi.analytics@1`
 BI question lineage and dashboard wiring profile alongside `panels.composed@1`
-and `chart.*@1`, recorded under `consumer_patches.bi_analytics`.
+and `chart.*@1`, recorded under `consumer_patches.bi_analytics`; and
+`ddn_screen_mesh.py` ([ddn-screen-mesh.md](ddn-screen-mesh.md)) to expand
+`wireframe.ui@1` with `ui.grid`, `ui.dropdown`, `ui.radio`, `ui.tabs`,
+`ui.region`, data bindings, and bounded `navigation` links, recorded under
+`consumer_patches.screen_mesh`.
 
 Native MariaDB 12.2.2 macOS builds apply one guarded source correction in
 `native_servers.patch_mariadb_darwin_linker`: ColumnStore's GNU ld

@@ -5,6 +5,7 @@
   "resource_kinds": [
     "foreign-server"
   ],
+  "form_reference": "SR-F-020106",
   "status": "draft",
   "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],

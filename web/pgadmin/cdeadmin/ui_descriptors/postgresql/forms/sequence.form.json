@@ -5,6 +5,7 @@
   "resource_kinds": [
     "sequence"
   ],
+  "form_reference": "SR-F-020064",
   "status": "draft",
   "engine_tab_title": "PostgreSQL",
   "omitted_tabs": [],

@@ -847,7 +847,7 @@ export function completeProfileDiagnostics(view, records, review = false) {
         }
     }
     if (profileId === 'wireframe.ui@1')
-        for (const n of nodes.filter(n => role(n) !== 'ui.frame'))
+        for (const n of nodes.filter(n => role(n).startsWith('ui.') && role(n) !== 'ui.frame'))
             if ((!regionOwner(n) || role(regionOwner(n)) !== 'ui.frame'))
                 issue('DDN-UI-FRAME', 'Control is not assigned to a UI frame', n.ref, 'warning');
     if (profileId === 'idef0.basic@1') {
