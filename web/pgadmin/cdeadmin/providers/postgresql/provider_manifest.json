@@ -30,26 +30,95 @@
     "AnalyticalQueryProvider"
   ],
   "permissions": [
-    {"permission_id": "network", "granted": true, "scope": ["endpoint"]},
-    {"permission_id": "secret_read", "granted": true, "scope": ["endpoint"]},
-    {"permission_id": "backup_admin", "granted": true, "scope": ["endpoint", "resource"]},
-    {"permission_id": "data_read", "granted": true, "scope": ["endpoint", "resource"]},
-    {"permission_id": "data_write", "granted": true, "scope": ["endpoint", "resource"]},
-    {"permission_id": "administer", "granted": true, "scope": ["endpoint", "resource"]},
-    {"permission_id": "execute", "granted": true, "scope": ["endpoint"]},
-    {"permission_id": "filesystem", "granted": false, "scope": []},
-    {"permission_id": "embedded_runtime", "granted": false, "scope": []}
+    {
+      "permission_id": "network",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "secret_read",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "backup_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_read",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_write",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "administer",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "execute",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "filesystem",
+      "granted": false,
+      "scope": []
+    },
+    {
+      "permission_id": "embedded_runtime",
+      "granted": false,
+      "scope": []
+    }
   ],
-  "required_permissions": ["network"],
+  "required_permissions": [
+    "network"
+  ],
   "composition": {
-    "experience_families": ["postgresql"],
-    "target_adapter_ids": ["legacy-pgadmin-server"]
+    "experience_families": [
+      "postgresql"
+    ],
+    "target_adapter_ids": [
+      "legacy-pgadmin-server"
+    ]
   },
   "extension_schema": null,
   "registration": {
     "display_name": "PostgreSQL",
     "workflow": "legacy_preserved",
-    "browse_data": {"resource_kinds": ["table", "partitioned-table", "partition", "view", "materialized-view", "foreign-table"]},
+    "browse_data": {
+      "resource_kinds": [
+        "table",
+        "partitioned-table",
+        "partition",
+        "view",
+        "materialized-view",
+        "foreign-table"
+      ]
+    },
     "default_port": 5432,
     "default": true,
     "target_adapter_version": "9.17.0",
@@ -69,11 +138,12 @@
       "native_receipt_sha256": "ab3b54d93a4ec927c18cd1e351d94a689213222f77f1fec6a1ad6e6f858f7412",
       "metrics_receipt_sha256": "ba7671f65287536b2adfcee26c645d00a78920052f6b53b50d03b63807bc91e2"
     },
-    "live_evidence_reference": "cde-rel-live:postgresql-18.3:20260910",
+    "live_evidence_reference": "cdeadmin-postgresql-provider-tree-live:18.3:20261111",
     "object_experience_gate": "requires_requalification",
     "historical_evidence_scope": "The retained hashes identify earlier evidence. Preserved asset inventory and direct SQL smoke do not qualify all native form operations; these hashes do not authorize current full-surface completion.",
     "provider_live_evidence_sha256": "41e1b93be4e020fb8ae036ea2f4926843b92573b7dd5f2cb20c9befacec4d0a3",
     "object_evidence_sha256": "90877aeb541624edc603c551afb25dfdab59901e0acee7bf61759ebca9c6eb9f",
-    "strict_object_evidence_sha256": "0fd5ca7b88dfa2b7945cfaee88edb07dd7a57453ea4dbb259b24f32dcd68d90a"
+    "strict_object_evidence_sha256": "0fd5ca7b88dfa2b7945cfaee88edb07dd7a57453ea4dbb259b24f32dcd68d90a",
+    "live_suite": "tools/tests/test_ui_descriptor_operations_postgresql.py against PostgreSQL 18.3 (cdeadmin-demo-postgresql), provider-tree parity M2-M7, 2026-11-11"
   }
 }

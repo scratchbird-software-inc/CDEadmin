@@ -423,6 +423,7 @@ class ActualEnginePilotContractTests(unittest.TestCase):
             row['engine_id']: row['live_suite']
             for row in record['pilots']
         }
+        self.assertEqual('passed', live_status.pop('postgresql'))
         self.assertEqual('passed', live_status.pop('mysql'))
         self.assertEqual('passed', live_status.pop('mariadb'))
         self.assertEqual('passed', live_status.pop('mongodb'))
