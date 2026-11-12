@@ -673,7 +673,8 @@ def test_truncate_restart_identity_and_cascade(live):
     query('CREATE TABLE public.m_tru_child (id int, parent int REFERENCES public.m_tru(id))')
     query('INSERT INTO public.m_tru_child VALUES (1, 1)')
     # PostgreSQL refuses a truncate that a referencing table blocks; nothing is removed.
-    with pytest.raises(Exception, match='outcome is unknown'):
+    # Owner decision 2026-11-11: a server rejection is a known outcome (nothing changed), no longer unknown.
+    with pytest.raises(Exception, match='rejected the statement; nothing was changed'):
         maintain(live, 'truncate', 'table', 'm_tru')
     assert one('SELECT count(*) FROM public.m_tru') == 5
     plan, outcome = maintain(live, 'truncate', 'table', 'm_tru', values={'cascade': True})
