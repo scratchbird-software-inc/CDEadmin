@@ -9,7 +9,9 @@ alter one statement per changed fact, compared against the captured
 (``column.ui.js``). Every value is a literal, a validated identifier or
 a type or expression admitted by PostgreSQL's own parser; the engine
 never receives free text as an identifier. Column privileges, security
-labels and attribute options stay with the inherited dialog for now.
+labels and attribute options (owner direction 2026-11-11) are grids:
+grants and labels are stated, revocations and option resets have grids
+of their own, and a type change may carry a USING expression.
 """
 from __future__ import annotations
 
@@ -20,6 +22,9 @@ from .native_admin import (
 from .policies import expression
 
 STORAGE = {'p': 'PLAIN', 'm': 'MAIN', 'e': 'EXTERNAL', 'x': 'EXTENDED'}
+PRIVILEGE_CODES = {'a': 'INSERT', 'r': 'SELECT', 'w': 'UPDATE',
+                   'x': 'REFERENCES'}
+ATTOPTIONS = ('n_distinct', 'n_distinct_inherited')
 COMPRESSION = ('pglz', 'lz4')
 IDENTITY = {'a': 'ALWAYS', 'd': 'BY DEFAULT'}
 _SEQUENCE = (('seqincrement', 'INCREMENT'), ('seqstart', 'START'),
@@ -57,7 +62,41 @@ def facts(native):
                           else row.get('attstattarget')),
         'attstorage': storage if storage in STORAGE else '',
         'attcompression': row.get('attcompression') or '',
+        'attacl': _acl_rows(row.get('attacl')),
+        'attoptions': _option_rows(row.get('attoptions')),
+        'seclabels': [{'provider': item.get('provider'),
+                       'label': item.get('label')}
+                      for item in native.get('security_labels') or []],
     }
+
+
+def _acl_rows(value):
+    """``{role=arwx/grantor}`` items as grid rows; ``*`` marks grant option."""
+    if isinstance(value, str):
+        value = [part.strip() for part in value.strip('{}').split(',')
+                 if part.strip()]
+    rows = []
+    for item in value or []:
+        if not isinstance(item, str) or '=' not in item:
+            continue
+        grantee, _sep, rest = item.partition('=')
+        codes, _slash, grantor = rest.partition('/')
+        rows.append({'grantee': grantee.strip('"') or 'PUBLIC',
+                     'privileges': codes.replace('*', ''),
+                     'with_grant': '*' in codes, 'grantor': grantor})
+    return rows
+
+
+def _option_rows(value):
+    if isinstance(value, str):
+        value = [part.strip() for part in value.strip('{}').split(',')
+                 if part.strip()]
+    rows = []
+    for item in value or []:
+        if isinstance(item, str) and '=' in item:
+            name, _sep, option = item.partition('=')
+            rows.append({'name': name.strip(), 'value': option.strip()})
+    return rows
 
 
 # -- values -----------------------------------------------------------------
@@ -110,6 +149,87 @@ def _table(current):
                       _name(current['table'], 'table'))
 
 
+def _rows(draft, key):
+    value = draft.get(key)
+    if _blank(value):
+        return []
+    if not isinstance(value, list) or any(
+            not isinstance(item, dict) for item in value):
+        _refuse(f'{key} must be a list of rows')
+    return value
+
+
+def _grantee(value):
+    value = _name(value, 'grantee')
+    return 'PUBLIC' if value.upper() == 'PUBLIC' else _identifier(
+        value, 'grantee')
+
+
+def _grant(table, column, row):
+    codes = row.get('privileges')
+    if isinstance(codes, str):
+        codes = list(codes.replace(',', '').replace(' ', ''))
+    if not isinstance(codes, list) or not codes or any(
+            code not in PRIVILEGE_CODES for code in codes):
+        _refuse('column privileges are codes among '
+                + ', '.join(PRIVILEGE_CODES))
+    words = [f'{PRIVILEGE_CODES[code]} ({column})'
+             for code in PRIVILEGE_CODES if code in codes]
+    option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''
+    return (f'GRANT {", ".join(words)} ON {table} TO '
+            f'{_grantee(row.get("grantee"))}{option}')
+
+
+def _label(table, column, row):
+    provider = _name(row.get('provider'), 'provider')
+    label = row.get('label')
+    if not isinstance(label, str) or not label:
+        _refuse('a security label needs text')
+    return (f'SECURITY LABEL FOR {_identifier(provider, "provider")} ON '
+            f'COLUMN {table}.{column} IS {_literal(label, "label")}')
+
+
+def _option_set(rows):
+    parts = []
+    for row in rows:
+        name = row.get('name')
+        if name not in ATTOPTIONS:
+            _refuse('attoptions are ' + ', '.join(ATTOPTIONS))
+        value = str(row.get('value', '')).strip()
+        if not value or not all(ch.isdigit() or ch in '.-' for ch in value):
+            _refuse(f'{name} must be a number')
+        parts.append(f'{name}={value}')
+    return parts
+
+
+def _extras(table, column, draft, create):
+    """Grants, revocations, labels and attribute options after the
+    column itself; on create only the stating grids apply."""
+    statements = []
+    options = _option_set(_rows(draft, 'attoptions'))
+    if options:
+        statements.append(f'ALTER TABLE {table} ALTER COLUMN {column} SET ('
+                          + ', '.join(options) + ')')
+    if not create:
+        resets = []
+        for row in _rows(draft, 'reset_options'):
+            if row.get('name') not in ATTOPTIONS:
+                _refuse('attoptions are ' + ', '.join(ATTOPTIONS))
+            resets.append(row['name'])
+        if resets:
+            statements.append(f'ALTER TABLE {table} ALTER COLUMN {column} '
+                              f'RESET (' + ', '.join(resets) + ')')
+    for row in _rows(draft, 'attacl'):
+        statements.append(_grant(table, column, row))
+    if not create:
+        for row in _rows(draft, 'revoke'):
+            statements.append(f'REVOKE ALL ({column}) ON {table} FROM '
+                              + _grantee(row.get('grantee')))
+    for row in _rows(draft, 'seclabels'):
+        statements.append(_label(table, column, row))
+    return statements
+
+
 def _column_ref(current, name=None):
     return _identifier(_name(name or current['name'], 'name'), 'name')
 
@@ -155,6 +275,7 @@ def _create(native, draft):
         statements.append(f'ALTER TABLE {table} ALTER COLUMN {column} '
                           f'SET COMPRESSION '
                           f'{_compression(draft["attcompression"])}')
+    statements.extend(_extras(table, column, draft, create=True))
     return statements
 
 
@@ -179,7 +300,11 @@ def _alter(native, draft):
         if not _blank(draft.get('collspcname')):
             clause += ' COLLATE ' + _reference(draft['collspcname'],
                                                'collation')
+        if not _blank(draft.get('using')):
+            clause += ' USING ' + expression(draft['using'], 'using')
         statements.append(clause)
+    elif not _blank(draft.get('using')):
+        _refuse('a USING expression goes with a type change')
     if 'defval' in draft and current['colconstype'] != 'g':
         if _blank(draft.get('defval')):
             if current['defval']:
@@ -237,6 +362,7 @@ def _alter(native, draft):
         statements.append(f'COMMENT ON COLUMN {table}.{column} IS '
                           + ('NULL' if value == '' else
                              _literal(str(value), 'comment')))
+    statements.extend(_extras(table, column, draft, create=False))
     if not statements:
         _refuse('nothing to change')
     return statements
@@ -273,6 +399,9 @@ def _when(controller, value):
 
 def form(operation, field):
     """Dialog fields; ids follow the inherited column dialog."""
+    def column(field_id, label, control='text', required=False, **extra):
+        return {'field_id': field_id, 'label': label, 'control': control,
+                'required': required, **extra}
     if operation == 'drop':
         return {'form_id': 'postgresql-column-drop',
                 'form_key': 'native:postgresql:schema:column',
@@ -321,6 +450,9 @@ def form(operation, field):
         field('genexpr', 'Expression', help=(
             'GENERATED ALWAYS AS (expression) STORED; set at creation only.'),
             visible_when=_when('colconstype', 'g')),
+        field('using', 'Type conversion (USING)', help=(
+            'An expression over the old value when the type changes and '
+            'PostgreSQL cannot cast it on its own.')) if alter else None,
         field('attstattarget', 'Statistics', 'number', help=(
             '-1 uses the default statistics target.'),
             **initial('attstattarget')),
@@ -332,12 +464,33 @@ def form(operation, field):
             **initial('attcompression')),
         field('description', 'Comment', 'multiline',
               **initial('description')),
+        field('attoptions', 'Attribute options', 'grid', columns=[
+            column('name', 'Option', 'select', required=True, options=[
+                {'value': name, 'label': name} for name in ATTOPTIONS]),
+            column('value', 'Value', required=True)],
+            help='SET (n_distinct = ...) planner hints.'),
+        field('attacl', 'Column privileges', 'grid', columns=[
+            column('grantee', 'Grantee', required=True),
+            column('privileges', 'Privileges (a insert, r select, '
+                                 'w update, x references)', required=True),
+            column('with_grant', 'With grant option', 'boolean')],
+            help='Granted on this column; stated, never diffed.'),
+        field('seclabels', 'Security labels', 'grid', columns=[
+            column('provider', 'Provider', required=True),
+            column('label', 'Label', required=True)]),
     ]
+    fields = [item for item in fields if item is not None]
+    if alter:
+        fields.append(field('reset_options', 'Reset attribute options',
+                            'grid', columns=[column('name', 'Option',
+                                                    required=True)]))
+        fields.append(field('revoke', 'Revoke all column privileges from',
+                            'grid', columns=[column('grantee', 'Grantee',
+                                                    required=True)]))
     return {'form_id': f'postgresql-column-{operation}',
             'form_key': 'native:postgresql:schema:column',
             'title': ('Edit' if alter else 'Create') + ' column',
             'fields': fields,
-            'notes': ('Privileges, security labels and attribute options '
-                      'stay with the inherited dialog for now. A type '
-                      'change carries no USING clause: PostgreSQL must be '
-                      'able to cast the existing values.')}
+            'notes': ('Grants and labels are stated; revocations and option '
+                      'resets have grids of their own. A type change may '
+                      'carry a USING expression.')}

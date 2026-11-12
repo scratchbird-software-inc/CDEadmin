@@ -199,7 +199,28 @@ def _server_children_url(gid, sid):
     return url_for('NODE-server.children_id', gid=gid, sid=sid)
 
 
-def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None):
+def _native_create_kinds(visual_admin):
+    """Database-scoped kinds whose create the provider edits natively
+    (owner decision 2026-11-11, option 1), for the database node's Create
+    submenu; server-scope kinds create from their own groups."""
+    kinds = []
+    # Server-scope kinds create from their own groups; relation-owned kinds
+    # create from the Columns, Constraints, Indexes, ... group of a table.
+    skipped = {'server', 'database', 'role', 'tablespace', 'pgagent-job',
+               'replica-node', 'column', 'constraint', 'index',
+               'partitioned-index', 'trigger', 'rule', 'row-policy',
+               'partition'}
+    for item in (visual_admin or {}).get('objects', []):
+        kind = item.get('resource_kind')
+        if kind in skipped:
+            continue
+        if 'create' in _native_editor_operations(visual_admin, kind):
+            kinds.append(kind)
+    return sorted(kinds)
+
+
+def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
+                        native_create_kinds=()):
     """Place every retained database directly below its owning endpoint."""
     nodes = []
     for entry in database_entries(catalog):
@@ -234,6 +255,7 @@ def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None):
             'children_url': _cde_navigator_url(gid, sid, state),
             'cde_database': entry['database'],
             'cde_database_active': entry['active'],
+            'cde_native_editor_kinds': list(native_create_kinds),
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
@@ -1201,11 +1223,22 @@ class ServerNode(PGChildNodeView):
         if not manager.connection().connected():
             return None
         try:
-            catalog = endpoint_service_for_app(
-                current_app).database_catalog(server)
+            endpoint_service = endpoint_service_for_app(current_app)
+            catalog = endpoint_service.database_catalog(server)
+            visual_admin = None
+            try:
+                context, _endpoint, _root = endpoint_service.workspace(server)
+                binding = endpoint_service.provider_registry.resolve(context)
+                describe_admin = getattr(
+                    binding.instance, 'visual_admin_descriptor', None)
+                visual_admin = (describe_admin()
+                                if callable(describe_admin) else None)
+            except Exception:
+                visual_admin = None
             nodes = _cde_database_nodes(
                 gid, sid, profile, catalog,
                 runtime_version=public_version(manager.version),
+                native_create_kinds=_native_create_kinds(visual_admin),
             )
             # M3 (2026-11-11): the inherited tree's server-level
             # collections, served by the provider navigator at server scope.

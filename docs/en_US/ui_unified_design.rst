@@ -661,6 +661,18 @@ partitions and an attached table from the grid, then one partition added
 and one detached through the grid on alter; owner and access method
 reported back by name and an unchanged pair refused as no change.
 
+Column and menu gaps closed (owner direction 2026-11-11). The column
+editor gained column privileges (stated through a grid, revoked through
+a grid of grantees), security labels (the relation's labels with the
+column's attribute number, now carried on the column node), attribute
+options (n_distinct and n_distinct_inherited, set and reset) and a USING
+expression on a type change; the inherited dialog's remaining column
+features are covered. The database node now lists the database-scoped
+kinds the provider creates natively, so its Create submenu offers the
+engine-object kinds beside the family-form kinds, as the group nodes
+already did. Observed live on PostgreSQL 18.3: a column granted, given
+an option, retyped with USING, reset and revoked.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

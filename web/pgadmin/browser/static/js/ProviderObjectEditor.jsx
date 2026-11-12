@@ -240,11 +240,15 @@ export function familyEditorContextActions(itemData, item) {
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
   }
   // Create entries: a group node creates its own kind; a database creates any top-level kind.
+  // A database node also creates the engine-object kinds the server flags as
+  // natively creatable (owner decision 2026-11-11, option 1).
+  const nativeKinds = Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [];
   const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
     itemData._type === 'cde_database_target' ?
-      Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
-        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind) : [];
-  const creatable = childKinds.filter((kind) => nodeEditorAvailable(bundle, kind, itemData, 'create') && bundle.kinds[kind]?.tier1.includes('create'));
+      [...new Set([...Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
+        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind), ...nativeKinds])] : [];
+  const creatable = childKinds.filter((kind) => bundle.kinds[kind]?.tier1.includes('create') &&
+    (nodeEditorAvailable(bundle, kind, itemData, 'create') || nativeKinds.includes(kind)));
   if(creatable.length === 1) {
     entries.push({category: 'common', id: `family-editor-create-${creatable[0]}`,
       label: gettext('Create %s...', kindTitle(bundle, creatable[0])), iconKey: 'action.create',

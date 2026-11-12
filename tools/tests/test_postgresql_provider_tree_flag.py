@@ -144,6 +144,9 @@ class WiringTests(unittest.TestCase):
         # Owner decision 2026-11-11 (option 1): nodes flag the lifecycle
         # operations their provider edits with a form of its own.
         self.assertEqual(3, text.count("'cde_native_editor': _native_editor_operations("))
+        # The database node lists the database-scoped kinds created natively.
+        self.assertIn("'cde_native_editor_kinds': list(native_create_kinds)", text)
+        self.assertIn("native_create_kinds=_native_create_kinds(visual_admin)", text)
         # The inherited Connect records the runtime (owner decision
         # 2026-11-10) and never fails the connection over it.
         connect = text.split('    def connect(self, gid, sid')[1]

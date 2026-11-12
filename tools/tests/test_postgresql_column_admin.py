@@ -34,7 +34,8 @@ def test_facts_read_the_captured_attribute():
         'schema': 'shop', 'table': 'orders', 'name': 'amount', 'attnum': 3,
         'cltype': 'numeric(10,2)', 'attnotnull': False, 'defval': '0',
         'description': 'gross', 'colconstype': 'n', 'attidentity': '',
-        'attstattarget': -1, 'attstorage': 'm', 'attcompression': ''}
+        'attstattarget': -1, 'attstorage': 'm', 'attcompression': '',
+        'attacl': [], 'attoptions': [], 'seclabels': []}
     identity = dict(COLUMN, catalog_row=dict(COLUMN['catalog_row'],
                                              attidentity='a'))
     assert facts(identity)['colconstype'] == 'i'
@@ -163,3 +164,56 @@ def test_forms_follow_the_inherited_ids():
         'field': 'colconstype', 'field_id': 'colconstype', 'equals': 'g'}
     drop = {f['field_id'] for f in form('drop', field)['fields']}
     assert drop == {'cascade', 'confirmation'}
+
+
+def test_privileges_labels_options_and_using():
+    # Facts read the aclitem, option and label rows the capture carries.
+    rich = dict(COLUMN, security_labels=[{'provider': 'selinux', 'label': 'x',
+                                          'objsubid': 3}],
+                catalog_row=dict(COLUMN['catalog_row'],
+                                 attacl=['reader=r/app', 'ops=rw*/app'],
+                                 attoptions=['n_distinct=10']))
+    current = facts(rich)
+    assert current['attacl'] == [
+        {'grantee': 'reader', 'privileges': 'r', 'with_grant': False,
+         'grantor': 'app'},
+        {'grantee': 'ops', 'privileges': 'rw', 'with_grant': True,
+         'grantor': 'app'}]
+    assert current['attoptions'] == [{'name': 'n_distinct', 'value': '10'}]
+    assert current['seclabels'] == [{'provider': 'selinux', 'label': 'x'}]
+    # Create states grants, labels and options after the column.
+    lines = statements('create', {
+        'name': 'c', 'cltype': 'int',
+        'attoptions': [{'name': 'n_distinct', 'value': '-0.5'}],
+        'attacl': [{'grantee': 'reader', 'privileges': 'rx'}],
+        'seclabels': [{'provider': 'selinux', 'label': 'l'}]})
+    assert lines[1:] == [
+        'ALTER TABLE "shop"."orders" ALTER COLUMN "c" SET (n_distinct=-0.5)',
+        'GRANT SELECT ("c"), REFERENCES ("c") ON "shop"."orders" TO "reader"',
+        'SECURITY LABEL FOR "selinux" ON COLUMN "shop"."orders"."c" IS \'l\'']
+    # Alter adds revocations, option resets and the USING expression.
+    assert statements('alter', {
+        'cltype': 'integer', 'using': 'amount::integer',
+        'reset_options': [{'name': 'n_distinct'}],
+        'revoke': [{'grantee': 'public'}],
+        'attacl': [{'grantee': 'ops', 'privileges': 'w', 'with_grant': True}]}) == [
+        'ALTER TABLE "shop"."orders" ALTER COLUMN "amount" TYPE integer '
+        'USING amount::integer',
+        'ALTER TABLE "shop"."orders" ALTER COLUMN "amount" RESET (n_distinct)',
+        'GRANT UPDATE ("amount") ON "shop"."orders" TO "ops" WITH GRANT OPTION',
+        'REVOKE ALL ("amount") ON "shop"."orders" FROM PUBLIC']
+    for draft, message in (
+            ({'using': 'x'}, 'type change'),
+            ({'attoptions': [{'name': 'work_mem', 'value': '1'}]}, 'attoptions'),
+            ({'attacl': [{'grantee': 'r', 'privileges': 'd'}]}, 'privileges'),
+            ({'seclabels': [{'provider': 'p', 'label': ''}]}, 'label')):
+        with pytest.raises(PostgreSQLNativeAdminError, match=message):
+            compile_column('alter', draft)
+    def field(field_id, label, control='text', required=False, **extra):
+        return {'field_id': field_id, 'label': label, 'control': control,
+                'required': required, **extra}
+    alter = {f['field_id'] for f in form('alter', field)['fields']}
+    assert {'using', 'attoptions', 'reset_options', 'attacl', 'revoke',
+            'seclabels'} <= alter
+    create = {f['field_id'] for f in form('create', field)['fields']}
+    assert 'using' not in create and 'revoke' not in create

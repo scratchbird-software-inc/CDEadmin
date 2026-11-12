@@ -1427,6 +1427,11 @@ class PostgreSQLProvider:
                 'comment': row.get('comment'),
                 'default_expression': row.get('default_expression'),
                 'navigator_parent_resource_id': relation['resource_id'],
+                # Security labels of this column (owner direction
+                # 2026-11-11): the relation's labels with its attnum.
+                'security_labels': [
+                    label for label in native.get('security_labels') or []
+                    if label.get('objsubid') == attnum],
                 'catalog_row': row})
             from .columns import facts as column_facts
             column_native['column_facts'] = column_facts(column_native)

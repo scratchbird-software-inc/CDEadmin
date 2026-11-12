@@ -2306,16 +2306,17 @@ def column_native(schema, table, name):
                             CASE WHEN a.attgenerated='' AND a.attidentity='' THEN
                                  (SELECT pg_get_expr(d.adbin, d.adrelid, false) FROM pg_attrdef d
                                   WHERE d.adrelid=a.attrelid AND d.adnum=a.attnum) END,
-                            a.attidentity, a.attgenerated, a.attstattarget, a.attstorage, a.attcompression
+                            a.attidentity, a.attgenerated, a.attstattarget, a.attstorage, a.attcompression,
+                            a.attacl::text[], a.attoptions::text[]
                      FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
                      WHERE n.nspname='{schema}' AND c.relname='{table}' AND a.attname='{name}' AND NOT a.attisdropped""")
     assert len(rows) == 1, (schema, table, name)
-    oid, attnum, typ, notnull, comment, default, identity, generated, stat, storage, compression = rows[0]
+    oid, attnum, typ, notnull, comment, default, identity, generated, stat, storage, compression, acl, options = rows[0]
     native = {'catalog': 'pg_attribute', 'oid': oid, 'attnum': attnum, 'name': name, 'schema': schema, 'table': table,
               'data_type': typ, 'not_null': notnull, 'comment': comment, 'default_expression': default,
               'catalog_row': {'attname': name, 'attnotnull': notnull, 'attidentity': identity,
                               'attgenerated': generated, 'attstattarget': stat, 'attstorage': storage,
-                              'attcompression': compression}}
+                              'attcompression': compression, 'attacl': acl, 'attoptions': options}}
     native['column_facts'] = facts(native)
     return native
 
@@ -2356,6 +2357,27 @@ def test_column_lifecycle_round_trips(live):
     assert column_native('public', 'm_col', 'seq_id')['column_facts']['colconstype'] == 'n'
     with pytest.raises(Exception):
         run_kind(live, 'column', 'alter', {'cltype': 'numeric(14, 2)'}, column_native('public', 'm_col', 'gross'))
+    # Privileges, labels (none here: no provider loaded), options and USING on a retype (owner direction 2026-11-11).
+    reader = f'ui_ops_colreader_{UNIQUE}'
+    query(f'CREATE ROLE {reader}')
+    try:
+        run_kind(live, 'column', 'alter', {
+            'attoptions': [{'name': 'n_distinct', 'value': '42'}],
+            'attacl': [{'grantee': reader, 'privileges': 'r', 'with_grant': True}]},
+            column_native('public', 'm_col', 'gross'))
+        assert one("SELECT attoptions::text FROM pg_attribute WHERE attrelid='public.m_col'::regclass AND attname='gross'") == '{n_distinct=42}'
+        assert one(f"SELECT has_column_privilege('{reader}', 'public.m_col', 'gross', 'SELECT WITH GRANT OPTION')") is True
+        run_kind(live, 'column', 'alter', {
+            'reset_options': [{'name': 'n_distinct'}], 'revoke': [{'grantee': reader}]},
+            column_native('public', 'm_col', 'gross'))
+        current = column_native('public', 'm_col', 'gross')['column_facts']
+        assert (current['attoptions'], current['attacl']) == ([], [])
+        # USING on a retype, on a column nothing depends on (the generated column depends on gross).
+        run_kind(live, 'column', 'alter', {'cltype': 'integer', 'using': 'seq_id::integer'},
+                 column_native('public', 'm_col', 'seq_id'))
+        assert column_native('public', 'm_col', 'seq_id')['column_facts']['cltype'] == 'integer'
+    finally:
+        query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
     # Drop: the generated column depends on gross, so plain drop is refused and cascade removes both.
     with pytest.raises(Exception):
         run_kind(live, 'column', 'drop', {'confirmation': 'gross'}, column_native('public', 'm_col', 'gross'))

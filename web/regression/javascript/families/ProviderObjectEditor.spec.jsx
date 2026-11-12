@@ -82,6 +82,13 @@ describe('family editor tree glue', () => {
     // Without the flag and without a bundle form, nothing is offered.
     expect(familyEditorContextActions({...column, cde_native_editor: []}, 'column').map((entry) => entry.id))
       .not.toContain('family-editor-edit');
+    // A database node creates the kinds the server flags natively beside the family-form kinds.
+    const pgDatabase = {_type: 'cde_database_target', _id: 'postgresql-database:16384', cde_engine_id: 'postgresql',
+      label: 'demo', cde_context_actions: [], cde_native_editor_kinds: ['extension', 'schema']};
+    installTree({pgserver: {data: pgServer}, db: {data: pgDatabase, parent: 'pgserver'}});
+    const create = familyEditorContextActions(pgDatabase, 'db').find((entry) => entry.id === 'family-editor-create');
+    expect(create.children.map((child) => child.id)).toEqual(expect.arrayContaining(
+      ['family-editor-create-extension', 'family-editor-create-schema', 'family-editor-create-sequence']));
   });
 
   it('builds the workspace endpoint url with the database target', () => {
