@@ -20,7 +20,8 @@ from __future__ import annotations
 from . import columns as column_editor
 from . import constraints as constraint_editor
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
+    PostgreSQLNativeAdminError, privilege_words,
+    _flag, _identifier, _literal, _name,
     _qualified, _reference, _type_reference,
 )
 from .policies import expression
@@ -146,15 +147,9 @@ def _grantee(value):
 
 
 def _grant(qualified, row):
-    codes = row.get('privileges')
-    if isinstance(codes, str):
-        codes = list(codes.replace(',', '').replace(' ', ''))
-    if not isinstance(codes, list) or not codes or any(
-            code not in PRIVILEGE_CODES for code in codes):
-        _refuse('table privileges are codes among '
-                + ', '.join(PRIVILEGE_CODES))
-    words = [PRIVILEGE_CODES[code] for code in PRIVILEGE_CODES
-             if code in codes]
+    words_chosen = privilege_words(row.get('privileges'), PRIVILEGE_CODES,
+                                   'table')
+    words = words_chosen
     privileges = 'ALL' if len(words) == len(PRIVILEGE_CODES) else \
         ', '.join(words)
     option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''

@@ -16,7 +16,8 @@ of their own, and a type change may carry a USING expression.
 from __future__ import annotations
 
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
+    PostgreSQLNativeAdminError, privilege_words,
+    _flag, _identifier, _literal, _name,
     _qualified, _reference, _type_reference,
 )
 from .policies import expression
@@ -166,15 +167,9 @@ def _grantee(value):
 
 
 def _grant(table, column, row):
-    codes = row.get('privileges')
-    if isinstance(codes, str):
-        codes = list(codes.replace(',', '').replace(' ', ''))
-    if not isinstance(codes, list) or not codes or any(
-            code not in PRIVILEGE_CODES for code in codes):
-        _refuse('column privileges are codes among '
-                + ', '.join(PRIVILEGE_CODES))
-    words = [f'{PRIVILEGE_CODES[code]} ({column})'
-             for code in PRIVILEGE_CODES if code in codes]
+    words_chosen = privilege_words(row.get('privileges'), PRIVILEGE_CODES,
+                                   'column')
+    words = [f'{word} ({column})' for word in words_chosen]
     option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''
     return (f'GRANT {", ".join(words)} ON {table} TO '
             f'{_grantee(row.get("grantee"))}{option}')

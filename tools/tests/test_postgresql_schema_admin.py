@@ -86,7 +86,7 @@ def test_drop_needs_the_typed_name():
 
 
 @pytest.mark.parametrize('draft, message', [
-    ({'name': 's', 'nspacl': [{'grantee': 'r', 'privileges': 'X'}]}, 'codes'),
+    ({'name': 's', 'nspacl': [{'grantee': 'r', 'privileges': 'X'}]}, 'privileges are among'),
     ({'name': 's', 'default_privileges': [
         {'object_type': 'views', 'grantee': 'r', 'privileges': 'ALL'}]},
      'apply to'),
@@ -131,4 +131,6 @@ def test_forms_and_catalog_route():
     assert routes == {
         'create': 'provider-native', 'alter': 'provider-native',
         'drop': 'provider-native', 'inspect': 'legacy-preserved',
-        'reindex': 'provider-native'}
+        'reindex': 'provider-native',
+        # M6.2 (2026-11-11): schema-scope VACUUM and ANALYZE.
+        'vacuum': 'provider-native', 'analyze': 'provider-native'}

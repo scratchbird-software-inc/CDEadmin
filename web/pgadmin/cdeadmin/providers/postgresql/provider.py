@@ -52,6 +52,7 @@ from .execution import (
     Execution, parameters as native_parameters, control as native_control,
 )
 from .native_admin import (
+    _native_target,
     PostgreSQLNativeAdminError, compile_native_admin,
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
@@ -475,6 +476,23 @@ class PostgreSQLProvider:
             # (M6): it always runs from the server scope attachment.
             return {'server_id': _required_int(route, 'server_id'),
                     'database_id': None}
+        if kind == 'database' and request.get('operation_id') == 'alter':
+            # ALTER DEFAULT PRIVILEGES acts inside the database (owner
+            # direction 2026-11-11): such a plan attaches to it.
+            from .databases import has_default_privileges
+            draft = request.get('draft') or {}
+            if isinstance(draft, Mapping) and has_default_privileges(draft):
+                native = _native_target(request)
+                meta = native.get('catalog_metadata') or {}
+                oid = meta.get('did', native.get('native_identity',
+                                                 native.get('oid')))
+                if isinstance(oid, str) and oid.isdigit():
+                    oid = int(oid)
+                if type(oid) is not int:
+                    raise PostgreSQLProviderError(
+                        'the database identity is not known to the listing')
+                return {'server_id': _required_int(route, 'server_id'),
+                        'database_id': oid}
         from .maintenance import DATABASE_PICKED, database_reference_oid
         if (kind, request.get('operation_id')) in DATABASE_PICKED:
             # The dialog picks the database these run in (M6).

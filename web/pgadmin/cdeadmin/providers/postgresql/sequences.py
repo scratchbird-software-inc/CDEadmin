@@ -14,7 +14,8 @@ on a private attachment, so the change commits or rolls back whole.
 from collections.abc import Mapping
 
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
+    PostgreSQLNativeAdminError, privilege_words,
+    _flag, _identifier, _literal, _name,
     _qualified,
 )
 
@@ -72,15 +73,8 @@ def _grantee(value):
 def _grant(qualified, row):
     if not isinstance(row, Mapping):
         raise PostgreSQLNativeAdminError('privilege rows must be objects')
-    codes = row.get('privileges')
-    if isinstance(codes, str):
-        codes = list(codes)
-    if not isinstance(codes, list) or not codes or any(
-            code not in PRIVILEGE_CODES for code in codes):
-        raise PostgreSQLNativeAdminError(
-            'privileges are codes among ' + ', '.join(PRIVILEGE_CODES))
-    words = [PRIVILEGE_CODES[code] for code in PRIVILEGE_CODES
-             if code in codes]
+    words = privilege_words(row.get('privileges'), PRIVILEGE_CODES,
+                            'sequence')
     privileges = 'ALL' if len(words) == len(PRIVILEGE_CODES) else ', '.join(
         words)
     option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''

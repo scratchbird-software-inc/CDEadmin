@@ -125,7 +125,7 @@ def test_drop_needs_the_typed_name():
     ('create', {'schema': 's', 'name': 'n', 'relpersistence': 'temp'},
      'logged or unlogged'),
     ('create', {'schema': 's', 'name': 'n',
-                'relacl': [{'grantee': 'r', 'privileges': 'x'}]}, 'codes'),
+                'relacl': [{'grantee': 'r', 'privileges': 'x'}]}, 'privileges are among'),
     ('create', {'schema': 's', 'name': 'n', 'relacl': 'reader'}, 'list'),
     ('create', {'schema': 's', 'name': 'n; DROP TABLE t'},
      None),

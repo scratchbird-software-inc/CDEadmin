@@ -673,6 +673,28 @@ engine-object kinds beside the family-form kinds, as the group nodes
 already did. Observed live on PostgreSQL 18.3: a column granted, given
 an option, retyped with USING, reset and revoked.
 
+Form close-outs, database (owner direction 2026-11-11: close the
+remaining PostgreSQL family forms the way the table form was closed).
+The provider tree renders the family form and the provider validates the
+draft against its own form, refusing any field it does not declare, so a
+form is complete only when the provider admits and compiles every field
+the dialog can send. A shared helper now reads privileges as the words
+the family grids send or as aclitem codes, for tables, columns,
+databases, schemas and sequences alike. The database editor admits every
+family field: STRATEGY on create; per-database parameters set and reset
+(a row with an empty value resets; a current setting left out resets
+when the listing knows it); security labels; the four default-privilege
+grids, which run inside the database, so such a plan attaches to it; a
+Revoke grid; locale fields hidden by the provider choice are ignored.
+CREATE DATABASE still runs alone, so the follow-up grids are refused on
+create with that message, and the inherited tree's schema restriction is
+refused as a browsing preference the provider tree does not store. The
+pgAdmin field-id gate now lists the provider-tree-only ids (revocation
+grids, storage resets, foreign option grids) that the M7 forms had
+introduced without updating it. Observed live on PostgreSQL 18.3: word
+privileges granted and revoked, parameters set per database and per role
+then reset, default privileges applied inside the database.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

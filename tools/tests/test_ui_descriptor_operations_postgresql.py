@@ -1005,6 +1005,9 @@ def test_schema_lifecycle_round_trips(live):
 
 
 # -- M4 (2026-11-11): database create and alter from the server scope, provider-native, live -----
+from pgadmin.cdeadmin.providers.postgresql.databases import facts  # noqa: E402
+
+
 def database_native(name):
     rows = query(f"""SELECT d.oid::int, t.spcname, d.datallowconn, d.datistemplate, pg_get_userbyid(d.datdba),
                             d.datconnlimit, s.description, d.datacl::text[]
@@ -1046,7 +1049,7 @@ def test_database_create_and_alter_round_trip(live):
     query(f'CREATE ROLE {owner}; CREATE ROLE {reader}')
     try:
         plan = run_database(live, 'create', {
-            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8',
+            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8', 'datstrategy': 'wal_log',
             'datlocaleprovider': 'libc', 'datcollate': 'C', 'datctype': 'C', 'datconnlimit': 7,
             'datallowconn': True, 'is_template': False})
         assert plan['command_preview']['statement'].startswith(f'CREATE DATABASE "{name}" WITH OWNER')
@@ -1066,6 +1069,32 @@ def test_database_create_and_alter_round_trip(live):
         with pytest.raises(Exception):
             run_database(live, 'alter', {'spcname': 'pg_default', 'comments': 'x'}, dict(
                 native, database_facts=dict(native['database_facts'], spcname='other')))
+        # The family grid sends privilege words; settings set and reset; default privileges attach to the database
+        # (owner direction 2026-11-11).
+        run_database(live, 'alter', {
+            'datacl': [{'grantee': reader, 'privileges': ['CONNECT', 'TEMPORARY']}],
+            'variables': [{'name': 'work_mem', 'value': '16MB'}, {'name': 'statement_timeout', 'value': '7s', 'role': reader}]},
+            native)
+        # PUBLIC holds CONNECT and TEMP on every database, so read the ACL itself, not has_database_privilege.
+        assert any(item.startswith(f'{reader}=Tc/') for item in database_native(name)['acl'])
+        # Default privileges attach the plan to the database itself; the harness driver is attached to the scratch
+        # database, so that is the database they are applied to here (the route must name it, or the identity check
+        # refuses: observed above with another database).
+        run_database(live, 'alter', {'deftblacl': [{'grantee': reader, 'privileges': ['SELECT']}]}, database_native(DATABASE))
+        assert one(f"SELECT count(*) FROM pg_default_acl a WHERE a.defaclobjtype='r' AND a.defaclnamespace=0 "
+                   f"AND a.defaclacl::text LIKE '%{reader}=r/%'") == 1
+        query(f'ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM {reader}')
+        assert query(f"SELECT setconfig::text FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase "
+                     f"WHERE d.datname='{name}' AND s.setrole=0") == [('{work_mem=16MB}',)]
+        assert one(f"SELECT count(*) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase JOIN pg_roles r "
+                   f"ON r.oid=s.setrole WHERE d.datname='{name}' AND r.rolname='{reader}'") == 1
+        native = database_native(name)
+        native['settings'] = [{'name': 'work_mem', 'value': '16MB'}, {'name': 'statement_timeout', 'value': '7s', 'role': reader}]
+        native['database_facts'] = facts(native)
+        run_database(live, 'alter', {'variables': [{'name': 'work_mem', 'value': ''}], 'revoke': [{'grantee': reader}]}, native)
+        assert one(f"SELECT count(*) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase WHERE d.datname='{name}'") == 0
+        assert not any(item.startswith(f'{reader}=') for item in database_native(name)['acl'])
+        native = database_native(name)
         # Rename runs from the maintenance database, which is not the renamed one.
         run_database(live, 'alter', {'name': name + '_r'}, native)
         assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}_r'") == [(1,)]

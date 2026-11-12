@@ -53,6 +53,36 @@ def _required_text(value, label):
     return value.strip()
 
 
+def privilege_words(value, codes, label):
+    """The privileges a grant row names, as ordered words. The family
+    privileges grid sends words (['SELECT', 'UPDATE']); API drafts and
+    the inherited dialogs send aclitem codes ('rw' or ['r', 'w']). Either
+    is accepted, case-insensitively for words."""
+    if isinstance(value, str):
+        parts = [part for part in re.split(r'[,\s]+', value.strip())
+                 if part]
+        if len(parts) == 1 and parts[0].upper() not in codes.values() \
+                and all(ch in codes for ch in parts[0]):
+            parts = list(parts[0])
+        value = parts
+    if not isinstance(value, list) or not value:
+        raise PostgreSQLNativeAdminError(
+            f'{label} privileges are among ' + ', '.join(codes.values()))
+    chosen = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise PostgreSQLNativeAdminError(
+                f'{label} privileges are among ' + ', '.join(codes.values()))
+        if item in codes:
+            chosen.add(codes[item])
+        elif item.upper() in codes.values():
+            chosen.add(item.upper())
+        else:
+            raise PostgreSQLNativeAdminError(
+                f'{label} privileges are among ' + ', '.join(codes.values()))
+    return [word for word in codes.values() if word in chosen]
+
+
 def _flag(draft, name):
     value = draft.get(name, False)
     if type(value) is not bool:

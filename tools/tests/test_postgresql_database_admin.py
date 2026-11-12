@@ -23,14 +23,14 @@ def test_facts_read_the_server_scope_row_or_the_captured_row():
     assert facts(NATIVE) == {
         'name': 'appdb', 'spcname': 'pg_default', 'datconnlimit': None,
         'is_template': False, 'datallowconn': True, 'comments': 'the app',
-        'datacl': []}
+        'datacl': [], 'variables': []}
     captured = {'name': 'appdb', 'comment': None, 'catalog_row': {
         'datname': 'appdb', 'datconnlimit': 5, 'datistemplate': True,
         'datallowconn': False, 'datacl': ['=Tc/postgres']}}
     assert facts(captured) == {
         'name': 'appdb', 'spcname': None, 'datconnlimit': 5,
         'is_template': True, 'datallowconn': False, 'comments': None,
-        'datacl': ['=Tc/postgres']}
+        'datacl': ['=Tc/postgres'], 'variables': []}
 
 
 def test_create_is_one_autocommit_statement():
@@ -124,12 +124,22 @@ def test_forms_follow_the_inherited_ids():
                 'required': required, **extra}
     create = {f['field_id']: f for f in form('create', field)['fields']}
     alter = {f['field_id']: f for f in form('alter', field)['fields']}
-    assert 'comments' not in create and create['name']['required']
+    # Every family field id is admitted (owner direction 2026-11-11), so
+    # the dialog's draft is never refused as unknown.
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'database.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
+    assert create['name']['required'] and 'revoke' in alter
     assert alter['datconnlimit']['initial_value_path'] == [
         'database_facts', 'datconnlimit']
-    assert set(alter) == {'name', 'datowner', 'spcname', 'datconnlimit',
-                          'datallowconn', 'is_template', 'comments',
-                          'datacl', 'revoke'}
+    assert create['daticulocale']['visible_when'] == {
+        'field': 'datlocaleprovider', 'field_id': 'datlocaleprovider',
+        'equals': 'icu'}
 
 
 def test_provider_route_needs_no_database_for_database_changes():
@@ -141,3 +151,63 @@ def test_provider_route_needs_no_database_for_database_changes():
     with pytest.raises(PostgreSQLProviderError):
         PostgreSQLProvider._native_admin_route(
             {'resource_kind': 'schema', '_provider_route': {'server_id': 7}})
+
+
+def test_strategy_follow_ups_and_hidden_locale_values_on_create():
+    assert compile_database('create', {
+        'name': 'd', 'datstrategy': 'file_copy', 'datlocaleprovider': 'libc',
+        'datcollate': 'C', 'daticulocale': 'en'})['statement'] == (
+        'CREATE DATABASE "d" WITH LOCALE_PROVIDER = libc '
+        "LC_COLLATE = 'C' STRATEGY = file_copy")
+    with pytest.raises(PostgreSQLNativeAdminError, match='runs alone'):
+        compile_database('create', {'name': 'd', 'datacl': [
+            {'grantee': 'r', 'privileges': ['CONNECT']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='browsing preference'):
+        compile_database('create', {'name': 'd', 'schema_res': ['public']})
+    with pytest.raises(PostgreSQLNativeAdminError, match='strategy is'):
+        compile_database('create', {'name': 'd', 'datstrategy': 'copy'})
+
+
+def test_alter_settings_labels_default_privileges_and_words():
+    settings = dict(NATIVE, settings=[{'name': 'work_mem', 'value': '8MB'},
+                                      {'name': 'search_path', 'value': 'app',
+                                       'role': 'reporter'}])
+    assert facts(settings)['variables'][1]['role'] == 'reporter'
+    lines = compile_database('alter', {
+        'datacl': [{'grantee': 'reader', 'privileges': ['CONNECT', 'temporary']}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}],
+        'variables': [{'name': 'work_mem', 'value': '16MB'},
+                      {'name': 'statement_timeout', 'value': ''}],
+        'deftblacl': [{'grantee': 'reader', 'privileges': ['SELECT']}],
+        'defseqacl': [{'grantee': 'reader', 'privileges': 'U'}]},
+        settings)['statement'].split(';\n')
+    assert lines == [
+        'GRANT TEMPORARY, CONNECT ON DATABASE "appdb" TO "reader"',
+        'SECURITY LABEL FOR "selinux" ON DATABASE "appdb" IS \'x\'',
+        'ALTER DATABASE "appdb" SET work_mem TO \'16MB\'',
+        'ALTER DATABASE "appdb" RESET statement_timeout',
+        'ALTER ROLE "reporter" IN DATABASE "appdb" RESET search_path',
+        'ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO "reader"',
+        'ALTER DEFAULT PRIVILEGES GRANT USAGE ON SEQUENCES TO "reader"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='rename it separately'):
+        compile_database('alter', {'name': 'other', 'deftypeacl': [
+            {'grantee': 'r', 'privileges': ['USAGE']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='privileges are among'):
+        compile_database('alter', {'datacl': [{'grantee': 'r',
+                                               'privileges': ['SELECT']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='parameter name'):
+        compile_database('alter', {'variables': [{'name': 'x; drop',
+                                                  'value': '1'}]})
+    # A plan with default privileges attaches to the database itself.
+    from pgadmin.cdeadmin.providers.postgresql.provider import (
+        PostgreSQLProvider)
+    request = {'resource_kind': 'database', 'operation_id': 'alter',
+               '_provider_route': {'server_id': 7},
+               'target_resource': {'extensions': {'postgresql': {
+                   'native': NATIVE}}},
+               'draft': {'deftblacl': [{'grantee': 'r', 'privileges': 'r'}]}}
+    assert PostgreSQLProvider._native_admin_route(request) == {
+        'server_id': 7, 'database_id': 10}
+    request['draft'] = {'comments': 'x'}
+    assert PostgreSQLProvider._native_admin_route(request) == {
+        'server_id': 7, 'database_id': None}
