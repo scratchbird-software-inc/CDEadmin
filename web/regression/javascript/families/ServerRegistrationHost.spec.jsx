@@ -121,3 +121,26 @@ describe('ServerRegistrationHost refusals (browser pass 2026-11-12)', () => {
     expect(screen.queryByText(/status code 401/)).toBeNull();
   });
 });
+
+describe('MySQL edit through the lifecycle route (browser pass 2026-11-12)', () => {
+  it('posts the provider edit form values with a route change keyed by field id', async () => {
+    const bundle = loadEngineBundle('mysql');
+    const editFields = ['name', 'host', 'port', 'username', 'compress'].map((field_id) => ({field_id}));
+    const api = jest.fn(async ({data}) => ({data: data.action === 'endpoint_profile_read'
+      ? {success: 1, data: {endpoint_registration: {forms: {forms: {edit: {fields: editFields}}}}}}
+      : {success: 1, data: {}}}));
+    api.get = jest.fn(async (url) => ({data: url.startsWith('/cdeadmin/api/ui/descriptors') ? {success: 1, data: bundle}
+      : {name: 'm', host: 'h', port: 3306, username: 'u', cde_route_compress: false, cde_profile_id: 'mysql-native'}}));
+    const onSaved = jest.fn();
+    render(<Theme><ServerRegistrationHost api={api} engine="mysql" mode="alter" urlFor={() => '/browser/server/obj/1/7'}
+      lifecycleUrl="/browser/server/cde_workspace/1/7" profileId="mysql-native" displayName="Edit MySQL"
+      onClose={() => {}} onSaved={onSaved} /></Theme>);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByLabelText(/^Protocol compression/));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const update = api.mock.calls.map(([request]) => request).find((request) => request.data?.action === 'endpoint_profile_update');
+    expect(update.url).toBe('/browser/server/cde_workspace/1/7');
+    expect(update.data.request).toEqual({name: 'm', host: 'h', port: 3306, username: 'u', compress: true});
+  });
+});

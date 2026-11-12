@@ -120,7 +120,12 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
       const read = await send(api, {url: lifecycleUrl, method: 'POST', data: {action: 'endpoint_profile_read'}});
       const editForm = read?.data?.data?.endpoint_registration?.forms?.forms?.edit;
       if(!editForm) throw new Error(read?.data?.errormsg || 'The provider did not return its edit form');
-      const request = lifecycleProfileRequest(editForm.fields.map((field) => field.field_id), fromBackend, draft);
+      // The editor reports changes under the servers API's names (cde_route_compress); the provider
+      // edit form and the record use field ids (compress).
+      const fieldOf = new Map(form.tabs.flatMap((tab) => tab.fields)
+        .filter((field) => field.backend_field_id).map((field) => [field.backend_field_id, field.field_id]));
+      const changes = Object.fromEntries(Object.entries(draft).map(([key, value]) => [fieldOf.get(key) || key, value]));
+      const request = lifecycleProfileRequest(editForm.fields.map((field) => field.field_id), fromBackend, changes);
       const response = await send(api, {url: lifecycleUrl, method: 'POST', data: {action: 'endpoint_profile_update', request}});
       onSaved?.(response.data);
       return response.data;

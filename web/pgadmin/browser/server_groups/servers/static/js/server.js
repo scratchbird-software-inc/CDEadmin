@@ -17,7 +17,7 @@ import { AllPermissionTypes } from '../../../../static/js/constants';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
 import {
-  LEGACY_REGISTRATION_RETIRED, reportServerEditorFailure, tryOpenServerForm,
+  LEGACY_REGISTRATION_RETIRED, LIFECYCLE_EDIT_ENGINES, reportServerEditorFailure, tryOpenServerForm,
 } from '../../../../static/js/ProviderObjectEditor';
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
@@ -404,6 +404,35 @@ define('pgadmin.node.server', [
                 panelTitle: gettext('Copy %s', nodeData.label || nodeData._label)});
             })
             .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
+        },
+        /*
+         * Remove Server for an engine whose registration changes pass the provider lifecycle
+         * (MySQL): the servers delete refuses it, so after the same confirmation the removal goes
+         * through the endpoint's workspace action, confirmed with the registration's own name.
+         */
+        delete_obj: function(args, item) {
+          const tree = pgBrowser.tree;
+          const nodeItem = args?.item || item || tree.selected();
+          const nodeData = nodeItem ? tree.itemData(nodeItem) : undefined;
+          if(nodeData?._type !== 'server' || !LIFECYCLE_EDIT_ENGINES.has(nodeData.cde_engine_id)) {
+            return pgAdmin.Browser.Node.callbacks.delete_obj.call(this, args, item);
+          }
+          const label = nodeData.label || nodeData._label;
+          pgAdmin.Browser.notifier.confirmDelete(gettext('Remove Server?'),
+            gettext('Are you sure you want to remove the server <b>"%s"</b>?', _.escape(label)),
+            () => {
+              const api = getApiInstance();
+              api.get(this.generate_url(nodeItem, 'obj', nodeData, true))
+                .then(({data}) => api.post(this.generate_url(nodeItem, 'cde_workspace', nodeData, true),
+                  {action: 'endpoint_profile_remove', request: {confirmation: data.name}}))
+                .then(({data: res}) => {
+                  if(res?.success === 0) throw new Error(res.errormsg || res.info);
+                  pgBrowser.removeTreeNode(nodeItem, true);
+                })
+                .catch((error) => pgAdmin.Browser.notifier.alertText(
+                  gettext('Error removing server: "%s"', label),
+                  error?.response?.data?.errormsg || error?.message || String(error)));
+            }, () => {}, gettext('Remove'), gettext('Cancel'));
         },
         open_postgresql_dashboard_editor: function(args) {
           const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());

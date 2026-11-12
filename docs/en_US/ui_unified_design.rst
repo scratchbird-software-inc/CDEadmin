@@ -919,6 +919,14 @@ the demos, then in Chrome):
   a change to a field that form does not own (the comment) is refused with
   its name rather than dropped. Verified: one timeout change, every other
   route value unchanged.
+- Clicked through in Chrome afterwards, two MySQL faults surfaced and were
+  fixed: the editor reports changes under the servers API's names
+  (cde_route_compress), so the lifecycle save refused them until they were
+  translated to the provider's field ids; and Remove Server answered a 409
+  pointing at a removal form nothing opens. Remove Server now confirms and
+  removes a MySQL registration through the endpoint's lifecycle removal.
+  Observed: a compression change saved with every other value unchanged,
+  and removal deleted the registration and its tree node.
 - Copy registers once the password is entered (a copy never carries the
   secret); host, port, database, user, comment and connection parameters
   match the source. The copy's tags carried a display-only key, now
