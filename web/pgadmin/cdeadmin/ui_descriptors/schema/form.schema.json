@@ -338,7 +338,7 @@
         },
         "hidden": {
           "type": "boolean",
-          "description": "grid column: carried in the row and sent to the provider, never shown (provider bookkeeping)"
+          "description": "grid column: carried in the row and sent to the provider, never shown (provider bookkeeping); form field: kept in the record and draft, never rendered (the registration host supplies it)"
         },
         "detail": {
           "type": "boolean",

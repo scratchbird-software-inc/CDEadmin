@@ -15,7 +15,10 @@ lists all 25 engine ids; ``server.ui.js`` is no longer reached from the
 register or edit actions. Each engine's Server form is complete and the
 registrations were exercised through the servers API with the form's payload
 (see :doc:`ui_unified_design`, decision of 2026-11-11); still not run in a
-browser.
+browser. A browser pass the same day found Properties and Copy Server on a server
+node still opening ``server.ui.js``; ``server.js`` now overrides the server
+node's ``show_obj_properties`` so both open the descriptor editor (verified
+in Chrome).
 
 Status: **UNVERIFIED IN A BROWSER.** Verified only by Jest
 (``web/regression/javascript/families/ServerRegistrationHost.spec.jsx``), the Python

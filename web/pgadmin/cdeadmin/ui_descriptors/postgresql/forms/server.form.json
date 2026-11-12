@@ -67,7 +67,8 @@
       ],
       "help": "Options are the pgAdmin server groups; hidden when registering through an engine profile. Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
       "ui_only": true,
-      "required": false
+      "required": false,
+      "hidden": true
     },
     {
       "field_id": "cde_profile_id",
@@ -83,7 +84,8 @@
         "create"
       ],
       "help": "Select the native interface used by this endpoint. Engines with multiple interfaces expose each interface as a separate protocol-owned profile. Changing it resets port, connect/verify switches and route defaults (depChange not expressible here). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
-      "ui_only": true
+      "ui_only": true,
+      "hidden": true
     },
     {
       "field_id": "cde_registration_intent",
@@ -95,7 +97,8 @@
       ],
       "help": "Hidden field set by the registration workflow (endpoint / create_database / register_existing). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
       "ui_only": true,
-      "required": false
+      "required": false,
+      "hidden": true
     },
     {
       "field_id": "server_owner",
@@ -183,7 +186,8 @@
       ],
       "help": "Shown for provider_endpoint profiles only (visibility depends on the profile workflow, not on a field). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
       "ui_only": true,
-      "required": false
+      "required": false,
+      "hidden": true
     },
     {
       "field_id": "shared",

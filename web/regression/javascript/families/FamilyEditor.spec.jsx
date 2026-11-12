@@ -80,6 +80,7 @@ describe('ObjectEditor renders every populated family form', () => {
         for(const field of tab.fields) {
           if(field.modes && !field.modes.includes('create')) continue;
           if(field.visible_when) continue; // conditional fields are covered by descriptor logic tests
+          if(field.hidden) continue; // supplied by the host, never rendered (registration envelope)
           // A tab with sections (Constraints) shows one at a time: open the field's section.
           const sections = within(panel).queryByRole('tablist', {name: `${tab.title} sections`});
           if(sections && field.group) fireEvent.click(within(sections).getByRole('tab', {name: field.group}));

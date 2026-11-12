@@ -66,7 +66,9 @@ function cellErrorsFor(fieldId, errors) {
 
 function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, fixedFields=[],
   onFieldChange}) {
-  const fields = activeFields(tab.fields, {mode, draft});
+  // A hidden field (registration envelope: profile, intent, verification, server group) stays in
+  // the record and the draft but is never shown; the host supplies its value.
+  const fields = activeFields(tab.fields, {mode, draft}).filter((field) => !field.hidden);
   const groups = groupFields(fields);
   // A tab whose family declares sections (Constraints: primary key, unique, ...) shows
   // one section at a time when the engine fills more than one, instead of stacking grids.

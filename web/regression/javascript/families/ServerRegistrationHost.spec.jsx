@@ -36,6 +36,19 @@ describe('registrationPayload', () => {
 });
 
 describe('ServerRegistrationHost', () => {
+  it('hides the PostgreSQL registration envelope fields the host supplies (browser pass 2026-11-12)', async () => {
+    const bundle = loadEngineBundle('postgresql');
+    const api = fakeApi(bundle);
+    render(<Theme><ServerRegistrationHost api={api} engine="postgresql" mode="create" urlFor={(isNew) => `/browser/server/obj/1/${isNew ? '' : '7'}`}
+      initialData={{name: 'PostgreSQL on localhost', cde_profile_id: 'postgresql-native', cde_registration_intent: 'endpoint'}}
+      profileId="postgresql-native" displayName="Register PostgreSQL" onClose={() => {}} onSaved={() => {}} /></Theme>);
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText(/^Name/)).toBeTruthy();
+    for(const label of [/^Registration action/, /^Engine \/ interface profile/, /^Server group/, /Verify endpoint now/]) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+    }
+  });
+
   it('registers a SQLite endpoint through the servers API without a plan step', async () => {
     const bundle = loadEngineBundle('sqlite');
     const api = fakeApi(bundle);

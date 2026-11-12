@@ -361,6 +361,46 @@ define('pgadmin.node.server', [
         return _.some(item.children, (child) => pgAdmin.Browser.tree.getData(child).connected);
       },
       callbacks: {
+        /*
+         * Owner direction 2026-11-12: one registration path. A server's Properties (edit, and its
+         * Alt+Shift+E shortcut) and Copy Server open the descriptor Server editor for every engine
+         * in LEGACY_REGISTRATION_RETIRED; a host that cannot open reports instead of falling back.
+         * Other actions keep the shared node behaviour.
+         */
+        show_obj_properties: function(args, item) {
+          const tree = pgBrowser.tree;
+          const nodeItem = args?.item || item || tree.selected();
+          const nodeData = nodeItem ? tree.itemData(nodeItem) : undefined;
+          const engine = nodeData?.cde_engine_id;
+          const action = args?.action;
+          const base = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(this, args, item);
+          if(nodeData?._type !== 'server' || !engine || !LEGACY_REGISTRATION_RETIRED.has(engine) ||
+            !['edit', 'copy'].includes(action)) {
+            return base();
+          }
+          const report = (error) => reportServerEditorFailure(engine, error?.message || String(error));
+          if(action === 'edit') {
+            return tryOpenServerForm({item: nodeItem, mode: 'alter', engine, profileId: nodeData.cde_profile_id,
+              panelTitle: gettext('Edit %s', nodeData.label || nodeData._label)})
+              .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
+          }
+          // Copy: register a new endpoint under the same group, prefilled from this one's registration.
+          let groupItem = nodeItem;
+          while(groupItem && tree.itemData(groupItem)?._type !== 'server_group') {
+            groupItem = tree.hasParent(groupItem) ? tree.parent(groupItem) : null;
+          }
+          if(!groupItem) return report(gettext('server group not found'));
+          return getApiInstance().get(this.generate_url(nodeItem, 'obj', nodeData, true))
+            .then(({data}) => {
+              const initialData = _.omit(data, ['id', '_id', 'connected', 'version', 'server_owner',
+                'gss_authenticated', 'gss_encrypted', 'connection_string', 'password', 'tunnel_password']);
+              initialData.name = gettext('Copy of %s', data.name || nodeData.label);
+              return tryOpenServerForm({item: groupItem, mode: 'create', engine, profileId: nodeData.cde_profile_id,
+                initialData, intent: 'endpoint', verifyNow: Boolean(data.cde_verify_now),
+                panelTitle: gettext('Copy %s', nodeData.label || nodeData._label)});
+            })
+            .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
+        },
         open_postgresql_dashboard_editor: function(args) {
           const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
           showPostgresqlDashboardEditor(Number(node._id));

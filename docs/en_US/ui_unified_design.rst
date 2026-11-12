@@ -880,6 +880,38 @@ live runs corrected:
 Nothing was screen-checked: the browser extension reported no connected
 browser for this account all day.
 
+Browser pass, 2026-11-12 (the first time the application was seen in a
+browser this cycle; Chrome, the throwaway instance, PostgreSQL 18.3 demo).
+Passed: registering PostgreSQL from its connector through the descriptor
+editor (values entered, server created with them); the SQLite create-new
+and open-existing intents open the descriptor editor and create-new
+creates the file; server-group menus offer no legacy server entry; the
+Redis registration form renders its contract tabs; a sequence's family
+form opens with its current values (increment, start, bounds, cache,
+comment), Apply stays disabled with no change, and one change previews
+and applies exactly ALTER SEQUENCE ... INCREMENT BY 7. Failed and fixed:
+
+- A server's Properties (and Alt+Shift+E) and Copy Server still opened
+  the legacy server dialog. The server node now routes edit and copy to
+  the descriptor editor for every engine in the retirement set; copy
+  prefills from the server's registration (without secrets) under the
+  same group. Observed after the fix: Properties opens the descriptor
+  editor with the current values, Copy opens it with "Copy of ...".
+- The PostgreSQL registration editor showed the registration envelope
+  (profile, registration action, verification, server group) as editable
+  fields that were never sent. Form fields marked ``hidden`` are now kept
+  in the record but never rendered, and the PostgreSQL Server form marks
+  those four.
+- Native editors rendered ``multiline`` (every comment field) and
+  ``json`` controls as read-only "unsupported" boxes, so no comment could
+  be edited from a provider-native form. Both are editable text now.
+
+Observed, not changed: a resource group under a schema expands by
+double-click but not by its chevron or the arrow key; the SQL tab of an
+applied native plan shows the plan's JSON envelope rather than the
+statement alone; an owner whose catalog value is an OID shows empty in the
+schema and sequence editors (documented: empty keeps the owner).
+
 Verification of the close-outs. Every PostgreSQL unit suite, the
 descriptor service and field-contract suites, the pgAdmin field-id gate
 and the Jest family specs pass; the live lifecycles ran against
