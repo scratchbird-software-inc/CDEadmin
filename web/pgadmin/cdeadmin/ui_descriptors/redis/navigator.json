@@ -1,0 +1,15 @@
+{
+  "schema": "cdeadmin.ui-navigator.v1",
+  "engine": "redis",
+  "sort": "alphabetical",
+  "groups": [
+    {
+      "group_id": "server",
+      "title": "Server",
+      "kinds": [
+        "server"
+      ],
+      "order": 1
+    }
+  ]
+}

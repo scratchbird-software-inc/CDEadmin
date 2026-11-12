@@ -5,7 +5,10 @@ on the engine -> edit pre-fill from the persisted route.
 
 SQLite and DuckDB run on temporary files. MariaDB and Firebird need the same
 ``CDEADMIN_ROUNDTRIP_*`` settings as their family round trips and are skipped
-otherwise. PostgreSQL registration is legacy_preserved (phase 5).
+otherwise. Owner direction 2026-11-11: every engine registers through the
+descriptor registration host, so every engine's server form is exercised
+here; the PostgreSQL form maps onto the servers API's own keys (its profile
+has no contract fields) and is verified against the running application.
 """
 import json
 import os
@@ -30,14 +33,17 @@ from ui_descriptor_roundtrip import (  # noqa: E402
 
 GENERIC = {'name', 'host', 'port', 'username', 'password', 'save_password', 'database', 'connect_now', 'comment',
            'bgcolor', 'fgcolor', 'tags', 'profile'}
+PACKAGE_OF = {'opensearch_sql_ppl': 'opensearch'}
 
 
 def roundtrip(engine, profile_id, draft):
     form = resolved_form(engine, 'server')
     profile = registration_profile(profile_id)
     data = registration_data(form, draft)
-    # every non-generic form field is a declared contract field or secret (nothing invented)
-    declared = {f['field_id'] for sibling in registration_profiles() if sibling['engine_id'] == engine
+    # every non-generic form field is a declared contract field or secret (nothing invented);
+    # a package may serve a profile of another engine id (OpenSearch SQL/PPL, 2026-11-11)
+    declared = {f['field_id'] for sibling in registration_profiles()
+                if PACKAGE_OF.get(sibling['engine_id'], sibling['engine_id']) == engine
                 for f in sibling['connection_fields'] + sibling['secret_fields']}
     for tab in form['tabs']:
         for field in tab['fields']:
@@ -315,3 +321,57 @@ def test_mysql_wire_empty_typed_fields_leave_the_route_unset(engine):
     assert 'conn_attrs' in offered and ('compress' in offered) == (engine == 'tidb'), sorted(offered)
     edit = backend_draft(form, {'failover': []}, mode='alter', baseline={'failover': [{'host': 'b', 'port': 3306}]})
     assert edit == {'cde_route_failover': None}
+
+
+# Owner direction 2026-11-11: the engines whose only descriptor is the server form.
+# Each draft carries what its contract requires beside the generic keys.
+REGISTRATION_ONLY = {
+    'apache_ignite': ('apache-ignite-native', {'database': 'PUBLIC'}),
+    'cassandra': ('cassandra-native', {'database': 'cdeadmin_demo', 'local_dc': 'datacenter1'}),
+    'clickhouse': ('clickhouse-native', {'database': 'default'}),
+    'foundationdb': ('foundationdb-native', {'database': 'fdb'}),
+    'influxdb': ('influxdb-native', {'database': 'default'}),
+    'milvus': ('milvus-native', {'database': 'default'}),
+    'mongodb': ('mongodb-native', {'database': 'cdeadmin_demo', 'username': 'demo'}),
+    'neo4j': ('neo4j-native', {'database': 'neo4j', 'username': 'neo4j'}),
+    'opensearch': ('opensearch-native', {'database': 'cdeadmin_demo', 'profile': 'opensearch-native'}),
+    'redis': ('redis-native', {'database': '0'}),
+    'tikv': ('tikv-native', {'database': 'default'}),
+}
+
+
+@pytest.mark.parametrize('engine', sorted(REGISTRATION_ONLY))
+def test_registration_only_server_form_maps_to_its_contract(engine):
+    profile_id, extra = REGISTRATION_ONLY[engine]
+    profile = registration_profile(profile_id)
+    draft = {'name': f'{engine} rt', 'host': '127.0.0.1', 'port': int(profile.get('default_port') or 5000),
+             'connect_now': True, **extra}
+    form, _profile, route = roundtrip(engine, profile_id, draft)
+    assert route['host'] == '127.0.0.1' and int(route['port']) == draft['port']
+    assert form['status'] == 'complete', engine
+
+
+def test_opensearch_server_form_serves_its_sql_ppl_profile():
+    draft = {'profile': 'opensearch-sql-ppl', 'name': 'ppl rt', 'host': '127.0.0.1', 'port': 9200,
+             'database': 'cdeadmin_demo', 'connect_now': True}
+    form, _profile, route = roundtrip('opensearch', 'opensearch-sql-ppl', draft)
+    assert route['host'] == '127.0.0.1'
+    assert any(field['field_id'] == 'profile' for tab in form['tabs'] for field in tab['fields'])
+
+
+def test_postgresql_server_form_maps_onto_the_servers_api_keys():
+    """The PostgreSQL profile has no contract fields: every field id is a
+    servers-API key and the host adds the registration envelope."""
+    form = resolved_form('postgresql', 'server')
+    assert form['status'] == 'complete'
+    draft = {'name': 'pg rt', 'host': '127.0.0.1', 'port': 5432, 'db': 'postgres', 'username': 'rt',
+             'connect_now': True, 'tags': [{'text': 'a', 'color': '#000000'}],
+             'connection_params': [{'name': 'sslmode', 'keyword': 'sslmode', 'value': 'prefer'}]}
+    data = registration_data(form, draft)
+    # The draft's values travel under their own ids; the builder adds the form's defaults beside them.
+    assert {k: data.get(k) for k in draft} == draft
+    for tab in form['tabs']:
+        for field in tab['fields']:
+            assert (field.get('backend_field_id') or field['field_id']) == field['field_id'], field['field_id']
+    envelope = {f['field_id'] for tab in form['tabs'] for f in tab['fields'] if f.get('ui_only')}
+    assert {'cde_profile_id', 'cde_registration_intent', 'cde_verify_now', 'gid'} <= envelope

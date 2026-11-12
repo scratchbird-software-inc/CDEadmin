@@ -408,6 +408,833 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+    },
+    {
+      "operation_id": "reload",
+      "resource_kind": "server",
+      "title": "Reload configuration",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+    },
+    {
+      "operation_id": "restore-point",
+      "resource_kind": "server",
+      "title": "Create restore point",
+      "menu": {
+        "category": "backup_restore",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Restore point name",
+          "control": "text",
+          "required": true,
+          "help": "Recorded in the WAL; a recovery_target_name for point-in-time recovery."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+    },
+    {
+      "operation_id": "wal-replay-pause",
+      "resource_kind": "server",
+      "title": "Pause WAL replay",
+      "menu": {
+        "category": "replication",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
+    },
+    {
+      "operation_id": "wal-replay-resume",
+      "resource_kind": "server",
+      "title": "Resume WAL replay",
+      "menu": {
+        "category": "replication",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
+    },
+    {
+      "operation_id": "vacuum",
+      "resource_kind": "schema",
+      "title": "Vacuum",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "full",
+          "label": "Full (rewrite the table; exclusive lock)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "freeze",
+          "label": "Freeze row versions",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "analyze",
+          "label": "Also analyze",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "parallel",
+          "label": "Parallel workers (not with Full)",
+          "control": "number",
+          "required": false,
+          "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused. VACUUM cannot run in a transaction block: autocommit."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "schema",
+      "title": "Analyze",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip tables that cannot be locked",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused."
+    },
+    {
+      "operation_id": "vacuum",
+      "resource_kind": "database",
+      "title": "Vacuum",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "full",
+          "label": "Full (rewrite the table; exclusive lock)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "freeze",
+          "label": "Freeze row versions",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "analyze",
+          "label": "Also analyze",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "parallel",
+          "label": "Parallel workers (not with Full)",
+          "control": "number",
+          "required": false,
+          "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database. VACUUM cannot run in a transaction block: autocommit."
+    },
+    {
+      "operation_id": "analyze",
+      "resource_kind": "database",
+      "title": "Analyze",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip tables that cannot be locked",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database."
+    },
+    {
+      "operation_id": "reassign-owned",
+      "resource_kind": "role",
+      "title": "Reassign owned objects",
+      "menu": {
+        "category": "security",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "new_owner",
+          "label": "New owner",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "role"
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did."
+    },
+    {
+      "operation_id": "drop-owned",
+      "resource_kind": "role",
+      "title": "Drop owned objects",
+      "menu": {
+        "category": "security",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade to dependent objects",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. Also revokes the role's privileges in that database."
+    },
+    {
+      "operation_id": "move-objects",
+      "resource_kind": "tablespace",
+      "title": "Move objects to another tablespace",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "database",
+          "reference_value": "resource_id",
+          "help": "Only the objects of this database are affected."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Objects to move",
+          "control": "select",
+          "required": false,
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "Tables, indexes and materialized views"
+            },
+            {
+              "value": "tables",
+              "label": "Tables"
+            },
+            {
+              "value": "indexes",
+              "label": "Indexes"
+            },
+            {
+              "value": "materialized-views",
+              "label": "Materialized views"
+            }
+          ]
+        },
+        {
+          "field_id": "new_tablespace",
+          "label": "New tablespace",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "tablespace"
+        },
+        {
+          "field_id": "owner",
+          "label": "Only objects owned by",
+          "control": "reference",
+          "required": false,
+          "reference_kind": "role",
+          "help": "Leave empty to move every object in the tablespace."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. ALTER TABLE/INDEX/MATERIALIZED VIEW ALL IN TABLESPACE ... SET TABLESPACE, one transaction; it takes an exclusive lock on each moved relation. Live check uses tablespace_dir."
+    },
+    {
+      "operation_id": "run-now",
+      "resource_kind": "pgagent-job",
+      "title": "Run now",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py against a stand-in pgagent schema on PostgreSQL 18.3 (the demo image cannot install pgAgent; not checked against a real agent). Sets jobnextrun = now(); the agent picks the job up at its next poll. M6, 2026-11-11."
+    },
+    {
+      "operation_id": "count-rows",
+      "resource_kind": "table",
+      "title": "Count rows",
+      "menu": {
+        "category": "diagnostics",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
+    },
+    {
+      "operation_id": "reset-statistics",
+      "resource_kind": "table",
+      "title": "Reset statistics",
+      "menu": {
+        "category": "maintenance",
+        "order": 60
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. pg_stat_reset_single_table_counters(oid)."
+    },
+    {
+      "operation_id": "enable-triggers",
+      "resource_kind": "table",
+      "title": "Enable all triggers",
+      "menu": {
+        "category": "lifecycle",
+        "order": 70
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... ENABLE TRIGGER ALL."
+    },
+    {
+      "operation_id": "disable-triggers",
+      "resource_kind": "table",
+      "title": "Disable all triggers",
+      "menu": {
+        "category": "lifecycle",
+        "order": 80
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... DISABLE TRIGGER ALL, including internal constraint triggers: foreign keys stop being enforced until re-enabled."
+    },
+    {
+      "operation_id": "create-partition",
+      "resource_kind": "table",
+      "title": "Create partition",
+      "menu": {
+        "category": "lifecycle",
+        "order": 90
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": false,
+          "help": "Empty uses the parent's schema."
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default partition",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_value",
+          "label": "Partition bound",
+          "control": "text",
+          "required": false,
+          "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
+        },
+        {
+          "field_id": "relpersistence",
+          "label": "Unlogged",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "is_partitioned",
+          "label": "Sub-partitioned",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_type",
+          "label": "Sub-partition type",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "range",
+              "label": "Range"
+            },
+            {
+              "value": "list",
+              "label": "List"
+            },
+            {
+              "value": "hash",
+              "label": "Hash"
+            }
+          ]
+        },
+        {
+          "field_id": "partition_keys",
+          "label": "Sub-partition keys",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "key_type",
+              "label": "Key type",
+              "control": "select",
+              "required": false,
+              "options": [
+                {
+                  "value": "column",
+                  "label": "Column"
+                },
+                {
+                  "value": "expression",
+                  "label": "Expression"
+                }
+              ]
+            },
+            {
+              "field_id": "pt_column",
+              "label": "Column",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "expression",
+              "label": "Expression",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "collationame",
+              "label": "Collation",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "op_class",
+              "label": "Operator class",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "amname",
+          "label": "Access method",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "spcname",
+          "label": "Tablespace",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "relowner",
+          "label": "Owner",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "description",
+          "label": "Comment",
+          "control": "multiline",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server."
+    },
+    {
+      "operation_id": "attach-partition",
+      "resource_kind": "table",
+      "title": "Attach partition",
+      "menu": {
+        "category": "lifecycle",
+        "order": 91
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "partition",
+          "label": "Table to attach",
+          "control": "text",
+          "required": true,
+          "help": "schema.table of an existing table whose columns match."
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default partition",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_value",
+          "label": "Partition bound",
+          "control": "text",
+          "required": false,
+          "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server."
+    },
+    {
+      "operation_id": "create-partition",
+      "resource_kind": "partitioned-table",
+      "title": "Create partition",
+      "menu": {
+        "category": "lifecycle",
+        "order": 90
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": false,
+          "help": "Empty uses the parent's schema."
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default partition",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_value",
+          "label": "Partition bound",
+          "control": "text",
+          "required": false,
+          "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
+        },
+        {
+          "field_id": "relpersistence",
+          "label": "Unlogged",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "is_partitioned",
+          "label": "Sub-partitioned",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_type",
+          "label": "Sub-partition type",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "range",
+              "label": "Range"
+            },
+            {
+              "value": "list",
+              "label": "List"
+            },
+            {
+              "value": "hash",
+              "label": "Hash"
+            }
+          ]
+        },
+        {
+          "field_id": "partition_keys",
+          "label": "Sub-partition keys",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "key_type",
+              "label": "Key type",
+              "control": "select",
+              "required": false,
+              "options": [
+                {
+                  "value": "column",
+                  "label": "Column"
+                },
+                {
+                  "value": "expression",
+                  "label": "Expression"
+                }
+              ]
+            },
+            {
+              "field_id": "pt_column",
+              "label": "Column",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "expression",
+              "label": "Expression",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "collationame",
+              "label": "Collation",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "op_class",
+              "label": "Operator class",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "amname",
+          "label": "Access method",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "fillfactor",
+          "label": "Fill factor",
+          "control": "number",
+          "required": false
+        },
+        {
+          "field_id": "spcname",
+          "label": "Tablespace",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "relowner",
+          "label": "Owner",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "description",
+          "label": "Comment",
+          "control": "multiline",
+          "required": false
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it."
+    },
+    {
+      "operation_id": "attach-partition",
+      "resource_kind": "partitioned-table",
+      "title": "Attach partition",
+      "menu": {
+        "category": "lifecycle",
+        "order": 91
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "partition",
+          "label": "Table to attach",
+          "control": "text",
+          "required": true,
+          "help": "schema.table of an existing table whose columns match."
+        },
+        {
+          "field_id": "is_default",
+          "label": "Default partition",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "partition_value",
+          "label": "Partition bound",
+          "control": "text",
+          "required": false,
+          "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it."
+    },
+    {
+      "operation_id": "detach-partition",
+      "resource_kind": "table",
+      "title": "Detach partition",
+      "menu": {
+        "category": "lifecycle",
+        "order": 92
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Mode",
+          "control": "select",
+          "required": false,
+          "default": "plain",
+          "options": [
+            {
+              "value": "plain",
+              "label": "Detach"
+            },
+            {
+              "value": "concurrently",
+              "label": "Detach concurrently (outside a transaction)"
+            },
+            {
+              "value": "finalize",
+              "label": "Finalize a pending detach"
+            }
+          ]
+        }
+      ],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Only a table that is a partition accepts it; the plan names its parent from the listing."
+    },
+    {
+      "operation_id": "count-rows",
+      "resource_kind": "partitioned-table",
+      "title": "Count rows",
+      "menu": {
+        "category": "diagnostics",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
     }
   ]
 }

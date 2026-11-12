@@ -11,7 +11,8 @@ object type instead of the dialog's four tabs.
 from collections.abc import Mapping
 
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
+    PostgreSQLNativeAdminError, privilege_words,
+    _flag, _identifier, _literal, _name,
 )
 
 PRIVILEGE_CODES = {'U': 'USAGE', 'C': 'CREATE'}
@@ -59,15 +60,8 @@ def _rows(draft, key, label):
 
 
 def _grant(name, row):
-    codes = row.get('privileges')
-    if isinstance(codes, str):
-        codes = list(codes.replace(',', '').replace(' ', ''))
-    if not isinstance(codes, list) or not codes or any(
-            code not in PRIVILEGE_CODES for code in codes):
-        raise PostgreSQLNativeAdminError(
-            'schema privileges are codes among ' + ', '.join(PRIVILEGE_CODES))
-    words = [PRIVILEGE_CODES[code] for code in PRIVILEGE_CODES
-             if code in codes]
+    words = privilege_words(row.get('privileges'), PRIVILEGE_CODES,
+                            'schema')
     privileges = 'ALL' if len(words) == len(PRIVILEGE_CODES) else ', '.join(
         words)
     option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''

@@ -10,6 +10,14 @@
 import {removeSQLConnections} from '../editors/SQLConnections';
 
 export function providerEndpointSessionReady(serverData) {
+  // A PostgreSQL registration browsed through the provider tree (owner
+  // decision 2026-11-10) is an inherited connection, whose node reports the
+  // verification state 'legacy' while connected: the connection is its
+  // session (M6, 2026-11-11). Without this the descriptor editors and
+  // operations were unreachable from its tree menus.
+  if(serverData?.cde_provider_tree && !serverData.cde_endpoint) {
+    return Boolean(serverData.connected && ['legacy', 'verified'].includes(serverData.runtime_verification_state));
+  }
   return Boolean(
     serverData?.cde_endpoint &&
     serverData.runtime_verification_state === 'verified' &&

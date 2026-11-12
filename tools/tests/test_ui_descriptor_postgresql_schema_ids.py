@@ -16,6 +16,16 @@ SOURCES = (
 )
 # Descriptor-only ids the shell owns (never sent to pgAdmin).
 SHELL_IDS = {'variant'}
+# Ids the provider-native route compiles that the inherited dialogs never
+# had (M7 and the 2026-11-11 form close-outs): revocation grids, storage
+# parameter resets and foreign option grids. They are sent to the provider,
+# never to a pgAdmin template, so they are not ui.js ids.
+PROVIDER_TREE_IDS = {
+    'revoke', 'reset_fillfactor', 'reset_toast_tuple_target',
+    'reset_parallel_workers', 'add_options', 'set_options', 'drop_options',
+    'revoke_membership', 'revoke_members', 'reset_variables', 'admin_only',
+    'reset_parameters', 'no_minimum', 'no_maximum', 'owned_by_none',
+}
 
 
 def schema_ids():
@@ -33,11 +43,12 @@ def test_every_postgresql_field_id_is_a_ui_schema_id():
     for path in sorted(FORMS.glob('*.form.json')):
         form = json.loads(path.read_text(encoding='utf-8'))
         for field in form['fields']:
-            if field['field_id'] not in ids and field['field_id'] not in SHELL_IDS:
+            if field['field_id'] not in ids and field['field_id'] not in SHELL_IDS \
+                    and field['field_id'] not in PROVIDER_TREE_IDS:
                 unknown.append(f"{form['family']}.{field['field_id']}")
             if field['field_id'] in SHELL_IDS:
                 assert field.get('ui_only') is True, f"{form['family']}.{field['field_id']} must be ui_only"
             for column in field.get('columns', []):
-                if column['field_id'] not in ids:
+                if column['field_id'] not in ids and column['field_id'] not in PROVIDER_TREE_IDS:
                     unknown.append(f"{form['family']}.{field['field_id']}.{column['field_id']}")
     assert unknown == [], unknown

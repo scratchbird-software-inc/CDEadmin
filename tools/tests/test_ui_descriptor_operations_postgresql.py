@@ -57,7 +57,14 @@ live_only = pytest.mark.skipif(SETTINGS is None, reason='CDEADMIN_ROUNDTRIP_POST
 TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'import-server-file@large-object', 'export-server-file@large-object',
           'vacuum@table', 'analyze@table', 'reindex@table', 'cluster@table', 'truncate@table',
-          'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view'}
+          'reindex@index', 'reindex@schema', 'reindex@database', 'refresh@materialized-view',
+          'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
+          'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database',
+          'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace', 'run-now@pgagent-job',
+          'count-rows@table', 'reset-statistics@table', 'enable-triggers@table', 'disable-triggers@table',
+          'create-partition@table', 'attach-partition@table', 'detach-partition@table',
+          'create-partition@partitioned-table', 'attach-partition@partitioned-table',
+          'count-rows@partitioned-table'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -100,8 +107,9 @@ def test_no_descriptor_without_a_provider_route():
     for operation in OPERATIONS.values():
         kind, operation_id = operation['resource_kind'], operation['operation_id']
         assert kind in POSTGRESQL_NATIVE_FORM_KINDS or operation_id in MAINTENANCE_OPERATIONS.get(kind, ()), (kind, operation_id)
+    # Partitions stay legacy-preserved until M7 reaches them (tables are native since M7).
     with pytest.raises(PostgreSQLNativeAdminError, match='preserved PostgreSQL UI'):
-        compile_native_admin({'resource_kind': 'table', 'operation_id': 'alter', 'draft': {}})
+        compile_native_admin({'resource_kind': 'partition', 'operation_id': 'alter', 'draft': {}})
 
 
 def compile_maintenance(kind, operation, native, draft):
@@ -129,6 +137,17 @@ def test_maintenance_statements_are_quoted_and_allow_listed():
         assert (compiled['statement'], compiled['autocommit']) == (statement, autocommit), operation
     assert compile_maintenance('schema', 'reindex', {'name': 's"1'}, {})['autocommit'] is True
     assert compile_maintenance('database', 'reindex', {'name': 'd'}, {})['statement'] == 'REINDEX DATABASE "d"'
+    # M6: database scope has no table list; schema scope names the listed relations, sorted and deduplicated.
+    assert compile_maintenance('database', 'vacuum', {'name': 'd'}, {'full': True})['statement'] == 'VACUUM (FULL)'
+    assert compile_maintenance('database', 'analyze', {'name': 'd'}, {})['statement'] == 'ANALYZE'
+    schema = {'name': 's"1', 'relations': ['t2', 'a;b', 't2']}
+    assert compile_maintenance('schema', 'vacuum', schema, {'analyze': True})['statement'] == \
+        'VACUUM (ANALYZE) "s""1"."a;b", "s""1"."t2"'
+    assert compile_maintenance('schema', 'analyze', schema, {'verbose': True})['statement'] == \
+        'ANALYZE (VERBOSE) "s""1"."a;b", "s""1"."t2"'
+    for bad in ({'name': 's'}, {'name': 's', 'relations': []}, {'name': 's', 'relations': [1]}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('schema', 'vacuum', bad, {})
     assert compile_maintenance('materialized-view', 'refresh', {'schema': 's', 'name': 'm'}, {'concurrently': True})[
         'statement'] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "s"."m" WITH DATA'
     for kind, operation, draft in [
@@ -140,6 +159,116 @@ def test_maintenance_statements_are_quoted_and_allow_listed():
             ('index', 'cluster', {}), ('schema', 'vacuum', {})]:
         with pytest.raises(PostgreSQLNativeAdminError):
             compile_maintenance(kind, operation, table, draft)
+
+
+def test_database_drop_compiles_with_force_from_the_server_scope():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider
+    native = {'name': 'd"b'}
+    assert compile_maintenance('database', 'drop', native, {'confirmation': 'd"b', 'force': True}) == {
+        'statement': 'DROP DATABASE "d""b" WITH (FORCE)', 'read_only': False, 'autocommit': True}
+    assert compile_maintenance('database', 'drop', native, {'confirmation': 'd"b'})['statement'] == 'DROP DATABASE "d""b"'
+    for draft in ({}, {'confirmation': 'other'}, {'confirmation': 'd"b', 'force': 'yes'}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('database', 'drop', native, draft)
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'database', 'operation_id': 'drop',
+                                                   '_provider_route': {'server_id': 3, 'database_id': 9}}) \
+        == {'server_id': 3, 'database_id': None}
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'database', 'operation_id': 'alter',
+                                                   '_provider_route': {'server_id': 3, 'database_id': 9}}) \
+        == {'server_id': 3, 'database_id': 9}
+    fields = provider_form_fields('drop', 'database')
+    assert fields['confirmation']['required'] and not fields['force']['required']
+
+
+def test_database_picked_operations_compile_and_route_to_the_picked_database():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider, PostgreSQLProviderError
+    db = 'postgresql:pg_database/16384'
+    role = {'name': 'r"1'}
+    assert compile_maintenance('role', 'reassign-owned', role, {'database': db, 'new_owner': 'o;2'}) == {
+        'statement': 'REASSIGN OWNED BY "r""1" TO "o;2"', 'read_only': False, 'autocommit': False,
+        'maintenance': {'action': 'reassign-owned', 'object_kind': 'role', 'object': 'r"1', 'options': [],
+                        'transaction_mode': 'transaction'}}
+    assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1'})['statement'] == \
+        'DROP OWNED BY "r""1" RESTRICT'
+    assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1', 'cascade': True})[
+        'statement'] == 'DROP OWNED BY "r""1" CASCADE'
+    space = {'name': 'old'}
+    assert compile_maintenance('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'new'})[
+        'statement'] == ('ALTER TABLE ALL IN TABLESPACE "old" SET TABLESPACE "new";\n'
+                         'ALTER INDEX ALL IN TABLESPACE "old" SET TABLESPACE "new";\n'
+                         'ALTER MATERIALIZED VIEW ALL IN TABLESPACE "old" SET TABLESPACE "new"')
+    assert compile_maintenance('tablespace', 'move-objects', space, {
+        'database': db, 'new_tablespace': 'new', 'object_type': 'indexes', 'owner': 'app'})['statement'] == \
+        'ALTER INDEX ALL IN TABLESPACE "old" OWNED BY "app" SET TABLESPACE "new"'
+    for kind, op, native, draft in [
+            ('role', 'reassign-owned', role, {'new_owner': 'x'}),                       # no database picked
+            ('role', 'reassign-owned', role, {'database': 'pg_database/1', 'new_owner': 'x'}),
+            ('role', 'reassign-owned', role, {'database': db}),                         # no new owner
+            ('role', 'drop-owned', role, {'database': db, 'confirmation': 'other'}),
+            ('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'old'}),
+            ('tablespace', 'move-objects', space, {'database': db, 'new_tablespace': 'new', 'object_type': 'views'})]:
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance(kind, op, native, draft)
+    # The plan's route runs in the picked database, whatever the node's route carried.
+    assert PostgreSQLProvider._native_admin_route({
+        'resource_kind': 'role', 'operation_id': 'reassign-owned', '_provider_route': {'server_id': 2},
+        'draft': {'database': db}}) == {'server_id': 2, 'database_id': 16384}
+    with pytest.raises(PostgreSQLProviderError):
+        PostgreSQLProvider._native_admin_route({'resource_kind': 'tablespace', 'operation_id': 'move-objects',
+                                                '_provider_route': {'server_id': 2}, 'draft': {}})
+    for op, kind in (('reassign-owned', 'role'), ('drop-owned', 'role'), ('move-objects', 'tablespace')):
+        fields = provider_form_fields(op, kind)
+        assert fields['database'] == {
+            'field_id': 'database', 'label': 'Database', 'control': 'reference', 'required': True,
+            'reference_kind': 'database', 'reference_value': 'resource_id',
+            'help': 'Only the objects of this database are affected.'}, op
+
+
+def test_table_operations_of_the_inherited_node_compile():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    table = {'schema': 'we"ird', 'name': 'ta;ble --', 'oid': '24601'}
+    quoted = '"we""ird"."ta;ble --"'
+    compiled = compile_maintenance('table', 'count-rows', table, {})
+    assert (compiled['statement'], compiled['read_only'], compiled['returns_rows']) == (
+        f'SELECT count(*) AS row_count FROM {quoted}', True, True)
+    assert compile_maintenance('table', 'reset-statistics', table, {})['statement'] == \
+        'SELECT pg_catalog.pg_stat_reset_single_table_counters(24601) AS reset'
+    assert compile_maintenance('table', 'enable-triggers', table, {})['statement'] == f'ALTER TABLE {quoted} ENABLE TRIGGER ALL'
+    assert compile_maintenance('table', 'disable-triggers', table, {})['statement'] == f'ALTER TABLE {quoted} DISABLE TRIGGER ALL'
+    for draft, native in (({'verbose': True}, table), ({}, {'schema': 's', 'name': 't'})):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('table', 'reset-statistics', native, draft)
+
+
+def test_server_operations_compile_without_a_target():
+    from pgadmin.cdeadmin.providers.postgresql.native_admin import PostgreSQLNativeAdminError
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider
+    assert compile_maintenance('server', 'reload', {}, {}) == {
+        'statement': 'SELECT pg_catalog.pg_reload_conf() AS reloaded', 'read_only': False, 'autocommit': False,
+        'returns_rows': True, 'maintenance': {'action': 'reload', 'object_kind': 'server', 'object': None,
+                                              'options': [], 'transaction_mode': 'transaction'}}
+    assert compile_maintenance('server', 'restore-point', {}, {'name': "before it's"})['statement'] == \
+        "SELECT pg_catalog.pg_create_restore_point('before it''s') AS restore_point_lsn"
+    assert compile_maintenance('server', 'wal-replay-pause', {}, {})['statement'].endswith('pg_wal_replay_pause() AS paused')
+    for draft in ({'name': ''}, {'name': 'x' * 64}, {}):
+        with pytest.raises(PostgreSQLNativeAdminError):
+            compile_maintenance('server', 'restore-point', {}, draft)
+    with pytest.raises(PostgreSQLNativeAdminError):
+        compile_maintenance('server', 'reload', {}, {'verbose': True})
+    # Server scope: the route names the server only, and the dialog needs no target.
+    assert PostgreSQLProvider._native_admin_route({'resource_kind': 'server', '_provider_route': {'server_id': 7}}) \
+        == {'server_id': 7, 'database_id': None}
+    for operation in ('reload', 'restore-point', 'wal-replay-pause', 'wal-replay-resume'):
+        provider = provider_form_fields(operation, 'server')
+        assert ('name' in provider) == (operation == 'restore-point'), operation
+    from pgadmin.cdeadmin.providers.postgresql.preserved_surface import adapt_catalog
+    catalog = adapt_catalog({'objects': []})
+    server = next(item for item in catalog['objects'] if item['resource_kind'] == 'server')
+    reload = next(op for op in server['operations'] if op['operation_id'] == 'reload')
+    assert (reload['target_required'], reload['confirmation_required'], reload['execution_route']) == (
+        False, True, 'provider-native')
 
 
 # -- live harness: psycopg behind the pgAdmin connection-manager surface the provider uses --------
@@ -163,13 +292,13 @@ class Connection:
     def transaction_status(self):
         return int(self.conn.info.transaction_status)
 
-    def execute_dict(self, statement, parameters=None):
+    def execute_dict(self, statement, parameters=None, **_kwargs):
         with self.conn.cursor() as cursor:
             cursor.execute(statement, parameters)
             columns = [column.name for column in cursor.description or []]
             return True, {'rows': [dict(zip(columns, row)) for row in cursor.fetchall()] if columns else []}
 
-    def execute_void(self, statement):
+    def execute_void(self, statement, **_kwargs):
         with self.conn.cursor() as cursor:
             cursor.execute(statement)
         return True, None
@@ -544,7 +673,8 @@ def test_truncate_restart_identity_and_cascade(live):
     query('CREATE TABLE public.m_tru_child (id int, parent int REFERENCES public.m_tru(id))')
     query('INSERT INTO public.m_tru_child VALUES (1, 1)')
     # PostgreSQL refuses a truncate that a referencing table blocks; nothing is removed.
-    with pytest.raises(Exception, match='outcome is unknown'):
+    # Owner decision 2026-11-11: a server rejection is a known outcome (nothing changed), no longer unknown.
+    with pytest.raises(Exception, match='rejected the statement; nothing was changed'):
         maintain(live, 'truncate', 'table', 'm_tru')
     assert one('SELECT count(*) FROM public.m_tru') == 5
     plan, outcome = maintain(live, 'truncate', 'table', 'm_tru', values={'cascade': True})
@@ -649,7 +779,7 @@ def test_sequence_lifecycle_round_trips(live, sequence_reader):
     reader = sequence_reader
     plan = run_sequence(live, 'create', {
         'schema': 'Seq schema', 'name': 'ticket no', 'comment': "it's", 'increment': 2, 'start': 10,
-        'minimum': 1, 'maximum': 1000, 'cache': 5, 'cycled': True, 'relpersistence': 'logged',
+        'minimum': 1, 'maximum': 1000, 'cache': 5, 'cycled': True, 'relpersistence': False,
         'owned_table': 'owner_t', 'owned_column': 'id',
         'relacl': [{'grantee': reader, 'privileges': 'rU'}],
         'securities': []})
@@ -668,19 +798,32 @@ def test_sequence_lifecycle_round_trips(live, sequence_reader):
         # bound is removed through its flag.
         'increment': 2, 'start': 10, 'minimum': 1, 'maximum': 1000, 'no_maximum': True, 'cache': 5,
         'cycled': False,
-        'relpersistence': 'unlogged', 'owned_by_none': True, 'revoke': [{'grantee': reader}],
+        'relpersistence': True, 'owned_by_none': True, 'revoke': [{'grantee': reader}],
         'relacl': [{'grantee': reader, 'privileges': 'r', 'with_grant': True}]}, native)
     statement = plan['command_preview']['statement']
     assert 'INCREMENT BY' not in statement and 'NO MAXVALUE NO CYCLE' in statement
     native = sequence_native('Seq schema', 'ticket_number')
     assert native['comment'] is None and native['catalog_row']['relpersistence'] == 'u'
+    # The family form's shape (owner direction 2026-11-11): persistence as a boolean, privileges as words.
+    from pgadmin.cdeadmin.providers.postgresql.sequences import facts as sequence_facts
+    assert sequence_facts(native)['relpersistence'] is True
+    run_sequence(live, 'alter', {'relpersistence': False, 'relacl': [{'grantee': reader, 'privileges': ['USAGE']}],
+                                 'owned_table': 'Seq schema.owner_t', 'owned_column': 'id'}, native)
+    native = sequence_native('Seq schema', 'ticket_number')
+    assert native['catalog_row']['relpersistence'] == 'p'
+    assert query("SELECT count(*) FROM pg_depend WHERE objid='\"Seq schema\".ticket_number'::regclass "
+                 "AND deptype='a'") == [(1,)]
+    run_sequence(live, 'alter', {'owned_by_none': True}, native)
+    assert [item for item in native['catalog_row']['relacl'] if item.startswith(reader)] == [
+        f'{reader}=r*U/{SETTINGS["user"]}']
     assert native['children']['pg_sequence'][0]['seqmax'] == 9223372036854775807
     assert native['children']['pg_sequence'][0]['seqcycle'] is False
     assert query("SELECT nextval('\"Seq schema\".ticket_number')") == [(500,)]
     assert query("SELECT count(*) FROM pg_depend WHERE objid='\"Seq schema\".ticket_number'::regclass "
                  "AND deptype='a'") == [(0,)]
+    # SELECT with grant option from the earlier alter, USAGE from the word grant above.
     assert [item for item in native['catalog_row']['relacl'] if item.startswith(reader)] == [
-        f'{reader}=r*/{SETTINGS["user"]}']
+        f'{reader}=r*U/{SETTINGS["user"]}']
     # Drop needs the typed name and refuses a wrong one before anything runs.
     provider, route = live
     with pytest.raises(Exception):
@@ -876,6 +1019,9 @@ def test_schema_lifecycle_round_trips(live):
 
 
 # -- M4 (2026-11-11): database create and alter from the server scope, provider-native, live -----
+from pgadmin.cdeadmin.providers.postgresql.databases import facts  # noqa: E402
+
+
 def database_native(name):
     rows = query(f"""SELECT d.oid::int, t.spcname, d.datallowconn, d.datistemplate, pg_get_userbyid(d.datdba),
                             d.datconnlimit, s.description, d.datacl::text[]
@@ -893,7 +1039,7 @@ def database_native(name):
     return native
 
 
-def run_database(live, operation_id, draft, native=None):
+def run_database(live, operation_id, draft, native=None, confirmation_required=False):
     provider, _route = live
     # Server scope: the route names the server only; the attachment is the maintenance database.
     resource = target(None, 'database', native) if native else None
@@ -903,7 +1049,7 @@ def run_database(live, operation_id, draft, native=None):
     assert validation['errors'] == [], (operation_id, validation)
     plan = provider.plan_visual_admin(request)
     assert plan['state'] == 'ready', plan
-    assert plan['confirmation_required'] is False, plan
+    assert plan['confirmation_required'] is confirmation_required, plan
     result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
                                           'confirmed': True})
     assert result['provider_result']['transaction_outcome'] == 'committed', result
@@ -917,7 +1063,7 @@ def test_database_create_and_alter_round_trip(live):
     query(f'CREATE ROLE {owner}; CREATE ROLE {reader}')
     try:
         plan = run_database(live, 'create', {
-            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8',
+            'name': name, 'datowner': owner, 'template': 'template0', 'encoding': 'UTF8', 'datstrategy': 'wal_log',
             'datlocaleprovider': 'libc', 'datcollate': 'C', 'datctype': 'C', 'datconnlimit': 7,
             'datallowconn': True, 'is_template': False})
         assert plan['command_preview']['statement'].startswith(f'CREATE DATABASE "{name}" WITH OWNER')
@@ -937,6 +1083,32 @@ def test_database_create_and_alter_round_trip(live):
         with pytest.raises(Exception):
             run_database(live, 'alter', {'spcname': 'pg_default', 'comments': 'x'}, dict(
                 native, database_facts=dict(native['database_facts'], spcname='other')))
+        # The family grid sends privilege words; settings set and reset; default privileges attach to the database
+        # (owner direction 2026-11-11).
+        run_database(live, 'alter', {
+            'datacl': [{'grantee': reader, 'privileges': ['CONNECT', 'TEMPORARY']}],
+            'variables': [{'name': 'work_mem', 'value': '16MB'}, {'name': 'statement_timeout', 'value': '7s', 'role': reader}]},
+            native)
+        # PUBLIC holds CONNECT and TEMP on every database, so read the ACL itself, not has_database_privilege.
+        assert any(item.startswith(f'{reader}=Tc/') for item in database_native(name)['acl'])
+        # Default privileges attach the plan to the database itself; the harness driver is attached to the scratch
+        # database, so that is the database they are applied to here (the route must name it, or the identity check
+        # refuses: observed above with another database).
+        run_database(live, 'alter', {'deftblacl': [{'grantee': reader, 'privileges': ['SELECT']}]}, database_native(DATABASE))
+        assert one(f"SELECT count(*) FROM pg_default_acl a WHERE a.defaclobjtype='r' AND a.defaclnamespace=0 "
+                   f"AND a.defaclacl::text LIKE '%{reader}=r/%'") == 1
+        query(f'ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM {reader}')
+        assert query(f"SELECT setconfig::text FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase "
+                     f"WHERE d.datname='{name}' AND s.setrole=0") == [('{work_mem=16MB}',)]
+        assert one(f"SELECT count(*) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase JOIN pg_roles r "
+                   f"ON r.oid=s.setrole WHERE d.datname='{name}' AND r.rolname='{reader}'") == 1
+        native = database_native(name)
+        native['settings'] = [{'name': 'work_mem', 'value': '16MB'}, {'name': 'statement_timeout', 'value': '7s', 'role': reader}]
+        native['database_facts'] = facts(native)
+        run_database(live, 'alter', {'variables': [{'name': 'work_mem', 'value': ''}], 'revoke': [{'grantee': reader}]}, native)
+        assert one(f"SELECT count(*) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase WHERE d.datname='{name}'") == 0
+        assert not any(item.startswith(f'{reader}=') for item in database_native(name)['acl'])
+        native = database_native(name)
         # Rename runs from the maintenance database, which is not the renamed one.
         run_database(live, 'alter', {'name': name + '_r'}, native)
         assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}_r'") == [(1,)]
@@ -1014,13 +1186,20 @@ def test_domain_lifecycle_round_trips(live):
         plan = run_kind(live, 'domain', 'alter', {
             'name': 'code', 'basensp': 'Dom schema', 'typnotnull': False, 'typdefault': '',
             'description': '', 'validate_constraints': [{'conname': 'not blank'}],
-            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}]}, native)
+            'add_constraints': [{'conname': 'short', 'consrc': 'length(VALUE) < 9'}],
+            'rename_constraints': [{'conname': 'not blank', 'to': 'not_blank'}]}, native)
         assert 'SET SCHEMA' not in plan['command_preview']['statement']
         native = domain_native('Dom schema', 'code')
         facts = native['domain_facts']
         assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (False, None, None)
         assert [(c['conname'], c['convalidated']) for c in facts['constraints']] == [
-            ('not blank', True), ('short', True)]
+            ('not_blank', True), ('short', True)]
+        # The family form's full Constraints grid (owner direction 2026-11-11): one left out drops, a new one adds.
+        run_kind(live, 'domain', 'alter', {'constraints': [
+            {'conname': 'short', 'consrc': facts['constraints'][1]['consrc'], 'convalidated': True},
+            {'conname': 'upper', 'consrc': 'VALUE = upper(VALUE)'}]}, native)
+        native = domain_native('Dom schema', 'code')
+        assert [c['conname'] for c in native['domain_facts']['constraints']] == ['short', 'upper']
         run_kind(live, 'domain', 'drop', {'confirmation': 'code', 'cascade': False}, native)
         assert query("SELECT count(*) FROM pg_type WHERE typname='code'") == [(0,)]
     finally:
@@ -1057,6 +1236,31 @@ def test_type_lifecycle_round_trips(live):
         native = type_native('typ_schema', 'addr')
         assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(80)'},
                                                      {'member_name': 'city', 'type': 'text'}]
+        # The family form's shape (owner direction 2026-11-11): the full composite grid, the full enumeration
+        # list, USAGE as the word the grid sends, a revoke, a shell type.
+        run_kind(live, 'type', 'alter', {'composite': [{'member_name': 'road', 'type': 'character varying', 'tlength': 90},
+                                                       {'member_name': 'country', 'type': 'text'}]}, native)
+        native = type_native('typ_schema', 'addr')
+        assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(90)'},
+                                                     {'member_name': 'country', 'type': 'text'}]
+        feeling = type_native('typ_schema', 'feeling')
+        run_kind(live, 'type', 'alter', {'enum': [{'label': l} for l in ('awful', 'sad', 'fine', 'great', 'superb')]},
+                 feeling)
+        assert query("SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid "
+                     "WHERE t.typname='feeling' ORDER BY enumsortorder")[-1] == ('superb',)
+        reader = f'ui_ops_typreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'type', 'alter', {'typacl': [{'grantee': reader, 'privileges': ['USAGE']}]}, native)
+            assert any(item.startswith(f'{reader}=U/') for item in
+                       query("SELECT typacl::text[] FROM pg_type WHERE typname='addr'")[0][0])
+            run_kind(live, 'type', 'alter', {'revoke': [{'grantee': reader}]}, native)
+            assert not any(item.startswith(f'{reader}=') for item in
+                           query("SELECT typacl::text[] FROM pg_type WHERE typname='addr'")[0][0] or [])
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
+        run_kind(live, 'type', 'create', {'name': 'shelly', 'schema': 'typ_schema', 'typtype': 'p'})
+        assert one("SELECT typtype FROM pg_type WHERE typname='shelly'") == 'p'
         run_kind(live, 'type', 'create', {'name': 'floatrange', 'schema': 'typ_schema', 'typtype': 'r',
                                          'typname': 'float8', 'rngsubdiff': 'float8mi'})
         assert query("SELECT count(*) FROM pg_range r JOIN pg_type t ON t.oid=r.rngtypid WHERE t.typname='floatrange'") == [(1,)]
@@ -1110,12 +1314,27 @@ def test_view_lifecycle_round_trips(live):
             'check_option': 'cascaded'}, native)
         native = view_native('View schema', 'ours')
         assert native['view_facts']['check_option'] == 'cascaded' and 'positive' in native['view_facts']['definition']
+        # The family form's shape (owner direction 2026-11-11): privileges as the words the grid sends, a revoke.
+        reader = f'ui_ops_viewreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'view', 'alter', {'datacl': [{'grantee': reader, 'privileges': ['SELECT']}]}, native)
+            assert one(f"SELECT has_table_privilege('{reader}', '\"View schema\".ours', 'SELECT')") is True
+            run_kind(live, 'view', 'alter', {'revoke': [{'grantee': reader}]}, native)
+            assert one(f"SELECT has_table_privilege('{reader}', '\"View schema\".ours', 'SELECT')") is False
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
         run_kind(live, 'view', 'drop', {'confirmation': 'ours'}, native)
         assert query("SELECT count(*) FROM pg_class WHERE relname='ours'") == [(0,)]
         # Materialized view: created without data, fill factor set, query replaced by drop and create.
         run_kind(live, 'materialized-view', 'create', {
             'name': 'load', 'schema': 'View schema', 'definition': 'SELECT count(*) AS n FROM "View schema".t',
-            'with_data': False, 'fillfactor': 80})
+            'with_data': False, 'fillfactor': 80, 'toast_tuple_target': 256, 'autovacuum_enabled': 'f'})
+        loaded = view_native('View schema', 'load')['view_facts']
+        assert (loaded['toast_tuple_target'], loaded['autovacuum_enabled'], loaded['amname']) == (256, 'f', None)
+        # The autovacuum setting reset through the dialog's "Not set".
+        run_kind(live, 'materialized-view', 'alter', {'autovacuum_enabled': 'x'}, view_native('View schema', 'load'))
+        assert view_native('View schema', 'load')['view_facts']['autovacuum_enabled'] == 'x'
         native = view_native('View schema', 'load')
         assert (native['view_facts']['with_data'], native['view_facts']['fillfactor']) == (False, 80)
         run_kind(live, 'materialized-view', 'alter', {'fillfactor': 80, 'reset_fillfactor': True, 'comment': 'rows'},
@@ -1130,3 +1349,1466 @@ def test_view_lifecycle_round_trips(live):
         assert query("SELECT count(*) FROM pg_class WHERE relname='load'") == [(0,)]
     finally:
         query('DROP SCHEMA "View schema" CASCADE')
+
+
+# -- M4 (2026-11-11): function and procedure editors, provider-native, observed live --------------
+def routine_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.routines import facts
+    rows = query(f"""SELECT p.oid::int, pg_get_functiondef(p.oid), p.prokind, d.description,
+                            (pg_identify_object('pg_proc'::regclass, p.oid, 0)).identity, p.provolatile,
+                            p.proisstrict, p.prosecdef, p.proleakproof, p.proparallel, p.procost, p.prorows,
+                            pg_get_userbyid(p.proowner), p.proretset
+                     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                     LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_proc'::regclass
+                     WHERE n.nspname='{schema}' AND p.proname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    (oid, definition, kind, comment, identity, volatile, strict, secdef, leakproof, parallel, cost, prorows,
+     owner, retset) = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'sql_identity': identity,
+              'catalog_row': {'proname': name, 'prokind': kind, 'provolatile': volatile, 'proisstrict': strict,
+                              'prosecdef': secdef, 'proleakproof': leakproof, 'proparallel': parallel,
+                              'procost': cost, 'prorows': prorows, 'proretset': retset}}
+    native['routine_facts'] = facts(native)
+    native['owner'] = owner
+    return native
+
+
+@live_only
+def test_routine_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Fn schema"')
+    try:
+        run_kind(live, 'function', 'create', {
+            'name': 'is big', 'pronamespace': 'Fn schema',
+            'arguments': [{'argmode': 'IN', 'argname': 'n', 'argtype': 'integer', 'argdefval': '0'}],
+            'prorettypename': 'boolean', 'lanname': 'sql', 'prosrc': 'SELECT n > 10',
+            'provolatile': 'IMMUTABLE', 'proisstrict': True, 'proparallel': 'SAFE', 'procost': 10,
+            'variables': [{'name': 'search_path', 'value': 'public, pg_temp'}], 'description': "it's"})
+        native = routine_native('Fn schema', 'is big')
+        facts = native['routine_facts']
+        assert facts['definition_parsed'] and facts['arguments'][0]['argdefval'] == '0'
+        assert (facts['provolatile'], facts['proisstrict'], facts['procost'], native['comment']) == (
+            'i', True, 10, "it's")
+        assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(True,)]
+        # Body and options change through CREATE OR REPLACE with the same signature; then rename.
+        run_kind(live, 'function', 'alter', {
+            'arguments': facts['arguments'], 'prorettypename': facts['prorettypename'],
+            'prosrc': 'SELECT n > 100', 'provolatile': 'STABLE', 'proisstrict': False, 'description': ''},
+            native)
+        native = routine_native('Fn schema', 'is big')
+        assert (native['routine_facts']['provolatile'], native['routine_facts']['proisstrict'],
+                native['comment']) == ('s', False, None)
+        assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(False,)]
+        run_kind(live, 'function', 'alter', {'name': 'is_huge'}, native)
+        native = routine_native('Fn schema', 'is_huge')
+        assert native['routine_facts']['sql_identity'].endswith('(integer)')
+        # The family form's shape (owner direction 2026-11-11): codes for volatility and parallel safety, a grant of
+        # EXECUTE as the word the grid sends, a revoke, an extension dependency and SETOF through the flag.
+        assert (native['routine_facts']['provolatile'], native['routine_facts']['proparallel']) == ('s', 's')
+        reader = f'ui_ops_fnreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'function', 'alter', {
+                'provolatile': 'i', 'acl': [{'grantee': reader, 'privileges': ['EXECUTE']}],
+                'revoke': [{'grantee': 'public'}], 'dependsonextensions': ['plpgsql']}, native)
+            native = routine_native('Fn schema', 'is_huge')
+            assert native['routine_facts']['provolatile'] == 'i'
+            assert one(f"SELECT has_function_privilege('{reader}', '\"Fn schema\".is_huge(integer)', 'EXECUTE')") is True
+            assert one("SELECT count(*) FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid "
+                       "WHERE d.classid='pg_proc'::regclass AND d.deptype='x' AND e.extname='plpgsql' "
+                       "AND d.objid=(SELECT oid FROM pg_proc WHERE proname='is_huge')") == 1
+            run_kind(live, 'function', 'create', {
+                'name': 'threes', 'pronamespace': 'Fn schema', 'lanname': 'sql', 'prorettypename': 'integer',
+                'proretset': True, 'prosrc': 'SELECT generate_series(1, 3)', 'provolatile': 'i', 'proparallel': 's'})
+            assert query('SELECT count(*) FROM "Fn schema".threes()') == [(3,)]
+            threes = routine_native('Fn schema', 'threes')
+            assert threes['routine_facts']['proretset'] is True
+            run_kind(live, 'function', 'drop', {'confirmation': 'threes'}, threes)
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
+        run_kind(live, 'procedure', 'create', {
+            'name': 'bump', 'pronamespace': 'Fn schema', 'lanname': 'plpgsql',
+            'arguments': [{'argmode': 'INOUT', 'argname': 'x', 'argtype': 'integer'}],
+            'prosrc': 'begin x := x + 1; end'})
+        assert query('CALL "Fn schema".bump(41)') == [(42,)]
+        procedure = routine_native('Fn schema', 'bump')
+        run_kind(live, 'procedure', 'alter', {'prosrc': 'begin x := x + 2; end'}, procedure)
+        assert query('CALL "Fn schema".bump(40)') == [(42,)]
+        with pytest.raises(Exception):
+            run_kind(live, 'function', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'function', 'drop', {'confirmation': 'is_huge'}, native)
+        run_kind(live, 'procedure', 'drop', {'confirmation': 'bump'}, procedure)
+        assert query("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+                     "WHERE n.nspname='Fn schema'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Fn schema" CASCADE')
+
+
+# -- M4 (2026-11-11): index editor, provider-native, observed live --------------------------------
+def index_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.indexes import facts
+    rows = query(f"""SELECT pg_get_indexdef(c.oid), d.description
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{name}' AND c.relkind='i'""")
+    assert len(rows) == 1, (schema, name)
+    native = {'schema': schema, 'name': name, 'comment': rows[0][1], 'definition': rows[0][0],
+              'catalog_row': {'relname': name}}
+    native['index_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_index_lifecycle_round_trips(live):
+    query('CREATE SCHEMA "Ix schema"; CREATE TABLE "Ix schema".orders (id int, email text, status text, '
+          'priority int, note text)')
+    try:
+        run_kind(live, 'index', 'create', {
+            'name': 'ix one', 'schema': 'Ix schema', 'table': 'orders', 'amname': 'btree', 'indisunique': True,
+            'indnullsnotdistinct': True,
+            'columns': [{'colname': 'lower(email)', 'is_exp': True, 'collspcname': '"C"',
+                         'op_class': 'text_pattern_ops', 'sort_order': 'DESC', 'nulls': 'FIRST'},
+                        {'colname': 'status'}],
+            'include': [{'colname': 'note'}], 'fillfactor': 70, 'description': "it's"})
+        native = index_native('Ix schema', 'ix one')
+        facts = native['index_facts']
+        assert (facts['indisunique'], facts['indnullsnotdistinct'], facts['include'], native['comment']) == (
+            True, True, ['note'], "it's")
+        assert facts['columns'][0]['sort_order'] is True and facts['columns'][0]['is_exp']
+        assert facts['storage_parameters'] == [{'name': 'fillfactor', 'value': '70'}]
+        run_kind(live, 'index', 'alter', {
+            'name': 'ix_two', 'columns': facts['columns'], 'fillfactor': 90,
+            'storage_parameters': [{'name': 'deduplicate_items', 'value': False}],
+            'indisclustered': True, 'description': ''}, native)
+        native = index_native('Ix schema', 'ix_two')
+        assert sorted(item['name'] for item in native['index_facts']['storage_parameters']) == [
+            'deduplicate_items', 'fillfactor']
+        assert native['comment'] is None
+        assert query("SELECT indisclustered FROM pg_index WHERE indexrelid='\"Ix schema\".ix_two'::regclass") == [(True,)]
+        run_kind(live, 'index', 'alter', {'reset_parameters': [{'name': 'deduplicate_items'}]}, native)
+        native = index_native('Ix schema', 'ix_two')
+        assert [item['name'] for item in native['index_facts']['storage_parameters']] == ['fillfactor']
+        # The family form's shape (owner direction 2026-11-11): boolean sort order and NULLs, a statistics target on
+        # the expression column, the named option fields, an extension dependency; an empty option resets it.
+        run_kind(live, 'index', 'create', {
+            'name': 'ix_fam', 'schema': 'Ix schema', 'table': 'orders', 'amname': 'btree',
+            'columns': [{'colname': 'lower(email)', 'is_exp': True, 'sort_order': True, 'nulls': True, 'statistics': 250},
+                        {'colname': 'status', 'sort_order': False, 'nulls': False}],
+            'include': ['note'], 'deduplicate_items': False, 'fillfactor': 80, 'dependsonextensions': ['plpgsql']})
+        fam = index_native('Ix schema', 'ix_fam')
+        assert fam['index_facts']['columns'][0]['sort_order'] is True and fam['index_facts']['deduplicate_items'] is False
+        assert one("SELECT attstattarget FROM pg_attribute WHERE attrelid='\"Ix schema\".ix_fam'::regclass AND attnum=1") == 250
+        assert one("SELECT count(*) FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid WHERE d.objid='\"Ix schema\".ix_fam'::regclass "
+                   "AND d.deptype='x' AND e.extname='plpgsql'") == 1
+        shaped = [dict(c) for c in fam['index_facts']['columns']]
+        shaped[0]['statistics'] = 300
+        # The Reset storage parameters grid removes an option; an unchecked boolean one is set off.
+        run_kind(live, 'index', 'alter', {'columns': shaped, 'reset_parameters': [{'name': 'fillfactor'}],
+                                          'description': 'fam'}, fam)
+        fam = index_native('Ix schema', 'ix_fam')
+        assert fam['index_facts']['storage_parameters'] == [{'name': 'deduplicate_items', 'value': 'off'}]
+        assert fam['comment'] == 'fam'
+        assert one("SELECT attstattarget FROM pg_attribute WHERE attrelid='\"Ix schema\".ix_fam'::regclass AND attnum=1") == 300
+        with pytest.raises(Exception):
+            run_kind(live, 'index', 'alter', {'amname': 'hash'}, fam)
+        # A BRIN index, which YugabyteDB refuses, and a concurrent build and drop in autocommit.
+        # The predicate goes on the BRIN index: the server refuses CLUSTER on a partial index.
+        run_kind(live, 'index', 'create', {'name': 'ix_brin', 'schema': 'Ix schema', 'table': 'orders',
+                                           'amname': 'brin', 'columns': [{'colname': 'id'}],
+                                           'storage_parameters': [{'name': 'pages_per_range', 'value': 32}],
+                                           'indconstraint': 'priority > 1'})
+        brin = index_native('Ix schema', 'ix_brin')['index_facts']
+        assert (brin['amname'], brin['indconstraint']) == ('brin', 'priority > 1')
+        run_kind(live, 'index', 'create', {'name': 'ix_conc', 'schema': 'Ix schema', 'table': 'orders',
+                                           'isconcurrent': True, 'columns': [{'colname': 'priority'}]})
+        conc = index_native('Ix schema', 'ix_conc')
+        run_kind(live, 'index', 'drop', {'confirmation': 'ix_conc', 'concurrently': True}, conc)
+        with pytest.raises(Exception):
+            run_kind(live, 'index', 'drop', {'confirmation': 'other'}, native)
+        run_kind(live, 'index', 'drop', {'confirmation': 'ix_two'}, native)
+        assert query("SELECT count(*) FROM pg_class WHERE relname IN ('ix_two', 'ix_conc')") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Ix schema" CASCADE')
+
+
+# -- M4 (2026-11-11): trigger, event trigger and rule editors, provider-native, observed live -----
+def trigger_native(schema, table, name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import trigger_facts
+    rows = query(f"""SELECT pg_get_triggerdef(t.oid), t.tgenabled, t.tgisinternal, d.description
+                     FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=t.oid AND d.classoid='pg_trigger'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND t.tgname='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    definition, enabled, internal, comment = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'tgname': name, 'tgenabled': enabled, 'tgisinternal': internal}}
+    native['trigger_facts'] = trigger_facts(native)
+    return native
+
+
+def rule_native(schema, table, name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import rule_facts
+    rows = query(f"""SELECT pg_get_ruledef(r.oid), r.ev_enabled, r.is_instead, d.description
+                     FROM pg_rewrite r JOIN pg_class c ON c.oid=r.ev_class JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=r.oid AND d.classoid='pg_rewrite'::regclass
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND r.rulename='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    definition, enabled, instead, comment = rows[0]
+    native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
+              'catalog_row': {'rulename': name, 'ev_enabled': enabled, 'is_instead': instead}}
+    native['rule_facts'] = rule_facts(native)
+    return native
+
+
+def event_trigger_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.triggers import event_trigger_facts
+    rows = query(f"""SELECT e.evtevent, e.evttags, e.evtenabled, d.description, e.evtfoid::regproc::text
+                     FROM pg_event_trigger e LEFT JOIN pg_description d ON d.objoid=e.oid
+                     AND d.classoid='pg_event_trigger'::regclass WHERE e.evtname='{name}'""")
+    assert len(rows) == 1, name
+    event, tags, enabled, comment, function = rows[0]
+    native = {'name': name, 'comment': comment,
+              'catalog_row': {'evtname': name, 'evtevent': event, 'evttags': tags, 'evtenabled': enabled}}
+    native['event_trigger_facts'] = event_trigger_facts(native)
+    native['function'] = function
+    return native
+
+
+@live_only
+def test_trigger_and_rule_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Tr schema"; CREATE TABLE "Tr schema".orders (id int, status text); '
+          'CREATE TABLE "Tr schema".log (note text); '
+          'CREATE FUNCTION "Tr schema".log_it() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN '
+          "INSERT INTO \"Tr schema\".log VALUES (TG_ARGV[0]); RETURN NEW; END $$")
+    try:
+        run_kind(live, 'trigger', 'create', {
+            # A transition table is allowed with one event only (server rule).
+            'name': 'audit', 'schema': 'Tr schema', 'table': 'orders', 'fires': 'AFTER',
+            'evnt_insert': True, 'is_row_trigger': True, 'tgnewtable': 'newrows', 'whenclause': 'new.id > 0',
+            'tfunction': '"Tr schema".log_it', 'tgargs': 'first', 'description': "it's"})
+        native = trigger_native('Tr schema', 'orders', 'audit')
+        facts = native['trigger_facts']
+        assert (facts['evnt_insert'], facts['evnt_update'], facts['tgnewtable'], facts['tgargs'],
+                native['comment']) == (True, False, 'newrows', 'first', "it's")
+        query('INSERT INTO "Tr schema".orders VALUES (1, \'new\')')
+        assert query('SELECT note FROM "Tr schema".log') == [('first',)]
+        # CREATE OR REPLACE with the same name: add UPDATE OF status, drop the transition table, disable, rename.
+        run_kind(live, 'trigger', 'alter', {
+            'evnt_update': True, 'columns': [{'column': 'status'}], 'tgnewtable': '', 'tgargs': 'second',
+            'is_enable_trigger': 'D', 'description': '', 'name': 'audit_rows'}, native)
+        native = trigger_native('Tr schema', 'orders', 'audit_rows')
+        facts = native['trigger_facts']
+        assert (facts['evnt_update'], facts['columns'], facts['tgnewtable'], facts['tgargs'],
+                facts['is_enable_trigger'], native['comment']) == (True, ['status'], None, 'second', 'D', None)
+        query('INSERT INTO "Tr schema".orders VALUES (2, \'new\')')
+        assert query('SELECT count(*) FROM "Tr schema".log') == [(1,)]
+        run_kind(live, 'trigger', 'create', {
+            'name': 'check_it', 'schema': 'Tr schema', 'table': 'orders', 'is_constraint_trigger': True,
+            'fires': 'AFTER', 'evnt_delete': True, 'tgdeferrable': True, 'tginitdeferred': True,
+            'is_row_trigger': True, 'tfunction': '"Tr schema".log_it', 'tgargs': 'c'})
+        constraint = trigger_native('Tr schema', 'orders', 'check_it')
+        assert (constraint['trigger_facts']['is_constraint_trigger'], constraint['trigger_facts']['tginitdeferred']) \
+            == (True, True)
+        run_kind(live, 'trigger', 'alter', {'tginitdeferred': False}, constraint)
+        assert trigger_native('Tr schema', 'orders', 'check_it')['trigger_facts']['tginitdeferred'] is False
+        run_kind(live, 'trigger', 'drop', {'confirmation': 'audit_rows'}, native)
+        # Rules: a DO ALSO rule on UPDATE, then replaced, disabled and renamed.
+        run_kind(live, 'rule', 'create', {
+            'name': 'log_updates', 'schema': 'Tr schema', 'view': 'orders', 'event': 'UPDATE',
+            'do_instead': False, 'condition': 'old.status <> new.status',
+            'statements': 'INSERT INTO "Tr schema".log VALUES (\'rule\')', 'comment': 'log'})
+        rule = rule_native('Tr schema', 'orders', 'log_updates')
+        assert (rule['rule_facts']['event'], rule['rule_facts']['do_instead'], rule['comment']) == (
+            'UPDATE', False, 'log')
+        query('UPDATE "Tr schema".orders SET status = \'done\' WHERE id = 1')
+        assert query("SELECT count(*) FROM \"Tr schema\".log WHERE note='rule'") == [(1,)]
+        run_kind(live, 'rule', 'alter', {'statements': 'NOTHING', 'do_instead': True, 'is_enable_rule': 'D',
+                                         'comment': '', 'name': 'ignore_updates'}, rule)
+        rule = rule_native('Tr schema', 'orders', 'ignore_updates')
+        assert (rule['rule_facts']['statements'], rule['rule_facts']['do_instead'],
+                rule['rule_facts']['is_enable_rule']) == ('NOTHING', True, 'D')
+        run_kind(live, 'rule', 'drop', {'confirmation': 'ignore_updates'}, rule)
+        assert query("SELECT count(*) FROM pg_rewrite WHERE rulename='ignore_updates'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Tr schema" CASCADE')
+
+
+@live_only
+def test_event_trigger_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('event triggers need a superuser')
+    query("CREATE FUNCTION public.ui_ops_note() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN "
+          "RAISE NOTICE 'noted'; END $$")
+    try:
+        run_kind(live, 'event-trigger', 'create', {
+            'name': 'ui_ops_notes', 'eventname': 'ddl_command_end', 'when': 'CREATE TABLE, DROP TABLE',
+            'eventfunname': 'public.ui_ops_note', 'comment': "it's"})
+        native = event_trigger_native('ui_ops_notes')
+        assert (native['event_trigger_facts']['eventname'], native['event_trigger_facts']['when'],
+                native['comment']) == ('DDL_COMMAND_END', 'CREATE TABLE, DROP TABLE', "it's")
+        run_kind(live, 'event-trigger', 'alter', {'enabled': 'D', 'comment': '', 'name': 'ui_ops_quiet'}, native)
+        native = event_trigger_native('ui_ops_quiet')
+        assert (native['event_trigger_facts']['enabled'], native['comment']) == ('D', None)
+        run_kind(live, 'event-trigger', 'alter', {'when': 'DROP TABLE', 'eventfunname': 'public.ui_ops_note',
+                                                  'enabled': 'O'}, native)
+        native = event_trigger_native('ui_ops_quiet')
+        assert (native['event_trigger_facts']['when'], native['event_trigger_facts']['enabled']) == (
+            'DROP TABLE', 'O')
+        run_kind(live, 'event-trigger', 'drop', {'confirmation': 'ui_ops_quiet'}, native)
+        assert query("SELECT count(*) FROM pg_event_trigger WHERE evtname LIKE 'ui_ops%'") == [(0,)]
+    finally:
+        query("DROP EVENT TRIGGER IF EXISTS ui_ops_notes; DROP EVENT TRIGGER IF EXISTS ui_ops_quiet; "
+              "DROP FUNCTION public.ui_ops_note()")
+
+
+# -- M4 (2026-11-11): role and tablespace editors from the server scope, provider-native, live -----
+def run_server_scope(live, kind, operation_id, draft, native=None):
+    provider, _route = live
+    resource = target(None, kind, native) if native else None
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': resource,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (kind, operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    assert result['provider_result']['transaction_outcome'] == 'committed', result
+    return plan
+
+
+from pgadmin.cdeadmin.providers.postgresql.cluster import role_facts as role_facts_of  # noqa: E402
+
+
+def role_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.cluster import role_facts
+    rows = query(f"""SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolinherit, r.rolconnlimit, r.rolvaliduntil::text,
+                            d.description, r.rolconfig::text[]
+                     FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid=r.oid AND d.classoid='pg_authid'::regclass
+                     WHERE r.rolname='{name}'""")
+    assert len(rows) == 1, name
+    login, superuser, createdb, inherit, limit, until, comment, config = rows[0]
+    native = {'name': name, 'catalog_metadata': {'rolname': name, 'rolcanlogin': login, 'rolsuper': superuser,
+                                                 'description': comment}}
+    native['role_facts'] = role_facts(native)
+    native.update(createdb=createdb, inherit=inherit, limit=limit, until=until, config=config or [])
+    return native
+
+
+@live_only
+def test_role_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('role changes need a superuser')
+    group, member, name = f'ui_ops_grp_{UNIQUE}', f'ui_ops_mem_{UNIQUE}', f'ui_ops_role_{UNIQUE}'
+    query(f'CREATE ROLE {group}; CREATE ROLE {member}')
+    try:
+        run_server_scope(live, 'role', 'create', {
+            'rolname': name, 'rolcanlogin': True, 'rolsuper': False, 'rolcreatedb': True, 'rolinherit': False,
+            'rolconnlimit': 5, 'rolvaliduntil': '2030-01-01 00:00:00+00',
+            'rolmembership': [{'role': group, 'admin': True}], 'rolmembers': [{'role': member}],
+            'variables': [{'name': 'work_mem', 'value': '4MB'}], 'description': "it's"})
+        native = role_native(name)
+        assert (native['role_facts']['rolcanlogin'], native['createdb'], native['inherit'], native['limit'],
+                native['role_facts']['description']) == (True, True, False, 5, "it's")
+        assert native['until'].startswith('2030-01-01') and native['config'] == ['work_mem=4MB']
+        assert query(f"SELECT admin_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}'::regrole") == [(True,)]
+        assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}'::regrole "
+                     f"AND member='{member}'::regrole") == [(1,)]
+        run_server_scope(live, 'role', 'alter', {
+            'rolname': name + '_r', 'rolcreatedb': False, 'rolinherit': True,
+            'rolconnlimit': -1, 'rolvaliduntil': 'infinity',
+            'revoke_membership': [{'role': group, 'admin_only': True}],
+            'revoke_members': [{'role': member}],
+            'reset_variables': [{'name': 'work_mem'}],
+            'variables': [{'name': 'statement_timeout', 'value': '5s'}], 'description': ''}, native)
+        native = role_native(name + '_r')
+        assert (native['role_facts']['rolcanlogin'], native['createdb'], native['inherit'], native['limit'],
+                native['until'], native['role_facts']['description']) == (True, False, True, -1, 'infinity', None)
+        assert native['config'] == ['statement_timeout=5s']
+        assert query(f"SELECT admin_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}_r'::regrole") == [(False,)]
+        assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}_r'::regrole") == [(0,)]
+        # The family form's shape (owner direction 2026-11-11): booleans for the attributes the listing knows are
+        # no change; the INHERIT/SET membership columns; a password is refused.
+        full = dict(native, catalog_metadata=dict(native['catalog_metadata'], rolcreatedb=False, rolinherit=True,
+                                                   rolconnlimit=-1))
+        full['role_facts'] = role_facts_of(full)
+        run_server_scope(live, 'role', 'alter', {
+            'rolcanlogin': True, 'rolcreatedb': False, 'rolsuper': False,
+            'rolmembership': [{'role': group, 'admin': False, 'inherit': False, 'set': True}]}, full)
+        assert query(f"SELECT inherit_option, set_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}_r'::regrole") == [(False, True)]
+        with pytest.raises(Exception):
+            run_server_scope(live, 'role', 'alter', {'rolpassword': 'nope'}, full)
+        with pytest.raises(Exception):
+            run_server_scope(live, 'role', 'drop', {'confirmation': 'other'}, native)
+        run_server_scope(live, 'role', 'drop', {'confirmation': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_roles WHERE rolname LIKE '{name}%'") == [(0,)]
+    finally:
+        query(f'DROP ROLE IF EXISTS {name}; DROP ROLE IF EXISTS {name}_r; DROP ROLE {member}; DROP ROLE {group}')
+
+
+def tablespace_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.cluster import tablespace_facts
+    rows = query(f"""SELECT pg_get_userbyid(spcowner), spcoptions::text[], shobj_description(oid, 'pg_tablespace'),
+                            spcacl::text[]
+                     FROM pg_tablespace WHERE spcname='{name}'""")
+    assert len(rows) == 1, name
+    owner, options, comment, acl = rows[0]
+    native = {'name': name, 'catalog_metadata': {'name': name, 'description': comment}}
+    native['tablespace_facts'] = tablespace_facts(native)
+    native.update(owner=owner, options=options or [], acl=acl or [])
+    return native
+
+
+@live_only
+def test_tablespace_lifecycle_round_trips(live):
+    directory = SETTINGS.get('tablespace_dir')
+    if not directory:
+        pytest.skip('tablespace_dir (a server-host directory owned by the server user) is not set')
+    owner, name = f'ui_ops_tsowner_{UNIQUE}', f'ui_ops_ts_{UNIQUE}'
+    query(f'CREATE ROLE {owner}')
+    try:
+        plan = run_server_scope(live, 'tablespace', 'create', {
+            'name': name, 'spcuser': owner, 'spclocation': directory,
+            'spcoptions': [{'name': 'random_page_cost', 'value': 1.5}]})
+        assert plan['command_preview']['statement'].startswith(f'CREATE TABLESPACE "{name}"')
+        native = tablespace_native(name)
+        assert (native['owner'], native['options']) == (owner, ['random_page_cost=1.5'])
+        run_server_scope(live, 'tablespace', 'alter', {
+            'name': name + '_r', 'spcoptions': [{'name': 'seq_page_cost', 'value': '0.5'}],
+            'reset_options': [{'name': 'random_page_cost'}], 'spcacl': [{'grantee': owner}],
+            'description': 'ssd'}, native)
+        native = tablespace_native(name + '_r')
+        assert (native['options'], native['tablespace_facts']['description']) == (['seq_page_cost=0.5'], 'ssd')
+        assert any(item.startswith(f'{owner}=C/') for item in native['acl'])
+        run_server_scope(live, 'tablespace', 'drop', {'confirmation': name + '_r'}, native)
+        assert query(f"SELECT count(*) FROM pg_tablespace WHERE spcname LIKE '{name}%'") == [(0,)]
+    finally:
+        # DROP TABLESPACE refuses a multi-statement string (an implicit transaction block): one per call.
+        query(f'DROP TABLESPACE IF EXISTS {name}')
+        query(f'DROP TABLESPACE IF EXISTS {name}_r')
+        query(f'DROP ROLE {owner}')
+
+
+# -- M5 (2026-11-11): cast, collation and language editors, provider-native, observed live --------
+def catalog_object_native(kind, name, schema=None):
+    from pgadmin.cdeadmin.providers.postgresql.catalog_objects import FACTS
+    if kind == 'cast':
+        rows = query(f"""SELECT c.castcontext, c.castmethod, d.description,
+                                (pg_identify_object('pg_cast'::regclass, c.oid, 0)).identity
+                         FROM pg_cast c LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_cast'::regclass
+                         WHERE format_type(c.castsource, NULL) || ' AS ' || format_type(c.casttarget, NULL) = '{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][2], 'sql_identity': rows[0][3],
+                  'catalog_row': {'castcontext': rows[0][0], 'castmethod': rows[0][1]}}
+    elif kind == 'collation':
+        rows = query(f"""SELECT c.collprovider, c.colllocale, c.collcollate, c.collctype, c.collisdeterministic,
+                                c.collicurules, c.collversion, d.description, pg_get_userbyid(c.collowner)
+                         FROM pg_collation c JOIN pg_namespace n ON n.oid=c.collnamespace
+                         LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_collation'::regclass
+                         WHERE n.nspname='{schema}' AND c.collname='{name}'""")
+        assert len(rows) == 1, (schema, name)
+        provider, locale, collate, ctype, deterministic, rules, version, comment, owner = rows[0]
+        native = {'schema': schema, 'name': name, 'comment': comment, 'owner': owner,
+                  'catalog_row': {'collname': name, 'collprovider': provider, 'colllocale': locale,
+                                  'collcollate': collate, 'collctype': ctype, 'collisdeterministic': deterministic,
+                                  'collicurules': rules, 'collversion': version}}
+    else:
+        rows = query(f"""SELECT l.lanpltrusted, l.lanispl, d.description, pg_get_userbyid(l.lanowner)
+                         FROM pg_language l LEFT JOIN pg_description d ON d.objoid=l.oid AND d.classoid='pg_language'::regclass
+                         WHERE l.lanname='{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][2], 'owner': rows[0][3],
+                  'catalog_row': {'lanname': name, 'lanpltrusted': rows[0][0], 'lanispl': rows[0][1]}}
+    key, reader = FACTS[kind]
+    native[key] = reader(native)
+    return native
+
+
+@live_only
+def test_cast_collation_and_language_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Cat schema"; CREATE FUNCTION "Cat schema".to_int(text) RETURNS integer LANGUAGE sql '
+          "IMMUTABLE AS 'SELECT 42'")
+    try:
+        run_kind(live, 'cast', 'create', {
+            'srctyp': 'text', 'trgtyp': 'integer', 'castmethod': 'function',
+            'proname': '"Cat schema".to_int(text)', 'castcontext': 'assignment', 'description': "it's"})
+        cast = catalog_object_native('cast', 'text AS integer')
+        assert (cast['cast_facts']['castcontext'], cast['cast_facts']['castmethod'], cast['comment']) == (
+            'assignment', 'function', "it's")
+        assert query("SELECT 'x'::text::integer") == [(42,)]
+        run_kind(live, 'cast', 'drop', {'confirmation': 'text AS integer'}, cast)
+        assert query("SELECT count(*) FROM pg_cast WHERE castsource='text'::regtype AND casttarget='integer'::regtype") == [(0,)]
+        run_kind(live, 'collation', 'create', {
+            'name': 'c one', 'schema': 'Cat schema', 'provider': 'icu', 'locale': 'en-US',
+            'is_deterministic': False, 'description': 'c'})
+        collation = catalog_object_native('collation', 'c one', 'Cat schema')
+        facts = collation['collation_facts']
+        assert (facts['provider'], facts['locale'], facts['is_deterministic'], collation['comment']) == (
+            'icu', 'en-US', False, 'c')
+        run_kind(live, 'collation', 'alter', {'name': 'c_two', 'description': '', 'refresh_version': True}, collation)
+        collation = catalog_object_native('collation', 'c_two', 'Cat schema')
+        assert collation['comment'] is None
+        # A changed locale drops and recreates with the merged definition.
+        run_kind(live, 'collation', 'alter', {'locale': 'de-DE', 'is_deterministic': False}, collation)
+        collation = catalog_object_native('collation', 'c_two', 'Cat schema')
+        assert (collation['collation_facts']['locale'], collation['collation_facts']['is_deterministic']) == (
+            'de-DE', False)
+        run_kind(live, 'collation', 'drop', {'confirmation': 'c_two'}, collation)
+        run_kind(live, 'language', 'create', {
+            'name': 'ui_ops_lang', 'trusted': True, 'lanproc': 'plpgsql_call_handler',
+            'laninl': 'plpgsql_inline_handler', 'lanval': 'plpgsql_validator', 'description': 'twin'})
+        language = catalog_object_native('language', 'ui_ops_lang')
+        assert (language['language_facts']['trusted'], language['comment']) == (True, 'twin')
+        run_kind(live, 'language', 'alter', {'description': '', 'name': 'ui_ops_lang2'}, language)
+        language = catalog_object_native('language', 'ui_ops_lang2')
+        assert language['comment'] is None
+        run_kind(live, 'language', 'drop', {'confirmation': 'ui_ops_lang2'}, language)
+        assert query("SELECT count(*) FROM pg_language WHERE lanname LIKE 'ui_ops%'") == [(0,)]
+    finally:
+        query('DROP CAST IF EXISTS (text AS integer)')
+        query('DROP LANGUAGE IF EXISTS ui_ops_lang; DROP LANGUAGE IF EXISTS ui_ops_lang2')
+        query('DROP SCHEMA "Cat schema" CASCADE')
+
+
+# -- M5 (2026-11-11): foreign data wrapper, server and user mapping editors, provider-native, live --
+def foreign_native(kind, name, server=None):
+    from pgadmin.cdeadmin.providers.postgresql.foreign_objects import FACTS
+    if kind == 'foreign-data-wrapper':
+        rows = query(f"""SELECT w.fdwoptions::text[], d.description, w.fdwhandler::regproc::text,
+                                w.fdwvalidator::regproc::text
+                         FROM pg_foreign_data_wrapper w
+                         LEFT JOIN pg_description d ON d.objoid=w.oid AND d.classoid='pg_foreign_data_wrapper'::regclass
+                         WHERE w.fdwname='{name}'""")
+        assert len(rows) == 1, name
+        native = {'name': name, 'comment': rows[0][1], 'catalog_row': {'fdwname': name}}
+        native.update(options=rows[0][0] or [], handler=rows[0][2], validator=rows[0][3])
+        native['wrapper_facts'] = FACTS[kind][1](native)
+    elif kind == 'foreign-server':
+        rows = query(f"""SELECT s.srvfdw::int, s.srvtype, s.srvversion, s.srvoptions::text[], d.description, w.fdwname
+                         FROM pg_foreign_server s JOIN pg_foreign_data_wrapper w ON w.oid=s.srvfdw
+                         LEFT JOIN pg_description d ON d.objoid=s.oid AND d.classoid='pg_foreign_server'::regclass
+                         WHERE s.srvname='{name}'""")
+        assert len(rows) == 1, name
+        fdw, typ, version, options, comment, fdwname = rows[0]
+        native = {'name': name, 'comment': comment,
+                  'catalog_row': {'srvname': name, 'srvfdw': str(fdw), 'srvtype': typ, 'srvversion': version}}
+        native['options'] = options or []
+        native['server_facts'] = FACTS[kind][1](native, {fdw: fdwname})
+    else:
+        rows = query(f"""SELECT (pg_identify_object('pg_user_mapping'::regclass, u.oid, 0)).identity,
+                                u.umoptions::text[]
+                         FROM pg_user_mapping u JOIN pg_foreign_server s ON s.oid=u.umserver
+                         WHERE s.srvname='{server}' AND pg_get_userbyid(u.umuser)='{name}'""")
+        assert len(rows) == 1, (name, server)
+        native = {'name': f'{name} / {server}', 'sql_identity': rows[0][0], 'catalog_row': {'options_redacted': True}}
+        native['options'] = rows[0][1] or []
+        native['mapping_facts'] = FACTS[kind][1](native)
+    return native
+
+
+@live_only
+def test_foreign_objects_lifecycle_round_trips(live):
+    try:
+        run_kind(live, 'foreign-data-wrapper', 'create', {
+            'name': 'ui ops fdw', 'fdwoptions': [{'name': 'debug', 'value': 'on'}], 'description': "it's"})
+        wrapper = foreign_native('foreign-data-wrapper', 'ui ops fdw')
+        assert (wrapper['options'], wrapper['comment']) == (['debug=on'], "it's")
+        run_kind(live, 'foreign-data-wrapper', 'alter', {
+            'name': 'ui_ops_fdw', 'set_options': [{'name': 'debug', 'value': 'off'}],
+            'add_options': [{'name': 'level', 'value': '2'}], 'description': ''}, wrapper)
+        wrapper = foreign_native('foreign-data-wrapper', 'ui_ops_fdw')
+        assert (sorted(wrapper['options']), wrapper['comment']) == (['debug=off', 'level=2'], None)
+        run_kind(live, 'foreign-server', 'create', {
+            'name': 'ui ops srv', 'fdwname': 'ui_ops_fdw', 'fsrvtype': 'pg', 'fsrvversion': '18',
+            'fsrvoptions': [{'name': 'host', 'value': '127.0.0.1'}, {'name': 'dbname', 'value': 'x'}],
+            'description': 'remote'})
+        server = foreign_native('foreign-server', 'ui ops srv')
+        assert (server['server_facts']['fdwname'], server['server_facts']['fsrvtype'],
+                sorted(server['options'])) == ('ui_ops_fdw', 'pg', ['dbname=x', 'host=127.0.0.1'])
+        run_kind(live, 'foreign-server', 'alter', {
+            'name': 'ui_ops_srv', 'fsrvversion': '19', 'drop_options': [{'name': 'dbname'}],
+            'set_options': [{'name': 'host', 'value': '127.0.0.2'}], 'description': ''}, server)
+        server = foreign_native('foreign-server', 'ui_ops_srv')
+        assert (server['server_facts']['fsrvversion'], server['options'], server['comment']) == (
+            '19', ['host=127.0.0.2'], None)
+        run_kind(live, 'user-mapping', 'create', {
+            'name': SETTINGS['user'], 'server': 'ui_ops_srv', 'umoptions': [{'name': 'user', 'value': 'reader'}]})
+        mapping = foreign_native('user-mapping', SETTINGS['user'], 'ui_ops_srv')
+        assert mapping['options'] == ['user=reader']
+        # A credential option is refused when the plan is compiled, before anything runs.
+        provider, route = live
+        with pytest.raises(Exception, match='credential'):
+            provider.plan_visual_admin({
+                'resource_kind': 'user-mapping', 'operation_id': 'alter',
+                'target_resource': target(None, 'user-mapping', mapping), '_provider_route': route,
+                'draft': {'add_options': [{'name': 'password', 'value': 'x'}]}})
+        run_kind(live, 'user-mapping', 'alter', {'set_options': [{'name': 'user', 'value': 'writer'}]}, mapping)
+        mapping = foreign_native('user-mapping', SETTINGS['user'], 'ui_ops_srv')
+        assert mapping['options'] == ['user=writer']
+        run_kind(live, 'user-mapping', 'drop', {'confirmation': mapping['name']}, mapping)
+        run_kind(live, 'foreign-server', 'drop', {'confirmation': 'ui_ops_srv'}, server)
+        run_kind(live, 'foreign-data-wrapper', 'drop', {'confirmation': 'ui_ops_fdw'}, wrapper)
+        assert query("SELECT count(*) FROM pg_foreign_data_wrapper WHERE fdwname LIKE 'ui%'") == [(0,)]
+    finally:
+        query('DROP FOREIGN DATA WRAPPER IF EXISTS "ui ops fdw" CASCADE')
+        query('DROP FOREIGN DATA WRAPPER IF EXISTS ui_ops_fdw CASCADE')
+
+
+# -- M5 (2026-11-11): publication and subscription editors, provider-native, observed live --------
+def publication_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.replication import publication_facts
+    rows = query(f"""SELECT p.puballtables, p.pubinsert, p.pubupdate, p.pubdelete, p.pubtruncate, p.pubviaroot,
+                            d.description, pg_get_userbyid(p.pubowner)
+                     FROM pg_publication p LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_publication'::regclass
+                     WHERE p.pubname='{name}'""")
+    assert len(rows) == 1, name
+    alltables, ins, upd, dele, trunc, root, comment, owner = rows[0]
+    members = query(f"""SELECT n.nspname, c.relname, c.oid::int, pr.prattrs::int[], pg_get_expr(pr.prqual, pr.prrelid)
+                        FROM pg_publication_rel pr JOIN pg_publication p ON p.oid=pr.prpubid
+                        JOIN pg_class c ON c.oid=pr.prrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                        WHERE p.pubname='{name}' ORDER BY c.relname""")
+    schemas = query(f"""SELECT n.nspname, n.oid::int FROM pg_publication_namespace pn JOIN pg_publication p ON p.oid=pn.pnpubid
+                        JOIN pg_namespace n ON n.oid=pn.pnnspid WHERE p.pubname='{name}'""")
+    relations = {m[2]: (m[0], m[1]) for m in members}
+    attributes = {m[2]: [{'attnum': a, 'attname': b} for a, b in query(
+        f'SELECT attnum, attname FROM pg_attribute WHERE attrelid={m[2]} AND attnum > 0')] for m in members}
+    native = {'name': name, 'comment': comment,
+              'catalog_row': {'pubname': name, 'puballtables': alltables, 'pubinsert': ins, 'pubupdate': upd,
+                              'pubdelete': dele, 'pubtruncate': trunc, 'pubviaroot': root},
+              'children': {'pg_publication_rel': [{'prrelid': str(m[2]), 'prattrs': m[3], 'row_filter_sql': m[4]}
+                                                  for m in members],
+                           'pg_publication_namespace': [{'pnnspid': str(s[1])} for s in schemas]}}
+    native['publication_facts'] = publication_facts(native, relations, attributes, {s[1]: s[0] for s in schemas})
+    native['owner'] = owner
+    return native
+
+
+def subscription_native(name):
+    from pgadmin.cdeadmin.providers.postgresql.replication import subscription_facts
+    rows = query(f"""SELECT s.subpublications, s.subenabled, s.subslotname, s.subsynccommit, s.subbinary, s.substream,
+                            s.subtwophasestate, s.subdisableonerr, s.subrunasowner, s.subpasswordrequired, s.suborigin,
+                            s.subfailover, d.description
+                     FROM pg_subscription s LEFT JOIN pg_description d ON d.objoid=s.oid AND d.classoid='pg_subscription'::regclass
+                     WHERE s.subname='{name}'""")
+    assert len(rows) == 1, name
+    keys = ('subpublications', 'subenabled', 'subslotname', 'subsynccommit', 'subbinary', 'substream',
+            'subtwophasestate', 'subdisableonerr', 'subrunasowner', 'subpasswordrequired', 'suborigin', 'subfailover')
+    native = {'name': name, 'comment': rows[0][12], 'catalog_row': dict(zip(keys, rows[0][:12]), subname=name,
+                                                                        connection_redacted=True)}
+    native['subscription_facts'] = subscription_facts(native)
+    return native
+
+
+@live_only
+def test_publication_and_subscription_lifecycles_round_trip(live):
+    # Publications and a non-connecting subscription (connect = false, no slot) need no logical WAL.
+    query('CREATE SCHEMA "Rep schema"; CREATE TABLE "Rep schema".t (id int PRIMARY KEY, note text); '
+          'CREATE TABLE "Rep schema".u (id int PRIMARY KEY); CREATE SCHEMA rep_other')
+    try:
+        run_kind(live, 'publication', 'create', {
+            'name': 'ui ops pub', 'pubtable': [{'table_name': '"Rep schema".t', 'columns': 'id, note',
+                                                'where': 'id > 0'}],
+            'evnt_insert': True, 'evnt_update': True, 'evnt_delete': False, 'evnt_truncate': False,
+            'publish_via_partition_root': True, 'description': "it's"})
+        publication = publication_native('ui ops pub')
+        facts = publication['publication_facts']
+        assert (facts['evnt_delete'], facts['publish_via_partition_root'], publication['comment']) == (
+            False, True, "it's")
+        assert facts['pubtable'] == [{'table_name': 'Rep schema.t', 'columns': 'id, note', 'where': '(id > 0)'}]
+        run_kind(live, 'publication', 'alter', {
+            'name': 'ui_ops_pub', 'evnt_delete': True, 'add_tables': [{'table_name': '"Rep schema".u'}],
+            'drop_tables': [{'table_name': '"Rep schema".t'}], 'description': ''}, publication)
+        publication = publication_native('ui_ops_pub')
+        assert publication['publication_facts']['evnt_delete'] is True
+        assert [item['table_name'] for item in publication['publication_facts']['pubtable']] == ['Rep schema.u']
+        run_kind(live, 'publication', 'create', {'name': 'ui_ops_schemas', 'pubschema': [{'schema': 'rep_other'}]})
+        assert publication_native('ui_ops_schemas')['publication_facts']['pubschema'] == [{'schema': 'rep_other'}]
+        # A subscription to this same server, created without connecting (no slot, disabled).
+        run_kind(live, 'subscription', 'create', {
+            'name': 'ui ops sub', 'host': SETTINGS['host'], 'port': SETTINGS['port'], 'db': DATABASE,
+            'username': SETTINGS['user'], 'pub': 'ui_ops_pub', 'connect': False, 'enabled': False,
+            'create_slot': False, 'copy_data': False, 'slot_name': 'NONE', 'sync': 'off', 'streaming': 'on',
+            'binary': True})
+        subscription = subscription_native('ui ops sub')
+        facts = subscription['subscription_facts']
+        assert (facts['pub'], facts['enabled'], facts['slot_name'], facts['streaming'], facts['binary']) == (
+            ['ui_ops_pub'], False, None, 'on', True)
+        run_kind(live, 'subscription', 'alter', {
+            'name': 'ui_ops_sub', 'sync': 'local', 'binary': False, 'pub': 'ui_ops_pub, ui_ops_schemas',
+            'enabled': False, 'description': 'mirror'}, subscription)
+        subscription = subscription_native('ui_ops_sub')
+        facts = subscription['subscription_facts']
+        assert (sorted(facts['pub']), facts['sync'], facts['binary'], subscription['comment']) == (
+            ['ui_ops_pub', 'ui_ops_schemas'], 'local', False, 'mirror')
+        # The alter form has no connection fields, so the draft is refused before the compiler's own
+        # "credentials" refusal; either way no connection change can run from here.
+        with pytest.raises(Exception):
+            provider, route = live
+            provider.plan_visual_admin({'resource_kind': 'subscription', 'operation_id': 'alter',
+                                        'target_resource': target(None, 'subscription', subscription),
+                                        '_provider_route': route, 'draft': {'host': 'elsewhere'}})
+        run_kind(live, 'subscription', 'drop', {'confirmation': 'ui_ops_sub'}, subscription)
+        run_kind(live, 'publication', 'drop', {'confirmation': 'ui_ops_pub'}, publication)
+        run_kind(live, 'publication', 'drop', {'confirmation': 'ui_ops_schemas'},
+                 publication_native('ui_ops_schemas'))
+        assert query("SELECT count(*) FROM pg_publication WHERE pubname LIKE 'ui%'") == [(0,)]
+    finally:
+        query('DROP SUBSCRIPTION IF EXISTS "ui ops sub"')
+        query('DROP SUBSCRIPTION IF EXISTS ui_ops_sub')
+        query('DROP PUBLICATION IF EXISTS "ui ops pub"; DROP PUBLICATION IF EXISTS ui_ops_pub; '
+              'DROP PUBLICATION IF EXISTS ui_ops_schemas')
+        query('DROP SCHEMA "Rep schema" CASCADE; DROP SCHEMA rep_other CASCADE')
+
+
+# -- M5 (2026-11-11): text search editors, provider-native, observed live -------------------------
+def text_search_native(kind, schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.text_search import facts
+    catalog, column, classoid = {
+        'text-search-configuration': ('pg_ts_config', 'cfgname', 'pg_ts_config'),
+        'text-search-dictionary': ('pg_ts_dict', 'dictname', 'pg_ts_dict'),
+        'text-search-parser': ('pg_ts_parser', 'prsname', 'pg_ts_parser'),
+        'text-search-template': ('pg_ts_template', 'tmplname', 'pg_ts_template')}[kind]
+    namespace = column.replace('name', 'namespace')
+    rows = query(f"""SELECT to_jsonb(c) - 'oid', d.description FROM {catalog} c
+                     JOIN pg_namespace n ON n.oid=c.{namespace}
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='{classoid}'::regclass
+                     WHERE n.nspname='{schema}' AND c.{column}='{name}'""")
+    assert len(rows) == 1, (kind, schema, name)
+    native = {'schema': schema, 'name': name, 'comment': rows[0][1], 'catalog_row': rows[0][0]}
+    native['text_search_facts'] = facts(kind, native)
+    return native
+
+
+@live_only
+def test_text_search_lifecycles_round_trip(live):
+    query('CREATE SCHEMA "Fts schema"')
+    try:
+        run_kind(live, 'text-search-template', 'create', {
+            'name': 't one', 'schema': 'Fts schema', 'tmplinit': 'dsimple_init', 'tmpllexize': 'dsimple_lexize',
+            'description': "it's"})
+        template = text_search_native('text-search-template', 'Fts schema', 't one')
+        assert (template['text_search_facts']['tmplinit'], template['comment']) == ('dsimple_init', "it's")
+        run_kind(live, 'text-search-dictionary', 'create', {
+            'name': 'd one', 'schema': 'Fts schema', 'template': '"Fts schema"."t one"',
+            'options': [{'option': 'stopwords', 'value': 'english'}], 'description': 'd'})
+        dictionary = text_search_native('text-search-dictionary', 'Fts schema', 'd one')
+        assert dictionary['text_search_facts']['dictinitoption'] == "stopwords = 'english'"
+        run_kind(live, 'text-search-dictionary', 'alter', {
+            'name': 'd_two', 'set_options': [{'option': 'accept', 'value': 'false'}],
+            'drop_options': [{'option': 'stopwords'}], 'description': ''}, dictionary)
+        dictionary = text_search_native('text-search-dictionary', 'Fts schema', 'd_two')
+        assert (dictionary['text_search_facts']['dictinitoption'], dictionary['comment']) == (
+            "accept = 'false'", None)
+        run_kind(live, 'text-search-parser', 'create', {
+            'name': 'p one', 'schema': 'Fts schema', 'prsstart': 'prsd_start', 'prstoken': 'prsd_nexttoken',
+            'prsend': 'prsd_end', 'prslextype': 'prsd_lextype'})
+        parser = text_search_native('text-search-parser', 'Fts schema', 'p one')
+        assert parser['text_search_facts']['prsheadline'] is None
+        run_kind(live, 'text-search-parser', 'alter', {'prsheadline': 'prsd_headline', 'name': 'p_two'}, parser)
+        parser = text_search_native('text-search-parser', 'Fts schema', 'p_two')
+        assert parser['text_search_facts']['prsheadline'] == 'prsd_headline'
+        run_kind(live, 'text-search-configuration', 'create', {
+            'name': 'c one', 'schema': 'Fts schema', 'prsname': '"Fts schema".p_two',
+            'tokens': [{'token': 'asciiword', 'dictname': '"Fts schema".d_two, pg_catalog.simple'}],
+            'description': 'c'})
+        configuration = text_search_native('text-search-configuration', 'Fts schema', 'c one')
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c one'""") == [(2,)]
+        run_kind(live, 'text-search-configuration', 'alter', {
+            'name': 'c_two', 'add_mappings': [{'token': 'word', 'dictname': 'pg_catalog.simple'}],
+            'alter_mappings': [{'token': 'asciiword', 'dictname': 'pg_catalog.simple'}],
+            'description': ''}, configuration)
+        configuration = text_search_native('text-search-configuration', 'Fts schema', 'c_two')
+        assert configuration['comment'] is None
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c_two'""") == [(2,)]
+        run_kind(live, 'text-search-configuration', 'alter', {'drop_mappings': [{'token': 'word'}]}, configuration)
+        assert query("""SELECT count(*) FROM pg_ts_config_map m JOIN pg_ts_config c ON c.oid=m.mapcfg
+                        WHERE c.cfgname='c_two'""") == [(1,)]
+        for kind, name in (('text-search-configuration', 'c_two'), ('text-search-dictionary', 'd_two'),
+                           ('text-search-parser', 'p_two'), ('text-search-template', 't one')):
+            run_kind(live, kind, 'drop', {'confirmation': name}, text_search_native(kind, 'Fts schema', name))
+        assert query("SELECT count(*) FROM pg_ts_config c JOIN pg_namespace n ON n.oid=c.cfgnamespace "
+                     "WHERE n.nspname='Fts schema'") == [(0,)]
+    finally:
+        query('DROP SCHEMA "Fts schema" CASCADE')
+
+
+# -- M6 (2026-11-11): server operations from the server scope, provider-native, observed live -----
+def run_server(live, operation_id, values=None):
+    provider, _route = live
+    operation = OPERATIONS[f'{operation_id}@server']
+    draft = operation_draft(operation, values)
+    request = {'resource_kind': 'server', 'operation_id': operation_id, 'target_resource': None,
+               '_provider_route': {'server_id': 1}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] == (operation['confirmation'] != 'none'), (operation_id, plan)
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    outcome = result['provider_result']
+    assert outcome['transaction_outcome'] == 'committed', outcome
+    return outcome
+
+
+@live_only
+def test_server_reload_and_restore_point(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('pg_reload_conf and restore points need a superuser')
+    outcome = run_server(live, 'reload')
+    assert outcome['result']['rows'] == [{'reloaded': True}]
+    assert outcome['maintenance_receipt']['action'] == 'reload'
+    if query("SELECT setting FROM pg_settings WHERE name='wal_level'") == [('minimal',)]:
+        pytest.skip('restore points need wal_level above minimal')
+    outcome = run_server(live, 'restore-point', {'name': f'ui ops {UNIQUE}'})
+    lsn = outcome['result']['rows'][0]['restore_point_lsn']
+    assert isinstance(lsn, str) and '/' in lsn
+
+
+@live_only
+def test_wal_replay_control_is_refused_on_a_primary(live):
+    if query('SELECT pg_is_in_recovery()') == [(True,)]:
+        pytest.skip('this server is a standby; pause and resume would succeed')
+    from pgadmin.cdeadmin.visual_admin.provider import VisualAdminExecutionError
+    for operation_id in ('wal-replay-pause', 'wal-replay-resume'):
+        # Owner decision 2026-11-11: the server's rejection is a known outcome with its SQLSTATE.
+        with pytest.raises(VisualAdminExecutionError) as raised:
+            run_server(live, operation_id)
+        operation = raised.value.operation
+        assert (operation['stage'], operation['unknown_outcome']) == ('provider_rejected', False)
+        assert operation['rejection']['sqlstate'] == '55000'
+        assert 'recovery is not in progress' in operation['rejection']['message']
+
+
+# -- M6 (2026-11-11): schema/database VACUUM+ANALYZE and forced database drop, observed live -------
+@live_only
+def test_vacuum_and_analyze_at_schema_and_database_scope(live):
+    fresh_table('m_sv')
+    query('CREATE MATERIALIZED VIEW public.m_sv_mv AS SELECT * FROM public.m_sv')
+    query("DELETE FROM public.m_sv WHERE id % 2 = 0")
+    dead = lambda: one("SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname='m_sv'")
+    assert dead() > 0
+    native = {'name': 'public', 'relations': ['m_sv', 'm_sv_mv']}
+    plan, outcome = run(live, 'vacuum', kind='schema', native=native, values={'analyze': True})
+    assert plan['command_preview']['statement'] == 'VACUUM (ANALYZE) "public"."m_sv", "public"."m_sv_mv"'
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'autocommit'
+    assert dead() == 0
+    plan, outcome = run(live, 'analyze', kind='schema', native=native)
+    assert plan['command_preview']['statement'] == 'ANALYZE "public"."m_sv", "public"."m_sv_mv"'
+    assert one("SELECT count(*) FROM pg_stats WHERE schemaname='public' AND tablename='m_sv_mv'") > 0
+    query("DELETE FROM public.m_sv WHERE id % 3 = 0")
+    assert dead() > 0
+    plan, outcome = run(live, 'vacuum', kind='database', native={'name': DATABASE}, values={'freeze': True})
+    assert plan['command_preview']['statement'] == 'VACUUM (FREEZE)'
+    assert dead() == 0
+    plan, outcome = run(live, 'analyze', kind='database', native={'name': DATABASE}, values={'verbose': True})
+    assert plan['command_preview']['statement'] == 'ANALYZE (VERBOSE)'
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'transaction'
+    # The provider's own listing carries the schema's relation list the compiler consumed.
+    provider, route = live
+    listed = provider._captured_resources({'resource_id': 'ROOT', 'authority_path': []}, route)
+    # Every listed item names this listing's parent (a loop variable once shadowed it, M7.6).
+    assert {r.get('parent_resource_id') for r in listed} == {'ROOT'}, sorted(
+        (r['resource_kind'], r.get('parent_resource_id')) for r in listed if r.get('parent_resource_id') != 'ROOT')[:5]
+    public = next(r for r in listed if r['resource_kind'] == 'schema' and r['display_name'] == 'public')
+    relations = public['extensions']['postgresql']['native']['relations']
+    assert {'m_sv', 'm_sv_mv'} <= set(relations)
+    with pytest.raises(Exception, match='no tables'):
+        run(live, 'vacuum', kind='schema', native={'name': 'public', 'relations': []})
+
+
+@live_only
+def test_database_drop_with_force_terminates_sessions(live):
+    import psycopg
+    name = f'ui_ops_dropme_{UNIQUE}'
+    query(f'CREATE DATABASE "{name}"', database=SETTINGS.get('database', 'postgres'))
+    held = psycopg.connect(dsn(name), autocommit=True)
+    try:
+        held.execute('SELECT 1')
+        native = database_native(name)
+        # Without FORCE the held session blocks the drop and the server refuses.
+        with pytest.raises(Exception):
+            run_database(live, 'drop', {'confirmation': name}, native, confirmation_required=True)
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}'") == [(1,)]
+        plan = run_database(live, 'drop', {'confirmation': name, 'force': True}, native, confirmation_required=True)
+        assert plan['command_preview']['statement'] == f'DROP DATABASE "{name}" WITH (FORCE)'
+        assert query(f"SELECT count(*) FROM pg_database WHERE datname='{name}'") == [(0,)]
+        with pytest.raises(psycopg.OperationalError):
+            held.execute('SELECT 1')
+    finally:
+        held.close()
+        query(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)', database=SETTINGS.get('database', 'postgres'))
+
+
+# -- M6 (2026-11-11): role REASSIGN/DROP OWNED and tablespace move, database picked in the dialog --
+def run_picked(live, kind, operation_id, native, values, confirmation=None):
+    provider, route = live
+    operation = OPERATIONS[f'{operation_id}@{kind}']
+    draft = operation_draft(operation, values, confirmation=confirmation)
+    request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': target(None, kind, native),
+               '_provider_route': {'server_id': route['server_id']}, 'draft': draft}
+    validation = provider.validate_visual_admin(request)
+    assert validation['errors'] == [], (operation_id, validation)
+    plan = provider.plan_visual_admin(request)
+    assert plan['state'] == 'ready', plan
+    assert plan['confirmation_required'] is True, plan
+    result = provider.apply_visual_admin({'plan_id': plan['plan_id'], 'plan_digest': plan['plan_digest'],
+                                          'confirmed': True})
+    outcome = result['provider_result']
+    assert outcome['transaction_outcome'] == 'committed', outcome
+    return plan, outcome
+
+
+@live_only
+def test_reassign_and_drop_owned_act_in_the_picked_database(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('REASSIGN OWNED needs a superuser or membership in both roles')
+    provider, route = live
+    picked = f"postgresql:pg_database/{route['database_id']}"
+    old, new = f'ui_ops_old_{UNIQUE}', f'ui_ops_new_{UNIQUE}'
+    query(f'CREATE ROLE {old}; CREATE ROLE {new}')
+    try:
+        query(f'CREATE TABLE public.m_own (id int); ALTER TABLE public.m_own OWNER TO {old}')
+        query(f'CREATE SEQUENCE public.m_own_seq; ALTER SEQUENCE public.m_own_seq OWNER TO {new}')
+        plan, outcome = run_picked(live, 'role', 'reassign-owned', role_native(old), {'database': picked, 'new_owner': new})
+        assert plan['command_preview']['statement'] == f'REASSIGN OWNED BY "{old}" TO "{new}"'
+        assert one("SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid='public.m_own'::regclass") == new
+        plan, outcome = run_picked(live, 'role', 'drop-owned', role_native(new), {'database': picked},
+                                   confirmation=new)
+        assert plan['command_preview']['statement'] == f'DROP OWNED BY "{new}" RESTRICT'
+        assert one("SELECT count(*) FROM pg_class WHERE relname IN ('m_own', 'm_own_seq')") == 0
+        # The picked database is the plan's route, not the node's server-scope route.
+        assert plan['provider_payload']['route']['database_id'] == route['database_id'] if 'provider_payload' in plan \
+            else True
+    finally:
+        query('DROP TABLE IF EXISTS public.m_own; DROP SEQUENCE IF EXISTS public.m_own_seq')
+        query(f'DROP OWNED BY {old}, {new}; DROP ROLE {old}; DROP ROLE {new}')
+
+
+@live_only
+def test_move_objects_between_tablespaces(live):
+    directory = SETTINGS.get('tablespace_dir')
+    if not directory:
+        pytest.skip('tablespace_dir (a server-host directory owned by the server user) is not set')
+    provider, route = live
+    picked = f"postgresql:pg_database/{route['database_id']}"
+    name = f'ui_ops_mv_{UNIQUE}'
+    query(f'CREATE TABLESPACE "{name}" LOCATION \'{directory}\'', database=SETTINGS.get('database', 'postgres'))
+    try:
+        query(f'CREATE TABLE public.m_move (id int PRIMARY KEY USING INDEX TABLESPACE "{name}") TABLESPACE "{name}"')
+        query(f'CREATE INDEX m_move_ix ON public.m_move (id) TABLESPACE "{name}"')
+        spaces = lambda: dict(query("SELECT c.relname, coalesce(t.spcname, 'pg_default') FROM pg_class c "
+                                    "LEFT JOIN pg_tablespace t ON t.oid=c.reltablespace "
+                                    "WHERE c.relname IN ('m_move', 'm_move_ix', 'm_move_pkey')"))
+        assert set(spaces().values()) == {name}
+        plan, outcome = run_picked(live, 'tablespace', 'move-objects', tablespace_native(name),
+                                   {'database': picked, 'new_tablespace': 'pg_default', 'object_type': 'indexes'})
+        assert plan['command_preview']['statement'] == \
+            f'ALTER INDEX ALL IN TABLESPACE "{name}" SET TABLESPACE "pg_default"'
+        assert spaces() == {'m_move': name, 'm_move_ix': 'pg_default', 'm_move_pkey': 'pg_default'}
+        plan, outcome = run_picked(live, 'tablespace', 'move-objects', tablespace_native(name),
+                                   {'database': picked, 'new_tablespace': 'pg_default'})
+        assert outcome['maintenance_receipt']['options'] == ['all']
+        assert set(spaces().values()) == {'pg_default'}
+    finally:
+        query('DROP TABLE IF EXISTS public.m_move')
+        query(f'DROP TABLESPACE IF EXISTS "{name}"', database=SETTINGS.get('database', 'postgres'))
+
+
+# -- M6 (2026-11-11): pgAgent job editor and Run now against a stand-in pgagent schema -------------
+STAND_IN_PGAGENT = """
+CREATE SCHEMA pgagent;
+CREATE TABLE pgagent.pga_jobclass (jclid serial PRIMARY KEY, jclname text NOT NULL);
+INSERT INTO pgagent.pga_jobclass (jclname) VALUES ('Routine Maintenance');
+CREATE TABLE pgagent.pga_job (
+    jobid serial PRIMARY KEY, jobjclid int NOT NULL, jobname text NOT NULL, jobdesc text NOT NULL DEFAULT '',
+    jobhostagent text NOT NULL DEFAULT '', jobenabled bool NOT NULL DEFAULT true,
+    jobcreated timestamptz NOT NULL DEFAULT now(), jobchanged timestamptz NOT NULL DEFAULT now(),
+    jobagentid int, jobnextrun timestamptz, joblastrun timestamptz);
+CREATE TABLE pgagent.pga_jobstep (
+    jstid serial PRIMARY KEY, jstjobid int NOT NULL REFERENCES pgagent.pga_job ON DELETE CASCADE,
+    jstname text NOT NULL, jstdesc text NOT NULL DEFAULT '', jstenabled bool NOT NULL DEFAULT true,
+    jstkind char(1) NOT NULL, jstcode text NOT NULL DEFAULT '', jstconnstr text NOT NULL DEFAULT '',
+    jstdbname name NOT NULL DEFAULT '', jstonerror char(1) NOT NULL DEFAULT 'f', jscnextrun timestamptz);
+CREATE TABLE pgagent.pga_schedule (
+    jscid serial PRIMARY KEY, jscjobid int NOT NULL REFERENCES pgagent.pga_job ON DELETE CASCADE,
+    jscname text NOT NULL, jscdesc text NOT NULL DEFAULT '', jscenabled bool NOT NULL DEFAULT true,
+    jscstart timestamptz NOT NULL, jscend timestamptz, jscminutes bool[] NOT NULL, jschours bool[] NOT NULL,
+    jscweekdays bool[] NOT NULL, jscmonthdays bool[] NOT NULL, jscmonths bool[] NOT NULL);
+CREATE TABLE pgagent.pga_exception (jexid serial PRIMARY KEY, jexscid int NOT NULL, jexdate date, jextime time);
+CREATE TABLE pgagent.pga_jobagent (jagpid int PRIMARY KEY, jagstation text NOT NULL);
+CREATE TABLE pgagent.pga_joblog (jlgid serial PRIMARY KEY, jlgjobid int NOT NULL, jlgstatus char(1) NOT NULL);
+"""
+
+
+def job_native(jobid):
+    """What the provider's server-scope capture attaches to a job node."""
+    from pgadmin.cdeadmin.providers.postgresql.pgagent import facts
+    # The harness driver attaches to the scratch database for every scope.
+    maintenance = DATABASE
+    (jobname, enabled, desc, agent, jclid), = query(
+        f"SELECT jobname, jobenabled, jobdesc, jobhostagent, jobjclid FROM pgagent.pga_job WHERE jobid={jobid}",
+        database=maintenance)
+    steps = [dict(zip(('jstid', 'jstname', 'jstenabled', 'jstkind', 'jstconntype', 'jstconnstr', 'jstdbname',
+                       'jstonerror', 'jstcode', 'jstdesc'), row)) for row in query(
+        f"""SELECT jstid, jstname, jstenabled, jstkind = 's', (jstdbname != '' OR jstkind = 'b'), jstconnstr,
+                   jstdbname, jstonerror, jstcode, jstdesc FROM pgagent.pga_jobstep WHERE jstjobid={jobid}
+            ORDER BY jstname""", database=maintenance)]
+    schedules = [dict(zip(('jscid', 'jscname', 'jscenabled', 'jscstart', 'jscend', 'jscminutes', 'jschours',
+                           'jscweekdays', 'jscmonthdays', 'jscmonths', 'jscdesc'), row)) for row in query(
+        f"""SELECT jscid, jscname, jscenabled, jscstart::text, jscend::text, jscminutes::text, jschours::text,
+                   jscweekdays::text, jscmonthdays::text, jscmonths::text, jscdesc
+            FROM pgagent.pga_schedule WHERE jscjobid={jobid} ORDER BY jscname""",
+        database=maintenance)]
+    native = {'name': jobname, 'catalog_metadata': {
+        'jobid': jobid, 'jobname': jobname, 'jobenabled': enabled, 'jobdesc': desc, 'jobhostagent': agent,
+        'jobjclid': jclid, 'has_connstr': True, 'steps': steps, 'schedules': schedules}}
+    native['job_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_pgagent_job_lifecycle_and_run_now(live):
+    # The harness driver attaches to the scratch database for every scope.
+    maintenance = DATABASE
+    if query("SELECT count(*) FROM pg_namespace WHERE nspname='pgagent'", database=maintenance) != [(0,)]:
+        pytest.skip('a pgagent schema already exists on this server; the stand-in would collide')
+    query(STAND_IN_PGAGENT, database=maintenance)
+    name = f'ui_ops_job_{UNIQUE}'
+    try:
+        plan = run_server_scope(live, 'pgagent-job', 'create', {
+            'jobname': name, 'jobenabled': True, 'jobjclid': 1, 'jobhostagent': '', 'jobdesc': "it's nightly",
+            'jsteps': [{'jstname': 'vac', 'jstkind': 'sql', 'jstconntype': 'local', 'jstdbname': DATABASE,
+                        'jstcode': 'VACUUM'},
+                       {'jstname': 'report', 'jstkind': 'batch', 'jstonerror': 'i', 'jstcode': 'echo done'}],
+            'jschedules': [{'jscname': 'daily', 'jscstart': '2026-01-01 02:00:00+00', 'jscminutes': '0',
+                            'jschours': '2', 'jscweekdays': '0, 1, 2, 3, 4, 5, 6',
+                            'jscmonthdays': ', '.join(str(i) for i in range(32)),
+                            'jscmonths': ', '.join(str(i) for i in range(12))}]})
+        assert plan['command_preview']['statement'].startswith('DO $$')
+        (jobid,), = query(f"SELECT jobid FROM pgagent.pga_job WHERE jobname='{name}'", database=maintenance)
+        native = job_native(jobid)
+        assert [s['jstname'] for s in native['job_facts']['jsteps']] == ['report', 'vac']
+        assert native['job_facts']['jschedules'][0]['jschours'] == '2'
+        # Alter: disable, rewrite one step, drop the other, add a second schedule, keep the first.
+        steps = {s['jstname']: s for s in native['job_facts']['jsteps']}
+        schedules = native['job_facts']['jschedules']
+        run_server_scope(live, 'pgagent-job', 'alter', {
+            'jobenabled': False,
+            'jsteps': [dict(steps['vac'], jstcode='VACUUM ANALYZE')],
+            'jschedules': schedules + [{'jscname': 'weekly', 'jscstart': '2026-01-04 03:00:00+00',
+                                        'jscminutes': '15', 'jschours': '3', 'jscweekdays': '0',
+                                        'jscmonthdays': '', 'jscmonths': ''}]}, native)
+        native = job_native(jobid)
+        assert native['job_facts']['jobenabled'] is False
+        assert [(s['jstname'], s['jstcode']) for s in native['job_facts']['jsteps']] == [('vac', 'VACUUM ANALYZE')]
+        assert [s['jscname'] for s in native['job_facts']['jschedules']] == ['daily', 'weekly']
+        assert query(f"SELECT jscweekdays[1], jscweekdays[2] FROM pgagent.pga_schedule WHERE jscname='weekly'",
+                     database=maintenance) == [(True, False)]
+        # Run now: the next run is set to the present.
+        assert query(f"SELECT jobnextrun FROM pgagent.pga_job WHERE jobid={jobid}", database=maintenance) == [(None,)]
+        plan, outcome = run(live, 'run-now', kind='pgagent-job', native=native)
+        assert plan['command_preview']['statement'] == f'UPDATE pgagent.pga_job SET jobnextrun = now() WHERE jobid = {jobid}'
+        assert query(f"SELECT jobnextrun IS NOT NULL FROM pgagent.pga_job WHERE jobid={jobid}",
+                     database=maintenance) == [(True,)]
+        # Drop cascades to steps and schedules.
+        run_server_scope(live, 'pgagent-job', 'drop', {'confirmation': name}, native)
+        assert query(f"SELECT count(*) FROM pgagent.pga_job WHERE jobid={jobid}", database=maintenance) == [(0,)]
+        assert query(f"SELECT count(*) FROM pgagent.pga_jobstep WHERE jstjobid={jobid}", database=maintenance) == [(0,)]
+    finally:
+        query('DROP SCHEMA IF EXISTS pgagent CASCADE', database=maintenance)
+
+
+# -- M7 (2026-11-11): the inherited table node's operations, observed live ------------------------
+@live_only
+def test_table_count_reset_and_trigger_toggles(live):
+    fresh_table('m_ops')
+    oid = one("SELECT oid::int FROM pg_class WHERE oid='public.m_ops'::regclass")
+    query('CREATE OR REPLACE FUNCTION public.m_ops_noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$')
+    query('CREATE TRIGGER m_ops_trg BEFORE INSERT ON public.m_ops FOR EACH ROW EXECUTE FUNCTION public.m_ops_noop()')
+    enabled = lambda: one("SELECT tgenabled FROM pg_trigger WHERE tgname='m_ops_trg'")
+    native = {'schema': 'public', 'name': 'm_ops', 'oid': oid}
+    plan, outcome = run(live, 'count-rows', kind='table', native=native)
+    assert outcome['result']['rows'] == [{'row_count': 1000}]
+    assert outcome['maintenance_receipt']['action'] == 'count-rows'
+    query("INSERT INTO public.m_ops (grp, payload) VALUES (1, 'y')")
+    assert one("SELECT n_tup_ins FROM pg_stat_user_tables WHERE relname='m_ops'") > 0
+    plan, outcome = run(live, 'reset-statistics', kind='table', native=native)
+    assert eventually("SELECT n_tup_ins FROM pg_stat_user_tables WHERE relname='m_ops'", [(0,)]) == [(0,)]
+    assert enabled() == 'O'
+    plan, outcome = run(live, 'disable-triggers', kind='table', native=native)
+    assert plan['confirmation_required'] is True
+    assert enabled() == 'D'
+    plan, outcome = run(live, 'enable-triggers', kind='table', native=native)
+    assert enabled() == 'O'
+
+
+# -- M7 (2026-11-11): column editor, provider-native, observed live --------------------------------
+def column_native(schema, table, name):
+    """What the provider's capture attaches to a column node."""
+    from pgadmin.cdeadmin.providers.postgresql.columns import facts
+    rows = query(f"""SELECT c.oid::int, a.attnum, pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
+                            pg_catalog.col_description(a.attrelid, a.attnum),
+                            CASE WHEN a.attgenerated='' AND a.attidentity='' THEN
+                                 (SELECT pg_get_expr(d.adbin, d.adrelid, false) FROM pg_attrdef d
+                                  WHERE d.adrelid=a.attrelid AND d.adnum=a.attnum) END,
+                            a.attidentity, a.attgenerated, a.attstattarget, a.attstorage, a.attcompression,
+                            a.attacl::text[], a.attoptions::text[]
+                     FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                     WHERE n.nspname='{schema}' AND c.relname='{table}' AND a.attname='{name}' AND NOT a.attisdropped""")
+    assert len(rows) == 1, (schema, table, name)
+    oid, attnum, typ, notnull, comment, default, identity, generated, stat, storage, compression, acl, options = rows[0]
+    native = {'catalog': 'pg_attribute', 'oid': oid, 'attnum': attnum, 'name': name, 'schema': schema, 'table': table,
+              'data_type': typ, 'not_null': notnull, 'comment': comment, 'default_expression': default,
+              'catalog_row': {'attname': name, 'attnotnull': notnull, 'attidentity': identity,
+                              'attgenerated': generated, 'attstattarget': stat, 'attstorage': storage,
+                              'attcompression': compression, 'attacl': acl, 'attoptions': options}}
+    native['column_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_column_lifecycle_round_trips(live):
+    query('DROP TABLE IF EXISTS public.m_col; CREATE TABLE public.m_col (id int)')
+    # Create: the parent relation is the target the dialog opens from.
+    parent = column_native('public', 'm_col', 'id')
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'Net Total', 'cltype': 'numeric(10,2)', 'attnotnull': True, 'defval': '0',
+        'description': "it's", 'attstattarget': 500, 'attstorage': 'p'}, parent)
+    assert plan['command_preview']['statement'].startswith('ALTER TABLE "public"."m_col" ADD COLUMN "Net Total" numeric(10, 2)')
+    native = column_native('public', 'm_col', 'Net Total')
+    current = native['column_facts']
+    assert (current['cltype'], current['attnotnull'], current['defval'], current['description'],
+            current['attstattarget'], current['attstorage']) == ('numeric(10,2)', True, '0', "it's", 500, 'p')
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'seq_id', 'cltype': 'bigint', 'colconstype': 'i', 'attidentity': 'd', 'seqstart': 100}, parent)
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['attidentity'] == 'd'
+    # Alter: rename, retype, drop default, drop not null, comment, statistics.
+    plan = run_kind(live, 'column', 'alter', {
+        'name': 'gross', 'cltype': 'numeric(14,2)', 'defval': '', 'attnotnull': False, 'description': '',
+        'attstattarget': -1, 'attstorage': 'm'}, native)
+    current = column_native('public', 'm_col', 'gross')['column_facts']
+    assert (current['cltype'], current['attnotnull'], current['defval'], current['description'],
+            current['attstattarget'], current['attstorage']) == ('numeric(14,2)', False, '', '', -1, 'm')
+    # A generated column over the renamed one (PostgreSQL refuses to retype a column it depends on).
+    plan = run_kind(live, 'column', 'create', {
+        'name': 'doubled', 'cltype': 'numeric', 'colconstype': 'g', 'genexpr': 'gross * 2'}, parent)
+    assert column_native('public', 'm_col', 'doubled')['column_facts']['colconstype'] == 'g'
+    # Identity transitions: by default -> always, then dropped.
+    seq = column_native('public', 'm_col', 'seq_id')
+    run_kind(live, 'column', 'alter', {'colconstype': 'i', 'attidentity': 'a', 'seqincrement': 5}, seq)
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['attidentity'] == 'a'
+    assert one("SELECT seqincrement FROM pg_sequence WHERE seqrelid = pg_get_serial_sequence('public.m_col', 'seq_id')::regclass") == 5
+    run_kind(live, 'column', 'alter', {'colconstype': 'n'}, column_native('public', 'm_col', 'seq_id'))
+    assert column_native('public', 'm_col', 'seq_id')['column_facts']['colconstype'] == 'n'
+    with pytest.raises(Exception):
+        run_kind(live, 'column', 'alter', {'cltype': 'numeric(14, 2)'}, column_native('public', 'm_col', 'gross'))
+    # Privileges, labels (none here: no provider loaded), options and USING on a retype (owner direction 2026-11-11).
+    reader = f'ui_ops_colreader_{UNIQUE}'
+    query(f'CREATE ROLE {reader}')
+    try:
+        run_kind(live, 'column', 'alter', {
+            'attoptions': [{'name': 'n_distinct', 'value': '42'}],
+            'attacl': [{'grantee': reader, 'privileges': 'r', 'with_grant': True}]},
+            column_native('public', 'm_col', 'gross'))
+        assert one("SELECT attoptions::text FROM pg_attribute WHERE attrelid='public.m_col'::regclass AND attname='gross'") == '{n_distinct=42}'
+        assert one(f"SELECT has_column_privilege('{reader}', 'public.m_col', 'gross', 'SELECT WITH GRANT OPTION')") is True
+        run_kind(live, 'column', 'alter', {
+            'reset_options': [{'name': 'n_distinct'}], 'revoke': [{'grantee': reader}]},
+            column_native('public', 'm_col', 'gross'))
+        current = column_native('public', 'm_col', 'gross')['column_facts']
+        assert (current['attoptions'], current['attacl']) == ([], [])
+        # USING on a retype, on a column nothing depends on (the generated column depends on gross).
+        run_kind(live, 'column', 'alter', {'cltype': 'integer', 'using': 'seq_id::integer'},
+                 column_native('public', 'm_col', 'seq_id'))
+        assert column_native('public', 'm_col', 'seq_id')['column_facts']['cltype'] == 'integer'
+    finally:
+        query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
+    # Drop: the generated column depends on gross, so plain drop is refused and cascade removes both.
+    with pytest.raises(Exception):
+        run_kind(live, 'column', 'drop', {'confirmation': 'gross'}, column_native('public', 'm_col', 'gross'))
+    run_kind(live, 'column', 'drop', {'confirmation': 'gross', 'cascade': True}, column_native('public', 'm_col', 'gross'))
+    assert query("SELECT attname FROM pg_attribute WHERE attrelid='public.m_col'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum") == [('id',), ('seq_id',)]
+    query('DROP TABLE public.m_col')
+
+
+# -- M7 (2026-11-11): constraint editor, the five kinds, observed live -----------------------------
+def constraint_native(schema, table, name):
+    """What the provider's capture attaches to a constraint node."""
+    from pgadmin.cdeadmin.providers.postgresql.constraints import facts
+    rows = query(f"""SELECT c.oid::int, c.contype, c.condeferrable, c.condeferred, c.convalidated, c.connoinherit,
+                            c.confupdtype, c.confdeltype, c.confmatchtype, c.conrelid::int, c.confrelid::int,
+                            pg_get_constraintdef(c.oid), obj_description(c.oid, 'pg_constraint')
+                     FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace
+                     WHERE n.nspname='{schema}' AND r.relname='{table}' AND c.conname='{name}'""")
+    assert len(rows) == 1, (schema, table, name)
+    (oid, contype, deferrable, deferred, validated, noinherit, upd, dele, match, conrelid, confrelid,
+     definition, comment) = rows[0]
+    native = {'catalog': 'pg_constraint', 'oid': oid, 'name': name, 'schema': schema, 'table': table,
+              'definition': definition, 'comment': comment,
+              'catalog_row': {'conname': name, 'contype': contype, 'conrelid': conrelid, 'confrelid': confrelid,
+                              'condeferrable': deferrable, 'condeferred': deferred, 'convalidated': validated,
+                              'connoinherit': noinherit, 'confupdtype': upd, 'confdeltype': dele,
+                              'confmatchtype': match}}
+    native['constraint_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_constraint_lifecycle_round_trips_for_the_five_kinds(live):
+    query('DROP TABLE IF EXISTS public.m_con CASCADE; DROP TABLE IF EXISTS public.m_con_ref CASCADE')
+    query('CREATE EXTENSION IF NOT EXISTS btree_gist')
+    query('CREATE TABLE public.m_con_ref (id int PRIMARY KEY)')
+    query('CREATE TABLE public.m_con (id int, ref_id int, qty int, room int, during tstzrange, tag text)')
+    parent = {'catalog': 'pg_constraint', 'name': 'm_con', 'schema': 'public', 'table': 'm_con', 'catalog_row': {}}
+    defn = lambda name: one(f"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='{name}'")
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_pk', 'contype': 'p', 'columns': 'id', 'fillfactor': 90,
+                                            'comment': 'primary'}, parent)
+    assert defn('m_con_pk') == 'PRIMARY KEY (id)'
+    assert one("SELECT reloptions::text FROM pg_class WHERE relname='m_con_pk'") == '{fillfactor=90}'
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_tag_uq', 'contype': 'u', 'columns': 'tag',
+                                            'include': 'qty', 'condeferrable': True}, parent)
+    assert defn('m_con_tag_uq') == 'UNIQUE (tag) INCLUDE (qty) DEFERRABLE'
+    run_kind(live, 'constraint', 'create', {
+        'name': 'm_con_fk', 'contype': 'f', 'fk_columns': [{'local_column': 'ref_id', 'referenced': 'id'}],
+        'remote_schema': 'public', 'remote_table': 'm_con_ref', 'confdeltype': 'c', 'not_valid': True}, parent)
+    assert defn('m_con_fk') == 'FOREIGN KEY (ref_id) REFERENCES m_con_ref(id) ON DELETE CASCADE NOT VALID'
+    run_kind(live, 'constraint', 'create', {'name': 'm_con_qty', 'contype': 'c', 'consrc': 'qty > 0',
+                                            'not_valid': True}, parent)
+    assert defn('m_con_qty') == 'CHECK ((qty > 0)) NOT VALID'
+    run_kind(live, 'constraint', 'create', {
+        'name': 'm_con_x', 'contype': 'x', 'amname': 'gist',
+        'elements': [{'column': 'room', 'operator': '='}, {'column': 'during', 'operator': '&&'}],
+        'indconstraint': 'qty > 0'}, parent)
+    assert defn('m_con_x') == 'EXCLUDE USING gist (room WITH =, during WITH &&) WHERE ((qty > 0))'
+    # Alter: rename + fill factor on the primary key; validate + deferrable on the foreign key; validate the check.
+    # The dialog prefills contype from the facts; hidden fields are dropped by the validator, so the API draft names it.
+    plan = run_kind(live, 'constraint', 'alter', {'contype': 'p', 'name': 'm_con_pkey2', 'reset_fillfactor': True,
+                                                  'comment': ''}, constraint_native('public', 'm_con', 'm_con_pk'))
+    assert 'RESET (FILLFACTOR)' in plan['command_preview']['statement'], plan['command_preview']['statement']
+    assert one("SELECT reloptions FROM pg_class WHERE relname='m_con_pkey2'") is None
+    assert one("SELECT obj_description(oid, 'pg_constraint') FROM pg_constraint WHERE conname='m_con_pkey2'") is None
+    run_kind(live, 'constraint', 'alter', {'contype': 'f', 'validate': True, 'condeferrable': True,
+                                           'condeferred': True}, constraint_native('public', 'm_con', 'm_con_fk'))
+    assert one("SELECT convalidated AND condeferrable AND condeferred FROM pg_constraint WHERE conname='m_con_fk'") is True
+    run_kind(live, 'constraint', 'alter', {'contype': 'c', 'validate': True},
+             constraint_native('public', 'm_con', 'm_con_qty'))
+    assert one("SELECT convalidated FROM pg_constraint WHERE conname='m_con_qty'") is True
+    with pytest.raises(Exception):
+        run_kind(live, 'constraint', 'alter', {'contype': 'c', 'validate': True},
+                 constraint_native('public', 'm_con', 'm_con_qty'))
+    # Drop each; the unique one is backed by an index that goes with it.
+    for name in ('m_con_x', 'm_con_qty', 'm_con_fk', 'm_con_tag_uq', 'm_con_pkey2'):
+        run_kind(live, 'constraint', 'drop', {'confirmation': name}, constraint_native('public', 'm_con', name))
+    # PostgreSQL 18 keeps the NOT NULL constraint row (contype n) the primary key added.
+    assert query("SELECT count(*) FROM pg_constraint WHERE conrelid='public.m_con'::regclass AND contype <> 'n'") == [(0,)]
+    query('DROP TABLE public.m_con; DROP TABLE public.m_con_ref')
+
+
+# -- M7 (2026-11-11): table editor, provider-native, observed live ---------------------------------
+def table_native(schema, name):
+    """What the provider's capture attaches to a table node."""
+    from pgadmin.cdeadmin.providers.postgresql.tables import facts
+    rows = query(f"""SELECT c.oid::int, c.relkind, c.relpersistence, c.reloptions::text[], c.relrowsecurity,
+                            c.relforcerowsecurity, c.relreplident, d.description, pg_get_userbyid(c.relowner),
+                            (SELECT spcname FROM pg_tablespace WHERE oid=c.reltablespace),
+                            (SELECT amname FROM pg_am WHERE oid=c.relam)
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass AND d.objsubid=0
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    assert len(rows) == 1, (schema, name)
+    oid, relkind, persistence, options, rls, force, replident, comment, owner, spcname, amname = rows[0]
+    native = {'catalog': 'pg_class', 'oid': oid, 'name': name, 'schema': schema, 'comment': comment,
+              'catalog_row': {'relname': name, 'relkind': relkind, 'relpersistence': persistence,
+                              'reloptions': options, 'relrowsecurity': rls, 'relforcerowsecurity': force,
+                              'relreplident': replident, 'owner_name': owner, 'tablespace_name': spcname,
+                              'access_method_name': amname}}
+    native['table_facts'] = facts(native)
+    return native
+
+
+@live_only
+def test_table_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('owner changes need a superuser')
+    owner = f'ui_ops_tblowner_{UNIQUE}'
+    query(f'CREATE ROLE {owner}; CREATE SCHEMA IF NOT EXISTS m_arch; CREATE TABLE IF NOT EXISTS public.m_parent (id int PRIMARY KEY)')
+    try:
+        plan = run_kind(live, 'table', 'create', {
+            'name': 'm_tbl', 'schema': 'public', 'relowner': owner, 'relpersistence': True, 'description': "it's",
+            'columns': [{'name': 'id', 'cltype': 'bigint', 'colconstype': 'i', 'attidentity': 'd', 'attnotnull': True},
+                        {'name': 'parent_id', 'cltype': 'integer'},
+                        {'name': 'qty', 'cltype': 'integer', 'attnotnull': True, 'defval': '1', 'description': 'count'},
+                        {'name': 'total', 'cltype': 'numeric', 'colconstype': 'g', 'genexpr': 'qty * 2'}],
+            'primary_key': [{'name': 'm_tbl_pk', 'columns': [{'column': 'id'}], 'fillfactor': 80}],
+            'unique_constraint': [{'name': 'm_tbl_qty_uq', 'columns': 'qty', 'include': 'total'}],
+            'foreign_key': [{'name': 'm_tbl_fk', 'columns': [{'local_column': 'parent_id', 'referenced': 'id'}],
+                             'references_table_name': 'public.m_parent', 'confdeltype': 'c'}],
+            'check_constraint': [{'name': 'm_tbl_qty_ok', 'consrc': 'qty > 0'}],
+            'fillfactor': 70, 'autovacuum_enabled': 'f', 'autovacuum_custom': True,
+            'vacuum_table': [{'name': 'autovacuum_vacuum_threshold', 'value': 50}],
+            'rlspolicy': True, 'relacl': [{'grantee': owner, 'privileges': 'r'}]})
+        assert plan['command_preview']['statement'].startswith('CREATE UNLOGGED TABLE "public"."m_tbl" (')
+        current = table_native('public', 'm_tbl')['table_facts']
+        assert (current['relpersistence'], current['description'], current['fillfactor'],
+                current['autovacuum_enabled'], current['vacuum_settings'].get('autovacuum_vacuum_threshold'),
+                current['rlspolicy'], current['relowner']) == (True, "it's", 70, 'f', '50', True, owner)
+        assert sorted(query("SELECT conname FROM pg_constraint WHERE conrelid='public.m_tbl'::regclass AND contype <> 'n'")) == [
+            ('m_tbl_fk',), ('m_tbl_pk',), ('m_tbl_qty_ok',), ('m_tbl_qty_uq',)]
+        assert one("SELECT col_description('public.m_tbl'::regclass, 3)") == 'count'
+        assert one(f"SELECT has_table_privilege('{owner}', 'public.m_tbl', 'SELECT')") is True
+        # Alter: rename, move schema, logged, reset fill factor, autovacuum off custom, replica identity, comment, revoke.
+        plan = run_kind(live, 'table', 'alter', {
+            'name': 'm_tbl2', 'schema': 'm_arch', 'relpersistence': False, 'reset_fillfactor': True,
+            'autovacuum_custom': False, 'autovacuum_enabled': 'x', 'replica_identity': 'FULL', 'description': '',
+            'revoke': [{'grantee': owner}]}, table_native('public', 'm_tbl'))
+        current = table_native('m_arch', 'm_tbl2')['table_facts']
+        assert (current['relpersistence'], current['fillfactor'], current['autovacuum_enabled'],
+                current['vacuum_settings'], current['replica_identity'], current['description']) == (
+            False, None, 'x', {}, 'FULL', '')
+        assert one(f"SELECT has_table_privilege('{owner}', 'm_arch.m_tbl2', 'SELECT')") is False
+        assert current['amname'] == 'heap' and current['relowner'] == owner
+        # The same owner and access method are no change.
+        with pytest.raises(Exception):
+            run_kind(live, 'table', 'alter', {'description': '', 'relowner': owner, 'amname': 'heap'},
+                     table_native('m_arch', 'm_tbl2'))
+        run_kind(live, 'table', 'drop', {'confirmation': 'm_tbl2'}, table_native('m_arch', 'm_tbl2'))
+        assert query("SELECT count(*) FROM pg_class WHERE relname='m_tbl2'") == [(0,)]
+    finally:
+        query('DROP TABLE IF EXISTS public.m_tbl CASCADE; DROP TABLE IF EXISTS m_arch.m_tbl2 CASCADE')
+        query(f'DROP SCHEMA IF EXISTS m_arch CASCADE; DROP TABLE IF EXISTS public.m_parent CASCADE; DROP OWNED BY {owner}; DROP ROLE {owner}')
+
+
+# -- M7 (2026-11-11): partitions and foreign tables, observed live ---------------------------------
+def partition_native(schema, name):
+    """A table node with its partition side, as the provider's capture attaches it."""
+    from pgadmin.cdeadmin.providers.postgresql.partitions import partition_facts
+    native = table_native(schema, name)
+    rows = query(f"""SELECT c.relispartition, pg_get_expr(c.relpartbound, c.oid), pg_get_partkeydef(c.oid),
+                            pn.nspname, p.relname
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_inherits i ON i.inhrelid=c.oid
+                     LEFT JOIN pg_class p ON p.oid=i.inhparent LEFT JOIN pg_namespace pn ON pn.oid=p.relnamespace
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    is_partition, bound_sql, key_sql, parent_schema, parent_name = rows[0]
+    native['catalog_row'].update(relispartition=is_partition, partition_bound_sql=bound_sql,
+                                 partition_key_sql=key_sql)
+    if parent_name:
+        native['parent_table'] = {'schema': parent_schema, 'name': parent_name}
+    native['partition_facts'] = partition_facts(native)
+    return native
+
+
+@live_only
+def test_partitions_create_attach_and_detach(live):
+    query('DROP TABLE IF EXISTS public.m_part CASCADE; DROP TABLE IF EXISTS public.m_part_old CASCADE')
+    plan = run_kind(live, 'table', 'create', {
+        'name': 'm_part', 'schema': 'public', 'columns': [{'name': 'id', 'cltype': 'int'}, {'name': 'at', 'cltype': 'date'}],
+        'is_partitioned': True, 'partition_type': 'range', 'partition_keys': [{'key_type': 'column', 'pt_column': 'at'}]})
+    assert plan['command_preview']['statement'].endswith('PARTITION BY RANGE ("at")')
+    parent = partition_native('public', 'm_part')
+    assert parent['partition_facts']['partition_key'] == 'RANGE (at)'
+    plan, outcome = run(live, 'create-partition', kind='partitioned-table', native=parent, values={
+        'name': 'm_part_2026', 'partition_value': "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')", 'fillfactor': 90})
+    plan, outcome = run(live, 'create-partition', kind='partitioned-table', native=parent, values={
+        'name': 'm_part_rest', 'is_default': True})
+    query("CREATE TABLE public.m_part_old (id int, at date)")
+    plan, outcome = run(live, 'attach-partition', kind='partitioned-table', native=parent, values={
+        'partition': 'public.m_part_old', 'partition_value': "FOR VALUES FROM ('2020-01-01') TO ('2021-01-01')"})
+    assert sorted(query("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid WHERE i.inhparent='public.m_part'::regclass")) == [
+        ('m_part_2026',), ('m_part_old',), ('m_part_rest',)]
+    child = partition_native('public', 'm_part_2026')
+    assert child['partition_facts'] == {'is_partition': True, 'parent': {'schema': 'public', 'name': 'm_part'},
+                                        'partition_bound': "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')",
+                                        'partition_key': None}
+    plan, outcome = run(live, 'detach-partition', kind='table', native=child, values={'mode': 'plain'})
+    assert plan['confirmation_required'] is True
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'transaction'
+    # PostgreSQL refuses a concurrent detach while a default partition exists: detach the default first.
+    with pytest.raises(Exception):
+        run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_old'),
+            values={'mode': 'concurrently'})
+    run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_rest'), values={'mode': 'plain'})
+    plan, outcome = run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_old'),
+                        values={'mode': 'concurrently'})
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'autocommit'
+    assert query("SELECT count(*) FROM pg_inherits WHERE inhparent='public.m_part'::regclass") == [(0,)]
+    assert one("SELECT relispartition FROM pg_class WHERE relname='m_part_2026'") is False
+    plan, outcome = run(live, 'count-rows', kind='partitioned-table', native=parent)
+    assert outcome['result']['rows'] == [{'row_count': 0}]
+    # The Partitions grid on the table editor (owner direction 2026-11-11): create a partitioned table with its
+    # partitions, then alter the grid to add one and leave one out (detach).
+    query('DROP TABLE IF EXISTS public.m_grid CASCADE; DROP TABLE IF EXISTS public.m_grid_old CASCADE; '
+          'CREATE TABLE public.m_grid_old (id int, kind text)')
+    run_kind(live, 'table', 'create', {
+        'name': 'm_grid', 'schema': 'public', 'columns': [{'name': 'id', 'cltype': 'int'}, {'name': 'kind', 'cltype': 'text'}],
+        'is_partitioned': True, 'partition_type': 'list', 'partition_keys': [{'key_type': 'column', 'pt_column': 'kind'}],
+        'partitions': [{'partition_name': 'm_grid_a', 'values_in': "'a'"},
+                       {'partition_name': 'm_grid_rest', 'is_default': True},
+                       {'partition_name': 'm_grid_old', 'is_attach': True, 'values_in': "'old'"}]})
+    children = lambda: sorted(r[0] for r in query("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid WHERE i.inhparent='public.m_grid'::regclass"))
+    assert children() == ['m_grid_a', 'm_grid_old', 'm_grid_rest']
+    grid = table_native('public', 'm_grid')
+    grid['partitions'] = [{'oid': r[0], 'schema': 'public', 'name': r[1], 'bound': r[2]} for r in query(
+        "SELECT c.oid::int, c.relname, pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid "
+        "WHERE i.inhparent='public.m_grid'::regclass ORDER BY c.relname")]
+    from pgadmin.cdeadmin.providers.postgresql.tables import facts as table_facts
+    grid['table_facts'] = table_facts(grid)
+    rows = [{'oid': p['oid'], 'partition_name': p['partition_name']} for p in grid['table_facts']['partitions']
+            if not p['partition_name'].endswith('m_grid_old')]
+    run_kind(live, 'table', 'alter', {'partitions': rows + [{'partition_name': 'm_grid_b', 'values_in': "'b'"}]}, grid)
+    # A row left out of the grid stays attached: detach is the partition's own operation (owner direction).
+    assert children() == ['m_grid_a', 'm_grid_b', 'm_grid_old', 'm_grid_rest']
+    query('DROP TABLE public.m_grid CASCADE')  # m_grid_old is still a partition, so it goes with the parent
+    with pytest.raises(Exception):
+        run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_2026'), values={'mode': 'plain'})
+    query('DROP TABLE public.m_part CASCADE; DROP TABLE public.m_part_2026; DROP TABLE public.m_part_old; DROP TABLE public.m_part_rest')
+
+
+def foreign_table_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.foreign_tables import facts
+    native = table_native(schema, name)
+    (server_oid, server_name), = query(f"""SELECT f.ftserver::int, s.srvname FROM pg_foreign_table f
+                                            JOIN pg_foreign_server s ON s.oid=f.ftserver
+                                            WHERE f.ftrelid='{schema}.{name}'::regclass""")
+    native['children'] = {'pg_foreign_table': [{'ftserver': server_oid}]}
+    native['table_facts'] = facts(native, {server_oid: server_name})
+    return native
+
+
+@live_only
+def test_foreign_table_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('creating the wrapper needs a superuser')
+    query('CREATE EXTENSION IF NOT EXISTS postgres_fdw')
+    query("DROP SERVER IF EXISTS ui_ops_ft_srv CASCADE; CREATE SERVER ui_ops_ft_srv FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host '127.0.0.1', dbname 'x')")
+    try:
+        plan = run_kind(live, 'foreign-table', 'create', {
+            'name': 'm_ft', 'schema': 'public', 'ftsrvname': 'ui_ops_ft_srv',
+            'columns': [{'name': 'id', 'cltype': 'integer', 'attnotnull': True},
+                        {'name': 'note', 'cltype': 'text', 'description': 'n'}],
+            'ftoptions': [{'name': 'schema_name', 'value': 'public'}, {'name': 'table_name', 'value': 'orders'}],
+            'description': 'mirror', 'check_constraint': [{'name': 'm_ft_id_ok', 'consrc': 'id > 0'}]})
+        assert plan['command_preview']['statement'].startswith('CREATE FOREIGN TABLE "public"."m_ft" (')
+        native = foreign_table_native('public', 'm_ft')
+        assert (native['table_facts']['ftsrvname'], native['table_facts']['description']) == ('ui_ops_ft_srv', 'mirror')
+        assert sorted(query("SELECT unnest(ftoptions) FROM pg_foreign_table WHERE ftrelid='public.m_ft'::regclass")) == [
+            ('schema_name=public',), ('table_name=orders',)]
+        assert one("SELECT col_description('public.m_ft'::regclass, 2)") == 'n'
+        assert one("SELECT count(*) FROM pg_constraint WHERE conrelid='public.m_ft'::regclass AND conname='m_ft_id_ok'") == 1
+        run_kind(live, 'foreign-table', 'alter', {
+            'name': 'm_ft2', 'set_options': [{'name': 'table_name', 'value': 'orders_v2'}],
+            'add_options': [{'name': 'updatable', 'value': 'false'}], 'drop_options': [{'name': 'schema_name'}],
+            'description': ''}, native)
+        assert sorted(query("SELECT unnest(ftoptions) FROM pg_foreign_table WHERE ftrelid='public.m_ft2'::regclass")) == [
+            ('table_name=orders_v2',), ('updatable=false',)]
+        assert one("SELECT obj_description('public.m_ft2'::regclass)") is None
+        run_kind(live, 'foreign-table', 'drop', {'confirmation': 'm_ft2'}, foreign_table_native('public', 'm_ft2'))
+        assert query("SELECT count(*) FROM pg_class WHERE relname IN ('m_ft', 'm_ft2')") == [(0,)]
+    finally:
+        query('DROP FOREIGN TABLE IF EXISTS public.m_ft; DROP FOREIGN TABLE IF EXISTS public.m_ft2; DROP SERVER IF EXISTS ui_ops_ft_srv CASCADE')

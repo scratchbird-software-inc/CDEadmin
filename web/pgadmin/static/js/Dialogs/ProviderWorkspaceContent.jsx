@@ -5434,7 +5434,8 @@ export default function ProviderWorkspaceContent({
     // write in the one in use; client_sql_dialect matters only where the
     // provider's language has dialects.
     post({action: 'browse_source', request: {resource_id: sourceRequest.resource_id,
-      language_profile: languageProfile, client_sql_dialect: clientSqlDialect}})
+      language_profile: languageProfile, client_sql_dialect: clientSqlDialect,
+      ...(sourceRequest.script ? {script: sourceRequest.script} : {})}})
       .then((browse) => {
         if (!latest()) return;
         const languageTitle = (workspace.languages || []).find((item) =>

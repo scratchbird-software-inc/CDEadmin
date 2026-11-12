@@ -199,7 +199,28 @@ def _server_children_url(gid, sid):
     return url_for('NODE-server.children_id', gid=gid, sid=sid)
 
 
-def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None):
+def _native_create_kinds(visual_admin):
+    """Database-scoped kinds whose create the provider edits natively
+    (owner decision 2026-11-11, option 1), for the database node's Create
+    submenu; server-scope kinds create from their own groups."""
+    kinds = []
+    # Server-scope kinds create from their own groups; relation-owned kinds
+    # create from the Columns, Constraints, Indexes, ... group of a table.
+    skipped = {'server', 'database', 'role', 'tablespace', 'pgagent-job',
+               'replica-node', 'column', 'constraint', 'index',
+               'partitioned-index', 'trigger', 'rule', 'row-policy',
+               'partition'}
+    for item in (visual_admin or {}).get('objects', []):
+        kind = item.get('resource_kind')
+        if kind in skipped:
+            continue
+        if 'create' in _native_editor_operations(visual_admin, kind):
+            kinds.append(kind)
+    return sorted(kinds)
+
+
+def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
+                        native_create_kinds=()):
     """Place every retained database directly below its owning endpoint."""
     nodes = []
     for entry in database_entries(catalog):
@@ -234,6 +255,7 @@ def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None):
             'children_url': _cde_navigator_url(gid, sid, state),
             'cde_database': entry['database'],
             'cde_database_active': entry['active'],
+            'cde_native_editor_kinds': list(native_create_kinds),
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
@@ -303,6 +325,22 @@ def _passwordless(server):
         return False
 
 
+def _native_editor_operations(visual_admin, resource_kind):
+    """Lifecycle operations the provider edits natively with a form of
+    its own (owner decision 2026-11-11, option 1): the client offers Edit
+    and Create for them even when the descriptor bundle has no form."""
+    for item in (visual_admin or {}).get('objects', []):
+        if item.get('resource_kind') == resource_kind:
+            return sorted(
+                operation['operation_id']
+                for operation in item.get('operations', [])
+                if operation.get('operation_id') in {'create', 'alter',
+                                                     'drop'} and
+                operation.get('execution_route') == 'provider-native' and
+                (operation.get('form') or {}).get('fields'))
+    return []
+
+
 def _unsupported_operations(visual_admin, resource_kind):
     """Operations the endpoint's provider reports as unsupported.
 
@@ -341,6 +379,18 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
     """
     nodes = []
     replication, pgagent = None, False
+    # The provider's visual-administration catalog flags the kinds it edits
+    # natively (owner decision 2026-11-11, option 1); absent on failure.
+    visual_admin = None
+    try:
+        endpoint_service = endpoint_service_for_app(current_app)
+        context, _endpoint, _root = endpoint_service.workspace(server)
+        binding = endpoint_service.provider_registry.resolve(context)
+        describe_admin = getattr(
+            binding.instance, 'visual_admin_descriptor', None)
+        visual_admin = describe_admin() if callable(describe_admin) else None
+    except Exception:
+        visual_admin = None
     if manager is not None:
         try:
             replication = get_replication_type(
@@ -384,6 +434,8 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
             'cde_resource_kind': resource_kind,
+            'cde_native_editor': _native_editor_operations(
+                visual_admin, resource_kind),
             'cde_context_actions': [],
         })
     return nodes
@@ -447,6 +499,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 'cde_engine_id': profile['engine_id'],
                 'cde_profile_id': profile['profile_id'],
                 'cde_resource_kind': value['resource_kind'],
+                'cde_native_editor': _native_editor_operations(
+                    snapshot.get('visual_admin'), value['resource_kind']),
                 'cde_context_actions': resource_group_context_actions(
                     profile, value['resource_kind'],
                     snapshot.get('visual_admin'),
@@ -510,6 +564,13 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'cde_context_actions': actions,
             'cde_unsupported_operations': _unsupported_operations(
                 snapshot.get('visual_admin'), value['resource_kind']),
+            'cde_native_editor': _native_editor_operations(
+                snapshot.get('visual_admin'), value['resource_kind']),
+            # The inherited debugger reads the routine's language off the
+            # node (M7); the provider's routine facts carry it.
+            'language': ((resource.get('extensions') or {}).get(
+                'postgresql', {}).get('native', {}).get(
+                'routine_facts') or {}).get('lanname'),
             'cde_section': value.get('section'),
         })
     return nodes if profile['engine_id'] == 'firebird' else sorted(nodes, key=lambda item: item['label'].casefold())
@@ -1162,11 +1223,22 @@ class ServerNode(PGChildNodeView):
         if not manager.connection().connected():
             return None
         try:
-            catalog = endpoint_service_for_app(
-                current_app).database_catalog(server)
+            endpoint_service = endpoint_service_for_app(current_app)
+            catalog = endpoint_service.database_catalog(server)
+            visual_admin = None
+            try:
+                context, _endpoint, _root = endpoint_service.workspace(server)
+                binding = endpoint_service.provider_registry.resolve(context)
+                describe_admin = getattr(
+                    binding.instance, 'visual_admin_descriptor', None)
+                visual_admin = (describe_admin()
+                                if callable(describe_admin) else None)
+            except Exception:
+                visual_admin = None
             nodes = _cde_database_nodes(
                 gid, sid, profile, catalog,
                 runtime_version=public_version(manager.version),
+                native_create_kinds=_native_create_kinds(visual_admin),
             )
             # M3 (2026-11-11): the inherited tree's server-level
             # collections, served by the provider navigator at server scope.
@@ -1439,7 +1511,13 @@ class ServerNode(PGChildNodeView):
                 **_runtime_node_fields(server),
                 runtime_verification_state=verification_state,
                 cde_engine_id=profile['engine_id'],
-                cde_context_actions=_cde_endpoint_actions(server, profile),
+                # On the provider tree the server node carries descriptor
+                # operations of its own (M6): an empty action list marks it
+                # as a provider context node for the client menu.
+                cde_context_actions=(
+                    _cde_endpoint_actions(server, profile)
+                    if _cde_endpoint_actions(server, profile) is not None
+                    else ([] if provider_tree_enabled(server) else None)),
                 username=server.username,
                 is_kerberos_conn=bool(server.kerberos_conn),
                 gss_authenticated=manager.gss_authenticated,
@@ -2258,8 +2336,20 @@ class ServerNode(PGChildNodeView):
             raise CryptKeyMissing
 
         # Some fields can be provided with service file so they are optional
+        generic_user_absent = False
         if provider_endpoint and not embedded_endpoint:
-            required_args.extend(['host', 'port', 'username'])
+            required_args.extend(['host', 'port'])
+            # The legacy username column: the descriptor server form sends
+            # what the registration contract declares (owner direction
+            # 2026-11-11, one registration path for every engine), so a
+            # contract username fills it and an engine without one gets a
+            # placeholder, as embedded endpoints do.
+            if data.get('username') is None:
+                # The route keeps no generic user in that case: a placeholder
+                # there would read as a credential to the provider.
+                generic_user_absent = True
+                data['username'] = (
+                    data.get('cde_route_username') or 'endpoint-profile')
             if endpoint_registration.get(
                 'database_targeting', {}
             ).get('mode', 'required') == 'required':
@@ -2374,7 +2464,8 @@ class ServerNode(PGChildNodeView):
                         route_configuration = {
                             'host': data.get('host'),
                             'port': data.get('port'),
-                            'user': data.get('username'),
+                            'user': (None if generic_user_absent
+                                     else data.get('username')),
                             'database': (
                                 None if registration_intent ==
                                 'create_database' else data.get('db')
@@ -3107,7 +3198,7 @@ class ServerNode(PGChildNodeView):
                         'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts',
                         'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts',
                         'resource_page', 'resource_inspect', 'resource_refresh',
-                        'browse_source', 'catalog_diagram', 'sql_builder',
+                        'browse_source', 'catalog_diagram', 'sql_builder', 'native_forms',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
@@ -3594,6 +3685,10 @@ class ServerNode(PGChildNodeView):
                     )
                 elif action == 'browse_source':
                     payload = service.browse_source(
+                        server, data.get('request') or {}
+                    )
+                elif action == 'native_forms':
+                    payload = service.native_forms(
                         server, data.get('request') or {}
                     )
                 elif action == 'catalog_diagram':

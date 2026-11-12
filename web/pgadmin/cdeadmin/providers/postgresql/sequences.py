@@ -14,7 +14,8 @@ on a private attachment, so the change commits or rolls back whole.
 from collections.abc import Mapping
 
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
+    PostgreSQLNativeAdminError, privilege_words,
+    _flag, _identifier, _literal, _name,
     _qualified,
 )
 
@@ -54,9 +55,11 @@ def facts(native):
         'name': native.get('name') or row.get('relname'),
         'comment': native.get('comment'),
         'cycled': bool(sequence.get('seqcycle', False)),
-        'relpersistence': ('unlogged' if row.get('relpersistence') == 'u'
-                           else 'logged'),
+        # The dialog's shape: true = unlogged (the compiler reads the
+        # words too).
+        'relpersistence': row.get('relpersistence') == 'u',
         'relacl': list(row.get('relacl') or []),
+        'seqowner': native.get('owner'),
     }
     for key, column in _NATIVE_COUNTERS.items():
         result[key] = sequence.get(column)
@@ -72,15 +75,8 @@ def _grantee(value):
 def _grant(qualified, row):
     if not isinstance(row, Mapping):
         raise PostgreSQLNativeAdminError('privilege rows must be objects')
-    codes = row.get('privileges')
-    if isinstance(codes, str):
-        codes = list(codes)
-    if not isinstance(codes, list) or not codes or any(
-            code not in PRIVILEGE_CODES for code in codes):
-        raise PostgreSQLNativeAdminError(
-            'privileges are codes among ' + ', '.join(PRIVILEGE_CODES))
-    words = [PRIVILEGE_CODES[code] for code in PRIVILEGE_CODES
-             if code in codes]
+    words = privilege_words(row.get('privileges'), PRIVILEGE_CODES,
+                            'sequence')
     privileges = 'ALL' if len(words) == len(PRIVILEGE_CODES) else ', '.join(
         words)
     option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''
@@ -124,14 +120,25 @@ def _owned_by(draft, schema, qualified):
     if _blank(table) or _blank(column):
         raise PostgreSQLNativeAdminError(
             'owned by needs both the table and the column')
+    # The dialog's table picker sends schema.table; a bare name is a
+    # table of the sequence's schema.
+    table = _name(table, 'owned table')
+    if '.' in table:
+        table_schema, _dot, table = table.rpartition('.')
+        owner = _qualified(_name(table_schema, 'schema'), table)
+    else:
+        owner = _qualified(schema, table)
     return [f'ALTER SEQUENCE {qualified} OWNED BY '
-            f'{_qualified(schema, table)}.{_identifier(column, "column")}']
+            f'{owner}.{_identifier(column, "column")}']
 
 
 def _persistence(draft):
+    """'unlogged' / 'logged', or the dialog's boolean (true = unlogged)."""
     value = draft.get('relpersistence')
     if _blank(value):
         return None
+    if isinstance(value, bool):
+        return 'unlogged' if value else 'logged'
     if value not in ('logged', 'unlogged'):
         raise PostgreSQLNativeAdminError(
             'persistence is logged or unlogged')
@@ -214,7 +221,8 @@ def _alter(native, draft):
     if clauses:
         statements.append(f'ALTER SEQUENCE {qualified} ' + ' '.join(clauses))
     persistence = _persistence(draft)
-    if persistence is not None and persistence != current['relpersistence']:
+    if persistence is not None and (persistence == 'unlogged') != \
+            current['relpersistence']:
         statements.append(f'ALTER SEQUENCE {qualified} SET '
                           + persistence.upper())
     if 'comment' in draft and (draft['comment'] or None) != (
@@ -261,71 +269,64 @@ def compile_operation(operation, native, draft):
     return {'statement': ';\n'.join(statements), 'read_only': False}
 
 
-def form(operation, field):
-    """Dialog fields; ids follow the inherited sequence dialog."""
-    def number(name, label, **kw):
-        return field(name, label, 'number', **kw)
+# The family form's field ids (sequence.form.json) by operation, plus the
+# provider's own flags and grids: the validator admits exactly these.
+_FAMILY_FIELDS = {
+    'create': ('name', 'seqowner', 'schema', 'comment', 'increment', 'start',
+               'minimum', 'no_minimum', 'maximum', 'no_maximum', 'cache',
+               'cycled', 'relpersistence', 'owned_table', 'owned_column',
+               'relacl', 'securities'),
+    'alter': ('name', 'oid', 'seqowner', 'schema', 'is_sys_obj', 'comment',
+              'current_value', 'increment', 'start', 'minimum', 'no_minimum',
+              'maximum', 'no_maximum', 'cache', 'cycled', 'relpersistence',
+              'owned_table', 'owned_column', 'owned_by_none', 'acl', 'relacl',
+              'securities', 'revoke'),
+}
+_GRIDS = ('relacl', 'securities', 'revoke')
+_BOOLEANS = ('no_minimum', 'no_maximum', 'cycled', 'relpersistence',
+             'owned_by_none', 'is_sys_obj')
+_NUMBERS = ('increment', 'start', 'minimum', 'maximum', 'cache',
+            'current_value')
 
-    def grid(name, label, columns, **kw):
-        return field(name, label, 'grid', columns=columns, **kw)
-    acl_columns = [
-        {'field_id': 'grantee', 'label': 'Grantee', 'control': 'text',
-         'required': True},
-        {'field_id': 'privileges', 'label': 'Privileges (r, w, U)',
-         'control': 'text', 'required': True},
-        {'field_id': 'with_grant', 'label': 'With grant option',
-         'control': 'boolean', 'required': False}]
-    label_columns = [
-        {'field_id': 'provider', 'label': 'Provider', 'control': 'text',
-         'required': True},
-        {'field_id': 'label', 'label': 'Security label', 'control': 'text',
-         'required': False}]
+
+def form(operation, field):
+    """The validator's view of the sequence family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs and grid columns."""
     if operation == 'drop':
-        fields = [field('cascade', 'Drop dependent objects', 'boolean'),
-                  field('confirmation', 'Type the sequence name to confirm',
-                        required=True)]
-    else:
-        alter = operation == 'alter'
-        fields = [field('name', 'Name', required=not alter),
-                  field('schema', 'Schema', required=not alter,
-                        help='In alter: a different schema runs SET SCHEMA.'),
-                  field('seqowner', 'Owner', help='OWNER TO'),
-                  field('comment', 'Comment')]
-        if alter:
-            fields.append(number('current_value', 'Current value', help=(
-                'Sets the value the next nextval returns (setval).')))
-        fields += [number('increment', 'Increment'),
-                   number('start', 'Start'),
-                   number('minimum', 'Minimum'),
-                   field('no_minimum', 'No minimum (NO MINVALUE)', 'boolean'),
-                   number('maximum', 'Maximum'),
-                   field('no_maximum', 'No maximum (NO MAXVALUE)', 'boolean'),
-                   number('cache', 'Cache', help='At least 1.'),
-                   field('cycled', 'Cycled', 'boolean'),
-                   field('relpersistence', 'Persistence', 'select', options=[
-                       {'value': 'logged', 'label': 'Logged'},
-                       {'value': 'unlogged',
-                        'label': 'Unlogged (PostgreSQL 15 and later)'}],
-                       **({} if alter else {'default': 'logged'})),
-                   field('owned_table', 'Owned by table',
-                         help='A table of the same schema (OWNED BY).'),
-                   field('owned_column', 'Owned by column'),
-                   grid('relacl', 'Grant privileges', acl_columns,
-                        help='Rows run GRANT; existing grants stay.'),
-                   grid('securities', 'Security labels', label_columns,
-                        help='Empty label unsets the provider\'s label.')]
-        if alter:
-            fields.insert(fields.index(next(
-                f for f in fields if f['field_id'] == 'relacl')),
-                field('owned_by_none', 'Detach from its column (OWNED BY '
-                      'NONE)', 'boolean'))
-            fields.append(grid('revoke', 'Revoke all privileges from',
-                               [acl_columns[0]]))
-            for item in fields:
-                if item['field_id'] in facts({}) and item['field_id'] not \
-                        in {'relacl', 'relpersistence'}:
-                    item['initial_value_path'] = [
-                        'sequence_facts', item['field_id']]
+        return {'form_id': 'postgresql-sequence-drop',
+                'form_key': 'native:postgresql:schema:sequence',
+                'title': 'Drop sequence', 'fields': [
+                    field('cascade', 'Drop dependent objects', 'boolean'),
+                    field('confirmation', 'Type the sequence name to confirm',
+                          required=True)]}
+    alter = operation == 'alter'
+    known = facts({})
+
+    def initial(key):
+        return {'initial_value_path': ['sequence_facts', key]} \
+            if alter and key in known and key != 'relacl' else {}
+    fields = []
+    for field_id in _FAMILY_FIELDS[operation]:
+        label = field_id.replace('_', ' ').capitalize()
+        if field_id in _GRIDS:
+            fields.append(field(field_id, label, 'grid', columns=[]))
+        elif field_id in _BOOLEANS:
+            fields.append(field(field_id, 'Unlogged' if field_id ==
+                                'relpersistence' else label, 'boolean',
+                                **initial(field_id)))
+        elif field_id in _NUMBERS or field_id == 'oid':
+            fields.append(field(field_id, label, 'number',
+                                **initial(field_id)))
+        else:
+            fields.append(field(field_id, label,
+                                required=field_id in ('name', 'schema')
+                                and not alter, **initial(field_id)))
     return {'form_id': f'postgresql-sequence-{operation}',
             'form_key': 'native:postgresql:schema:sequence',
-            'title': f'{operation.title()} sequence', 'fields': fields}
+            'title': f'{operation.title()} sequence', 'fields': fields,
+            'notes': ('A bound is removed through its No minimum / No '
+                      'maximum flag (a cleared number never reaches the '
+                      'provider); OWNED BY NONE detaches the sequence; '
+                      'privileges are stated and revoked through the Revoke '
+                      'grid.')}

@@ -1,0 +1,1069 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mongodb",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "complete",
+  "engine_tab_title": "MongoDB",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "server.read_preference_tags",
+      "reason": "provider control 'json' needs a typed control"
+    },
+    {
+      "concept": "server.auth_oidc_allowed_hosts",
+      "reason": "provider control 'json' needs a typed control"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "auth_mechanism",
+      "label": "Authentication mechanism",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_mechanism",
+      "group": "MongoDB authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "NONE",
+          "label": "No authentication"
+        },
+        {
+          "value": "DEFAULT",
+          "label": "Driver negotiation"
+        },
+        {
+          "value": "SCRAM-SHA-256",
+          "label": "SCRAM-SHA-256"
+        },
+        {
+          "value": "SCRAM-SHA-1",
+          "label": "SCRAM-SHA-1"
+        },
+        {
+          "value": "MONGODB-X509",
+          "label": "MONGODB-X509"
+        },
+        {
+          "value": "GSSAPI",
+          "label": "GSSAPI / Kerberos"
+        },
+        {
+          "value": "PLAIN",
+          "label": "SASL PLAIN"
+        },
+        {
+          "value": "MONGODB-AWS",
+          "label": "MONGODB-AWS"
+        },
+        {
+          "value": "MONGODB-OIDC",
+          "label": "MONGODB-OIDC"
+        }
+      ],
+      "default": "DEFAULT"
+    },
+    {
+      "field_id": "auth_source",
+      "label": "Authentication database",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_auth_source",
+      "group": "MongoDB authentication",
+      "required": false,
+      "help": "Defaults to the selected working database."
+    },
+    {
+      "field_id": "gssapi_service_name",
+      "label": "GSSAPI service name",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_gssapi_service_name",
+      "group": "MongoDB authentication",
+      "required": false,
+      "default": "mongodb",
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "GSSAPI"
+      }
+    },
+    {
+      "field_id": "gssapi_canonicalize_host_name",
+      "label": "Canonicalize GSSAPI host name",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "cde_route_gssapi_canonicalize_host_name",
+      "group": "MongoDB authentication",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "GSSAPI"
+      }
+    },
+    {
+      "field_id": "oidc_environment",
+      "label": "OIDC environment",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_oidc_environment",
+      "group": "MongoDB authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "callback",
+          "label": "Protected access-token callback"
+        },
+        {
+          "value": "azure",
+          "label": "Azure"
+        },
+        {
+          "value": "gcp",
+          "label": "GCP"
+        },
+        {
+          "value": "k8s",
+          "label": "Kubernetes"
+        },
+        {
+          "value": "test",
+          "label": "Test"
+        }
+      ],
+      "default": "callback",
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-OIDC"
+      }
+    },
+    {
+      "field_id": "oidc_token_resource",
+      "label": "OIDC token resource",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_oidc_token_resource",
+      "group": "MongoDB authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-OIDC"
+      }
+    },
+    {
+      "field_id": "auth_oidc_allowed_hosts",
+      "label": "OIDC callback allowed hosts (JSON array)",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_auth_oidc_allowed_hosts",
+      "group": "MongoDB authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-OIDC"
+      }
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "in": [
+          "DEFAULT",
+          "SCRAM-SHA-1",
+          "SCRAM-SHA-256",
+          "PLAIN",
+          "GSSAPI"
+        ]
+      }
+    },
+    {
+      "field_id": "aws_secret_access_key",
+      "label": "AWS secret access key",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_aws_secret_access_key",
+      "group": "MongoDB authentication",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-AWS"
+      }
+    },
+    {
+      "field_id": "aws_session_token",
+      "label": "AWS session token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_aws_session_token",
+      "group": "MongoDB authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-AWS"
+      }
+    },
+    {
+      "field_id": "oidc_access_token",
+      "label": "OIDC access token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_oidc_access_token",
+      "group": "MongoDB authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mechanism",
+        "equals": "MONGODB-OIDC"
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls",
+      "label": "Use TLS",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls",
+      "group": "MongoDB TLS",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "MongoDB TLS",
+      "required": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_certificate_key_file",
+      "label": "Client certificate and key file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_key_file",
+      "group": "MongoDB TLS",
+      "required": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_crl_file",
+      "label": "Certificate revocation list",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_crl_file",
+      "group": "MongoDB TLS",
+      "required": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_allow_invalid_certificates",
+      "label": "Allow invalid server certificates",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_allow_invalid_certificates",
+      "group": "MongoDB TLS",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_allow_invalid_hostnames",
+      "label": "Allow certificate hostname mismatch",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_allow_invalid_hostnames",
+      "group": "MongoDB TLS",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_disable_ocsp_endpoint_check",
+      "label": "Disable OCSP endpoint checks",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_disable_ocsp_endpoint_check",
+      "group": "MongoDB TLS",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "group": "MongoDB TLS",
+      "required": false,
+      "visible_when": {
+        "field": "tls",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "replica_set",
+      "label": "Replica set",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_replica_set",
+      "group": "MongoDB topology",
+      "required": false
+    },
+    {
+      "field_id": "direct_connection",
+      "label": "Direct connection",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_direct_connection",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "contact_points",
+      "label": "Additional seed endpoints (host:port, comma separated)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_contact_points",
+      "group": "MongoDB topology",
+      "required": false
+    },
+    {
+      "field_id": "dns_srv",
+      "label": "Use DNS SRV discovery",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_dns_srv",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "srv_service_name",
+      "label": "DNS SRV service name",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_srv_service_name",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": "mongodb",
+      "visible_when": {
+        "field": "dns_srv",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "srv_max_hosts",
+      "label": "Maximum SRV hosts (0 means unlimited)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_srv_max_hosts",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 10000,
+      "visible_when": {
+        "field": "dns_srv",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "load_balanced",
+      "label": "Load-balanced deployment",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_load_balanced",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "compressors",
+      "label": "Compressors (snappy,zlib,zstd)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_compressors",
+      "group": "MongoDB compression",
+      "required": false
+    },
+    {
+      "field_id": "zlib_compression_level",
+      "label": "Zlib compression level",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_zlib_compression_level",
+      "group": "MongoDB compression",
+      "required": false,
+      "default": -1,
+      "min": -1,
+      "max": 9
+    },
+    {
+      "field_id": "local_threshold_ms",
+      "label": "Latency window for eligible servers (ms)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_local_threshold_ms",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": 15,
+      "min": 0,
+      "max": 600000
+    },
+    {
+      "field_id": "session_causal_consistency",
+      "label": "Causally consistent sessions",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_session_causal_consistency",
+      "group": "MongoDB session",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "session_snapshot",
+      "label": "Snapshot sessions",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_session_snapshot",
+      "group": "MongoDB session",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "connect_timeout_ms",
+      "label": "Connect timeout (ms)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout_ms",
+      "group": "MongoDB timeouts",
+      "required": false,
+      "default": 5000,
+      "min": 100,
+      "max": 120000
+    },
+    {
+      "field_id": "server_selection_timeout_ms",
+      "label": "Server selection timeout (ms)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_server_selection_timeout_ms",
+      "group": "MongoDB timeouts",
+      "required": false,
+      "default": 5000,
+      "min": 100,
+      "max": 120000
+    },
+    {
+      "field_id": "socket_timeout_ms",
+      "label": "Socket timeout (ms)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_socket_timeout_ms",
+      "group": "MongoDB timeouts",
+      "required": false,
+      "default": 30000,
+      "min": 100,
+      "max": 600000
+    },
+    {
+      "field_id": "operation_timeout_ms",
+      "label": "Client-side operation timeout (ms; 0 disables)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_operation_timeout_ms",
+      "group": "MongoDB timeouts",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "min_pool_size",
+      "label": "Minimum pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_min_pool_size",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 10000
+    },
+    {
+      "field_id": "max_pool_size",
+      "label": "Maximum pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_pool_size",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 100,
+      "min": 1,
+      "max": 10000
+    },
+    {
+      "field_id": "max_connecting",
+      "label": "Maximum concurrent connection establishments",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_connecting",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 2,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "field_id": "max_idle_time_ms",
+      "label": "Maximum idle connection time (ms; 0 disables)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_idle_time_ms",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "wait_queue_timeout_ms",
+      "label": "Pool wait-queue timeout (ms; 0 disables)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_wait_queue_timeout_ms",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 3600000
+    },
+    {
+      "field_id": "wait_queue_multiple",
+      "label": "Maximum waiters per pool connection",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_wait_queue_multiple",
+      "group": "MongoDB pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 10000
+    },
+    {
+      "field_id": "heartbeat_frequency_ms",
+      "label": "Topology heartbeat frequency (ms)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_heartbeat_frequency_ms",
+      "group": "MongoDB topology",
+      "required": false,
+      "default": 10000,
+      "min": 500,
+      "max": 120000
+    },
+    {
+      "field_id": "server_monitoring_mode",
+      "label": "Server monitoring mode",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_server_monitoring_mode",
+      "group": "MongoDB topology",
+      "required": false,
+      "options": [
+        {
+          "value": "auto",
+          "label": "Automatic"
+        },
+        {
+          "value": "stream",
+          "label": "Streaming"
+        },
+        {
+          "value": "poll",
+          "label": "Polling"
+        }
+      ],
+      "default": "auto"
+    },
+    {
+      "field_id": "server_api_version",
+      "label": "Stable API version",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_server_api_version",
+      "group": "MongoDB session",
+      "required": false,
+      "options": [
+        {
+          "value": "1",
+          "label": "Server API v1"
+        }
+      ]
+    },
+    {
+      "field_id": "server_api_strict",
+      "label": "Stable API strict mode",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_server_api_strict",
+      "group": "MongoDB session",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "server_api_version",
+        "equals": "1"
+      }
+    },
+    {
+      "field_id": "server_api_deprecation_errors",
+      "label": "Stable API deprecation errors",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_server_api_deprecation_errors",
+      "group": "MongoDB session",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "server_api_version",
+        "equals": "1"
+      }
+    },
+    {
+      "field_id": "tz_aware",
+      "label": "Timezone-aware date values",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tz_aware",
+      "group": "MongoDB session",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "uuid_representation",
+      "label": "UUID representation",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_uuid_representation",
+      "group": "MongoDB session",
+      "required": false,
+      "options": [
+        {
+          "value": "unspecified",
+          "label": "Unspecified"
+        },
+        {
+          "value": "standard",
+          "label": "Standard"
+        },
+        {
+          "value": "pythonLegacy",
+          "label": "Python legacy"
+        },
+        {
+          "value": "javaLegacy",
+          "label": "Java legacy"
+        },
+        {
+          "value": "csharpLegacy",
+          "label": "C# legacy"
+        }
+      ],
+      "default": "standard"
+    },
+    {
+      "field_id": "unicode_decode_error_handler",
+      "label": "Unicode decode error policy",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_unicode_decode_error_handler",
+      "group": "MongoDB session",
+      "required": false,
+      "options": [
+        {
+          "value": "strict",
+          "label": "Strict"
+        },
+        {
+          "value": "replace",
+          "label": "Replace"
+        },
+        {
+          "value": "ignore",
+          "label": "Ignore"
+        }
+      ],
+      "default": "strict"
+    },
+    {
+      "field_id": "read_preference",
+      "label": "Read preference",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_read_preference",
+      "group": "MongoDB consistency",
+      "required": false,
+      "options": [
+        {
+          "value": "primary",
+          "label": "Primary"
+        },
+        {
+          "value": "primaryPreferred",
+          "label": "Primary preferred"
+        },
+        {
+          "value": "secondary",
+          "label": "Secondary"
+        },
+        {
+          "value": "secondaryPreferred",
+          "label": "Secondary preferred"
+        },
+        {
+          "value": "nearest",
+          "label": "Nearest"
+        }
+      ],
+      "default": "primary"
+    },
+    {
+      "field_id": "read_preference_tags",
+      "label": "Read preference tag sets (JSON array)",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_read_preference_tags",
+      "group": "MongoDB consistency",
+      "required": false
+    },
+    {
+      "field_id": "max_staleness_seconds",
+      "label": "Maximum replica staleness (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_max_staleness_seconds",
+      "group": "MongoDB consistency",
+      "required": false,
+      "min": 90,
+      "max": 100000000
+    },
+    {
+      "field_id": "read_concern_level",
+      "label": "Read concern",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_read_concern_level",
+      "group": "MongoDB consistency",
+      "required": false,
+      "options": [
+        {
+          "value": "local",
+          "label": "Local"
+        },
+        {
+          "value": "available",
+          "label": "Available"
+        },
+        {
+          "value": "majority",
+          "label": "Majority"
+        },
+        {
+          "value": "linearizable",
+          "label": "Linearizable"
+        },
+        {
+          "value": "snapshot",
+          "label": "Snapshot"
+        }
+      ],
+      "default": "local"
+    },
+    {
+      "field_id": "write_concern",
+      "label": "Write concern (number or majority)",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_write_concern",
+      "group": "MongoDB consistency",
+      "required": false,
+      "default": "majority"
+    },
+    {
+      "field_id": "write_concern_timeout_ms",
+      "label": "Write concern timeout (ms; 0 disables)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_write_concern_timeout_ms",
+      "group": "MongoDB consistency",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "journal",
+      "label": "Require journal acknowledgement",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_journal",
+      "group": "MongoDB consistency",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "transaction_read_concern",
+      "label": "Default transaction read concern",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_read_concern",
+      "group": "MongoDB transaction",
+      "required": false,
+      "options": [
+        {
+          "value": "server",
+          "label": "Server default"
+        },
+        {
+          "value": "local",
+          "label": "Local"
+        },
+        {
+          "value": "majority",
+          "label": "Majority"
+        },
+        {
+          "value": "snapshot",
+          "label": "Snapshot"
+        }
+      ],
+      "default": "server"
+    },
+    {
+      "field_id": "transaction_write_concern",
+      "label": "Default transaction write concern",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_transaction_write_concern",
+      "group": "MongoDB transaction",
+      "required": false
+    },
+    {
+      "field_id": "transaction_max_commit_time_ms",
+      "label": "Maximum commit time (ms)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_transaction_max_commit_time_ms",
+      "group": "MongoDB transaction",
+      "required": false,
+      "min": 1,
+      "max": 86400000
+    },
+    {
+      "field_id": "retry_reads",
+      "label": "Retry reads",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_retry_reads",
+      "group": "MongoDB reconnection",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "retry_writes",
+      "label": "Retry writes under driver retryable-write rules",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_retry_writes",
+      "group": "MongoDB reconnection",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "enable_overload_retargeting",
+      "label": "Retarget reads from overloaded servers",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_enable_overload_retargeting",
+      "group": "MongoDB reconnection",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "max_adaptive_retries",
+      "label": "Maximum adaptive read retries",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_max_adaptive_retries",
+      "group": "MongoDB reconnection",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "field_id": "fsync",
+      "label": "Require filesystem sync acknowledgement",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_fsync",
+      "group": "MongoDB consistency",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "appname",
+      "label": "Application name",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_appname",
+      "group": "MongoDB advanced",
+      "required": false,
+      "default": "ScratchRobin"
+    },
+    {
+      "field_id": "tool_workspace",
+      "label": "Backup/import/export workspace",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_tool_workspace",
+      "group": "MongoDB operational tools",
+      "required": false,
+      "help": "Absolute non-root directory explicitly granted to provider-owned tools."
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for mongodb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-11): registered through the servers API with this form's payload (what the descriptor registration host sends) against the pinned MongoDB 8.2.6 demo, verified at create, read back and removed (Claude-temp-directory/2026-11-10-pg-m2/live/api-register-engines.py); contract round trip in tools/tests/test_ui_descriptor_server_forms.py. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
+}

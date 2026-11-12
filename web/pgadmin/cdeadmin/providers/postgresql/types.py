@@ -7,20 +7,34 @@ DROP NOT NULL / SET | DROP DEFAULT / ADD, DROP, VALIDATE CONSTRAINT / SET
 SCHEMA; DROP DOMAIN. Types: CREATE TYPE AS (composite), AS ENUM, AS RANGE
 with owner and comment; ALTER TYPE RENAME TO / OWNER TO / SET SCHEMA, enum
 ADD VALUE and RENAME VALUE, composite ADD / DROP / RENAME / ALTER
-ATTRIBUTE; DROP TYPE. External (base) and shell types, type privileges and
-security labels stay with the inherited dialog. Field ids follow the
-inherited dialogs (``domain.ui.js``, ``type.ui.js``).
+ATTRIBUTE; DROP TYPE. Owner direction 2026-11-11: every field of the type
+family form is admitted and compiled: external (base) types with their
+support functions and storage properties, shell types, USAGE privileges
+(stated, revoked through a grid), security labels, a domain's length and
+precision, and the dialog's full-set grids (enumeration labels, composite
+members, domain constraints) are diffed against the facts. A multirange is
+created with its range type and is refused on its own. Field ids follow
+the inherited dialogs (``domain.ui.js``, ``type.ui.js``).
 
 Type names are admitted by PostgreSQL's own parser (``_type_reference``),
 expressions as the policy editor admits them.
 """
 from .native_admin import (
     PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
-    _qualified, _type_reference,
+    _qualified, _type_reference, privilege_words,
 )
 from .policies import expression
 
-TYPE_KINDS = {'c': 'composite', 'e': 'enum', 'r': 'range'}
+TYPE_KINDS = {'c': 'composite', 'e': 'enum', 'r': 'range', 'b': 'external',
+              'p': 'shell', 'm': 'multirange'}
+PRIVILEGE_CODES = {'U': 'USAGE'}
+_ALIGNMENTS = {'c': 'char', 's': 'int2', 'i': 'int4', 'd': 'double'}
+_STORAGES = {'p': 'plain', 'e': 'external', 'm': 'main', 'x': 'extended'}
+_EXTERNAL_FUNCTIONS = (('typinput', 'INPUT'), ('typoutput', 'OUTPUT'),
+                       ('typreceive', 'RECEIVE'), ('typsend', 'SEND'),
+                       ('typmodin', 'TYPMOD_IN'), ('typmodout', 'TYPMOD_OUT'),
+                       ('typanalyze', 'ANALYZE'),
+                       ('typsubscript', 'SUBSCRIPT'))
 _RANGE_OPTIONS = (('opcname', 'SUBTYPE_OPCLASS'), ('collname', 'COLLATION'),
                   ('rngcanonical', 'CANONICAL'),
                   ('rngsubdiff', 'SUBTYPE_DIFF'),
@@ -69,6 +83,7 @@ def domain_facts(native, constraints=None):
                                'convalidated', True))})
     return {'name': native.get('name') or row.get('typname'),
             'basensp': native.get('schema'),
+            'owner': native.get('owner'),
             'typnotnull': bool(row.get('typnotnull', False)),
             'typdefault': row.get('typdefault'),
             'description': native.get('comment'),
@@ -92,11 +107,60 @@ def type_facts(native, attributes=None):
                  if not item.get('attisdropped')]
     return {'name': native.get('name') or row.get('typname'),
             'schema': native.get('schema'),
+            'typeowner': native.get('owner'),
             'typtype': kind,
             'kind': TYPE_KINDS.get(kind, 'other'),
             'enum': [{'label': item.get('enumlabel')} for item in enum],
             'composite': composite,
+            'typacl': list(row.get('typacl') or []),
             'description': native.get('comment')}
+
+
+def _grantee(value):
+    value = _name(value, 'grantee')
+    return 'PUBLIC' if value.upper() == 'PUBLIC' else _identifier(
+        value, 'grantee')
+
+
+def _extras(keyword, qualified, draft, alter):
+    """USAGE grants, revocations and security labels; stated, never
+    diffed. ``keyword`` is DOMAIN or TYPE."""
+    statements = []
+    if alter:
+        for row in _rows(draft, 'revoke', 'revoked grantees'):
+            statements.append(f'REVOKE ALL ON TYPE {qualified} FROM '
+                              + _grantee(row.get('grantee')))
+    for row in _rows(draft, 'typacl', 'privileges'):
+        privilege_words(row.get('privileges'), PRIVILEGE_CODES, 'type')
+        option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''
+        statements.append(f'GRANT USAGE ON TYPE {qualified} TO '
+                          f'{_grantee(row.get("grantee"))}{option}')
+    for row in _rows(draft, 'seclabels', 'security labels'):
+        provider = _name(row.get('provider'), 'provider')
+        label = row.get('label')
+        if not isinstance(label, str) or not label:
+            raise PostgreSQLNativeAdminError('a security label needs text')
+        statements.append(f'SECURITY LABEL FOR '
+                          f'{_identifier(provider, "provider")} ON {keyword} '
+                          f'{qualified} IS {_literal(label, "label")}')
+    return statements
+
+
+def _with_modifiers(type_text, row):
+    """The dialog's length and precision beside a type without them."""
+    text = str(type_text or '')
+    length, precision = row.get('tlength', row.get('typlen')), row.get(
+        'precision')
+    if '(' in text or _blank(length):
+        return text
+    for value in (length, precision):
+        if value is not None and value != '' and (
+                isinstance(value, bool) or not isinstance(value, int)
+                or value < 0):
+            raise PostgreSQLNativeAdminError(
+                'length and precision are whole numbers')
+    return text + (f'({length}, {precision})' if not _blank(precision)
+                   else f'({length})')
 
 
 # -- domains ------------------------------------------------------------------
@@ -116,7 +180,8 @@ def _create_domain(draft):
     schema = _name(draft.get('basensp'), 'schema')
     qualified = _qualified(schema, draft.get('name'))
     statement = (f'CREATE DOMAIN {qualified} AS '
-                 + _type_reference(draft.get('basetype'), 'base type'))
+                 + _type_reference(_with_modifiers(draft.get('basetype'),
+                                                   draft), 'base type'))
     if not _blank(draft.get('collname')):
         statement += ' COLLATE ' + _reference(draft['collname'],
                                               'collation')
@@ -134,7 +199,33 @@ def _create_domain(draft):
     if not _blank(draft.get('description')):
         statements.append(f'COMMENT ON DOMAIN {qualified} IS '
                           + _literal(str(draft['description']), 'comment'))
+    statements.extend(_extras('DOMAIN', qualified, draft, False))
     return statements
+
+
+def _constraint_changes(draft, current):
+    """The dialog's full Constraints grid against the facts: new rows
+    add, missing names drop, a validated flag turned on validates; a
+    changed expression is refused (fixed once created)."""
+    if 'constraints' not in draft:
+        return [], [], []
+    rows = _rows(draft, 'constraints', 'constraints')
+    held = {item['conname']: item for item in current['constraints']}
+    seen, added, validated = set(), [], []
+    for row in rows:
+        name = row.get('conname')
+        if _blank(name) or name not in held:
+            added.append(row)
+            continue
+        seen.add(name)
+        if (row.get('consrc') or '') not in ('', held[name]['consrc']):
+            raise PostgreSQLNativeAdminError(
+                f'the check expression of {name!r} is fixed once created; '
+                'drop and add the constraint')
+        if row.get('convalidated') is True and not held[name]['convalidated']:
+            validated.append(name)
+    dropped = [name for name in held if name not in seen]
+    return added, dropped, validated
 
 
 def _alter_domain(native, draft):
@@ -158,23 +249,37 @@ def _alter_domain(native, draft):
         statements.append(f'ALTER DOMAIN {qualified} ' + (
             'DROP DEFAULT' if _blank(draft['typdefault']) else
             'SET DEFAULT ' + expression(draft['typdefault'], 'default')))
-    if not _blank(draft.get('owner')):
+    if not _blank(draft.get('owner')) and draft['owner'] != current.get(
+            'owner'):
         statements.append(f'ALTER DOMAIN {qualified} OWNER TO '
                           + _identifier(draft['owner'], 'owner'))
+    added, dropped, validated = _constraint_changes(draft, current)
+    for name in dropped:
+        statements.append(f'ALTER DOMAIN {qualified} DROP CONSTRAINT '
+                          + _identifier(name, 'constraint'))
     for row in _rows(draft, 'drop_constraints', 'dropped constraints'):
         statements.append(f'ALTER DOMAIN {qualified} DROP CONSTRAINT '
                           + _identifier(row.get('conname'), 'constraint'))
+    for name in validated:
+        statements.append(f'ALTER DOMAIN {qualified} VALIDATE CONSTRAINT '
+                          + _identifier(name, 'constraint'))
     for row in _rows(draft, 'validate_constraints',
                      'validated constraints'):
         statements.append(f'ALTER DOMAIN {qualified} VALIDATE CONSTRAINT '
                           + _identifier(row.get('conname'), 'constraint'))
-    for row in _rows(draft, 'add_constraints', 'added constraints'):
+    for row in _rows(draft, 'rename_constraints', 'renamed constraints'):
+        # The inherited domain-constraint node's own edit (M5 review).
+        statements.append(f'ALTER DOMAIN {qualified} RENAME CONSTRAINT '
+                          + _identifier(row.get('conname'), 'constraint')
+                          + ' TO ' + _identifier(row.get('to'), 'new name'))
+    for row in added + _rows(draft, 'add_constraints', 'added constraints'):
         statements.append(_check(qualified, row))
     if 'description' in draft and (draft['description'] or None) != (
             current['description'] or None):
         text = 'NULL' if _blank(draft['description']) else _literal(
             str(draft['description']), 'comment')
         statements.append(f'COMMENT ON DOMAIN {qualified} IS {text}')
+    statements.extend(_extras('DOMAIN', qualified, draft, True))
     new_schema = draft.get('basensp')
     if not _blank(new_schema) and new_schema != schema:
         statements.append(f'ALTER DOMAIN {qualified} SET SCHEMA '
@@ -198,7 +303,8 @@ def _drop(keyword, current, draft):
 
 def _attribute(row):
     return (f'{_identifier(row.get("member_name"), "member name")} '
-            + _type_reference(row.get('type'), 'member type')
+            + _type_reference(_with_modifiers(row.get('type'), row),
+                              'member type')
             + ('' if _blank(row.get('collation')) else
                ' COLLATE ' + _reference(row['collation'], 'collation')))
 
@@ -231,18 +337,26 @@ def _create_type(draft):
         statement = f'CREATE TYPE {qualified} AS ENUM (' + ', '.join(
             _literal(label, 'enum label') for label in labels) + ')'
     elif kind == 'r':
-        options = ['SUBTYPE = ' + _type_reference(draft.get('typname'),
-                                                 'subtype')]
+        options = ['SUBTYPE = '
+                   + _type_reference(draft.get('typname'), 'subtype')]
         for key, keyword in _RANGE_OPTIONS:
             if not _blank(draft.get(key)):
                 options.append(f'{keyword} = ' + _reference(draft[key],
                                                             keyword))
         statement = f'CREATE TYPE {qualified} AS RANGE (' + ', '.join(
             options) + ')'
+    elif kind == 'p':
+        statement = f'CREATE TYPE {qualified}'
+    elif kind == 'b':
+        statement = _external(qualified, draft)
+    elif kind == 'm':
+        raise PostgreSQLNativeAdminError(
+            'a multirange is created with its range type (multirange type '
+            'name); it cannot be created on its own')
     else:
         raise PostgreSQLNativeAdminError(
-            'type is composite (c), enumeration (e) or range (r); external '
-            'and shell types stay with the inherited dialog')
+            'type is composite (c), enumeration (e), range (r), external '
+            '(b) or shell (p)')
     statements = [statement]
     if not _blank(draft.get('typeowner')):
         statements.append(f'ALTER TYPE {qualified} OWNER TO '
@@ -250,7 +364,106 @@ def _create_type(draft):
     if not _blank(draft.get('description')):
         statements.append(f'COMMENT ON TYPE {qualified} IS '
                           + _literal(str(draft['description']), 'comment'))
+    statements.extend(_extras('TYPE', qualified, draft, False))
     return statements
+
+
+def _external(qualified, draft):
+    """CREATE TYPE name (INPUT = ..., OUTPUT = ..., ...) from the external
+    variant's fields; the functions must already exist (or be declared
+    against a shell type), as PostgreSQL requires."""
+    options = []
+    for key, keyword in _EXTERNAL_FUNCTIONS:
+        if not _blank(draft.get(key)):
+            options.append(f'{keyword} = ' + _reference(draft[key], keyword))
+    if not any(option.startswith(('INPUT', 'OUTPUT')) for option in options):
+        raise PostgreSQLNativeAdminError(
+            'an external type needs its input and output functions')
+    length = draft.get('typlen')
+    if not _blank(length):
+        if length == -1 or str(length).upper() == 'VARIABLE':
+            options.append('INTERNALLENGTH = VARIABLE')
+        else:
+            if isinstance(length, bool) or not isinstance(length, int) or \
+                    length < 1:
+                raise PostgreSQLNativeAdminError(
+                    'the internal length is a whole number or -1')
+            options.append(f'INTERNALLENGTH = {length}')
+    if _flag(draft, 'typbyval') if 'typbyval' in draft else False:
+        options.append('PASSEDBYVALUE')
+    for key, keyword, table in (('typalign', 'ALIGNMENT', _ALIGNMENTS),
+                                ('typstorage', 'STORAGE', _STORAGES)):
+        if not _blank(draft.get(key)):
+            value = draft[key]
+            value = table.get(value, value)
+            if value not in table.values():
+                raise PostgreSQLNativeAdminError(
+                    f'{keyword.lower()} is ' + ', '.join(table.values()))
+            options.append(f'{keyword} = {value}')
+    if not _blank(draft.get('typcategory')):
+        category = str(draft['typcategory'])
+        if len(category) != 1 or not category.isalnum():
+            raise PostgreSQLNativeAdminError('the category is one letter')
+        options.append('CATEGORY = ' + _literal(category, 'category'))
+    if _flag(draft, 'typispreferred') if 'typispreferred' in draft else False:
+        options.append('PREFERRED = true')
+    if not _blank(draft.get('typdefault')):
+        options.append('DEFAULT = ' + _literal(str(draft['typdefault']),
+                                               'default'))
+    if not _blank(draft.get('element')):
+        options.append('ELEMENT = ' + _type_reference(draft['element'],
+                                                      'element'))
+    if not _blank(draft.get('typdelim')):
+        delimiter = str(draft['typdelim'])
+        if len(delimiter) != 1:
+            raise PostgreSQLNativeAdminError('the delimiter is one character')
+        options.append('DELIMITER = ' + _literal(delimiter, 'delimiter'))
+    if _flag(draft, 'is_collatable') if 'is_collatable' in draft else False:
+        options.append('COLLATABLE = true')
+    return f'CREATE TYPE {qualified} (' + ', '.join(options) + ')'
+
+
+def _grid_changes(draft, current):
+    """The dialog's full enumeration and composite grids against the
+    facts, as the provider's own change grids."""
+    changes = {}
+    if 'enum' in draft and draft['enum'] not in (None, ''):
+        wanted = _labels(_rows(draft, 'enum', 'enum labels'))
+        held = [item['label'] for item in current['enum']]
+        missing = [label for label in held if label not in wanted]
+        if missing:
+            raise PostgreSQLNativeAdminError(
+                'PostgreSQL cannot drop or rename an enumeration value '
+                'through the list; use Rename enumeration values')
+        added = []
+        for index, label in enumerate(wanted):
+            if label in held:
+                continue
+            row = {'label': label}
+            if index:
+                row['after'] = wanted[index - 1]
+            elif len(wanted) > 1:
+                row['before'] = wanted[1]
+            added.append(row)
+        changes['add_values'] = added
+    if 'composite' in draft and draft['composite'] not in (None, ''):
+        rows = _rows(draft, 'composite', 'composite members')
+        held = {item['member_name']: item['type']
+                for item in current['composite']}
+        seen = set()
+        changes['add_attributes'], changes['alter_attributes'] = [], []
+        for row in rows:
+            name = row.get('member_name')
+            if name in held:
+                seen.add(name)
+                if not _blank(row.get('type')) and _with_modifiers(
+                        row['type'], row) != held[name]:
+                    changes['alter_attributes'].append(row)
+            else:
+                changes['add_attributes'].append(row)
+        changes['drop_attributes'] = [{'member_name': name} for name in held
+                                      if name not in seen]
+    return changes
 
 
 def _alter_type(native, draft):
@@ -260,12 +473,15 @@ def _alter_type(native, draft):
     qualified = _qualified(schema, name)
     kind = current['typtype']
     statements = []
-    if not _blank(draft.get('typeowner')):
+    if not _blank(draft.get('typeowner')) and \
+            draft['typeowner'] != current.get('typeowner'):
         statements.append(f'ALTER TYPE {qualified} OWNER TO '
                           + _identifier(draft['typeowner'], 'owner'))
+    grid = _grid_changes(draft, current)
     labels = [item['label'] for item in current['enum']]
     renames = _rows(draft, 'rename_values', 'renamed enum values')
-    added = _rows(draft, 'add_values', 'added enum values')
+    added = _rows(draft, 'add_values', 'added enum values') + grid.get(
+        'add_values', [])
     if (renames or added) and kind != 'e':
         raise PostgreSQLNativeAdminError('only an enumeration has values')
     for row in renames:
@@ -301,7 +517,7 @@ def _alter_type(native, draft):
         ('add_attributes', 'ADD ATTRIBUTE {definition}')]
     members = {item['member_name'] for item in current['composite']}
     for key, template in attribute_changes:
-        rows = _rows(draft, key, key.replace('_', ' '))
+        rows = _rows(draft, key, key.replace('_', ' ')) + grid.get(key, [])
         if rows and kind != 'c':
             raise PostgreSQLNativeAdminError(
                 'only a composite type has attributes')
@@ -317,8 +533,8 @@ def _alter_type(native, draft):
                 members.discard(member)
                 members.add(row.get('to'))
             elif key == 'alter_attributes':
-                values['type'] = _type_reference(row.get('type'),
-                                                 'member type')
+                values['type'] = _type_reference(
+                    _with_modifiers(row.get('type'), row), 'member type')
             elif key == 'add_attributes':
                 values['definition'] = _attribute(row)
                 members.add(member)
@@ -331,6 +547,7 @@ def _alter_type(native, draft):
         text = 'NULL' if _blank(draft['description']) else _literal(
             str(draft['description']), 'comment')
         statements.append(f'COMMENT ON TYPE {qualified} IS {text}')
+    statements.extend(_extras('TYPE', qualified, draft, True))
     new_name = draft.get('name')
     if not _blank(new_name) and new_name != name:
         statements.append(f'ALTER TYPE {qualified} RENAME TO '
@@ -383,115 +600,103 @@ def _column(field_id, label, control='text', required=False, **extra):
             'required': required, **extra}
 
 
-def domain_form(operation, field):
-    """Dialog fields; ids follow the inherited domain dialog."""
-    check_columns = [_column('conname', 'Name'),
-                     _column('consrc', 'Check expression', required=True),
-                     _column('convalidated', 'Validated', 'boolean')]
-    name_column = [_column('conname', 'Name', required=True)]
+# The type family form's field ids (type.form.json: domain, composite,
+# enumeration, range, external, shell and multirange variants) plus the
+# provider's own change grids; the validator admits exactly these.
+_FAMILY_FIELDS = (
+    'variant', 'name', 'oid', 'owner', 'basensp', 'typeowner', 'schema',
+    'sysdomain', 'is_sys_type', 'description', 'typtype', 'basetype',
+    'typlen', 'precision', 'typdefault', 'typnotnull', 'collname',
+    'composite', 'enum', 'typname', 'opcname', 'rngcanonical', 'rngsubdiff',
+    'rngmultirangetype', 'alias', 'member_list', 'enum_list', 'constraints',
+    'typinput', 'typoutput', 'typreceive', 'typsend', 'typmodin',
+    'typmodout', 'typanalyze', 'typsubscript', 'typcategory',
+    'typispreferred', 'element', 'typdelim', 'typalign', 'typstorage',
+    'typbyval', 'is_collatable', 'type_acl', 'typacl', 'seclabels')
+_OWN_GRIDS = {
+    'domain': ('add_constraints', 'drop_constraints', 'validate_constraints',
+               'rename_constraints'),
+    'type': ('add_values', 'rename_values', 'add_attributes',
+             'alter_attributes', 'rename_attributes', 'drop_attributes'),
+}
+_GRIDS = ('composite', 'enum', 'constraints', 'typacl', 'seclabels', 'revoke')
+_BOOLEANS = ('sysdomain', 'is_sys_type', 'typnotnull', 'typispreferred',
+             'typbyval', 'is_collatable')
+_NUMBERS = ('typlen', 'precision')
+_SELECTS = {
+    'typtype': [{'value': code, 'label': word.title()}
+                for code, word in TYPE_KINDS.items()],
+    'typalign': [{'value': code, 'label': word}
+                 for code, word in _ALIGNMENTS.items()],
+    'typstorage': [{'value': code, 'label': word.upper()}
+                   for code, word in _STORAGES.items()],
+}
+
+
+def _family_form(kind, operation, field):
+    """The validator's view of the type family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs, options and grid columns."""
+    label = 'domain' if kind == 'domain' else 'type'
+    facts_key = 'domain_facts' if kind == 'domain' else 'type_facts'
     if operation == 'drop':
-        fields = [field('cascade', 'Drop dependent objects', 'boolean'),
-                  field('confirmation', 'Type the domain name to confirm',
-                        required=True)]
-    elif operation == 'create':
-        fields = [field('name', 'Name', required=True),
-                  field('basensp', 'Schema', required=True),
-                  field('basetype', 'Base type', required=True,
-                        help='A native type, with its modifiers.'),
-                  field('collname', 'Collation'),
-                  field('typdefault', 'Default', 'code'),
-                  field('typnotnull', 'Not NULL', 'boolean'),
-                  field('owner', 'Owner'),
-                  field('description', 'Comment', 'multiline'),
-                  _grid(field, 'constraints', 'Check constraints',
-                        check_columns)]
-    else:
-        def initial(key):
-            return {'initial_value_path': ['domain_facts', key]}
-        fields = [field('name', 'Name', **initial('name')),
-                  field('basensp', 'Schema', help='A different schema runs '
-                        'SET SCHEMA.', **initial('basensp')),
-                  field('typdefault', 'Default', 'code',
-                        **initial('typdefault')),
-                  field('typnotnull', 'Not NULL', 'boolean',
-                        **initial('typnotnull')),
-                  field('owner', 'Owner', help='Empty keeps the owner.'),
-                  field('description', 'Comment', 'multiline',
-                        **initial('description')),
-                  _grid(field, 'add_constraints', 'Add check constraints',
-                        check_columns),
-                  _grid(field, 'drop_constraints', 'Drop constraints',
-                        name_column),
-                  _grid(field, 'validate_constraints',
-                        'Validate constraints', name_column)]
-    return {'form_id': f'postgresql-domain-{operation}',
-            'form_key': 'native:postgresql:schema:domain',
-            'title': f'{operation.title()} domain', 'fields': fields}
+        return {'form_id': f'postgresql-{kind}-drop',
+                'form_key': f'native:postgresql:schema:{kind}',
+                'title': f'Drop {label}', 'fields': [
+                    field('cascade', 'Drop dependent objects', 'boolean'),
+                    field('confirmation', f'Type the {label} name to confirm',
+                          required=True)]}
+    alter = operation == 'alter'
+
+    def initial(key):
+        return {'initial_value_path': [facts_key, key]} if alter else {}
+    fields = []
+    own = _OWN_GRIDS[kind] if alter else ()
+    for field_id in _FAMILY_FIELDS + own + (('revoke',) if alter else ()):
+        title = field_id.replace('_', ' ').capitalize()
+        if field_id in _GRIDS or field_id in own:
+            fields.append(field(field_id, title, 'grid', columns=[],
+                                **initial(field_id)))
+        elif field_id in _BOOLEANS:
+            fields.append(field(field_id, title, 'boolean',
+                                **initial(field_id)))
+        elif field_id in _NUMBERS:
+            fields.append(field(field_id, title, 'number'))
+        elif field_id in _SELECTS:
+            fields.append(field(field_id, title, 'select',
+                                options=_SELECTS[field_id],
+                                required=(field_id == 'typtype' and
+                                          kind == 'type' and not alter),
+                                **initial(field_id)))
+        elif field_id == 'typcategory':
+            fields.append(field(field_id, 'Category', 'text', max_length=1))
+        else:
+            required = not alter and (
+                field_id == 'name' or
+                (kind == 'domain' and field_id in ('basensp', 'basetype')) or
+                (kind == 'type' and field_id == 'schema'))
+            fields.append(field(field_id, title, required=required,
+                                **initial(field_id)))
+    notes = ('The Constraints grid is the full set: a new row adds, a row '
+             'left out drops, a validated flag turned on validates; the '
+             'check expression is fixed once created.') if kind == \
+        'domain' else (
+        'The enumeration and composite grids are the full set: new '
+        'labels are added after their predecessor (PostgreSQL cannot drop '
+        'or rename a value through the list), new members are added, '
+        'members left out are dropped, a changed type is altered. '
+        'External and shell types are created from their fields; a '
+        'multirange comes with its range type.')
+    return {'form_id': f'postgresql-{kind}-{operation}',
+            'form_key': f'native:postgresql:schema:{kind}',
+            'title': f'{operation.title()} {label}', 'fields': fields,
+            'notes': notes + ' Privileges and labels are stated; the Revoke '
+                             'grid removes privileges.'}
+
+
+def domain_form(operation, field):
+    return _family_form('domain', operation, field)
 
 
 def type_form(operation, field):
-    """Dialog fields; ids follow the inherited type dialog."""
-    member_columns = [_column('member_name', 'Member name', required=True),
-                      _column('type', 'Type', required=True),
-                      _column('collation', 'Collation')]
-    if operation == 'drop':
-        fields = [field('cascade', 'Drop dependent objects', 'boolean'),
-                  field('confirmation', 'Type the type name to confirm',
-                        required=True)]
-    elif operation == 'create':
-        fields = [
-            field('name', 'Name', required=True),
-            field('schema', 'Schema', required=True),
-            field('typtype', 'Type', 'select', required=True, options=[
-                {'value': 'c', 'label': 'Composite'},
-                {'value': 'e', 'label': 'Enumeration'},
-                {'value': 'r', 'label': 'Range'}], default='e'),
-            _grid(field, 'composite', 'Composite members', member_columns,
-                  visible_when={'field_id': 'typtype', 'equals': 'c'}),
-            _grid(field, 'enum', 'Enumeration labels',
-                  [_column('label', 'Label', required=True)],
-                  visible_when={'field_id': 'typtype', 'equals': 'e'}),
-            field('typname', 'Subtype',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('opcname', 'Subtype operator class',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('collname', 'Collation',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('rngcanonical', 'Canonical function',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('rngsubdiff', 'Subtype diff function',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('rngmultirangetype', 'Multirange type name',
-                  visible_when={'field_id': 'typtype', 'equals': 'r'}),
-            field('typeowner', 'Owner'),
-            field('description', 'Comment', 'multiline')]
-    else:
-        def initial(key):
-            return {'initial_value_path': ['type_facts', key]}
-        fields = [
-            field('name', 'Name', **initial('name')),
-            field('schema', 'Schema', help='A different schema runs SET '
-                  'SCHEMA.', **initial('schema')),
-            field('typeowner', 'Owner', help='Empty keeps the owner.'),
-            field('description', 'Comment', 'multiline',
-                  **initial('description')),
-            _grid(field, 'add_values', 'Add enumeration values', [
-                _column('label', 'Label', required=True),
-                _column('before', 'Before'), _column('after', 'After')]),
-            _grid(field, 'rename_values', 'Rename enumeration values', [
-                _column('from', 'From', required=True),
-                _column('to', 'To', required=True)]),
-            _grid(field, 'add_attributes', 'Add attributes', member_columns),
-            _grid(field, 'alter_attributes', 'Change attribute types', [
-                _column('member_name', 'Member name', required=True),
-                _column('type', 'Type', required=True)]),
-            _grid(field, 'rename_attributes', 'Rename attributes', [
-                _column('member_name', 'Member name', required=True),
-                _column('to', 'To', required=True)]),
-            _grid(field, 'drop_attributes', 'Drop attributes', [
-                _column('member_name', 'Member name', required=True)])]
-    return {'form_id': f'postgresql-type-{operation}',
-            'form_key': 'native:postgresql:schema:type',
-            'title': f'{operation.title()} type', 'fields': fields,
-            'notes': 'External and shell types, type privileges and '
-                     'security labels stay with the inherited dialog.'}
+    return _family_form('type', operation, field)

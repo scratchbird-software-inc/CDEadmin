@@ -10,6 +10,7 @@
 """Milvus 2.6.5 PyMilvus boundary, vector results, and administration."""
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import copy
 import hashlib
@@ -193,7 +194,7 @@ class MilvusClientAdapter:
             'server_name', 'connect_timeout', 'operation_timeout',
             'consistency_level', 'auth_kind', 'read_only', 'keep_alive',
         }
-        unknown = sorted(set(route).difference(admitted))
+        unknown = unknown_route_keys(route, admitted)
         if unknown:
             raise MilvusClientError(
                 f'route contains unknown fields: {unknown}')

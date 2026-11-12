@@ -267,3 +267,28 @@ describe('Enter', () => {
     expect(enterSubmits(event(document.createElement('textarea')))).toBe(false);
   });
 });
+
+describe('free-text controls of provider-native forms (browser pass 2026-11-12)', () => {
+  it('edits a multiline comment instead of showing it as unsupported', () => {
+    const onChange = jest.fn();
+    render(<Theme><FieldControl field={{field_id: 'description', label: 'Comment', control: 'multiline'}}
+      value="" onChange={onChange} /></Theme>);
+    const box = screen.getByLabelText('Comment');
+    expect(box.disabled).toBe(false);
+    expect(box.value).toBe('');
+    expect(screen.queryByText(/Unsupported control/)).toBeNull();
+    fireEvent.change(box, {target: {value: 'a note'}});
+    expect(onChange).toHaveBeenCalledWith('a note');
+  });
+
+  it('edits a json value as text the provider parses', () => {
+    const onChange = jest.fn();
+    render(<Theme><FieldControl field={{field_id: 'options', label: 'Options', control: 'json'}}
+      value={{a: 1}} onChange={onChange} /></Theme>);
+    const box = screen.getByLabelText('Options');
+    expect(box.disabled).toBe(false);
+    expect(JSON.parse(box.value)).toEqual({a: 1});
+    fireEvent.change(box, {target: {value: '{"a": 2}'}});
+    expect(onChange).toHaveBeenCalledWith('{"a": 2}');
+  });
+});

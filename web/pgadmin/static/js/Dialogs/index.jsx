@@ -379,8 +379,10 @@ export function showProviderWorkspace(
     activateSQLConnection({...connection, content: panel.content});
     // Browse data: the connection's editor (new or already open) fills in
     // the relation's SELECT from its own metadata.
-    if (initialContext.browse_data && initialContext.resource_id) {
-      requestSQLSource(connection.id, {resource_id: initialContext.resource_id});
+    if ((initialContext.browse_data || initialContext.script) && initialContext.resource_id) {
+      // A script kind (insert, update, delete) rides the same request (M7).
+      requestSQLSource(connection.id, {resource_id: initialContext.resource_id,
+        ...(initialContext.script ? {script: initialContext.script} : {})});
     }
     workspace.focus(BROWSER_PANELS.SQL);
     return BROWSER_PANELS.SQL;

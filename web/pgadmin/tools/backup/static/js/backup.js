@@ -10,7 +10,7 @@ import { getNodeListByName, getNodeAjaxOptions } from '../../../../browser/stati
 import BackupSchema, {getSectionSchema, getTypeObjSchema, getSaveOptSchema, getDisabledOptionSchema, getMiscellaneousSchema, getExcludePatternsSchema} from './backup.ui';
 import BackupGlobalSchema, {getMiscellaneousSchema as getMiscellaneousGlobalSchema} from './backupGlobal.ui';
 import getApiInstance from 'sources/api_instance';
-import {retrieveAncestorOfTypeServer} from 'sources/tree/tree_utils';
+import {retrieveAncestorOfTypeServer, legacyNodeData} from 'sources/tree/tree_utils';
 import pgAdmin from 'sources/pgadmin';
 import { AllPermissionTypes } from '../../../../browser/static/js/constants';
 
@@ -186,7 +186,8 @@ define([
     backupObjects: function(_action, treeItem) {
       let tree = pgBrowser.tree,
         i = treeItem || tree.selected(),
-        data = i ? tree.itemData(i) : undefined;
+        // A provider-tree item stands for its inherited node (M6).
+        data = i ? legacyNodeData(tree.itemData(i)) : undefined;
 
       const serverInformation = retrieveAncestorOfTypeServer(pgBrowser, treeItem, gettext('Backup Error')),
         sid = serverInformation._type == 'database' ? serverInformation._pid : serverInformation._id,

@@ -251,7 +251,706 @@ and WITH or WITHOUT DATA, and altered through rename, schema, owner,
 tablespace, fill factor, comment, and a changed query as drop and create in
 one transaction, as the inherited dialog does. The query is admitted only
 when PostgreSQL's own parser reads it as one SELECT. WITH CHECK OPTION,
-which YugabyteDB refuses, is offered here.
+which YugabyteDB refuses, is offered here. Eighth slice (2026-11-11), the
+function and procedure editors: arguments with mode, name, type and
+default, a return type including SETOF and TABLE, language, body,
+volatility, strictness, leak-proofness, security definer, parallel safety,
+cost, rows and SET parameters, with owner and comment; a changed body or
+option runs CREATE OR REPLACE with the unchanged signature, while a changed
+signature is refused; rename, owner, schema and comment address the
+routine by its catalog identity. The alter dialog reads the current
+definition back through PostgreSQL's own parser, so its values are exact.
+C-language routines, support and window functions, privileges and security
+labels stay with the inherited dialog. A trigger function is a function
+returning ``trigger``. Ninth slice (2026-11-11), the index editor: columns
+or expressions with collation, operator class, sort order and NULLs
+placement, any access method the server has (BRIN and GiST, which
+YugabyteDB refuses, included), unique, NULLs not distinct, include columns,
+fill factor and other storage parameters, tablespace, a WHERE predicate and
+comment; alter renames, moves tablespace, sets or resets storage
+parameters, clusters the table on the index and sets the comment, while the
+columns stay fixed. A concurrent build or drop runs alone outside a
+transaction. Reindex was already native. Tenth slice (2026-11-11), the
+trigger, event trigger and rule editors: a trigger with timing, events and
+UPDATE OF columns, row or statement scope, WHEN condition, constraint
+trigger with deferrability, transition tables, the function and its
+arguments and a comment, altered through CREATE OR REPLACE for a changed
+definition (constraint triggers are dropped and created), enable state,
+comment and rename; an event trigger with event, command tags, function,
+owner and comment, altered through enable state, comment, owner and
+rename, with a changed event, tags or function as drop and create, as the
+inherited dialog does; a rule with event, condition, INSTEAD or ALSO and
+its commands, altered through CREATE OR REPLACE, enable state, comment and
+rename. Transition tables and constraint triggers, which YugabyteDB
+refuses, are offered here. Internal constraint triggers belong to their
+constraint and are not edited. Eleventh slice (2026-11-11), the role and
+tablespace editors from the server scope: a role with login, superuser,
+create database, create role, inherit, replication and bypass-RLS
+attributes, connection limit, expiry, membership of and members with the
+admin option, per-role parameters and a comment, altered through rename,
+the attributes a user chooses to change, membership granted and revoked,
+parameters set and reset, and the comment; passwords never travel in a
+plan and stay with the inherited dialog. A tablespace is created with
+owner, location and options as one statement outside a transaction, as
+PostgreSQL requires, altered through rename, owner, options, privileges
+and comment, and dropped outside a transaction. This closes the M4 editor
+list of the parity matrix.
+
+M5 first slice (2026-11-11), the cast, collation and language editors on
+the same route: a cast from a source to a target type with a function,
+binary coercion or I/O conversion, in explicit, assignment or implicit
+context, with a comment, and dropped; the preserved surface admits no cast
+alter, so none is offered. A collation from a locale, from LC_COLLATE and
+LC_CTYPE, or copied from another, with provider, determinism, rules and
+version, owner and comment; alter renames, moves schema, changes the
+owner and comment, refreshes the version, and drops and recreates for a
+changed locale, as the inherited dialog does. A procedural language with
+handler, inline and validator functions, trusted or not, or from the
+server's template, with owner and comment; alter renames and changes the
+owner and comment, since handlers and trust are fixed once created.
+Nondeterministic collations, which YugabyteDB refuses, are offered here.
+Second slice (2026-11-11), the foreign data wrapper, foreign server and
+user mapping editors: a wrapper with handler, validator, options, owner
+and comment, altered through rename, owner, handler and validator set or
+removed, options added, set or dropped, and comment; a server with type,
+version, wrapper, options, owner and comment, altered through rename,
+owner, version, options and comment, while the wrapper and type stay
+fixed; a user mapping for a role, PUBLIC or the current user on a server
+with options, altered through its options. The capture redacts these
+options, so changes are explicit rows rather than a diff, and options that
+carry a credential (password, passfile, SSL password and key) are refused
+here and stay with the inherited dialog, so a plan never shows a secret.
+Third slice (2026-11-11), the publication and subscription editors: a
+publication for all tables, listed tables with column lists and row
+filters, or tables in schemas, with the published operations, publishing
+via the partition root, owner and comment, altered through rename, owner,
+operations, tables and schemas added or dropped, and comment; a
+subscription whose connection is built from the dialog's non-secret
+settings (host, port, database, user, password file and SSL settings,
+never a password), with publications and every option PostgreSQL 13 to 17
+knows, created as one statement outside a transaction as PostgreSQL
+requires, altered through rename, owner, enable state, options,
+publication list and comment, with REFRESH PUBLICATION run alone; the
+connection string is never shown and a change to it stays with the
+inherited dialog. Column lists, row filters, schema publications and the
+published-operation subset, which YugabyteDB refuses, are offered here.
+Fourth slice (2026-11-11), the text search editors: a configuration from a
+parser or copied from another, with token mappings added, altered or
+dropped, owner and comment; a dictionary from a template with options set
+or dropped in place, owner and comment, the template fixed once created; a
+parser with its start, get-token, end, lextypes and headline functions and
+a template with its init and lexize functions, where a changed function is
+drop and create, as the inherited dialogs do; all with rename and schema
+move. The preserved surface has no concept for these kinds, so the
+provider admits them explicitly. M5 close-out (2026-11-11): domain
+constraints are the domain editor's rows (add, drop, validate, and now
+rename, which is the inherited child node's own edit) and their inspection
+rides the identity chain, so no standalone kind is needed; the operator
+kind, which the provider already created, altered and dropped natively, is
+now declared in the capabilities descriptor so the provider tree lists it
+with its native form; the aggregate kind keeps its native form (a parsed
+full definition on create, and owner, schema, rename and comment on
+alter), while the routine form's recorded gap for aggregates stays
+accurate. This closes the M5 list of the parity matrix.
+
+M6 first slice (2026-11-11), server operations: a provider-tree server
+offers reload configuration, create restore point, and pause and resume
+WAL replay as provider-native operations run from the server scope on the
+maintenance attachment, each planned as one function call whose result
+row is the receipt, with confirmation on reload and the replay controls;
+the replay controls are accepted only by a standby in recovery. On a
+primary the server rejects them, and that rejection reaches the browser
+the way every rejected administrative statement does today: as the
+fail-closed unknown-outcome response, with the server's message kept in
+the application log only (a standing property of the apply contract, not
+of this slice). Change password and clear SSH tunnel password stay with
+the inherited dialogs since they carry credentials. On the way a
+reachability defect was found and fixed: the client's session-ready check
+accepted only provider-endpoint servers, so on a PostgreSQL provider-tree
+server no descriptor entry, including the M4 and M5 editors, had been
+reachable from the tree menu; a connected provider-tree server (whose node
+reports the verification state ``legacy``) now counts as ready, and its
+node carries an action list of its own so the menu is built. Observed
+through the running application's workspace route against the demo
+server (node payload, reload, restore point, rejected pause); the menu
+itself was not screen-checked.
+
+M6 second slice (2026-11-11), database and schema scope: VACUUM and
+ANALYZE run at database scope (no table list, so they cover the connected
+database, which the apply route checks is the one named) and at schema
+scope, where PostgreSQL has no schema form, so the statement names the
+schema's tables and materialized views as listed with the schema node; a
+table created after that listing is not included and an empty schema is
+refused. Database drop joined the database editor with a typed-name
+confirmation and an optional FORCE, compiled as one DROP DATABASE run
+from the server scope outside a transaction; FORCE terminates the other
+sessions of that database first, including any this application holds to
+it, and the server still refuses the connected database and templates.
+Observed live on PostgreSQL 18.3: dead tuples cleared at both scopes,
+statistics recorded for the materialized view, and a held session
+terminated by the forced drop.
+
+M6 third slice (2026-11-11), role and tablespace operations that act
+inside one database: reassign owned objects and drop owned objects on a
+role, and move objects to another tablespace (tables, indexes,
+materialized views or all three, optionally only those owned by one role)
+on a tablespace. These objects live at server scope while the statements
+act on one database's objects, so the dialog picks the database from a
+reference field and the plan's route runs in that database; the node's
+own route is not used, matching the inherited dialogs' database choice.
+Drop owned takes a typed-name confirmation and is destructive; the other
+two confirm. Observed live on PostgreSQL 18.3: table ownership moved
+between two roles, the dropped-owned role's objects gone, and indexes
+then every relation moved from a scratch tablespace to pg_default.
+
+M6 fourth slice (2026-11-11), the inherited utilities as openers: backup,
+restore and the psql terminal on a provider-tree database node, backup and
+restore on schema and table resources (restore also on function, trigger
+and index), and import/export on tables, each declared in the engine's
+tools file with the ``open_inherited_tool`` handler. The utilities
+themselves are unchanged apart from one read: a client identity bridge
+(``legacyNodeData`` in the tree utilities) turns a PostgreSQL provider
+database target into the inherited database node keyed by its OID and a
+provider resource into the inherited node its legacy route names, and the
+tree hierarchy walk every inherited dialog relies on applies it, so the
+dialogs see the same server, database, schema and table entries they see
+on the inherited tree. The server node keeps its inherited menus, so
+backup globals, backup server and psql at server scope were never lost.
+Verified by unit tests of the bridge, the hierarchy walk and the handler,
+and by the running application serving the opener actions on the demo
+database node; the dialogs were not opened in a browser.
+
+M6 fifth slice (2026-11-11): the grant wizard (database and schema scope)
+and search objects (database, schema and table scope) join the openers
+through the same handler and identity bridge; the grant wizard now takes
+the clicked item rather than the tree selection, so a provider node opens
+it with its schema preselected. Not opened in a browser.
+
+M6 sixth slice (2026-11-11): the inherited maintenance dialog joins the
+openers at database scope and on schema, table, index and materialized
+view resources, kept beside the provider-native maintenance operations
+because it offers every VACUUM option and the constraint-backed index
+cases the native forms do not. Not opened in a browser.
+
+M6 seventh slice (2026-11-11), pgAgent jobs: the provider tree's pgAgent
+job node gains create, alter, drop and run now through the provider's
+native route. The job carries its steps and schedules as grids, as the
+inherited job dialog did: a row with an id updates that step or schedule,
+a row without one adds it, and an existing id left out removes it. Create
+compiles to one ``DO`` block in which the new job id flows into its steps
+and schedules, alter to plain update, insert and delete statements, drop
+to one delete that pgAgent cascades, and run now to the inherited
+``jobnextrun = now()``. Every value is a literal; a step connection string
+may not carry a password, and remote steps are refused on a pgAgent whose
+step table has no connection-string column. The provider's capture now
+attaches each job's steps, schedules and that column's presence so the
+editor opens with current values. Schedules and steps are not separate
+editable kinds; they are edited on the job, which is where the inherited
+dialog edited them. Verified live against a stand-in pgagent schema on the
+demo server, because the demo image cannot install pgAgent; not checked
+against a real agent, and the picker-less positions fields (minutes,
+hours, days, months as comma lists) were not exercised in a browser.
+
+M6 eighth slice (2026-11-11), Browse data on the provider tree: the
+PostgreSQL manifest now declares the relation kinds its editor can read
+(table, partitioned table, partition, view, materialized view, foreign
+table), so the shared menu offers Browse data on those nodes, and the
+provider answers the workspace's browse request with a SELECT of every
+column from the cached catalog, quoted exactly as the inherited route
+quotes (pgAdmin's keyword-aware identifier quoting), as schema.name; the
+text is placed in the editor and not run. Observed through the running
+application on the demo server's service.assets table.
+
+M6 ninth slice (2026-11-11), the dashboard: the inherited Dashboard tab
+follows the selected node through the same identity bridge, so a
+provider-tree database node or any object under it shows the inherited
+server and database dashboards (activity with cancel and terminate,
+locks, prepared transactions, configuration, logs, system statistics,
+replication) exactly as the inherited database node did; the bridged
+database carries the connected flag the tab requires, since the provider
+tree attaches to a database when it is browsed, and the dashboard routes
+resolve the database OID through the maintenance connection either way.
+The provider-backed per-database PostgreSQL dashboard and its monitoring
+settings were already declared for the provider tree (M2). This closes
+the M6 list of the parity matrix. The tab was not watched in a browser;
+the routes it calls were observed answering for the demo database by OID.
+
+M7 first slice (2026-11-11), the inherited table node's own operations:
+count rows (a read whose result row is the receipt), reset statistics,
+enable all triggers and disable all triggers join the provider-native
+maintenance set on a table, each one statement in a transaction;
+disabling confirms, since it also stops foreign-key enforcement until the
+triggers are enabled again. Truncate with cascade and restart identity
+was already native. Observed live on PostgreSQL 18.3: the count, the
+counters reset, and a trigger's enabled state toggled.
+
+M7 second slice (2026-11-11), scripts: the inherited Scripts menu's
+INSERT, UPDATE and DELETE scripts open from provider-tree relations (the
+SELECT script is Browse data) with the same placeholders and condition
+marker the inherited node wrote, offered per relation kind as the
+inherited nodes offered them (views insert only, materialized views
+select only). They ride the Browse data channel: the studio source
+request and the workspace's browse action carry a script kind, which the
+provider's builder renders; the text is placed in the editor and not run.
+The CREATE script is the provider tree's DDL state. Observed through the
+running application on the demo table; not opened in a browser.
+
+M7 third slice (2026-11-11), the column editor: create, alter and drop
+on a provider-tree column through the provider's native route, compiled
+as the inherited column dialog rendered them: ADD COLUMN with type,
+collation, NOT NULL, default, identity or generated clause, then comment,
+statistics, storage and compression; on alter one statement per changed
+fact against the captured attribute row (rename, type with optional
+collation, default set or drop, NOT NULL, identity add, change and drop,
+statistics, storage, compression, comment); drop with optional CASCADE
+and a typed name. Types and expressions are admitted by PostgreSQL's own
+parser; a type change carries no USING clause, as the inherited dialog
+did not. The capture now names each column's owning relation and carries
+the editor's initial values. Column privileges, security labels and
+attribute options stay with the inherited dialog. Observed live on
+PostgreSQL 18.3 (create with every clause, identity and generated
+columns, the alter set, identity transitions, cascade drop); the default
+statistics target is read as -1 where PostgreSQL 17+ stores NULL. Reachability
+finding, recorded for decision: the object editor renders only forms
+from the descriptor bundle, and PostgreSQL ships no engine-object form
+files, so the client offers Edit and Create only for kinds with a family
+form (sequence, index, trigger, type, view, routine, role, database,
+table); every engine-object kind edited natively since M4 (extension,
+schema, row policy, cast, collation, language, foreign data wrapper,
+foreign server, user mapping, publication, subscription, text search,
+operator, pgAgent job, column) is reachable through the workspace API and
+its operation dialogs but not yet through the tree's Edit entry. The
+provider's own form builders carry every field; the proposed fix is a
+client fallback to the endpoint's visual-administration catalog form when
+the bundle has no form for an engine-object kind. Decided and done the
+same day (owner decision 2026-11-11, option 1): the workspace gained a
+``native_forms`` action returning the provider-native lifecycle forms of
+one kind from the endpoint's visual-administration catalog; provider-tree
+nodes and groups carry ``cde_native_editor``, the lifecycle operations
+their provider edits natively, so the tree offers Edit and Create for
+them; and the object editor, when the bundle has no form for the kind,
+builds one from the provider's form (its fields on General, the provider
+plan on SQL) and reads initial values along each field's
+``initial_value_path`` into the inspected resource's native block. The
+provider's Python form builders stay the single source; no form files
+were generated. Verified by unit tests of the action, the flags, the
+synthesized form and the menu, and by the running application returning
+the column, extension, schema and role forms and flagging the column,
+schema and server-scope group nodes; not watched in a browser.
+
+M7 fourth slice (2026-11-11), the five constraint kinds: one ``constraint``
+kind on the provider tree with a kind selector (primary key, unique,
+foreign key, check, exclusion) whose fields follow the inherited dialogs.
+Create compiles the ``ALTER TABLE ... ADD CONSTRAINT`` each inherited
+template rendered: columns or an existing unique index with INCLUDE,
+fill factor, index tablespace and deferrability for primary key and
+unique; column pairs, the referenced table, MATCH, ON UPDATE and ON
+DELETE actions, deferrability and NOT VALID for a foreign key; the
+expression, NOT VALID and NO INHERIT for a check; access method,
+elements (columns or expressions with operator class, order and
+operator), predicate, INCLUDE and index options for an exclusion. Alter
+emits one statement per changed fact: rename, validate for a foreign key
+or check created NOT VALID, a foreign key's deferrability, the backing
+index's fill factor (set, or reset through its own flag because the
+validator drops empty values) and tablespace, and comment; columns,
+references and expressions are not changed in place. Drop takes a typed
+name with optional CASCADE. Observed live on PostgreSQL 18.3 for all
+five kinds; PostgreSQL 18 also stores NOT NULL as a constraint row, which
+the tree lists but the editor leaves alone.
+
+M7 fifth slice (2026-11-11), the table editor: create, alter and drop
+of a table through the provider's native route, with the table family
+form as the dialog. Create compiles the one ``CREATE TABLE`` the
+inherited template rendered: LIKE source with its INCLUDING options, OF
+type, the Columns grid (each column clause from the column editor's
+rules: type, compression, collation, NOT NULL, default, identity or
+generated), the five constraint grids (each body from the constraint
+editor's rules), PARTITION BY with column or expression keys, INHERITS,
+access method, storage options including custom autovacuum parameters,
+and tablespace; then owner, row security, security labels, grants, the
+table comment and column and constraint comments. Alter emits one
+statement per changed table-level fact: rename, schema, owner,
+persistence, tablespace, row security, storage options set or reset
+(resets through their own flags, added to the family form), replica
+identity, labels, grants and revocations, comment. Columns and
+constraints of an existing table are edited on their own nodes, so those
+grids act at creation only; the partitions grid, OIDs and the read-only
+properties are not compiled; owner, tablespace and access method are
+OIDs in the captured row, so a value the dialog supplies is applied
+rather than compared. The data operations and inspection stay with the
+inherited grid. Observed live on PostgreSQL 18.3: a table created with
+identity, generated and commented columns, four constraints, storage and
+autovacuum options, row security, owner and a grant; then renamed, moved
+to another schema, made logged, reset, given a replica identity and
+revoked; then dropped. The family form keeps its draft status until its
+recorded gaps are closed.
+
+M7 sixth slice (2026-11-11), partitions and foreign tables. Partitions:
+a partitioned table (``relkind p``, now a declared kind that takes the
+table editor) offers create partition (``CREATE TABLE child PARTITION OF
+parent`` with a bound or DEFAULT, optional sub-partitioning, access
+method, storage options, tablespace, owner and comment) and attach
+partition (``ATTACH PARTITION`` of an existing table); a table that is a
+partition offers detach partition in the plain, CONCURRENTLY and FINALIZE
+forms, the concurrent one outside a transaction, naming its parent from
+the captured inheritance row. A partition bound is text the user writes
+and is admitted only when PostgreSQL's parser accepts it inside a
+``CREATE TABLE ... PARTITION OF``. Foreign tables: create compiles the
+``CREATE FOREIGN TABLE`` the inherited template rendered (columns with
+their options, INHERITS, SERVER, OPTIONS, then owner, check constraints,
+comments, grants and labels); alter emits rename, schema, owner, options
+added, set or dropped through three grids (the capture strips a foreign
+table's options, so they are stated rather than diffed), comment, grants,
+revocations and labels; drop takes a typed name. The table family form
+gained the foreign server and option grids. Observed live on PostgreSQL
+18.3: a range-partitioned parent with a created range partition, a
+created default partition and an attached table; plain and concurrent
+detaches (PostgreSQL refuses a concurrent detach while a default
+partition exists, which the test observes); a foreign table over
+postgres_fdw created, re-optioned and dropped. The partitions grid of the
+table create form is still not compiled; partitions are created from the
+parent instead.
+
+M7 seventh slice (2026-11-11), the debugger and Schema Diff openers,
+closing the parity matrix: a provider-tree function or procedure offers
+Debug (direct) and Set breakpoint (indirect), a trigger offers Set
+breakpoint, and a database node offers Schema Diff, all through the
+inherited tools. The debugger reads the clicked item through the
+identity bridge, so a provider routine stands for the inherited function
+or procedure node, and the server, database, schema and function ids it
+builds its routes from come from the bridged hierarchy; the node carries
+the routine's language for the debugger's own check. The demo image has
+no pldbgapi extension, so the live check stopped at the debugger's
+initialisation route answering for the bridged ids; the debugger session
+itself was not exercised. On the way a regression from the partitions
+slice was found and fixed: a loop variable named ``parent`` shadowed the
+listing's parent, so every resource after the first table lost its
+parent id and the provider tree's navigator refused the page; the live
+listing test now asserts every item names the listing's parent.
+
+Rejection reporting (owner decision 2026-11-11): a server rejection the
+provider vouches for is now a known outcome. When PostgreSQL refuses an
+administrative statement before any commit, the provider raises a
+rejection carrying the SQLSTATE and the server's first message line; the
+private attachment rolls back on release, so nothing changed. The shared
+apply records it as its own stage (``provider_rejected``, not an unknown
+outcome) and the receipt returns 409 ``PROVIDER_OPERATION_REJECTED`` with
+the SQLSTATE and message in the error text, where the dialogs already
+show it. Every other failure keeps the fail-closed unknown-outcome
+response: a failure during COMMIT, after a server-file export was
+dispatched, from a driver error without a SQLSTATE, or from a provider
+that does not vouch that nothing changed. Observed live: pausing WAL
+replay on the demo primary now answers SQLSTATE 55000 with the server's
+own words through both the harness and the running application.
+
+Table form gaps closed (owner direction 2026-11-11). The capture now
+names a relation's owner, tablespace and access method beside their
+OIDs, so the table editor diffs them and emits SET ACCESS METHOD only on
+a known change. The Partitions grid is compiled: on create each row
+creates a partition or attaches an existing table after the table; on
+alter a new row creates or attaches; a row left out never detaches,
+since detaching is the partition's own Detach operation (owner
+direction 2026-11-11). MAINTAIN is the ``m`` privilege code
+for PostgreSQL 17 and later. The table family form is marked complete,
+with its deliberate differences from the inherited dialog recorded in
+its notes: the data type is typed and admitted by PostgreSQL's parser
+rather than picked, the grids do not cross-sync, and columns and
+constraints of an existing table are edited on their own nodes. Observed
+live on PostgreSQL 18.3: a list-partitioned table created with two
+partitions and an attached table from the grid, then one partition added
+through the grid on alter with the others left in place; owner and access method
+reported back by name and an unchanged pair refused as no change.
+
+Column and menu gaps closed (owner direction 2026-11-11). The column
+editor gained column privileges (stated through a grid, revoked through
+a grid of grantees), security labels (the relation's labels with the
+column's attribute number, now carried on the column node), attribute
+options (n_distinct and n_distinct_inherited, set and reset) and a USING
+expression on a type change; the inherited dialog's remaining column
+features are covered. The database node now lists the database-scoped
+kinds the provider creates natively, so its Create submenu offers the
+engine-object kinds beside the family-form kinds, as the group nodes
+already did. Observed live on PostgreSQL 18.3: a column granted, given
+an option, retyped with USING, reset and revoked.
+
+Form close-outs, database (owner direction 2026-11-11: close the
+remaining PostgreSQL family forms the way the table form was closed).
+The provider tree renders the family form and the provider validates the
+draft against its own form, refusing any field it does not declare, so a
+form is complete only when the provider admits and compiles every field
+the dialog can send. A shared helper now reads privileges as the words
+the family grids send or as aclitem codes, for tables, columns,
+databases, schemas and sequences alike. The database editor admits every
+family field: STRATEGY on create; per-database parameters set and reset
+(a row with an empty value resets; a current setting left out resets
+when the listing knows it); security labels; the four default-privilege
+grids, which run inside the database, so such a plan attaches to it; a
+Revoke grid; locale fields hidden by the provider choice are ignored.
+CREATE DATABASE still runs alone, so the follow-up grids are refused on
+create with that message, and the inherited tree's schema restriction is
+refused as a browsing preference the provider tree does not store. The
+pgAdmin field-id gate now lists the provider-tree-only ids (revocation
+grids, storage resets, foreign option grids) that the M7 forms had
+introduced without updating it. Observed live on PostgreSQL 18.3: word
+privileges granted and revoked, parameters set per database and per role
+then reset, default privileges applied inside the database.
+
+Form close-outs, index. The index editor admits every family field and
+reads the dialog's shapes: booleans for sort order and NULLs beside the
+words, the access-method options the dialog shows as fields
+(deduplicate_items, fastupdate, gin_pending_list_limit, pages_per_range,
+autosummarize, buffering) as storage parameters that an empty value
+resets on edit, a column row's statistics target as ALTER INDEX ... SET
+STATISTICS, extension dependencies as DEPENDS ON EXTENSION, and
+clustering on create after the create. Definition fields (columns,
+uniqueness, method, predicate, INCLUDE, NULLs not distinct) are refused
+as fixed once created rather than hidden. Observed live on PostgreSQL
+18.3: an index created from the family shape with a statistics target
+and an extension dependency, an option reset by an empty value, the
+statistics target changed on edit, and a method change refused.
+
+Form close-outs, role. The server-scope role listing already carried
+every attribute, so the role facts now expose them all and the family
+form's booleans are diffed against them; the connection limit and expiry
+are diffed too. The INHERIT and SET membership columns compile to the
+PostgreSQL 16 WITH list; security labels compile; the Revoke membership,
+Remove members and Reset parameters grids join the family form so the
+stated memberships and parameters can be removed. The password field is
+admitted only to be refused: a provider-tree plan never carries a
+password, so passwords stay with the inherited Properties dialog.
+Observed live on PostgreSQL 18.3: attributes equal to the listing
+produce no change, a membership granted with INHERIT FALSE and SET TRUE,
+a password refused.
+
+Facts surfaced for the family forms. The editor host fills a family
+form's record from the resource's native block by field id, so the
+editor facts each provider module computes (table, column, index,
+routine, view, sequence, trigger, database, role, ...) are now surfaced
+at the top level of the native block wherever no native key holds that
+name. Observed through the running application: listed tables, columns,
+indexes, views, sequences, functions and triggers carry their dialog
+values. The facts take the dialog's shapes: booleans for an index
+column's sort order and NULLs, the codes for a routine's volatility and
+parallel safety.
+
+Form close-outs, routine. The function and procedure editor admits every
+family field: volatility and parallel safety as the dialog's codes or as
+words, SETOF through the return-set flag, WINDOW, SUPPORT, C-language
+routines by object file and link symbol (read back from the definition
+too), EXECUTE grants stated through the grid and revoked through a Revoke
+grid, security labels and extension dependencies. The aggregate variant
+stays read-only, as in the inherited dialog. Observed live on PostgreSQL
+18.3: codes read back and applied, EXECUTE granted as the word the grid
+sends and PUBLIC revoked, an extension dependency recorded, a
+set-returning function created through the flag.
+
+Form close-outs, sequence. The sequence editor admits every family
+field; persistence is the dialog's boolean (checked = UNLOGGED) beside
+the words; the owner is a fact; the provider's No minimum, No maximum,
+OWNED BY NONE and Revoke controls join the family form, since a cleared
+number never reaches the provider; the table picker's schema.table is
+accepted for OWNED BY. Observed live on PostgreSQL 18.3: persistence
+switched through the boolean, USAGE granted as the word the grid sends,
+the sequence re-owned through the picker's dotted path.
+
+Form close-outs, trigger. The trigger family form serves two kinds, the
+table or view trigger and the event trigger; both now admit every family
+field. The dialog's column list arrives as plain names, the event
+trigger's event as the dialog's upper-case option (the facts match it),
+event trigger security labels compile, and the inline trigger code
+field, an EDB feature, is refused with that message. Rewrite rules keep
+their own engine-object form. Observed live on PostgreSQL 18.3: the
+existing trigger, event trigger and rule lifecycles pass under the
+family-field forms.
+
+Form close-outs, view. The view and materialized view editor admits every
+family field: privileges stated through the grid and revoked through a
+Revoke grid, security labels, and for materialized views the TOAST tuple
+target, the autovacuum grids (set and reset, as the table editor does),
+the access method on edit (SET ACCESS METHOD, PostgreSQL 15 and later)
+and extension dependencies; a recreate keeps the current storage
+parameters under the dialog's changes; the owner, tablespace and access
+method are facts. Observed live on PostgreSQL 18.3: SELECT granted on a
+view as the word the grid sends and revoked, a materialized view created
+with a TOAST tuple target and autovacuum off, the setting reset through
+the dialog's "Not set".
+
+Form close-outs, type and domain. The type family form serves the domain
+and type kinds; both now admit every family field. External (base) types
+are created from their support functions and storage properties, shell
+types from their name, and a multirange is refused on its own since it
+comes with its range type. USAGE is granted through the grid and revoked
+through a Revoke grid, security labels compile, and a domain's or
+composite member's length and precision join the type. The dialog's
+full-set grids are diffed against the facts: new enumeration labels are
+added after their predecessor and a dropped one is refused since
+PostgreSQL cannot drop it, composite members are added, dropped or
+altered, domain constraints are added, dropped or validated and a
+changed expression is refused as fixed once created. Observed live on
+PostgreSQL 18.3: a composite type reshaped through its grid, an
+enumeration extended through its list, USAGE granted as the word the grid
+sends and revoked, a shell type created, a domain's constraints replaced
+through its grid.
+
+Form close-outs, server (left as draft, deliberately). The PostgreSQL
+Server family form maps the inherited registration dialog, not a DDL
+object. A Server form marked complete reroutes registering and editing
+PostgreSQL servers through the descriptor registration host, away from
+the inherited dialog the provider tree uses today, and its five recorded
+gaps (SSL fields stored as connection_params rows, the colour picker, the
+db_res dynamic control, the runtime route and secret fields, the
+connected-state read-only rules) are differences in that registration
+path rather than in a provider compiler. Switching the registration path
+is an owner decision and needs a browser pass, so the form stays draft
+with this recorded in its notes; the nine DDL forms are complete.
+
+Decided 2026-11-11 (owner): one registration path for every engine. Every
+engine registers and edits its endpoints through the descriptor
+registration host; the inherited dialogs remain only as the fallback when
+the host cannot open. What this took:
+
+- The PostgreSQL Server form is complete. Its field ids are the servers
+  API's own keys, so the payload is the form draft plus the envelope the
+  host adds (profile, intent, verification, and the server group from the
+  tree). Verified against the running application: the pinned PostgreSQL
+  18.3 demo registered, read back, edited and removed through the servers
+  API with the form's payload.
+- The eleven engines whose only descriptor is their Server form (Apache
+  Ignite, Cassandra, ClickHouse, FoundationDB, InfluxDB, Milvus, MongoDB,
+  Neo4j, OpenSearch with its SQL/PPL profile, Redis, TiKV) get a minimal
+  package from ``tools/scaffold_registration_descriptors.py`` (the server
+  kind, the nine object families omitted with the reason, an empty
+  navigator and operations list) and a Server form drafted from their
+  registration contract by ``tools/draft_server_descriptors.py``, which
+  now places unlisted contract groups by what their names say and marks
+  the maintenance database required when the profile requires one.
+- The servers API fills the legacy username column from a contract
+  username (or a placeholder, as embedded endpoints already did) without
+  putting a placeholder into the provider route, where it would read as a
+  credential.
+- The route envelope. The endpoint service and the servers API add
+  bookkeeping to every provider route beside the contract fields (route
+  id, generic host, port, user and database, the legacy connection
+  timeout, the database target, credential kinds and references). The
+  strict providers rejected those keys as unknown, so a registration that
+  verified at create failed for them: a latent defect the standard path
+  exposed. ``transports/route_envelope.py`` names the envelope and the
+  eight strict validators (Redis, MongoDB, Neo4j, ClickHouse, XTDB,
+  Cassandra, Ignite, Milvus) and the shared HTTP route normaliser admit
+  it. MongoDB's contract default of 0 for the pool idle and wait options
+  now reads as unset, which is what pymongo 4 accepts; Redis reads the
+  generic database as the text the servers API stores.
+
+Decided 2026-11-12 (owner): the legacy registration dialog is retired for
+every engine, and every registration intent (endpoint, register an
+existing database file, create a database file) opens the descriptor
+Server editor; a host that cannot open reports instead of falling back
+(``LEGACY_REGISTRATION_RETIRED`` lists all 25 engine ids). The endpoint
+service reads the PostgreSQL provider's identity from
+``providers/postgresql/identity.py`` rather than importing the provider
+module, which had dragged the application model into three
+endpoint-registration unit tests that now pass again.
+
+Verification (completed 2026-11-12, owner direction: every engine
+through a live registration): all 24 engines, 26 profiles, registered
+through the servers API with their form's payload against the pinned
+demos, verified at create, read back and removed: PostgreSQL, MySQL,
+MariaDB, Firebird, DuckDB, SQLite, Dolt, TiDB, Vitess, CockroachDB,
+YugabyteDB (YSQL and YCQL), immudb, XTDB, Apache Ignite, Cassandra,
+ClickHouse, FoundationDB, InfluxDB, Milvus, MongoDB, Neo4j, OpenSearch
+(native and SQL/PPL), Redis and TiKV. The demos were verified in groups:
+the Docker Desktop VM holds 7.5 GiB, and the whole estate at once
+starves PD and CockroachDB and kills Cassandra and ClickHouse. What the
+live runs corrected:
+
+- Verification granted secret access to every provider; TiKV's manifest
+  grants none, so its verification was refused. The grant now follows the
+  profile (secret access only when it declares a secret) and adds what
+  the provider's manifest requires of every context (FoundationDB reads
+  its cluster file, so it requires the filesystem). FoundationDB's
+  manifest now declares the secret access its TLS key password needs.
+- The pinned MySQL-wire and PostgreSQL-wire demos speak plain TCP, so a
+  registration sets the dialog's TLS switch off for them (ssl_disabled,
+  ssl, sslmode disable); the contracts default to TLS on, as they should.
+- The demo tool's TiKV definition is recreated when the advertised host
+  address changes, and the FoundationDB host cluster file must carry the
+  cluster's current connection string (a client rewrites it; a stale one
+  reads as an unreachable coordinator).
+
+Nothing was screen-checked: the browser extension reported no connected
+browser for this account all day.
+
+Browser pass, 2026-11-12 (the first time the application was seen in a
+browser this cycle; Chrome, the throwaway instance, PostgreSQL 18.3 demo).
+Passed: registering PostgreSQL from its connector through the descriptor
+editor (values entered, server created with them); the SQLite create-new
+and open-existing intents open the descriptor editor and create-new
+creates the file; server-group menus offer no legacy server entry; the
+Redis registration form renders its contract tabs; a sequence's family
+form opens with its current values (increment, start, bounds, cache,
+comment), Apply stays disabled with no change, and one change previews
+and applies exactly ALTER SEQUENCE ... INCREMENT BY 7. Failed and fixed:
+
+- A server's Properties (and Alt+Shift+E) and Copy Server still opened
+  the legacy server dialog. The server node now routes edit and copy to
+  the descriptor editor for every engine in the retirement set; copy
+  prefills from the server's registration (without secrets) under the
+  same group. Observed after the fix: Properties opens the descriptor
+  editor with the current values, Copy opens it with "Copy of ...".
+- The PostgreSQL registration editor showed the registration envelope
+  (profile, registration action, verification, server group) as editable
+  fields that were never sent. Form fields marked ``hidden`` are now kept
+  in the record but never rendered, and the PostgreSQL Server form marks
+  those four.
+- Native editors rendered ``multiline`` (every comment field) and
+  ``json`` controls as read-only "unsupported" boxes, so no comment could
+  be edited from a provider-native form. Both are editable text now.
+
+Save paths, checked the same day (servers API and lifecycle route against
+the demos, then in Chrome):
+
+- A PostgreSQL edit saved with the editor's envelope changes only the edited
+  field; saved password, tags, connection parameters, host and port stay,
+  and the server reconnects.
+- MySQL registration changes pass the provider's lifecycle admission (owner
+  work 2026-10-23), so the servers API refuses a MySQL update and the editor's
+  Save failed for MySQL. The editor now saves a MySQL edit through the
+  endpoint's workspace action with the provider edit form's complete values;
+  a change to a field that form does not own (the comment) is refused with
+  its name rather than dropped. Verified: one timeout change, every other
+  route value unchanged.
+- Clicked through in Chrome afterwards, two MySQL faults surfaced and were
+  fixed: the editor reports changes under the servers API's names
+  (cde_route_compress), so the lifecycle save refused them until they were
+  translated to the provider's field ids; and Remove Server answered a 409
+  pointing at a removal form nothing opens. Remove Server now confirms and
+  removes a MySQL registration through the endpoint's lifecycle removal.
+  Observed: a compression change saved with every other value unchanged,
+  and removal deleted the registration and its tree node.
+- Copy registers once the password is entered (a copy never carries the
+  secret); host, port, database, user, comment and connection parameters
+  match the source. The copy's tags carried a display-only key, now
+  stripped. A refused registration showed only "status code 401"; the
+  editor now shows the servers API's reason.
+- Moving a server between groups: the update API honours it, but the
+  descriptor Server form has no usable group control (it is UI-only and
+  the editor supplies no group list), so with the legacy dialog retired no
+  screen moves a server between groups. Recorded for the owner; not built.
+- Tree chevrons work: a first open fetches the node's children and took
+  several seconds on the loaded machine; reopening takes a quarter second.
+
+Observed, not changed: the SQL tab of an
+applied native plan shows the plan's JSON envelope rather than the
+statement alone; an owner whose catalog value is an OID shows empty in the
+schema and sequence editors (documented: empty keeps the owner).
+
+Verification of the close-outs. Every PostgreSQL unit suite, the
+descriptor service and field-contract suites, the pgAdmin field-id gate
+and the Jest family specs pass; the live lifecycles ran against
+PostgreSQL 18.3 through the harness with temporary objects created and
+dropped. Nothing was screen-checked: the browser extension stayed
+disconnected, so the dialogs themselves have not been seen rendering the
+surfaced values.
 
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

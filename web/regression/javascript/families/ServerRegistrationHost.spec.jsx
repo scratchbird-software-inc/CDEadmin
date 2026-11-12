@@ -3,7 +3,7 @@ import Theme from 'sources/Theme';
 import {
   ServerRegistrationHost, recordFromBackend,
 } from '../../../pgadmin/static/js/cdeadmin_ui/objects';
-import {registrationPayload} from '../../../pgadmin/static/js/cdeadmin_ui/objects/ServerRegistrationHost';
+import {lifecycleProfileRequest, registrationPayload} from '../../../pgadmin/static/js/cdeadmin_ui/objects/ServerRegistrationHost';
 import {loadEngineBundle} from './familyFixtures';
 
 beforeEach(() => {
@@ -36,6 +36,19 @@ describe('registrationPayload', () => {
 });
 
 describe('ServerRegistrationHost', () => {
+  it('hides the PostgreSQL registration envelope fields the host supplies (browser pass 2026-11-12)', async () => {
+    const bundle = loadEngineBundle('postgresql');
+    const api = fakeApi(bundle);
+    render(<Theme><ServerRegistrationHost api={api} engine="postgresql" mode="create" urlFor={(isNew) => `/browser/server/obj/1/${isNew ? '' : '7'}`}
+      initialData={{name: 'PostgreSQL on localhost', cde_profile_id: 'postgresql-native', cde_registration_intent: 'endpoint'}}
+      profileId="postgresql-native" displayName="Register PostgreSQL" onClose={() => {}} onSaved={() => {}} /></Theme>);
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText(/^Name/)).toBeTruthy();
+    for(const label of [/^Registration action/, /^Engine \/ interface profile/, /^Server group/, /Verify endpoint now/]) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+    }
+  });
+
   it('registers a SQLite endpoint through the servers API without a plan step', async () => {
     const bundle = loadEngineBundle('sqlite');
     const api = fakeApi(bundle);
@@ -68,5 +81,66 @@ describe('ServerRegistrationHost', () => {
     expect(request.url).toBe('/browser/server/obj/1/7');
     expect(request.data).toMatchObject({name: 'New'});
     expect(request.data).not.toHaveProperty('db');
+  });
+});
+
+describe('lifecycleProfileRequest (MySQL edits through the provider lifecycle, browser pass 2026-11-12)', () => {
+  const owned = ['name', 'host', 'port', 'username', 'connection_timeout', 'password'];
+  const record = {name: 'm', host: 'h', port: 3306, username: 'u', connection_timeout: 10, password: '', comment: 'c'};
+
+  it('sends the complete owned values with the change merged in, and keeps the stored secret', () => {
+    expect(lifecycleProfileRequest(owned, record, {connection_timeout: 11}))
+      .toEqual({name: 'm', host: 'h', port: 3306, username: 'u', connection_timeout: 11});
+  });
+
+  it('sends a secret only when it was changed', () => {
+    expect(lifecycleProfileRequest(owned, record, {password: 'new'}).password).toBe('new');
+  });
+
+  it('refuses a change the provider edit form does not own instead of dropping it', () => {
+    expect(() => lifecycleProfileRequest(owned, record, {comment: 'x'})).toThrow(/does not edit: comment/);
+  });
+});
+
+describe('ServerRegistrationHost refusals (browser pass 2026-11-12)', () => {
+  it('shows the servers API reason instead of the HTTP status', async () => {
+    const bundle = loadEngineBundle('sqlite');
+    const api = jest.fn(async () => {
+      const error = new Error('Request failed with status code 401');
+      error.response = {status: 401, data: {success: 0, errormsg: 'A password is required to verify this endpoint.'}};
+      throw error;
+    });
+    api.get = jest.fn(async () => ({data: {success: 1, data: bundle}}));
+    render(<Theme><ServerRegistrationHost api={api} engine="sqlite" mode="create" urlFor={() => '/browser/server/obj/1/'}
+      initialData={{name: 'S', cde_profile_id: 'sqlite-native'}} profileId="sqlite-native" displayName="Register SQLite"
+      onClose={() => {}} onSaved={() => {}} /></Theme>);
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText(/^Database file/), {target: {value: '/tmp/a.db'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Register'}));
+    expect(await screen.findByText(/A password is required to verify this endpoint/)).toBeTruthy();
+    expect(screen.queryByText(/status code 401/)).toBeNull();
+  });
+});
+
+describe('MySQL edit through the lifecycle route (browser pass 2026-11-12)', () => {
+  it('posts the provider edit form values with a route change keyed by field id', async () => {
+    const bundle = loadEngineBundle('mysql');
+    const editFields = ['name', 'host', 'port', 'username', 'compress'].map((field_id) => ({field_id}));
+    const api = jest.fn(async ({data}) => ({data: data.action === 'endpoint_profile_read'
+      ? {success: 1, data: {endpoint_registration: {forms: {forms: {edit: {fields: editFields}}}}}}
+      : {success: 1, data: {}}}));
+    api.get = jest.fn(async (url) => ({data: url.startsWith('/cdeadmin/api/ui/descriptors') ? {success: 1, data: bundle}
+      : {name: 'm', host: 'h', port: 3306, username: 'u', cde_route_compress: false, cde_profile_id: 'mysql-native'}}));
+    const onSaved = jest.fn();
+    render(<Theme><ServerRegistrationHost api={api} engine="mysql" mode="alter" urlFor={() => '/browser/server/obj/1/7'}
+      lifecycleUrl="/browser/server/cde_workspace/1/7" profileId="mysql-native" displayName="Edit MySQL"
+      onClose={() => {}} onSaved={onSaved} /></Theme>);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByLabelText(/^Protocol compression/));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const update = api.mock.calls.map(([request]) => request).find((request) => request.data?.action === 'endpoint_profile_update');
+    expect(update.url).toBe('/browser/server/cde_workspace/1/7');
+    expect(update.data.request).toEqual({name: 'm', host: 'h', port: 3306, username: 'u', compress: true});
   });
 });

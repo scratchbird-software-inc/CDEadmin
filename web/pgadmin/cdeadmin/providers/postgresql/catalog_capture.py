@@ -220,7 +220,8 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                 if catalog == 'pg_transform':
                     native += " || jsonb_build_object('language_name', l.lanname, 'data_type_identity', (SELECT pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(t.typname) FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace WHERE t.oid=c.trftype))"
                 if catalog == 'pg_class':
-                    native += " || jsonb_build_object('partition_bound_sql', pg_catalog.pg_get_expr(c.relpartbound,c.oid,false), 'partition_key_sql', CASE WHEN c.relkind='p' THEN pg_catalog.pg_get_partkeydef(c.oid) END)"
+                    # Owner, tablespace and access method by name (owner direction 2026-11-11: the table editor diffs them).
+                    native += " || jsonb_build_object('partition_bound_sql', pg_catalog.pg_get_expr(c.relpartbound,c.oid,false), 'partition_key_sql', CASE WHEN c.relkind='p' THEN pg_catalog.pg_get_partkeydef(c.oid) END, 'owner_name', pg_catalog.pg_get_userbyid(c.relowner), 'tablespace_name', (SELECT t.spcname FROM pg_catalog.pg_tablespace t WHERE t.oid=c.reltablespace), 'access_method_name', (SELECT a.amname FROM pg_catalog.pg_am a WHERE a.oid=c.relam))"
                 if catalog == 'pg_policy':
                     native += " || jsonb_build_object('using_sql', pg_catalog.pg_get_expr(c.polqual,c.polrelid,false), 'check_sql', pg_catalog.pg_get_expr(c.polwithcheck,c.polrelid,false), 'roles_sql', (SELECT COALESCE(array_agg(CASE WHEN r = 0 THEN 'public' ELSE pg_catalog.pg_get_userbyid(r) END ORDER BY r), ARRAY[]::text[]) FROM unnest(c.polroles) r))"
                 if catalog == 'pg_foreign_server':
@@ -237,7 +238,9 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                         'subdisableonerr', 'subpasswordrequired', 'subrunasowner',
                         'subfailover', 'subslotname', 'subsynccommit', 'subpublications', 'suborigin')
                     native = 'jsonb_build_object(' + ','.join(f"'{field}',c.{field}" for field in fields) + ", 'connection_redacted',true)"
-                description = 'shobj_description' if catalog == 'pg_subscription' else 'obj_description'
+                # A subscription's comment is in pg_description (COMMENT ON SUBSCRIPTION), like
+                # every database-local object; pg_shdescription holds none for it (M5, 2026-11-11).
+                description = 'obj_description'
                 native_identity = f"(pg_catalog.pg_identify_object('pg_catalog.{catalog}'::regclass,c.oid,0)).identity"
                 query = sql.SQL(f"SELECT {identity}, {name}, {namespace}, ({native})::text, {definition}, pg_catalog.{description}(c.oid, %s), {native_identity} FROM pg_catalog.{{}} c {joins} WHERE {where} ORDER BY c.oid").format(sql.Identifier(storage_catalog))
 

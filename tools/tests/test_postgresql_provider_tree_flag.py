@@ -136,6 +136,17 @@ class WiringTests(unittest.TestCase):
                       groups)
         self.assertIn('_provider_tree_server_groups(', text.split(
             'def _provider_tree_children(')[1].split('    def ')[0])
+        # M6: on the provider tree the server node is a provider context node
+        # (an action list of its own) so the client menu offers the engine's
+        # server-scope operations.
+        self.assertIn("else ([] if provider_tree_enabled(server) else None)",
+                      text)
+        # Owner decision 2026-11-11 (option 1): nodes flag the lifecycle
+        # operations their provider edits with a form of its own.
+        self.assertEqual(3, text.count("'cde_native_editor': _native_editor_operations("))
+        # The database node lists the database-scoped kinds created natively.
+        self.assertIn("'cde_native_editor_kinds': list(native_create_kinds)", text)
+        self.assertIn("native_create_kinds=_native_create_kinds(visual_admin)", text)
         # The inherited Connect records the runtime (owner decision
         # 2026-11-10) and never fails the connection over it.
         connect = text.split('    def connect(self, gid, sid')[1]

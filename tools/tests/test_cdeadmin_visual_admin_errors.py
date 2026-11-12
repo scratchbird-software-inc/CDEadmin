@@ -85,6 +85,31 @@ def test_public_receipt_is_allowlisted_and_stage_specific(stage, phrase):
         'native_status_codes', 'operation_id'}
 
 
+def test_rejected_receipt_names_the_sqlstate_and_message():
+    # Owner decision 2026-11-11: a provider-vouched rejection is a known outcome.
+    error = VisualAdminExecutionError('rejected', {
+        'stage': 'provider_rejected', 'operation_id': 'ea4a5eb3-bcee-4348-8629-bc489961cf2c',
+        'unknown_outcome': False,
+        'rejection': {'sqlstate': '55000', 'message': 'recovery is not in progress'},
+        'provider_payload': {'password': 'credential-canary'},
+    })
+    result = execution_failure_response(error, lambda text: text)
+    assert (result['status'], result['info']) == (409, 'PROVIDER_OPERATION_REJECTED')
+    assert result['errormsg'] == ('The server rejected the statement; nothing was changed. '
+                                  'SQLSTATE 55000: recovery is not in progress')
+    receipt = result['data']['control_operation']
+    assert receipt == {'stage': 'provider_rejected', 'unknown_outcome': False, 'automatic_mutation_retry': False,
+                       'rejected': True, 'sqlstate': '55000', 'message': 'recovery is not in progress',
+                       'native_status_codes': [], 'operation_id': 'ea4a5eb3-bcee-4348-8629-bc489961cf2c'}
+    assert 'credential-canary' not in json.dumps(result)
+    # An invalid SQLSTATE and an overlong message are bounded.
+    error = VisualAdminExecutionError('rejected', {
+        'stage': 'provider_rejected', 'rejection': {'sqlstate': 'bad', 'message': 'x' * 600}})
+    result = execution_failure_response(error, lambda text: text)
+    assert result['data']['control_operation']['sqlstate'] is None
+    assert len(result['data']['control_operation']['message']) == 500
+
+
 @pytest.mark.parametrize('identifier', [None, 1, 'credential-canary', {}, []])
 def test_non_uuid_operation_id_is_not_exported(identifier):
     error = VisualAdminExecutionError('private', {

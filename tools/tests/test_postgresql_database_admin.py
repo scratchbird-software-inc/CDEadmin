@@ -23,14 +23,14 @@ def test_facts_read_the_server_scope_row_or_the_captured_row():
     assert facts(NATIVE) == {
         'name': 'appdb', 'spcname': 'pg_default', 'datconnlimit': None,
         'is_template': False, 'datallowconn': True, 'comments': 'the app',
-        'datacl': []}
+        'datacl': [], 'variables': []}
     captured = {'name': 'appdb', 'comment': None, 'catalog_row': {
         'datname': 'appdb', 'datconnlimit': 5, 'datistemplate': True,
         'datallowconn': False, 'datacl': ['=Tc/postgres']}}
     assert facts(captured) == {
         'name': 'appdb', 'spcname': None, 'datconnlimit': 5,
         'is_template': True, 'datallowconn': False, 'comments': None,
-        'datacl': ['=Tc/postgres']}
+        'datacl': ['=Tc/postgres'], 'variables': []}
 
 
 def test_create_is_one_autocommit_statement():
@@ -94,11 +94,18 @@ def test_alter_runs_in_one_transaction_except_the_tablespace():
                                    'comments': 'the app'})
 
 
-def test_drop_and_inspect_stay_inherited():
-    for operation in ('drop', 'inspect'):
-        with pytest.raises(PostgreSQLNativeAdminError,
-                           match='inherited dialog'):
-            compile_database(operation, {'confirmation': 'appdb'})
+def test_drop_is_native_with_force_and_inspect_stays_inherited():
+    # M6 (2026-11-11): drop joined the editor, typed name, optional FORCE.
+    assert compile_database('drop', {'confirmation': 'appdb'}) == {
+        'statement': 'DROP DATABASE "appdb"', 'read_only': False,
+        'autocommit': True}
+    assert compile_database('drop', {'confirmation': 'appdb',
+                                     'force': True})['statement'] == \
+        'DROP DATABASE "appdb" WITH (FORCE)'
+    with pytest.raises(PostgreSQLNativeAdminError, match='confirmation'):
+        compile_database('drop', {'confirmation': 'other'})
+    with pytest.raises(PostgreSQLNativeAdminError, match='provider tree'):
+        compile_database('inspect', {})
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -106,8 +113,9 @@ def test_drop_and_inspect_stay_inherited():
                     if item['resource_kind'] == 'database')
     routes = {op['operation_id']: op['execution_route']
               for op in database['operations']}
-    assert routes['create'] == routes['alter'] == 'provider-native'
-    assert routes['drop'] == routes['inspect'] == 'legacy-preserved'
+    assert routes['create'] == routes['alter'] == routes['drop'] == \
+        'provider-native'
+    assert routes['inspect'] == 'legacy-preserved'
 
 
 def test_forms_follow_the_inherited_ids():
@@ -116,12 +124,22 @@ def test_forms_follow_the_inherited_ids():
                 'required': required, **extra}
     create = {f['field_id']: f for f in form('create', field)['fields']}
     alter = {f['field_id']: f for f in form('alter', field)['fields']}
-    assert 'comments' not in create and create['name']['required']
+    # Every family field id is admitted (owner direction 2026-11-11), so
+    # the dialog's draft is never refused as unknown.
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'database.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
+    assert create['name']['required'] and 'revoke' in alter
     assert alter['datconnlimit']['initial_value_path'] == [
         'database_facts', 'datconnlimit']
-    assert set(alter) == {'name', 'datowner', 'spcname', 'datconnlimit',
-                          'datallowconn', 'is_template', 'comments',
-                          'datacl', 'revoke'}
+    assert create['daticulocale']['visible_when'] == {
+        'field': 'datlocaleprovider', 'field_id': 'datlocaleprovider',
+        'equals': 'icu'}
 
 
 def test_provider_route_needs_no_database_for_database_changes():
@@ -133,3 +151,63 @@ def test_provider_route_needs_no_database_for_database_changes():
     with pytest.raises(PostgreSQLProviderError):
         PostgreSQLProvider._native_admin_route(
             {'resource_kind': 'schema', '_provider_route': {'server_id': 7}})
+
+
+def test_strategy_follow_ups_and_hidden_locale_values_on_create():
+    assert compile_database('create', {
+        'name': 'd', 'datstrategy': 'file_copy', 'datlocaleprovider': 'libc',
+        'datcollate': 'C', 'daticulocale': 'en'})['statement'] == (
+        'CREATE DATABASE "d" WITH LOCALE_PROVIDER = libc '
+        "LC_COLLATE = 'C' STRATEGY = file_copy")
+    with pytest.raises(PostgreSQLNativeAdminError, match='runs alone'):
+        compile_database('create', {'name': 'd', 'datacl': [
+            {'grantee': 'r', 'privileges': ['CONNECT']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='browsing preference'):
+        compile_database('create', {'name': 'd', 'schema_res': ['public']})
+    with pytest.raises(PostgreSQLNativeAdminError, match='strategy is'):
+        compile_database('create', {'name': 'd', 'datstrategy': 'copy'})
+
+
+def test_alter_settings_labels_default_privileges_and_words():
+    settings = dict(NATIVE, settings=[{'name': 'work_mem', 'value': '8MB'},
+                                      {'name': 'search_path', 'value': 'app',
+                                       'role': 'reporter'}])
+    assert facts(settings)['variables'][1]['role'] == 'reporter'
+    lines = compile_database('alter', {
+        'datacl': [{'grantee': 'reader', 'privileges': ['CONNECT', 'temporary']}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}],
+        'variables': [{'name': 'work_mem', 'value': '16MB'},
+                      {'name': 'statement_timeout', 'value': ''}],
+        'deftblacl': [{'grantee': 'reader', 'privileges': ['SELECT']}],
+        'defseqacl': [{'grantee': 'reader', 'privileges': 'U'}]},
+        settings)['statement'].split(';\n')
+    assert lines == [
+        'GRANT TEMPORARY, CONNECT ON DATABASE "appdb" TO "reader"',
+        'SECURITY LABEL FOR "selinux" ON DATABASE "appdb" IS \'x\'',
+        'ALTER DATABASE "appdb" SET work_mem TO \'16MB\'',
+        'ALTER DATABASE "appdb" RESET statement_timeout',
+        'ALTER ROLE "reporter" IN DATABASE "appdb" RESET search_path',
+        'ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO "reader"',
+        'ALTER DEFAULT PRIVILEGES GRANT USAGE ON SEQUENCES TO "reader"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='rename it separately'):
+        compile_database('alter', {'name': 'other', 'deftypeacl': [
+            {'grantee': 'r', 'privileges': ['USAGE']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='privileges are among'):
+        compile_database('alter', {'datacl': [{'grantee': 'r',
+                                               'privileges': ['SELECT']}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='parameter name'):
+        compile_database('alter', {'variables': [{'name': 'x; drop',
+                                                  'value': '1'}]})
+    # A plan with default privileges attaches to the database itself.
+    from pgadmin.cdeadmin.providers.postgresql.provider import (
+        PostgreSQLProvider)
+    request = {'resource_kind': 'database', 'operation_id': 'alter',
+               '_provider_route': {'server_id': 7},
+               'target_resource': {'extensions': {'postgresql': {
+                   'native': NATIVE}}},
+               'draft': {'deftblacl': [{'grantee': 'r', 'privileges': 'r'}]}}
+    assert PostgreSQLProvider._native_admin_route(request) == {
+        'server_id': 7, 'database_id': 10}
+    request['draft'] = {'comments': 'x'}
+    assert PostgreSQLProvider._native_admin_route(request) == {
+        'server_id': 7, 'database_id': None}

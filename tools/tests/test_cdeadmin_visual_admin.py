@@ -966,6 +966,56 @@ class VisualAdministrationCatalogTests(unittest.TestCase):
                 'session_id': 'different-session',
             }, execution)
 
+    def test_server_rejection_is_a_known_outcome(self):
+        """Owner decision 2026-11-11: a rejection the provider vouches for
+        (nothing committed) is shown as such, not as an unknown outcome."""
+        class RejectingAdapter(NativeAdapter):
+            def apply_admin_operation(self, _request):
+                error = RuntimeError('recovery is not in progress')
+                error.rejected = True
+                error.nothing_changed = True
+                error.sqlstate = '55000'
+                error.message = 'recovery is not in progress'
+                raise error
+
+        provider = ProviderVisualAdministration(
+            context(), Permissions(), 'mysql', '9.7.0', RejectingAdapter()
+        )
+        plan = provider.plan({
+            'resource_kind': 'database', 'operation_id': 'create',
+            'draft': {'name': 'rejected', 'options': {}},
+        })
+        with self.assertRaises(VisualAdminExecutionError) as raised:
+            provider.apply({
+                'plan_id': plan['plan_id'],
+                'plan_digest': plan['plan_digest'],
+            })
+        operation = raised.exception.operation
+        self.assertEqual('provider_rejected', operation['stage'])
+        self.assertFalse(operation['unknown_outcome'])
+        self.assertEqual({'sqlstate': '55000',
+                          'message': 'recovery is not in progress'},
+                         operation['rejection'])
+        self.assertEqual('provider_rejected', operation['events'][-1]['event_kind'])
+        # A rejection without the provider's vouching stays fail-closed.
+        class HalfRejecting(NativeAdapter):
+            def apply_admin_operation(self, _request):
+                error = RuntimeError('x')
+                error.rejected = True
+                raise error
+        provider = ProviderVisualAdministration(
+            context(), Permissions(), 'mysql', '9.7.0', HalfRejecting()
+        )
+        plan = provider.plan({
+            'resource_kind': 'database', 'operation_id': 'create',
+            'draft': {'name': 'unknown2', 'options': {}},
+        })
+        with self.assertRaises(VisualAdminExecutionError) as raised:
+            provider.apply({'plan_id': plan['plan_id'],
+                            'plan_digest': plan['plan_digest']})
+        self.assertEqual('provider_response_unavailable',
+                         raised.exception.operation['stage'])
+
     def test_lost_provider_response_is_recorded_and_never_retried(self):
         class FailedAdapter(NativeAdapter):
             def __init__(self):

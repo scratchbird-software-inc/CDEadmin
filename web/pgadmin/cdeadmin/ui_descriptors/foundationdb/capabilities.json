@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "foundationdb",
+  "profiles": [
+    "foundationdb-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "7.3.77",
+    "tested": [
+      "7.3.77"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "schema": "cdeadmin.ui-tools.v1",
   "engine": "postgresql",
-  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries.",
+  "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries. M6 (2026-11-11): the inherited backup, restore, import/export and psql utilities are declared as openers (handler open_inherited_tool); the client identity bridge (legacyNodeData) lets them read a provider node as the inherited node it stands for.",
   "tools": [
     {
       "command_id": "endpoint.{engine_id}.bi_questions",
@@ -114,6 +114,364 @@
       "arguments": {
         "tab": "administration",
         "resource_kind": "access-method"
+      }
+    },
+    {
+      "command_id": "database.postgresql.backup",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Backup...",
+      "description": "The inherited pg_dump backup dialog for this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.backup",
+      "group": "backup",
+      "priority": 10,
+      "arguments": {
+        "tool": "backup"
+      }
+    },
+    {
+      "command_id": "database.postgresql.restore",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Restore...",
+      "description": "The inherited pg_restore dialog for this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.restore",
+      "group": "restore",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "restore"
+      }
+    },
+    {
+      "command_id": "database.postgresql.psql",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "PSQL Tool",
+      "description": "The inherited psql terminal connected to this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "database",
+      "priority": 40,
+      "arguments": {
+        "tool": "psql"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.backup",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Backup...",
+      "description": "The inherited pg_dump backup dialog for this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.backup",
+      "group": "backup",
+      "priority": 10,
+      "arguments": {
+        "tool": "backup"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.restore",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Restore...",
+      "description": "The inherited pg_restore dialog for this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.restore",
+      "group": "restore",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "restore"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table",
+          "function",
+          "trigger",
+          "index"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.import_export",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Import/Export Data...",
+      "description": "The inherited COPY-based import/export dialog for this table.",
+      "handler": "open_inherited_tool",
+      "icon": "action.export",
+      "group": "object",
+      "priority": 20,
+      "mutation": "write",
+      "arguments": {
+        "tool": "import_export"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "database.postgresql.grant_wizard",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Grant Wizard...",
+      "description": "The inherited bulk privilege wizard over this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 10,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "grant_wizard"
+      }
+    },
+    {
+      "command_id": "database.postgresql.search_objects",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Search Objects...",
+      "description": "The inherited catalog search over this database.",
+      "handler": "open_inherited_tool",
+      "icon": "action.search",
+      "group": "information",
+      "priority": 10,
+      "arguments": {
+        "tool": "search_objects"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.grant_wizard",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Grant Wizard...",
+      "description": "The inherited bulk privilege wizard over this schema.",
+      "handler": "open_inherited_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 30,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "grant_wizard"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.search_objects",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Search Objects...",
+      "description": "The inherited catalog search, started from this object.",
+      "handler": "open_inherited_tool",
+      "icon": "action.search",
+      "group": "information",
+      "priority": 40,
+      "arguments": {
+        "tool": "search_objects"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "database.postgresql.maintenance",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Maintenance dialog...",
+      "description": "The inherited maintenance dialog (VACUUM, ANALYZE, REINDEX, CLUSTER with every option), kept beside the provider-native maintenance operations.",
+      "handler": "open_inherited_tool",
+      "icon": "action.maintenance",
+      "group": "maintenance",
+      "priority": 90,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "maintenance"
+      }
+    },
+    {
+      "command_id": "resource.postgresql.maintenance",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Maintenance dialog...",
+      "description": "The inherited maintenance dialog (VACUUM, ANALYZE, REINDEX, CLUSTER with every option), kept beside the provider-native maintenance operations.",
+      "handler": "open_inherited_tool",
+      "icon": "action.maintenance",
+      "group": "maintenance",
+      "priority": 90,
+      "mutation": "admin",
+      "arguments": {
+        "tool": "maintenance"
+      },
+      "when": {
+        "resource_kinds": [
+          "schema",
+          "table",
+          "index",
+          "materialized-view"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.script_insert",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "INSERT Script",
+      "description": "Open the query editor holding an INSERT script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 30,
+      "arguments": {
+        "tab": "studio",
+        "script": "insert"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table",
+          "view"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.script_update",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "UPDATE Script",
+      "description": "Open the query editor holding an UPDATE script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 31,
+      "arguments": {
+        "tab": "studio",
+        "script": "update"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.script_delete",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "DELETE Script",
+      "description": "Open the query editor holding a DELETE script for this object, as the inherited Scripts menu did. The statement is not run.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "object",
+      "priority": 32,
+      "arguments": {
+        "tab": "studio",
+        "script": "delete"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table",
+          "foreign-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.debug",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Debug...",
+      "description": "The inherited PL/pgSQL debugger, direct mode, on this routine (needs the pldbgapi extension).",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "diagnostics",
+      "priority": 10,
+      "arguments": {
+        "tool": "debugger"
+      },
+      "when": {
+        "resource_kinds": [
+          "function",
+          "procedure"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.debug_indirect",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Set breakpoint...",
+      "description": "The inherited debugger, indirect mode (global breakpoint) on this routine or trigger; superusers only.",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "diagnostics",
+      "priority": 11,
+      "arguments": {
+        "tool": "debugger_indirect"
+      },
+      "when": {
+        "resource_kinds": [
+          "function",
+          "procedure",
+          "trigger"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "database.postgresql.schema_diff",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Schema Diff...",
+      "description": "The inherited Schema Diff tool.",
+      "handler": "open_inherited_tool",
+      "icon": "action.view",
+      "group": "information",
+      "priority": 20,
+      "arguments": {
+        "tool": "schema_diff"
       }
     }
   ]

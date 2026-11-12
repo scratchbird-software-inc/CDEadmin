@@ -1,0 +1,296 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "foundationdb",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "complete",
+  "engine_tab_title": "FoundationDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "fdbcli_path",
+      "label": "fdbcli executable",
+      "tab": "Authentication",
+      "control": "file",
+      "backend_field_id": "cde_route_fdbcli_path",
+      "group": "FoundationDB identity",
+      "required": false
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "FoundationDB TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disabled",
+          "label": "Disabled"
+        },
+        {
+          "value": "verify-peers",
+          "label": "Verify peers"
+        }
+      ],
+      "default": "disabled"
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "CA certificate file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "FoundationDB TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "group": "FoundationDB TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client private key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "group": "FoundationDB TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_verify_peers",
+      "label": "Peer verification constraints",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_tls_verify_peers",
+      "group": "FoundationDB TLS",
+      "required": false,
+      "default": "Check.Valid=1"
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "group": "FoundationDB TLS",
+      "required": false
+    },
+    {
+      "field_id": "cluster_file",
+      "label": "Cluster file",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_cluster_file",
+      "group": "FoundationDB client",
+      "required": false
+    },
+    {
+      "field_id": "external_client_directory",
+      "label": "External client library directory",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_external_client_directory",
+      "group": "FoundationDB client",
+      "required": false
+    },
+    {
+      "field_id": "external_client_library",
+      "label": "External client library",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_external_client_library",
+      "group": "FoundationDB client",
+      "required": false
+    },
+    {
+      "field_id": "client_threads_per_version",
+      "label": "Client threads per version",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_client_threads_per_version",
+      "group": "FoundationDB client",
+      "required": false,
+      "min": 1,
+      "max": 128
+    },
+    {
+      "field_id": "transaction_timeout",
+      "label": "Transaction timeout (milliseconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_transaction_timeout",
+      "group": "FoundationDB transactions",
+      "required": false,
+      "default": 5000,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "transaction_retry_limit",
+      "label": "Transaction retry limit",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_transaction_retry_limit",
+      "group": "FoundationDB transactions",
+      "required": false,
+      "default": 5,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "field_id": "transaction_max_retry_delay",
+      "label": "Maximum retry delay (milliseconds)",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_transaction_max_retry_delay",
+      "group": "FoundationDB transactions",
+      "required": false,
+      "default": 1000,
+      "min": 0,
+      "max": 86400000
+    },
+    {
+      "field_id": "fdbbackup_path",
+      "label": "fdbbackup executable",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_fdbbackup_path",
+      "group": "FoundationDB recovery",
+      "required": false
+    },
+    {
+      "field_id": "fdbrestore_path",
+      "label": "fdbrestore executable",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_fdbrestore_path",
+      "group": "FoundationDB recovery",
+      "required": false
+    },
+    {
+      "field_id": "backup_container_allowlist",
+      "label": "Approved backup URL prefixes",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_backup_container_allowlist",
+      "group": "FoundationDB recovery",
+      "required": false,
+      "help": "Comma-separated URL prefixes admitted for backup and restore."
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for foundationdb-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-12): registered through the servers API with this form's payload (what the descriptor registration host sends) against the pinned FoundationDB 7.3.77 demo, verified at create, read back and removed (Claude-temp-directory/2026-11-10-pg-m2/live/api-register-all.py); contract round trip in tools/tests/test_ui_descriptor_server_forms.py. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
+}

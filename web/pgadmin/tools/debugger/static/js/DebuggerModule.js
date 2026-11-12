@@ -19,6 +19,7 @@ import Kerberos from 'pgadmin.authenticate.kerberos';
 import { refresh_db_node } from 'tools/sqleditor/static/js/sqleditor_title';
 import getApiInstance from '../../../../static/js/api_instance';
 import { getFunctionId, getProcedureId, getAppropriateLabel, getDebuggerTitle } from './debugger_utils';
+import { legacyNodeData } from 'sources/tree/tree_utils';
 import FunctionArguments from './debugger_ui';
 import ModalProvider from '../../../../static/js/helpers/ModalProvider';
 import DebuggerComponent from './components/DebuggerComponent';
@@ -317,7 +318,7 @@ export default class DebuggerModule {
   getTreeNodeData(item) {
     let t = this.pgBrowser.tree,
       i = item || t.selected(),
-      d = i ? t.itemData(i) : undefined,
+      d = i ? legacyNodeData(t.itemData(i)) : undefined,
       node = d && this.pgBrowser.Nodes[d._type];
 
     return [t,i,d,node];
@@ -356,7 +357,7 @@ export default class DebuggerModule {
         Directly open the panel */
         let _t = this.pgBrowser.tree,
           _i = _t.selected(),
-          _d = _i ? _t.itemData(_i) : undefined;
+          _d = _i ? legacyNodeData(_t.itemData(_i)) : undefined;
 
         let newTreeInfo = _t.getTreeNodeHierarchy(_i);
 
@@ -505,7 +506,7 @@ export default class DebuggerModule {
     let self = this;
     let t = this.pgBrowser.tree,
       i = item || t.selected(),
-      d = i ? t.itemData(i) : undefined,
+      d = i ? legacyNodeData(t.itemData(i)) : undefined,
       tree_data = this.pgBrowser.tree.translateTreeNodeIdFromReactTree(i),
       db_data = this.pgBrowser.tree.findNode(tree_data[3]),
       dbNode = db_data.domNode;

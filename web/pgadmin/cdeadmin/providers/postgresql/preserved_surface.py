@@ -381,6 +381,10 @@ def concept_declarations():
     }
 
 
+TEXT_SEARCH_KINDS = ('text-search-configuration', 'text-search-dictionary',
+                     'text-search-parser', 'text-search-template')
+
+
 def preserved_operations():
     """Return the exact object-operation map owned by the legacy surface."""
     result = {}
@@ -400,6 +404,12 @@ def administration_operations():
     result = {**preserved_operations(), 'large-object': OPERATIONS}
     for kind, operations in MAINTENANCE_OPERATIONS.items():
         result[kind] = frozenset(result.get(kind, frozenset()) | operations)
+    # Text search kinds have no preserved-surface concept of their own; the
+    # provider tree edits them natively (M5, 2026-11-11).
+    for kind in TEXT_SEARCH_KINDS + ('pgagent-job', 'partitioned-table'):
+        # pgAgent jobs (M6) and partitioned tables (M7) likewise.
+        result[kind] = frozenset(result.get(kind, frozenset())
+                                 | {'create', 'alter', 'drop', 'inspect'})
     return result
 
 
@@ -430,7 +440,14 @@ def adapt_catalog(catalog):
     native_form_kinds = {
         'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
         'sequence', 'extension', 'row-policy', 'schema', 'database',
-        'domain', 'type', 'view', 'materialized-view',
+        'domain', 'type', 'view', 'materialized-view', 'function',
+        'procedure', 'index', 'trigger', 'event-trigger', 'rule', 'role',
+        'tablespace', 'cast', 'collation', 'language',
+        'foreign-data-wrapper', 'foreign-server', 'user-mapping',
+        'publication', 'subscription', 'text-search-configuration',
+        'text-search-dictionary', 'text-search-parser',
+        'text-search-template', 'pgagent-job', 'column', 'constraint',
+        'table', 'partitioned-table', 'foreign-table',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -467,6 +484,47 @@ def adapt_catalog(catalog):
         if kind in {'view', 'materialized-view'}:
             from .views import form as view_form
             return view_form(kind, operation_id, field)
+        if kind in {'function', 'procedure'}:
+            from .routines import form as routine_form
+            return routine_form(kind, operation_id, field)
+        if kind == 'index':
+            from .indexes import form as index_form
+            return index_form(operation_id, field)
+        if kind in {'trigger', 'event-trigger', 'rule'}:
+            from .triggers import form as trigger_form
+            return trigger_form(kind, operation_id, field)
+        if kind == 'pgagent-job':
+            from .pgagent import form as job_form
+            return job_form(operation_id, field)
+        if kind == 'column':
+            from .columns import form as column_form
+            return column_form(operation_id, field)
+        if kind == 'constraint':
+            from .constraints import form as constraint_form
+            return constraint_form(operation_id, field)
+        if kind in {'table', 'partitioned-table'}:
+            from .tables import form as table_form
+            return table_form(operation_id, field)
+        if kind == 'foreign-table':
+            from .foreign_tables import form as foreign_table_form
+            return foreign_table_form(operation_id, field)
+        if kind in {'role', 'tablespace'}:
+            from .cluster import role_form, tablespace_form
+            return (role_form if kind == 'role' else tablespace_form)(
+                operation_id, field)
+        if kind in {'cast', 'collation', 'language'}:
+            from .catalog_objects import form as catalog_form
+            return catalog_form(kind, operation_id, field)
+        if kind in {'foreign-data-wrapper', 'foreign-server',
+                    'user-mapping'}:
+            from .foreign_objects import form as foreign_form
+            return foreign_form(kind, operation_id, field)
+        if kind in {'publication', 'subscription'}:
+            from .replication import form as replication_form
+            return replication_form(kind, operation_id, field)
+        if kind.startswith('text-search-'):
+            from .text_search import form as text_search_form
+            return text_search_form(kind, operation_id, field)
         if operation_id == 'inspect':
             fields = []
         elif kind == 'aggregate' and operation_id == 'create':
@@ -603,15 +661,30 @@ def adapt_catalog(catalog):
                 operation['execution_route'] = 'provider-native'
                 operation['mutation_class'] = mutation_classes[operation_id]
                 operation['confirmation_required'] = (kind, operation_id) in CONFIRMED
-                operation['target_required'] = True
+                # Server operations act on the connection's server (M6).
+                operation['target_required'] = kind != 'server'
             elif kind in native_form_kinds and not (
                     kind in {'sequence', 'extension', 'row-policy',
                              'schema', 'database', 'domain', 'type',
-                             'view', 'materialized-view'} and
+                             'view', 'materialized-view', 'function',
+                             'procedure', 'index', 'trigger',
+                             'event-trigger', 'rule', 'role',
+                             'tablespace', 'cast', 'collation',
+                             'language', 'foreign-data-wrapper',
+                             'foreign-server', 'user-mapping',
+                             'publication', 'subscription',
+                             'text-search-configuration',
+                             'text-search-dictionary', 'text-search-parser',
+                             'text-search-template', 'pgagent-job',
+                             'column', 'constraint', 'table',
+                             'partitioned-table', 'foreign-table'} and
                     operation_id == 'inspect') and not (
-                    kind == 'database' and operation_id == 'drop'):
+                    kind in {'table', 'partitioned-table', 'foreign-table'}
+                    and operation_id in {'insert', 'update', 'delete'}):
+                # The table's data operations stay with the inherited grid
+                # (M7 edits the table itself natively).
                 # Object-family inspection is the provider tree's own (M3);
-                # database drop stays with the inherited dialog (M4).
+                # database drop joined the editor with FORCE (M6).
                 operation['form'] = native_form(
                     kind, operation_id, resource['title']
                 )

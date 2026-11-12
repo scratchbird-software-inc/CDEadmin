@@ -94,6 +94,58 @@ def test_builders_still_emit_the_migrated_entries():
         profile('sqlite', route_kind='embedded_file'), system, catalog, database_target_id='t1'))
 
 
+def test_postgresql_provider_tree_declares_the_inherited_utilities():
+    """M6 (2026-11-11): backup, restore, import/export and psql open from
+    provider-tree nodes through the identity bridge; declared per scope."""
+    database = {item['command_id']: item for item in database_target_context_actions(
+        profile('postgresql'), {'target_id': 'postgresql-database:16384', 'display_name': 'demo'})}
+    for name, tool in (('backup', 'backup'), ('restore', 'restore'), ('psql', 'psql')):
+        action = database[f'database.postgresql.{name}']
+        assert action['handler'] == 'open_inherited_tool'
+        assert action['arguments']['tool'] == tool
+        assert action['arguments']['database_target_id'] == 'postgresql-database:16384'
+    catalog = {'objects': [{'resource_kind': kind, 'title': kind, 'operations': [], 'editor': {'sections': []}}
+                           for kind in ('schema', 'table', 'view')]}
+    def offered(kind, native=None):
+        resource = {'resource_id': f'{kind}:r', 'resource_kind': kind, 'display_name': 'r', 'display_path': ['r'],
+                    **({'native': native} if native else {})}
+        return set(ids(resource_context_actions(profile('postgresql'), resource, catalog,
+                                                database_target_id='postgresql-database:16384')))
+    assert {'resource.postgresql.backup', 'resource.postgresql.restore'} <= offered('schema')
+    assert 'resource.postgresql.import_export' not in offered('schema')
+    assert {'resource.postgresql.backup', 'resource.postgresql.restore',
+            'resource.postgresql.import_export'} <= offered('table')
+    assert not {'resource.postgresql.backup', 'resource.postgresql.restore',
+                'resource.postgresql.import_export'} & offered('view')
+    assert 'resource.postgresql.backup' not in offered('table', {'system_object': True})
+    # Grant wizard and search objects follow the same opener pattern.
+    for name in ('grant_wizard', 'search_objects'):
+        assert database[f'database.postgresql.{name}']['arguments']['tool'] == name
+    assert {'resource.postgresql.grant_wizard', 'resource.postgresql.search_objects'} <= offered('schema')
+    assert 'resource.postgresql.grant_wizard' not in offered('table')
+    assert 'resource.postgresql.search_objects' in offered('table')
+    assert database['database.postgresql.maintenance']['arguments']['tool'] == 'maintenance'
+    assert 'resource.postgresql.maintenance' in offered('table')
+    assert 'resource.postgresql.maintenance' not in offered('view')
+    # Debugger and Schema Diff (M7 close): routines debug, triggers take a global breakpoint.
+    routines = {'objects': [{'resource_kind': kind, 'title': kind, 'operations': [], 'editor': {'sections': []}}
+                            for kind in ('function', 'procedure', 'trigger', 'table')]}
+    def offered_in(kind):
+        resource = {'resource_id': f'{kind}:r', 'resource_kind': kind, 'display_name': 'r', 'display_path': ['r']}
+        return set(ids(resource_context_actions(profile('postgresql'), resource, routines,
+                                                database_target_id='postgresql-database:16384')))
+    assert {'resource.postgresql.debug', 'resource.postgresql.debug_indirect'} <= offered_in('function')
+    assert 'resource.postgresql.debug' not in offered_in('trigger')
+    assert 'resource.postgresql.debug_indirect' in offered_in('trigger')
+    assert not {'resource.postgresql.debug', 'resource.postgresql.debug_indirect'} & offered_in('table')
+    assert database['database.postgresql.schema_diff']['arguments']['tool'] == 'schema_diff'
+    # Scripts (M7): the inherited Scripts menu's kinds per relation.
+    assert {'resource.postgresql.script_insert', 'resource.postgresql.script_update',
+            'resource.postgresql.script_delete'} <= offered('table')
+    assert 'resource.postgresql.script_insert' in offered('view')
+    assert 'resource.postgresql.script_update' not in offered('view')
+
+
 def test_browse_data_follows_each_connector_manifest():
     """Owner direction 2026-11-05: Browse data opens the editor with a read of
     every column. 2026-11-06: on every connector, for the resource kinds its
@@ -129,6 +181,7 @@ def test_browse_data_follows_each_connector_manifest():
         assert not [command for command in ids(resource_context_actions(
             item, column, None, database_target_id='t1'))
             if command.endswith('.browse_data')]
-    assert len(offered) == 26 and 'postgresql-native' not in offered
+    # PostgreSQL joined on the provider tree (M6, 2026-11-11).
+    assert len(offered) == 27 and 'postgresql-native' in offered
     for path in DESCRIPTORS.glob('*/tools.json'):
         assert 'browse_data' not in path.read_text(encoding='utf-8'), path

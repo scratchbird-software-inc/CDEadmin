@@ -14,6 +14,7 @@ remain opaque: common CDEadmin code must never infer finality or retry policy.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import copy
 import hashlib
@@ -737,7 +738,7 @@ class Neo4jClient:
             request.get('route', request.get('_provider_route')),
             'Neo4j route',
         )
-        unknown = sorted(set(route).difference(cls.ROUTE_KEYS))
+        unknown = unknown_route_keys(route, cls.ROUTE_KEYS)
         if unknown:
             raise Neo4jClientError(
                 'Neo4j route contains unknown fields: ' + ', '.join(unknown)

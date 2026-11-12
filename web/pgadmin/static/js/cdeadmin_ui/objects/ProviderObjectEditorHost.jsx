@@ -24,7 +24,7 @@ import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
-import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice} from './descriptors';
+import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice, nativeEditorForm, nativeInitialValues} from './descriptors';
 import {Stack} from '../primitives/Layout';
 
 const DATABASE_SCOPED = new Set(['resource_inspect', 'resource_page', 'visual_admin_validate',
@@ -164,13 +164,17 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     (async () => {
       try {
         const bundle = await client.bundle(engine, {version});
-        const [resource, resources] = await Promise.all([
+        const [resource, resources, nativeForms] = await Promise.all([
           mode === 'alter' && resourceId ? post({action: 'resource_inspect', request: {resource_id: resourceId}}) : null,
           // The endpoint's resources feed catalog lists, reference pickers
           // and options offered only where the engine reports a resource.
           loadEndpointResources(post),
+          // A kind without a bundle form is edited with its provider's own
+          // form (owner decision 2026-11-11, option 1).
+          editorAvailable(bundle, resourceKind) ? null :
+            post({action: 'native_forms', request: {resource_kind: resourceKind}}).catch(() => null),
         ]);
-        if(!cancelled) setState({status: 'ready', bundle, resource, resources, error: null});
+        if(!cancelled) setState({status: 'ready', bundle, resource, resources, nativeForms, error: null});
       } catch(error) {
         if(!cancelled) setState({status: 'error', bundle: null, resource: null, resources: [], error: error?.message || String(error)});
       }
@@ -189,12 +193,16 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
       <Box sx={{mt: 1}}><Button intent="neutral" onClick={onClose}>Close</Button></Box>
     </Box>;
   }
-  const {bundle, resource, resources} = state;
-  if(!editorAvailable(bundle, resourceKind)) {
+  const {bundle, resource, resources, nativeForms} = state;
+  const nativeOperation = editorAvailable(bundle, resourceKind) ? null :
+    (nativeForms?.operations || []).find((op) => op.operation_id === (mode === 'create' ? 'create' : 'alter'));
+  const nativeForm = nativeOperation ? nativeEditorForm(resourceKind, nativeOperation,
+    {title: bundle?.kinds?.[resourceKind]?.title}) : null;
+  if(!nativeForm && !editorAvailable(bundle, resourceKind)) {
     return <EmptyState message={`No ${resourceKind} editor is declared for ${engine} yet.`}
       actionLabel="Close" onAction={onClose} />;
   }
-  const {form, fixed, variant} = kindForm(bundle, resourceKind);
+  const {form, fixed, variant} = nativeForm ? {form: nativeForm, fixed: [], variant: null} : kindForm(bundle, resourceKind);
   const calls = visualAdminCalls(post, {resourceKind, operationId: mode === 'create' ? 'create' : 'alter',
     target: resource});
   const optionContext = buildOptionContext(bundle, resources);
@@ -208,7 +216,9 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     Triggers: () => <NativeChildList resource={resource} resources={resources} kind="trigger" />,
     ...tabRenderersProp,
   };
-  const record = {...recordFromResource(resource, {form, resources}), ...(variant ? {variant} : {})};
+  const record = {...recordFromResource(resource, {form, resources}),
+    ...(nativeForm ? nativeInitialValues(nativeForm, resourceNative(resource)) : {}),
+    ...(variant ? {variant} : {})};
   const notice = versionSupportNotice(versionSupport);
   const editor = <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
     record={record} context={{...context, ...optionContext, target, target_resource: resource}}

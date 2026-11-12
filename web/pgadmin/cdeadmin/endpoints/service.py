@@ -140,6 +140,18 @@ EMBEDDED_WORKSPACE_PERMISSIONS = frozenset({
     'maintenance_admin', 'upgrade_admin',
 })
 
+def verification_permissions(profile, embedded):
+    """What a verification needs: the network (or the embedded runtime and
+    its files), and secret access only when the profile declares a secret
+    (a provider whose manifest grants no secret access, such as TiKV, must
+    not be asked to; owner direction 2026-11-12, one registration path)."""
+    if embedded:
+        return EMBEDDED_VERIFY_PERMISSIONS
+    if profile.get('secret_fields') or profile.get('requires_secret'):
+        return VERIFY_PERMISSIONS
+    return frozenset({'network'})
+
+
 
 def _connection_change(method):
     """Admit local configuration changes before altering profile state."""
@@ -440,10 +452,7 @@ class EndpointService:
                     'Firebird connection user, or disconnect before '
                     'reconnecting with saved default credentials')
         embedded = profile['route_kind'] == 'embedded_file'
-        context = self._context(
-            endpoint,
-            EMBEDDED_VERIFY_PERMISSIONS if embedded else VERIFY_PERMISSIONS,
-        )
+        context = self._verification_context(endpoint, profile, embedded)
         discovered = None
         selected_route = None
         failures = []
@@ -564,11 +573,7 @@ class EndpointService:
                 server, endpoint, profile, route_model=route_model,
                 principal_override=None, database_override=database_override,
             )
-            context = self._context(
-                endpoint,
-                EMBEDDED_VERIFY_PERMISSIONS if embedded else
-                VERIFY_PERMISSIONS,
-            )
+            context = self._verification_context(endpoint, profile, embedded)
             with self._transient_credentials(
                     endpoint, route, reference, credential_values):
                 self.provider_registry.resolve(
@@ -1352,7 +1357,7 @@ class EndpointService:
     @staticmethod
     def _is_preserved_postgresql(server):
         endpoint = getattr(server, 'endpoint_profile', None)
-        from pgadmin.cdeadmin.providers.postgresql.provider import (
+        from pgadmin.cdeadmin.providers.postgresql.identity import (
             PROVIDER_ID, PROVIDER_VERSION, PROFILE_ID, PROFILE_VERSION)
         return (endpoint is not None and getattr(endpoint, 'provider_id', None) == PROVIDER_ID and
                 (endpoint.provider_version is None or (
@@ -1652,10 +1657,7 @@ class EndpointService:
     def _verify_database_target(self, server, endpoint, profile, database,
                                 database_options=None, credential_target=None):
         embedded = profile['route_kind'] == 'embedded_file'
-        context = self._context(
-            endpoint,
-            EMBEDDED_VERIFY_PERMISSIONS if embedded else VERIFY_PERMISSIONS,
-        )
+        context = self._verification_context(endpoint, profile, embedded)
         candidates = self.route_health.candidates(
             endpoint.id, endpoint.routes
         )
@@ -2152,6 +2154,19 @@ class EndpointService:
         )
         self.security_service.secrets.register_reference(reference)
         return reference
+
+    def _verification_context(self, endpoint, profile, embedded):
+        """A verification context: what the profile needs plus what the
+        provider's manifest requires of every context (FoundationDB reads
+        its cluster file, so it requires the filesystem)."""
+        permissions = verification_permissions(profile, embedded)
+        probe = self._context(endpoint, permissions)
+        lookup = getattr(self.provider_registry, 'required_permissions', None)
+        required = (frozenset(lookup(probe)) if callable(lookup)
+                    else frozenset())
+        if required.difference(permissions):
+            return self._context(endpoint, permissions | required)
+        return probe
 
     @staticmethod
     def _context(endpoint, permissions):

@@ -727,11 +727,16 @@ class EndpointVerificationTests(unittest.TestCase):
         registry = SimpleNamespace(resolve=lambda _context: SimpleNamespace(
             instance=Provider()
         ))
-        for route_kind, expected in (
-            ('embedded_file', frozenset({
+        # Secret access is granted only when the profile declares a secret
+        # (owner direction 2026-11-12: a provider whose manifest grants none,
+        # such as TiKV, verifies with the network alone).
+        for route_kind, secrets, expected in (
+            ('embedded_file', [], frozenset({
                 'embedded_runtime', 'filesystem',
             })),
-            ('network', frozenset({'network', 'secret_read'})),
+            ('network', [], frozenset({'network'})),
+            ('network', [{'field_id': 'password'}],
+             frozenset({'network', 'secret_read'})),
         ):
             route = SimpleNamespace(
                 id=f'route-{route_kind}', priority=0,
@@ -755,7 +760,8 @@ class EndpointVerificationTests(unittest.TestCase):
                 ),
             ):
                 service._verify_database_target(
-                    server, endpoint, {'route_kind': route_kind},
+                    server, endpoint,
+                    {'route_kind': route_kind, 'secret_fields': secrets},
                     '/safe/test.sqlite',
                 )
             self.assertEqual(expected, observed[-1][1])

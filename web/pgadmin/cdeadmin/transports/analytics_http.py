@@ -14,6 +14,7 @@ retry semantics.  Those remain owned by the provider using the transport.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import base64
 import copy
@@ -122,7 +123,7 @@ def normalize_http_route(request, *, default_port, default_auth='none',
         'aws_service', 'api_key_header', 'http_compression',
         'pool_max_size', 'pool_block', 'read_only', *extra_fields,
     }
-    unknown = sorted(set(route).difference(admitted))
+    unknown = unknown_route_keys(route, admitted)
     if unknown:
         raise AnalyticHTTPError(
             f'route contains unknown fields: {unknown}'

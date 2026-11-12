@@ -46,6 +46,51 @@ describe('family editor tree glue', () => {
       group: {data: groupData, parent: 'server'}, database: {data: databaseData, parent: 'server'}});
   });
 
+  it('offers a PostgreSQL provider-tree server its server-scope operations only', async () => {
+    const pgServer = {_type: 'server', _id: 18, cde_provider_tree: true, connected: true, cde_engine_id: 'postgresql',
+      runtime_verification_state: 'legacy', verified_runtime_version: '18.3', cde_context_actions: [], label: 'demo'};
+    installTree({pgserver: {data: pgServer}});
+    resetDescriptorClient();
+    const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}),
+      post: async () => ({})});
+    await client.bundle('postgresql', {version: '18.3'});
+    const entries = familyEditorContextActions(pgServer, 'pgserver');
+    expect(entries.map((entry) => entry.id)).toEqual(expect.arrayContaining([
+      'descriptor-op-reload', 'descriptor-op-restore-point', 'descriptor-op-wal-replay-pause',
+      'descriptor-op-wal-replay-resume']));
+    expect(entries.find((entry) => entry.id === 'descriptor-op-reload').category).toBe('maintenance');
+    expect(entries.find((entry) => entry.id === 'descriptor-op-restore-point').category).toBe('backup');
+    expect(entries.find((entry) => entry.id === 'family-editor-edit')).toBeUndefined();
+    expect(entries.find((entry) => entry.id.startsWith('family-editor-create'))).toBeUndefined();
+    // Without the provider-tree choice the inherited server menu stays alone.
+    expect(familyEditorContextActions({...pgServer, cde_provider_tree: false}, 'pgserver')).toEqual([]);
+  });
+
+  it('offers Edit and Create for kinds the server flags as natively editable (owner decision 2026-11-11)', async () => {
+    const column = {_type: 'cde_resource', cde_resource_kind: 'column', cde_resource_id: 'col-1', cde_engine_id: 'postgresql',
+      cde_database_target_id: 'db-1', label: 'amount', cde_context_actions: [], cde_native_editor: ['alter', 'create', 'drop']};
+    const columns = {_type: 'cde_resource_group', cde_resource_kind: 'column', cde_engine_id: 'postgresql', label: 'Columns',
+      cde_context_actions: [], cde_native_editor: ['alter', 'create', 'drop']};
+    const pgServer = {_type: 'server', _id: 18, cde_provider_tree: true, connected: true, cde_engine_id: 'postgresql',
+      runtime_verification_state: 'legacy', verified_runtime_version: '18.3', cde_context_actions: []};
+    installTree({pgserver: {data: pgServer}, column: {data: column, parent: 'pgserver'}, columns: {data: columns, parent: 'pgserver'}});
+    resetDescriptorClient();
+    const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}), post: async () => ({})});
+    await client.bundle('postgresql', {version: '18.3'});
+    expect(familyEditorContextActions(column, 'column').map((entry) => entry.id)).toContain('family-editor-edit');
+    expect(familyEditorContextActions(columns, 'columns').map((entry) => entry.id)).toContain('family-editor-create-column');
+    // Without the flag and without a bundle form, nothing is offered.
+    expect(familyEditorContextActions({...column, cde_native_editor: []}, 'column').map((entry) => entry.id))
+      .not.toContain('family-editor-edit');
+    // A database node creates the kinds the server flags natively beside the family-form kinds.
+    const pgDatabase = {_type: 'cde_database_target', _id: 'postgresql-database:16384', cde_engine_id: 'postgresql',
+      label: 'demo', cde_context_actions: [], cde_native_editor_kinds: ['extension', 'schema']};
+    installTree({pgserver: {data: pgServer}, db: {data: pgDatabase, parent: 'pgserver'}});
+    const create = familyEditorContextActions(pgDatabase, 'db').find((entry) => entry.id === 'family-editor-create');
+    expect(create.children.map((child) => child.id)).toEqual(expect.arrayContaining(
+      ['family-editor-create-extension', 'family-editor-create-schema', 'family-editor-create-sequence']));
+  });
+
   it('builds the workspace endpoint url with the database target', () => {
     expect(providerEndpointUrl(pgAdmin.Browser.Nodes.server, 'server', serverData, 'db 1'))
       .toBe('/browser/server/cde_workspace/1/7?database_target_id=db%201');
@@ -134,5 +179,21 @@ describe('operation targets', () => {
     expect(await operationTarget(post, databaseData)).toEqual({resource_id: 'database:main', resource_kind: 'database'});
     expect(await operationTarget(post, groupData)).toBeNull();
     expect(calls).toEqual(['resource_inspect', 'resource_page']);
+  });
+});
+
+
+describe('legacy registration retirement (owner direction 2026-11-12)', () => {
+  it('retires the legacy dialog for every engine that has a descriptor package', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const {DESCRIPTOR_ROOT} = require('./familyFixtures');
+    const {LEGACY_REGISTRATION_RETIRED} = require('pgbrowser/ProviderObjectEditor');
+    const engines = fs.readdirSync(DESCRIPTOR_ROOT).filter((name) =>
+      fs.existsSync(path.join(DESCRIPTOR_ROOT, name, 'capabilities.json')));
+    expect(engines.length).toBeGreaterThanOrEqual(24);
+    for(const engine of engines) expect(LEGACY_REGISTRATION_RETIRED.has(engine)).toBe(true);
+    // The OpenSearch SQL/PPL profile registers from the OpenSearch package under its own engine id.
+    expect(LEGACY_REGISTRATION_RETIRED.has('opensearch_sql_ppl')).toBe(true);
   });
 });

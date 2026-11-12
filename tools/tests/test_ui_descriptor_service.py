@@ -23,6 +23,11 @@ BETA_ENGINES = ('postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite'
                 'immudb', 'xtdb')
 FAMILIES = ('table', 'view', 'index', 'routine', 'trigger', 'sequence', 'type',
             'role', 'database', 'server')
+# Owner direction 2026-11-11: every engine registers through the descriptor
+# registration host, so every engine's bundle carries a complete server form.
+REGISTRATION_ENGINES = BETA_ENGINES + (
+    'apache_ignite', 'cassandra', 'clickhouse', 'foundationdb', 'influxdb',
+    'milvus', 'mongodb', 'neo4j', 'opensearch', 'redis', 'tikv')
 
 
 @pytest.fixture(scope='module')
@@ -176,3 +181,11 @@ def test_engine_object_form_must_name_one_kind():
                      'resource_kinds': ['x']}) == 'engine_object:x'
     with pytest.raises(UIDescriptorError):
         form_key({'family': 'engine_object', 'resource_kinds': ['x', 'y']})
+
+
+@pytest.mark.parametrize('engine', REGISTRATION_ENGINES)
+def test_every_engine_registers_through_a_complete_server_form(service, engine):
+    bundle = service.engine(engine)
+    form = bundle['forms'].get('server')
+    assert form is not None and form['status'] == 'complete', engine
+    assert any(tab['fields'] for tab in form['tabs']), engine

@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "redis",
+  "profiles": [
+    "redis-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "8.6.2",
+    "tested": [
+      "8.6.2"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

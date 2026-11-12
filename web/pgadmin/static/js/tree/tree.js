@@ -12,6 +12,7 @@ import pgAdmin from 'sources/pgadmin';
 
 import { FileType } from 'react-aspen';
 import { TreeNode } from './tree_nodes';
+import { legacyNodeData } from './tree_utils';
 
 export function manageTreeEvents(event, eventName, item) {
   let d = item ? item._metadata.data : [];
@@ -491,7 +492,8 @@ export class Tree {
     }
     if (!item) return;
     do {
-      const currentNodeData = item.getData();
+      // Provider-tree items stand for inherited nodes (legacyNodeData).
+      const currentNodeData = legacyNodeData(item.getData());
       if (currentNodeData._type in this.Nodes && this.Nodes[currentNodeData._type].hasId) {
         const nodeType = mapType(currentNodeData._type, node_cnt);
         if (result[nodeType] === undefined) {

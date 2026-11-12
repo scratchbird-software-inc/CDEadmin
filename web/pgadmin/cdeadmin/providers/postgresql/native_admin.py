@@ -22,7 +22,19 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'conversion', 'operator-class', 'operator-family', 'access-method', 'transform', 'operator', 'aggregate', 'large-object',
     # M4 (2026-11-11): object-family editors on the provider tree.
     'sequence', 'extension', 'row-policy', 'schema', 'database',
-    'domain', 'type', 'view', 'materialized-view',
+    'domain', 'type', 'view', 'materialized-view', 'function',
+    'procedure', 'index', 'trigger', 'event-trigger', 'rule', 'role',
+    'tablespace',
+    # M6 (2026-11-11): pgAgent jobs with their steps and schedules.
+    'pgagent-job',
+    # M7 (2026-11-11): the table family: columns, constraints, tables,
+    # partitioned tables and foreign tables.
+    'column', 'constraint', 'table', 'partitioned-table', 'foreign-table',
+    # M5 (2026-11-11).
+    'cast', 'collation', 'language', 'foreign-data-wrapper',
+    'foreign-server', 'user-mapping', 'publication', 'subscription',
+    'text-search-configuration', 'text-search-dictionary',
+    'text-search-parser', 'text-search-template',
 })
 _NAME = r'(?:[^\W\d][\w$]*|"(?:[^"\x00]|"")+")'
 _PG_REFERENCE = re.compile(rf'{_NAME}(?:\.{_NAME})?(?:\[\])?')
@@ -39,6 +51,36 @@ def _required_text(value, label):
     if not isinstance(value, str) or not value.strip() or '\x00' in value:
         raise PostgreSQLNativeAdminError(f'{label} must not be empty')
     return value.strip()
+
+
+def privilege_words(value, codes, label):
+    """The privileges a grant row names, as ordered words. The family
+    privileges grid sends words (['SELECT', 'UPDATE']); API drafts and
+    the inherited dialogs send aclitem codes ('rw' or ['r', 'w']). Either
+    is accepted, case-insensitively for words."""
+    if isinstance(value, str):
+        parts = [part for part in re.split(r'[,\s]+', value.strip())
+                 if part]
+        if len(parts) == 1 and parts[0].upper() not in codes.values() \
+                and all(ch in codes for ch in parts[0]):
+            parts = list(parts[0])
+        value = parts
+    if not isinstance(value, list) or not value:
+        raise PostgreSQLNativeAdminError(
+            f'{label} privileges are among ' + ', '.join(codes.values()))
+    chosen = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise PostgreSQLNativeAdminError(
+                f'{label} privileges are among ' + ', '.join(codes.values()))
+        if item in codes:
+            chosen.add(codes[item])
+        elif item.upper() in codes.values():
+            chosen.add(item.upper())
+        else:
+            raise PostgreSQLNativeAdminError(
+                f'{label} privileges are among ' + ', '.join(codes.values()))
+    return [word for word in codes.values() if word in chosen]
 
 
 def _flag(draft, name):
@@ -342,6 +384,45 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind in {'view', 'materialized-view'}:
         from .views import compile_operation as compile_view
         return compile_view(kind, operation, native, draft)
+    if kind in {'function', 'procedure'}:
+        from .routines import compile_operation as compile_routine
+        return compile_routine(kind, operation, native, draft)
+    if kind == 'index' and not maintenance:
+        from .indexes import compile_operation as compile_index
+        return compile_index(operation, native, draft)
+    if kind in {'trigger', 'event-trigger', 'rule'}:
+        from .triggers import compile_operation as compile_trigger
+        return compile_trigger(kind, operation, native, draft)
+    if kind in {'role', 'tablespace'}:
+        from .cluster import compile_operation as compile_cluster
+        return compile_cluster(kind, operation, native, draft)
+    if kind == 'pgagent-job':
+        from .pgagent import compile_operation as compile_job
+        return compile_job(operation, native, draft)
+    if kind == 'column':
+        from .columns import compile_operation as compile_column
+        return compile_column(operation, native, draft)
+    if kind == 'constraint':
+        from .constraints import compile_operation as compile_constraint
+        return compile_constraint(operation, native, draft)
+    if kind in {'table', 'partitioned-table'}:
+        from .tables import compile_operation as compile_table
+        return compile_table(operation, native, draft)
+    if kind == 'foreign-table':
+        from .foreign_tables import compile_operation as compile_foreign_table
+        return compile_foreign_table(operation, native, draft)
+    if kind in {'cast', 'collation', 'language'}:
+        from .catalog_objects import compile_operation as compile_catalog
+        return compile_catalog(kind, operation, native, draft)
+    if kind in {'foreign-data-wrapper', 'foreign-server', 'user-mapping'}:
+        from .foreign_objects import compile_operation as compile_foreign
+        return compile_foreign(kind, operation, native, draft)
+    if kind in {'publication', 'subscription'}:
+        from .replication import compile_operation as compile_replication
+        return compile_replication(kind, operation, native, draft)
+    if kind.startswith('text-search-'):
+        from .text_search import compile_operation as compile_text_search
+        return compile_text_search(kind, operation, native, draft)
     if kind == 'operator':
         return _operator_admin(operation, native, draft)
     if kind == 'aggregate':

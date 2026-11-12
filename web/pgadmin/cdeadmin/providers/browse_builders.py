@@ -212,6 +212,59 @@ def _pg_wire(provider, resource, native, catalog):
         reserved=contract_keywords(provider, _pg_reserved)))
 
 
+def postgresql(self, resource, native, catalog, language):
+    """PostgreSQL on the provider tree (M6, 2026-11-11). Names are quoted
+    exactly as the inherited Browse data route quotes them: pgAdmin's
+    keyword-aware ``Driver.qtIdent`` (owner direction 2026-11-06), so the
+    two paths render the same text."""
+    _kind(resource, 'table', 'partitioned-table', 'partition', 'view',
+          'materialized-view', 'foreign-table')
+    from pgadmin.utils.driver.psycopg3 import Driver
+    columns = path_columns(resource, catalog)
+    # The provider tree's path starts with the database; PostgreSQL reads a
+    # relation as schema.name (the inherited route's form).
+    relation = list(resource.get('display_path') or ())[-2:]
+    script = resource.get('script')
+    if script in (None, '', 'select'):
+        return sql_select(columns, relation,
+                          lambda name: Driver.qtIdent(None, str(name)))
+    return postgresql_script(script, resource, columns, relation)
+
+
+PG_SCRIPT_KINDS = {
+    # The inherited nodes' hasScriptTypes, without the create script the
+    # provider tree shows as DDL.
+    'table': ('select', 'insert', 'update', 'delete'),
+    'partitioned-table': ('select', 'insert', 'update', 'delete'),
+    'foreign-table': ('select', 'insert', 'update', 'delete'),
+    'view': ('select', 'insert'),
+    'materialized-view': ('select',),
+    'partition': ('select',),
+}
+
+
+def postgresql_script(script, resource, columns, relation):
+    """The inherited table node's INSERT, UPDATE and DELETE scripts (M7,
+    2026-11-11), with the same placeholders and condition marker."""
+    from pgadmin.utils.driver.psycopg3 import Driver
+    kind = resource.get('resource_kind')
+    if script not in PG_SCRIPT_KINDS.get(kind, ()):
+        raise BrowseUnavailable(f'No {script} script for a {kind or "resource"}.')
+    name = '.'.join(Driver.qtIdent(None, str(part)) for part in relation)
+    quoted = [Driver.qtIdent(None, str(column)) for column in columns]
+    if script == 'insert':
+        if not quoted:
+            return '-- Please create column(s) first...'
+        return 'INSERT INTO {0}(\n\t{1})\n\tVALUES ({2});'.format(
+            name, ', '.join(quoted), ', '.join('?' for _ in quoted))
+    if script == 'update':
+        if not quoted:
+            return '-- Please create column(s) first...'
+        return 'UPDATE {0}\n\tSET {1}\n\tWHERE <condition>;'.format(
+            name, '=?, '.join(quoted) + '=?')
+    return 'DELETE FROM {0}\n\tWHERE <condition>;'.format(name)
+
+
 def cockroachdb(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view', 'materialized-view')
     return _pg_wire(self, resource, native, catalog)

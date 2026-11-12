@@ -104,6 +104,7 @@ def test_domain_alter_emits_only_differences():
         'typdefault': '', 'owner': 'dba', 'description': '',
         'drop_constraints': [{'conname': 'code_check'}],
         'validate_constraints': [{'conname': 'later'}],
+        'rename_constraints': [{'conname': 'code_check', 'to': 'not_blank'}],
         'add_constraints': [{'conname': 'later', 'consrc': 'VALUE <> \'z\'',
                              'convalidated': False}]}) == [
         'ALTER DOMAIN "service"."code" RENAME TO "ticket_code"',
@@ -112,6 +113,8 @@ def test_domain_alter_emits_only_differences():
         'ALTER DOMAIN "service"."ticket_code" OWNER TO "dba"',
         'ALTER DOMAIN "service"."ticket_code" DROP CONSTRAINT "code_check"',
         'ALTER DOMAIN "service"."ticket_code" VALIDATE CONSTRAINT "later"',
+        'ALTER DOMAIN "service"."ticket_code" RENAME CONSTRAINT "code_check" '
+        'TO "not_blank"',
         'ALTER DOMAIN "service"."ticket_code" ADD CONSTRAINT "later" CHECK '
         "(VALUE <> 'z') NOT VALID",
         'COMMENT ON DOMAIN "service"."ticket_code" IS NULL',
@@ -155,7 +158,7 @@ def test_type_create_for_each_kind():
 
 
 @pytest.mark.parametrize('draft, message', [
-    ({'typtype': 'b'}, 'external and shell'),
+    ({'typtype': 'b'}, 'input and output'),
     ({'typtype': 'c', 'composite': []}, 'at least one member'),
     ({'typtype': 'e', 'enum': [{'label': 'a'}, {'label': 'a'}]}, 'repeats'),
     ({'typtype': 'c', 'composite': [{'member_name': 'x',
@@ -221,12 +224,21 @@ def test_type_drop_and_forms_and_routes():
         return {'field_id': field_id, 'label': label, 'control': control,
                 'required': required, **extra}
     create = {f['field_id']: f for f in type_form('create', field)['fields']}
-    assert create['typtype']['default'] == 'e'
-    assert create['enum']['visible_when'] == {'field_id': 'typtype',
-                                              'equals': 'e'}
+    assert create['typtype']['required'] and 'typinput' in create
     alter = {f['field_id']: f for f in domain_form('alter', field)['fields']}
     assert alter['typdefault']['initial_value_path'] == [
         'domain_facts', 'typdefault']
+    # Every family field id is admitted for both kinds (owner direction
+    # 2026-11-11), beside the provider's own change grids.
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'type.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
+    assert {'add_constraints', 'rename_constraints', 'revoke'} <= set(alter)
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -238,3 +250,69 @@ def test_type_drop_and_forms_and_routes():
         assert routes == {
             'create': 'provider-native', 'alter': 'provider-native',
             'drop': 'provider-native', 'inspect': 'legacy-preserved'}, kind
+
+
+def test_family_shapes_external_shell_grants_and_full_set_grids():
+    # External and shell types from the dialog's fields; a multirange refused.
+    assert statements('type', 'create', {
+        'name': 'pt', 'schema': 's', 'typtype': 'b', 'typinput': 'pt_in',
+        'typoutput': 'pt_out', 'typlen': 16, 'typbyval': False,
+        'typalign': 'd', 'typstorage': 'p', 'typcategory': 'U',
+        'typdelim': ';', 'is_collatable': False}) == [
+        'CREATE TYPE "s"."pt" (INPUT = pt_in, OUTPUT = pt_out, '
+        "INTERNALLENGTH = 16, ALIGNMENT = double, STORAGE = plain, "
+        "CATEGORY = 'U', DELIMITER = ';')"]
+    assert statements('type', 'create', {'name': 'sh', 'schema': 's',
+                                         'typtype': 'p'}) == [
+        'CREATE TYPE "s"."sh"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='multirange'):
+        compile_kind('type', 'create', {'name': 'm', 'schema': 's',
+                                        'typtype': 'm'}, ENUM)
+    with pytest.raises(PostgreSQLNativeAdminError, match='input and output'):
+        compile_kind('type', 'create', {'name': 'b', 'schema': 's',
+                                        'typtype': 'b'}, ENUM)
+    # USAGE as the word the grid sends, a revoke and a label.
+    assert statements('type', 'alter', {
+        'revoke': [{'grantee': 'public'}],
+        'typacl': [{'grantee': 'app', 'privileges': ['USAGE']}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}]}) == [
+        'REVOKE ALL ON TYPE "service"."mood" FROM PUBLIC',
+        'GRANT USAGE ON TYPE "service"."mood" TO "app"',
+        'SECURITY LABEL FOR "selinux" ON TYPE "service"."mood" IS \'x\'']
+    # The full enumeration list: a new label after its predecessor; a
+    # dropped label refused.
+    assert statements('type', 'alter', {
+        'enum': [{'label': 'sad'}, {'label': 'ok'}, {'label': 'great'}]}) == [
+        'ALTER TYPE "service"."mood" ADD VALUE \'great\' AFTER \'ok\'']
+    with pytest.raises(PostgreSQLNativeAdminError, match='cannot drop'):
+        compile_kind('type', 'alter', {'enum': [{'label': 'sad'}]}, ENUM)
+    # The full composite grid: add, alter (with the dialog's length) and
+    # drop members.
+    assert statements('type', 'alter', {'composite': [
+        {'member_name': 'street', 'type': 'text'},
+        {'member_name': 'zip', 'type': 'character varying', 'tlength': 20},
+        {'member_name': 'city', 'type': 'text'}]}, COMPOSITE) == [
+        'ALTER TYPE "service"."addr" ALTER ATTRIBUTE "zip" SET DATA TYPE '
+        'varchar(20)',
+        'ALTER TYPE "service"."addr" ADD ATTRIBUTE "city" text']
+    assert statements('type', 'alter', {'composite': [
+        {'member_name': 'street', 'type': 'text'}]}, COMPOSITE) == [
+        'ALTER TYPE "service"."addr" DROP ATTRIBUTE "zip"']
+    # Domains: the dialog's length and precision, the full constraints
+    # grid (add, drop, validate), a changed expression refused.
+    assert statements('domain', 'create', {
+        'name': 'money2', 'basensp': 's', 'basetype': 'numeric', 'typlen': 10,
+        'precision': 2})[0] == 'CREATE DOMAIN "s"."money2" AS numeric(10, 2)'
+    assert statements('domain', 'alter', {'constraints': [
+        {'conname': 'code_check', 'consrc': "((VALUE)::text <> ''::text)",
+         'convalidated': True},
+        {'conname': 'short', 'consrc': 'length(VALUE) < 9'}]}) == [
+        'ALTER DOMAIN "service"."code" VALIDATE CONSTRAINT "code_check"',
+        'ALTER DOMAIN "service"."code" ADD CONSTRAINT "short" CHECK '
+        '(length(VALUE) < 9)']
+    assert statements('domain', 'alter', {'constraints': []}) == [
+        'ALTER DOMAIN "service"."code" DROP CONSTRAINT "code_check"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='fixed once'):
+        compile_kind('domain', 'alter', {'constraints': [
+            {'conname': 'code_check', 'consrc': 'VALUE IS NOT NULL'}]},
+            DOMAIN)

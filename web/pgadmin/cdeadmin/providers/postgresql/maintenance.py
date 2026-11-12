@@ -18,19 +18,53 @@ are marked ``autocommit`` so the apply route runs them without BEGIN/COMMIT.
 from __future__ import annotations
 
 MAINTENANCE_OPERATIONS = {
-    'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate'}),
+    # M7 (2026-11-11): the inherited table node's row count, statistics
+    # reset and trigger toggles join the maintenance set.
+    'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate', 'count-rows',
+                        'reset-statistics', 'enable-triggers', 'disable-triggers',
+                        'create-partition', 'attach-partition', 'detach-partition'}),
+    # A partitioned table takes the partition operations and the row count (M7).
+    'partitioned-table': frozenset({'create-partition', 'attach-partition', 'count-rows'}),
     'index': frozenset({'reindex'}),
-    'schema': frozenset({'reindex'}),
-    'database': frozenset({'reindex'}),
+    # Schema and database scope VACUUM/ANALYZE (M6, 2026-11-11): a schema
+    # has no VACUUM form, so its statement names the tables captured with it.
+    'schema': frozenset({'vacuum', 'analyze', 'reindex'}),
+    'database': frozenset({'vacuum', 'analyze', 'reindex'}),
     'materialized-view': frozenset({'refresh'}),
+    # Server operations from the provider tree's server scope (M6, 2026-11-11):
+    # the inherited server menu's reload, restore point and WAL replay control.
+    'server': frozenset({'reload', 'restore-point', 'wal-replay-pause',
+                         'wal-replay-resume'}),
+    # Role and tablespace operations that act inside one database (M6,
+    # 2026-11-11): the dialog picks the database; the plan's route runs there.
+    'role': frozenset({'reassign-owned', 'drop-owned'}),
+    'tablespace': frozenset({'move-objects'}),
+    # The inherited pgAgent "Run now" (M6, 2026-11-11).
+    'pgagent-job': frozenset({'run-now'}),
 }
+#: Operations whose database comes from the dialog's `database` reference.
+DATABASE_PICKED = frozenset({('role', 'reassign-owned'), ('role', 'drop-owned'),
+                             ('tablespace', 'move-objects')})
+_DATABASE_REFERENCE = __import__('re').compile(r'postgresql:pg_database/([1-9][0-9]{0,9})')
+MOVE_OBJECT_TYPES = {'all': ('TABLE', 'INDEX', 'MATERIALIZED VIEW'), 'tables': ('TABLE',),
+                     'indexes': ('INDEX',), 'materialized-views': ('MATERIALIZED VIEW',)}
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).
 CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
+    ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
+    ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
+    ('pgagent-job', 'run-now'), ('table', 'disable-triggers'), ('table', 'detach-partition'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
     'truncate': 'destructive', 'refresh': 'admin',
+    'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
+    'wal-replay-resume': 'admin',
+    'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
+    'run-now': 'admin',
+    'count-rows': 'read', 'reset-statistics': 'admin', 'enable-triggers': 'admin',
+    'disable-triggers': 'admin', 'create-partition': 'write', 'attach-partition': 'admin',
+    'detach-partition': 'admin',
 }
 
 _OPTIONS = {
@@ -38,12 +72,40 @@ _OPTIONS = {
     ('table', 'analyze'): {'verbose', 'skip_locked'},
     ('table', 'reindex'): {'concurrently', 'verbose'},
     ('index', 'reindex'): {'concurrently', 'verbose'},
+    ('schema', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
+    ('schema', 'analyze'): {'verbose', 'skip_locked'},
     ('schema', 'reindex'): {'concurrently', 'verbose'},
+    ('database', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
+    ('database', 'analyze'): {'verbose', 'skip_locked'},
     ('database', 'reindex'): {'concurrently', 'verbose'},
     ('table', 'cluster'): {'index', 'verbose'},
     ('table', 'truncate'): {'restart_identity', 'cascade', 'confirmation'},
     ('materialized-view', 'refresh'): {'concurrently', 'with_data'},
+    ('server', 'reload'): set(),
+    ('server', 'restore-point'): {'name'},
+    ('server', 'wal-replay-pause'): set(),
+    ('server', 'wal-replay-resume'): set(),
+    ('role', 'reassign-owned'): {'database', 'new_owner'},
+    ('role', 'drop-owned'): {'database', 'cascade', 'confirmation'},
+    ('tablespace', 'move-objects'): {'database', 'object_type', 'new_tablespace', 'owner'},
+    ('pgagent-job', 'run-now'): set(),
+    ('table', 'count-rows'): set(),
+    ('table', 'reset-statistics'): set(),
+    ('table', 'enable-triggers'): set(),
+    ('table', 'disable-triggers'): set(),
+    ('table', 'create-partition'): {'name', 'schema', 'is_default', 'partition_value', 'relpersistence',
+                                    'is_partitioned', 'partition_type', 'partition_keys', 'amname',
+                                    'fillfactor', 'spcname', 'relowner', 'description'},
+    ('partitioned-table', 'create-partition'): {'name', 'schema', 'is_default', 'partition_value',
+                                                'relpersistence', 'is_partitioned', 'partition_type',
+                                                'partition_keys', 'amname', 'fillfactor', 'spcname',
+                                                'relowner', 'description'},
+    ('table', 'attach-partition'): {'partition', 'is_default', 'partition_value'},
+    ('partitioned-table', 'attach-partition'): {'partition', 'is_default', 'partition_value'},
+    ('table', 'detach-partition'): {'mode'},
+    ('partitioned-table', 'count-rows'): set(),
 }
+_RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
 
 
@@ -63,6 +125,20 @@ def _qualified(native):
     from .native_admin import _identifier, _name
     return (_identifier(_name(native.get('schema'), 'schema'), 'schema') + '.' +
             _identifier(_name(native.get('name'), 'name'), 'name'))
+
+
+def _schema_relations(native):
+    """The schema's tables and materialized views as one quoted list, from the
+    listing that produced the node; a table created afterwards is not in it."""
+    from .native_admin import _identifier, _name
+    schema = _name(native.get('name'), 'name')
+    relations = native.get('relations')
+    if not isinstance(relations, list) or any(type(item) is not str for item in relations):
+        _refuse('the schema listing carries no table list to vacuum or analyze')
+    if not relations:
+        _refuse('the schema has no tables or materialized views to vacuum or analyze')
+    return ', '.join(_identifier(schema, 'schema') + '.' + _identifier(name, 'name')
+                     for name in sorted(set(relations)))
 
 
 def _parallel(value):
@@ -85,11 +161,38 @@ def compile_operation(kind, operation, native, draft):
         _refuse('Unknown PostgreSQL maintenance option')
     options = []
     autocommit = False
+    if kind == 'server':
+        return _server_operation(operation, draft)
+    if key in DATABASE_PICKED:
+        return _database_picked_operation(kind, operation, native, draft)
+    if kind in {'table', 'partitioned-table'} and operation in {
+            'count-rows', 'reset-statistics', 'enable-triggers', 'disable-triggers'}:
+        return _table_operation(operation, native)
+    if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
+        from .partitions import compile_operation as compile_partition
+        compiled = compile_partition(operation, native, draft)
+        compiled.setdefault('autocommit', False)
+        compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
+                                   'options': [], 'transaction_mode': 'autocommit' if compiled['autocommit']
+                                   else 'transaction'}
+        return compiled
+    if key == ('pgagent-job', 'run-now'):
+        from .pgagent import run_now
+        compiled = run_now(native)
+        compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
+                                   'options': [], 'transaction_mode': 'transaction'}
+        return compiled
     if kind in {'schema', 'database'}:
         target = _identifier(_name(native.get('name'), 'name'), 'name')
     else:
         target = _qualified(native)
     object_name = native.get('name')
+    if operation in {'vacuum', 'analyze'} and kind == 'database':
+        # Without a table list VACUUM/ANALYZE cover the connected database;
+        # the apply route checks that database is the one named here.
+        target = ''
+    elif operation in {'vacuum', 'analyze'} and kind == 'schema':
+        target = _schema_relations(native)
     if operation == 'vacuum':
         flags = {name: _flag(draft, name) for name in ('full', 'freeze', 'analyze', 'verbose')}
         parallel = _parallel(draft.get('parallel'))
@@ -98,11 +201,11 @@ def compile_operation(kind, operation, native, draft):
         options = [name.upper() for name, on in flags.items() if on]
         if parallel is not None:
             options.append(f'PARALLEL {parallel}')
-        statement = 'VACUUM' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target
+        statement = ('VACUUM' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
         autocommit = True
     elif operation == 'analyze':
         options = [name.upper() for name in ('verbose', 'skip_locked') if _flag(draft, name)]
-        statement = 'ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target
+        statement = ('ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
     elif operation == 'reindex':
         concurrently = _flag(draft, 'concurrently')
         options = (['CONCURRENTLY'] if concurrently else []) + (['VERBOSE'] if _flag(draft, 'verbose') else [])
@@ -137,8 +240,104 @@ def compile_operation(kind, operation, native, draft):
     }
 
 
+def database_reference_oid(value):
+    """The pg_database OID a dialog's database reference names."""
+    match = _DATABASE_REFERENCE.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        _refuse('choose the database the operation runs in')
+    return int(match.group(1))
+
+
+def _database_picked_operation(kind, operation, native, draft):
+    """REASSIGN OWNED, DROP OWNED and ALTER ... ALL IN TABLESPACE: one
+    transaction in the database the dialog picked (plan route), on the
+    objects of that database only."""
+    from .native_admin import _identifier, _name
+    database_reference_oid(draft.get('database'))
+    name = _name(native.get('name'), 'name')
+    target = _identifier(name, 'name')
+    options = []
+    if operation == 'reassign-owned':
+        new_owner = _identifier(_name(draft.get('new_owner'), 'new_owner'), 'new_owner')
+        statement = f'REASSIGN OWNED BY {target} TO {new_owner}'
+    elif operation == 'drop-owned':
+        if _name(draft.get('confirmation'), 'confirmation') != name:
+            _refuse('drop confirmation does not match object name')
+        cascade = _flag(draft, 'cascade')
+        options = ['CASCADE'] if cascade else []
+        statement = f'DROP OWNED BY {target}' + (' CASCADE' if cascade else ' RESTRICT')
+    else:
+        object_type = draft.get('object_type', 'all')
+        if object_type not in MOVE_OBJECT_TYPES:
+            _refuse('object_type must be one of ' + ', '.join(sorted(MOVE_OBJECT_TYPES)))
+        new_tablespace = _identifier(_name(draft.get('new_tablespace'), 'new_tablespace'), 'new_tablespace')
+        if draft.get('new_tablespace') == name:
+            _refuse('choose a different tablespace to move the objects to')
+        owner = draft.get('owner')
+        owned = '' if owner in (None, '') else ' OWNED BY ' + _identifier(_name(owner, 'owner'), 'owner')
+        options = [object_type]
+        statement = ';\n'.join(f'ALTER {word} ALL IN TABLESPACE {target}{owned} SET TABLESPACE {new_tablespace}'
+                                for word in MOVE_OBJECT_TYPES[object_type])
+    return {
+        'statement': statement, 'read_only': False, 'autocommit': False,
+        'maintenance': {'action': operation, 'object_kind': kind, 'object': name,
+                        'options': options, 'transaction_mode': 'transaction'},
+    }
+
+
+def _table_operation(operation, native):
+    """The inherited table node's own operations (M7): one statement each,
+    in a transaction; the row count is a read whose result row is shown."""
+    from .native_admin import _name
+    target = _qualified(native)
+    read_only = operation == 'count-rows'
+    if operation == 'count-rows':
+        statement = f'SELECT count(*) AS row_count FROM {target}'
+    elif operation == 'reset-statistics':
+        oid = native.get('oid')
+        if type(oid) is str and oid.isdigit():
+            oid = int(oid)
+        if type(oid) is not int or oid <= 0:
+            _refuse('the table listing carries no OID to reset statistics for')
+        statement = f'SELECT pg_catalog.pg_stat_reset_single_table_counters({oid}) AS reset'
+    else:
+        word = 'ENABLE' if operation == 'enable-triggers' else 'DISABLE'
+        statement = f'ALTER TABLE {target} {word} TRIGGER ALL'
+    return {
+        'statement': statement, 'read_only': read_only, 'autocommit': False,
+        'returns_rows': operation in {'count-rows', 'reset-statistics'},
+        'maintenance': {'action': operation, 'object_kind': 'table', 'object': _name(native.get('name'), 'name'),
+                        'options': [], 'transaction_mode': 'transaction'},
+    }
+
+
+def _server_operation(operation, draft):
+    """One server-wide function call; the result row is the receipt."""
+    from .native_admin import _literal
+    if operation == 'reload':
+        statement = 'SELECT pg_catalog.pg_reload_conf() AS reloaded'
+    elif operation == 'restore-point':
+        name = draft.get('name')
+        if not isinstance(name, str) or not _RESTORE_POINT.fullmatch(name):
+            _refuse('a restore point needs a name of at most 63 characters')
+        statement = ('SELECT pg_catalog.pg_create_restore_point('
+                     + _literal(name, 'name') + ') AS restore_point_lsn')
+    elif operation == 'wal-replay-pause':
+        statement = 'SELECT pg_catalog.pg_wal_replay_pause() AS paused'
+    else:
+        statement = 'SELECT pg_catalog.pg_wal_replay_resume() AS resumed'
+    return {
+        'statement': statement, 'read_only': False, 'autocommit': False, 'returns_rows': True,
+        'maintenance': {'action': operation, 'object_kind': 'server', 'object': None,
+                        'options': [], 'transaction_mode': 'transaction'},
+    }
+
+
 def form(kind, operation, field):
     """Dialog fields for the catalog form; mirrors the allow-list above."""
+    if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
+        from .partitions import form as partition_form
+        return partition_form(operation, field)
     def boolean(name, label, **kw):
         return field(name, label, 'boolean', **kw)
     fields = []
@@ -164,7 +363,37 @@ def form(kind, operation, field):
     elif operation == 'refresh':
         fields = [boolean('with_data', 'Populate with data', default=True),
                   boolean('concurrently', 'Concurrently (requires a unique index)')]
+    elif operation == 'restore-point':
+        fields = [field('name', 'Restore point name', required=True,
+                        help='Recorded in the WAL; a recovery_target_name for point-in-time recovery.')]
+    database = field('database', 'Database', 'reference', required=True, reference_kind='database',
+                     reference_value='resource_id', help='Only the objects of this database are affected.')
+    if operation == 'reassign-owned':
+        fields = [database, field('new_owner', 'New owner', 'reference', required=True, reference_kind='role')]
+    elif operation == 'drop-owned':
+        fields = [database, boolean('cascade', 'Cascade to dependent objects'),
+                  field('confirmation', 'Type the role name to confirm', required=True)]
+    elif operation == 'move-objects':
+        fields = [database,
+                  field('object_type', 'Objects to move', 'select', default='all', options=[
+                      {'value': 'all', 'label': 'Tables, indexes and materialized views'},
+                      {'value': 'tables', 'label': 'Tables'}, {'value': 'indexes', 'label': 'Indexes'},
+                      {'value': 'materialized-views', 'label': 'Materialized views'}]),
+                  field('new_tablespace', 'New tablespace', 'reference', required=True, reference_kind='tablespace'),
+                  field('owner', 'Only objects owned by', 'reference', reference_kind='role',
+                        help='Leave empty to move every object in the tablespace.')]
     titles = {'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
-              'truncate': 'Truncate', 'refresh': 'Refresh'}
+              'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
+              'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
+              'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',
+              'drop-owned': 'Drop owned objects', 'move-objects': 'Move objects to another tablespace',
+              'run-now': 'Run now', 'count-rows': 'Count rows', 'reset-statistics': 'Reset statistics',
+              'enable-triggers': 'Enable all triggers', 'disable-triggers': 'Disable all triggers'}
+    if kind in {'role', 'tablespace', 'pgagent-job'}:
+        return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:server:{kind}',
+                'title': titles[operation], 'fields': fields}
+    if kind == 'server':
+        return {'form_id': f'postgresql-server-{operation}', 'form_key': 'native:postgresql:server:server',
+                'title': titles[operation], 'fields': fields}
     return {'form_id': f'postgresql-{kind}-{operation}', 'form_key': f'native:postgresql:schema:{kind}',
             'title': f'{titles[operation]} {kind.replace("-", " ")}', 'fields': fields}

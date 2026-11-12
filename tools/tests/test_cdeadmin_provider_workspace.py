@@ -510,6 +510,40 @@ class ProviderWorkspaceTests(unittest.TestCase):
                 'native': {'forged': True},
             })
 
+    def test_native_forms_return_the_providers_lifecycle_forms(self):
+        """Owner decision 2026-11-11 (option 1): a kind without a bundle
+        form is edited with the provider's own form from its catalog."""
+        field = {'field_id': 'name', 'label': 'Name', 'control': 'text',
+                 'required': True}
+        self.provider.visual_admin_descriptor = lambda: {'objects': [{
+            'resource_kind': 'widget', 'operations': [
+                {'operation_id': 'alter', 'execution_route': 'provider-native',
+                 'confirmation_required': False, 'target_required': True,
+                 'form': {'title': 'Edit widget', 'fields': [field],
+                          'notes': 'n'}},
+                {'operation_id': 'drop', 'execution_route': 'provider-native',
+                 'confirmation_required': True,
+                 'form': {'title': 'Drop widget', 'fields': []}},
+                {'operation_id': 'inspect', 'execution_route': 'legacy-preserved',
+                 'form': {'title': 'Inspect', 'fields': [field]}}]}]}
+        result = self.workspace.native_forms(SimpleNamespace(), {
+            'resource_kind': 'widget'})
+        self.assertEqual('widget', result['resource_kind'])
+        # Provider-native operations with a field list; the inherited one is left out.
+        self.assertEqual([
+            {'operation_id': 'alter', 'title': 'Edit widget', 'fields': [field],
+             'notes': 'n', 'confirmation_required': False,
+             'target_required': True},
+            {'operation_id': 'drop', 'title': 'Drop widget', 'fields': [],
+             'notes': None, 'confirmation_required': True,
+             'target_required': True}], result['operations'])
+        self.assertEqual([], self.workspace.native_forms(
+            SimpleNamespace(), {'resource_kind': 'no-such-kind'})['operations'])
+        with self.assertRaisesRegex(Exception, 'invalid'):
+            self.workspace.native_forms(SimpleNamespace(), {'forged': True})
+        with self.assertRaisesRegex(Exception, 'required'):
+            self.workspace.native_forms(SimpleNamespace(), {'resource_kind': ''})
+
     def test_browse_data_builds_the_select_from_every_cached_page(self):
         """Browse data (owner direction 2026-11-06), end to end through the
         MySQL provider: the columns are found in the tree's cached catalog,

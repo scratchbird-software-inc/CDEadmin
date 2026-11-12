@@ -38,17 +38,34 @@ function resourceEditorAvailable(bundle, resourceKind) {
   return bundle?.kinds?.[resourceKind]?.family !== 'server' && editorAvailable(bundle, resourceKind);
 }
 
+/**
+ * Whether a node can open the editor for an operation: a bundle form, or the
+ * provider's own form the server flagged on the node (owner decision
+ * 2026-11-11, option 1: `cde_native_editor` lists create/alter/drop).
+ */
+function nodeEditorAvailable(bundle, resourceKind, itemData, operation) {
+  return resourceEditorAvailable(bundle, resourceKind) ||
+    (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation));
+}
+
 /*
- * LEGACY REGISTRATION RETIRED (2026-10-28) for these engines. Their Server form in
- * ui_descriptors/<engine>/forms/server.form.json is `complete`, and register / edit now go only
- * through tryOpenServerForm -> ServerRegistrationHost. The legacy SchemaView dialog
+ * LEGACY REGISTRATION RETIRED (2026-10-28 for the first four engines, 2026-11-12 for every
+ * engine, owner direction). Each engine's Server form in ui_descriptors/<engine>/forms/server.form.json
+ * is `complete`, and register / edit go only through tryOpenServerForm -> ServerRegistrationHost. The legacy SchemaView dialog
  * (servers/static/js/server.ui.js) is NOT removed, only unreachable for them: the fallback calls
  * in server.js `register_engine_server` and ProviderContextMenu.js `edit_endpoint` are commented
  * out and marked "LEGACY-FALLBACK". Full trace and restore steps: docs/en_US/ui_server_editor_retirement.rst
  * To restore one engine, delete it from this set (the fallback then applies to it again) and
  * uncomment the LEGACY-FALLBACK lines.
  */
-export const LEGACY_REGISTRATION_RETIRED = new Set(['mariadb', 'firebird', 'duckdb', 'sqlite']);
+export const LEGACY_REGISTRATION_RETIRED = new Set([
+  // Owner direction 2026-11-12: one registration path for every engine. The legacy dialog is
+  // unreachable for all of them; a host that cannot open reports instead of falling back.
+  'postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite', 'dolt', 'tidb', 'vitess',
+  'cockroachdb', 'yugabytedb', 'immudb', 'xtdb', 'apache_ignite', 'cassandra', 'clickhouse',
+  'foundationdb', 'influxdb', 'milvus', 'mongodb', 'neo4j', 'opensearch', 'opensearch_sql_ppl',
+  'redis', 'tikv',
+]);
 
 /** Tell the user the new editor failed and where to look; replaces the retired legacy fallback. */
 export function reportServerEditorFailure(engine, reason) {
@@ -163,7 +180,7 @@ export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
     // No descriptors served for this engine: the legacy workspace still works.
     return false;
   }
-  if(!resourceEditorAvailable(bundle, itemData.cde_resource_kind)) return false;
+  if(!nodeEditorAvailable(bundle, itemData.cde_resource_kind, itemData, 'alter')) return false;
   return openEditorPanel({context, itemData, item, resourceKind: itemData.cde_resource_kind,
     resourceId: itemData.cde_resource_id, mode, displayName: itemData.label || itemData._label});
 }
@@ -173,7 +190,7 @@ export function openFamilyCreate(itemData, item, resourceKind) {
   const context = treeContext(itemData, item);
   if(!context) return false;
   const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
-  if(!bundle || !resourceEditorAvailable(bundle, resourceKind)) return false;
+  if(!bundle || !nodeEditorAvailable(bundle, resourceKind, itemData, 'create')) return false;
   return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
     displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
 }
@@ -247,23 +264,32 @@ const CATEGORY_MAP = {
  * (the first request starts the fetch) or when the kind declares nothing.
  */
 export function familyEditorContextActions(itemData, item) {
-  if(!['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
+  // A provider-tree server node offers the engine's server-scope operations
+  // (reload configuration, restore points, WAL replay control) from the
+  // descriptor; its edit and create entries stay with the server dialog.
+  const providerServer = itemData?._type === 'server' && Boolean(itemData.cde_provider_tree);
+  if(!providerServer && !['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
   const context = treeContext(itemData, item);
   if(!context) return [];
   const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
   if(!bundle) return [];
   const entries = [];
-  const resourceKind = itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
-  if(itemData._type === 'cde_resource' && resourceEditorAvailable(bundle, resourceKind)) {
+  const resourceKind = providerServer ? 'server' :
+    itemData._type === 'cde_database_target' ? 'database' : itemData.cde_resource_kind;
+  if(itemData._type === 'cde_resource' && nodeEditorAvailable(bundle, resourceKind, itemData, 'alter')) {
     entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
   }
   // Create entries: a group node creates its own kind; a database creates any top-level kind.
+  // A database node also creates the engine-object kinds the server flags as
+  // natively creatable (owner decision 2026-11-11, option 1).
+  const nativeKinds = Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [];
   const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
     itemData._type === 'cde_database_target' ?
-      Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
-        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind) : [];
-  const creatable = childKinds.filter((kind) => resourceEditorAvailable(bundle, kind) && bundle.kinds[kind]?.tier1.includes('create'));
+      [...new Set([...Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
+        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind), ...nativeKinds])] : [];
+  const creatable = childKinds.filter((kind) => bundle.kinds[kind]?.tier1.includes('create') &&
+    (nodeEditorAvailable(bundle, kind, itemData, 'create') || nativeKinds.includes(kind)));
   if(creatable.length === 1) {
     entries.push({category: 'common', id: `family-editor-create-${creatable[0]}`,
       label: gettext('Create %s...', kindTitle(bundle, creatable[0])), iconKey: 'action.create',
@@ -276,6 +302,7 @@ export function familyEditorContextActions(itemData, item) {
   }
   if(itemData._type !== 'cde_resource_group') {
     // The endpoint's provider decides per runtime (version and proof).
+    // A server node lists its descriptor operations only (no family editor).
     const unsupported = new Set(itemData.cde_unsupported_operations || []);
     for(const group of menuForKind(bundle, resourceKind)) {
       for(const entry of group.items) {
@@ -298,6 +325,13 @@ export function familyEditorContextActions(itemData, item) {
  * editing ('alter', on a server item) a provider endpoint. Resolves true when it opened and false
  * when the legacy dialog must handle it: no bundle, or the engine's server form is not complete.
  */
+/*
+ * Engines whose registration changes the servers API refuses and routes through the provider's
+ * lifecycle admission (servers/__init__.py update guard); their editor saves through the
+ * endpoint's workspace action instead.
+ */
+export const LIFECYCLE_EDIT_ENGINES = new Set(['mysql']);
+
 export async function tryOpenServerForm({item, mode='create', engine, profileId, initialData={}, intent='endpoint',
   verifyNow=true, panelTitle}) {
   if(!engine || !item) return false;
@@ -317,11 +351,19 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
   const base = generateNodeUrl.call(serverNode, treeNodeInfo, mode === 'create' ? 'create' : 'edit', nodeData, false,
     serverNode.url_jump_after_node);
   const urlFor = (isNew) => base + (isNew ? '' : nodeData._id);
+  const lifecycleUrl = mode !== 'create' && LIFECYCLE_EDIT_ENGINES.has(engine) ?
+    urlFor(false).replace('/obj/', '/cde_workspace/') : undefined;
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = mode === 'create' ? `id-server-register-${++editorSequence}` : `id-server-edit-${nodeData._id}`;
   const onClose = () => closeInlineOrWorkspaceTab(panelId, workspace);
   const onSaved = (response) => {
     setTimeout(() => serverNode.clear_cache?.(item), 0);
+    if(mode !== 'create' && !response?.node) {
+      // A lifecycle update returns the endpoint, not a tree node: reload the node instead.
+      tree.refresh?.(item);
+      onClose();
+      return;
+    }
     if(mode === 'create') {
       pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
     } else {
@@ -339,7 +381,8 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
     <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
       versionSupport={nodeData.version_support}
       mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
-      intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
+      intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved}
+      lifecycleUrl={lifecycleUrl} />
   </ErrorBoundary>;
   openInlineOrWorkspaceTab(panelId, title, content, workspace);
   return true;

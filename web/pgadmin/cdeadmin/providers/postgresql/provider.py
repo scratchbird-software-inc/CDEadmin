@@ -17,6 +17,7 @@ transaction payload as opaque.
 from __future__ import annotations
 
 import copy
+import re
 import json
 import uuid
 import threading
@@ -51,6 +52,7 @@ from .execution import (
     Execution, parameters as native_parameters, control as native_control,
 )
 from .native_admin import (
+    _native_target,
     PostgreSQLNativeAdminError, compile_native_admin,
 )
 from .catalog_capture import CAPTURE_RESOURCE_KINDS
@@ -63,10 +65,10 @@ from .preserved_surface import (
 )
 
 
-PROVIDER_ID = 'org.pgadmin.postgresql'
-PROVIDER_VERSION = '9.17.0'
-PROFILE_ID = 'postgresql-native'
-PROFILE_VERSION = '18.3'
+# The identity is one module, importable without this one.
+from .identity import (  # noqa: E402
+    PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION,
+)
 LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'
@@ -102,8 +104,61 @@ POSTGRESQL_CONCEPT_DECLARATIONS = {
 POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 
 
+def _surface_facts(native):
+    """Family forms read a resource's native block by field id (the editor
+    host spreads it into the dialog's record), so the editor facts are
+    surfaced at the top level wherever no native key holds that name
+    (owner direction 2026-11-11: the forms show the current values)."""
+    for key, facts in list(native.items()):
+        if key.endswith('_facts') and isinstance(facts, Mapping):
+            for name, value in facts.items():
+                native.setdefault(name, value)
+    return native
+
+
 class PostgreSQLProviderError(RuntimeError):
     """A PostgreSQL provider operation cannot be completed safely."""
+
+
+class PostgreSQLStatementRejected(PostgreSQLProviderError):
+    """The server rejected the administrative statement before anything
+    was committed (owner decision 2026-11-11): the outcome is known, nothing
+    changed, and the SQLSTATE and the server's message may be shown."""
+
+    rejected = True
+    nothing_changed = True
+
+    def __init__(self, message, sqlstate=None):
+        super().__init__(message)
+        self.sqlstate = sqlstate
+        self.message = message
+
+
+_SQLSTATE = re.compile(r'^[0-9A-Z]{5}$')
+
+
+def _rejection(error):
+    """Build the rejection from a driver error text or a psycopg error."""
+    sqlstate = None
+    text = ''
+    if isinstance(error, str):
+        text = error
+        match = re.search(r'SQL state:\s*([0-9A-Z]{5})', text)
+        if match:
+            sqlstate = match.group(1)
+    else:
+        diag = getattr(error, 'diag', None)
+        sqlstate = (getattr(error, 'sqlstate', None) or
+                    getattr(diag, 'sqlstate', None))
+        text = (getattr(diag, 'message_primary', None) or str(error))
+    if not isinstance(sqlstate, str) or _SQLSTATE.match(sqlstate) is None:
+        sqlstate = None
+    first = str(text).replace('\x00', '').strip().splitlines()
+    message = (first[0] if first else 'the statement was rejected').strip()
+    for prefix in ('ERROR:', 'FATAL:'):
+        if message.startswith(prefix):
+            message = message[len(prefix):].strip()
+    return PostgreSQLStatementRejected(message[:500], sqlstate)
 
 
 def _mapping(value: object) -> dict[str, Any]:
@@ -278,8 +333,30 @@ class PostgreSQLCatalogSource:
             sql = self._renderer('pga_job/sql/pre3.4/properties.sql',
                                  jid=object_id, conn=connection)
             status, result = connection.execute_dict(sql)
-            return [{**row, 'name': row.get('jobname')}
+            rows = [{**row, 'name': row.get('jobname')}
                     for row in self._rows(status, result)]
+            if object_id is not None:
+                # The editor's initial values (M6): steps, schedules and
+                # whether this pgAgent has the connection-string column.
+                status, result = connection.execute_dict(
+                    "SELECT EXISTS(SELECT 1 FROM information_schema.columns"
+                    " WHERE table_schema='pgagent' AND table_name="
+                    "'pga_jobstep' AND column_name='jstconnstr')"
+                    " AS has_connstr")
+                has_connstr = bool(
+                    self._rows(status, result)[0].get('has_connstr'))
+                status, result = connection.execute_dict(self._renderer(
+                    'pga_job/sql/pre3.4/steps.sql', jid=object_id,
+                    jstid=None, has_connstr=has_connstr, conn=connection))
+                steps = self._rows(status, result)
+                status, result = connection.execute_dict(self._renderer(
+                    'pga_job/sql/pre3.4/schedules.sql', jid=object_id,
+                    jscid=None, conn=connection))
+                schedules = self._rows(status, result)
+                for row in rows:
+                    row.update(has_connstr=has_connstr, steps=steps,
+                               schedules=schedules)
+            return rows
         if catalog_kind == 'replica-node':
             # The inherited Replica Nodes collection: pg_stat_replication
             # rows joined to their slots, keyed by the walsender pid. The
@@ -400,9 +477,46 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL provider route is invalid'
             )
-        # Database create and alter run from the server scope (M4): the
-        # attachment is the maintenance database, so no database id.
-        optional = request.get('resource_kind') == 'database'
+        # Database, role and tablespace changes run from the server scope
+        # (M4): the attachment is the maintenance database, so no database
+        # id.
+        kind = request.get('resource_kind')
+        optional = kind in {'database', 'role', 'tablespace', 'server',
+                            'pgagent-job'}
+        if kind == 'database' and request.get('operation_id') == 'drop':
+            # DROP DATABASE cannot run on a connection to that database
+            # (M6): it always runs from the server scope attachment.
+            return {'server_id': _required_int(route, 'server_id'),
+                    'database_id': None}
+        if kind == 'database' and request.get('operation_id') == 'alter':
+            # ALTER DEFAULT PRIVILEGES acts inside the database (owner
+            # direction 2026-11-11): such a plan attaches to it.
+            from .databases import has_default_privileges
+            draft = request.get('draft') or {}
+            if isinstance(draft, Mapping) and has_default_privileges(draft):
+                native = _native_target(request)
+                meta = native.get('catalog_metadata') or {}
+                oid = meta.get('did', native.get('native_identity',
+                                                 native.get('oid')))
+                if isinstance(oid, str) and oid.isdigit():
+                    oid = int(oid)
+                if type(oid) is not int:
+                    raise PostgreSQLProviderError(
+                        'the database identity is not known to the listing')
+                return {'server_id': _required_int(route, 'server_id'),
+                        'database_id': oid}
+        from .maintenance import DATABASE_PICKED, database_reference_oid
+        if (kind, request.get('operation_id')) in DATABASE_PICKED:
+            # The dialog picks the database these run in (M6).
+            draft = request.get('draft') or {}
+            try:
+                picked = database_reference_oid(
+                    draft.get('database') if isinstance(draft, Mapping)
+                    else None)
+            except Exception as exc:
+                raise PostgreSQLProviderError(str(exc)) from exc
+            return {'server_id': _required_int(route, 'server_id'),
+                    'database_id': picked}
         return {
             'server_id': _required_int(route, 'server_id'),
             'database_id': (route.get('database_id') if optional and
@@ -507,10 +621,28 @@ class PostgreSQLProvider:
                               identity.get('rows') != [{'oid': database_id}]):
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
-            status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
-                              else connection.execute_void(statement))
+            returns_rows = (compiled['read_only'] or
+                            compiled.get('returns_rows'))
+            try:
+                # The inherited connection puts the SQLSTATE in the formatted
+                # message; a clean rejection reports it.
+                status, result = (
+                    connection.execute_dict(statement,
+                                            formatted_exception_msg=True)
+                    if returns_rows else
+                    connection.execute_void(statement,
+                                            formatted_exception_msg=True))
+            except Exception as exc:
+                # A driver that raises on a server error (the harness does)
+                # reports the same clean rejection as one that returns it.
+                if (getattr(exc, 'diag', None) is None and
+                        not getattr(exc, 'sqlstate', None)):
+                    raise
+                raise _rejection(exc) from None
             if not status:
-                raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+                # Rejected before any commit: the private attachment rolls back
+                # on release, so nothing changed and the outcome is known.
+                raise _rejection(result if isinstance(result, str) else '')
             if compiled.get('server_file_operation'):
                 rows = result.get('rows', [])
                 if (len(rows) != 1 or
@@ -1112,6 +1244,14 @@ class PostgreSQLProvider:
         schemas = schema_oids(capture['resources'])
         backed = constraint_indexes(capture['resources'])
         wrappers = foreign_server_wrappers(capture['resources'])
+        wrapper_names = {int(r['native']['oid']): r['display_name']
+                         for r in capture['resources']
+                         if (r.get('native') or {}).get('catalog')
+                         == 'pg_foreign_data_wrapper'}
+        server_names = {int(r['native']['oid']): r['display_name']
+                        for r in capture['resources']
+                        if (r.get('native') or {}).get('catalog')
+                        == 'pg_foreign_server'}
         relations = {int(r['native']['oid']): (r['native'].get('schema'),
                                               r['display_name'])
                      for r in capture['resources']
@@ -1130,6 +1270,32 @@ class PostgreSQLProvider:
             if n.get('catalog') == 'pg_class':
                 attributes[int(n['oid'])] = (
                     n.get('children') or {}).get('pg_attribute') or []
+        # A partitioned table's partitions, from each child's pg_inherits
+        # row, for the Partitions grid (owner direction 2026-11-11).
+        partitions_of: dict[int, list] = {}
+        for r in capture['resources']:
+            n = r.get('native') or {}
+            if n.get('catalog') != 'pg_class' or not (
+                    n.get('catalog_row') or {}).get('relispartition'):
+                continue
+            for inherit in (n.get('children') or {}).get('pg_inherits') or []:
+                parent_oid = inherit.get('inhparent')
+                if isinstance(parent_oid, str) and parent_oid.isdigit():
+                    parent_oid = int(parent_oid)
+                if type(parent_oid) is int:
+                    partitions_of.setdefault(parent_oid, []).append({
+                        'oid': n.get('oid'), 'schema': n.get('schema'),
+                        'name': r['display_name'],
+                        'bound': (n.get('catalog_row') or {}).get(
+                            'partition_bound_sql')})
+        # Schema-scope VACUUM/ANALYZE name the schema's tables and
+        # materialized views (M6): PostgreSQL has no schema form.
+        schema_relations: dict[str, list[str]] = {}
+        for r in capture['resources']:
+            if r.get('resource_kind') in {'table', 'materialized-view'}:
+                schema_relations.setdefault(
+                    (r.get('native') or {}).get('schema'), []
+                ).append(r['display_name'])
         # Array and relation row types stay out, as on the inherited tree.
         hidden_types = implicit_type_ids(capture['resources'], include_system)
         result = []
@@ -1158,6 +1324,35 @@ class PostgreSQLProvider:
             if item['resource_kind'] == 'policy':
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
+            if item['resource_kind'] in {'table', 'partitioned-table'}:
+                # The table editor's initial values and the partition side
+                # (parent, bound) for the detach operation (M7).
+                from .partitions import partition_facts
+                from .tables import facts as table_facts
+                native['partitions'] = partitions_of.get(
+                    int(native['oid']) if str(native.get('oid')).isdigit()
+                    else native.get('oid'), [])
+                native['table_facts'] = table_facts(native)
+                native['partition_facts'] = partition_facts(native, relations)
+                # Not ``parent``: that is this listing's parent resource.
+                owner_table = native['partition_facts'].get('parent') or {}
+                if owner_table.get('name'):
+                    native['parent_table'] = owner_table
+            if item['resource_kind'] == 'foreign-table':
+                from .foreign_tables import facts as foreign_table_facts
+                native['table_facts'] = foreign_table_facts(
+                    native, server_names)
+                native['foreign_server'] = native['table_facts']['ftsrvname']
+            if item['resource_kind'] == 'constraint':
+                # The owning relation and the editor's initial values (M7).
+                from .constraints import _oid as constraint_oid
+                from .constraints import facts as constraint_facts
+                owner = relations.get(constraint_oid(
+                    (native.get('catalog_row') or {}).get('conrelid')))
+                if owner:
+                    native['table'] = owner[1]
+                native['constraint_facts'] = constraint_facts(
+                    native, relations)
             if item['resource_kind'] == 'domain':
                 from .types import domain_facts
                 native['domain_facts'] = domain_facts(
@@ -1168,9 +1363,51 @@ class PostgreSQLProvider:
             if item['resource_kind'] in {'view', 'materialized-view'}:
                 from .views import facts as view_facts
                 native['view_facts'] = view_facts(native)
+            if item['resource_kind'] in {'function', 'procedure'}:
+                from .routines import facts as routine_facts
+                native['routine_facts'] = routine_facts(native)
+            if item['resource_kind'] == 'index':
+                from .indexes import facts as index_facts
+                native['index_facts'] = index_facts(native)
+            if item['resource_kind'].startswith('text-search-'):
+                from .text_search import facts as text_search_facts
+                native['text_search_facts'] = text_search_facts(
+                    item['resource_kind'], native)
+            if item['resource_kind'] == 'publication':
+                from .replication import publication_facts
+                native['publication_facts'] = publication_facts(
+                    native, relations, attributes,
+                    {oid: name for name, oid in schemas.items()})
+            if item['resource_kind'] == 'subscription':
+                from .replication import subscription_facts
+                native['subscription_facts'] = subscription_facts(native)
+            if item['resource_kind'] in {'foreign-data-wrapper',
+                                         'foreign-server', 'user-mapping'}:
+                from .foreign_objects import FACTS as foreign_facts
+                key, reader = foreign_facts[item['resource_kind']]
+                native[key] = (reader(native, wrapper_names)
+                               if item['resource_kind'] == 'foreign-server'
+                               else reader(native))
+            if item['resource_kind'] in {'cast', 'collation', 'language'}:
+                from .catalog_objects import FACTS as catalog_facts
+                key, reader = catalog_facts[item['resource_kind']]
+                native[key] = reader(native)
+            if item['resource_kind'] in {'trigger', 'rule', 'event-trigger'}:
+                from .triggers import (
+                    event_trigger_facts, rule_facts, trigger_facts)
+                reader, key = {
+                    'trigger': (trigger_facts, 'trigger_facts'),
+                    'rule': (rule_facts, 'rule_facts'),
+                    'event-trigger': (event_trigger_facts,
+                                      'event_trigger_facts'),
+                }[item['resource_kind']]
+                native[key] = reader(native)
             if item['resource_kind'] == 'schema':
                 from .schemas import facts as schema_facts
                 native['schema_facts'] = schema_facts(native)
+                native['relations'] = schema_relations.get(
+                    item['display_name'], [])
+            _surface_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
@@ -1214,12 +1451,22 @@ class PostgreSQLProvider:
                 'catalog': 'pg_attribute', 'oid': native.get('oid'),
                 'attnum': attnum, 'name': name,
                 'schema': native.get('schema'),
+                # The owning relation, for the column editor (M7).
+                'table': relation['display_name'],
                 'data_type': row.get('formatted_type'),
                 'not_null': row.get('attnotnull'),
                 'comment': row.get('comment'),
                 'default_expression': row.get('default_expression'),
                 'navigator_parent_resource_id': relation['resource_id'],
+                # Security labels of this column (owner direction
+                # 2026-11-11): the relation's labels with its attnum.
+                'security_labels': [
+                    label for label in native.get('security_labels') or []
+                    if label.get('objsubid') == attnum],
                 'catalog_row': row})
+            from .columns import facts as column_facts
+            column_native['column_facts'] = column_facts(column_native)
+            _surface_facts(column_native)
             columns.append({
                 'identity': self._identity(),
                 'endpoint_id': self.context.endpoint_id,
@@ -1288,6 +1535,16 @@ class PostgreSQLProvider:
             # The alter dialog's initial values (M4, 2026-11-11).
             from .databases import facts as database_facts
             native['database_facts'] = database_facts(native)
+        if catalog_kind == 'role':
+            from .cluster import role_facts
+            native['role_facts'] = role_facts(native)
+        if catalog_kind == 'tablespace':
+            from .cluster import tablespace_facts
+            native['tablespace_facts'] = tablespace_facts(native)
+        if catalog_kind == 'pgagent-job':
+            from .pgagent import facts as job_facts
+            native['job_facts'] = job_facts(native)
+        _surface_facts(native)
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,
@@ -1480,6 +1737,21 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(
                 'PostgreSQL delegated connection failed'
             )
+
+    def browse_source(self, request, catalog=()):
+        """Browse data (owner direction 2026-11-06) for the provider tree
+        (M6, 2026-11-11): editor text reading every column of one relation,
+        built from the cached catalog; nothing runs here."""
+        from pgadmin.cdeadmin.sdk.browse import BrowseUnavailable, native_of
+        from ..browse_builders import postgresql as build
+        self.permissions.require('data_read')
+        payload = dict(request) if isinstance(request, Mapping) else {}
+        try:
+            source = build(self, payload, native_of(payload),
+                           list(catalog or ()), 'postgresql-sql')
+        except BrowseUnavailable as exc:
+            raise PostgreSQLProviderError(str(exc)) from exc
+        return {'source': source, 'language_profile': 'postgresql-sql'}
 
     def source_tooling(self, language_profile):
         if language_profile != 'postgresql-sql':

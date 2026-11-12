@@ -75,6 +75,18 @@ export default function FieldControl({field, value, onChange, draft={}, context=
     return <TextField {...common} value={value ?? ''} placeholder={field.placeholder}
       onChange={(event) => onChange(event.target.value)} />;
   }
+  // Provider-native forms declare comments and other free text as multiline, and JSON values as
+  // json (text the provider parses). Both were read-only "unsupported" boxes until the browser
+  // pass of 2026-11-12, which left every native editor's comment uneditable.
+  if(control === 'multiline') {
+    return <TextArea {...common} value={value ?? ''} rows={3} placeholder={field.placeholder}
+      onChange={(event) => onChange(event.target.value)} />;
+  }
+  if(control === 'json') {
+    return <TextArea {...common} rows={3} placeholder={field.placeholder}
+      value={typeof value === 'string' ? value : (value === undefined || value === null ? '' : JSON.stringify(value, null, 1))}
+      onChange={(event) => onChange(event.target.value)} />;
+  }
   if(control === 'number') {
     return <NumberField {...common} value={value ?? ''}
       inputProps={{...common.inputProps, min: field.min, max: field.max}}

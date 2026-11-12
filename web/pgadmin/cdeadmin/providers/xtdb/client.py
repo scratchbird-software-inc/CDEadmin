@@ -15,6 +15,7 @@ opaque and uncertain mutations are never replayed.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import base64
 import copy
@@ -356,7 +357,7 @@ class XTDBClient:
             if 'connection_timeout' in route:
                 timeout = route.pop('connection_timeout')
                 route.setdefault('connect_timeout', timeout)
-        unknown = sorted(set(route).difference(cls.ROUTE_FIELDS))
+        unknown = unknown_route_keys(route, cls.ROUTE_FIELDS)
         if unknown:
             raise XTDBClientError(
                 'XTDB route contains unknown fields: ' + ', '.join(unknown)

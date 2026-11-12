@@ -1,0 +1,432 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "clickhouse",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "complete",
+  "engine_tab_title": "ClickHouse",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "read_only",
+      "label": "Read-only route",
+      "tab": "Connection",
+      "control": "boolean",
+      "backend_field_id": "cde_route_read_only",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default.",
+      "default": "default"
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "Username",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_username",
+      "required": false,
+      "default": "default"
+    },
+    {
+      "field_id": "aws_access_key_id",
+      "label": "AWS access key ID",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_aws_access_key_id",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "aws-sigv4"
+      }
+    },
+    {
+      "field_id": "aws_region",
+      "label": "AWS region",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_aws_region",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "aws-sigv4"
+      }
+    },
+    {
+      "field_id": "aws_service",
+      "label": "AWS signing service",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_aws_service",
+      "group": "HTTP authentication",
+      "required": false,
+      "default": "es",
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "aws-sigv4"
+      }
+    },
+    {
+      "field_id": "api_key_header",
+      "label": "API key header",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_api_key_header",
+      "group": "HTTP authentication",
+      "required": false,
+      "default": "Authorization",
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "api-key"
+      }
+    },
+    {
+      "field_id": "auth_kind",
+      "label": "Authentication",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_kind",
+      "group": "ClickHouse authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No password"
+        },
+        {
+          "value": "clickhouse-basic",
+          "label": "Username/password reference"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "role",
+      "label": "Initial role",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_role",
+      "required": false
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "clickhouse-basic"
+      }
+    },
+    {
+      "field_id": "bearer_token",
+      "label": "Bearer token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_bearer_token",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "bearer"
+      }
+    },
+    {
+      "field_id": "api_key",
+      "label": "API key",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_api_key",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "api-key"
+      }
+    },
+    {
+      "field_id": "aws_secret_access_key",
+      "label": "AWS secret access key",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_aws_secret_access_key",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "aws-sigv4"
+      }
+    },
+    {
+      "field_id": "aws_session_token",
+      "label": "AWS session token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_aws_session_token",
+      "group": "HTTP authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "aws-sigv4"
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "ClickHouse TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "HTTP"
+        },
+        {
+          "value": "require",
+          "label": "HTTPS without CA verification"
+        },
+        {
+          "value": "verify-ca",
+          "label": "HTTPS with CA verification"
+        },
+        {
+          "value": "verify-full",
+          "label": "HTTPS with CA and hostname verification"
+        }
+      ],
+      "default": "disable"
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "ClickHouse TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "group": "ClickHouse TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "group": "ClickHouse TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "group": "HTTP TLS",
+      "required": false,
+      "visible_when": {
+        "field": "tls_mode",
+        "in": [
+          "require",
+          "verify-ca",
+          "verify-full"
+        ]
+      }
+    },
+    {
+      "field_id": "pool_max_size",
+      "label": "Maximum pooled connections",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_pool_max_size",
+      "group": "HTTP connection pool",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "field_id": "pool_block",
+      "label": "Wait when the connection pool is full",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_pool_block",
+      "group": "HTTP connection pool",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout",
+      "group": "ClickHouse timeouts",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 120
+    },
+    {
+      "field_id": "statement_timeout",
+      "label": "Statement timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_statement_timeout",
+      "group": "ClickHouse timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "session_id",
+      "label": "HTTP session identifier",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_session_id",
+      "group": "ClickHouse session",
+      "required": false
+    },
+    {
+      "field_id": "quota_key",
+      "label": "Quota key",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_quota_key",
+      "group": "ClickHouse session",
+      "required": false
+    },
+    {
+      "field_id": "http_compression",
+      "label": "HTTP compression",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_http_compression",
+      "group": "HTTP connection",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "gzip",
+          "label": "Gzip request and response"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for clickhouse-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-11): registered through the servers API with this form's payload (what the descriptor registration host sends) against the pinned ClickHouse 25.12.10.7 demo, verified at create, read back and removed (Claude-temp-directory/2026-11-10-pg-m2/live/api-register-engines.py); contract round trip in tools/tests/test_ui_descriptor_server_forms.py. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
+}

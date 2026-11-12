@@ -15,6 +15,12 @@ refuses, is offered here.
 
 The query is admitted only when PostgreSQL's own parser reads it as exactly
 one SELECT (or VALUES / TABLE) statement with no separator or comment.
+
+Owner direction 2026-11-11: every field of the view family form is
+admitted and compiled: privileges (stated, revoked through a grid),
+security labels, a materialized view's TOAST tuple target, autovacuum
+settings, access method and extension dependencies; the owner, tablespace
+and access method are facts.
 """
 from .native_admin import (
     PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
@@ -62,12 +68,28 @@ def _options(reloptions):
 def facts(native):
     """Current values of a view or materialized view as the dialogs show
     them."""
+    from . import tables as table_editor  # tables imports _options: lazy
     row = native.get('catalog_row') or {}
     options = _options(row.get('reloptions'))
     fillfactor = options.get('fillfactor')
+    autovacuum = {key: value for key, value in options.items()
+                  if key in table_editor.AUTOVACUUM}
+    toast = {key[6:]: value for key, value in options.items()
+             if key.startswith('toast.')
+             and key[6:] in table_editor.AUTOVACUUM}
+
+    def number(key):
+        value = options.get(key)
+        return int(value) if isinstance(value, str) and value.isdigit() \
+            else None
+
+    def enabled(settings):
+        return {'true': 't', 'false': 'f'}.get(
+            str(settings.get('autovacuum_enabled', '')).lower(), 'x')
     return {
         'name': native.get('name') or row.get('relname'),
         'schema': native.get('schema'),
+        'owner': native.get('owner') or row.get('owner_name'),
         'definition': (native.get('definition') or '').strip().rstrip(';'),
         'check_option': options.get('check_option', 'no'),
         'security_barrier': options.get('security_barrier',
@@ -77,8 +99,91 @@ def facts(native):
         'with_data': bool(row.get('relispopulated', True)),
         'fillfactor': int(fillfactor) if fillfactor and
         fillfactor.isdigit() else None,
+        'spcname': native.get('tablespace') or row.get('tablespace_name'),
+        'amname': row.get('access_method_name'),
+        'toast_tuple_target': number('toast_tuple_target'),
+        'autovacuum_enabled': enabled(autovacuum),
+        'autovacuum_custom': bool(autovacuum),
+        'vacuum_settings': autovacuum,
+        'toast_autovacuum_enabled': enabled(toast),
+        'toast_autovacuum': bool(toast),
+        'toast_vacuum_settings': toast,
+        'datacl': list(row.get('relacl') or []),
+        'dependsonextensions': list(
+            native.get('depends_on_extensions') or []),
         'comment': native.get('comment'),
     }
+
+
+def _storage_changes(draft, current):
+    """(sets, resets) of a materialized view's storage parameters from the
+    dialog: fill factor, TOAST tuple target and the autovacuum grids."""
+    from . import tables as table_editor
+    sets, resets = [], []
+    if _flag(draft, 'reset_fillfactor') if 'reset_fillfactor' in draft \
+            else False:
+        if current is None or current['fillfactor'] is not None:
+            resets.append('fillfactor')
+    elif not _blank(draft.get('fillfactor')) and (
+            current is None or draft['fillfactor'] != current['fillfactor']):
+        sets.append(f'fillfactor={_fillfactor(draft["fillfactor"])}')
+    if not _blank(draft.get('toast_tuple_target')) and (
+            current is None or
+            draft['toast_tuple_target'] != current['toast_tuple_target']):
+        sets.append('toast_tuple_target='
+                    + str(table_editor._number(draft['toast_tuple_target'],
+                                               'toast_tuple_target')))
+    for prefix, flag, grid, enabled_key, settings_key in (
+            ('', 'autovacuum_custom', 'vacuum_table', 'autovacuum_enabled',
+             'vacuum_settings'),
+            ('toast.', 'toast_autovacuum', 'vacuum_toast',
+             'toast_autovacuum_enabled', 'toast_vacuum_settings')):
+        held = current[settings_key] if current else {}
+        enabled = draft.get(enabled_key)
+        if enabled in ('t', 'f') and (current is None or enabled !=
+                                      current[enabled_key]):
+            sets.append(f'{prefix}autovacuum_enabled='
+                        + ('true' if enabled == 't' else 'false'))
+        elif enabled == 'x' and current and current[enabled_key] != 'x':
+            resets.append(f'{prefix}autovacuum_enabled')
+        if flag in draft:
+            if _flag(draft, flag):
+                for name, value in table_editor._autovacuum_rows(draft,
+                                                                 grid):
+                    if held.get(name) != value:
+                        sets.append(f'{prefix}{name}={value}')
+            elif held:
+                resets.extend(f'{prefix}{name}' for name in held
+                              if name != 'autovacuum_enabled')
+    return sets, resets
+
+
+def _grants(kind, qualified, draft, alter):
+    """Grants, revocations, labels and extension dependencies; stated,
+    never diffed."""
+    from . import tables as table_editor
+    statements = []
+    if alter:
+        for row in table_editor._rows(draft, 'revoke'):
+            statements.append(f'REVOKE ALL ON TABLE {qualified} FROM '
+                              + table_editor._grantee(row.get('grantee')))
+    for row in table_editor._rows(draft, 'datacl'):
+        statements.append(table_editor._grant(qualified, row))
+    for row in table_editor._rows(draft, 'seclabels'):
+        statements.append(table_editor._label(qualified, row).replace(
+            ' ON TABLE ', f' ON {_keyword(kind)} ', 1))
+    value = draft.get('dependsonextensions')
+    if value not in (None, '', []):
+        if kind == 'view':
+            raise PostgreSQLNativeAdminError(
+                'only a materialized view can depend on an extension')
+        if not isinstance(value, list):
+            raise PostgreSQLNativeAdminError('extensions must be a list')
+        for item in value:
+            name = item.get('name') if isinstance(item, dict) else item
+            statements.append(f'ALTER MATERIALIZED VIEW {qualified} DEPENDS '
+                              'ON EXTENSION ' + _identifier(name, 'extension'))
+    return statements
 
 
 def _keyword(kind):
@@ -131,11 +236,21 @@ def _mview_head(qualified, draft, current=None):
             raise PostgreSQLNativeAdminError(
                 'access method is an access method name')
         head += f' USING {_identifier(method, "access method")}'
-    fillfactor = draft.get('fillfactor')
-    if _blank(fillfactor) and current is not None:
-        fillfactor = current['fillfactor']
-    if not _blank(fillfactor):
-        head += f' WITH (fillfactor={_fillfactor(fillfactor)})'
+    # The storage parameters the view will carry: the current ones (on a
+    # recreate) under the dialog's changes.
+    options = {}
+    if current is not None:
+        for key, value in (current.get('_reloptions') or {}).items():
+            options[key] = value
+    sets, resets = _storage_changes(draft, current)
+    for item in sets:
+        key, _eq, value = item.partition('=')
+        options[key] = value
+    for key in resets:
+        options.pop(key, None)
+    if options:
+        head += ' WITH (' + ', '.join(f'{key}={value}' for key, value
+                                      in options.items()) + ')'
     if not _blank(draft.get('spcname')):
         head += ' TABLESPACE ' + _identifier(draft['spcname'], 'tablespace')
     return head
@@ -170,11 +285,14 @@ def _create(kind, draft):
                           + _identifier(draft['owner'], 'owner'))
     if not _blank(draft.get('comment')):
         statements.append(_comment(kind, qualified, draft['comment']))
+    statements.extend(_grants(kind, qualified, draft, False))
     return statements
 
 
 def _alter(kind, native, draft):
     current = native.get('view_facts') or facts(native)
+    current = dict(current, _reloptions=_options(
+        (native.get('catalog_row') or {}).get('reloptions')))
     schema = _name(current['schema'], 'schema')
     name = _name(current['name'], 'name')
     qualified = _qualified(schema, name)
@@ -192,7 +310,8 @@ def _alter(kind, native, draft):
                           + _identifier(new_schema, 'schema'))
         schema = new_schema
         qualified = _qualified(schema, name)
-    if not _blank(draft.get('owner')):
+    if not _blank(draft.get('owner')) and draft['owner'] != current.get(
+            'owner'):
         statements.append(f'ALTER TABLE {qualified} OWNER TO '
                           + _identifier(draft['owner'], 'owner'))
     definition = draft.get('definition')
@@ -227,23 +346,32 @@ def _alter(kind, native, draft):
             statements.append(f'{head} AS {query(definition)}'
                               f'{_with_data(draft, current)}')
         else:
-            if not _blank(draft.get('spcname')):
+            if not _blank(draft.get('spcname')) and \
+                    draft['spcname'] != current.get('spcname'):
                 statements.append(f'ALTER MATERIALIZED VIEW {qualified} SET '
                                   'TABLESPACE ' + _identifier(
                                       draft['spcname'], 'tablespace'))
+            if not _blank(draft.get('amname')) and \
+                    draft['amname'] != current.get('amname'):
+                if current.get('amname') is None:
+                    raise PostgreSQLNativeAdminError(
+                        'the access method of this view is not known to '
+                        'the listing; refresh before changing it')
+                statements.append(f'ALTER MATERIALIZED VIEW {qualified} SET '
+                                  'ACCESS METHOD ' + _identifier(
+                                      draft['amname'], 'access method'))
             # The dialog drops a cleared number, so the reset is a flag.
-            if _flag(draft, 'reset_fillfactor'):
-                if current['fillfactor'] is not None:
-                    statements.append(f'ALTER MATERIALIZED VIEW {qualified} '
-                                      'RESET (fillfactor)')
-            elif not _blank(draft.get('fillfactor')) and \
-                    draft['fillfactor'] != current['fillfactor']:
-                statements.append(
-                    f'ALTER MATERIALIZED VIEW {qualified} SET '
-                    f'(fillfactor={_fillfactor(draft["fillfactor"])})')
+            sets, resets = _storage_changes(draft, current)
+            if sets:
+                statements.append(f'ALTER MATERIALIZED VIEW {qualified} SET ('
+                                  + ', '.join(sets) + ')')
+            if resets:
+                statements.append(f'ALTER MATERIALIZED VIEW {qualified} '
+                                  'RESET (' + ', '.join(resets) + ')')
     if 'comment' in draft and (draft['comment'] or None) != (
             current['comment'] or None):
         statements.append(_comment(kind, qualified, draft['comment']))
+    statements.extend(_grants(kind, qualified, draft, True))
     if not statements:
         raise PostgreSQLNativeAdminError('nothing to change')
     return statements
@@ -274,66 +402,75 @@ def compile_operation(kind, operation, native, draft):
     return {'statement': ';\n'.join(statements), 'read_only': False}
 
 
+# The family form's field ids (view.form.json: the view and materialized
+# view variants) plus the provider's reset flag and revoke grid; the
+# validator admits exactly these.
+_FAMILY_FIELDS = (
+    'variant', 'name', 'oid', 'owner', 'schema', 'system_view', 'comment',
+    'security_barrier', 'security_invoker', 'check_option', 'with_data',
+    'spcname', 'amname', 'fillfactor', 'toast_tuple_target',
+    'dependsonextensions', 'vacuum_settings_str', 'definition',
+    'autovacuum_custom', 'autovacuum_enabled', 'vacuum_table',
+    'toast_autovacuum', 'toast_autovacuum_enabled', 'vacuum_toast', 'acl',
+    'datacl', 'seclabels')
+_GRIDS = ('vacuum_table', 'vacuum_toast', 'datacl', 'seclabels', 'revoke',
+          'dependsonextensions')
+_BOOLEANS = ('system_view', 'security_barrier', 'security_invoker',
+             'with_data', 'autovacuum_custom', 'toast_autovacuum',
+             'reset_fillfactor')
+_NUMBERS = ('fillfactor', 'toast_tuple_target')
+_TRI = [{'value': 'x', 'label': 'Not set'}, {'value': 't', 'label': 'Yes'},
+        {'value': 'f', 'label': 'No'}]
+
+
 def form(kind, operation, field):
-    """Dialog fields; ids follow the inherited view dialogs."""
+    """The validator's view of the view family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs, options and grid columns."""
     label = 'view' if kind == 'view' else 'materialized view'
     if operation == 'drop':
-        fields = [field('cascade', 'Drop dependent objects', 'boolean'),
-                  field('confirmation', f'Type the {label} name to confirm',
-                        required=True)]
-    else:
-        alter = operation == 'alter'
+        return {'form_id': f'postgresql-{kind}-drop',
+                'form_key': f'native:postgresql:schema:{kind}',
+                'title': f'Drop {label}', 'fields': [
+                    field('cascade', 'Drop dependent objects', 'boolean'),
+                    field('confirmation', f'Type the {label} name to confirm',
+                          required=True)]}
+    alter = operation == 'alter'
 
-        def initial(key):
-            return {'initial_value_path': ['view_facts', key]} if alter \
-                else {}
-        fields = [field('name', 'Name', required=not alter,
-                        **initial('name')),
-                  field('schema', 'Schema', required=not alter, **(
-                      {'help': 'A different schema runs SET SCHEMA.'}
-                      if alter else {}), **initial('schema')),
-                  field('owner', 'Owner', help=(
-                      'Empty keeps the owner.' if alter else 'OWNER TO')),
-                  field('comment', 'Comment', 'multiline',
-                        **initial('comment')),
-                  field('definition', 'Code', 'code', required=not alter,
-                        help='One SELECT.' + (
-                            ' A changed query runs CREATE OR REPLACE VIEW, '
-                            'which may add columns at the end but not drop '
-                            'or reorder them.'
-                            if kind == 'view' and alter else
-                            ' A changed query drops and recreates the '
-                            'materialized view in one transaction.'
-                            if alter else ''), **initial('definition'))]
-        if kind == 'view':
-            fields += [
-                field('check_option', 'Check options', 'select', options=[
-                    {'value': 'no', 'label': 'No'},
-                    {'value': 'local', 'label': 'Local'},
-                    {'value': 'cascaded', 'label': 'Cascaded'}],
-                    **({} if alter else {'default': 'no'}),
-                    **initial('check_option')),
-                field('security_barrier', 'Security barrier', 'boolean',
-                      **initial('security_barrier')),
-                field('security_invoker', 'Security invoker', 'boolean',
-                      help='PostgreSQL 15 and later.',
-                      **initial('security_invoker'))]
+    def initial(key):
+        return {'initial_value_path': ['view_facts', key]} if alter else {}
+    fields = []
+    for field_id in _FAMILY_FIELDS + (('reset_fillfactor', 'revoke')
+                                      if alter else ()):
+        title = field_id.replace('_', ' ').capitalize()
+        if field_id in _GRIDS:
+            fields.append(field(field_id, title, 'grid', columns=[],
+                                **initial(field_id)))
+        elif field_id in _BOOLEANS:
+            fields.append(field(field_id, title, 'boolean',
+                                **initial(field_id)))
+        elif field_id in _NUMBERS:
+            fields.append(field(field_id, title, 'number',
+                                **initial(field_id)))
+        elif field_id == 'check_option':
+            fields.append(field(field_id, 'Check options', 'select', options=[
+                {'value': item, 'label': item.title()}
+                for item in CHECK_OPTIONS], **initial(field_id)))
+        elif field_id in ('autovacuum_enabled', 'toast_autovacuum_enabled'):
+            fields.append(field(field_id, title, 'select', options=_TRI,
+                                **initial(field_id)))
+        elif field_id == 'definition':
+            fields.append(field(field_id, 'Code', 'code', required=not alter,
+                                **initial(field_id)))
         else:
-            fields += [
-                field('with_data', 'With data', 'boolean',
-                      **({} if alter else {'default': True}),
-                      **initial('with_data')),
-                field('spcname', 'Tablespace'),
-                field('fillfactor', 'Fill factor', 'number',
-                      help='10 to 100.', **initial('fillfactor'))]
-            if alter:
-                fields.append(field('reset_fillfactor',
-                                    'Reset the fill factor', 'boolean'))
-            if not alter:
-                fields.append(field('amname', 'Access method',
-                                    help='USING; empty for the default.'))
+            fields.append(field(field_id, title,
+                                required=field_id in ('name', 'schema')
+                                and not alter, **initial(field_id)))
     return {'form_id': f'postgresql-{kind}-{operation}',
             'form_key': f'native:postgresql:schema:{kind}',
             'title': f'{operation.title()} {label}', 'fields': fields,
-            'notes': 'Privileges and security labels stay with the '
-                     'inherited dialog.'}
+            'notes': ('A changed query runs CREATE OR REPLACE VIEW, or drops '
+                      'and recreates a materialized view in one transaction. '
+                      'Privileges and labels are stated; the Revoke grid '
+                      'removes privileges; the fill factor is reset through '
+                      'its flag.')}

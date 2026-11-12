@@ -29,7 +29,7 @@ def statements(operation, draft, native=NATIVE):
 def test_facts_read_the_captured_row_and_child():
     assert facts(NATIVE) == {
         'schema': 'service', 'name': 'inspection_number', 'comment': None,
-        'cycled': False, 'relpersistence': 'logged',
+        'cycled': False, 'relpersistence': False, 'seqowner': None,
         'relacl': ['app_owner=rwU/app_owner'], 'increment': 1, 'start': 5000,
         'minimum': 1, 'maximum': 9223372036854775807, 'cache': 1}
     assert facts({})['name'] is None
@@ -125,7 +125,7 @@ def test_drop_needs_the_typed_name():
     ('create', {'schema': 's', 'name': 'n', 'relpersistence': 'temp'},
      'logged or unlogged'),
     ('create', {'schema': 's', 'name': 'n',
-                'relacl': [{'grantee': 'r', 'privileges': 'x'}]}, 'codes'),
+                'relacl': [{'grantee': 'r', 'privileges': 'x'}]}, 'privileges are among'),
     ('create', {'schema': 's', 'name': 'n', 'relacl': 'reader'}, 'list'),
     ('create', {'schema': 's', 'name': 'n; DROP TABLE t'},
      None),
@@ -157,8 +157,16 @@ def test_forms_follow_the_inherited_field_ids():
     assert 'initial_value_path' not in alter['relacl']
     assert alter['owned_by_none']['control'] == 'boolean'
     assert drop['confirmation']['required'] and 'cascade' in drop
-    assert create['relpersistence']['default'] == 'logged'
-    assert 'default' not in alter['relpersistence']
+    # The dialog's boolean (true = unlogged); every family field admitted.
+    assert create['relpersistence']['control'] == 'boolean'
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'sequence.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
 
 
 def test_catalog_routes_sequence_lifecycle_to_the_provider():
@@ -175,3 +183,26 @@ def test_catalog_routes_sequence_lifecycle_to_the_provider():
                 if op['operation_id'] == 'drop')
     assert drop['confirmation_required'] and drop['mutation_class'] == \
         'destructive'
+
+
+def test_persistence_boolean_and_word_privileges():
+    # The dialog's boolean for persistence beside the words; the facts'
+    # boolean is no change; the privileges grid's words.
+    assert statements('create', {'schema': 's', 'name': 'q',
+                                 'relpersistence': True}) == [
+        'CREATE UNLOGGED SEQUENCE "s"."q"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_sequence('alter', {'relpersistence': False})
+    assert statements('alter', {'relpersistence': True, 'relacl': [
+        {'grantee': 'reader', 'privileges': ['USAGE', 'SELECT']}]}) == [
+        'ALTER SEQUENCE "service"."inspection_number" SET UNLOGGED',
+        'GRANT SELECT, USAGE ON SEQUENCE "service"."inspection_number" TO '
+        '"reader"']
+
+
+def test_owned_by_accepts_the_pickers_dotted_table():
+    assert statements('alter', {'owned_table': 'other.t', 'owned_column': 'id'}) == [
+        'ALTER SEQUENCE "service"."inspection_number" OWNED BY "other"."t"."id"']
+    assert statements('alter', {'owned_table': 't', 'owned_column': 'id'}) == [
+        'ALTER SEQUENCE "service"."inspection_number" OWNED BY '
+        '"service"."t"."id"']

@@ -1,0 +1,515 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "neo4j",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "complete",
+  "engine_tab_title": "Neo4j",
+  "omitted_tabs": [],
+  "gaps": [
+    {
+      "concept": "server.auth_parameters",
+      "reason": "provider control 'json' needs a typed control"
+    },
+    {
+      "concept": "server.resolver_addresses",
+      "reason": "provider control 'json' needs a typed control"
+    },
+    {
+      "concept": "server.bookmarks",
+      "reason": "provider control 'json' needs a typed control"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "auth_mode",
+      "label": "Authentication mode",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_mode",
+      "group": "Neo4j authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No authentication"
+        },
+        {
+          "value": "basic",
+          "label": "Basic (username and password)"
+        },
+        {
+          "value": "kerberos",
+          "label": "Kerberos ticket"
+        },
+        {
+          "value": "bearer",
+          "label": "Bearer token"
+        },
+        {
+          "value": "custom",
+          "label": "Custom scheme"
+        }
+      ],
+      "default": "basic"
+    },
+    {
+      "field_id": "auth_realm",
+      "label": "Authentication realm",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_auth_realm",
+      "group": "Neo4j authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "basic",
+          "custom"
+        ]
+      }
+    },
+    {
+      "field_id": "auth_scheme",
+      "label": "Custom authentication scheme",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_auth_scheme",
+      "group": "Neo4j authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "custom"
+      }
+    },
+    {
+      "field_id": "auth_parameters",
+      "label": "Custom authentication parameters (JSON object)",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_auth_parameters",
+      "group": "Neo4j authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "custom"
+      }
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "basic"
+      }
+    },
+    {
+      "field_id": "auth_token",
+      "label": "Kerberos ticket or bearer token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_auth_token",
+      "group": "Neo4j authentication",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "kerberos",
+          "bearer"
+        ]
+      }
+    },
+    {
+      "field_id": "custom_credentials",
+      "label": "Custom authentication credentials",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_custom_credentials",
+      "group": "Neo4j authentication",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "custom"
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "Neo4j TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disabled",
+          "label": "Disabled"
+        },
+        {
+          "value": "system-ca",
+          "label": "System CA validation"
+        },
+        {
+          "value": "self-signed",
+          "label": "Self-signed certificate"
+        }
+      ],
+      "default": "disabled"
+    },
+    {
+      "field_id": "client_certificate",
+      "label": "Use a TLS client certificate",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_client_certificate",
+      "group": "Neo4j TLS",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "group": "Neo4j TLS",
+      "required": false,
+      "visible_when": {
+        "field": "client_certificate",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client private key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "group": "Neo4j TLS",
+      "required": false,
+      "visible_when": {
+        "field": "client_certificate",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "group": "Neo4j TLS",
+      "required": false,
+      "visible_when": {
+        "field": "client_certificate",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "routing",
+      "label": "Use Neo4j routing",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_routing",
+      "group": "Neo4j topology",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "connection_timeout",
+      "label": "Connection timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connection_timeout",
+      "group": "Neo4j timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "connection_acquisition_timeout",
+      "label": "Pool acquisition timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connection_acquisition_timeout",
+      "group": "Neo4j timeouts",
+      "required": false,
+      "default": 60,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "max_transaction_retry_time",
+      "label": "Driver retry time ceiling (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_transaction_retry_time",
+      "group": "Neo4j timeouts",
+      "required": false,
+      "default": 30,
+      "min": 0,
+      "max": 3600
+    },
+    {
+      "field_id": "max_connection_pool_size",
+      "label": "Maximum connection pool size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_connection_pool_size",
+      "group": "Neo4j pool",
+      "required": false,
+      "default": 100,
+      "min": 1,
+      "max": 10000
+    },
+    {
+      "field_id": "max_connection_lifetime",
+      "label": "Maximum connection lifetime (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_connection_lifetime",
+      "group": "Neo4j pool",
+      "required": false,
+      "default": 3600,
+      "min": 1,
+      "max": 86400
+    },
+    {
+      "field_id": "liveness_check_timeout",
+      "label": "Idle connection liveness-check threshold (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_liveness_check_timeout",
+      "group": "Neo4j pool",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 86400
+    },
+    {
+      "field_id": "resolver_addresses",
+      "label": "Custom resolved addresses (JSON array)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_resolver_addresses",
+      "group": "Neo4j topology",
+      "required": false
+    },
+    {
+      "field_id": "notifications_min_severity",
+      "label": "Minimum notification severity",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_notifications_min_severity",
+      "group": "Neo4j session",
+      "required": false,
+      "options": [
+        {
+          "value": "OFF",
+          "label": "Disabled"
+        },
+        {
+          "value": "INFORMATION",
+          "label": "Information"
+        },
+        {
+          "value": "WARNING",
+          "label": "Warning"
+        }
+      ],
+      "default": "INFORMATION"
+    },
+    {
+      "field_id": "access_mode",
+      "label": "Default access mode",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_access_mode",
+      "group": "Neo4j session",
+      "required": false,
+      "options": [
+        {
+          "value": "write",
+          "label": "Write"
+        },
+        {
+          "value": "read",
+          "label": "Read"
+        }
+      ],
+      "default": "write"
+    },
+    {
+      "field_id": "fetch_size",
+      "label": "Result fetch size",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_fetch_size",
+      "group": "Neo4j session",
+      "required": false,
+      "default": 1000,
+      "min": 1,
+      "max": 1000000
+    },
+    {
+      "field_id": "impersonated_user",
+      "label": "Impersonated user",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_impersonated_user",
+      "group": "Neo4j session",
+      "required": false
+    },
+    {
+      "field_id": "bookmarks",
+      "label": "Initial bookmarks (JSON array)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_bookmarks",
+      "group": "Neo4j session",
+      "required": false
+    },
+    {
+      "field_id": "keep_alive",
+      "label": "Use TCP keep-alive",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_keep_alive",
+      "group": "Neo4j pool",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "user_agent",
+      "label": "Driver user agent",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_user_agent",
+      "group": "Neo4j advanced",
+      "required": false,
+      "default": "ScratchRobin"
+    },
+    {
+      "field_id": "tool_workspace",
+      "label": "Administration tool workspace",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_tool_workspace",
+      "group": "Neo4j operational tools",
+      "required": false,
+      "help": "Absolute non-root directory explicitly granted to provider-owned tools."
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for neo4j-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-11): registered through the servers API with this form's payload (what the descriptor registration host sends) against the pinned Neo4j 2026.04.0 demo, verified at create, read back and removed (Claude-temp-directory/2026-11-10-pg-m2/live/api-register-engines.py); contract round trip in tools/tests/test_ui_descriptor_server_forms.py. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
+}

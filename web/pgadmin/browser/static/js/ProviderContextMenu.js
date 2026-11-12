@@ -27,6 +27,8 @@ const SAFE_HANDLERS = new Set([
   'open_mysql_host', 'open_mysql_routers', 'open_mysql_physical', 'open_mysql_local_clone', 'open_mysql_binlogs', 'open_mysql_instance_backups', 'open_mysql_instance_restores', 'open_mysql_topologies', 'open_mysql_sandboxes', 'open_mariadb_binlogs', 'open_mysql_binlog_replay', 'open_mariadb_binlog_replay', 'open_mysql_raw_binlogs',
   'register_endpoint', 'verify_endpoint', 'disconnect_endpoint',
   'add_to_diagram',
+  // Inherited PostgreSQL utilities opened from a provider-tree node (M6).
+  'open_inherited_tool',
 ]);
 
 export const PROVIDER_MENU_CATEGORIES = Object.freeze({
@@ -237,6 +239,8 @@ function dispatch(action, args, context) {
     });
   case 'open_tool':
     return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''), args);
+  case 'open_inherited_tool':
+    return openInheritedTool(args.tool, item);
   case 'add_to_diagram':
     // To Diagram: args.diagram is the submenu choice (see toDiagramEntry).
     return import('sources/cdeadmin_ui/integrations/ddn/toDiagramMenu')
@@ -365,6 +369,41 @@ export function providerContextMenuItems(itemData, item=null) {
     requiresConfirmation: Boolean(action.requires_confirmation),
     macroCallable: action.macro_callable !== false,
   }));
+}
+
+/**
+ * Open an inherited PostgreSQL utility on a provider-tree item (M6,
+ * 2026-11-11). The utilities read the item through the tree hierarchy and
+ * legacyNodeData, which turn a provider database target or resource into
+ * the inherited node they stand for, so they run unchanged.
+ */
+export function openInheritedTool(tool, item) {
+  const browser = pgAdmin.Browser;
+  switch(tool) {
+  case 'backup':
+    return browser.Backup.backupObjects(null, item);
+  case 'restore':
+    return browser.Restore.restoreObjects(null, item);
+  case 'import_export':
+    return pgAdmin.Tools.import_utility.callback_import_export({}, item);
+  case 'psql':
+    return pgAdmin.Tools.Psql.openPsqlTool({}, item);
+  case 'grant_wizard':
+    return browser.GrantWizard.start_grant_wizard(null, item);
+  case 'search_objects':
+    return pgAdmin.Tools.SearchObjects.show_search_objects(null, item);
+  case 'maintenance':
+    return pgAdmin.Tools.maintenance.callback_maintenance({}, item);
+  case 'debugger':
+    // Direct debugging of the function or procedure the node stands for.
+    return pgAdmin.Tools.Debugger.getFunctionInformation({data: {debug_type: 'direct'}}, item);
+  case 'debugger_indirect':
+    return pgAdmin.Tools.Debugger.checkFuncDebuggable({data: {debug_type: 'indirect'}}, item);
+  case 'schema_diff':
+    return pgAdmin.Tools.SchemaDiff.launchSchemaDiff();
+  default:
+    throw new Error(gettext('The inherited tool "%s" is not known.', String(tool)));
+  }
 }
 
 function executeProviderAction(menu, itemData, item) {

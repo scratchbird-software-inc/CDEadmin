@@ -17,7 +17,7 @@ import { AllPermissionTypes } from '../../../../static/js/constants';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {openProviderObject} from '../../../../static/js/ProviderContextMenu';
 import {
-  LEGACY_REGISTRATION_RETIRED, reportServerEditorFailure, tryOpenServerForm,
+  LEGACY_REGISTRATION_RETIRED, LIFECYCLE_EDIT_ENGINES, reportServerEditorFailure, tryOpenServerForm,
 } from '../../../../static/js/ProviderObjectEditor';
 import {
   beforeOpenProviderDatabase, providerEndpointSessionReady,
@@ -361,6 +361,79 @@ define('pgadmin.node.server', [
         return _.some(item.children, (child) => pgAdmin.Browser.tree.getData(child).connected);
       },
       callbacks: {
+        /*
+         * Owner direction 2026-11-12: one registration path. A server's Properties (edit, and its
+         * Alt+Shift+E shortcut) and Copy Server open the descriptor Server editor for every engine
+         * in LEGACY_REGISTRATION_RETIRED; a host that cannot open reports instead of falling back.
+         * Other actions keep the shared node behaviour.
+         */
+        show_obj_properties: function(args, item) {
+          const tree = pgBrowser.tree;
+          const nodeItem = args?.item || item || tree.selected();
+          const nodeData = nodeItem ? tree.itemData(nodeItem) : undefined;
+          const engine = nodeData?.cde_engine_id;
+          const action = args?.action;
+          const base = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(this, args, item);
+          if(nodeData?._type !== 'server' || !engine || !LEGACY_REGISTRATION_RETIRED.has(engine) ||
+            !['edit', 'copy'].includes(action)) {
+            return base();
+          }
+          const report = (error) => reportServerEditorFailure(engine, error?.message || String(error));
+          if(action === 'edit') {
+            return tryOpenServerForm({item: nodeItem, mode: 'alter', engine, profileId: nodeData.cde_profile_id,
+              panelTitle: gettext('Edit %s', nodeData.label || nodeData._label)})
+              .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
+          }
+          // Copy: register a new endpoint under the same group, prefilled from this one's registration.
+          let groupItem = nodeItem;
+          while(groupItem && tree.itemData(groupItem)?._type !== 'server_group') {
+            groupItem = tree.hasParent(groupItem) ? tree.parent(groupItem) : null;
+          }
+          if(!groupItem) return report(gettext('server group not found'));
+          return getApiInstance().get(this.generate_url(nodeItem, 'obj', nodeData, true))
+            .then(({data}) => {
+              const initialData = _.omit(data, ['id', '_id', 'connected', 'version', 'server_owner',
+                'gss_authenticated', 'gss_encrypted', 'connection_string', 'password', 'tunnel_password']);
+              initialData.name = gettext('Copy of %s', data.name || nodeData.label);
+              // Tags come back display-shaped (old_text marks an edited row); a copy starts them fresh.
+              if(Array.isArray(initialData.tags)) {
+                initialData.tags = initialData.tags.map((tag) => _.omit(tag, ['old_text']));
+              }
+              return tryOpenServerForm({item: groupItem, mode: 'create', engine, profileId: nodeData.cde_profile_id,
+                initialData, intent: 'endpoint', verifyNow: Boolean(data.cde_verify_now),
+                panelTitle: gettext('Copy %s', nodeData.label || nodeData._label)});
+            })
+            .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
+        },
+        /*
+         * Remove Server for an engine whose registration changes pass the provider lifecycle
+         * (MySQL): the servers delete refuses it, so after the same confirmation the removal goes
+         * through the endpoint's workspace action, confirmed with the registration's own name.
+         */
+        delete_obj: function(args, item) {
+          const tree = pgBrowser.tree;
+          const nodeItem = args?.item || item || tree.selected();
+          const nodeData = nodeItem ? tree.itemData(nodeItem) : undefined;
+          if(nodeData?._type !== 'server' || !LIFECYCLE_EDIT_ENGINES.has(nodeData.cde_engine_id)) {
+            return pgAdmin.Browser.Node.callbacks.delete_obj.call(this, args, item);
+          }
+          const label = nodeData.label || nodeData._label;
+          pgAdmin.Browser.notifier.confirmDelete(gettext('Remove Server?'),
+            gettext('Are you sure you want to remove the server <b>"%s"</b>?', _.escape(label)),
+            () => {
+              const api = getApiInstance();
+              api.get(this.generate_url(nodeItem, 'obj', nodeData, true))
+                .then(({data}) => api.post(this.generate_url(nodeItem, 'cde_workspace', nodeData, true),
+                  {action: 'endpoint_profile_remove', request: {confirmation: data.name}}))
+                .then(({data: res}) => {
+                  if(res?.success === 0) throw new Error(res.errormsg || res.info);
+                  pgBrowser.removeTreeNode(nodeItem, true);
+                })
+                .catch((error) => pgAdmin.Browser.notifier.alertText(
+                  gettext('Error removing server: "%s"', label),
+                  error?.response?.data?.errormsg || error?.message || String(error)));
+            }, () => {}, gettext('Remove'), gettext('Cancel'));
+        },
         open_postgresql_dashboard_editor: function(args) {
           const node = pgBrowser.tree.itemData(args?.item || pgBrowser.tree.selected());
           showPostgresqlDashboardEditor(Number(node._id));
@@ -423,12 +496,9 @@ define('pgadmin.node.server', [
           const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
             this, {action: 'create', item, initialData, panelTitle}
           );
-          // Descriptor Server editor for the plain endpoint intent; every other
-          // intent, and engines whose server form is not complete, keep the legacy dialog.
-          if(registrationIntent !== 'endpoint') {
-            legacy();
-            return false;
-          }
+          // Owner direction 2026-11-12: every intent (endpoint, register an existing database file,
+          // create a database file) opens the descriptor Server editor; the host carries the
+          // intent in the registration envelope.
           // Retired engines (see LEGACY_REGISTRATION_RETIRED): no legacy fallback, report instead.
           // LEGACY-FALLBACK (restore by uncommenting and removing the engine from the set):
           //   .then((opened) => { if(!opened) legacy(); }).catch(() => legacy());
