@@ -32,6 +32,12 @@ def statements(kind, operation, draft, native=None):
 def test_facts_read_the_server_scope_rows():
     assert role_facts(ROLE) == {'rolname': 'app_owner', 'rolcanlogin': True,
                                 'rolsuper': False, 'description': 'owns'}
+    full = role_facts({'name': 'r', 'catalog_metadata': {
+        'rolname': 'r', 'rolcanlogin': False, 'rolsuper': True,
+        'rolcreatedb': True, 'rolinherit': False, 'rolconnlimit': 3,
+        'rolvaliduntil': None, 'comment': 'c'}})
+    assert (full['rolcreatedb'], full['rolinherit'], full['rolconnlimit'],
+            full['description']) == (True, False, 3, 'c')
     assert tablespace_facts(TABLESPACE) == {'name': 'fast',
                                             'description': None}
 
@@ -47,7 +53,7 @@ def test_role_create_with_every_clause_and_no_password():
         'variables': [{'name': 'work_mem', 'value': '4MB'},
                       {'name': 'search_path', 'value': 'app',
                        'database': 'appdb'}],
-        'description': "it's", 'rolpassword': 'never used'})['statement']
+        'description': "it's"})['statement']
     assert text.split(';\n') == [
         'CREATE ROLE "app user" WITH LOGIN NOSUPERUSER CREATEDB NOCREATEROLE '
         'NOINHERIT NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5 VALID UNTIL '
@@ -58,7 +64,9 @@ def test_role_create_with_every_clause_and_no_password():
         'ALTER ROLE "app user" IN DATABASE "appdb" SET search_path = '
         "'app'",
         'COMMENT ON ROLE "app user" IS \'it\'\'s\'']
-    assert 'never used' not in text and len(parse_sql(text)) == 6
+    assert len(parse_sql(text)) == 6
+    with pytest.raises(PostgreSQLNativeAdminError, match='never carries a password'):
+        compile_kind('role', 'create', {'rolname': 'x', 'rolpassword': 's3'})
 
 
 def test_role_alter_emits_only_chosen_attributes():
@@ -133,9 +141,20 @@ def test_forms_routes_and_server_scope_route():
                 'required': required, **extra}
     create = {f['field_id']: f for f in role_form('create', field)['fields']}
     alter = {f['field_id']: f for f in role_form('alter', field)['fields']}
-    assert 'rolpassword' not in create and 'rolpassword' not in alter
+    # Every family field id is admitted (owner direction 2026-11-11); the
+    # password field exists only to be refused.
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'role.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
     assert create['rolinherit']['default'] is True
-    assert alter['rolsuper']['control'] == 'select'
+    assert alter['rolsuper']['control'] == 'boolean'
+    assert {'revoke_membership', 'revoke_members', 'reset_variables'} <= set(
+        alter)
     ts = {f['field_id']: f for f in tablespace_form('create', field)['fields']}
     assert ts['spclocation']['required']
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
@@ -154,3 +173,26 @@ def test_forms_routes_and_server_scope_route():
         assert PostgreSQLProvider._native_admin_route(
             {'resource_kind': kind, '_provider_route': {'server_id': 7}}) \
             == {'server_id': 7, 'database_id': None}
+
+
+def test_role_family_shapes_inherit_set_labels_and_known_attributes():
+    full = {'name': 'app_owner', 'catalog_metadata': {
+        'rolname': 'app_owner', 'rolcanlogin': True, 'rolsuper': False,
+        'rolcreatedb': True, 'rolinherit': True, 'rolconnlimit': 3,
+        'rolvaliduntil': None, 'comment': None}}
+    # Booleans equal to the known attributes are no change; the PostgreSQL
+    # 16 membership options and a security label compile.
+    assert statements('role', 'alter', {
+        'rolcanlogin': True, 'rolcreatedb': False, 'rolconnlimit': 3,
+        'rolmembership': [{'role': 'readers', 'admin': False,
+                           'inherit': False, 'set': True}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}]}, full) == [
+        'ALTER ROLE "app_owner" WITH NOCREATEDB',
+        'GRANT "readers" TO "app_owner" WITH ADMIN FALSE, INHERIT FALSE, '
+        'SET TRUE',
+        'SECURITY LABEL FOR "selinux" ON ROLE "app_owner" IS \'x\'']
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_kind('role', 'alter', {'rolcanlogin': True, 'rolconnlimit': 3},
+                     full)
+    with pytest.raises(PostgreSQLNativeAdminError, match='never carries'):
+        compile_kind('role', 'alter', {'rolpassword': 'x'}, full)

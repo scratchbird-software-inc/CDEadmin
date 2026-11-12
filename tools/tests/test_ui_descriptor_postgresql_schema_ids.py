@@ -23,6 +23,8 @@ SHELL_IDS = {'variant'}
 PROVIDER_TREE_IDS = {
     'revoke', 'reset_fillfactor', 'reset_toast_tuple_target',
     'reset_parallel_workers', 'add_options', 'set_options', 'drop_options',
+    'revoke_membership', 'revoke_members', 'reset_variables', 'admin_only',
+    'reset_parameters',
 }
 
 
@@ -47,6 +49,6 @@ def test_every_postgresql_field_id_is_a_ui_schema_id():
             if field['field_id'] in SHELL_IDS:
                 assert field.get('ui_only') is True, f"{form['family']}.{field['field_id']} must be ui_only"
             for column in field.get('columns', []):
-                if column['field_id'] not in ids:
+                if column['field_id'] not in ids and column['field_id'] not in PROVIDER_TREE_IDS:
                     unknown.append(f"{form['family']}.{field['field_id']}.{column['field_id']}")
     assert unknown == [], unknown

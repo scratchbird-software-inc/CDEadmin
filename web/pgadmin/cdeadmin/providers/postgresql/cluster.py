@@ -58,11 +58,21 @@ def _comment(keyword, name, value):
 # -- roles --------------------------------------------------------------------
 
 def role_facts(native):
+    """The server-scope row carries every attribute (owner direction
+    2026-11-11); an attribute the row lacks is None, so the alter emits
+    whatever the dialog chooses for it."""
     meta = native.get('catalog_metadata') or {}
-    return {'rolname': native.get('name') or meta.get('rolname'),
-            'rolcanlogin': bool(meta.get('rolcanlogin', False)),
-            'rolsuper': bool(meta.get('rolsuper', False)),
-            'description': meta.get('description')}
+    current = {'rolname': native.get('name') or meta.get('rolname'),
+               'rolcanlogin': bool(meta.get('rolcanlogin', False)),
+               'rolsuper': bool(meta.get('rolsuper', False)),
+               'description': meta.get('description', meta.get('comment'))}
+    for key, _keyword in ATTRIBUTES:
+        if key in meta and key not in current:
+            current[key] = bool(meta[key])
+    for key in ('rolconnlimit', 'rolvaliduntil'):
+        if key in meta:
+            current[key] = meta[key]
+    return current
 
 
 def _limit(value):
@@ -100,19 +110,51 @@ def _memberships(name, draft, key, direction, label):
     statements = []
     for row in _rows(draft, key, label):
         other = _identifier(row.get('role'), 'role')
-        grant, to = (other, name) if direction == 'member_of' else (name,
-                                                                   other)
-        option = ' WITH ADMIN OPTION' if _flag(row, 'admin') else ''
+        grant, to = (other, name) if direction == 'member_of' \
+            else (name, other)
+        # The dialog's INHERIT and SET columns (PostgreSQL 16+) join the
+        # admin option in the WITH list; alone, admin keeps the older form.
+        options = []
+        for column, keyword in (('inherit', 'INHERIT'), ('set', 'SET')):
+            if column in row and row[column] is not None and \
+                    row[column] != '':
+                options.append(f'{keyword} {str(_flag(row, column)).upper()}')
+        admin = _flag(row, 'admin') if 'admin' in row else False
+        if options:
+            options.insert(0, f'ADMIN {str(admin).upper()}')
+            option = ' WITH ' + ', '.join(options)
+        else:
+            option = ' WITH ADMIN OPTION' if admin else ''
         statements.append(f'GRANT {grant} TO {to}{option}')
     return statements
+
+
+def _labels(name, draft):
+    statements = []
+    for row in _rows(draft, 'seclabels', 'security labels'):
+        provider = _name(row.get('provider'), 'provider')
+        label = row.get('label')
+        if not isinstance(label, str) or not label:
+            raise PostgreSQLNativeAdminError('a security label needs text')
+        statements.append(f'SECURITY LABEL FOR '
+                          f'{_identifier(provider, "provider")} ON ROLE '
+                          f'{name} IS {_literal(label, "label")}')
+    return statements
+
+
+def _no_password(draft):
+    if not _blank(draft.get('rolpassword')):
+        raise PostgreSQLNativeAdminError(
+            'a provider-tree plan never carries a password; set it with '
+            'the inherited Properties dialog')
 
 
 def _revocations(name, draft, key, direction, label):
     statements = []
     for row in _rows(draft, key, label):
         other = _identifier(row.get('role'), 'role')
-        grant, frm = (other, name) if direction == 'member_of' else (name,
-                                                                    other)
+        grant, frm = (other, name) if direction == 'member_of' \
+            else (name, other)
         prefix = 'REVOKE ADMIN OPTION FOR ' if _flag(row, 'admin_only') \
             else 'REVOKE '
         statements.append(f'{prefix}{grant} FROM {frm}')
@@ -137,6 +179,7 @@ def _settings(name, rows):
 
 
 def _create_role(draft):
+    _no_password(draft)
     name = _identifier(draft.get('rolname'), 'name')
     words = []
     for key, keyword in ATTRIBUTES:
@@ -154,12 +197,14 @@ def _create_role(draft):
     statements += _memberships(name, draft, 'rolmembers', 'members',
                                'members')
     statements += _settings(name, _rows(draft, 'variables', 'settings'))
+    statements += _labels(name, draft)
     if not _blank(draft.get('description')):
         statements.append(_comment('ROLE', name, draft['description']))
     return statements
 
 
 def _alter_role(native, draft):
+    _no_password(draft)
     current = native.get('role_facts') or role_facts(native)
     name = _name(current['rolname'], 'name')
     quoted = _identifier(name, 'name')
@@ -177,9 +222,11 @@ def _alter_role(native, draft):
         if key in current and chosen == current[key]:
             continue
         words.append(keyword if chosen else 'NO' + keyword)
-    if not _blank(draft.get('rolconnlimit')):
+    if not _blank(draft.get('rolconnlimit')) and \
+            draft['rolconnlimit'] != current.get('rolconnlimit'):
         words.append(f'CONNECTION LIMIT {_limit(draft["rolconnlimit"])}')
-    if not _blank(draft.get('rolvaliduntil')):
+    if not _blank(draft.get('rolvaliduntil')) and \
+            draft['rolvaliduntil'] != current.get('rolvaliduntil'):
         words.append('VALID UNTIL ' + _valid_until(draft['rolvaliduntil']))
     if words:
         statements.append(f'ALTER ROLE {quoted} WITH ' + ' '.join(words))
@@ -200,6 +247,7 @@ def _alter_role(native, draft):
             scope = ' IN DATABASE ' + _identifier(row['database'], 'database')
         statements.append(f'ALTER ROLE {quoted}{scope} RESET {variable}')
     statements += _settings(quoted, _rows(draft, 'variables', 'settings'))
+    statements += _labels(quoted, draft)
     if 'description' in draft and (draft['description'] or None) != (
             current['description'] or None):
         statements.append(_comment('ROLE', quoted, draft['description']))
@@ -287,8 +335,8 @@ def _alter_tablespace(native, draft):
     if options:
         statements.append(f'ALTER TABLESPACE {quoted} SET ('
                           + ', '.join(options) + ')')
-    resets = [row.get('name') for row in _rows(draft, 'reset_options',
-                                                'reset options')]
+    resets = [row.get('name')
+              for row in _rows(draft, 'reset_options', 'reset options')]
     if resets:
         if any(not isinstance(item, str) or not _OPTION.fullmatch(item)
                for item in resets):
@@ -352,66 +400,80 @@ def _column(field_id, label, control='text', required=False, **extra):
             'required': required, **extra}
 
 
+# The family form's field ids (role.form.json) by operation, plus the
+# provider's own revocation and reset grids: the validator admits exactly
+# these. Read-only properties are admitted and ignored.
+_ROLE_FAMILY_FIELDS = {
+    'create': ('rolname', 'description', 'rolpassword', 'rolvaliduntil',
+               'rolconnlimit', 'rolmembership', 'rolmembers', 'rolcanlogin',
+               'rolsuper', 'rolcreaterole', 'rolcreatedb', 'rolinherit',
+               'rolreplication', 'rolbypassrls', 'variables', 'seclabels'),
+    'alter': ('rolname', 'oid', 'is_sys_obj', 'description', 'rolpassword',
+              'rolvaliduntil', 'rolconnlimit', 'rolmembership',
+              'revoke_membership', 'rolmembers', 'revoke_members',
+              'rolcanlogin', 'rolsuper', 'rolcreaterole', 'rolcreatedb',
+              'rolinherit', 'rolreplication', 'rolbypassrls', 'variables',
+              'reset_variables', 'seclabels'),
+}
+_ROLE_GRIDS = ('rolmembership', 'revoke_membership', 'rolmembers',
+               'revoke_members', 'variables', 'reset_variables', 'seclabels')
+_ROLE_LABELS = {'rolcanlogin': 'Can login', 'rolsuper': 'Superuser',
+                'rolcreatedb': 'Create databases',
+                'rolcreaterole': 'Create roles',
+                'rolinherit': 'Inherit rights',
+                'rolreplication': 'Replication',
+                'rolbypassrls': 'Bypass RLS'}
+
+
 def role_form(operation, field):
-    """Dialog fields; ids follow the inherited role dialog. No password."""
-    membership = [_column('role', 'Role', required=True),
-                  _column('admin', 'With admin option', 'boolean')]
-    revocation = [_column('role', 'Role', required=True),
-                  _column('admin_only', 'Admin option only', 'boolean')]
-    settings = [_column('name', 'Name', required=True),
-                _column('value', 'Value', required=True),
-                _column('database', 'Database (optional)')]
-    tri = [{'value': '', 'label': 'Keep'}, {'value': 'yes', 'label': 'Yes'},
-           {'value': 'no', 'label': 'No'}]
-    labels = {'rolcanlogin': 'Can login', 'rolsuper': 'Superuser',
-              'rolcreatedb': 'Create databases',
-              'rolcreaterole': 'Create roles', 'rolinherit': 'Inherit rights',
-              'rolreplication': 'Replication', 'rolbypassrls': 'Bypass RLS'}
+    """The validator's view of the role family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs and grid columns. A password is admitted only to be refused: a
+    plan never carries one."""
     if operation == 'drop':
-        fields = [field('confirmation', 'Type the role name to confirm',
-                        required=True)]
-    elif operation == 'create':
-        fields = [field('rolname', 'Name', required=True)]
-        fields += [field(key, labels[key], 'boolean',
-                         **({'default': True} if key == 'rolinherit' else {}))
-                   for key, _ in ATTRIBUTES]
-        fields += [
-            field('rolconnlimit', 'Connection limit', 'number',
-                  help='-1 for no limit.'),
-            field('rolvaliduntil', 'Account expires',
-                  help="A timestamp, or 'infinity'."),
-            field('rolmembership', 'Member of', 'grid', columns=membership),
-            field('rolmembers', 'Members', 'grid', columns=membership),
-            field('variables', 'Parameters', 'grid', columns=settings),
-            field('description', 'Comments', 'multiline')]
-    else:
-        fields = [field('rolname', 'Name',
-                        initial_value_path=['role_facts', 'rolname'])]
-        fields += [field(key, labels[key], 'select', options=tri)
-                   for key, _ in ATTRIBUTES]
-        fields += [
-            field('rolconnlimit', 'Connection limit', 'number',
-                  help='Empty keeps it; -1 for no limit.'),
-            field('rolvaliduntil', 'Account expires',
-                  help="Empty keeps it; 'infinity' clears it."),
-            field('rolmembership', 'Grant membership of', 'grid',
-                  columns=membership),
-            field('revoke_membership', 'Revoke membership of', 'grid',
-                  columns=revocation),
-            field('rolmembers', 'Add members', 'grid', columns=membership),
-            field('revoke_members', 'Remove members', 'grid',
-                  columns=revocation),
-            field('variables', 'Set parameters', 'grid', columns=settings),
-            field('reset_variables', 'Reset parameters', 'grid', columns=[
-                _column('name', 'Name', required=True),
-                _column('database', 'Database (optional)')]),
-            field('description', 'Comments', 'multiline',
-                  initial_value_path=['role_facts', 'description'])]
+        return {'form_id': 'postgresql-role-drop',
+                'form_key': 'native:postgresql:server:role',
+                'title': 'Drop role', 'fields': [
+                    field('confirmation', 'Type the role name to confirm',
+                          required=True)]}
+    alter = operation == 'alter'
+
+    def initial(key):
+        return {'initial_value_path': ['role_facts', key]} if alter else {}
+    fields = []
+    for field_id in _ROLE_FAMILY_FIELDS[operation]:
+        if field_id in _ROLE_GRIDS:
+            fields.append(field(field_id, field_id.replace('_', ' ')
+                                .capitalize(), 'grid', columns=[]))
+        elif field_id in _ROLE_LABELS:
+            fields.append(field(field_id, _ROLE_LABELS[field_id], 'boolean',
+                                **({'default': True}
+                                   if field_id == 'rolinherit' and not alter
+                                   else {}), **initial(field_id)))
+        elif field_id in ('rolconnlimit', 'oid'):
+            fields.append(field(field_id, 'Connection limit' if field_id ==
+                                'rolconnlimit' else 'OID', 'number',
+                                **initial(field_id)))
+        elif field_id == 'is_sys_obj':
+            fields.append(field(field_id, 'System role', 'boolean'))
+        elif field_id == 'rolpassword':
+            fields.append(field(field_id, 'Password', 'password', help=(
+                'Never carried in a plan; set it with the inherited '
+                'Properties dialog.')))
+        else:
+            fields.append(field(field_id, {'rolname': 'Name',
+                                           'description': 'Comments',
+                                           'rolvaliduntil': 'Account expires'
+                                           }[field_id],
+                                required=field_id == 'rolname' and not alter,
+                                **initial(field_id)))
     return {'form_id': f'postgresql-role-{operation}',
             'form_key': 'native:postgresql:server:role',
             'title': f'{operation.title()} role', 'fields': fields,
-            'notes': 'Passwords and security labels stay with the inherited '
-                     'dialog; a plan never carries a password.'}
+            'notes': ('A plan never carries a password: passwords are set '
+                      'with the inherited Properties dialog. Memberships and '
+                      'parameters are stated; the Revoke and Reset grids '
+                      'remove them.')}
 
 
 def tablespace_form(operation, field):

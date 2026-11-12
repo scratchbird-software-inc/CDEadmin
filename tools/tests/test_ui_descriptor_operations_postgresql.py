@@ -1404,6 +1404,29 @@ def test_index_lifecycle_round_trips(live):
         run_kind(live, 'index', 'alter', {'reset_parameters': [{'name': 'deduplicate_items'}]}, native)
         native = index_native('Ix schema', 'ix_two')
         assert [item['name'] for item in native['index_facts']['storage_parameters']] == ['fillfactor']
+        # The family form's shape (owner direction 2026-11-11): boolean sort order and NULLs, a statistics target on
+        # the expression column, the named option fields, an extension dependency; an empty option resets it.
+        run_kind(live, 'index', 'create', {
+            'name': 'ix_fam', 'schema': 'Ix schema', 'table': 'orders', 'amname': 'btree',
+            'columns': [{'colname': 'lower(email)', 'is_exp': True, 'sort_order': True, 'nulls': True, 'statistics': 250},
+                        {'colname': 'status', 'sort_order': False, 'nulls': False}],
+            'include': ['note'], 'deduplicate_items': False, 'fillfactor': 80, 'dependsonextensions': ['plpgsql']})
+        fam = index_native('Ix schema', 'ix_fam')
+        assert fam['index_facts']['columns'][0]['sort_order'] == 'DESC' and fam['index_facts']['deduplicate_items'] is False
+        assert one("SELECT attstattarget FROM pg_attribute WHERE attrelid='\"Ix schema\".ix_fam'::regclass AND attnum=1") == 250
+        assert one("SELECT count(*) FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid WHERE d.objid='\"Ix schema\".ix_fam'::regclass "
+                   "AND d.deptype='x' AND e.extname='plpgsql'") == 1
+        shaped = [dict(c, sort_order=c['sort_order'] == 'DESC', nulls=c['nulls'] == 'FIRST') for c in fam['index_facts']['columns']]
+        shaped[0]['statistics'] = 300
+        # The Reset storage parameters grid removes an option; an unchecked boolean one is set off.
+        run_kind(live, 'index', 'alter', {'columns': shaped, 'reset_parameters': [{'name': 'fillfactor'}],
+                                          'description': 'fam'}, fam)
+        fam = index_native('Ix schema', 'ix_fam')
+        assert fam['index_facts']['storage_parameters'] == [{'name': 'deduplicate_items', 'value': 'off'}]
+        assert fam['comment'] == 'fam'
+        assert one("SELECT attstattarget FROM pg_attribute WHERE attrelid='\"Ix schema\".ix_fam'::regclass AND attnum=1") == 300
+        with pytest.raises(Exception):
+            run_kind(live, 'index', 'alter', {'amname': 'hash'}, fam)
         # A BRIN index, which YugabyteDB refuses, and a concurrent build and drop in autocommit.
         # The predicate goes on the BRIN index: the server refuses CLUSTER on a partial index.
         run_kind(live, 'index', 'create', {'name': 'ix_brin', 'schema': 'Ix schema', 'table': 'orders',
@@ -1570,6 +1593,9 @@ def run_server_scope(live, kind, operation_id, draft, native=None):
     return plan
 
 
+from pgadmin.cdeadmin.providers.postgresql.cluster import role_facts as role_facts_of  # noqa: E402
+
+
 def role_native(name):
     from pgadmin.cdeadmin.providers.postgresql.cluster import role_facts
     rows = query(f"""SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolinherit, r.rolconnlimit, r.rolvaliduntil::text,
@@ -1606,7 +1632,7 @@ def test_role_lifecycle_round_trips(live):
         assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}'::regrole "
                      f"AND member='{member}'::regrole") == [(1,)]
         run_server_scope(live, 'role', 'alter', {
-            'rolname': name + '_r', 'rolcanlogin': '', 'rolcreatedb': 'no', 'rolinherit': 'yes',
+            'rolname': name + '_r', 'rolcreatedb': False, 'rolinherit': True,
             'rolconnlimit': -1, 'rolvaliduntil': 'infinity',
             'revoke_membership': [{'role': group, 'admin_only': True}],
             'revoke_members': [{'role': member}],
@@ -1619,6 +1645,18 @@ def test_role_lifecycle_round_trips(live):
         assert query(f"SELECT admin_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
                      f"AND member='{name}_r'::regrole") == [(False,)]
         assert query(f"SELECT count(*) FROM pg_auth_members WHERE roleid='{name}_r'::regrole") == [(0,)]
+        # The family form's shape (owner direction 2026-11-11): booleans for the attributes the listing knows are
+        # no change; the INHERIT/SET membership columns; a password is refused.
+        full = dict(native, catalog_metadata=dict(native['catalog_metadata'], rolcreatedb=False, rolinherit=True,
+                                                   rolconnlimit=-1))
+        full['role_facts'] = role_facts_of(full)
+        run_server_scope(live, 'role', 'alter', {
+            'rolcanlogin': True, 'rolcreatedb': False, 'rolsuper': False,
+            'rolmembership': [{'role': group, 'admin': False, 'inherit': False, 'set': True}]}, full)
+        assert query(f"SELECT inherit_option, set_option FROM pg_auth_members WHERE roleid='{group}'::regrole "
+                     f"AND member='{name}_r'::regrole") == [(False, True)]
+        with pytest.raises(Exception):
+            run_server_scope(live, 'role', 'alter', {'rolpassword': 'nope'}, full)
         with pytest.raises(Exception):
             run_server_scope(live, 'role', 'drop', {'confirmation': 'other'}, native)
         run_server_scope(live, 'role', 'drop', {'confirmation': name + '_r'}, native)

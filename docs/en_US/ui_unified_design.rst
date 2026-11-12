@@ -695,6 +695,33 @@ introduced without updating it. Observed live on PostgreSQL 18.3: word
 privileges granted and revoked, parameters set per database and per role
 then reset, default privileges applied inside the database.
 
+Form close-outs, index. The index editor admits every family field and
+reads the dialog's shapes: booleans for sort order and NULLs beside the
+words, the access-method options the dialog shows as fields
+(deduplicate_items, fastupdate, gin_pending_list_limit, pages_per_range,
+autosummarize, buffering) as storage parameters that an empty value
+resets on edit, a column row's statistics target as ALTER INDEX ... SET
+STATISTICS, extension dependencies as DEPENDS ON EXTENSION, and
+clustering on create after the create. Definition fields (columns,
+uniqueness, method, predicate, INCLUDE, NULLs not distinct) are refused
+as fixed once created rather than hidden. Observed live on PostgreSQL
+18.3: an index created from the family shape with a statistics target
+and an extension dependency, an option reset by an empty value, the
+statistics target changed on edit, and a method change refused.
+
+Form close-outs, role. The server-scope role listing already carried
+every attribute, so the role facts now expose them all and the family
+form's booleans are diffed against them; the connection limit and expiry
+are diffed too. The INHERIT and SET membership columns compile to the
+PostgreSQL 16 WITH list; security labels compile; the Revoke membership,
+Remove members and Reset parameters grids join the family form so the
+stated memberships and parameters can be removed. The password field is
+admitted only to be refused: a provider-tree plan never carries a
+password, so passwords stay with the inherited Properties dialog.
+Observed live on PostgreSQL 18.3: attributes equal to the listing
+produce no change, a membership granted with INHERIT FALSE and SET TRUE,
+a password refused.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

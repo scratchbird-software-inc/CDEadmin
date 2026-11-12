@@ -33,7 +33,7 @@ def test_facts_read_the_definition_back_through_the_parser():
          'op_class': '"text_pattern_ops"', 'sort_order': 'DESC',
          'nulls': 'FIRST'},
         {'colname': 'priority', 'is_exp': False, 'collspcname': None,
-         'op_class': None, 'sort_order': None, 'nulls': None}]
+         'op_class': None, 'sort_order': 'ASC', 'nulls': 'LAST'}]
     assert current['storage_parameters'] == [{'name': 'fillfactor',
                                               'value': '70'}]
     assert facts({'definition': 'nope', 'catalog_row': {}})[
@@ -144,6 +144,14 @@ def test_reindex_still_routes_to_maintenance_and_forms_follow_ids():
     assert create['columns']['required'] and 'amname' in create
     assert alter['columns']['initial_value_path'] == ['index_facts',
                                                       'columns']
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'index.form.json').read_text())
+    for operation, served in (('create', create), ('alter', alter)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -155,3 +163,61 @@ def test_reindex_still_routes_to_maintenance_and_forms_follow_ids():
                       'drop': 'provider-native',
                       'inspect': 'legacy-preserved',
                       'reindex': 'provider-native'}
+
+
+def test_family_shaped_rows_named_options_statistics_and_dependencies():
+    # Booleans for sort order and NULLs, named access-method options, a
+    # statistics target, an extension dependency and clustering on create.
+    lines = compile_index('create', {
+        'name': 'i', 'schema': 's', 'table': 't', 'amname': 'btree',
+        'columns': [{'colname': 'lower(a)', 'is_exp': True, 'sort_order': True,
+                     'nulls': True, 'statistics': 500},
+                    {'colname': 'b', 'sort_order': False, 'nulls': False}],
+        'include': ['c'], 'deduplicate_items': False, 'fillfactor': 80,
+        'dependsonextensions': ['btree_gist'], 'indisclustered': True,
+        'description': 'd'})['statement'].split(';\n')
+    assert lines == [
+        'CREATE INDEX "i" ON "s"."t" USING btree ((lower(a)) DESC NULLS FIRST, '
+        '"b" ASC NULLS LAST) INCLUDE ("c") WITH (fillfactor=80, '
+        'deduplicate_items=off)',
+        'ALTER INDEX "s"."i" ALTER COLUMN 1 SET STATISTICS 500',
+        'ALTER INDEX "s"."i" DEPENDS ON EXTENSION "btree_gist"',
+        'ALTER TABLE "s"."t" CLUSTER ON "i"',
+        'COMMENT ON INDEX "s"."i" IS \'d\'']
+    with pytest.raises(PostgreSQLNativeAdminError, match='runs alone'):
+        compile_index('create', {'name': 'i', 'schema': 's', 'table': 't',
+                                 'isconcurrent': True, 'indisclustered': True,
+                                 'columns': [{'colname': 'c'}]})
+    # Facts expose the named options; the same columns in the dialog's
+    # boolean shape are no change; an empty option resets it.
+    current = facts(dict(INDEX, definition=INDEX['definition'].replace(
+        "fillfactor='70'", "fillfactor='70', deduplicate_items='off'")))
+    assert (current['fillfactor'], current['deduplicate_items'],
+            current['buffering']) == (70, False, None)
+    shaped = [{'colname': 'lower(status)', 'is_exp': True, 'collspcname': '"C"',
+               'op_class': '"text_pattern_ops"', 'sort_order': True,
+               'nulls': True, 'statistics': 100},
+              {'colname': 'priority'}]
+    native = dict(INDEX, definition=INDEX['definition'].replace(
+        "fillfactor='70'", "fillfactor='70', deduplicate_items='off'"))
+    assert compile_index('alter', {'columns': shaped, 'fillfactor': '',
+                                   'fastupdate': True,
+                                   'dependsonextensions': ['btree_gist']},
+                         native)['statement'].split(';\n') == [
+        'ALTER INDEX "service"."ix_orders" SET (fastupdate=on)',
+        'ALTER INDEX "service"."ix_orders" RESET (fillfactor)',
+        'ALTER INDEX "service"."ix_orders" ALTER COLUMN 1 SET STATISTICS 100',
+        'ALTER INDEX "service"."ix_orders" DEPENDS ON EXTENSION "btree_gist"']
+    # Unchecked boxes equal the defaults pg_get_indexdef omits.
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_index('alter', {'columns': [
+            dict(shaped[0], statistics=None),
+            {'colname': 'priority', 'sort_order': False, 'nulls': False}]},
+            native)
+    for draft in ({'amname': 'hash'}, {'indisunique': False},
+                  {'include': ['other']}, {'indconstraint': 'priority > 2'}):
+        with pytest.raises(PostgreSQLNativeAdminError, match='fixed once'):
+            compile_index('alter', draft)
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_index('alter', {'include': ['technician'],
+                                'indisunique': True})
