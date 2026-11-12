@@ -61,7 +61,10 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'reload@server', 'restore-point@server', 'wal-replay-pause@server', 'wal-replay-resume@server',
           'vacuum@schema', 'analyze@schema', 'vacuum@database', 'analyze@database',
           'reassign-owned@role', 'drop-owned@role', 'move-objects@tablespace', 'run-now@pgagent-job',
-          'count-rows@table', 'reset-statistics@table', 'enable-triggers@table', 'disable-triggers@table'}
+          'count-rows@table', 'reset-statistics@table', 'enable-triggers@table', 'disable-triggers@table',
+          'create-partition@table', 'attach-partition@table', 'detach-partition@table',
+          'create-partition@partitioned-table', 'attach-partition@partitioned-table',
+          'count-rows@partitioned-table'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------
@@ -2491,3 +2494,109 @@ def test_table_lifecycle_round_trips(live):
     finally:
         query('DROP TABLE IF EXISTS public.m_tbl CASCADE; DROP TABLE IF EXISTS m_arch.m_tbl2 CASCADE')
         query(f'DROP SCHEMA IF EXISTS m_arch CASCADE; DROP TABLE IF EXISTS public.m_parent CASCADE; DROP OWNED BY {owner}; DROP ROLE {owner}')
+
+
+# -- M7 (2026-11-11): partitions and foreign tables, observed live ---------------------------------
+def partition_native(schema, name):
+    """A table node with its partition side, as the provider's capture attaches it."""
+    from pgadmin.cdeadmin.providers.postgresql.partitions import partition_facts
+    native = table_native(schema, name)
+    rows = query(f"""SELECT c.relispartition, pg_get_expr(c.relpartbound, c.oid), pg_get_partkeydef(c.oid),
+                            pn.nspname, p.relname
+                     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                     LEFT JOIN pg_inherits i ON i.inhrelid=c.oid
+                     LEFT JOIN pg_class p ON p.oid=i.inhparent LEFT JOIN pg_namespace pn ON pn.oid=p.relnamespace
+                     WHERE n.nspname='{schema}' AND c.relname='{name}'""")
+    is_partition, bound_sql, key_sql, parent_schema, parent_name = rows[0]
+    native['catalog_row'].update(relispartition=is_partition, partition_bound_sql=bound_sql,
+                                 partition_key_sql=key_sql)
+    if parent_name:
+        native['parent_table'] = {'schema': parent_schema, 'name': parent_name}
+    native['partition_facts'] = partition_facts(native)
+    return native
+
+
+@live_only
+def test_partitions_create_attach_and_detach(live):
+    query('DROP TABLE IF EXISTS public.m_part CASCADE; DROP TABLE IF EXISTS public.m_part_old CASCADE')
+    plan = run_kind(live, 'table', 'create', {
+        'name': 'm_part', 'schema': 'public', 'columns': [{'name': 'id', 'cltype': 'int'}, {'name': 'at', 'cltype': 'date'}],
+        'is_partitioned': True, 'partition_type': 'range', 'partition_keys': [{'key_type': 'column', 'pt_column': 'at'}]})
+    assert plan['command_preview']['statement'].endswith('PARTITION BY RANGE ("at")')
+    parent = partition_native('public', 'm_part')
+    assert parent['partition_facts']['partition_key'] == 'RANGE (at)'
+    plan, outcome = run(live, 'create-partition', kind='partitioned-table', native=parent, values={
+        'name': 'm_part_2026', 'partition_value': "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')", 'fillfactor': 90})
+    plan, outcome = run(live, 'create-partition', kind='partitioned-table', native=parent, values={
+        'name': 'm_part_rest', 'is_default': True})
+    query("CREATE TABLE public.m_part_old (id int, at date)")
+    plan, outcome = run(live, 'attach-partition', kind='partitioned-table', native=parent, values={
+        'partition': 'public.m_part_old', 'partition_value': "FOR VALUES FROM ('2020-01-01') TO ('2021-01-01')"})
+    assert sorted(query("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid WHERE i.inhparent='public.m_part'::regclass")) == [
+        ('m_part_2026',), ('m_part_old',), ('m_part_rest',)]
+    child = partition_native('public', 'm_part_2026')
+    assert child['partition_facts'] == {'is_partition': True, 'parent': {'schema': 'public', 'name': 'm_part'},
+                                        'partition_bound': "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')",
+                                        'partition_key': None}
+    plan, outcome = run(live, 'detach-partition', kind='table', native=child, values={'mode': 'plain'})
+    assert plan['confirmation_required'] is True
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'transaction'
+    # PostgreSQL refuses a concurrent detach while a default partition exists: detach the default first.
+    with pytest.raises(Exception):
+        run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_old'),
+            values={'mode': 'concurrently'})
+    run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_rest'), values={'mode': 'plain'})
+    plan, outcome = run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_old'),
+                        values={'mode': 'concurrently'})
+    assert outcome['maintenance_receipt']['transaction_mode'] == 'autocommit'
+    assert query("SELECT count(*) FROM pg_inherits WHERE inhparent='public.m_part'::regclass") == [(0,)]
+    assert one("SELECT relispartition FROM pg_class WHERE relname='m_part_2026'") is False
+    plan, outcome = run(live, 'count-rows', kind='partitioned-table', native=parent)
+    assert outcome['result']['rows'] == [{'row_count': 0}]
+    with pytest.raises(Exception):
+        run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_2026'), values={'mode': 'plain'})
+    query('DROP TABLE public.m_part CASCADE; DROP TABLE public.m_part_2026; DROP TABLE public.m_part_old; DROP TABLE public.m_part_rest')
+
+
+def foreign_table_native(schema, name):
+    from pgadmin.cdeadmin.providers.postgresql.foreign_tables import facts
+    native = table_native(schema, name)
+    (server_oid, server_name), = query(f"""SELECT f.ftserver::int, s.srvname FROM pg_foreign_table f
+                                            JOIN pg_foreign_server s ON s.oid=f.ftserver
+                                            WHERE f.ftrelid='{schema}.{name}'::regclass""")
+    native['children'] = {'pg_foreign_table': [{'ftserver': server_oid}]}
+    native['table_facts'] = facts(native, {server_oid: server_name})
+    return native
+
+
+@live_only
+def test_foreign_table_lifecycle_round_trips(live):
+    if query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user") != [(True,)]:
+        pytest.skip('creating the wrapper needs a superuser')
+    query('CREATE EXTENSION IF NOT EXISTS postgres_fdw')
+    query("DROP SERVER IF EXISTS ui_ops_ft_srv CASCADE; CREATE SERVER ui_ops_ft_srv FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host '127.0.0.1', dbname 'x')")
+    try:
+        plan = run_kind(live, 'foreign-table', 'create', {
+            'name': 'm_ft', 'schema': 'public', 'ftsrvname': 'ui_ops_ft_srv',
+            'columns': [{'name': 'id', 'cltype': 'integer', 'attnotnull': True},
+                        {'name': 'note', 'cltype': 'text', 'description': 'n'}],
+            'ftoptions': [{'name': 'schema_name', 'value': 'public'}, {'name': 'table_name', 'value': 'orders'}],
+            'description': 'mirror', 'check_constraint': [{'name': 'm_ft_id_ok', 'consrc': 'id > 0'}]})
+        assert plan['command_preview']['statement'].startswith('CREATE FOREIGN TABLE "public"."m_ft" (')
+        native = foreign_table_native('public', 'm_ft')
+        assert (native['table_facts']['ftsrvname'], native['table_facts']['description']) == ('ui_ops_ft_srv', 'mirror')
+        assert sorted(query("SELECT unnest(ftoptions) FROM pg_foreign_table WHERE ftrelid='public.m_ft'::regclass")) == [
+            ('schema_name=public',), ('table_name=orders',)]
+        assert one("SELECT col_description('public.m_ft'::regclass, 2)") == 'n'
+        assert one("SELECT count(*) FROM pg_constraint WHERE conrelid='public.m_ft'::regclass AND conname='m_ft_id_ok'") == 1
+        run_kind(live, 'foreign-table', 'alter', {
+            'name': 'm_ft2', 'set_options': [{'name': 'table_name', 'value': 'orders_v2'}],
+            'add_options': [{'name': 'updatable', 'value': 'false'}], 'drop_options': [{'name': 'schema_name'}],
+            'description': ''}, native)
+        assert sorted(query("SELECT unnest(ftoptions) FROM pg_foreign_table WHERE ftrelid='public.m_ft2'::regclass")) == [
+            ('table_name=orders_v2',), ('updatable=false',)]
+        assert one("SELECT obj_description('public.m_ft2'::regclass)") is None
+        run_kind(live, 'foreign-table', 'drop', {'confirmation': 'm_ft2'}, foreign_table_native('public', 'm_ft2'))
+        assert query("SELECT count(*) FROM pg_class WHERE relname IN ('m_ft', 'm_ft2')") == [(0,)]
+    finally:
+        query('DROP FOREIGN TABLE IF EXISTS public.m_ft; DROP FOREIGN TABLE IF EXISTS public.m_ft2; DROP SERVER IF EXISTS ui_ops_ft_srv CASCADE')

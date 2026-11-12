@@ -21,7 +21,10 @@ MAINTENANCE_OPERATIONS = {
     # M7 (2026-11-11): the inherited table node's row count, statistics
     # reset and trigger toggles join the maintenance set.
     'table': frozenset({'vacuum', 'analyze', 'reindex', 'cluster', 'truncate', 'count-rows',
-                        'reset-statistics', 'enable-triggers', 'disable-triggers'}),
+                        'reset-statistics', 'enable-triggers', 'disable-triggers',
+                        'create-partition', 'attach-partition', 'detach-partition'}),
+    # A partitioned table takes the partition operations and the row count (M7).
+    'partitioned-table': frozenset({'create-partition', 'attach-partition', 'count-rows'}),
     'index': frozenset({'reindex'}),
     # Schema and database scope VACUUM/ANALYZE (M6, 2026-11-11): a schema
     # has no VACUUM form, so its statement names the tables captured with it.
@@ -50,7 +53,7 @@ CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
     ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
     ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
-    ('pgagent-job', 'run-now'), ('table', 'disable-triggers'),
+    ('pgagent-job', 'run-now'), ('table', 'disable-triggers'), ('table', 'detach-partition'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
@@ -60,7 +63,8 @@ MUTATION_CLASSES = {
     'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
     'run-now': 'admin',
     'count-rows': 'read', 'reset-statistics': 'admin', 'enable-triggers': 'admin',
-    'disable-triggers': 'admin',
+    'disable-triggers': 'admin', 'create-partition': 'write', 'attach-partition': 'admin',
+    'detach-partition': 'admin',
 }
 
 _OPTIONS = {
@@ -89,6 +93,17 @@ _OPTIONS = {
     ('table', 'reset-statistics'): set(),
     ('table', 'enable-triggers'): set(),
     ('table', 'disable-triggers'): set(),
+    ('table', 'create-partition'): {'name', 'schema', 'is_default', 'partition_value', 'relpersistence',
+                                    'is_partitioned', 'partition_type', 'partition_keys', 'amname',
+                                    'fillfactor', 'spcname', 'relowner', 'description'},
+    ('partitioned-table', 'create-partition'): {'name', 'schema', 'is_default', 'partition_value',
+                                                'relpersistence', 'is_partitioned', 'partition_type',
+                                                'partition_keys', 'amname', 'fillfactor', 'spcname',
+                                                'relowner', 'description'},
+    ('table', 'attach-partition'): {'partition', 'is_default', 'partition_value'},
+    ('partitioned-table', 'attach-partition'): {'partition', 'is_default', 'partition_value'},
+    ('table', 'detach-partition'): {'mode'},
+    ('partitioned-table', 'count-rows'): set(),
 }
 _RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
 _MAX_PARALLEL = 1024
@@ -150,9 +165,17 @@ def compile_operation(kind, operation, native, draft):
         return _server_operation(operation, draft)
     if key in DATABASE_PICKED:
         return _database_picked_operation(kind, operation, native, draft)
-    if kind == 'table' and operation in {'count-rows', 'reset-statistics', 'enable-triggers',
-                                          'disable-triggers'}:
+    if kind in {'table', 'partitioned-table'} and operation in {
+            'count-rows', 'reset-statistics', 'enable-triggers', 'disable-triggers'}:
         return _table_operation(operation, native)
+    if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
+        from .partitions import compile_operation as compile_partition
+        compiled = compile_partition(operation, native, draft)
+        compiled.setdefault('autocommit', False)
+        compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
+                                   'options': [], 'transaction_mode': 'autocommit' if compiled['autocommit']
+                                   else 'transaction'}
+        return compiled
     if key == ('pgagent-job', 'run-now'):
         from .pgagent import run_now
         compiled = run_now(native)
@@ -312,6 +335,9 @@ def _server_operation(operation, draft):
 
 def form(kind, operation, field):
     """Dialog fields for the catalog form; mirrors the allow-list above."""
+    if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
+        from .partitions import form as partition_form
+        return partition_form(operation, field)
     def boolean(name, label, **kw):
         return field(name, label, 'boolean', **kw)
     fields = []

@@ -585,6 +585,32 @@ to another schema, made logged, reset, given a replica identity and
 revoked; then dropped. The family form keeps its draft status until its
 recorded gaps are closed.
 
+M7 sixth slice (2026-11-11), partitions and foreign tables. Partitions:
+a partitioned table (``relkind p``, now a declared kind that takes the
+table editor) offers create partition (``CREATE TABLE child PARTITION OF
+parent`` with a bound or DEFAULT, optional sub-partitioning, access
+method, storage options, tablespace, owner and comment) and attach
+partition (``ATTACH PARTITION`` of an existing table); a table that is a
+partition offers detach partition in the plain, CONCURRENTLY and FINALIZE
+forms, the concurrent one outside a transaction, naming its parent from
+the captured inheritance row. A partition bound is text the user writes
+and is admitted only when PostgreSQL's parser accepts it inside a
+``CREATE TABLE ... PARTITION OF``. Foreign tables: create compiles the
+``CREATE FOREIGN TABLE`` the inherited template rendered (columns with
+their options, INHERITS, SERVER, OPTIONS, then owner, check constraints,
+comments, grants and labels); alter emits rename, schema, owner, options
+added, set or dropped through three grids (the capture strips a foreign
+table's options, so they are stated rather than diffed), comment, grants,
+revocations and labels; drop takes a typed name. The table family form
+gained the foreign server and option grids. Observed live on PostgreSQL
+18.3: a range-partitioned parent with a created range partition, a
+created default partition and an attached table; plain and concurrent
+detaches (PostgreSQL refuses a concurrent detach while a default
+partition exists, which the test observes); a foreign table over
+postgres_fdw created, re-optioned and dropped. The partitions grid of the
+table create form is still not compiled; partitions are created from the
+parent instead.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

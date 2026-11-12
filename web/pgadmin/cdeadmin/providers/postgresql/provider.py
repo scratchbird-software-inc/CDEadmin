@@ -1158,6 +1158,10 @@ class PostgreSQLProvider:
                          for r in capture['resources']
                          if (r.get('native') or {}).get('catalog')
                          == 'pg_foreign_data_wrapper'}
+        server_names = {int(r['native']['oid']): r['display_name']
+                        for r in capture['resources']
+                        if (r.get('native') or {}).get('catalog')
+                        == 'pg_foreign_server'}
         relations = {int(r['native']['oid']): (r['native'].get('schema'),
                                               r['display_name'])
                      for r in capture['resources']
@@ -1213,9 +1217,20 @@ class PostgreSQLProvider:
                 from .policies import facts as policy_facts
                 native['policy_facts'] = policy_facts(native, relations)
             if item['resource_kind'] in {'table', 'partitioned-table'}:
-                # The table editor's initial values (M7).
+                # The table editor's initial values and the partition side
+                # (parent, bound) for the detach operation (M7).
+                from .partitions import partition_facts
                 from .tables import facts as table_facts
                 native['table_facts'] = table_facts(native)
+                native['partition_facts'] = partition_facts(native, relations)
+                parent = native['partition_facts'].get('parent') or {}
+                if parent.get('name'):
+                    native['parent_table'] = parent
+            if item['resource_kind'] == 'foreign-table':
+                from .foreign_tables import facts as foreign_table_facts
+                native['table_facts'] = foreign_table_facts(
+                    native, server_names)
+                native['foreign_server'] = native['table_facts']['ftsrvname']
             if item['resource_kind'] == 'constraint':
                 # The owning relation and the editor's initial values (M7).
                 from .constraints import _oid as constraint_oid

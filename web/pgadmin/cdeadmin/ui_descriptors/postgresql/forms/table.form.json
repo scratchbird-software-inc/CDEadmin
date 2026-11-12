@@ -5,7 +5,8 @@
   "resource_kinds": [
     "table",
     "partition",
-    "foreign-table"
+    "foreign-table",
+    "partitioned-table"
   ],
   "form_reference": "SR-F-020066",
   "status": "draft",
@@ -2231,6 +2232,107 @@
         }
       ],
       "help": "Provider tree (M7, 2026-11-11): REVOKE ALL ON TABLE ... FROM grantee."
+    },
+    {
+      "field_id": "ftsrvname",
+      "label": "Foreign server",
+      "control": "reference",
+      "required": false,
+      "tab": "General",
+      "reference_kind": "foreign-server",
+      "help": "Foreign tables only (provider tree, M7, 2026-11-11): SERVER name; required when creating a foreign table."
+    },
+    {
+      "field_id": "ftoptions",
+      "label": "Foreign table options",
+      "control": "grid",
+      "required": false,
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Foreign tables only: OPTIONS (name value, ...)."
+    },
+    {
+      "field_id": "add_options",
+      "label": "Add foreign table options",
+      "control": "grid",
+      "required": false,
+      "tab": "Engine",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Foreign tables only."
+    },
+    {
+      "field_id": "set_options",
+      "label": "Set foreign table options",
+      "control": "grid",
+      "required": false,
+      "tab": "Engine",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "drop_options",
+      "label": "Drop foreign table options",
+      "control": "grid",
+      "required": false,
+      "tab": "Engine",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        }
+      ]
     }
   ],
   "notes": "Fields map 1:1 onto the legacy pgAdmin dialog (workflow legacy_preserved): field ids are the BaseUISchema ids and are served by the existing SQL templates. Sources: web/pgadmin/browser/server_groups/servers/databases/schemas/tables/static/js/table.ui.js (TableSchema, ConstraintsSchema, LikeSchema), partition.utils.ui.js (PartitionKeysSchema, PartitionsSchema), columns/static/js/column.ui.js, constraints/index_constraint/static/js/{primary_key,unique_constraint}.ui.js, constraints/foreign_key/static/js/foreign_key.ui.js, constraints/check_constraint/static/js/check_constraint.ui.js, constraints/exclusion_constraint/static/js/exclusion_constraint.ui.js, static/js/vacuum.ui.js, static/js/privilege.ui.js, static/js/sec_label.ui.js. Mapping: General->General; Columns->Columns (coll_inherits->Engine); Constraints nested tab->Constraints groups Primary key/Foreign keys/Check/Unique/Exclude; Partitions->Partitions; Advanced: spcname/fillfactor->Options, typname/coll_inherits/rlspolicy/replica identity/access method/toast/parallel/oids/Like->Engine, reltuples/rows_cnt->Statistics; Parameters (vacuum nested tab)->Engine groups Autovacuum/TOAST autovacuum; Security->Security. The partition resource kind (partitions/static/js/partition.ui.js) is the same field set minus Columns/Like/typname. Field ids are checked against the pgAdmin *.ui.js schema ids by tools/tests/test_ui_descriptor_postgresql_schema_ids.py (the schema id gate); the form stays draft until phase 5 routes it to the SQL templates and ports the ui.spec expectations. Provider tree (M7, 2026-11-11): create, alter and drop compile through the provider (providers/postgresql/tables.py); columns and constraints of an existing table are edited on their own nodes, so the Columns and Constraints grids act at creation only; partitions grid, OIDs and read-only properties are not compiled."

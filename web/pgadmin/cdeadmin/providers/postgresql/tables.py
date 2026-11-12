@@ -517,7 +517,7 @@ _FAMILY_FIELDS = {
                'like_generated', 'like_identity', 'like_statistics',
                'autovacuum_custom', 'autovacuum_enabled', 'vacuum_table',
                'toast_autovacuum', 'toast_autovacuum_enabled', 'vacuum_toast',
-               'relacl', 'seclabels'),
+               'relacl', 'seclabels', 'ftsrvname', 'ftoptions'),
     'alter': ('name', 'oid', 'relowner', 'schema', 'is_sys_table',
               'relpersistence', 'description', 'columns', 'primary_key',
               'foreign_key', 'check_constraint', 'unique_constraint',
@@ -530,12 +530,14 @@ _FAMILY_FIELDS = {
               'conname', 'vacuum_settings_str', 'autovacuum_custom',
               'autovacuum_enabled', 'vacuum_table', 'toast_autovacuum',
               'toast_autovacuum_enabled', 'vacuum_toast', 'relacl_str',
-              'relacl', 'seclabels', 'revoke', 'reltuples', 'rows_cnt'),
+              'relacl', 'seclabels', 'revoke', 'reltuples', 'rows_cnt',
+              'ftsrvname', 'add_options', 'set_options', 'drop_options'),
 }
 _GRIDS = ('columns', 'primary_key', 'foreign_key', 'check_constraint',
           'unique_constraint', 'exclude_constraint', 'partition_keys',
           'partitions', 'vacuum_table', 'vacuum_toast', 'relacl',
-          'seclabels', 'revoke')
+          'seclabels', 'revoke', 'ftoptions', 'add_options', 'set_options',
+          'drop_options')
 _BOOLEANS = ('relpersistence', 'is_partitioned', 'rlspolicy', 'forcerlspolicy',
              'relhasoids', 'like_default_value', 'like_constraints',
              'like_indexes', 'like_storage', 'like_comments',
