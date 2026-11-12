@@ -484,6 +484,20 @@ class ProviderRegistry:
             self._validate_composition(registration, context)
             return frozenset(registration.permission_grants)
 
+    def required_permissions(
+        self, context: EndpointContext
+    ) -> frozenset[str]:
+        """Return the permissions the active provider's manifest requires
+        of every context (a verification must grant them too)."""
+        if context.provider_version is None:
+            return frozenset()
+        key = (context.provider_id, context.provider_version)
+        with self._lock:
+            registration = self._registrations.get(key)
+        if registration is None:
+            return frozenset()
+        return frozenset(registration.required_permissions)
+
     def profile_for(self, provider_id, provider_version):
         """Return a registered provider module's declared PROFILE, if any."""
         with self._lock:

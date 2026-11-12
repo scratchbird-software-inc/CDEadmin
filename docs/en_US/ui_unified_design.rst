@@ -851,16 +851,34 @@ service reads the PostgreSQL provider's identity from
 module, which had dragged the application model into three
 endpoint-registration unit tests that now pass again.
 
-Verification: MongoDB, Redis, Neo4j, ClickHouse, InfluxDB and OpenSearch
-(both profiles) registered through the servers API with their form's
-payload against the pinned demos, verified at create, read back and
-removed. Apache Ignite, Cassandra, FoundationDB, Milvus and TiKV
-round-trip through their contracts only; their multi-container demos
-were not started, so their first live registration is still to be
-observed, and their forms say so. Nothing was screen-checked. Three
-endpoint-registration unit tests (Firebird edit encryption, route CRUD
-staleness, SQLite edit form) fail on master before this work and were
-left as found.
+Verification (completed 2026-11-12, owner direction: every engine
+through a live registration): all 24 engines, 26 profiles, registered
+through the servers API with their form's payload against the pinned
+demos, verified at create, read back and removed: PostgreSQL, MySQL,
+MariaDB, Firebird, DuckDB, SQLite, Dolt, TiDB, Vitess, CockroachDB,
+YugabyteDB (YSQL and YCQL), immudb, XTDB, Apache Ignite, Cassandra,
+ClickHouse, FoundationDB, InfluxDB, Milvus, MongoDB, Neo4j, OpenSearch
+(native and SQL/PPL), Redis and TiKV. The demos were verified in groups:
+the Docker Desktop VM holds 7.5 GiB, and the whole estate at once
+starves PD and CockroachDB and kills Cassandra and ClickHouse. What the
+live runs corrected:
+
+- Verification granted secret access to every provider; TiKV's manifest
+  grants none, so its verification was refused. The grant now follows the
+  profile (secret access only when it declares a secret) and adds what
+  the provider's manifest requires of every context (FoundationDB reads
+  its cluster file, so it requires the filesystem). FoundationDB's
+  manifest now declares the secret access its TLS key password needs.
+- The pinned MySQL-wire and PostgreSQL-wire demos speak plain TCP, so a
+  registration sets the dialog's TLS switch off for them (ssl_disabled,
+  ssl, sslmode disable); the contracts default to TLS on, as they should.
+- The demo tool's TiKV definition is recreated when the advertised host
+  address changes, and the FoundationDB host cluster file must carry the
+  cluster's current connection string (a client rewrites it; a stale one
+  reads as an unreachable coordinator).
+
+Nothing was screen-checked: the browser extension reported no connected
+browser for this account all day.
 
 Verification of the close-outs. Every PostgreSQL unit suite, the
 descriptor service and field-contract suites, the pgAdmin field-id gate
