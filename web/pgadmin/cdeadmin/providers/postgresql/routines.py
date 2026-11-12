@@ -8,9 +8,13 @@ parameters and a dollar-quoted body; owner, comment; ALTER ... RENAME TO /
 OWNER TO / SET SCHEMA; DROP. A routine's signature (arguments and return
 type) is fixed once created: a changed body or option runs CREATE OR
 REPLACE with the same signature; a changed signature is refused (drop and
-create). C-language routines, support functions, window functions,
-privileges and security labels stay with the inherited dialog. Field ids
-follow the inherited dialog (``function.ui.js``).
+create). Owner direction 2026-11-11: every field of the family form is
+admitted and compiled: C-language routines (object file and symbol),
+SUPPORT and WINDOW, SETOF through the return-set flag, privileges
+(stated, revoked through a grid), security labels and extension
+dependencies. Volatility and parallel safety are read as the dialog's
+codes (v/s/i, u/r/s) or as words. Field ids follow the inherited dialog
+(``function.ui.js``).
 
 The alter dialog's initial values come from ``pg_get_functiondef`` read
 back through PostgreSQL's own parser (pglast), so arguments, options and
@@ -20,9 +24,11 @@ import re
 
 from .native_admin import (
     PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
-    _qualified, _type_reference,
+    _qualified, _reference, _type_reference, privilege_words,
 )
 from .policies import expression
+
+PRIVILEGE_CODES = {'X': 'EXECUTE'}
 
 MODES = {'IN': 'i', 'OUT': 'o', 'INOUT': 'b', 'VARIADIC': 'v',
          'TABLE': 't'}
@@ -55,14 +61,24 @@ def facts(native):
         'kind': 'procedure' if row.get('prokind') == 'p' else 'function',
         'description': native.get('comment'),
         'arguments': [], 'prorettypename': None, 'lanname': None,
-        'prosrc': None, 'provolatile': VOLATILITY.get(
-            row.get('provolatile'), 'VOLATILE'),
+        'prosrc': None,
+        # The dialog's codes: v/s/i and u/r/s.
+        'provolatile': row.get('provolatile') if row.get('provolatile')
+        in VOLATILITY else 'v',
         'proisstrict': bool(row.get('proisstrict', False)),
         'prosecdef': bool(row.get('prosecdef', False)),
         'proleakproof': bool(row.get('proleakproof', False)),
-        'proparallel': PARALLEL.get(row.get('proparallel'), 'UNSAFE'),
+        'proparallel': row.get('proparallel') if row.get('proparallel')
+        in PARALLEL else 'u',
         'procost': row.get('procost'), 'prorows': row.get('prorows'),
-        'variables': [], 'definition_parsed': False,
+        'proretset': bool(row.get('proretset', False)),
+        'proiswindow': row.get('prokind') == 'w',
+        'funcowner': native.get('owner'),
+        'acl': list(row.get('proacl') or []),
+        'dependsonextensions': list(
+            native.get('depends_on_extensions') or []),
+        'variables': [], 'probin': None, 'prosrc_c': None,
+        'definition_parsed': False,
     }
     definition = native.get('definition')
     if not isinstance(definition, str) or not definition.strip():
@@ -92,6 +108,15 @@ def facts(native):
             elif option.defname == 'as':
                 items = list(arg) if not hasattr(arg, 'sval') else [arg]
                 result['prosrc'] = items[0].sval if items else None
+                if len(items) == 2:
+                    # A C-language routine: object file and symbol.
+                    result['probin'], result['prosrc_c'] = (
+                        items[0].sval, items[1].sval)
+                    result['prosrc'] = None
+            elif option.defname == 'support':
+                result['prosupportfunc'] = _render(arg)
+            elif option.defname == 'window':
+                result['proiswindow'] = True
             elif option.defname == 'set':
                 values = [_render(value) for value in arg.args or []]
                 text = ', '.join(values)
@@ -210,8 +235,12 @@ def _settings(rows):
 
 
 def _choice(value, allowed, label, current):
+    """A word (IMMUTABLE) or the dialog's code (i); ``current`` may be
+    either too."""
     if _blank(value):
-        return current
+        value = current
+    if value in allowed:
+        return allowed[value]
     text = str(value).upper()
     if text not in allowed.values():
         raise PostgreSQLNativeAdminError(
@@ -246,16 +275,24 @@ def _definition(kind, qualified, draft, current, replace):
         returns = draft.get('prorettypename')
         if _blank(returns) and current:
             returns = current['prorettypename']
-        text += ' RETURNS ' + _returns(returns)
+        returns = _returns(returns)
+        # The dialog's "returns a set" flag beside a plain type.
+        wants_set = _bool(draft, 'proretset',
+                          (current or {}).get('proretset', False))
+        if wants_set and not returns.upper().startswith(('SETOF ',
+                                                         'TABLE(')):
+            returns = 'SETOF ' + returns
+        text += ' RETURNS ' + returns
     language = draft.get('lanname')
     if _blank(language) and current:
         language = current['lanname']
     if not isinstance(language, str) or not _LANGUAGE.fullmatch(language):
         raise PostgreSQLNativeAdminError('language is a language name')
-    if language.lower() == 'c':
-        raise PostgreSQLNativeAdminError(
-            'C-language routines stay with the inherited dialog')
     text += f' LANGUAGE {language.lower()}'
+    if kind == 'function' and _bool(draft, 'proiswindow',
+                                    (current or {}).get('proiswindow',
+                                                        False)):
+        text += ' WINDOW'
     if kind == 'function':
         base = current or {}
         text += ' ' + _choice(draft.get('provolatile'), VOLATILITY,
@@ -279,11 +316,31 @@ def _definition(kind, qualified, draft, current, replace):
                                 base.get('prorows'))
         if rows_estimate:
             text += f' ROWS {rows_estimate}'
+        support = draft.get('prosupportfunc')
+        if _blank(support) and current:
+            support = current.get('prosupportfunc')
+        if not _blank(support):
+            text += ' SUPPORT ' + _reference(support, 'support function')
     settings = draft.get('variables')
     if settings in (None, '') and current:
         settings = current['variables']
     for clause in _settings(settings or []):
         text += ' ' + clause
+    if language.lower() == 'c':
+        # AS 'object file', 'link symbol'.
+        probin = draft.get('probin')
+        symbol = draft.get('prosrc_c')
+        if _blank(probin) and current:
+            probin = current.get('probin')
+        if _blank(symbol) and current:
+            symbol = current.get('prosrc_c')
+        if _blank(probin) or _blank(symbol):
+            raise PostgreSQLNativeAdminError(
+                'a C-language routine needs an object file and a link '
+                'symbol')
+        text += (' AS ' + _literal(str(probin), 'object file') + ', '
+                 + _literal(str(symbol), 'link symbol'))
+        return text, '(' + ', '.join(signature) + ')'
     body = draft.get('prosrc')
     if _blank(body) and current:
         body = current['prosrc']
@@ -293,6 +350,54 @@ def _definition(kind, qualified, draft, current, replace):
         raise PostgreSQLNativeAdminError('the code contains a NUL byte')
     text += ' AS ' + _dollar_quote(body)
     return text, '(' + ', '.join(signature) + ')'
+
+
+def _grantee(value):
+    value = _name(value, 'grantee')
+    return 'PUBLIC' if value.upper() == 'PUBLIC' else _identifier(
+        value, 'grantee')
+
+
+def _rows(draft, key):
+    value = draft.get(key)
+    if value in (None, ''):
+        return []
+    if not isinstance(value, list) or any(
+            not isinstance(item, dict) for item in value):
+        raise PostgreSQLNativeAdminError(f'{key} must be a list of rows')
+    return value
+
+
+def _extras(keyword, identity, draft, alter):
+    """Grants, revocations, labels and extension dependencies after the
+    definition; stated, never diffed."""
+    statements = []
+    if alter:
+        for row in _rows(draft, 'revoke'):
+            statements.append(f'REVOKE ALL ON {keyword} {identity} FROM '
+                              + _grantee(row.get('grantee')))
+    for row in _rows(draft, 'acl'):
+        privilege_words(row.get('privileges'), PRIVILEGE_CODES, 'routine')
+        option = ' WITH GRANT OPTION' if _flag(row, 'with_grant') else ''
+        statements.append(f'GRANT EXECUTE ON {keyword} {identity} TO '
+                          f'{_grantee(row.get("grantee"))}{option}')
+    for row in _rows(draft, 'seclabels'):
+        provider = _name(row.get('provider'), 'provider')
+        label = row.get('label')
+        if not isinstance(label, str) or not label:
+            raise PostgreSQLNativeAdminError('a security label needs text')
+        statements.append(f'SECURITY LABEL FOR '
+                          f'{_identifier(provider, "provider")} ON {keyword} '
+                          f'{identity} IS {_literal(label, "label")}')
+    value = draft.get('dependsonextensions')
+    if value not in (None, ''):
+        if not isinstance(value, list):
+            raise PostgreSQLNativeAdminError('extensions must be a list')
+        for item in value:
+            name = item.get('name') if isinstance(item, dict) else item
+            statements.append(f'ALTER {keyword} {identity} DEPENDS ON '
+                              'EXTENSION ' + _identifier(name, 'extension'))
+    return statements
 
 
 def _keyword(kind):
@@ -311,6 +416,7 @@ def _create(kind, draft):
     if not _blank(draft.get('description')):
         statements.append(f'COMMENT ON {keyword} {qualified}{signature} IS '
                           + _literal(str(draft['description']), 'comment'))
+    statements.extend(_extras(keyword, qualified + signature, draft, False))
     return statements
 
 
@@ -331,7 +437,8 @@ def _alter(kind, native, draft):
     statements = []
     body_keys = ('lanname', 'prosrc', 'provolatile', 'proisstrict',
                  'prosecdef', 'proleakproof', 'proparallel', 'procost',
-                 'prorows', 'variables')
+                 'prorows', 'variables', 'probin', 'prosrc_c', 'proretset',
+                 'proiswindow', 'prosupportfunc')
     rows = draft.get('arguments')
     if rows not in (None, '') and rows != current['arguments']:
         raise PostgreSQLNativeAdminError(
@@ -372,6 +479,9 @@ def _alter(kind, native, draft):
     if not _blank(new_schema) and new_schema != schema:
         statements.append(f'ALTER {keyword} {qualified}{arguments} SET SCHEMA '
                           + _identifier(new_schema, 'schema'))
+        qualified = _qualified(new_schema, new_name if not _blank(new_name)
+                               else name)
+    statements.extend(_extras(keyword, qualified + arguments, draft, True))
     if not statements:
         raise PostgreSQLNativeAdminError('nothing to change')
     return statements
@@ -406,86 +516,83 @@ def compile_operation(kind, operation, native, draft):
 
 # -- forms --------------------------------------------------------------------
 
+# The family form's field ids (routine.form.json: function, procedure and
+# the read-only aggregate variant), plus the provider's revoke grid; the
+# validator admits exactly these.
+_FAMILY_FIELDS = (
+    'variant', 'name', 'oid', 'funcowner', 'pronamespace', 'owner', 'schema',
+    'sysfunc', 'sysproc', 'is_sys_obj', 'description', 'arguments',
+    'variables', 'pronargs', 'proargs', 'proargtypenames', 'customreturn',
+    'prorettypename', 'lanname', 'dependsonextensions', 'probin', 'prosrc_c',
+    'prosrc', 'provolatile', 'proretset', 'proisstrict', 'prosecdef',
+    'proiswindow', 'proparallel', 'procost', 'prorows', 'proleakproof',
+    'prosupportfunc', 'input_types', 'state_type', 'state_func',
+    'state_data_size', 'final_type', 'final_func', 'final_func_modify',
+    'final_extra_param', 'initial_val', 'moving_state_type',
+    'moving_state_func', 'moving_state_data_size', 'moving_final_func',
+    'moving_final_func_modify', 'moving_final_extra_param',
+    'moving_inverse_func', 'moving_initial_val', 'sort_oper', 'combine_func',
+    'serialization_func', 'deserialization_func', 'proacl', 'acl',
+    'seclabels')
+_GRIDS = ('arguments', 'variables', 'acl', 'seclabels', 'revoke')
+_LISTS = ('dependsonextensions',)
+_BOOLEANS = ('sysfunc', 'sysproc', 'is_sys_obj', 'customreturn', 'proretset',
+             'proisstrict', 'prosecdef', 'proiswindow', 'proleakproof',
+             'final_extra_param', 'moving_final_extra_param')
+_NUMBERS = ('procost', 'prorows')
+_CODES = {'provolatile': VOLATILITY, 'proparallel': PARALLEL}
+
+
 def form(kind, operation, field):
-    """Dialog fields; ids follow the inherited function dialog."""
+    """The validator's view of the routine family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs, options and grid columns."""
     label = 'procedure' if kind == 'procedure' else 'function'
     if operation == 'drop':
-        fields = [field('cascade', 'Drop dependent objects', 'boolean'),
-                  field('confirmation', f'Type the {label} name to confirm',
-                        required=True)]
-    else:
-        alter = operation == 'alter'
+        return {'form_id': f'postgresql-{kind}-drop',
+                'form_key': f'native:postgresql:schema:{kind}',
+                'title': f'Drop {label}', 'fields': [
+                    field('cascade', 'Drop dependent objects', 'boolean'),
+                    field('confirmation', f'Type the {label} name to confirm',
+                          required=True)]}
+    alter = operation == 'alter'
 
-        def initial(key):
-            return {'initial_value_path': ['routine_facts', key]} if alter \
-                else {}
-        argument_columns = [
-            {'field_id': 'argmode', 'label': 'Mode', 'control': 'select',
-             'required': False, 'options': [
-                 {'value': mode, 'label': mode} for mode in MODES
-                 if mode != 'TABLE']},
-            {'field_id': 'argname', 'label': 'Argument name',
-             'control': 'text', 'required': False},
-            {'field_id': 'argtype', 'label': 'Data type', 'control': 'text',
-             'required': True},
-            {'field_id': 'argdefval', 'label': 'Default', 'control': 'text',
-             'required': False}]
-        fields = [
-            field('name', 'Name', required=not alter, **initial('name')),
-            field('pronamespace', 'Schema', required=not alter, **(
-                {'help': 'A different schema runs SET SCHEMA.'} if alter
-                else {}), **initial('pronamespace')),
-            field('funcowner', 'Owner', help=(
-                'Empty keeps the owner.' if alter else 'OWNER TO')),
-            field('description', 'Comment', 'multiline',
-                  **initial('description')),
-            field('arguments', 'Arguments', 'grid', columns=argument_columns,
-                  help=('Fixed once created.' if alter else
-                        'Mode, name, type and default per argument.'),
-                  **initial('arguments'))]
-        if kind == 'function':
-            fields.append(field(
-                'prorettypename', 'Return type', required=not alter,
-                help='type, SETOF type, or TABLE(column type, ...).',
-                **initial('prorettypename')))
-        fields += [
-            field('lanname', 'Language', required=not alter,
-                  **({} if alter else {'default': 'plpgsql'}),
-                  **initial('lanname')),
-            field('prosrc', 'Code', 'code', required=not alter,
-                  **initial('prosrc'))]
-        if kind == 'function':
-            fields += [
-                field('provolatile', 'Volatility', 'select', options=[
-                    {'value': value, 'label': value.title()}
-                    for value in VOLATILITY.values()],
-                    **({} if alter else {'default': 'VOLATILE'}),
-                    **initial('provolatile')),
-                field('proisstrict', 'Strict', 'boolean',
-                      **initial('proisstrict')),
-                field('proleakproof', 'Leak proof', 'boolean',
-                      **initial('proleakproof')),
-                field('proparallel', 'Parallel', 'select', options=[
-                    {'value': value, 'label': value.title()}
-                    for value in PARALLEL.values()],
-                    **({} if alter else {'default': 'UNSAFE'}),
-                    **initial('proparallel')),
-                field('procost', 'Estimated cost', 'number',
-                      **initial('procost')),
-                field('prorows', 'Estimated rows', 'number',
-                      help='Set-returning functions only.',
-                      **initial('prorows'))]
-        fields += [
-            field('prosecdef', 'Security of definer', 'boolean',
-                  **initial('prosecdef')),
-            field('variables', 'Parameters (SET)', 'grid', columns=[
-                {'field_id': 'name', 'label': 'Name', 'control': 'text',
-                 'required': True},
-                {'field_id': 'value', 'label': 'Value', 'control': 'text',
-                 'required': True}], **initial('variables'))]
+    def initial(key):
+        return {'initial_value_path': ['routine_facts', key]} if alter else {}
+    fields = []
+    for field_id in _FAMILY_FIELDS + (('revoke',) if alter else ()):
+        title = field_id.replace('_', ' ').capitalize()
+        if field_id in _GRIDS:
+            fields.append(field(field_id, title, 'grid', columns=[],
+                                **initial(field_id)))
+        elif field_id in _LISTS:
+            fields.append(field(field_id, title, 'grid', columns=[]))
+        elif field_id in _BOOLEANS:
+            fields.append(field(field_id, title, 'boolean',
+                                **initial(field_id)))
+        elif field_id in _NUMBERS:
+            fields.append(field(field_id, title, 'number',
+                                **initial(field_id)))
+        elif field_id in _CODES:
+            codes = _CODES[field_id]
+            fields.append(field(field_id, title, 'select', options=[
+                {'value': code, 'label': word}
+                for code, word in codes.items()] + [
+                {'value': word, 'label': word} for word in codes.values()],
+                **initial(field_id)))
+        elif field_id == 'prosrc':
+            fields.append(field(field_id, 'Code', 'code',
+                                required=not alter and kind != 'aggregate',
+                                **initial(field_id)))
+        else:
+            fields.append(field(field_id, title, required=(
+                field_id in ('name', 'pronamespace', 'lanname') or
+                (field_id == 'prorettypename' and kind == 'function'))
+                and not alter, **initial(field_id)))
     return {'form_id': f'postgresql-{kind}-{operation}',
             'form_key': f'native:postgresql:schema:{kind}',
             'title': f'{operation.title()} {label}', 'fields': fields,
-            'notes': 'C-language routines, support and window functions, '
-                     'privileges and security labels stay with the '
-                     'inherited dialog.'}
+            'notes': ('The signature (arguments and return type) is fixed '
+                      'once created; a changed body or option runs CREATE '
+                      'OR REPLACE. Privileges and labels are stated; the '
+                      'Revoke grid removes privileges.')}

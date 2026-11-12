@@ -60,9 +60,10 @@ def test_facts_read_the_definition_back_through_the_parser():
     assert current['variables'] == [
         {'name': 'search_path', 'value': 'service, pg_temp'},
         {'name': 'work_mem', 'value': '4MB'}]
+    # The dialog's codes for volatility and parallel safety.
     assert (current['provolatile'], current['proisstrict'],
             current['proparallel'], current['procost']) == (
-        'IMMUTABLE', True, 'SAFE', 50)
+        'i', True, 's', 50)
     table = facts({'definition': 'CREATE FUNCTION t.g() RETURNS TABLE(a int, '
                                  "b text) LANGUAGE sql AS $$ select 1, 'x' $$",
                    'catalog_row': {}})
@@ -116,7 +117,7 @@ def test_procedure_create_and_table_returns():
 
 
 @pytest.mark.parametrize('draft, message', [
-    ({'lanname': 'c'}, 'C-language'),
+    ({'lanname': 'c'}, 'object file'),
     ({'lanname': 'sql; drop'}, 'language name'),
     ({'prosrc': ''}, 'must not be empty'),
     ({'arguments': [{'argmode': 'TABLE', 'argtype': 'int'}]}, 'RETURNS TABLE'),
@@ -198,8 +199,17 @@ def test_forms_and_routes():
                  for f in form('procedure', 'create', field)['fields']}
     assert function['prosrc']['initial_value_path'] == [
         'routine_facts', 'prosrc']
-    assert 'prorettypename' not in procedure and 'provolatile' not in \
-        procedure
+    # Every family field id is admitted (owner direction 2026-11-11).
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'routine.form.json').read_text())
+    for operation, served in (('alter', function), ('create', procedure)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
+    assert procedure['prorettypename']['required'] is False
+    assert 'revoke' in function and 'revoke' not in procedure
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -211,3 +221,48 @@ def test_forms_and_routes():
         assert routes['create'] == routes['alter'] == routes['drop'] == \
             'provider-native', kind
         assert routes['inspect'] == 'legacy-preserved', kind
+
+
+def test_family_codes_setof_window_support_c_and_extras():
+    # Codes for volatility and parallel safety, SETOF through the flag,
+    # SUPPORT, grants, labels and an extension dependency on create.
+    lines = statements('function', 'create', {
+        'name': 'f', 'pronamespace': 's', 'lanname': 'sql',
+        'prorettypename': 'integer', 'proretset': True, 'prosrc': 'select 1',
+        'provolatile': 's', 'proparallel': 'r', 'prosupportfunc': 'sup',
+        'acl': [{'grantee': 'app', 'privileges': ['EXECUTE']}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}],
+        'dependsonextensions': ['plpgsql']})
+    assert lines == [
+        'CREATE FUNCTION "s"."f"() RETURNS SETOF integer LANGUAGE sql STABLE '
+        'PARALLEL RESTRICTED SUPPORT sup AS $BODY$select 1$BODY$',
+        'GRANT EXECUTE ON FUNCTION "s"."f"() TO "app"',
+        'SECURITY LABEL FOR "selinux" ON FUNCTION "s"."f"() IS \'x\'',
+        'ALTER FUNCTION "s"."f"() DEPENDS ON EXTENSION "plpgsql"']
+    # A C-language window function names its object file and symbol.
+    assert statements('function', 'create', {
+        'name': 'w', 'pronamespace': 's', 'lanname': 'c',
+        'prorettypename': 'integer', 'proiswindow': True,
+        'probin': '$libdir/mine', 'prosrc_c': 'my_window'}) == [
+        'CREATE FUNCTION "s"."w"() RETURNS integer LANGUAGE c WINDOW VOLATILE '
+        "PARALLEL UNSAFE AS '$libdir/mine', 'my_window'"]
+    # Alter: the same codes as the facts are no change; revoke and grant.
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_kind('function', 'alter', {'provolatile': 'i',
+                                           'proparallel': 's'}, FUNCTION)
+    assert statements('function', 'alter', {
+        'revoke': [{'grantee': 'public'}],
+        'acl': [{'grantee': 'app', 'privileges': 'X', 'with_grant': True}]}) == [
+        'REVOKE ALL ON FUNCTION "service"."priority_label"(integer,text[]) '
+        'FROM PUBLIC',
+        'GRANT EXECUTE ON FUNCTION "service"."priority_label"(integer,text[]) '
+        'TO "app" WITH GRANT OPTION']
+    with pytest.raises(PostgreSQLNativeAdminError, match='privileges are among'):
+        compile_kind('function', 'alter', {'acl': [{'grantee': 'a',
+                                                    'privileges': ['SELECT']}]},
+                     FUNCTION)
+    c_facts = facts({'definition': "CREATE FUNCTION s.w() RETURNS integer "
+                                   "LANGUAGE c WINDOW AS '$libdir/mine', "
+                                   "'my_window'", 'catalog_row': {}})
+    assert (c_facts['probin'], c_facts['prosrc_c'], c_facts['proiswindow'],
+            c_facts['prosrc']) == ('$libdir/mine', 'my_window', True, None)

@@ -104,6 +104,18 @@ POSTGRESQL_CONCEPT_DECLARATIONS = {
 POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 
 
+def _surface_facts(native):
+    """Family forms read a resource's native block by field id (the editor
+    host spreads it into the dialog's record), so the editor facts are
+    surfaced at the top level wherever no native key holds that name
+    (owner direction 2026-11-11: the forms show the current values)."""
+    for key, facts in list(native.items()):
+        if key.endswith('_facts') and isinstance(facts, Mapping):
+            for name, value in facts.items():
+                native.setdefault(name, value)
+    return native
+
+
 class PostgreSQLProviderError(RuntimeError):
     """A PostgreSQL provider operation cannot be completed safely."""
 
@@ -1395,6 +1407,7 @@ class PostgreSQLProvider:
                 native['schema_facts'] = schema_facts(native)
                 native['relations'] = schema_relations.get(
                     item['display_name'], [])
+            _surface_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
                 'resource_id': item['resource_id'], 'identity_kind': 'postgresql-catalog-oid',
@@ -1453,6 +1466,7 @@ class PostgreSQLProvider:
                 'catalog_row': row})
             from .columns import facts as column_facts
             column_native['column_facts'] = column_facts(column_native)
+            _surface_facts(column_native)
             columns.append({
                 'identity': self._identity(),
                 'endpoint_id': self.context.endpoint_id,
@@ -1530,6 +1544,7 @@ class PostgreSQLProvider:
         if catalog_kind == 'pgagent-job':
             from .pgagent import facts as job_facts
             native['job_facts'] = job_facts(native)
+        _surface_facts(native)
         resource_route.update({
             'catalog_kind': catalog_kind,
             'object_id': object_id,

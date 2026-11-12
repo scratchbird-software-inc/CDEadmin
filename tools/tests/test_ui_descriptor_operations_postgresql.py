@@ -1297,18 +1297,18 @@ def routine_native(schema, name):
     rows = query(f"""SELECT p.oid::int, pg_get_functiondef(p.oid), p.prokind, d.description,
                             (pg_identify_object('pg_proc'::regclass, p.oid, 0)).identity, p.provolatile,
                             p.proisstrict, p.prosecdef, p.proleakproof, p.proparallel, p.procost, p.prorows,
-                            pg_get_userbyid(p.proowner)
+                            pg_get_userbyid(p.proowner), p.proretset
                      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                      LEFT JOIN pg_description d ON d.objoid=p.oid AND d.classoid='pg_proc'::regclass
                      WHERE n.nspname='{schema}' AND p.proname='{name}'""")
     assert len(rows) == 1, (schema, name)
     (oid, definition, kind, comment, identity, volatile, strict, secdef, leakproof, parallel, cost, prorows,
-     owner) = rows[0]
+     owner, retset) = rows[0]
     native = {'schema': schema, 'name': name, 'comment': comment, 'definition': definition,
               'sql_identity': identity,
               'catalog_row': {'proname': name, 'prokind': kind, 'provolatile': volatile, 'proisstrict': strict,
                               'prosecdef': secdef, 'proleakproof': leakproof, 'proparallel': parallel,
-                              'procost': cost, 'prorows': prorows}}
+                              'procost': cost, 'prorows': prorows, 'proretset': retset}}
     native['routine_facts'] = facts(native)
     native['owner'] = owner
     return native
@@ -1328,7 +1328,7 @@ def test_routine_lifecycle_round_trips(live):
         facts = native['routine_facts']
         assert facts['definition_parsed'] and facts['arguments'][0]['argdefval'] == '0'
         assert (facts['provolatile'], facts['proisstrict'], facts['procost'], native['comment']) == (
-            'IMMUTABLE', True, 10, "it's")
+            'i', True, 10, "it's")
         assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(True,)]
         # Body and options change through CREATE OR REPLACE with the same signature; then rename.
         run_kind(live, 'function', 'alter', {
@@ -1337,11 +1337,35 @@ def test_routine_lifecycle_round_trips(live):
             native)
         native = routine_native('Fn schema', 'is big')
         assert (native['routine_facts']['provolatile'], native['routine_facts']['proisstrict'],
-                native['comment']) == ('STABLE', False, None)
+                native['comment']) == ('s', False, None)
         assert query("SELECT \"Fn schema\".\"is big\"(11)") == [(False,)]
         run_kind(live, 'function', 'alter', {'name': 'is_huge'}, native)
         native = routine_native('Fn schema', 'is_huge')
         assert native['routine_facts']['sql_identity'].endswith('(integer)')
+        # The family form's shape (owner direction 2026-11-11): codes for volatility and parallel safety, a grant of
+        # EXECUTE as the word the grid sends, a revoke, an extension dependency and SETOF through the flag.
+        assert (native['routine_facts']['provolatile'], native['routine_facts']['proparallel']) == ('s', 's')
+        reader = f'ui_ops_fnreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'function', 'alter', {
+                'provolatile': 'i', 'acl': [{'grantee': reader, 'privileges': ['EXECUTE']}],
+                'revoke': [{'grantee': 'public'}], 'dependsonextensions': ['plpgsql']}, native)
+            native = routine_native('Fn schema', 'is_huge')
+            assert native['routine_facts']['provolatile'] == 'i'
+            assert one(f"SELECT has_function_privilege('{reader}', '\"Fn schema\".is_huge(integer)', 'EXECUTE')") is True
+            assert one("SELECT count(*) FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid "
+                       "WHERE d.classid='pg_proc'::regclass AND d.deptype='x' AND e.extname='plpgsql' "
+                       "AND d.objid=(SELECT oid FROM pg_proc WHERE proname='is_huge')") == 1
+            run_kind(live, 'function', 'create', {
+                'name': 'threes', 'pronamespace': 'Fn schema', 'lanname': 'sql', 'prorettypename': 'integer',
+                'proretset': True, 'prosrc': 'SELECT generate_series(1, 3)', 'provolatile': 'i', 'proparallel': 's'})
+            assert query('SELECT count(*) FROM "Fn schema".threes()') == [(3,)]
+            threes = routine_native('Fn schema', 'threes')
+            assert threes['routine_facts']['proretset'] is True
+            run_kind(live, 'function', 'drop', {'confirmation': 'threes'}, threes)
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
         run_kind(live, 'procedure', 'create', {
             'name': 'bump', 'pronamespace': 'Fn schema', 'lanname': 'plpgsql',
             'arguments': [{'argmode': 'INOUT', 'argname': 'x', 'argtype': 'integer'}],
@@ -1390,7 +1414,7 @@ def test_index_lifecycle_round_trips(live):
         facts = native['index_facts']
         assert (facts['indisunique'], facts['indnullsnotdistinct'], facts['include'], native['comment']) == (
             True, True, ['note'], "it's")
-        assert facts['columns'][0]['sort_order'] == 'DESC' and facts['columns'][0]['is_exp']
+        assert facts['columns'][0]['sort_order'] is True and facts['columns'][0]['is_exp']
         assert facts['storage_parameters'] == [{'name': 'fillfactor', 'value': '70'}]
         run_kind(live, 'index', 'alter', {
             'name': 'ix_two', 'columns': facts['columns'], 'fillfactor': 90,
@@ -1412,11 +1436,11 @@ def test_index_lifecycle_round_trips(live):
                         {'colname': 'status', 'sort_order': False, 'nulls': False}],
             'include': ['note'], 'deduplicate_items': False, 'fillfactor': 80, 'dependsonextensions': ['plpgsql']})
         fam = index_native('Ix schema', 'ix_fam')
-        assert fam['index_facts']['columns'][0]['sort_order'] == 'DESC' and fam['index_facts']['deduplicate_items'] is False
+        assert fam['index_facts']['columns'][0]['sort_order'] is True and fam['index_facts']['deduplicate_items'] is False
         assert one("SELECT attstattarget FROM pg_attribute WHERE attrelid='\"Ix schema\".ix_fam'::regclass AND attnum=1") == 250
         assert one("SELECT count(*) FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid WHERE d.objid='\"Ix schema\".ix_fam'::regclass "
                    "AND d.deptype='x' AND e.extname='plpgsql'") == 1
-        shaped = [dict(c, sort_order=c['sort_order'] == 'DESC', nulls=c['nulls'] == 'FIRST') for c in fam['index_facts']['columns']]
+        shaped = [dict(c) for c in fam['index_facts']['columns']]
         shaped[0]['statistics'] = 300
         # The Reset storage parameters grid removes an option; an unchecked boolean one is set off.
         run_kind(live, 'index', 'alter', {'columns': shaped, 'reset_parameters': [{'name': 'fillfactor'}],

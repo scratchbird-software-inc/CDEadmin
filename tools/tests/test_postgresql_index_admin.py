@@ -30,10 +30,10 @@ def test_facts_read_the_definition_back_through_the_parser():
                                           'priority > 1')
     assert current['columns'] == [
         {'colname': 'lower(status)', 'is_exp': True, 'collspcname': '"C"',
-         'op_class': '"text_pattern_ops"', 'sort_order': 'DESC',
-         'nulls': 'FIRST'},
+         'op_class': '"text_pattern_ops"', 'sort_order': True,
+         'nulls': True},
         {'colname': 'priority', 'is_exp': False, 'collspcname': None,
-         'op_class': None, 'sort_order': 'ASC', 'nulls': 'LAST'}]
+         'op_class': None, 'sort_order': False, 'nulls': False}]
     assert current['storage_parameters'] == [{'name': 'fillfactor',
                                               'value': '70'}]
     assert facts({'definition': 'nope', 'catalog_row': {}})[

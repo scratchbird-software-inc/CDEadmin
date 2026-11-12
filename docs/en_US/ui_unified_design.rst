@@ -722,6 +722,28 @@ Observed live on PostgreSQL 18.3: attributes equal to the listing
 produce no change, a membership granted with INHERIT FALSE and SET TRUE,
 a password refused.
 
+Facts surfaced for the family forms. The editor host fills a family
+form's record from the resource's native block by field id, so the
+editor facts each provider module computes (table, column, index,
+routine, view, sequence, trigger, database, role, ...) are now surfaced
+at the top level of the native block wherever no native key holds that
+name. Observed through the running application: listed tables, columns,
+indexes, views, sequences, functions and triggers carry their dialog
+values. The facts take the dialog's shapes: booleans for an index
+column's sort order and NULLs, the codes for a routine's volatility and
+parallel safety.
+
+Form close-outs, routine. The function and procedure editor admits every
+family field: volatility and parallel safety as the dialog's codes or as
+words, SETOF through the return-set flag, WINDOW, SUPPORT, C-language
+routines by object file and link symbol (read back from the definition
+too), EXECUTE grants stated through the grid and revoked through a Revoke
+grid, security labels and extension dependencies. The aggregate variant
+stays read-only, as in the inherited dialog. Observed live on PostgreSQL
+18.3: codes read back and applied, EXECUTE granted as the word the grid
+sends and PUBLIC revoked, an extension dependency recorded, a
+set-returning function created through the flag.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

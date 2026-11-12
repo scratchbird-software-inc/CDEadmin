@@ -99,15 +99,17 @@ def facts(native):
             # the facts state them: ASC, and NULLS LAST for ASC or FIRST
             # for DESC.
             order = _ORDERING.get(int(ordering or 0)) or 'ASC'
+            first = (_NULLS.get(int(nulls or 0)) or (
+                'FIRST' if order == 'DESC' else 'LAST')) == 'FIRST'
+            # The dialog's shapes: sort_order true = DESC, nulls true =
+            # FIRST (the compiler reads the words too).
             result['columns'].append({
                 'colname': item.name if item.expr is None else _render(
                     item.expr),
                 'is_exp': item.expr is not None,
                 'collspcname': _names(item.collation) or None,
                 'op_class': _names(item.opclass) or None,
-                'sort_order': order,
-                'nulls': _NULLS.get(int(nulls or 0)) or (
-                    'FIRST' if order == 'DESC' else 'LAST')})
+                'sort_order': order == 'DESC', 'nulls': first})
         for option in statement.options or []:
             value = option.arg
             text = getattr(value, 'sval', None)
