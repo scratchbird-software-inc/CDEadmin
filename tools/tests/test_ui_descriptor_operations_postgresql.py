@@ -1193,6 +1193,12 @@ def test_domain_lifecycle_round_trips(live):
         assert (facts['typnotnull'], facts['typdefault'], native['comment']) == (False, None, None)
         assert [(c['conname'], c['convalidated']) for c in facts['constraints']] == [
             ('not_blank', True), ('short', True)]
+        # The family form's full Constraints grid (owner direction 2026-11-11): one left out drops, a new one adds.
+        run_kind(live, 'domain', 'alter', {'constraints': [
+            {'conname': 'short', 'consrc': facts['constraints'][1]['consrc'], 'convalidated': True},
+            {'conname': 'upper', 'consrc': 'VALUE = upper(VALUE)'}]}, native)
+        native = domain_native('Dom schema', 'code')
+        assert [c['conname'] for c in native['domain_facts']['constraints']] == ['short', 'upper']
         run_kind(live, 'domain', 'drop', {'confirmation': 'code', 'cascade': False}, native)
         assert query("SELECT count(*) FROM pg_type WHERE typname='code'") == [(0,)]
     finally:
@@ -1229,6 +1235,31 @@ def test_type_lifecycle_round_trips(live):
         native = type_native('typ_schema', 'addr')
         assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(80)'},
                                                      {'member_name': 'city', 'type': 'text'}]
+        # The family form's shape (owner direction 2026-11-11): the full composite grid, the full enumeration
+        # list, USAGE as the word the grid sends, a revoke, a shell type.
+        run_kind(live, 'type', 'alter', {'composite': [{'member_name': 'road', 'type': 'character varying', 'tlength': 90},
+                                                       {'member_name': 'country', 'type': 'text'}]}, native)
+        native = type_native('typ_schema', 'addr')
+        assert native['type_facts']['composite'] == [{'member_name': 'road', 'type': 'character varying(90)'},
+                                                     {'member_name': 'country', 'type': 'text'}]
+        feeling = type_native('typ_schema', 'feeling')
+        run_kind(live, 'type', 'alter', {'enum': [{'label': l} for l in ('awful', 'sad', 'fine', 'great', 'superb')]},
+                 feeling)
+        assert query("SELECT enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid "
+                     "WHERE t.typname='feeling' ORDER BY enumsortorder")[-1] == ('superb',)
+        reader = f'ui_ops_typreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'type', 'alter', {'typacl': [{'grantee': reader, 'privileges': ['USAGE']}]}, native)
+            assert any(item.startswith(f'{reader}=U/') for item in
+                       query("SELECT typacl::text[] FROM pg_type WHERE typname='addr'")[0][0])
+            run_kind(live, 'type', 'alter', {'revoke': [{'grantee': reader}]}, native)
+            assert not any(item.startswith(f'{reader}=') for item in
+                           query("SELECT typacl::text[] FROM pg_type WHERE typname='addr'")[0][0] or [])
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
+        run_kind(live, 'type', 'create', {'name': 'shelly', 'schema': 'typ_schema', 'typtype': 'p'})
+        assert one("SELECT typtype FROM pg_type WHERE typname='shelly'") == 'p'
         run_kind(live, 'type', 'create', {'name': 'floatrange', 'schema': 'typ_schema', 'typtype': 'r',
                                          'typname': 'float8', 'rngsubdiff': 'float8mi'})
         assert query("SELECT count(*) FROM pg_range r JOIN pg_type t ON t.oid=r.rngtypid WHERE t.typname='floatrange'") == [(1,)]

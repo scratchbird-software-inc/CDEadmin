@@ -775,6 +775,23 @@ view as the word the grid sends and revoked, a materialized view created
 with a TOAST tuple target and autovacuum off, the setting reset through
 the dialog's "Not set".
 
+Form close-outs, type and domain. The type family form serves the domain
+and type kinds; both now admit every family field. External (base) types
+are created from their support functions and storage properties, shell
+types from their name, and a multirange is refused on its own since it
+comes with its range type. USAGE is granted through the grid and revoked
+through a Revoke grid, security labels compile, and a domain's or
+composite member's length and precision join the type. The dialog's
+full-set grids are diffed against the facts: new enumeration labels are
+added after their predecessor and a dropped one is refused since
+PostgreSQL cannot drop it, composite members are added, dropped or
+altered, domain constraints are added, dropped or validated and a
+changed expression is refused as fixed once created. Observed live on
+PostgreSQL 18.3: a composite type reshaped through its grid, an
+enumeration extended through its list, USAGE granted as the word the grid
+sends and revoked, a shell type created, a domain's constraints replaced
+through its grid.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
