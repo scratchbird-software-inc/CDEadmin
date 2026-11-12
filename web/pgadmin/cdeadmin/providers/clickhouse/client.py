@@ -10,6 +10,7 @@
 """Bounded ClickHouse 25.12 HTTP/JSON client and administration adapter."""
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import copy
 import datetime
@@ -259,7 +260,7 @@ class ClickHouseClient:
         forbidden = {'password', 'secret', 'token', 'credential'}
         if forbidden.intersection(key.casefold() for key in route):
             raise ClickHouseClientError('inline credentials are forbidden')
-        unknown = sorted(set(route).difference(self.ROUTE_FIELDS))
+        unknown = unknown_route_keys(route, self.ROUTE_FIELDS)
         if unknown:
             raise ClickHouseClientError(
                 f'ClickHouse route contains unknown fields: {unknown}'

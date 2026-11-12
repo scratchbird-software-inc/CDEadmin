@@ -2336,6 +2336,7 @@ class ServerNode(PGChildNodeView):
             raise CryptKeyMissing
 
         # Some fields can be provided with service file so they are optional
+        generic_user_absent = False
         if provider_endpoint and not embedded_endpoint:
             required_args.extend(['host', 'port'])
             # The legacy username column: the descriptor server form sends
@@ -2344,6 +2345,9 @@ class ServerNode(PGChildNodeView):
             # contract username fills it and an engine without one gets a
             # placeholder, as embedded endpoints do.
             if data.get('username') is None:
+                # The route keeps no generic user in that case: a placeholder
+                # there would read as a credential to the provider.
+                generic_user_absent = True
                 data['username'] = (
                     data.get('cde_route_username') or 'endpoint-profile')
             if endpoint_registration.get(
@@ -2460,7 +2464,8 @@ class ServerNode(PGChildNodeView):
                         route_configuration = {
                             'host': data.get('host'),
                             'port': data.get('port'),
-                            'user': data.get('username'),
+                            'user': (None if generic_user_absent
+                                     else data.get('username')),
                             'database': (
                                 None if registration_intent ==
                                 'create_database' else data.get('db')

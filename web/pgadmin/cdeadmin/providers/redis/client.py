@@ -16,6 +16,7 @@ Redis persistence observations as transaction finality for another engine.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import base64
 import copy
@@ -158,6 +159,9 @@ def _bounded_int(value, default, minimum, maximum, label):
         if default is None:
             raise RedisClientError(f'{label} is required')
         return default
+    if isinstance(value, str) and value.strip().lstrip('-').isdigit():
+        # The servers API keeps the generic database as text.
+        value = int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int):
         raise RedisClientError(f'{label} must be an integer')
     if not minimum <= value <= maximum:
@@ -339,7 +343,7 @@ class RedisClient:
             request.get('route', request.get('_provider_route')),
             'Redis route',
         )
-        unknown = sorted(set(route).difference(cls.ROUTE_KEYS))
+        unknown = unknown_route_keys(route, cls.ROUTE_KEYS)
         if unknown:
             raise RedisClientError(
                 'Redis route contains unknown fields: ' + ', '.join(unknown)

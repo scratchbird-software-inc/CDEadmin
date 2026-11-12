@@ -1,5 +1,6 @@
 """Qualified pyignite boundary for Apache Ignite 2.17.0."""
 
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 import copy
 import hashlib
 import importlib
@@ -123,7 +124,7 @@ class IgniteBackend:
         if not isinstance(route, dict):
             raise NativeDistributedError('Ignite route is required')
         route = copy.deepcopy(route)
-        unknown = sorted(set(route) - IgniteBackend.ROUTE_FIELDS)
+        unknown = unknown_route_keys(route, IgniteBackend.ROUTE_FIELDS)
         if unknown:
             raise NativeDistributedError(
                 'Ignite route contains unknown fields: ' + ', '.join(unknown)

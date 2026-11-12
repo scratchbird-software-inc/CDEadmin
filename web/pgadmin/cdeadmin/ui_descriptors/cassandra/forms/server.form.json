@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "Cassandra",
   "omitted_tabs": [],
   "gaps": [],
@@ -671,5 +671,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for cassandra-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for cassandra-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-11): the draft round-trips through the registration contract to a persisted route and back (tools/tests/test_ui_descriptor_server_forms.py); no live registration was run, the pinned demo is a multi-container estate that was not started for this close-out, so the first live registration is still to be observed. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
 }

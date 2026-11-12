@@ -16,6 +16,7 @@ common CDEadmin layer never infers transaction finality from them.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import copy
 import importlib
@@ -46,6 +47,11 @@ MAX_QUERY_BYTES = 2 * 1024 * 1024
 MAX_BATCH_DOCUMENTS = 500
 MAX_STREAM_DOCUMENTS = 100000
 MAX_ACTIVE_CURSORS = 64
+
+
+def _unlimited(value):
+    """A pool option whose contract default 0 means no limit: unset."""
+    return None if value in (0, '0') else value
 
 
 class MongoDBClientError(PilotProviderError):
@@ -220,7 +226,7 @@ class MongoDBClient:
     def _route(request: Mapping[str, Any]) -> dict[str, Any]:
         route = request.get('route', request.get('_provider_route'))
         route = _mapping(route, 'MongoDB route')
-        unknown = sorted(set(route).difference(MongoDBClient.ROUTE_KEYS))
+        unknown = unknown_route_keys(route, MongoDBClient.ROUTE_KEYS)
         if unknown:
             raise MongoDBClientError(
                 'MongoDB route contains unknown fields: ' +
@@ -437,9 +443,12 @@ class MongoDBClient:
             'minPoolSize': route.get('min_pool_size'),
             'maxPoolSize': route.get('max_pool_size'),
             'maxConnecting': route.get('max_connecting'),
-            'maxIdleTimeMS': route.get('max_idle_time_ms'),
-            'waitQueueTimeoutMS': route.get('wait_queue_timeout_ms'),
-            'waitQueueMultiple': route.get('wait_queue_multiple'),
+            # The contract's 0 means "no limit"; pymongo 4 refuses 0 for
+            # these and takes their absence as no limit.
+            'maxIdleTimeMS': _unlimited(route.get('max_idle_time_ms')),
+            'waitQueueTimeoutMS': _unlimited(
+                route.get('wait_queue_timeout_ms')),
+            'waitQueueMultiple': _unlimited(route.get('wait_queue_multiple')),
             'heartbeatFrequencyMS': route.get('heartbeat_frequency_ms'),
             'serverMonitoringMode': route.get('server_monitoring_mode'),
             'maxAdaptiveRetries': route.get('max_adaptive_retries'),

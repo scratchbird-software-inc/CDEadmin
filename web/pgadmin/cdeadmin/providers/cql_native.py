@@ -17,6 +17,7 @@ code never interprets it as transaction finality.
 """
 
 from __future__ import annotations
+from pgadmin.cdeadmin.transports.route_envelope import unknown_route_keys
 
 import base64
 import copy
@@ -409,7 +410,7 @@ class CassandraClient:
             route = dict(route)
             timeout = route.pop('connection_timeout')
             route.setdefault('connect_timeout', timeout)
-        unknown = sorted(set(route).difference(cls.ROUTE_KEYS))
+        unknown = unknown_route_keys(route, cls.ROUTE_KEYS)
         if unknown:
             raise CassandraClientError(
                 'Cassandra route contains unknown fields: ' +

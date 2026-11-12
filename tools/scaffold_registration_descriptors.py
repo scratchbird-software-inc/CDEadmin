@@ -11,7 +11,8 @@ nine object families as omitted with that reason, and an empty navigator
 group and operations list. The server form itself comes from
 tools/draft_server_descriptors.py.
 
-Usage: python3 tools/scaffold_registration_descriptors.py [--write] [--engine x ...]
+Usage: python3 tools/scaffold_registration_descriptors.py [--write]
+       [--engine x ...]
 """
 from __future__ import annotations
 
@@ -31,17 +32,21 @@ if "pgadmin" not in sys.modules:
 
 from pgadmin.cdeadmin.endpoints.profiles import registration_profiles  # noqa: E402
 
-ENGINES = ("apache_ignite", "cassandra", "clickhouse", "foundationdb", "influxdb", "milvus",
-           "mongodb", "neo4j", "opensearch", "redis", "tikv")
+ENGINES = ("apache_ignite", "cassandra", "clickhouse", "foundationdb",
+           "influxdb", "milvus", "mongodb", "neo4j", "opensearch", "redis",
+           "tikv")
 PACKAGE_OF = {"opensearch_sql_ppl": "opensearch"}
-FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type", "role", "database")
-REASON = ("Administered through the engine's provider workspace and operations, not a family form; "
-          "the package exists so registration goes through the descriptor registration host "
-          "(owner direction 2026-11-11).")
+FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence",
+            "type", "role", "database")
+REASON = ("Administered through the engine's provider workspace and "
+          "operations, not a family form; the package exists so registration "
+          "goes through the descriptor registration host (owner direction "
+          "2026-11-11).")
 
 
 def versions():
-    record = json.loads((DESCRIPTORS.parent / "providers" / "actual_engine_pilots.json").read_text())
+    pilots = DESCRIPTORS.parent / "providers" / "actual_engine_pilots.json"
+    record = json.loads(pilots.read_text())
     return {row["engine_id"]: row["exact_profile"] for row in record["pilots"]}
 
 
@@ -49,21 +54,33 @@ def scaffold(engine, profiles, version):
     return {
         "capabilities.json": {
             "schema": "cdeadmin.ui-capabilities.v1", "engine": engine,
-            "profiles": [p["profile_id"] for p in profiles], "beta_tier": "basic",
+            "profiles": [p["profile_id"] for p in profiles],
+            "beta_tier": "basic",
             "version_range": {"minimum": version, "tested": [version]},
-            "kinds": [{"resource_kind": "server", "family": "server", "form": "forms/server.form.json",
-                       "operations": [{"operation_id": "inspect", "tier": 1, "mutation_class": "read"}]}],
+            "kinds": [{
+                "resource_kind": "server", "family": "server",
+                "form": "forms/server.form.json",
+                "operations": [{"operation_id": "inspect", "tier": 1,
+                                "mutation_class": "read"}]}],
         },
-        "navigator.json": {"schema": "cdeadmin.ui-navigator.v1", "engine": engine, "sort": "alphabetical",
-                           "groups": [{"group_id": "server", "title": "Server", "kinds": ["server"], "order": 1}]},
-        "operations.json": {"schema": "cdeadmin.ui-operations.v1", "engine": engine, "operations": []},
-        "omitted_families.json": {"engine": engine,
-                                  "omitted": [{"family": family, "reason": REASON} for family in FAMILIES]},
+        "navigator.json": {
+            "schema": "cdeadmin.ui-navigator.v1", "engine": engine,
+            "sort": "alphabetical",
+            "groups": [{"group_id": "server", "title": "Server",
+                        "kinds": ["server"], "order": 1}]},
+        "operations.json": {"schema": "cdeadmin.ui-operations.v1",
+                            "engine": engine, "operations": []},
+        "omitted_families.json": {
+            "engine": engine,
+            "omitted": [{"family": family, "reason": REASON}
+                        for family in FAMILIES]},
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--engine", action="append")
     args = parser.parse_args()
@@ -86,7 +103,9 @@ def main():
             if args.write:
                 folder.mkdir(parents=True, exist_ok=True)
                 (folder / "forms").mkdir(exist_ok=True)
-                path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n")
+                path.write_text(
+                    json.dumps(document, indent=2, ensure_ascii=False)
+                    + "\n")
     return 0
 
 

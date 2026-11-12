@@ -5,7 +5,7 @@
   "resource_kinds": [
     "server"
   ],
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "ClickHouse",
   "omitted_tabs": [],
   "gaps": [],
@@ -428,5 +428,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for clickhouse-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for clickhouse-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement. Status complete (2026-11-11): registered through the servers API with this form's payload (what the descriptor registration host sends) against the pinned ClickHouse 25.12.10.7 demo, verified at create, read back and removed (Claude-temp-directory/2026-11-10-pg-m2/live/api-register-engines.py); contract round trip in tools/tests/test_ui_descriptor_server_forms.py. Owner direction 2026-11-11: every engine registers through the descriptor registration host; the inherited profile dialog stays as the fallback only when the host cannot open."
 }

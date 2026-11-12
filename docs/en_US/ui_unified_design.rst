@@ -804,6 +804,54 @@ path rather than in a provider compiler. Switching the registration path
 is an owner decision and needs a browser pass, so the form stays draft
 with this recorded in its notes; the nine DDL forms are complete.
 
+Decided 2026-11-11 (owner): one registration path for every engine. Every
+engine registers and edits its endpoints through the descriptor
+registration host; the inherited dialogs remain only as the fallback when
+the host cannot open. What this took:
+
+- The PostgreSQL Server form is complete. Its field ids are the servers
+  API's own keys, so the payload is the form draft plus the envelope the
+  host adds (profile, intent, verification, and the server group from the
+  tree). Verified against the running application: the pinned PostgreSQL
+  18.3 demo registered, read back, edited and removed through the servers
+  API with the form's payload.
+- The eleven engines whose only descriptor is their Server form (Apache
+  Ignite, Cassandra, ClickHouse, FoundationDB, InfluxDB, Milvus, MongoDB,
+  Neo4j, OpenSearch with its SQL/PPL profile, Redis, TiKV) get a minimal
+  package from ``tools/scaffold_registration_descriptors.py`` (the server
+  kind, the nine object families omitted with the reason, an empty
+  navigator and operations list) and a Server form drafted from their
+  registration contract by ``tools/draft_server_descriptors.py``, which
+  now places unlisted contract groups by what their names say and marks
+  the maintenance database required when the profile requires one.
+- The servers API fills the legacy username column from a contract
+  username (or a placeholder, as embedded endpoints already did) without
+  putting a placeholder into the provider route, where it would read as a
+  credential.
+- The route envelope. The endpoint service and the servers API add
+  bookkeeping to every provider route beside the contract fields (route
+  id, generic host, port, user and database, the legacy connection
+  timeout, the database target, credential kinds and references). The
+  strict providers rejected those keys as unknown, so a registration that
+  verified at create failed for them: a latent defect the standard path
+  exposed. ``transports/route_envelope.py`` names the envelope and the
+  eight strict validators (Redis, MongoDB, Neo4j, ClickHouse, XTDB,
+  Cassandra, Ignite, Milvus) and the shared HTTP route normaliser admit
+  it. MongoDB's contract default of 0 for the pool idle and wait options
+  now reads as unset, which is what pymongo 4 accepts; Redis reads the
+  generic database as the text the servers API stores.
+
+Verification: MongoDB, Redis, Neo4j, ClickHouse, InfluxDB and OpenSearch
+(both profiles) registered through the servers API with their form's
+payload against the pinned demos, verified at create, read back and
+removed. Apache Ignite, Cassandra, FoundationDB, Milvus and TiKV
+round-trip through their contracts only; their multi-container demos
+were not started, so their first live registration is still to be
+observed, and their forms say so. Nothing was screen-checked. Three
+endpoint-registration unit tests (Firebird edit encryption, route CRUD
+staleness, SQLite edit form) fail on master before this work and were
+left as found.
+
 Verification of the close-outs. Every PostgreSQL unit suite, the
 descriptor service and field-contract suites, the pgAdmin field-id gate
 and the Jest family specs pass; the live lifecycles ran against
