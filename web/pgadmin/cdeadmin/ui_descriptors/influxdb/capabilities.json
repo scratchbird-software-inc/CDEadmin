@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "influxdb",
+  "profiles": [
+    "influxdb-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "3.9.0",
+    "tested": [
+      "3.9.0"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

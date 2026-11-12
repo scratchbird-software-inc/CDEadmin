@@ -30,14 +30,17 @@ from ui_descriptor_roundtrip import (  # noqa: E402
 
 GENERIC = {'name', 'host', 'port', 'username', 'password', 'save_password', 'database', 'connect_now', 'comment',
            'bgcolor', 'fgcolor', 'tags', 'profile'}
+PACKAGE_OF = {'opensearch_sql_ppl': 'opensearch'}
 
 
 def roundtrip(engine, profile_id, draft):
     form = resolved_form(engine, 'server')
     profile = registration_profile(profile_id)
     data = registration_data(form, draft)
-    # every non-generic form field is a declared contract field or secret (nothing invented)
-    declared = {f['field_id'] for sibling in registration_profiles() if sibling['engine_id'] == engine
+    # every non-generic form field is a declared contract field or secret (nothing invented);
+    # a package may serve a profile of another engine id (OpenSearch SQL/PPL, 2026-11-11)
+    declared = {f['field_id'] for sibling in registration_profiles()
+                if PACKAGE_OF.get(sibling['engine_id'], sibling['engine_id']) == engine
                 for f in sibling['connection_fields'] + sibling['secret_fields']}
     for tab in form['tabs']:
         for field in tab['fields']:

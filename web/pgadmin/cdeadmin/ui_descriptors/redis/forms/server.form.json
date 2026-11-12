@@ -1,0 +1,529 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "redis",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Redis",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Logical database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default.",
+      "default": 0
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "ACL username",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_username",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "equals": "acl"
+      }
+    },
+    {
+      "field_id": "auth_mode",
+      "label": "Authentication mode",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_mode",
+      "group": "Redis authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No authentication"
+        },
+        {
+          "value": "password",
+          "label": "Default user password"
+        },
+        {
+          "value": "acl",
+          "label": "ACL username and password"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "password",
+      "label": "Redis password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "password",
+          "acl"
+        ]
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "Redis TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disabled",
+          "label": "Disabled"
+        },
+        {
+          "value": "system-ca",
+          "label": "System CA validation"
+        },
+        {
+          "value": "self-signed",
+          "label": "Self-signed certificate"
+        }
+      ],
+      "default": "disabled"
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_ca_path",
+      "label": "Certificate authority directory",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_path",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_check_hostname",
+      "label": "Verify server hostname",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_check_hostname",
+      "group": "Redis TLS",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "tls_min_version",
+      "label": "Minimum TLS version",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_min_version",
+      "group": "Redis TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "TLSv1_2",
+          "label": "TLS 1.2"
+        },
+        {
+          "value": "TLSv1_3",
+          "label": "TLS 1.3"
+        }
+      ],
+      "default": "TLSv1_2"
+    },
+    {
+      "field_id": "tls_ciphers",
+      "label": "TLS cipher list",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_tls_ciphers",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_validate_ocsp",
+      "label": "Validate certificate with OCSP",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_validate_ocsp",
+      "group": "Redis TLS",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "group": "Redis TLS",
+      "required": false
+    },
+    {
+      "field_id": "topology_mode",
+      "label": "Topology",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_topology_mode",
+      "group": "Redis topology",
+      "required": false,
+      "options": [
+        {
+          "value": "standalone",
+          "label": "Standalone or replica"
+        },
+        {
+          "value": "sentinel",
+          "label": "Sentinel"
+        },
+        {
+          "value": "cluster",
+          "label": "Redis Cluster"
+        }
+      ],
+      "default": "standalone"
+    },
+    {
+      "field_id": "contact_points",
+      "label": "Additional hosts (host:port, comma separated)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_contact_points",
+      "group": "Redis topology",
+      "required": false
+    },
+    {
+      "field_id": "sentinel_service",
+      "label": "Sentinel service name",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_sentinel_service",
+      "group": "Redis topology",
+      "required": false
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout",
+      "group": "Redis timeouts",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 120
+    },
+    {
+      "field_id": "socket_timeout",
+      "label": "Command timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_socket_timeout",
+      "group": "Redis timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "health_check_interval",
+      "label": "Health-check interval (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_health_check_interval",
+      "group": "Redis pool",
+      "required": false,
+      "default": 30,
+      "min": 0,
+      "max": 300
+    },
+    {
+      "field_id": "max_connections",
+      "label": "Maximum pooled connections",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_max_connections",
+      "group": "Redis pool",
+      "required": false,
+      "default": 100,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "field_id": "sentinel_username",
+      "label": "Sentinel ACL username",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_sentinel_username",
+      "group": "Redis Sentinel",
+      "required": false,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "sentinel"
+      }
+    },
+    {
+      "field_id": "sentinel_min_other_sentinels",
+      "label": "Minimum agreeing peer Sentinels",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_sentinel_min_other_sentinels",
+      "group": "Redis Sentinel",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 1000,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "sentinel"
+      }
+    },
+    {
+      "field_id": "sentinel_read_replica",
+      "label": "Connect to a Sentinel-discovered replica",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_sentinel_read_replica",
+      "group": "Redis Sentinel",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "sentinel"
+      }
+    },
+    {
+      "field_id": "cluster_require_full_coverage",
+      "label": "Require full slot coverage",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_cluster_require_full_coverage",
+      "group": "Redis Cluster",
+      "required": false,
+      "default": true,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "cluster"
+      }
+    },
+    {
+      "field_id": "cluster_dynamic_startup_nodes",
+      "label": "Use discovered nodes as future startup nodes",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_cluster_dynamic_startup_nodes",
+      "group": "Redis Cluster",
+      "required": false,
+      "default": true,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "cluster"
+      }
+    },
+    {
+      "field_id": "cluster_reinitialize_steps",
+      "label": "Moved responses before topology refresh",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_cluster_reinitialize_steps",
+      "group": "Redis Cluster",
+      "required": false,
+      "default": 5,
+      "min": 1,
+      "max": 1000,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "cluster"
+      }
+    },
+    {
+      "field_id": "cluster_error_retry_attempts",
+      "label": "Cluster routing retry attempts",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_cluster_error_retry_attempts",
+      "group": "Redis Cluster",
+      "required": false,
+      "default": 3,
+      "min": 0,
+      "max": 100,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "cluster"
+      }
+    },
+    {
+      "field_id": "unix_socket_path",
+      "label": "Unix socket path",
+      "tab": "Engine",
+      "control": "file",
+      "backend_field_id": "cde_route_unix_socket_path",
+      "group": "Redis connection",
+      "required": false,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "standalone"
+      }
+    },
+    {
+      "field_id": "socket_keepalive",
+      "label": "Enable TCP keep-alive",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_socket_keepalive",
+      "group": "Redis connection",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "client_name",
+      "label": "Client name",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_client_name",
+      "group": "Redis advanced",
+      "required": false,
+      "default": "ScratchRobin"
+    },
+    {
+      "field_id": "tool_workspace",
+      "label": "Backup/import/export workspace",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_tool_workspace",
+      "group": "Redis operational tools",
+      "required": false
+    },
+    {
+      "field_id": "sentinel_password",
+      "label": "Sentinel password",
+      "tab": "Engine",
+      "control": "password",
+      "backend_field_id": "cde_secret_sentinel_password",
+      "group": "Redis Sentinel",
+      "required": false,
+      "visible_when": {
+        "field": "topology_mode",
+        "equals": "sentinel"
+      }
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for redis-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+}

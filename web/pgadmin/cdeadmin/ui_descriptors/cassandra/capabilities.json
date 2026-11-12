@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "cassandra",
+  "profiles": [
+    "cassandra-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "5.0.8",
+    "tested": [
+      "5.0.8"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

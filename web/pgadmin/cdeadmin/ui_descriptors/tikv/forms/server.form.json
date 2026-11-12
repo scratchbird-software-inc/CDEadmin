@@ -1,0 +1,223 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "tikv",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "TiKV",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "tls_ca",
+      "label": "CA certificate path",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca",
+      "group": "TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_certificate",
+      "label": "Client certificate path",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate",
+      "group": "TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key",
+      "label": "Client key path",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key",
+      "group": "TLS",
+      "required": false
+    },
+    {
+      "field_id": "pd_endpoints",
+      "label": "PD endpoints",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_pd_endpoints",
+      "group": "TiKV topology",
+      "required": false
+    },
+    {
+      "field_id": "operation_timeout",
+      "label": "Operation timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_operation_timeout",
+      "group": "TiKV timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "api_version",
+      "label": "TiKV API version",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_api_version",
+      "group": "TiKV protocol",
+      "required": false,
+      "default": 1,
+      "min": 1,
+      "max": 2
+    },
+    {
+      "field_id": "enable_ttl",
+      "label": "Enable API v1 TTL encoding",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_enable_ttl",
+      "group": "TiKV protocol",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "api_version",
+        "equals": 1
+      }
+    },
+    {
+      "field_id": "pd_http_scheme",
+      "label": "PD metadata scheme",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_pd_http_scheme",
+      "group": "TiKV protocol",
+      "required": false,
+      "options": [
+        {
+          "value": "http",
+          "label": "HTTP"
+        },
+        {
+          "value": "https",
+          "label": "HTTPS"
+        }
+      ],
+      "default": "http"
+    },
+    {
+      "field_id": "transaction_mode",
+      "label": "Transaction mode",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_transaction_mode",
+      "group": "TiKV transactions",
+      "required": false,
+      "options": [
+        {
+          "value": "optimistic",
+          "label": "Optimistic"
+        },
+        {
+          "value": "pessimistic",
+          "label": "Pessimistic"
+        }
+      ],
+      "default": "optimistic"
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for tikv-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+}

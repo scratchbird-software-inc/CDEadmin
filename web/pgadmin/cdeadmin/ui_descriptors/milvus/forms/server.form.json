@@ -1,0 +1,312 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "milvus",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Milvus",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "read_only",
+      "label": "Read-only route",
+      "tab": "Connection",
+      "control": "boolean",
+      "backend_field_id": "cde_route_read_only",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Database",
+      "control": "text",
+      "required": true,
+      "help": "Database the profile connects to first; leave empty for the engine default.",
+      "default": "default"
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "Username",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "cde_route_username",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "basic"
+      }
+    },
+    {
+      "field_id": "auth_kind",
+      "label": "Authentication",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_kind",
+      "group": "Milvus authentication",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No authentication"
+        },
+        {
+          "value": "basic",
+          "label": "Username/password reference"
+        },
+        {
+          "value": "token",
+          "label": "API token reference"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "basic"
+      }
+    },
+    {
+      "field_id": "api_token",
+      "label": "API token",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_api_token",
+      "group": "Milvus authentication",
+      "required": false,
+      "visible_when": {
+        "field": "auth_kind",
+        "equals": "token"
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "Milvus TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disable",
+          "label": "Plaintext"
+        },
+        {
+          "value": "require",
+          "label": "TLS"
+        },
+        {
+          "value": "verify-ca",
+          "label": "TLS with CA verification"
+        },
+        {
+          "value": "verify-full",
+          "label": "TLS with CA and hostname verification"
+        }
+      ],
+      "default": "disable"
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "Certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "Milvus TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "group": "Milvus TLS",
+      "required": false
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "group": "Milvus TLS",
+      "required": false
+    },
+    {
+      "field_id": "server_name",
+      "label": "TLS server name",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_server_name",
+      "group": "Milvus TLS",
+      "required": false
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout",
+      "group": "Milvus timeouts",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 120
+    },
+    {
+      "field_id": "operation_timeout",
+      "label": "Operation timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_operation_timeout",
+      "group": "Milvus timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "consistency_level",
+      "label": "Consistency level",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_consistency_level",
+      "group": "Milvus query",
+      "required": false,
+      "options": [
+        {
+          "value": "Strong",
+          "label": "Strong"
+        },
+        {
+          "value": "Bounded",
+          "label": "Bounded staleness"
+        },
+        {
+          "value": "Session",
+          "label": "Session"
+        },
+        {
+          "value": "Eventually",
+          "label": "Eventually"
+        },
+        {
+          "value": "Customized",
+          "label": "Customized"
+        }
+      ],
+      "default": "Bounded"
+    },
+    {
+      "field_id": "keep_alive",
+      "label": "Enable driver reconnection handler",
+      "tab": "Engine",
+      "control": "boolean",
+      "backend_field_id": "cde_route_keep_alive",
+      "group": "Milvus connection",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for milvus-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+}

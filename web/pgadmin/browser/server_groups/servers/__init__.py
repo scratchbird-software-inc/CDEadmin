@@ -2337,7 +2337,15 @@ class ServerNode(PGChildNodeView):
 
         # Some fields can be provided with service file so they are optional
         if provider_endpoint and not embedded_endpoint:
-            required_args.extend(['host', 'port', 'username'])
+            required_args.extend(['host', 'port'])
+            # The legacy username column: the descriptor server form sends
+            # what the registration contract declares (owner direction
+            # 2026-11-11, one registration path for every engine), so a
+            # contract username fills it and an engine without one gets a
+            # placeholder, as embedded endpoints do.
+            if data.get('username') is None:
+                data['username'] = (
+                    data.get('cde_route_username') or 'endpoint-profile')
             if endpoint_registration.get(
                 'database_targeting', {}
             ).get('mode', 'required') == 'required':

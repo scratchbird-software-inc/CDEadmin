@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "mongodb",
+  "profiles": [
+    "mongodb-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "8.2.6",
+    "tested": [
+      "8.2.6"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

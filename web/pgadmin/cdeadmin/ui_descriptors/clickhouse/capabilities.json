@@ -1,0 +1,28 @@
+{
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "clickhouse",
+  "profiles": [
+    "clickhouse-native"
+  ],
+  "beta_tier": "basic",
+  "version_range": {
+    "minimum": "25.12.10.7-stable",
+    "tested": [
+      "25.12.10.7-stable"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    }
+  ]
+}

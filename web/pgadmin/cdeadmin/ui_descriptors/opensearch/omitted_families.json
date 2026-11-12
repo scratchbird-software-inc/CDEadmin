@@ -1,0 +1,41 @@
+{
+  "engine": "opensearch",
+  "omitted": [
+    {
+      "family": "table",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "view",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "index",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "routine",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "trigger",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "sequence",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "type",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "role",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    },
+    {
+      "family": "database",
+      "reason": "Administered through the engine's provider workspace and operations, not a family form; the package exists so registration goes through the descriptor registration host (owner direction 2026-11-11)."
+    }
+  ]
+}

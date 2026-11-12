@@ -1,0 +1,675 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "cassandra",
+  "family": "server",
+  "resource_kinds": [
+    "server"
+  ],
+  "status": "draft",
+  "engine_tab_title": "Cassandra",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection profile name",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "name",
+      "required": true
+    },
+    {
+      "field_id": "host",
+      "label": "Server host or address",
+      "tab": "Connection",
+      "control": "text",
+      "backend_field_id": "host",
+      "required": true
+    },
+    {
+      "field_id": "port",
+      "label": "Server port",
+      "tab": "Connection",
+      "control": "number",
+      "backend_field_id": "port",
+      "required": true,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "database",
+      "tab": "Connection",
+      "backend_field_id": "db",
+      "label": "Maintenance database",
+      "control": "text",
+      "required": false,
+      "help": "Database the profile connects to first; leave empty for the engine default."
+    },
+    {
+      "field_id": "connect_now",
+      "label": "Connect now",
+      "tab": "Connection",
+      "control": "boolean",
+      "default": true,
+      "backend_field_id": "connect_now"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comments",
+      "tab": "Connection",
+      "control": "code",
+      "language": "text",
+      "backend_field_id": "comment"
+    },
+    {
+      "field_id": "username",
+      "label": "User or principal",
+      "tab": "Authentication",
+      "control": "text",
+      "backend_field_id": "username",
+      "required": false
+    },
+    {
+      "field_id": "auth_mode",
+      "label": "Authentication mode",
+      "tab": "Authentication",
+      "control": "select",
+      "backend_field_id": "cde_route_auth_mode",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No authentication"
+        },
+        {
+          "value": "password",
+          "label": "Username and password"
+        },
+        {
+          "value": "mutual-tls",
+          "label": "Mutual TLS certificate"
+        },
+        {
+          "value": "password-mutual-tls",
+          "label": "Password and mutual TLS"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "password",
+      "label": "Password",
+      "tab": "Authentication",
+      "control": "password",
+      "backend_field_id": "cde_secret_password",
+      "required": true,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "password",
+          "password-mutual-tls"
+        ]
+      }
+    },
+    {
+      "field_id": "save_password",
+      "label": "Save default connection credentials",
+      "tab": "Authentication",
+      "control": "boolean",
+      "backend_field_id": "save_password",
+      "required": false,
+      "default": false,
+      "help": "Store the credentials for the default user in ScratchRobin. Credentials entered while connecting as another user are never stored as the default credentials."
+    },
+    {
+      "field_id": "tls_mode",
+      "label": "TLS mode",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_mode",
+      "group": "Cassandra TLS",
+      "required": false,
+      "options": [
+        {
+          "value": "disabled",
+          "label": "Disabled"
+        },
+        {
+          "value": "system-ca",
+          "label": "System CA validation"
+        },
+        {
+          "value": "self-signed",
+          "label": "Self-signed certificate"
+        }
+      ],
+      "default": "disabled"
+    },
+    {
+      "field_id": "tls_ca_file",
+      "label": "TLS certificate authority file",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_ca_file",
+      "group": "Cassandra TLS",
+      "required": false,
+      "help": "Optional for driver system-store validation and required for system-CA cqlsh execution."
+    },
+    {
+      "field_id": "tls_certificate_file",
+      "label": "Client certificate",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_certificate_file",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "mutual-tls",
+          "password-mutual-tls"
+        ]
+      }
+    },
+    {
+      "field_id": "tls_key_file",
+      "label": "Client private key",
+      "tab": "SSL/TLS",
+      "control": "file",
+      "backend_field_id": "cde_route_tls_key_file",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "mutual-tls",
+          "password-mutual-tls"
+        ]
+      }
+    },
+    {
+      "field_id": "tls_check_hostname",
+      "label": "Verify TLS host name",
+      "tab": "SSL/TLS",
+      "control": "boolean",
+      "backend_field_id": "cde_route_tls_check_hostname",
+      "required": false,
+      "default": true,
+      "visible_when": {
+        "field": "tls_mode",
+        "equals": "system-ca"
+      }
+    },
+    {
+      "field_id": "tls_min_version",
+      "label": "Minimum TLS version",
+      "tab": "SSL/TLS",
+      "control": "select",
+      "backend_field_id": "cde_route_tls_min_version",
+      "required": false,
+      "options": [
+        {
+          "value": "TLSv1_2",
+          "label": "TLS 1.2"
+        },
+        {
+          "value": "TLSv1_3",
+          "label": "TLS 1.3"
+        }
+      ],
+      "default": "TLSv1_2",
+      "visible_when": {
+        "field": "tls_mode",
+        "in": [
+          "system-ca",
+          "self-signed"
+        ]
+      }
+    },
+    {
+      "field_id": "tls_ciphers",
+      "label": "TLS cipher list",
+      "tab": "SSL/TLS",
+      "control": "text",
+      "backend_field_id": "cde_route_tls_ciphers",
+      "required": false,
+      "visible_when": {
+        "field": "tls_mode",
+        "in": [
+          "system-ca",
+          "self-signed"
+        ]
+      }
+    },
+    {
+      "field_id": "tls_key_password",
+      "label": "Client private-key password",
+      "tab": "SSL/TLS",
+      "control": "password",
+      "backend_field_id": "cde_secret_tls_key_password",
+      "required": false,
+      "visible_when": {
+        "field": "auth_mode",
+        "in": [
+          "mutual-tls",
+          "password-mutual-tls"
+        ]
+      }
+    },
+    {
+      "field_id": "contact_points",
+      "label": "Additional contact points (comma separated)",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_contact_points",
+      "group": "Cassandra topology",
+      "required": false,
+      "help": "Host is always the first contact point."
+    },
+    {
+      "field_id": "local_dc",
+      "label": "Local datacenter",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_local_dc",
+      "group": "Cassandra topology",
+      "required": false
+    },
+    {
+      "field_id": "load_balancing_policy",
+      "label": "Load-balancing policy",
+      "tab": "Advanced",
+      "control": "select",
+      "backend_field_id": "cde_route_load_balancing_policy",
+      "group": "Topology",
+      "required": false,
+      "options": [
+        {
+          "value": "dc-aware",
+          "label": "Datacenter-aware round robin"
+        },
+        {
+          "value": "round-robin",
+          "label": "Round robin"
+        },
+        {
+          "value": "token-aware-dc",
+          "label": "Token-aware, datacenter-aware"
+        },
+        {
+          "value": "token-aware-round-robin",
+          "label": "Token-aware round robin"
+        }
+      ],
+      "default": "token-aware-dc"
+    },
+    {
+      "field_id": "used_hosts_per_remote_dc",
+      "label": "Remote hosts per datacenter",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_used_hosts_per_remote_dc",
+      "group": "Topology",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 1024
+    },
+    {
+      "field_id": "allow_remote_dcs_for_local_cl",
+      "label": "Use remote datacenters for local consistency",
+      "tab": "Advanced",
+      "control": "boolean",
+      "backend_field_id": "cde_route_allow_remote_dcs_for_local_cl",
+      "group": "Topology",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "keyspace",
+      "label": "Initial keyspace",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_keyspace",
+      "group": "Cassandra session",
+      "required": false
+    },
+    {
+      "field_id": "request_timeout",
+      "label": "Request timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_request_timeout",
+      "group": "Cassandra timeouts",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connect timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_connect_timeout",
+      "group": "Cassandra timeouts",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 120
+    },
+    {
+      "field_id": "control_connection_timeout",
+      "label": "Control connection timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_control_connection_timeout",
+      "group": "Session",
+      "required": false,
+      "default": 10,
+      "min": 1,
+      "max": 600
+    },
+    {
+      "field_id": "heartbeat_interval",
+      "label": "Idle heartbeat interval (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_heartbeat_interval",
+      "group": "Session",
+      "required": false,
+      "default": 30,
+      "min": 0,
+      "max": 3600
+    },
+    {
+      "field_id": "heartbeat_timeout",
+      "label": "Idle heartbeat timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_heartbeat_timeout",
+      "group": "Session",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "schema_agreement_timeout",
+      "label": "Schema agreement timeout (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_schema_agreement_timeout",
+      "group": "Session",
+      "required": false,
+      "default": 10,
+      "min": 0,
+      "max": 3600
+    },
+    {
+      "field_id": "reconnect_base_delay",
+      "label": "Reconnect base delay (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_reconnect_base_delay",
+      "group": "Session",
+      "required": false,
+      "default": 1,
+      "min": 1,
+      "max": 300
+    },
+    {
+      "field_id": "reconnect_max_delay",
+      "label": "Reconnect maximum delay (seconds)",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_reconnect_max_delay",
+      "group": "Session",
+      "required": false,
+      "default": 30,
+      "min": 1,
+      "max": 3600
+    },
+    {
+      "field_id": "reconnect_max_attempts",
+      "label": "Reconnect maximum attempts",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_reconnect_max_attempts",
+      "group": "Session",
+      "required": false,
+      "default": 64,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "field_id": "executor_threads",
+      "label": "Driver executor threads",
+      "tab": "Advanced",
+      "control": "number",
+      "backend_field_id": "cde_route_executor_threads",
+      "group": "Session",
+      "required": false,
+      "default": 2,
+      "min": 1,
+      "max": 256
+    },
+    {
+      "field_id": "application_name",
+      "label": "Application name",
+      "tab": "Advanced",
+      "control": "text",
+      "backend_field_id": "cde_route_application_name",
+      "group": "Session",
+      "required": false,
+      "default": "ScratchRobin"
+    },
+    {
+      "field_id": "compression",
+      "label": "Native protocol compression",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_compression",
+      "group": "Cassandra protocol",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "lz4",
+          "label": "LZ4"
+        },
+        {
+          "value": "snappy",
+          "label": "Snappy"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "consistency",
+      "label": "Default consistency",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_consistency",
+      "group": "Cassandra consistency",
+      "required": false,
+      "options": [
+        {
+          "value": "ANY",
+          "label": "ANY"
+        },
+        {
+          "value": "ONE",
+          "label": "ONE"
+        },
+        {
+          "value": "TWO",
+          "label": "TWO"
+        },
+        {
+          "value": "THREE",
+          "label": "THREE"
+        },
+        {
+          "value": "QUORUM",
+          "label": "QUORUM"
+        },
+        {
+          "value": "ALL",
+          "label": "ALL"
+        },
+        {
+          "value": "LOCAL_QUORUM",
+          "label": "LOCAL_QUORUM"
+        },
+        {
+          "value": "EACH_QUORUM",
+          "label": "EACH_QUORUM"
+        },
+        {
+          "value": "LOCAL_ONE",
+          "label": "LOCAL_ONE"
+        }
+      ],
+      "default": "LOCAL_ONE"
+    },
+    {
+      "field_id": "serial_consistency",
+      "label": "Serial consistency",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_serial_consistency",
+      "group": "Cassandra consistency",
+      "required": false,
+      "options": [
+        {
+          "value": "SERIAL",
+          "label": "SERIAL"
+        },
+        {
+          "value": "LOCAL_SERIAL",
+          "label": "LOCAL_SERIAL"
+        }
+      ],
+      "default": "LOCAL_SERIAL"
+    },
+    {
+      "field_id": "jmx_port",
+      "label": "JMX administration port",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_jmx_port",
+      "group": "Cassandra operational tools",
+      "required": false,
+      "default": 7199,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "storage_port",
+      "label": "Internode streaming port",
+      "tab": "Engine",
+      "control": "number",
+      "backend_field_id": "cde_route_storage_port",
+      "group": "Cassandra operational tools",
+      "required": false,
+      "default": 7000,
+      "help": "Storage port advertised by Cassandra for SSTable streaming operations.",
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "jmx_auth_mode",
+      "label": "JMX authentication",
+      "tab": "Engine",
+      "control": "select",
+      "backend_field_id": "cde_route_jmx_auth_mode",
+      "group": "Cassandra operational tools",
+      "required": false,
+      "options": [
+        {
+          "value": "none",
+          "label": "No JMX authentication"
+        },
+        {
+          "value": "password",
+          "label": "JMX username and password file"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "field_id": "jmx_username",
+      "label": "JMX username",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_jmx_username",
+      "group": "Cassandra operational tools",
+      "required": false,
+      "visible_when": {
+        "field": "jmx_auth_mode",
+        "equals": "password"
+      }
+    },
+    {
+      "field_id": "tool_workspace",
+      "label": "Administration tool workspace",
+      "tab": "Engine",
+      "control": "text",
+      "backend_field_id": "cde_route_tool_workspace",
+      "group": "Cassandra operational tools",
+      "required": false,
+      "help": "Absolute non-root directory explicitly granted to provider-owned tools."
+    },
+    {
+      "field_id": "jmx_password",
+      "label": "JMX password",
+      "tab": "Engine",
+      "control": "password",
+      "backend_field_id": "cde_secret_jmx_password",
+      "group": "Cassandra operational tools",
+      "required": true,
+      "visible_when": {
+        "field": "jmx_auth_mode",
+        "equals": "password"
+      }
+    },
+    {
+      "field_id": "bgcolor",
+      "label": "Background colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "bgcolor",
+      "help": "Hex colour shown behind the server node; also tints the query tool."
+    },
+    {
+      "field_id": "fgcolor",
+      "label": "Foreground colour",
+      "tab": "Tags",
+      "control": "text",
+      "backend_field_id": "fgcolor"
+    },
+    {
+      "field_id": "tags",
+      "label": "Tags",
+      "tab": "Tags",
+      "control": "grid",
+      "backend_field_id": "tags",
+      "columns": [
+        {
+          "field_id": "text",
+          "label": "Tag",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "color",
+          "label": "Colour",
+          "control": "text"
+        }
+      ]
+    }
+  ],
+  "notes": "Drafted by tools/draft_server_descriptors.py from providers/form_contracts.py server.define for cassandra-native. Field ids are the registration contract's own; backend_field_id is the servers API key (cde_route_<id> / cde_secret_<id> for contract fields). Review tab/group placement."
+}

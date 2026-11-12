@@ -7,9 +7,11 @@ This script reads those contracts for the beta engines and writes a draft
 Server family form per engine, grouping fields onto the canonical tabs
 (Connection, Authentication, SSL/TLS, Advanced, Engine, Tags). Profiles of one
 engine (firebird-native, firebird-embedded) share one form behind a
-``profile`` select. PostgreSQL's registration is legacy_preserved and is
-transcribed by tools/draft_postgresql_descriptors.py instead; it is skipped
-here. Re-run after a provider manifest changes its connection fields.
+``profile`` select. PostgreSQL's registration form is transcribed from the
+inherited dialog by tools/draft_postgresql_descriptors.py (its profile has no
+contract fields); it is skipped here. Engines whose only descriptor is the
+server form get their package from tools/scaffold_registration_descriptors.py.
+Re-run after a provider manifest changes its connection fields.
 
 Usage: python3 tools/draft_server_descriptors.py [--write]
 """
@@ -34,7 +36,14 @@ from pgadmin.cdeadmin.endpoints.profiles import registration_profiles  # noqa: E
 
 ENGINES = ("mysql", "mariadb", "firebird", "duckdb", "sqlite",
            # Owner direction 2026-10-30: the parity engines are beta engines too.
-           "dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb")
+           "dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb",
+           # Owner direction 2026-11-11: every engine registers through the descriptor
+           # registration host, so every engine with a registration contract gets a form.
+           "apache_ignite", "cassandra", "clickhouse", "foundationdb", "influxdb", "milvus",
+           "mongodb", "neo4j", "opensearch", "redis", "tikv")
+# Profiles whose engine id differs from the package that serves them: the OpenSearch
+# SQL/PPL profile registers from the OpenSearch package (server.js folds the engine id).
+PACKAGE_OF = {"opensearch_sql_ppl": "opensearch"}
 # Registration keys of the servers API (web/pgadmin/browser/server_groups/servers) that are
 # not provider contract fields. Everything else travels as cde_route_<id> / cde_secret_<id>.
 GENERIC = {"name": "name", "host": "host", "port": "port", "username": "username", "password": "password",
@@ -56,7 +65,9 @@ JSON_CONTROLS = {
 }
 TITLE = {"mysql": "MySQL", "mariadb": "MariaDB", "firebird": "Firebird", "duckdb": "DuckDB", "sqlite": "SQLite",
          "dolt": "Dolt", "tidb": "TiDB", "vitess": "Vitess", "cockroachdb": "CockroachDB", "yugabytedb": "YugabyteDB",
-         "immudb": "immudb", "xtdb": "XTDB"}
+         "immudb": "immudb", "xtdb": "XTDB", "apache_ignite": "Apache Ignite", "cassandra": "Cassandra",
+         "clickhouse": "ClickHouse", "foundationdb": "FoundationDB", "influxdb": "InfluxDB", "milvus": "Milvus",
+         "mongodb": "MongoDB", "neo4j": "Neo4j", "opensearch": "OpenSearch", "redis": "Redis", "tikv": "TiKV"}
 ORDER = ["Connection", "Authentication", "SSL/TLS", "Advanced", "Engine", "Tags"]
 CONTROLS = {"text", "number", "boolean", "select", "multiselect", "radio", "password", "secret-reference",
             "code", "grid", "keyvalue", "privileges", "reference", "file"}
@@ -91,7 +102,10 @@ GROUP_TABS = {
     "XTDB pool": ("Advanced", "Connection pool"),
     "CQL topology and routing": ("Advanced", "Topology"), "YugabyteDB YCQL topology": ("Advanced", "Topology"),
 }
-PARITY_ENGINES = {"dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb"}
+PARITY_ENGINES = {"dolt", "tidb", "vitess", "cockroachdb", "yugabytedb", "immudb", "xtdb",
+                  # The 2026-11-11 engines: their contract groups decide the tabs too.
+                  "apache_ignite", "cassandra", "clickhouse", "foundationdb", "influxdb", "milvus",
+                  "mongodb", "neo4j", "opensearch", "redis", "tikv"}
 # Contract fields a form does not offer, with the evidence; each becomes a gap of the form.
 COMPRESS = ("Not offered: the pinned {} demo does not advertise protocol compression (no CLIENT_COMPRESS in its "
             "greeting, 2026-11-04); a route that requests it connects uncompressed.")
@@ -110,7 +124,19 @@ def tab_group(field_id, contract_group=None, engine=None):
                 break
             return tab, group
     if engine in PARITY_ENGINES and contract_group:
-        return GROUP_TABS.get(contract_group, ("Engine", contract_group))
+        if contract_group in GROUP_TABS:
+            return GROUP_TABS[contract_group]
+        # A contract group not listed above: place it by what its name says
+        # (the 2026-11-11 engines), else it is engine-specific.
+        lowered = contract_group.lower()
+        if re.search(r"tls|ssl|certificate|encryption", lowered):
+            return "SSL/TLS", contract_group
+        if re.search(r"auth|credential|identity|token", lowered):
+            return "Authentication", contract_group
+        if re.search(r"timeout|retry|pool|session|network|routing|topology|transport|keepalive|compression",
+                     lowered):
+            return "Advanced", contract_group
+        return "Engine", contract_group
     return "Engine", None
 
 
@@ -172,17 +198,23 @@ def draft(engine, profiles):
             fields.append(out)
     embedded = all(p.get("route_kind") == "embedded_file" for p in profiles)
     network = all(p.get("route_kind") == "network" for p in profiles)
+    # The servers API requires the database when the profile's database targeting does
+    # (every network profile so far), so the form says so rather than failing on save.
+    needs_database = embedded or any(
+        (p.get("database_targeting") or {}).get("mode", "required") == "required" for p in profiles)
     database = {"field_id": "database", "tab": "Connection", "backend_field_id": "db",
                 "label": "Database file" if embedded else "Maintenance database",
-                "control": "file" if embedded else "text", "required": embedded,
+                "control": "file" if embedded else "text", "required": needs_database,
                 "help": ("Absolute path of the database file this profile opens; further files are registered as databases under it."
                          if embedded else "Database the profile connects to first; leave empty for the engine default.")}
     if not network and not embedded:  # mixed profiles (Firebird): file path for the embedded kind only
         database.update({"label": "Database file", "control": "file", "required": True,
                          "visible_when": {"field": "profile", "equals": next(p["profile_id"] for p in profiles if p.get("route_kind") == "embedded_file")}})
     if contract_database:
-        database.update({key: contract_database[key] for key in ("label", "default", "required", "help")
+        database.update({key: contract_database[key] for key in ("label", "default", "help")
                          if contract_database.get(key) not in (None, "", [])})
+        if contract_database.get("required"):
+            database["required"] = True
         if contract_database.get("help_text") and "help" not in contract_database:
             database["help"] = contract_database["help_text"]
     fields.append(database)
@@ -198,7 +230,9 @@ def draft(engine, profiles):
     ])
     if len(profiles) > 1:
         fields.insert(0, {"field_id": "profile", "label": "Connection kind", "tab": "Connection", "control": "select", "required": True,
-                          "options": [{"value": p["profile_id"], "label": p["profile_id"].replace(f"{engine}-", "").capitalize()} for p in profiles]})
+                          "options": [{"value": p["profile_id"],
+                                       "label": (p.get("interface_display_name") or p.get("display_name") or
+                                                 p["profile_id"].replace(f"{engine}-", "").capitalize())} for p in profiles]})
     fields.sort(key=lambda f: ORDER.index(f["tab"]))
     omitted = [] if not embedded else [
         {"tab": "Authentication", "reason": "embedded file engine: no credentials"},
@@ -221,8 +255,9 @@ def main():
     selected = tuple(args.engine) if args.engine else tuple(e for e in ENGINES if e != "mysql")
     by_engine = {}
     for profile in registration_profiles():
-        if profile["engine_id"] in selected:
-            by_engine.setdefault(profile["engine_id"], []).append(profile)
+        package = PACKAGE_OF.get(profile["engine_id"], profile["engine_id"])
+        if package in selected:
+            by_engine.setdefault(package, []).append(profile)
     for engine, profiles in by_engine.items():
         form = draft(engine, profiles)
         path = DESCRIPTORS / engine / "forms" / "server.form.json"
