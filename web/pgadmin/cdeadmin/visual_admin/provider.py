@@ -63,6 +63,9 @@ class VisualAdminExecutionError(VisualAdminError):
         self.operation = copy.deepcopy(operation)
 
 
+_SQLSTATE = re.compile(r'^[0-9A-Z]{5}$')
+
+
 def _native_status_codes(error):
     """Accept only the adapter's bounded numeric public diagnostic contract."""
     try:
@@ -581,6 +584,35 @@ class ProviderVisualAdministration:
                     self._admin_operations.pop(operation_id, None)
                     self._plans[plan_id] = stored
                 raise
+            if (isinstance(exc, Exception) and
+                    getattr(exc, 'rejected', False) is True and
+                    getattr(exc, 'nothing_changed', False) is True):
+                # Owner decision 2026-11-11: a server rejection the provider
+                # vouches for (statement refused before any commit, the
+                # attachment rolled back) is a known outcome and is shown,
+                # not the fail-closed unknown-outcome receipt.
+                sqlstate = getattr(exc, 'sqlstate', None)
+                message = getattr(exc, 'message', None) or str(exc)
+                with self._lock:
+                    operation.public['unknown_outcome'] = False
+                    operation.public['stage'] = 'provider_rejected'
+                    operation.public['rejection'] = {
+                        'sqlstate': sqlstate if isinstance(sqlstate, str)
+                        and _SQLSTATE.match(sqlstate) else None,
+                        'message': str(message)[:500],
+                    }
+                    self._record_admin_event(
+                        operation.public, 'provider_rejected', {
+                            'sqlstate': operation.public['rejection'][
+                                'sqlstate'],
+                            'automatic_retry': False,
+                        },
+                    )
+                    failed = copy.deepcopy(operation.public)
+                raise VisualAdminExecutionError(
+                    'the server rejected the statement; nothing was changed',
+                    failed,
+                ) from None
             # Provider adapters already redact or normalize their public
             # exceptions. Preserve the server-side traceback for diagnosis
             # while the browser receives only the fail-closed unknown-outcome

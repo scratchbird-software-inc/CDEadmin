@@ -153,11 +153,11 @@ class FakeConnection:
         self.cancelled.append((connection_id, database_id))
         return True, 'cancelled'
 
-    def execute_void(self, source):
+    def execute_void(self, source, **_kwargs):
         self.executions.append((source, None, {'mode': 'void'}))
         return True, 'executed'
 
-    def execute_dict(self, source):
+    def execute_dict(self, source, **_kwargs):
         self.executions.append((source, None, {'mode': 'dict'}))
         return True, {'rows': [{'name': 'qualified'}]}
 

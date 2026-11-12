@@ -292,13 +292,13 @@ class Connection:
     def transaction_status(self):
         return int(self.conn.info.transaction_status)
 
-    def execute_dict(self, statement, parameters=None):
+    def execute_dict(self, statement, parameters=None, **_kwargs):
         with self.conn.cursor() as cursor:
             cursor.execute(statement, parameters)
             columns = [column.name for column in cursor.description or []]
             return True, {'rows': [dict(zip(columns, row)) for row in cursor.fetchall()] if columns else []}
 
-    def execute_void(self, statement):
+    def execute_void(self, statement, **_kwargs):
         with self.conn.cursor() as cursor:
             cursor.execute(statement)
         return True, None
@@ -2023,9 +2023,15 @@ def test_server_reload_and_restore_point(live):
 def test_wal_replay_control_is_refused_on_a_primary(live):
     if query('SELECT pg_is_in_recovery()') == [(True,)]:
         pytest.skip('this server is a standby; pause and resume would succeed')
+    from pgadmin.cdeadmin.visual_admin.provider import VisualAdminExecutionError
     for operation_id in ('wal-replay-pause', 'wal-replay-resume'):
-        with pytest.raises(Exception):
+        # Owner decision 2026-11-11: the server's rejection is a known outcome with its SQLSTATE.
+        with pytest.raises(VisualAdminExecutionError) as raised:
             run_server(live, operation_id)
+        operation = raised.value.operation
+        assert (operation['stage'], operation['unknown_outcome']) == ('provider_rejected', False)
+        assert operation['rejection']['sqlstate'] == '55000'
+        assert 'recovery is not in progress' in operation['rejection']['message']
 
 
 # -- M6 (2026-11-11): schema/database VACUUM+ANALYZE and forced database drop, observed live -------

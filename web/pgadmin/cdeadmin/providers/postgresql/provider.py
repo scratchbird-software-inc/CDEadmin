@@ -17,6 +17,7 @@ transaction payload as opaque.
 from __future__ import annotations
 
 import copy
+import re
 import json
 import uuid
 import threading
@@ -104,6 +105,47 @@ POSTGRESQL_ADMIN_OPERATIONS = administration_operations()
 
 class PostgreSQLProviderError(RuntimeError):
     """A PostgreSQL provider operation cannot be completed safely."""
+
+
+class PostgreSQLStatementRejected(PostgreSQLProviderError):
+    """The server rejected the administrative statement before anything
+    was committed (owner decision 2026-11-11): the outcome is known, nothing
+    changed, and the SQLSTATE and the server's message may be shown."""
+
+    rejected = True
+    nothing_changed = True
+
+    def __init__(self, message, sqlstate=None):
+        super().__init__(message)
+        self.sqlstate = sqlstate
+        self.message = message
+
+
+_SQLSTATE = re.compile(r'^[0-9A-Z]{5}$')
+
+
+def _rejection(error):
+    """Build the rejection from a driver error text or a psycopg error."""
+    sqlstate = None
+    text = ''
+    if isinstance(error, str):
+        text = error
+        match = re.search(r'SQL state:\s*([0-9A-Z]{5})', text)
+        if match:
+            sqlstate = match.group(1)
+    else:
+        diag = getattr(error, 'diag', None)
+        sqlstate = (getattr(error, 'sqlstate', None) or
+                    getattr(diag, 'sqlstate', None))
+        text = (getattr(diag, 'message_primary', None) or str(error))
+    if not isinstance(sqlstate, str) or _SQLSTATE.match(sqlstate) is None:
+        sqlstate = None
+    first = str(text).replace('\x00', '').strip().splitlines()
+    message = (first[0] if first else 'the statement was rejected').strip()
+    for prefix in ('ERROR:', 'FATAL:'):
+        if message.startswith(prefix):
+            message = message[len(prefix):].strip()
+    return PostgreSQLStatementRejected(message[:500], sqlstate)
 
 
 def _mapping(value: object) -> dict[str, Any]:
@@ -549,10 +591,28 @@ class PostgreSQLProvider:
                               identity.get('rows') != [{'oid': database_id}]):
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
-            status, result = (connection.execute_dict(statement) if compiled['read_only'] or compiled.get('returns_rows')
-                              else connection.execute_void(statement))
+            returns_rows = (compiled['read_only'] or
+                            compiled.get('returns_rows'))
+            try:
+                # The inherited connection puts the SQLSTATE in the formatted
+                # message; a clean rejection reports it.
+                status, result = (
+                    connection.execute_dict(statement,
+                                            formatted_exception_msg=True)
+                    if returns_rows else
+                    connection.execute_void(statement,
+                                            formatted_exception_msg=True))
+            except Exception as exc:
+                # A driver that raises on a server error (the harness does)
+                # reports the same clean rejection as one that returns it.
+                if (getattr(exc, 'diag', None) is None and
+                        not getattr(exc, 'sqlstate', None)):
+                    raise
+                raise _rejection(exc) from None
             if not status:
-                raise PostgreSQLProviderError('PostgreSQL rejected the administrative statement')
+                # Rejected before any commit: the private attachment rolls back
+                # on release, so nothing changed and the outcome is known.
+                raise _rejection(result if isinstance(result, str) else '')
             if compiled.get('server_file_operation'):
                 rows = result.get('rows', [])
                 if (len(rows) != 1 or

@@ -628,6 +628,21 @@ listing's parent, so every resource after the first table lost its
 parent id and the provider tree's navigator refused the page; the live
 listing test now asserts every item names the listing's parent.
 
+Rejection reporting (owner decision 2026-11-11): a server rejection the
+provider vouches for is now a known outcome. When PostgreSQL refuses an
+administrative statement before any commit, the provider raises a
+rejection carrying the SQLSTATE and the server's first message line; the
+private attachment rolls back on release, so nothing changed. The shared
+apply records it as its own stage (``provider_rejected``, not an unknown
+outcome) and the receipt returns 409 ``PROVIDER_OPERATION_REJECTED`` with
+the SQLSTATE and message in the error text, where the dialogs already
+show it. Every other failure keeps the fail-closed unknown-outcome
+response: a failure during COMMIT, after a server-file export was
+dispatched, from a driver error without a SQLSTATE, or from a provider
+that does not vouch that nothing changed. Observed live: pausing WAL
+replay on the demo primary now answers SQLSTATE 55000 with the server's
+own words through both the harness and the running application.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
