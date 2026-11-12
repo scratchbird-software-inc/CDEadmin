@@ -516,26 +516,19 @@ def _alter(native, draft):
     if resets:
         statements.append(f'{alter} RESET (' + ', '.join(resets) + ')')
     if 'partitions' in draft and current['is_partitioned']:
-        # The grid is the full set: new rows create or attach, rows left
-        # out detach (the inherited dialog's "deleting a row detaches").
-        known = {str(item['oid']): item for item in current['partitions']
+        # New rows create or attach. A row left out never detaches (owner
+        # direction 2026-11-11): detaching is the partition's own
+        # detach-partition operation.
+        known = {str(item['oid']) for item in current['partitions']
                  if item.get('oid') is not None}
-        kept, added = set(), []
+        added = []
         for row in _rows(draft, 'partitions'):
             oid = row.get('oid')
             if _blank(oid):
                 added.append(row)
-            elif str(oid) in known:
-                kept.add(str(oid))
-            else:
+            elif str(oid) not in known:
                 _refuse(f'partition {oid} does not belong to this table')
         statements.extend(_partition_rows(qualified, schema, added))
-        for oid in sorted(known.keys() - kept):
-            part_schema, part_name = known[oid]['partition_name'].split(
-                '.', 1)
-            statements.append(f'{alter} DETACH PARTITION '
-                              + _qualified(_name(part_schema, 'schema'),
-                                           _name(part_name, 'name')))
     identity = draft.get('replica_identity')
     if not _blank(identity) and identity != current['replica_identity']:
         statements.append(f'{alter} REPLICA IDENTITY '

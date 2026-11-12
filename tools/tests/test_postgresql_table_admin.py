@@ -259,7 +259,8 @@ def test_partitions_grid_creates_attaches_and_detaches():
                                  'partition_type': 'list',
                                  'partition_keys': [{'pt_column': 'k'}],
                                  'partitions': [{'partition_name': 'p'}]})
-    # Alter: the grid is the full set; a left-out partition detaches.
+    # Alter: new rows create or attach; a left-out row never detaches
+    # (owner direction 2026-11-11: detach is the partition's own operation).
     parent = dict(TABLE, catalog_row=dict(TABLE['catalog_row'], relkind='p',
                                           partition_key_sql='RANGE (at)'),
                   partitions=[{'oid': 11, 'schema': 'shop', 'name': 'orders_a',
@@ -273,8 +274,10 @@ def test_partitions_grid_creates_attaches_and_detaches():
         {'oid': 11, 'partition_name': 'shop.orders_a'},
         {'partition_name': 'orders_c', 'values_in': "'c'"}]}, parent) == [
         'CREATE TABLE "shop"."orders_c" PARTITION OF "shop"."orders" '
-        "FOR VALUES IN ('c')",
-        'ALTER TABLE "shop"."orders" DETACH PARTITION "shop"."orders_b"']
+        "FOR VALUES IN ('c')"]
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_table('alter', {'partitions': [
+            {'oid': 11, 'partition_name': 'shop.orders_a'}]}, parent)
     with pytest.raises(PostgreSQLNativeAdminError, match='does not belong'):
         compile_table('alter', {'partitions': [{'oid': 99}]}, parent)
     assert statements('alter', {'relacl': [{'grantee': 'ops',

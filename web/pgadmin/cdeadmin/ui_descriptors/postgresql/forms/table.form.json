@@ -1418,7 +1418,7 @@
         "field": "is_partitioned",
         "truthy": true
       },
-      "help": "Provider tree (2026-11-11): on create, each row creates a partition (or attaches an existing table when Operation is attach) after the table; on edit the grid is the full set: a new row creates or attaches, a row left out detaches (plain detach; use Detach partition on the partition for CONCURRENTLY or FINALIZE). Default: no other partition fits. From/To (range), In (list), Modulus/Remainder (hash): write values as SQL literals, quoted where PostgreSQL needs it; the bound is admitted only when the server's parser accepts it.",
+      "help": "Provider tree (2026-11-11): on create, each row creates a partition (or attaches an existing table when Operation is attach) after the table; on edit a new row creates or attaches. Removing a row never detaches: use Detach partition on the partition itself (owner direction). Default: no other partition fits. From/To (range), In (list), Modulus/Remainder (hash): write values as SQL literals, quoted where PostgreSQL needs it; the bound is admitted only when the server's parser accepts it.",
       "columns": [
         {
           "field_id": "oid",

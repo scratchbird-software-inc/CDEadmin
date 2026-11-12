@@ -2611,9 +2611,9 @@ def test_partitions_create_attach_and_detach(live):
     rows = [{'oid': p['oid'], 'partition_name': p['partition_name']} for p in grid['table_facts']['partitions']
             if not p['partition_name'].endswith('m_grid_old')]
     run_kind(live, 'table', 'alter', {'partitions': rows + [{'partition_name': 'm_grid_b', 'values_in': "'b'"}]}, grid)
-    assert children() == ['m_grid_a', 'm_grid_b', 'm_grid_rest']
-    assert one("SELECT relispartition FROM pg_class WHERE relname='m_grid_old'") is False
-    query('DROP TABLE public.m_grid CASCADE; DROP TABLE public.m_grid_old')
+    # A row left out of the grid stays attached: detach is the partition's own operation (owner direction).
+    assert children() == ['m_grid_a', 'm_grid_b', 'm_grid_old', 'm_grid_rest']
+    query('DROP TABLE public.m_grid CASCADE')  # m_grid_old is still a partition, so it goes with the parent
     with pytest.raises(Exception):
         run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_2026'), values={'mode': 'plain'})
     query('DROP TABLE public.m_part CASCADE; DROP TABLE public.m_part_2026; DROP TABLE public.m_part_old; DROP TABLE public.m_part_rest')
