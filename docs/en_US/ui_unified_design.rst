@@ -792,6 +792,26 @@ enumeration extended through its list, USAGE granted as the word the grid
 sends and revoked, a shell type created, a domain's constraints replaced
 through its grid.
 
+Form close-outs, server (left as draft, deliberately). The PostgreSQL
+Server family form maps the inherited registration dialog, not a DDL
+object. A Server form marked complete reroutes registering and editing
+PostgreSQL servers through the descriptor registration host, away from
+the inherited dialog the provider tree uses today, and its five recorded
+gaps (SSL fields stored as connection_params rows, the colour picker, the
+db_res dynamic control, the runtime route and secret fields, the
+connected-state read-only rules) are differences in that registration
+path rather than in a provider compiler. Switching the registration path
+is an owner decision and needs a browser pass, so the form stays draft
+with this recorded in its notes; the nine DDL forms are complete.
+
+Verification of the close-outs. Every PostgreSQL unit suite, the
+descriptor service and field-contract suites, the pgAdmin field-id gate
+and the Jest family specs pass; the live lifecycles ran against
+PostgreSQL 18.3 through the harness with temporary objects created and
+dropped. Nothing was screen-checked: the browser extension stayed
+disconnected, so the dialogs themselves have not been seen rendering the
+surfaced values.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
