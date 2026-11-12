@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass, field as dc_field
 import json
 import re
 from calendar import monthrange
@@ -89,7 +90,195 @@ WINDOW_OPERATIONS = frozenset({
 DIMENSION_USAGE_KINDS = frozenset({
     'regular', 'referenced', 'fact', 'many_to_many',
 })
+ATTRIBUTE_RELATIONSHIP_TYPES = frozenset({'changing', 'fixed'})
+UNKNOWN_MEMBER_POLICIES = frozenset({'unknown', 'hide', 'error'})
+PARTITION_GRAINS = frozenset({'none', 'day', 'month', 'year'})
+REFRESH_POLICIES = frozenset({
+    'manual', 'incremental', 'full_rebuild', 'on_accept_review', 'scheduled',
+})
 _ID = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,127}$')
+
+
+@dataclass(frozen=True)
+class CubeAttribute:
+    """Typed dimensional attribute / hierarchy level metadata."""
+
+    id: str
+    name: str
+    field: dict[str, str]
+    sort_field: dict[str, str] | None = None
+    relationship_type: str = 'changing'
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            'id': self.id,
+            'name': self.name,
+            'field': copy.deepcopy(self.field),
+            'relationship_type': self.relationship_type,
+        }
+        if self.sort_field is not None:
+            out['sort_field'] = copy.deepcopy(self.sort_field)
+        return out
+
+
+@dataclass(frozen=True)
+class CubeDimension:
+    """Typed cube dimension specification with unknown-member & role policy."""
+
+    id: str
+    name: str
+    field: dict[str, str]
+    is_time: bool = False
+    time_role: str | None = None
+    key_field: dict[str, str] | None = None
+    name_field: dict[str, str] | None = None
+    sort_field: dict[str, str] | None = None
+    attributes: tuple[dict[str, Any], ...] = ()
+    hierarchies: tuple[dict[str, Any], ...] = ()
+    role_of: str | None = None
+    active: bool = True
+    join_id: str | None = None
+    unknown_member_policy: str = 'unknown'
+    unknown_member_caption: str = 'Unknown'
+    visible_roles: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            'id': self.id,
+            'name': self.name,
+            'field': copy.deepcopy(self.field),
+            'is_time': self.is_time,
+            'time_role': self.time_role,
+            'hierarchies': [copy.deepcopy(h) for h in self.hierarchies],
+            'unknown_member_policy': self.unknown_member_policy,
+            'unknown_member_caption': self.unknown_member_caption,
+            'visible_roles': list(self.visible_roles),
+        }
+        if self.key_field is not None:
+            out['key_field'] = copy.deepcopy(self.key_field)
+        if self.name_field is not None:
+            out['name_field'] = copy.deepcopy(self.name_field)
+        if self.sort_field is not None:
+            out['sort_field'] = copy.deepcopy(self.sort_field)
+        if self.attributes:
+            out['attributes'] = [copy.deepcopy(a) for a in self.attributes]
+        if self.role_of is not None:
+            out['role_of'] = self.role_of
+            out['active'] = self.active
+        if self.join_id is not None:
+            out['join_id'] = self.join_id
+        return out
+
+
+@dataclass(frozen=True)
+class CubeMeasure:
+    """Typed cube measure specification with role visibility."""
+
+    id: str
+    name: str
+    aggregation: str = 'sum'
+    field: dict[str, str] | None = None
+    expression: dict[str, Any] | None = None
+    format: str = ''
+    description: str = ''
+    display_folder: str = ''
+    measure_group_id: str | None = None
+    filters: tuple[dict[str, Any], ...] = ()
+    semi_additive_dimension: str | None = None
+    within_group_aggregation: str = 'sum'
+    visible_roles: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            'id': self.id,
+            'name': self.name,
+            'aggregation': self.aggregation,
+            'field': copy.deepcopy(self.field),
+            'format': self.format,
+            'visible_roles': list(self.visible_roles),
+        }
+        if self.expression is not None:
+            out['expression'] = copy.deepcopy(self.expression)
+        if self.description:
+            out['description'] = self.description
+        if self.display_folder:
+            out['display_folder'] = self.display_folder
+        if self.measure_group_id is not None:
+            out['measure_group_id'] = self.measure_group_id
+        if self.filters:
+            out['filters'] = [copy.deepcopy(f) for f in self.filters]
+        if self.semi_additive_dimension is not None:
+            out['semi_additive_dimension'] = self.semi_additive_dimension
+            out['within_group_aggregation'] = self.within_group_aggregation
+        return out
+
+
+@dataclass(frozen=True)
+class CubePerspective:
+    """Typed cube perspective specification with role visibility."""
+
+    id: str
+    name: str
+    description: str = ''
+    dimensions: tuple[str, ...] = ()
+    measures: tuple[str, ...] = ()
+    measure_groups: tuple[str, ...] = ()
+    hierarchies: tuple[str, ...] = ()
+    default_measure: str | None = None
+    visible_roles: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'dimensions': list(self.dimensions),
+            'measures': list(self.measures),
+            'measure_groups': list(self.measure_groups),
+            'hierarchies': list(self.hierarchies),
+            'visible_roles': list(self.visible_roles),
+        }
+        if self.default_measure is not None:
+            out['default_measure'] = self.default_measure
+        return out
+
+
+@dataclass(frozen=True)
+class CubeAggregationPlan:
+    """Typed cube aggregation / materialization plan specification."""
+
+    id: str
+    name: str
+    strategy: str = 'aggregate_table'
+    enabled: bool = True
+    measure_group_id: str | None = None
+    grain_dimensions: tuple[str, ...] = ()
+    measures: tuple[str, ...] = ()
+    target_relation: tuple[str, ...] = ()
+    partition_field: dict[str, str] | str | None = None
+    partition_grain: str = 'none'
+    refresh_policy: str = 'manual'
+    rule_group: dict[str, Any] | None = dc_field(default=None)
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            'id': self.id,
+            'name': self.name,
+            'strategy': self.strategy,
+            'enabled': self.enabled,
+            'grain_dimensions': list(self.grain_dimensions),
+            'measures': list(self.measures),
+            'target_relation': list(self.target_relation),
+            'partition_grain': self.partition_grain,
+            'refresh_policy': self.refresh_policy,
+        }
+        if self.measure_group_id is not None:
+            out['measure_group_id'] = self.measure_group_id
+        if self.partition_field is not None:
+            out['partition_field'] = copy.deepcopy(self.partition_field)
+        if self.rule_group is not None:
+            out['rule_group'] = copy.deepcopy(self.rule_group)
+        return out
 
 
 class SemanticModelError(RuntimeError):
@@ -121,17 +310,40 @@ def identifier(value, label):
 
 
 def mapping(value, label):
+    if hasattr(value, 'to_dict') and callable(value.to_dict):
+        value = value.to_dict()
     if not isinstance(value, Mapping):
         raise SemanticModelError(f'{label} must be an object')
     return copy.deepcopy(dict(value))
 
 
 def array(value, label, maximum=500):
+    if isinstance(value, tuple):
+        value = list(value)
     if not isinstance(value, list):
         raise SemanticModelError(f'{label} must be an array')
     if len(value) > maximum:
         raise SemanticModelError(f'{label} exceeds its item limit')
-    return copy.deepcopy(value)
+    return [
+        copy.deepcopy(
+            item.to_dict()
+            if hasattr(item, 'to_dict') and callable(item.to_dict)
+            else item
+        )
+        for item in value
+    ]
+
+
+def _validate_visible_roles(value, label) -> list[str]:
+    raw_items = array(value, label, 128)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_items:
+        role_id = identifier(raw, f'{label}.role')
+        if role_id not in seen:
+            seen.add(role_id)
+            normalized.append(role_id)
+    return normalized
 
 
 def _unique(items, label):
@@ -428,6 +640,15 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                 level_ids.add(level_id)
                 level['name'] = required_text(level.get('name'), 'level.name')
                 _validate_field_reference(level.get('field'), source_ids)
+                if 'relationship_type' in level:
+                    rel_type = str(
+                        level.get('relationship_type') or 'changing'
+                    ).strip()
+                    if rel_type not in ATTRIBUTE_RELATIONSHIP_TYPES:
+                        raise SemanticModelError(
+                            'level.relationship_type must be changing or fixed'
+                        )
+                    level['relationship_type'] = rel_type
         for ref_key in ('key_field', 'name_field', 'sort_field'):
             if dimension.get(ref_key) is not None:
                 _validate_field_reference(dimension[ref_key], source_ids)
@@ -450,7 +671,36 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                 _validate_field_reference(attr.get('field'), source_ids)
                 if attr.get('sort_field') is not None:
                     _validate_field_reference(attr['sort_field'], source_ids)
+                if 'relationship_type' in attr:
+                    rel_type = str(
+                        attr.get('relationship_type') or 'changing'
+                    ).strip()
+                    if rel_type not in ATTRIBUTE_RELATIONSHIP_TYPES:
+                        raise SemanticModelError(
+                            'attribute.relationship_type must be changing or '
+                            'fixed'
+                        )
+                    attr['relationship_type'] = rel_type
             dimension['attributes'] = attrs
+        if 'unknown_member_policy' in dimension:
+            um_policy = str(
+                dimension.get('unknown_member_policy') or 'unknown'
+            ).strip()
+            if um_policy not in UNKNOWN_MEMBER_POLICIES:
+                raise SemanticModelError(
+                    'dimension.unknown_member_policy must be unknown, hide '
+                    'or error'
+                )
+            dimension['unknown_member_policy'] = um_policy
+        if 'unknown_member_caption' in dimension:
+            dimension['unknown_member_caption'] = (
+                str(dimension.get('unknown_member_caption') or '').strip()[:256]
+                or 'Unknown'
+            )
+        if 'visible_roles' in dimension:
+            dimension['visible_roles'] = _validate_visible_roles(
+                dimension.get('visible_roles', []), 'dimension.visible_roles'
+            )
         if dimension.get('role_of') is not None:
             role_of = identifier(dimension['role_of'], 'dimension.role_of')
             if role_of not in dimension_ids or role_of == dimension['id']:
@@ -549,6 +799,10 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
             certification.get('definition') or ''
         )[:4096]
         measure['certification'] = certification
+        if 'visible_roles' in measure:
+            measure['visible_roles'] = _validate_visible_roles(
+                measure.get('visible_roles', []), 'measure.visible_roles'
+            )
     dependencies = {
         item['id']: _expression_references(item.get('expression'))
         for item in measures
@@ -749,10 +1003,99 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                     'materialization.target_relation requires identifier parts'
                 )
             materialization['target_relation'] = [p.strip() for p in t_rel]
+        if 'partition_field' in materialization:
+            p_field = materialization.get('partition_field')
+            if p_field is not None:
+                if isinstance(p_field, Mapping):
+                    _validate_field_reference(p_field, source_ids)
+                    materialization['partition_field'] = copy.deepcopy(
+                        dict(p_field)
+                    )
+                else:
+                    materialization['partition_field'] = identifier(
+                        p_field, 'materialization.partition_field'
+                    )
+            else:
+                materialization['partition_field'] = None
+        if 'partition_grain' in materialization:
+            p_grain = str(
+                materialization.get('partition_grain') or 'none'
+            ).strip()
+            if p_grain not in PARTITION_GRAINS:
+                raise SemanticModelError(
+                    'materialization.partition_grain must be none, day, '
+                    'month or year'
+                )
+            materialization['partition_grain'] = p_grain
         if 'refresh_policy' in materialization:
-            materialization['refresh_policy'] = str(
+            r_policy = str(
                 materialization.get('refresh_policy') or 'manual'
-            )[:128]
+            ).strip()[:128]
+            if r_policy not in REFRESH_POLICIES:
+                raise SemanticModelError(
+                    'materialization.refresh_policy is unsupported'
+                )
+            materialization['refresh_policy'] = r_policy
+        if 'rule_group' in materialization:
+            rg = materialization.get('rule_group')
+            if rg is not None:
+                rg_map = mapping(rg, 'materialization.rule_group')
+                norm_rg: dict[str, Any] = {}
+                if 'name' in rg_map and rg_map['name']:
+                    norm_rg['name'] = str(rg_map['name']).strip()[:128]
+                if 'mandatory_dimensions' in rg_map:
+                    norm_rg['mandatory_dimensions'] = [
+                        identifier(
+                            d, 'rule_group.mandatory_dimensions'
+                        )
+                        for d in array(
+                            rg_map['mandatory_dimensions'],
+                            'rule_group.mandatory_dimensions', 64,
+                        )
+                    ]
+                if 'hierarchy_sets' in rg_map:
+                    norm_rg['hierarchy_sets'] = [
+                        [
+                            identifier(d, 'rule_group.hierarchy_sets.item')
+                            for d in array(
+                                chain, 'rule_group.hierarchy_sets.chain', 32
+                            )
+                        ]
+                        for chain in array(
+                            rg_map['hierarchy_sets'],
+                            'rule_group.hierarchy_sets', 32,
+                        )
+                    ]
+                if 'joint_sets' in rg_map:
+                    norm_rg['joint_sets'] = [
+                        [
+                            identifier(d, 'rule_group.joint_sets.item')
+                            for d in array(
+                                grp, 'rule_group.joint_sets.group', 32
+                            )
+                        ]
+                        for grp in array(
+                            rg_map['joint_sets'], 'rule_group.joint_sets', 32
+                        )
+                    ]
+                if (
+                    'max_dimension_combinations' in rg_map
+                    and rg_map['max_dimension_combinations'] is not None
+                ):
+                    cap = rg_map['max_dimension_combinations']
+                    if (
+                        isinstance(cap, bool)
+                        or not isinstance(cap, int)
+                        or cap < 0
+                    ):
+                        raise SemanticModelError(
+                            'rule_group.max_dimension_combinations must be '
+                            'a non-negative integer'
+                        )
+                    norm_rg['max_dimension_combinations'] = cap
+                materialization['rule_group'] = norm_rg
+            else:
+                materialization['rule_group'] = None
     model['materializations'] = materializations
     security = mapping(model.get('security', {}), 'model.security')
     security['row_filters'] = _validate_filters(
@@ -975,6 +1318,11 @@ def validate_model(value: Mapping[str, Any]) -> dict[str, Any]:
                         'perspective.default_measure must be in perspective'
                     )
                 persp['default_measure'] = default_measure
+            if 'visible_roles' in persp:
+                persp['visible_roles'] = _validate_visible_roles(
+                    persp.get('visible_roles', []),
+                    'perspective.visible_roles',
+                )
         model['perspectives'] = perspectives
 
     if 'translations' in model:
@@ -1563,7 +1911,157 @@ def validate_query(model, value):
         raise SemanticModelError('query.limit must be an integer')
     if not 1 <= query['limit'] <= 10000:
         raise SemanticModelError('query.limit is outside platform limits')
+    raw_role = query.get('role')
+    if raw_role is not None and str(raw_role).strip():
+        active_role = identifier(raw_role, 'query.role')
+        query['role'] = active_role
+        if query.get('perspective') is not None:
+            persp_map = {
+                item['id']: item for item in model.get('perspectives', [])
+            }
+            p_obj = persp_map.get(query['perspective'])
+            if (
+                p_obj
+                and p_obj.get('visible_roles')
+                and active_role not in p_obj['visible_roles']
+            ):
+                raise SemanticModelError(
+                    'selected perspective is not visible to role'
+                )
+        measures_map = {item['id']: item for item in model['measures']}
+
+        def _check_measure_role(mid: str, seen: frozenset[str] = frozenset()):
+            if mid in seen:
+                return
+            m_obj = measures_map.get(mid)
+            if not m_obj:
+                return
+            if (
+                m_obj.get('visible_roles')
+                and active_role not in m_obj['visible_roles']
+            ):
+                raise SemanticModelError(
+                    f"measure '{mid}' is not visible to role '{active_role}'"
+                )
+            for dep in _expression_references(m_obj.get('expression')):
+                _check_measure_role(dep, seen | frozenset({mid}))
+
+        for mid in selected_measures:
+            _check_measure_role(mid)
+
+        owner_dim_by_item: dict[str, dict[str, Any]] = {}
+        for dim in model['dimensions']:
+            owner_dim_by_item[dim['id']] = dim
+            for attr in dim.get('attributes', []):
+                owner_dim_by_item[attr['id']] = dim
+            for hier in dim.get('hierarchies', []):
+                owner_dim_by_item[hier['id']] = dim
+                for lvl in hier.get('levels', []):
+                    owner_dim_by_item[lvl['id']] = dim
+
+        checked_items = [
+            item
+            for axis in ('rows', 'columns', 'pages')
+            for item in axes[axis]
+        ]
+        if query['drill'].get('target_level'):
+            checked_items.append(query['drill']['target_level'])
+        for item_id in checked_items:
+            d_obj = owner_dim_by_item.get(item_id)
+            if (
+                d_obj
+                and d_obj.get('visible_roles')
+                and active_role not in d_obj['visible_roles']
+            ):
+                raise SemanticModelError(
+                    f"dimension '{d_obj['id']}' is not visible to role "
+                    f"'{active_role}'"
+                )
     return query
+
+
+def filter_model_for_role(model_value, role: str | None) -> dict[str, Any]:
+    """Return a public copy of ``model_value`` filtered for ``role``."""
+    validated = public_model(validate_model(model_value))
+    if role is None or not str(role).strip():
+        return validated
+    active_role = identifier(role, 'role')
+    filtered = copy.deepcopy(validated)
+    visible_dims = [
+        d for d in filtered.get('dimensions', [])
+        if not d.get('visible_roles') or active_role in d['visible_roles']
+    ]
+    visible_dim_ids = {d['id'] for d in visible_dims}
+    visible_hier_ids = {
+        h['id']
+        for d in visible_dims
+        for h in d.get('hierarchies', [])
+    }
+    filtered['dimensions'] = visible_dims
+
+    raw_measures = {m['id']: m for m in filtered.get('measures', [])}
+
+    def _measure_visible(mid: str, stack: frozenset[str] = frozenset()) -> bool:
+        if mid in stack or mid not in raw_measures:
+            return False
+        m_obj = raw_measures[mid]
+        if (
+            m_obj.get('visible_roles')
+            and active_role not in m_obj['visible_roles']
+        ):
+            return False
+        return all(
+            _measure_visible(dep, stack | frozenset({mid}))
+            for dep in _expression_references(m_obj.get('expression'))
+        )
+
+    visible_measures = [
+        m for m in filtered.get('measures', [])
+        if _measure_visible(m['id'])
+    ]
+    visible_measure_ids = {m['id'] for m in visible_measures}
+    filtered['measures'] = visible_measures
+
+    if 'measure_groups' in filtered:
+        for grp in filtered['measure_groups']:
+            grp['measures'] = [
+                mid for mid in grp.get('measures', [])
+                if mid in visible_measure_ids
+            ]
+            grp['dimension_usage'] = [
+                u for u in grp.get('dimension_usage', [])
+                if u.get('dimension_id') in visible_dim_ids
+            ]
+
+    if 'perspectives' in filtered:
+        kept_perspectives = []
+        for persp in filtered['perspectives']:
+            if (
+                persp.get('visible_roles')
+                and active_role not in persp['visible_roles']
+            ):
+                continue
+            persp['dimensions'] = [
+                did for did in persp.get('dimensions', [])
+                if did in visible_dim_ids
+            ]
+            persp['measures'] = [
+                mid for mid in persp.get('measures', [])
+                if mid in visible_measure_ids
+            ]
+            persp['hierarchies'] = [
+                hid for hid in persp.get('hierarchies', [])
+                if hid in visible_hier_ids
+            ]
+            if (
+                persp.get('default_measure')
+                and persp['default_measure'] not in visible_measure_ids
+            ):
+                persp.pop('default_measure', None)
+            if persp['measures'] or persp.get('measure_groups'):
+                kept_perspectives.append(persp)
+        filtered['perspectives'] = kept_perspectives
+    return filtered
 
 
 def public_model(model):

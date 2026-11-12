@@ -148,6 +148,7 @@ export default function rcdockOverride(theme) {
         // tab bar's overflow menu.
         flexShrink: 0,
         maxWidth: '24rem',
+        overflow: 'hidden',
         height: 'auto',
         borderBottom: 'none',
         marginRight: 0,
@@ -165,6 +166,9 @@ export default function rcdockOverride(theme) {
         },
         '& > div': {
           padding: '4px 8px',
+          minWidth: 0,
+          maxWidth: '100%',
+          overflow: 'hidden',
           minHeight: 'var(--cde-target-size, 24px)',
           '&:focus': {
             outline: '1px solid '+theme.otherVars.activeBorder,
@@ -173,9 +177,21 @@ export default function rcdockOverride(theme) {
         },
         '& .drag-initiator': {
           display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          maxWidth: '100%',
+          overflow: 'hidden',
+          '& > span:not(.dock-tab-icon)': {
+            flex: '1 1 auto',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
           '& .dock-tab-close-btn': {
             color: theme.palette.text.primary,
             position: 'unset',
+            flexShrink: 0,
             marginLeft: '8px',
             fontSize: '18px',
             transition: 'none',

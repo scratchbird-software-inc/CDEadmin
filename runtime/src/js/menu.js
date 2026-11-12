@@ -187,6 +187,7 @@ function buildAndSetMenus(menus, cdeadminMainScreen, configStore, callbacks={}) 
     Menu.setApplicationMenu(mainMenu);
   } else {
     cdeadminMainScreen.setMenu(mainMenu);
+    cdeadminMainScreen.setMenuBarVisibility(false);
   }
 }
 

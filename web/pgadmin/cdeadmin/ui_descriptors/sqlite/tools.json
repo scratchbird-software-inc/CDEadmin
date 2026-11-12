@@ -219,6 +219,109 @@
       "enabled_when": [
         "verified"
       ]
+    },
+    {
+      "command_id": "database.{engine_id}.design_erd",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Design from this database...",
+      "description": "Import this database schema into a Draft four-level ERD & Data Model.",
+      "handler": "open_tool",
+      "icon": "tool.erd",
+      "group": "database",
+      "priority": 74,
+      "arguments": {
+        "activity": "activity.erd-models",
+        "design_shortcut": "erd_from_database"
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_cube",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New cube from this table...",
+      "description": "Seed a Draft dimensional cube using this table as its fact source.",
+      "handler": "open_tool",
+      "icon": "tool.cube",
+      "group": "object",
+      "priority": 61,
+      "arguments": {
+        "activity": "activity.cubes",
+        "design_shortcut": "cube_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_bi_question",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New BI question from this table...",
+      "description": "Seed a Draft BI question structured query targeting this table.",
+      "handler": "open_tool",
+      "icon": "tool.bi",
+      "group": "object",
+      "priority": 62,
+      "arguments": {
+        "activity": "activity.bi-designs",
+        "design_shortcut": "bi_question_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_screen_mesh",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New screen mesh from this table...",
+      "description": "Seed a Draft wireframe screen mesh with controls bound to this table.",
+      "handler": "open_tool",
+      "icon": "tool.screen-mesh",
+      "group": "object",
+      "priority": 63,
+      "arguments": {
+        "activity": "activity.screen-meshes",
+        "design_shortcut": "screen_mesh_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.where_used_designs",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Where used in designs...",
+      "description": "Inspect ERD models, cubes, BI questions/dashboards and screen meshes bound to this table.",
+      "handler": "open_tool",
+      "icon": "action.view",
+      "group": "object",
+      "priority": 64,
+      "arguments": {
+        "activity": "activity.erd-models",
+        "design_shortcut": "where_used"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
     }
   ]
 }

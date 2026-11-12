@@ -13,7 +13,7 @@ import usePreferences from '../../../preferences/static/js/store';
 import {menuStructureRegistry} from
   '../../../static/js/cdeadmin_ui/commands/MenuStructure';
 import {
-  commandCustomizations, executeMenuCommand, resolveMenuCommand,
+  commandCustomizations, executeMenuCommand, legacyCommandId, resolveMenuCommand,
 } from './CommandMenuAdapter';
 import {commandRegistry} from
   '../../../static/js/cdeadmin_ui/commands/CommandRegistry';
@@ -84,8 +84,21 @@ export default class MainMenuFactory {
     const cache = Object.assign({}, ...aliases.map((surface) =>
       pgAdmin.Browser.all_menus_cache?.[surface] ?? {}
     ));
+    const cachedCommandIds = new Set();
+    const collectCachedIds = (group) => {
+      Object.values(group || {}).forEach((entry) => {
+        if(!entry || typeof entry !== 'object') return;
+        if('name' in entry) {
+          cachedCommandIds.add(legacyCommandId(entry));
+        } else {
+          collectCachedIds(entry);
+        }
+      });
+    };
+    collectCachedIds(cache);
     const customizations = commandCustomizations();
     const registered = commandRegistry.list().filter((command) => {
+      if(cachedCommandIds.has(command.id)) return false;
       const requestedSurface = customizations[command.id]?.surface;
       return requestedSurface ? requestedSurface === name :
         command.surfaces.includes(name);

@@ -249,7 +249,7 @@ basicSettings = createTheme(basicSettings, {
         inputMultiline: {
           padding: basicSettings.spacing(0.75, 1.5),
           resize: 'vertical',
-          height: '100%',
+          height: 'auto',
           boxSizing: 'border-box',
         },
         adornedStart: {
@@ -278,7 +278,7 @@ basicSettings = createTheme(basicSettings, {
         inputMultiline: {
           padding: basicSettings.spacing(0.75, 1.5),
           resize: 'vertical',
-          height: '100%',
+          height: 'auto',
           boxSizing: 'border-box',
         },
         adornedStart: {
@@ -640,18 +640,36 @@ function getFinalTheme(baseTheme, presentation) {
           }
         }
       },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            '.MuiTextField-root > &[data-shrink="true"]': {
+              position: 'relative',
+              transform: 'none',
+              maxWidth: '100%',
+              marginBottom: '0.25rem',
+              lineHeight: 1.35,
+            },
+          },
+        },
+      },
       MuiInputBase: {
         styleOverrides: {
           root: {
             backgroundColor: baseTheme.palette.background.default,
             textOverflow: 'ellipsis',
+            '&.MuiInputBase-multiline': {
+              height: 'auto',
+              minHeight: `${presentation.controlHeight}px`,
+              alignItems: 'flex-start',
+            },
             '&.Mui-disabled': {
               backgroundColor: baseTheme.otherVars.inputDisabledBg,
             },
           },
           inputMultiline: {
             fontSize: '1rem',
-            height: 'unset',
+            height: 'auto',
             backgroundColor: baseTheme.palette.background.default,
             '&[readonly], &.Mui-disabled': {
               color: baseTheme.palette.text.muted,
@@ -672,10 +690,21 @@ function getFinalTheme(baseTheme, presentation) {
             }
           },
           sizeSmall: {
-            height: `${presentation.controlHeight}px`,
+            '&:not(.MuiInputBase-multiline)': {
+              height: `${presentation.controlHeight}px`,
+            },
+            '&.MuiInputBase-multiline': {
+              height: 'auto',
+              minHeight: `${presentation.controlHeight}px`,
+            },
           },
           inputSizeSmall: {
-            height: `calc(${presentation.controlHeight}px - 12px)`,
+            '&:not(.MuiInputBase-inputMultiline)': {
+              height: `calc(${presentation.controlHeight}px - 12px)`,
+            },
+            '&.MuiInputBase-inputMultiline': {
+              height: 'auto',
+            },
           },
         }
       },

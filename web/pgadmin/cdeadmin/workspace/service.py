@@ -4285,10 +4285,12 @@ def init_app(
     from .transfer import init_app as init_transfer_app
     from .assets import init_app as init_project_assets
     from .monitoring_host import init_app as init_monitoring
+    from .shell_authority import init_app as init_shell_authority
 
     init_transfer_app(app)
     init_project_assets(app)
     init_monitoring(app, endpoint_service)
+    init_shell_authority(app)
     existing = app.extensions.get(APP_EXTENSION_KEY)
     if existing is not None:
         return existing

@@ -17,6 +17,7 @@ import AccountCircleRoundedIcon from '@mui/icons-material/AccountCircleRounded';
 import { usePgAdmin } from '../../static/js/PgAdminProvider';
 import { useForceUpdate } from './custom_hooks';
 import {Icon, inferActionIconKey} from 'sources/cdeadmin_ui/icons';
+import {ProjectTopMenuBar, useProjectShell} from 'sources/cdeadmin_ui/shell';
 
 
 // Text, icons and logo follow the menu text size and height settings
@@ -158,8 +159,7 @@ MenuCommandLabel.propTypes = {
 };
 
 
-export default function AppMenuBar() {
-
+function LegacyAppMenuBar() {
   const forceUpdate = useForceUpdate();
   const pgAdmin = usePgAdmin();
   const menuRef = useRef(null);
@@ -245,4 +245,12 @@ export default function AppMenuBar() {
       <AppUserMenu />
     </StyledBox>
   );
+}
+
+export default function AppMenuBar() {
+  const projectShell = useProjectShell();
+  if (projectShell) {
+    return <ProjectTopMenuBar />;
+  }
+  return <LegacyAppMenuBar />;
 }

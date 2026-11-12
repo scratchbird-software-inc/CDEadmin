@@ -13,8 +13,7 @@
     background: #EFF4FC;
 
     .WelcomeDashboard-card {
-        background: none;
-        border: none;
+        border-radius: var(--sr-island-radius, 12px);
     }
 
     .WelcomeDashboard-cardHeader {
@@ -26,17 +25,12 @@
     }
 
     .WelcomeDashboard-launchTile {
-        border: none !important;
-        border-radius: 20px;
+        border-radius: var(--sr-island-radius, 12px);
         color: #326690 !important;
         box-shadow: 4px 4px 20px -15px;
 
         svg {
             color: #326690;
-        }
-
-        &:hover:not(:disabled) {
-            border: none !important;
         }
     }
 }

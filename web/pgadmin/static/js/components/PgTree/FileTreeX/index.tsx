@@ -25,8 +25,28 @@ import { IFileTreeXHandle, IFileTreeXProps, FileTreeXEvent, IFileTreeXTriggerEve
 import { KeyboardHotkeys } from '../services/keyboardHotkeys';
 import { TreeModelX } from '../TreeModelX';
 import {AutoSizer} from 'react-virtualized-auto-sizer';
+import { ensureScratchBaseStyles } from 'sources/cdeadmin_ui/base/ScratchBaseStyles';
+import { readBranchedTreePreferences } from 'sources/cdeadmin_ui/navigation/ScratchBranchedTree';
 
-export class FileTreeX extends React.Component<IFileTreeXProps> {
+interface IFileTreeXState {
+  branchPrefs: {
+    stepX: number;
+    radius: number;
+    stickyAncestors: boolean;
+  };
+}
+
+function collectActiveAncestors(activeFile: any, root: any): any[] {
+  const chain: any[] = [];
+  let cursor = activeFile?.parent;
+  while (cursor && cursor !== root && (cursor.depth ?? 0) > 0) {
+    chain.unshift(cursor);
+    cursor = cursor.parent;
+  }
+  return chain;
+}
+
+export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState> {
   private fileTreeHandle: IFileTreeXHandle;
   private readonly activeFileDec: Decoration;
   private readonly pseudoActiveFileDec: Decoration;
@@ -39,17 +59,28 @@ export class FileTreeX extends React.Component<IFileTreeXProps> {
   private fileTreeEvent: IFileTreeXTriggerEvents;
   private readonly hoverTimeoutId: React.RefObject<number|null> = React.createRef<number|null>();
   private readonly hoverDispatchId: React.RefObject<number|null> = React.createRef<number|null>();
+  private readonly handleBranchPrefsChanged = () => {
+    this.setState({ branchPrefs: readBranchedTreePreferences() });
+  };
   constructor(props: IFileTreeXProps) {
     super(props);
     this.events = new Notificar();
     this.disposables = new DisposablesComposite();
     this.activeFileDec = new Decoration('active');
     this.pseudoActiveFileDec = new Decoration('pseudo-active');
+    this.state = {
+      branchPrefs: readBranchedTreePreferences(),
+    };
   }
 
   render() {
+    ensureScratchBaseStyles();
     const { height, model, disableCache } = this.props;
     const { decorations } = model;
+    const { branchPrefs } = this.state;
+    const stickyAncestors = branchPrefs.stickyAncestors && this.activeFile && ((this.activeFile as any).depth ?? 0) >= 3
+      ? collectActiveAncestors(this.activeFile, model?.root)
+      : [];
 
     return <div
       onKeyDown={this.handleKeyDown}
@@ -68,40 +99,77 @@ export class FileTreeX extends React.Component<IFileTreeXProps> {
         flex: 1
       }}
       tabIndex={-1}>
-      <AutoSizer onResize={this.onResize}
-        renderProp={({ width = 100, height = 100 }) => (
-          <FileTree
-            height={height}
-            width={width}
-            model={model}
-            itemHeight={this.props.itemHeight || FileTreeItem.renderHeight}
-            onReady={this.handleTreeReady}
-            disableCache={disableCache || false}
-          >
-            {(props: IItemRendererProps) => <FileTreeItem
-              item={props.item}
-              itemType={props.itemType}
-              decorations={decorations.getDecorations(props.item as FileEntry|Directory)}
-              onClick={this.handleItemClicked}
-              onDoubleClick={this.handleItemDoubleClicked}
-              onContextMenu={this.handleItemCtxMenu}
-              onMouseEnter={this.onItemMouseEnter}
-              onMouseLeave={this.onItemMouseLeave}
-              changeDirectoryCount={this.changeDirectoryCount}
-              events={this.events}/>}
-          </FileTree>
-        )}
-      />
+      {stickyAncestors.length > 0 && (
+        <div
+          className="sr-branched-sticky-ancestors"
+          data-cdeadmin-qa-key="pgtree-sticky-ancestors"
+          aria-label="Active catalog branch ancestors"
+        >
+          {stickyAncestors.map((anc, idx) => {
+            const ancLabel = anc?.getMetadata?.('data')?.label || anc?.fileName || '';
+            return (
+              <React.Fragment key={anc?.id || idx}>
+                {idx > 0 && <span aria-hidden="true" style={{opacity: 0.5}}>›</span>}
+                <button
+                  type="button"
+                  className="sr-branched-sticky-crumb"
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    this.setActiveFile(anc, true, 'auto');
+                  }}
+                >
+                  {ancLabel}
+                </button>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
+      <div style={{flex: 1, minHeight: 0, width: '100%'}}>
+        <AutoSizer onResize={this.onResize}
+          renderProp={({ width = 100, height = 100 }) => (
+            <FileTree
+              height={height}
+              width={width}
+              model={model}
+              itemHeight={this.props.itemHeight || FileTreeItem.renderHeight}
+              onReady={this.handleTreeReady}
+              disableCache={disableCache || false}
+            >
+              {(props: IItemRendererProps) => <FileTreeItem
+                item={props.item}
+                itemType={props.itemType}
+                decorations={decorations.getDecorations(props.item as FileEntry|Directory)}
+                activeItem={this.activeFile}
+                branchStepX={branchPrefs.stepX}
+                branchRadius={branchPrefs.radius}
+                onClick={this.handleItemClicked}
+                onDoubleClick={this.handleItemDoubleClicked}
+                onContextMenu={this.handleItemCtxMenu}
+                onMouseEnter={this.onItemMouseEnter}
+                onMouseLeave={this.onItemMouseLeave}
+                changeDirectoryCount={this.changeDirectoryCount}
+                events={this.events}/>}
+            </FileTree>
+          )}
+        />
+      </div>
     </div>;
   }
 
   public componentDidMount() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('scratchrobin:branched-tree-prefs', this.handleBranchPrefsChanged);
+    }
     for(const child of this.props.model.root.children) {
       this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'loaded', child);
     }
   }
 
   componentWillUnmount() {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scratchrobin:branched-tree-prefs', this.handleBranchPrefsChanged);
+    }
     const { model } = this.props;
     model.decorations.removeDecoration(this.activeFileDec);
     model.decorations.removeDecoration(this.pseudoActiveFileDec);
@@ -212,6 +280,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps> {
         this.activeFileDec.addTarget(fileH as Directory, TargetMatchMode.Self);
       }
       this.activeFile = fileH;
+      this.forceUpdate();
       this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'selected', fileH);
 
       if (fileH && ensureVisible === true) {
@@ -240,6 +309,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps> {
     if (this.activeFile === fileH) {
       this.activeFileDec.removeTarget(this.activeFile);
       this.activeFile = null;
+      this.forceUpdate();
     }
 
     this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'deselected', fileH);

@@ -7,25 +7,27 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert} from '@mui/material';
-import {Box} from '../../primitives/Layout';
+import {Box, Stack} from '../../primitives/Layout';
+import {Badge, Banner} from '../../feedback/Indicators';
 import {Icon} from '../../icons';
 import {ProjectAssetClient} from '../../projects/ProjectAssetClient';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Button} from '../../primitives/Button';
-import {TextArea, TextField} from '../../primitives/Field';
+import {TextField} from '../../primitives/Field';
 import {Select} from '../../primitives/Choice';
 import {TreeRow} from '../../navigation/AdvancedNavigation';
 import {Dialog} from '../../overlays/Dialog';
 import {EmptyState} from '../../feedback/EmptyState';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
+import CodeEditor from '../../editors/CodeEditor';
 import FormReference from '../../navigation/FormReference';
 import {DesignStoreClient} from './sharedDesignLibrary';
 
 export const BI_DESIGN_CREATE_EVENT = 'cdeadmin:bi-design-create';
 export const BI_DESIGN_OPEN_EVENT = 'cdeadmin:bi-design-open';
+export const DESIGN_SHORTCUT_EVENT = 'cdeadmin:design-shortcut';
 const NEW_PROJECT = '\u0000new-project';
 const WRITABLE = new Set(['owner', 'manager', 'editor']);
 let pendingCreate = false;
@@ -39,6 +41,20 @@ function takePendingCreate() {
   const pending = pendingCreate;
   pendingCreate = false;
   return pending;
+}
+
+function takeWindowPendingShortcut() {
+  if (typeof window === 'undefined') return null;
+  const pending = window.__cdeadminPendingDesignShortcut || null;
+  if (
+    pending &&
+    (pending.design_shortcut === 'bi_question_from_sql' ||
+      pending.design_shortcut === 'bi_question_from_table')
+  ) {
+    window.__cdeadminPendingDesignShortcut = null;
+    return pending;
+  }
+  return null;
 }
 
 export function openBIDesign(projectId, design) {
@@ -63,6 +79,45 @@ function slugKey(name, fallback = 'bi') {
       .replace(/^-+|-+$/g, '')
       .slice(0, 64) || fallback
   );
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function readUploadedFileBytes(file) {
+  if (typeof file.arrayBuffer === 'function') {
+    const buf = await file.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(new Error('Failed to read selected file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseTableShortcut(detail) {
+  if (Array.isArray(detail?.relation) && detail.relation.length > 0) {
+    return detail.relation.map(String);
+  }
+  if (detail?.table) {
+    return detail.schema
+      ? [String(detail.schema), String(detail.table)]
+      : ['main', String(detail.table)];
+  }
+  const resId = String(detail?.resource_id || detail?.resourceId || '');
+  if (resId.startsWith('table:')) {
+    const parts = resId.slice(6).split(':').filter(Boolean);
+    if (parts.length >= 2) return parts.slice(-2);
+    if (parts.length === 1) return ['main', parts[0]];
+  }
+  return ['main', 'orders'];
 }
 
 export function BIDesignsNavigator({
@@ -91,10 +146,16 @@ export function BIDesignsNavigator({
     projectId: 'analytics',
     projectName: 'Analytics BI',
     endpointId: 'default-endpoint',
-    bundleJsonOrBase64: '',
+    fileName: '',
+    parsedBundle: null,
+    archiveBase64: '',
+    sqlText: '',
+    prefillRelation: null,
   });
   const [createError, setCreateError] = useState('');
   const [saving, setSaving] = useState(false);
+  const sqlTextRef = useRef('');
+  sqlTextRef.current = draft.sqlText;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -124,7 +185,67 @@ export function BIDesignsNavigator({
     }
   }, [designClient, projectClient]);
 
-  const writable = groups.filter(({project}) => WRITABLE.has(project.access));
+  const writable = useMemo(
+    () => groups.filter(({project}) => WRITABLE.has(project.access)),
+    [groups]
+  );
+  const firstWritableProjectId = writable[0]?.project.project_id || '';
+
+  const applyShortcut = useCallback(
+    (detail, fallbackProject) => {
+      if (!detail) return false;
+      const shortcut = detail.design_shortcut;
+      if (shortcut === 'bi_question_from_sql') {
+        setCreateError('');
+        setDraft((cur) => ({
+          ...cur,
+          mode: 'from_sql',
+          title: String(detail.title || 'SQL Question'),
+          sqlText: String(detail.sql || 'SELECT 1 AS value'),
+          endpointId: String(detail.endpointId || cur.endpointId || 'default-endpoint'),
+          prefillRelation: null,
+          fileName: '',
+          parsedBundle: null,
+          archiveBase64: '',
+          project:
+            cur.project ||
+            fallbackProject ||
+            firstWritableProjectId ||
+            NEW_PROJECT,
+        }));
+        setOpen(true);
+        return true;
+      }
+      if (shortcut === 'bi_question_from_table') {
+        const rel = parseTableShortcut(detail);
+        const tblName = rel[rel.length - 1] || 'table';
+        setCreateError('');
+        setDraft((cur) => ({
+          ...cur,
+          mode: 'new_question',
+          title: String(detail.title || `${tblName} Summary`),
+          prefillRelation: rel,
+          sqlText: '',
+          endpointId: String(detail.endpointId || cur.endpointId || 'default-endpoint'),
+          fileName: '',
+          parsedBundle: null,
+          archiveBase64: '',
+          project:
+            cur.project ||
+            fallbackProject ||
+            firstWritableProjectId ||
+            NEW_PROJECT,
+        }));
+        setOpen(true);
+        return true;
+      }
+      return false;
+    },
+    [firstWritableProjectId]
+  );
+
+  const applyShortcutRef = useRef(applyShortcut);
+  applyShortcutRef.current = applyShortcut;
 
   const beginCreate = useCallback(() => {
     setCreateError('');
@@ -132,21 +253,31 @@ export function BIDesignsNavigator({
       ...cur,
       mode: 'new_question',
       title: '',
-      bundleJsonOrBase64: '',
-      project: cur.project || writable[0]?.project.project_id || NEW_PROJECT,
+      fileName: '',
+      parsedBundle: null,
+      archiveBase64: '',
+      sqlText: '',
+      prefillRelation: null,
+      project: cur.project || firstWritableProjectId || NEW_PROJECT,
     }));
     setOpen(true);
-  }, [writable]);
+  }, [firstWritableProjectId]);
 
   useEffect(() => {
     refresh().then((loaded) => {
+      const first = loaded.find(({project}) => WRITABLE.has(project.access));
+      const defaultProj = first?.project.project_id || NEW_PROJECT;
+      const pendingShortcut = takeWindowPendingShortcut();
+      if (pendingShortcut) {
+        applyShortcutRef.current(pendingShortcut, defaultProj);
+        return;
+      }
       if (takePendingCreate()) {
-        const first = loaded.find(({project}) => WRITABLE.has(project.access));
         setDraft((cur) => ({
           ...cur,
           mode: 'new_question',
           title: '',
-          project: first?.project.project_id || NEW_PROJECT,
+          project: defaultProj,
         }));
         setOpen(true);
       }
@@ -161,6 +292,55 @@ export function BIDesignsNavigator({
     window.addEventListener(BI_DESIGN_CREATE_EVENT, listener);
     return () => window.removeEventListener(BI_DESIGN_CREATE_EVENT, listener);
   }, [beginCreate]);
+
+  useEffect(() => {
+    const onShortcut = (event) => {
+      const detail = event?.detail;
+      if (applyShortcut(detail)) {
+        takeWindowPendingShortcut();
+      }
+    };
+    window.addEventListener(DESIGN_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(DESIGN_SHORTCUT_EVENT, onShortcut);
+  }, [applyShortcut]);
+
+  const handleBundleFileSelect = async (event) => {
+    const file = event.target.files?.[0];
+    setCreateError('');
+    if (!file) {
+      setDraft((cur) => ({
+        ...cur,
+        fileName: '',
+        parsedBundle: null,
+        archiveBase64: '',
+      }));
+      return;
+    }
+    try {
+      const bytes = await readUploadedFileBytes(file);
+      const lowerName = String(file.name || '').toLowerCase();
+      if (lowerName.endsWith('.json')) {
+        const text = new TextDecoder('utf-8').decode(bytes);
+        const parsed = JSON.parse(text);
+        setDraft((cur) => ({
+          ...cur,
+          fileName: file.name,
+          parsedBundle: parsed,
+          archiveBase64: '',
+        }));
+      } else {
+        const encoded = bytesToBase64(bytes);
+        setDraft((cur) => ({
+          ...cur,
+          fileName: file.name,
+          parsedBundle: null,
+          archiveBase64: encoded,
+        }));
+      }
+    } catch (fileErr) {
+      setCreateError(fileErr.message || 'Unable to parse selected bundle file.');
+    }
+  };
 
   const create = async () => {
     setSaving(true);
@@ -180,10 +360,8 @@ export function BIDesignsNavigator({
       }
 
       if (draft.mode === 'import_legacy_bi') {
-        const rawText = draft.bundleJsonOrBase64.trim();
-        const parsedBundle = rawText ? JSON.parse(rawText) : null;
         const imported = await designClient.importBiLegacy(projectId, {
-          bundle: parsedBundle,
+          bundle: draft.parsedBundle || null,
           endpointId: draft.endpointId.trim() || 'default-endpoint',
         });
         setImportSummary(imported.loss_report || null);
@@ -198,29 +376,21 @@ export function BIDesignsNavigator({
       }
 
       if (draft.mode === 'import_superset' || draft.mode === 'import_metabase') {
-        const rawText = draft.bundleJsonOrBase64.trim();
-        if (!rawText) {
+        if (!draft.parsedBundle && !draft.archiveBase64) {
           throw new Error(
-            'Provide a JSON bundle or base64-encoded export archive.'
+            'Select a .zip or .json export bundle file to import.'
           );
-        }
-        let parsedBundle = null;
-        let encodedArchive = null;
-        if (rawText.startsWith('{')) {
-          parsedBundle = JSON.parse(rawText);
-        } else {
-          encodedArchive = rawText;
         }
         const imported =
           draft.mode === 'import_superset'
             ? await designClient.importBiSuperset(projectId, {
-              bundle: parsedBundle,
-              zipBase64: encodedArchive,
+              bundle: draft.parsedBundle,
+              zipBase64: draft.archiveBase64 || null,
               endpointId: draft.endpointId.trim() || 'default-endpoint',
             })
             : await designClient.importBiMetabase(projectId, {
-              bundle: parsedBundle,
-              bundleBase64: encodedArchive,
+              bundle: draft.parsedBundle,
+              bundleBase64: draft.archiveBase64 || null,
               endpointId: draft.endpointId.trim() || 'default-endpoint',
             });
         setImportSummary(imported.loss_report || null);
@@ -239,6 +409,67 @@ export function BIDesignsNavigator({
         throw new Error('A BI question or dashboard needs a title.');
       }
       const key = `${slugKey(trimmedTitle)}-${Date.now().toString(36)}`;
+
+      if (draft.mode === 'from_sql') {
+        const sqlClean = String(draft.sqlText || '').trim();
+        if (!sqlClean) {
+          throw new Error('Provide a read-only SELECT statement to import.');
+        }
+        const endpoint = draft.endpointId.trim() || 'default-endpoint';
+        let questionPayload = {
+          name: trimmedTitle,
+          endpoint_id: endpoint,
+          query: {kind: 'sql', sql: sqlClean},
+          visualization: {type: 'bar'},
+        };
+        if (typeof designClient.biSqlBridge === 'function') {
+          const converted = await designClient.biSqlBridge(projectId, {
+            action: 'from_sql',
+            sql: sqlClean,
+            name: trimmedTitle,
+            endpoint_id: endpoint,
+          });
+          if (converted?.question) {
+            questionPayload = converted.question;
+          }
+          setImportSummary({
+            source_format: `SQL (${converted?.fidelity || 'exact'})`,
+            loss_count: (converted?.loss || []).length,
+          });
+        }
+        const created = await designClient.createBiQuestion(projectId, {
+          key,
+          title: trimmedTitle,
+          endpointId: endpoint,
+          question: questionPayload,
+        });
+        await refresh();
+        setOpen(false);
+        onOpenDesign(projectId, created);
+        return;
+      }
+
+      let prefilledQuestion = undefined;
+      if (draft.mode === 'new_question' && Array.isArray(draft.prefillRelation)) {
+        const alias = String(
+          draft.prefillRelation[draft.prefillRelation.length - 1] || 'tbl'
+        ).replace(/[^A-Za-z0-9_]+/g, '_') || 'tbl';
+        prefilledQuestion = {
+          name: trimmedTitle,
+          endpoint_id: draft.endpointId.trim() || 'default-endpoint',
+          query: {
+            kind: 'sbsql',
+            sbsql: {
+              from: {relation: draft.prefillRelation, alias},
+              columns: [],
+              measures: [{function: 'count', column: null, alias: 'row_count'}],
+              limit: 100,
+            },
+          },
+          visualization: {type: 'bar'},
+        };
+      }
+
       const created =
         draft.mode === 'new_dashboard'
           ? await designClient.createBiDashboard(projectId, {
@@ -249,6 +480,7 @@ export function BIDesignsNavigator({
             key,
             title: trimmedTitle,
             endpointId: draft.endpointId.trim() || 'default-endpoint',
+            question: prefilledQuestion,
           });
 
       await refresh();
@@ -262,6 +494,11 @@ export function BIDesignsNavigator({
   };
 
   const total = groups.reduce((count, g) => count + g.items.length, 0);
+  const isImportMode =
+    draft.mode === 'import_superset' ||
+    draft.mode === 'import_metabase' ||
+    draft.mode === 'import_legacy_bi' ||
+    draft.mode === 'from_sql';
 
   return (
     <Box
@@ -280,10 +517,12 @@ export function BIDesignsNavigator({
         <Button onClick={refresh}>Refresh</Button>
       </Toolbar>
       {importSummary && (
-        <Alert severity="info" sx={{m: 1}}>
-          Imported {importSummary.source_format} into Draft DDN (loss items:{' '}
-          {importSummary.loss_count || 0}).
-        </Alert>
+        <Box sx={{p: 1}}>
+          <Banner status="info" onClose={() => setImportSummary(null)}>
+            Imported {importSummary.source_format} into Draft DDN (loss items:{' '}
+            {importSummary.loss_count || 0}).
+          </Banner>
+        </Box>
       )}
       <Box
         role="tree"
@@ -353,12 +592,14 @@ export function BIDesignsNavigator({
         }
       >
         <FormReference formKey="bi-design-create" />
-        <Box sx={{display: 'grid', gap: 2}}>
+        {isImportMode && <FormReference formKey="bi-designer-import" />}
+        <Stack gap="standard">
           <Select
             label="Mode"
             value={draft.mode}
             options={[
               {value: 'new_question', label: 'New BI question'},
+              {value: 'from_sql', label: 'New BI question from SQL'},
               {value: 'new_dashboard', label: 'New BI dashboard'},
               {
                 value: 'import_superset',
@@ -374,9 +615,19 @@ export function BIDesignsNavigator({
                   'Migrate Legacy ScratchRobin BI (JSON / Store -> Draft DDN)',
               },
             ]}
-            onChange={(val) => setDraft((cur) => ({...cur, mode: val}))}
+            onChange={(val) =>
+              setDraft((cur) => ({
+                ...cur,
+                mode: val,
+                fileName: '',
+                parsedBundle: null,
+                archiveBase64: '',
+              }))
+            }
           />
-          {draft.mode === 'new_question' || draft.mode === 'new_dashboard' ? (
+          {(draft.mode === 'new_question' ||
+            draft.mode === 'new_dashboard' ||
+            draft.mode === 'from_sql') && (
             <TextField
               autoFocus
               required
@@ -386,23 +637,53 @@ export function BIDesignsNavigator({
                 setDraft((cur) => ({...cur, title: e.target.value}))
               }
             />
-          ) : (
-            <TextArea
-              autoFocus
-              required={draft.mode !== 'import_legacy_bi'}
-              label={
-                draft.mode === 'import_legacy_bi'
-                  ? 'Optional Legacy BI JSON Bundle (leave empty to read live store)'
-                  : 'Bundle JSON or Base64 Archive'
-              }
-              value={draft.bundleJsonOrBase64}
-              onChange={(e) =>
-                setDraft((cur) => ({
-                  ...cur,
-                  bundleJsonOrBase64: e.target.value,
-                }))
-              }
+          )}
+          {draft.mode === 'new_question' && draft.prefillRelation && (
+            <Badge
+              status="info"
+              label={`Source table: ${draft.prefillRelation.join('.')}`}
             />
+          )}
+          {draft.mode === 'from_sql' && (
+            <Box sx={{height: 160}}>
+              <CodeEditor
+                label="Source SQL"
+                language="sql"
+                value={draft.sqlText}
+                onChange={(val) => {
+                  const next =
+                    typeof val === 'string' ? val : val?.target?.value ?? '';
+                  if (next === sqlTextRef.current) return;
+                  sqlTextRef.current = next;
+                  setDraft((cur) => ({...cur, sqlText: next}));
+                }}
+              />
+            </Box>
+          )}
+          {(draft.mode === 'import_superset' ||
+            draft.mode === 'import_metabase' ||
+            draft.mode === 'import_legacy_bi') && (
+            <Stack gap="compact">
+              <Box
+                component="label"
+                sx={{fontSize: '0.8125rem', fontWeight: 600}}
+              >
+                {draft.mode === 'import_legacy_bi'
+                  ? 'Optional Legacy BI JSON File (leave empty to read live store)'
+                  : 'Select Export Bundle (.zip or .json)'}
+                <Box sx={{mt: 0.5}}>
+                  <input
+                    type="file"
+                    aria-label="Import bundle file"
+                    accept=".zip,.json,.yaml,.yml,.tar.gz,.tgz"
+                    onChange={handleBundleFileSelect}
+                  />
+                </Box>
+              </Box>
+              {draft.fileName && (
+                <Badge status="success" label={`Selected: ${draft.fileName}`} />
+              )}
+            </Stack>
           )}
           {draft.mode !== 'new_dashboard' && (
             <TextField
@@ -444,7 +725,7 @@ export function BIDesignsNavigator({
               />
             </>
           )}
-        </Box>
+        </Stack>
       </Dialog>
     </Box>
   );

@@ -98,9 +98,28 @@ function showConnectorInformation(args, context) {
  * registry (cdeadmin_ui/platform/SurfaceRegistry). The descriptor names the
  * surface; the endpoint comes from the tree selection. No engine knowledge.
  */
-export function openRegisteredTool(surfaceId, endpoint, title) {
+export function openRegisteredTool(surfaceId, endpoint, title, args = {}) {
   const serverNode = pgAdmin.Browser.Nodes.server;
   const workbench = pgAdmin.Browser.CDEadminCommandContext?.();
+  if(args?.activity && args?.design_shortcut) {
+    if(!endpoint?.data || typeof workbench?.showActivity !== 'function') {
+      throw new Error(gettext('The workbench tool host is unavailable.'));
+    }
+    const endpointId = Number(endpoint.data._id ?? endpoint.data.id);
+    const label = endpoint.data.label || endpoint.data._label || '';
+    workbench.showActivity(args.activity);
+    if(typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('cdeadmin:design-shortcut', {
+        detail: {
+          ...args,
+          endpointId,
+          providerId: endpoint.data.cde_engine_id,
+          endpointLabel: label,
+        },
+      }));
+    }
+    return true;
+  }
   if(typeof surfaceId !== 'string' || !surfaceId) {
     throw new Error(gettext('The tool descriptor does not name a surface.'));
   }
@@ -217,7 +236,7 @@ function dispatch(action, args, context) {
       item: endpoint.item,
     });
   case 'open_tool':
-    return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''));
+    return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''), args);
   case 'add_to_diagram':
     // To Diagram: args.diagram is the submenu choice (see toDiagramEntry).
     return import('sources/cdeadmin_ui/integrations/ddn/toDiagramMenu')

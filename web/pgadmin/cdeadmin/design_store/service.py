@@ -489,6 +489,60 @@ class DesignStore:
             finally:
                 conn.close()
 
+    def delete_design(
+        self,
+        design_id: str,
+        *,
+        expected_head_version: int | None = None,
+    ) -> dict[str, Any]:
+        """Delete a design, its versions/elements/bindings, and orphan blobs."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    'SELECT * FROM design WHERE id = ?', (design_id,)
+                ).fetchone()
+                if row is None:
+                    raise DesignStoreNotFound(
+                        f'Design {design_id!r} not found'
+                    )
+                if expected_head_version is not None and (
+                    int(row['head_version']) != int(expected_head_version)
+                ):
+                    raise DesignStoreConflict(
+                        f'Head version mismatch for {design_id!r}: '
+                        f'expected {expected_head_version}, '
+                        f'actual {row["head_version"]}'
+                    )
+                blob_rows = []
+                if conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' "
+                    "AND name='design_asset'"
+                ).fetchone():
+                    blob_rows = [
+                        r['sha256']
+                        for r in conn.execute(
+                            'SELECT DISTINCT sha256 FROM design_asset '
+                            'WHERE design_id = ?',
+                            (design_id,),
+                        ).fetchall()
+                    ]
+                conn.execute('DELETE FROM design WHERE id = ?', (design_id,))
+                for sha in blob_rows:
+                    still_ref = conn.execute(
+                        'SELECT 1 FROM design_asset WHERE sha256 = ? LIMIT 1',
+                        (sha,),
+                    ).fetchone()
+                    if still_ref is None:
+                        conn.execute(
+                            'DELETE FROM asset_blob WHERE sha256 = ?',
+                            (sha,),
+                        )
+                conn.commit()
+                return {'deleted': True, 'id': design_id}
+            finally:
+                conn.close()
+
     def list_designs(
         self,
         *,

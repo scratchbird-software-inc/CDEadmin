@@ -44,6 +44,163 @@ import UnlinkIcon from '../../../assets/cdeadmin/commands/unlink01.svg?svgr';
 import UploadIcon from '../../../assets/cdeadmin/commands/upload01.svg?svgr';
 import ScratchRobinIcon from '../../../assets/cdeadmin/branding/scratchrobincde.svg?svgr';
 
+function UndoIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path d="M5 9.5H14.5C17.5376 9.5 20 11.9624 20 15C20 18.0376 17.5376 20.5 14.5 20.5H10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 5.5L4.5 9.5L8.5 13.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RedoIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path d="M19 9.5H9.5C6.46243 9.5 4 11.9624 4 15C4 18.0376 6.46243 20.5 9.5 20.5H14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15.5 5.5L19.5 9.5L15.5 13.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CutIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <line x1="20" y1="4" x2="8.12" y2="15.88" />
+      <line x1="14.47" y1="14.48" x2="20" y2="20" />
+      <line x1="8.12" y1="8.12" x2="12" y2="12" />
+    </svg>
+  );
+}
+
+function PasteIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+    </svg>
+  );
+}
+
+function SelectPointerIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M5 3l14 7.5-6.2 1.8L10 19 5 3z" />
+      <path d="M12.8 12.3L18 17.5" />
+    </svg>
+  );
+}
+
+function SelectMarqueeIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 3" aria-hidden="true" {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  );
+}
+
+function AlignIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="4" x2="4" y2="20" />
+      <rect x="8" y="6" width="12" height="4" rx="1" />
+      <rect x="8" y="14" width="8" height="4" rx="1" />
+    </svg>
+  );
+}
+
+function LayersIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 12 12 17 22 12" />
+      <polyline points="2 17 12 22 22 17" />
+    </svg>
+  );
+}
+
+function PaletteEntitiesIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <line x1="17.5" y1="14" x2="17.5" y2="21" />
+      <line x1="14" y1="17.5" x2="21" y2="17.5" />
+    </svg>
+  );
+}
+
+function PaletteUdtIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M4 7V4h16v3" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+    </svg>
+  );
+}
+
+function EndpointSourceIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <ellipse cx="10" cy="6" rx="6" ry="2.5" />
+      <path d="M4 6v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V6" />
+      <path d="M15 12h6m-2.5-2.5L21 12l-2.5 2.5" />
+    </svg>
+  );
+}
+
+function EndpointTargetIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M3 12h6m-2.5-2.5L9 12l-2.5 2.5" />
+      <ellipse cx="15" cy="6" rx="5.5" ry="2.5" />
+      <path d="M9.5 6v10c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V6" />
+    </svg>
+  );
+}
+
+function SendReviewIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+function QueryPauseIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </svg>
+  );
+}
+
+function FetchLimitsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <circle cx="9" cy="6" r="2" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <circle cx="15" cy="12" r="2" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+      <circle cx="11" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function InspectorDrawerIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+    </svg>
+  );
+}
+
 export const ICON_CATEGORIES = Object.freeze({
   ACTION: 'action',
   ENGINE: 'engine',
@@ -130,7 +287,6 @@ const OBJECT_CLASSES = Object.freeze({
   vector_collection: 'icon-coll-table',
   vector: 'icon-type',
   semantic_model: 'icon-erd',
-  cube: 'icon-table',
   measure: 'icon-statistics',
   hierarchy: 'icon-schema',
 });
@@ -138,36 +294,51 @@ const OBJECT_CLASSES = Object.freeze({
 const ACTION_COMPONENTS = Object.freeze({
   about: InformationCircleIcon,
   add: AddCircleIcon,
+  align: AlignIcon,
   alter: EditIcon,
   attach: LinkIcon,
   backup: DatabaseBackupIcon,
   cancel: CancelCircleIcon,
+  checkpoints: HistoryIcon,
   close: CancelCircleIcon,
   commit: SaveIcon,
   compare: GitCompareIcon,
+  compare_run: RefreshIcon,
   connect: ConnectIcon,
   copy: CopyIcon,
   create: AddCircleIcon,
   create_database: DatabaseAddIcon,
+  cut: CutIcon,
   delete: DeleteIcon,
   detach: UnlinkIcon,
   disconnect: UnlinkIcon,
   documentation: HelpCircleIcon,
   drop: DeleteIcon,
+  duplicate: CopyIcon,
   edit: EditIcon,
+  endpoint_source: EndpointSourceIcon,
+  endpoint_target: EndpointTargetIcon,
   execute: PlayCircleIcon,
   export: DownloadIcon,
+  fetch_limits: FetchLimitsIcon,
   filter: FilterIcon,
   float: ArrowAllDirectionIcon,
   help: HelpCircleIcon,
   import: UploadIcon,
+  inspector_drawer: InspectorDrawerIcon,
+  layers: LayersIcon,
   lock: LockIcon,
   move: ArrowAllDirectionIcon,
   new: FileAddIcon,
   open: EyeIcon,
+  palette_entities: PaletteEntitiesIcon,
+  palette_udt: PaletteUdtIcon,
+  paste: PasteIcon,
   print: PrinterIcon,
   properties: InformationCircleIcon,
+  query_pause: QueryPauseIcon,
   refresh: RefreshIcon,
+  redo: RedoIcon,
   rename: EditIcon,
   restore: DatabaseRestoreIcon,
   rollback: HistoryIcon,
@@ -176,10 +347,15 @@ const ACTION_COMPONENTS = Object.freeze({
   script: CodeIcon,
   search: SearchIcon,
   security: ShieldUserIcon,
+  select_marquee: SelectMarqueeIcon,
+  select_pointer: SelectPointerIcon,
+  send_review: SendReviewIcon,
   settings: SettingsIcon,
   sort: SortIcon,
+  sql_preview: CodeIcon,
   terminal: CommandLineIcon,
   transaction: TransactionIcon,
+  undo: UndoIcon,
   unlock: LockIcon,
   view: EyeIcon,
 });
@@ -219,6 +395,8 @@ const ACTION_INFERENCE = Object.freeze([
   ['edit', /\b(?:edit|modify|update)\b/],
   ['commit', /\bcommit\b/],
   ['save', /\bsave\b/],
+  ['undo', /\bundo\b/],
+  ['redo', /\bredo\b/],
   ['print', /\bprint\b/],
   ['lock', /\block\b/],
   ['unlock', /\bunlock\b/],
@@ -395,6 +573,18 @@ const BUILTIN_DEFINITIONS = [
   ),
   componentDefinition(
     'tool.project-explorer', ICON_CATEGORIES.TOOL, FileAddIcon, 'Project Explorer'
+  ),
+  componentDefinition(
+    'object.cube', ICON_CATEGORIES.OBJECT, DatabaseAddIcon, 'Cube'
+  ),
+  componentDefinition(
+    'tool.cube', ICON_CATEGORIES.TOOL, DatabaseAddIcon, 'Cube Designer'
+  ),
+  componentDefinition(
+    'tool.bi', ICON_CATEGORIES.TOOL, SortIcon, 'BI Questions & Dashboards'
+  ),
+  componentDefinition(
+    'tool.screen-mesh', ICON_CATEGORIES.TOOL, EditIcon, 'Screen Mesh Designer'
   ),
   componentDefinition(
     'tool.erd', ICON_CATEGORIES.TOOL, ArrowAllDirectionIcon, 'Diagram Designer'

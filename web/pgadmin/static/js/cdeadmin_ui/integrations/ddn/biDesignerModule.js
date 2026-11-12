@@ -63,14 +63,14 @@ export function biDesignerModuleDefinition() {
     id: BI_DESIGNER_MODULE_ID,
     version: '1.0.0',
     title: 'BI Questions & Dashboards Designer',
-    iconKey: 'tool.data-explorer',
+    iconKey: 'tool.bi',
     serviceRequirements: [PROJECT_ASSET_SERVICE_ID, DESIGN_STORE_SERVICE_ID],
     contributions: {
       surfaces: [
         {
           id: 'diagram.bi.designer',
           title: 'BI Question & Dashboard Designer',
-          iconKey: 'tool.data-explorer',
+          iconKey: 'tool.bi',
           assetTypes: [
             BI_QUESTION_DESIGN_ASSET_TYPE,
             BI_DASHBOARD_DESIGN_ASSET_TYPE,
@@ -112,7 +112,7 @@ export function biDesignerModuleDefinition() {
           label: 'New BI Question or Dashboard…',
           description:
             'Create a BI question or dashboard design, or import Superset / Metabase content into Draft DDN.',
-          iconKey: 'tool.data-explorer',
+          iconKey: 'tool.bi',
           surfaces: ['tools', 'project'],
           permission: ['project.asset.edit'],
           execute: (_args, context) => {
@@ -125,7 +125,7 @@ export function biDesignerModuleDefinition() {
           label: 'BI Questions & Dashboards',
           description:
             'List and open BI question and dashboard designs across projects.',
-          iconKey: 'tool.data-explorer',
+          iconKey: 'tool.bi',
           surfaces: ['tools', 'view'],
           execute: (_args, context) => {
             if (typeof context.showActivity !== 'function') {
@@ -139,7 +139,7 @@ export function biDesignerModuleDefinition() {
           label: 'Open in BI Designer',
           description:
             'Open a versioned BI question or dashboard design from the design store.',
-          iconKey: 'tool.data-explorer',
+          iconKey: 'tool.bi',
           surfaces: ['toolbar'],
           validateArguments: validateDesignArguments,
           execute: async (args, context) => {
@@ -191,7 +191,7 @@ export function biDesignerModuleDefinition() {
         {
           id: 'activity.bi_designs',
           label: 'BI Questions & Dashboards',
-          iconKey: 'tool.data-explorer',
+          iconKey: 'tool.bi',
           priority: 54,
           surfaceId: 'diagram.bi.designer',
           render: () => React.createElement(BIDesignsNavigator),

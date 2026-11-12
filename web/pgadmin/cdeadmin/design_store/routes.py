@@ -172,6 +172,13 @@ def _register_routes(app, project_asset_service) -> None:
     from flask import Blueprint, Response, current_app, jsonify, request
     from flask_security import current_user
     from pgadmin.user_login_check import pga_login_required
+    try:
+        from pgadmin.utils.csrf import pgCSRFProtect
+
+        csrf_exempt = pgCSRFProtect.exempt
+    except Exception:  # pragma: no cover
+        def csrf_exempt(fn):
+            return fn
 
     api = Blueprint('cdeadmin_design_store', __name__)
 
@@ -1487,6 +1494,7 @@ def _register_routes(app, project_asset_service) -> None:
         '/cdeadmin/api/bi-server/dashboards/<publication_id>',
         methods=['GET'],
     )
+    @csrf_exempt
     def bi_dashboard_server_view(publication_id: str):
         auth_header = request.headers.get('Authorization') or ''
         token = ''
@@ -1660,6 +1668,7 @@ def _register_routes(app, project_asset_service) -> None:
         '/blobs/<sha256>',
         methods=['GET'],
     )
+    @csrf_exempt
     @pga_login_required
     def design_blob_get_route(
         project_id: str, design_id: str, sha256: str
@@ -1700,6 +1709,427 @@ def _register_routes(app, project_asset_service) -> None:
                 target_ref=target_ref,
                 target_kind=target_kind,
                 include_suspect=include_suspect,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/where-used',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def cross_design_where_used_route(project_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        from .where_used import query_cross_design_usage
+
+        target_ref = request.args.get('target_ref') or None
+        target_kind = request.args.get('target_kind') or None
+        design_id = request.args.get('design_id') or None
+        include_suspect = request.args.get('include_suspect', '1') not in (
+            '0',
+            'false',
+        )
+        return invoke(
+            lambda store, _proc: query_cross_design_usage(
+                store,
+                project_id,
+                target_ref=target_ref,
+                target_kind=target_kind,
+                design_id=design_id,
+                include_suspect=include_suspect,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/diff',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def design_versions_diff_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        from .where_used import diff_design_versions
+
+        body = request.get_json(silent=True) or {}
+        base_v = int(body.get('base_version') or 1)
+        target_v = int(body.get('target_version') or 1)
+        return invoke(
+            lambda store, _proc: diff_design_versions(
+                store, design_id, base_v, target_v
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/erd/import',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_external_import_route(project_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        from .erd_extensions import import_erd_external
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, proc: import_erd_external(
+                store,
+                proc,
+                project_id=project_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/erd/elements',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def erd_elements_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        if request.method == 'GET':
+            _check_project_access(
+                project_asset_service, uid, role_ids, project_id, 'viewer'
+            )
+            from .erd_extensions import inspect_erd_elements
+
+            version = request.args.get('version', type=int)
+            return invoke(
+                lambda store, _proc: inspect_erd_elements(
+                    store, design_id=design_id, version=version
+                )
+            )
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        from .erd_extensions import mutate_erd_elements
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, proc: mutate_erd_elements(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/erd/promote-whiteboard',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_promote_whiteboard_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        from .erd_extensions import promote_whiteboard_to_design
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, proc: promote_whiteboard_to_design(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/erd/standards',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_standards_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        body = request.get_json(silent=True) or {}
+        needed = (
+            'editor'
+            if body.get('action') in ('apply_fixes', 'save_waivers')
+            else 'viewer'
+        )
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, needed
+        )
+        from .erd_extensions import evaluate_or_apply_erd_standards
+
+        return invoke(
+            lambda store, proc: evaluate_or_apply_erd_standards(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/erd/deploy',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def erd_deploy_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        body = request.get_json(silent=True) or {}
+        needed = (
+            'editor'
+            if body.get('action')
+            in ('submit_review', 'record_environment_deployment')
+            else 'viewer'
+        )
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, needed
+        )
+        from .erd_extensions import plan_or_submit_erd_deployment
+
+        return invoke(
+            lambda store, proc: plan_or_submit_erd_deployment(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/cube/check-connection',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def cube_check_connection_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        from .cube_extensions import check_cube_against_connection
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, _proc: check_cube_against_connection(
+                store,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/cube/reduce-aggregations',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def cube_reduce_aggregations_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        body = request.get_json(silent=True) or {}
+        needed = 'editor' if body.get('save_version') else 'viewer'
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, needed
+        )
+        from .cube_extensions import reduce_cube_aggregations
+
+        return invoke(
+            lambda store, proc: reduce_cube_aggregations(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+                semantic_service=_semantic_service_for_app(current_app),
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/cube/try-query',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def cube_try_query_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        from .cube_extensions import execute_cube_try_query
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, _proc: execute_cube_try_query(
+                store,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/cube/ai-draft',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def cube_ai_draft_route(project_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        from .cube_extensions import propose_cube_ai_draft
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, _proc: propose_cube_ai_draft(
+                store,
+                project_id=project_id,
+                actor_id=uid,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/bi/devices',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def bi_devices_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        access = _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        has_perm = _ACCESS_RANK.get(access, 0) >= _ACCESS_RANK['manager']
+        body = request.get_json(silent=True) or {}
+        if body.get('has_scratchrobin_permission') is False:
+            has_perm = False
+        from .bi_extensions import manage_bi_device_tokens
+
+        return invoke(
+            lambda store, proc: manage_bi_device_tokens(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                method=request.method,
+                payload=body,
+                authorized=has_perm,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/designs/kiosk/<publication_id>',
+        methods=['GET'],
+    )
+    @csrf_exempt
+    def bi_kiosk_html_route(publication_id: str):
+        from .bi_extensions import render_bi_kiosk_html_response
+
+        store = store_for_app(current_app)
+        proc = process_for_app(current_app)
+        html_body, status_code, content_type = render_bi_kiosk_html_response(
+            store,
+            proc,
+            publication_id=publication_id,
+            query_args=request.args,
+            headers=request.headers,
+            app=current_app,
+        )
+        resp = Response(html_body, status=status_code, mimetype=content_type)
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/trace',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def screen_mesh_trace_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'editor'
+        )
+        from .screen_mesh_extensions import trace_screenshot_regions_to_mesh
+
+        body = request.get_json(silent=True) or {}
+        return invoke(
+            lambda store, proc: trace_screenshot_regions_to_mesh(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/field-spec',
+        methods=['GET', 'POST'],
+    )
+    @pga_login_required
+    def screen_mesh_field_spec_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        from .screen_mesh_extensions import build_screen_mesh_field_spec
+
+        body = (
+            {
+                'format': request.args.get('format') or 'json',
+                'version': request.args.get('version', type=int),
+            }
+            if request.method == 'GET'
+            else (request.get_json(silent=True) or {})
+        )
+        return invoke(
+            lambda store, proc: build_screen_mesh_field_spec(
+                store,
+                proc,
+                design_id=design_id,
+                payload=body,
+                app=current_app,
+            )
+        )
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>'
+        '/screen-mesh/compare-screenshot',
+        methods=['POST'],
+    )
+    @pga_login_required
+    def screen_mesh_compare_screenshot_route(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        body = request.get_json(silent=True) or {}
+        needed = 'editor' if body.get('replace_screenshot') else 'viewer'
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, needed
+        )
+        from .screen_mesh_extensions import compare_screen_mesh_screenshots
+
+        return invoke(
+            lambda store, proc: compare_screen_mesh_screenshots(
+                store,
+                proc,
+                design_id=design_id,
+                actor_id=uid,
+                payload=body,
             )
         )
 

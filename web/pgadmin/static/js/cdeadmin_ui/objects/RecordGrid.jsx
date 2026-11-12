@@ -19,6 +19,8 @@ import PropTypes from 'prop-types';
 import {Box, Stack} from '../primitives/Layout';
 import {Button, IconButton} from '../primitives/Button';
 import {ValidationMessage} from '../feedback/Indicators';
+import {ScratchScrollArea} from '../base/ScratchScrollArea';
+import {ensureScratchBaseStyles} from '../base/ScratchBaseStyles';
 import {activeFields} from './descriptors';
 import FieldControl from './FieldControl';
 
@@ -98,11 +100,42 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
   };
   const reorderable = field.reorderable !== false;
   const headingId = `grid-${field.field_id}`;
+  ensureScratchBaseStyles();
+
+  const inspectRowInDrawer = (index, row, rowDetail) => {
+    setSelected(index);
+    if (rowDetail.length === 0 || typeof window === 'undefined') return;
+    if (!document?.querySelector?.('[data-cdeadmin-qa-key="project-shell-backdrop"]')) return;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:inspect-right-drawer', {
+          detail: {
+            open: true,
+            node: (
+              <Box sx={{p: 1.5}} data-cdeadmin-qa-key={`subnode-inspector.${field.field_id}.${index}`}>
+                <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.82rem', fontWeight: 700}}>
+                  {singular(label)} #{index + 1} — Extended Attributes
+                </Box>
+                <Stack gap="compact">
+                  {rowDetail.map((column) => (
+                    <Box key={column.field_id}>{cell(row, index, column)}</Box>
+                  ))}
+                </Stack>
+              </Box>
+            ),
+          },
+        })
+      );
+    } catch {
+      // Non-DOM or restricted test environment.
+    }
+  };
 
   return <Box role="group" aria-labelledby={headingId} data-cdeadmin-qa-key={`object-editor.grid.${field.field_id}`}
-    sx={{border: '1px solid', borderColor: error ? 'error.main' : 'divider', p: 1}}>
-    <Stack direction="row" gap="compact" sx={{alignItems: 'center', mb: 1}}>
-      <Box id={headingId} component="span" sx={{fontSize: '0.8125rem', fontWeight: 600, flex: 1}}>
+    className="sr-bui-table-card"
+    sx={{borderColor: error ? 'var(--sr-danger)' : undefined}}>
+    <Stack direction="row" gap="compact" className="sr-bui-toolbar" sx={{alignItems: 'center'}}>
+      <Box id={headingId} component="span" className="sr-bui-toolbar-title" sx={{flex: 1}}>
         {label}{field.required ? ' *' : ''}
       </Box>
       <Button size="small" intent="neutral" disabled={disabled} onClick={add}
@@ -110,20 +143,20 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
         Add {singular(label)}
       </Button>
     </Stack>
-    {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 0.5, pb: 0.5}}>
+    {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.5, py: 1}}>
       No {label.toLowerCase()} yet.
     </Box>}
-    {rows.length > 0 && <Box sx={{overflowX: 'auto'}}>
-      <Box component="table" sx={{borderCollapse: 'collapse', width: '100%'}}
+    {rows.length > 0 && <ScratchScrollArea orientation="both" style={{width: '100%'}}>
+      <Box component="table" className="sr-bui-table" sx={{borderCollapse: 'collapse', width: '100%'}}
         aria-label={label}>
         <Box component="thead">
           <Box component="tr">
-            {reorderable && <Box component="th" scope="col" sx={headerSx}>#</Box>}
-            {inline.map((column) => <Box key={column.field_id} component="th" scope="col"
+            {reorderable && <Box component="th" scope="col" className="sr-bui-th" sx={headerSx}>#</Box>}
+            {inline.map((column) => <Box key={column.field_id} component="th" scope="col" className="sr-bui-th"
               sx={{...headerSx, minWidth: CELL_MIN_WIDTH[column.control] || 140}}>
               {column.label}{column.required ? ' *' : ''}
             </Box>)}
-            <Box component="th" scope="col" sx={{...headerSx, ...stickySx}}>Actions</Box>
+            <Box component="th" scope="col" className="sr-bui-th" sx={{...headerSx, ...stickySx}}>Actions</Box>
           </Box>
         </Box>
         <Box component="tbody">
@@ -132,17 +165,23 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
             const rowDetail = detail.filter((column) => visible.includes(column));
             const open = expanded.has(index);
             const detailErrors = rowDetail.some((column) => cellError(index, column));
-            return [<Box component="tr" key={index} aria-selected={selected === index || undefined}
+            return [<Box component="tr" key={index} className="sr-bui-tr"
+              data-selected={selected === index ? 'true' : undefined}
+              aria-selected={selected === index || undefined}
               onFocus={() => setSelected(index)}
-              sx={{bgcolor: selected === index ? 'action.selected' : undefined}}>
-              {reorderable && <Box component="td" sx={{...cellSx, textAlign: 'center', fontSize: '0.75rem',
+              onClick={() => inspectRowInDrawer(index, row, rowDetail)}>
+              {reorderable && <Box component="td" className="sr-bui-td" sx={{...cellSx, textAlign: 'center', fontSize: '0.75rem',
                 color: 'text.secondary'}}>{index + 1}</Box>}
-              {inline.map((column) => <Box key={column.field_id} component="td" sx={cellSx}>
+              {inline.map((column) => <Box key={column.field_id} component="td" className="sr-bui-td" sx={cellSx}>
                 {visible.includes(column) ? cell(row, index, column) : <Box aria-hidden="true" />}
               </Box>)}
-              <Box component="td" sx={{...cellSx, ...stickySx, whiteSpace: 'nowrap'}}>
+              <Box component="td" className="sr-bui-td" sx={{...cellSx, ...stickySx, whiteSpace: 'nowrap'}}>
                 {rowDetail.length > 0 && <Button size="small" intent={detailErrors ? 'destructive' : 'neutral'}
-                  aria-expanded={open} onClick={() => toggleDetail(index)}
+                  aria-expanded={open} onClick={(ev) => {
+                    ev.stopPropagation();
+                    toggleDetail(index);
+                    inspectRowInDrawer(index, row, rowDetail);
+                  }}
                   data-cdeadmin-qa-key={`object-editor.grid.${field.field_id}.details.${index}`}>
                   {open ? 'Hide details' : `Details (${rowDetail.length})`}
                 </Button>}
@@ -155,8 +194,8 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
               </Box>
             </Box>, open && rowDetail.length > 0 && <Box component="tr" key={`${index}-detail`}>
               <Box component="td" colSpan={inline.length + (reorderable ? 2 : 1)}
-                sx={{...cellSx, bgcolor: 'action.hover'}} aria-label={`Row ${index + 1} details`}>
-                <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))'}}>
+                sx={{...cellSx, bgcolor: 'var(--sr-surface-subtle)'}} aria-label={`Row ${index + 1} details`}>
+                <Box sx={{display: 'grid', gap: 1, p: 1, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))'}}>
                   {rowDetail.map((column) => <Box key={column.field_id}>{cell(row, index, column)}</Box>)}
                 </Box>
               </Box>
@@ -164,9 +203,9 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
           })}
         </Box>
       </Box>
-    </Box>}
-    {error && <ValidationMessage status="error">{error}</ValidationMessage>}
-    {!error && help && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', mt: 0.5}}>{help}</Box>}
+    </ScratchScrollArea>}
+    {error && <Box sx={{px: 1.5, py: 0.75}}><ValidationMessage status="error">{error}</ValidationMessage></Box>}
+    {!error && help && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.5, py: 0.75}}>{help}</Box>}
   </Box>;
 }
 

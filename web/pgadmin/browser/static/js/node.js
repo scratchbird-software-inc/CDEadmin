@@ -880,6 +880,49 @@ define('pgadmin.browser.node', [
       },
     },
     showPropertiesDialog: function(panelId, panelTitle, dialogProps, update=false) {
+      const hasProjectShell = typeof document !== 'undefined' &&
+        Boolean(document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]'));
+      if (hasProjectShell && typeof window !== 'undefined') {
+        const inlineDialogProps = {
+          ...dialogProps,
+          onClose: (...args) => {
+            dialogProps?.onClose?.(...args);
+            window.dispatchEvent(new CustomEvent('scratchrobin:close-inline-tab', {
+              detail: {instanceId: panelId},
+            }));
+          },
+        };
+        const inlineContent = (
+          <ErrorBoundary>
+            <ObjectNodeProperties
+              panelId={panelId}
+              node={this}
+              formType="dialog"
+              {...inlineDialogProps}
+            />
+          </ErrorBoundary>
+        );
+        const dispatchInline = () => {
+          window.dispatchEvent(new CustomEvent('scratchrobin:open-inline-tab', {
+            detail: {
+              instanceId: panelId,
+              title: panelTitle,
+              supportsLeftDrawer: true,
+              supportsRightDrawer: true,
+              supportsTabbedIconBar: true,
+              renderWorkArea: () => inlineContent,
+            },
+          }));
+        };
+        if (update) {
+          dialogProps?.onClose?.(true);
+          setTimeout(dispatchInline, 10);
+        } else {
+          dispatchInline();
+        }
+        return;
+      }
+
       const panelData = {
         id: panelId,
         title: panelTitle,

@@ -4,8 +4,7 @@
   background: #EFF4FC;
 }
 .WelcomeDashboard-root .WelcomeDashboard-card {
-  background: none;
-  border: none;
+  border-radius: var(--sr-island-radius, 12px);
 }
 .WelcomeDashboard-root .WelcomeDashboard-cardHeader {
   display: none;
@@ -14,16 +13,12 @@
   grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
 }
 .WelcomeDashboard-root .WelcomeDashboard-launchTile {
-  border: none !important;
-  border-radius: 20px;
+  border-radius: var(--sr-island-radius, 12px);
   color: #326690 !important;
   box-shadow: 4px 4px 20px -15px;
 }
 .WelcomeDashboard-root .WelcomeDashboard-launchTile svg {
   color: #326690;
-}
-.WelcomeDashboard-root .WelcomeDashboard-launchTile:hover:not(:disabled) {
-  border: none !important;
 }
 
 .dock-layout .dock-panel.dock-style-playground[data-dockid=id-main] > .dock > .dock-bar {

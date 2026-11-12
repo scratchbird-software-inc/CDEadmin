@@ -89,28 +89,62 @@ function refreshNode(item, {parent=false}={}) {
   node?.callbacks?.refresh?.call(node, null, target);
 }
 
+function hasProjectShellMounted() {
+  return typeof document !== 'undefined' &&
+    Boolean(document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]'));
+}
+
+function openInlineOrWorkspaceTab(panelId, title, content, workspace) {
+  if (hasProjectShellMounted() && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('scratchrobin:open-inline-tab', {
+      detail: {
+        instanceId: panelId,
+        title,
+        supportsLeftDrawer: true,
+        supportsRightDrawer: true,
+        supportsTabbedIconBar: true,
+        renderWorkArea: () => content,
+      },
+    }));
+    return;
+  }
+  workspace.openTab({
+    id: panelId,
+    title,
+    closable: true,
+    floatable: true,
+    content,
+  }, BROWSER_PANELS.MAIN, 'middle');
+}
+
+function closeInlineOrWorkspaceTab(panelId, workspace) {
+  if (hasProjectShellMounted() && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('scratchrobin:close-inline-tab', {
+      detail: {instanceId: panelId},
+    }));
+    return;
+  }
+  workspace?.close?.(panelId);
+}
+
 function openEditorPanel({context, itemData, item, resourceKind, resourceId, mode, displayName}) {
   const serverNode = pgAdmin.Browser.Nodes.server;
   const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
     itemData.cde_database_target_id);
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-object-editor-${++editorSequence}`;
-  const onClose = () => workspace.close(panelId);
-  workspace.openTab({
-    id: panelId,
-    title: gettext('%s — %s', mode === 'create' ? gettext('Create') : gettext('Edit'), displayName),
-    closable: true,
-    floatable: true,
-    content: <ErrorBoundary>
-      <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
-        version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
-        databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
-        onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})}
-        onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
-          database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
-          display_name: displayName, task_title: gettext('Data')})} />
-    </ErrorBoundary>,
-  }, BROWSER_PANELS.MAIN, 'middle');
+  const onClose = () => closeInlineOrWorkspaceTab(panelId, workspace);
+  const title = gettext('%s — %s', mode === 'create' ? gettext('Create') : gettext('Edit'), displayName);
+  const content = <ErrorBoundary>
+    <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
+      version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
+      databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
+      onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})}
+      onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
+        database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
+        display_name: displayName, task_title: gettext('Data')})} />
+  </ErrorBoundary>;
+  openInlineOrWorkspaceTab(panelId, title, content, workspace);
   return panelId;
 }
 
@@ -285,7 +319,7 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
   const urlFor = (isNew) => base + (isNew ? '' : nodeData._id);
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = mode === 'create' ? `id-server-register-${++editorSequence}` : `id-server-edit-${nodeData._id}`;
-  const onClose = () => workspace.close(panelId);
+  const onClose = () => closeInlineOrWorkspaceTab(panelId, workspace);
   const onSaved = (response) => {
     setTimeout(() => serverNode.clear_cache?.(item), 0);
     if(mode === 'create') {
@@ -300,14 +334,13 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
     }
     onClose();
   };
-  workspace.openTab({
-    id: panelId, title: panelTitle || gettext('Register server'), closable: true, floatable: true,
-    content: <ErrorBoundary>
-      <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
-        versionSupport={nodeData.version_support}
-        mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
-        intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
-    </ErrorBoundary>,
-  }, BROWSER_PANELS.MAIN, 'middle');
+  const title = panelTitle || gettext('Register server');
+  const content = <ErrorBoundary>
+    <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
+      versionSupport={nodeData.version_support}
+      mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
+      intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
+  </ErrorBoundary>;
+  openInlineOrWorkspaceTab(panelId, title, content, workspace);
   return true;
 }

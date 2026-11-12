@@ -4,7 +4,8 @@
 
 import React, {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box} from '@mui/material';
+import {Box} from '../../primitives/Layout';
+import {ScratchScrollArea} from '../../base/ScratchScrollArea';
 import {Button} from '../../primitives/Button';
 import {Select} from '../../primitives/Choice';
 import {TextArea} from '../../primitives/Field';
@@ -83,8 +84,14 @@ SourceCard.propTypes = {
   disabled: PropTypes.bool,
 };
 
-function CompareSetup({session, invoke, resources, assets}) {
+function CompareSetup({session, invoke, resources, assets, requestedPickerSide, onClearRequestedPicker}) {
   const [picker, setPicker] = useState(null);
+  useEffect(() => {
+    if (requestedPickerSide) {
+      setPicker({side: requestedPickerSide, kind: 'resource'});
+      onClearRequestedPicker?.();
+    }
+  }, [requestedPickerSide, onClearRequestedPicker]);
   const choose = (item) => {
     invoke('schema_compare.session.create', {
       configureSessionId: session.id,
@@ -93,33 +100,36 @@ function CompareSetup({session, invoke, resources, assets}) {
     setPicker(null);
   };
   const busy = session.state === 'background_task_active';
-  return <Box sx={{p: 2, overflow: 'auto', height: '100%'}}>
-    <Box component="h2" sx={{mt: 0}}>Compare Setup</Box>
-    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 2}}>
-      {['Left', 'Right'].map((side) => <SourceCard key={side} side={side}
-        reference={side === 'Left' ? session.content.leftRef : session.content.rightRef}
-        disabled={busy}
-        onChooseResource={() => setPicker({side, kind: 'resource'})}
-        onChooseAsset={() => setPicker({side, kind: 'asset'})} />)}
+  return <ScratchScrollArea orientation="both" style={{height: '100%'}}>
+    <Box sx={{p: 2}}>
+      <Box component="h2" sx={{mt: 0}}>Compare Setup</Box>
+      <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 2}}>
+        {['Left', 'Right'].map((side) => <SourceCard key={side} side={side}
+          reference={side === 'Left' ? session.content.leftRef : session.content.rightRef}
+          disabled={busy}
+          onChooseResource={() => setPicker({side, kind: 'resource'})}
+          onChooseAsset={() => setPicker({side, kind: 'asset'})} />)}
+      </Box>
+      <Box component="fieldset" sx={{mt: 2, border: '1px solid', borderColor: 'divider'}}>
+        <legend>Comparison scope and normalization options</legend>
+        <TextArea rows={6} fullWidth label="Options (JSON)" readOnly
+          value={JSON.stringify(session.content.options, null, 2)} />
+      </Box>
+      <Box sx={{mt: 2}}><Button intent="primary" disabled={busy ||
+        !session.content.leftRef || !session.content.rightRef}
+      onClick={() => invoke('schema_compare.run')}>Run comparison</Button></Box>
+      <ResourcePicker open={picker?.kind === 'resource'} items={resources}
+        selected={[]} onClose={() => setPicker(null)} onConfirm={choose} />
+      <AssetPicker open={picker?.kind === 'asset'} items={assets}
+        selected={[]} onClose={() => setPicker(null)} onConfirm={choose} />
     </Box>
-    <Box component="fieldset" sx={{mt: 2, border: '1px solid', borderColor: 'divider'}}>
-      <legend>Comparison scope and normalization options</legend>
-      <TextArea rows={6} fullWidth label="Options (JSON)" readOnly
-        value={JSON.stringify(session.content.options, null, 2)} />
-    </Box>
-    <Box sx={{mt: 2}}><Button intent="primary" disabled={busy ||
-      !session.content.leftRef || !session.content.rightRef}
-    onClick={() => invoke('schema_compare.run')}>Run comparison</Button></Box>
-    <ResourcePicker open={picker?.kind === 'resource'} items={resources}
-      selected={[]} onClose={() => setPicker(null)} onConfirm={choose} />
-    <AssetPicker open={picker?.kind === 'asset'} items={assets}
-      selected={[]} onClose={() => setPicker(null)} onConfirm={choose} />
-  </Box>;
+  </ScratchScrollArea>;
 }
 
 CompareSetup.propTypes = {
   session: PropTypes.object.isRequired, invoke: PropTypes.func.isRequired,
   resources: PropTypes.array, assets: PropTypes.array,
+  requestedPickerSide: PropTypes.string, onClearRequestedPicker: PropTypes.func,
 };
 
 function DiffTree({session, selectDiff, openSurface}) {
@@ -141,25 +151,27 @@ function DiffTree({session, selectDiff, openSurface}) {
     <Box sx={{p: 1}}><SearchField label="Filter differences" value={filter}
       onChange={setFilter} resultCount={groups.reduce((n, [, values]) => n + values.length, 0)} />
     </Box>
-    <Box role="tree" aria-label="Schema differences" sx={{overflow: 'auto', flex: 1}}>
-      {groups.map(([classification, values]) => {
-        const open = expanded.has(classification);
-        return <React.Fragment key={classification}>
-          <TreeRow label={`${classification.replaceAll('_', ' ')} (${values.length})`}
-            level={1} expandable expanded={open}
-            onToggle={() => setExpanded((prior) => {
-              const next = new Set(prior); open ? next.delete(classification) :
-                next.add(classification); return next;
-            })} />
-          {open && values.map((diff) => <TreeRow key={diff.id}
-            label={diff.qualifiedName} level={2}
-            selected={session.selectedDiffId === diff.id}
-            trailing={<Badge label={diff.kind} />}
-            onSelect={() => selectDiff(diff.id)}
-            onOpen={() => { selectDiff(diff.id); openSurface('object_diff'); }} />)}
-        </React.Fragment>;
-      })}
-    </Box>
+    <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
+      <Box role="tree" aria-label="Schema differences" sx={{p: 0.5}}>
+        {groups.map(([classification, values], gIdx) => {
+          const open = expanded.has(classification);
+          return <React.Fragment key={classification}>
+            <TreeRow label={`${classification.replaceAll('_', ' ')} (${values.length})`}
+              level={1} expandable expanded={open} isLast={gIdx === groups.length - 1}
+              onToggle={() => setExpanded((prior) => {
+                const next = new Set(prior); open ? next.delete(classification) :
+                  next.add(classification); return next;
+              })} />
+            {open && values.map((diff, dIdx) => <TreeRow key={diff.id}
+              label={diff.qualifiedName} level={2} isLast={dIdx === values.length - 1}
+              selected={session.selectedDiffId === diff.id}
+              trailing={<Badge label={diff.kind} />}
+              onSelect={() => selectDiff(diff.id)}
+              onOpen={() => { selectDiff(diff.id); openSurface('object_diff'); }} />)}
+          </React.Fragment>;
+        })}
+      </Box>
+    </ScratchScrollArea>
   </Box>;
 }
 
@@ -310,6 +322,7 @@ export function SchemaCompareWorkspace({service, sessionId, surface='compare_set
   executeCommand, resources=[], assets=[], onExport=() => {}, onStateChange}) {
   const session = useSession(service, sessionId);
   const [active, setActive] = useState(surface);
+  const [requestedPickerSide, setRequestedPickerSide] = useState(null);
   useEffect(() => onStateChange?.(session), [session, onStateChange]);
   const invoke = async (commandId, args={}) => {
     try {
@@ -321,6 +334,29 @@ export function SchemaCompareWorkspace({service, sessionId, surface='compare_set
       throw error;
     }
   };
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLeft = () => { setActive('compare_setup'); setRequestedPickerSide('Left'); };
+    const onRight = () => { setActive('compare_setup'); setRequestedPickerSide('Right'); };
+    const onRun = () => {
+      if (session.content.leftRef && session.content.rightRef) {
+        invoke('schema_compare.run').catch(() => {});
+      } else {
+        setActive('compare_setup');
+      }
+    };
+    const onReview = () => setActive(session.plan ? 'apply_export_review' : 'change_plan');
+    window.addEventListener('scratchrobin:schema-compare-pick-left', onLeft);
+    window.addEventListener('scratchrobin:schema-compare-pick-right', onRight);
+    window.addEventListener('scratchrobin:schema-compare-run', onRun);
+    window.addEventListener('scratchrobin:schema-compare-review', onReview);
+    return () => {
+      window.removeEventListener('scratchrobin:schema-compare-pick-left', onLeft);
+      window.removeEventListener('scratchrobin:schema-compare-pick-right', onRight);
+      window.removeEventListener('scratchrobin:schema-compare-run', onRun);
+      window.removeEventListener('scratchrobin:schema-compare-review', onReview);
+    };
+  }, [session.content.leftRef, session.content.rightRef, session.plan]);
   const View = VIEWS[active] ?? CompareSetup;
   return <Box data-module="cdeadmin.schema_compare"
     sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
@@ -340,6 +376,8 @@ export function SchemaCompareWorkspace({service, sessionId, surface='compare_set
     <Box sx={{flex: 1, minHeight: 0, overflow: 'hidden'}}>
       <StateBoundary session={session}>
         <View session={session} invoke={invoke} resources={resources} assets={assets}
+          requestedPickerSide={requestedPickerSide}
+          onClearRequestedPicker={() => setRequestedPickerSide(null)}
           onExport={onExport} selectDiff={(diffId) => service.selectDiff(sessionId, diffId)}
           openSurface={setActive} />
       </StateBoundary>

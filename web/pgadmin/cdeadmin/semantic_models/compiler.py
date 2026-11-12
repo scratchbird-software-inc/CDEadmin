@@ -20,12 +20,15 @@ from typing import Mapping
 from .models import (
     SEMI_ADDITIVE_AGGREGATIONS,
     SemanticModelError,
+    filter_model_for_role,
     validate_model,
     validate_query,
 )
 
 
-def compile_sql(model_value, query_value, dialect):
+def compile_sql(
+    model_value, query_value, dialect, *, role: str | None = None
+):
     """Compile a validated model only when invoked by an owning provider."""
     if not isinstance(dialect, Mapping) or dialect.get(
             'contract_complete') is not True:
@@ -97,7 +100,12 @@ def compile_sql(model_value, query_value, dialect):
             'provider semantic SQL percent-change numerator cast is invalid'
         )
     model = validate_model(model_value)
-    query = validate_query(model, query_value)
+    if role is not None and isinstance(query_value, Mapping):
+        merged_query = dict(query_value)
+        merged_query.setdefault('role', role)
+        query = validate_query(model, merged_query)
+    else:
+        query = validate_query(model, query_value)
     binder = _Binder(query.get('bind'))
     time_operations = frozenset(dialect['time_operations'])
     window_operations = frozenset(dialect['window_operations'])
@@ -134,16 +142,20 @@ def compile_sql(model_value, query_value, dialect):
         return f"{quote(source['alias'])}.{quote(reference['field'])}"
 
     levels = {}
+    owner_dimension_by_item = {}
     parent_child_hierarchies = {}
     dimensions_by_id = {item['id']: item for item in model['dimensions']}
     for dimension in model['dimensions']:
+        owner_dimension_by_item[dimension['id']] = dimension
         levels[dimension['id']] = {
             'id': dimension['id'], 'name': dimension['name'],
             'field': dimension['field'],
         }
         for attr in dimension.get('attributes', []):
+            owner_dimension_by_item[attr['id']] = dimension
             levels[attr['id']] = attr
         for hierarchy in dimension.get('hierarchies', []):
+            owner_dimension_by_item[hierarchy['id']] = dimension
             if hierarchy.get('hierarchy_kind') == 'parent_child':
                 parent_child_hierarchies[hierarchy['id']] = (
                     dimension, hierarchy, True
@@ -162,6 +174,7 @@ def compile_sql(model_value, query_value, dialect):
                 }
             else:
                 for level in hierarchy.get('levels', []):
+                    owner_dimension_by_item[level['id']] = dimension
                     levels[level['id']] = level
     measures = {item['id']: item for item in model['measures']}
     parameter_values = {
@@ -230,10 +243,76 @@ def compile_sql(model_value, query_value, dialect):
             else f'{cte_alias}.{anc_id}'
         )
 
+    first = model['sources'][0]['id']
+    from_clause = source_sql[first]
+    joined = {first}
+    nullable_sources = set()
+    active_dims = [
+        d for d in model['dimensions']
+        if d.get('active', True) is not False
+    ]
+
+    def _effective_join_type(join_obj):
+        jid = join_obj['id']
+        right_src = join_obj['right_source']
+        linked_dims = [
+            d for d in active_dims
+            if d.get('join_id') == jid
+            or (
+                d.get('join_id') is None
+                and d['field']['source_id'] == right_src
+            )
+        ]
+        if any(
+            d.get('unknown_member_policy', 'unknown') == 'hide'
+            for d in linked_dims
+        ):
+            return 'INNER'
+        return join_obj.get('join_type', 'inner').upper()
+
+    remaining = [
+        item for item in model['joins']
+        if item.get('active', True) is not False
+    ]
+    while remaining:
+        progress = False
+        for join in list(remaining):
+            left = join['left_source']
+            right = join['right_source']
+            if left not in joined or right in joined:
+                continue
+            join_type = _effective_join_type(join)
+            if join_type in {'LEFT', 'FULL'} or left in nullable_sources:
+                nullable_sources.add(right)
+            from_clause += f' {join_type} JOIN {source_sql[right]}'
+            if join_type != 'CROSS':
+                join_preds = [
+                    f"{field(item['left'])} = {field(item['right'])}"
+                    for item in join['predicates']
+                ]
+                from_clause += ' ON ' + ' AND '.join(join_preds)
+            joined.add(right)
+            remaining.remove(join)
+            progress = True
+        if not progress:
+            raise SemanticModelError(
+                'joins must form an ordered graph from the first source'
+            )
+
     def axis_sql_expr(item_id):
-        if item_id in pc_exprs:
-            return pc_exprs[item_id]
-        return field(levels[item_id]['field'])
+        raw_expr = (
+            pc_exprs[item_id]
+            if item_id in pc_exprs
+            else field(levels[item_id]['field'])
+        )
+        owner_dim = owner_dimension_by_item.get(item_id)
+        if owner_dim is not None:
+            policy = owner_dim.get('unknown_member_policy', 'unknown')
+            src_id = levels[item_id]['field']['source_id']
+            if policy == 'unknown' and src_id in nullable_sources:
+                caption = owner_dim.get('unknown_member_caption') or 'Unknown'
+                return f'COALESCE({raw_expr}, {_literal(caption, dialect)})'
+        return raw_expr
 
     selections = [
         f'{axis_sql_expr(item)} AS {quote(item)}'
@@ -392,35 +471,6 @@ def compile_sql(model_value, query_value, dialect):
     if not selections:
         raise SemanticModelError('semantic query has no projection')
 
-    first = model['sources'][0]['id']
-    from_clause = source_sql[first]
-    joined = {first}
-    remaining = [
-        item for item in model['joins']
-        if item.get('active', True) is not False
-    ]
-    while remaining:
-        progress = False
-        for join in list(remaining):
-            left = join['left_source']
-            right = join['right_source']
-            if left not in joined or right in joined:
-                continue
-            join_type = join.get('join_type', 'inner').upper()
-            from_clause += f' {join_type} JOIN {source_sql[right]}'
-            if join_type != 'CROSS':
-                predicates = [
-                    f"{field(item['left'])} = {field(item['right'])}"
-                    for item in join['predicates']
-                ]
-                from_clause += ' ON ' + ' AND '.join(predicates)
-            joined.add(right)
-            remaining.remove(join)
-            progress = True
-        if not progress:
-            raise SemanticModelError(
-                'joins must form an ordered graph from the first source'
-            )
     if joined != set(sources):
         raise SemanticModelError('every source must be connected by a join')
     if pc_joins:
@@ -434,6 +484,14 @@ def compile_sql(model_value, query_value, dialect):
         _compile_filter(item, field, dialect, parameter_values, binder)
         for item in filters
     ]
+    for item_id in axis_ids:
+        owner_dim = owner_dimension_by_item.get(item_id)
+        if (
+            owner_dim is not None
+            and owner_dim.get('unknown_member_policy') == 'hide'
+            and levels[item_id]['field']['source_id'] == first
+        ):
+            predicates.append(f"{field(levels[item_id]['field'])} IS NOT NULL")
     time_intelligence = query['time_intelligence']
     comparison_expression = None
     if time_intelligence:

@@ -1090,6 +1090,187 @@ export class DesignStoreClient {
       )
     );
   }
+
+  queryWhereUsed(
+    projectId,
+    {targetRef = '', targetKind = '', designId = '', includeSuspect = true} = {}
+  ) {
+    const params = new URLSearchParams();
+    if (targetRef) params.set('target_ref', String(targetRef));
+    if (targetKind) params.set('target_kind', String(targetKind));
+    if (designId) params.set('design_id', String(designId));
+    params.set('include_suspect', includeSuspect ? '1' : '0');
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/where-used?${params.toString()}`
+      )
+    );
+  }
+
+  diffDesignVersions(projectId, designId, {baseVersion, targetVersion} = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/diff`,
+        {
+          base_version: Number(baseVersion),
+          target_version: Number(targetVersion),
+        }
+      )
+    );
+  }
+
+  importErdExternal(projectId, payload = {}) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/erd/import`, payload)
+    );
+  }
+
+  inspectErdElements(projectId, designId, {version = null} = {}) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          `/erd/elements${suffix}`
+      )
+    );
+  }
+
+  mutateErdElements(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/erd/elements`,
+        payload
+      )
+    );
+  }
+
+  promoteErdWhiteboard(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/erd/promote-whiteboard',
+        payload
+      )
+    );
+  }
+
+  evaluateErdStandards(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/erd/standards`,
+        payload
+      )
+    );
+  }
+
+  deployErdPlan(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/erd/deploy`,
+        payload
+      )
+    );
+  }
+
+  checkCubeConnection(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/cube/check-connection',
+        payload
+      )
+    );
+  }
+
+  reduceCubeAggregations(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/cube/reduce-aggregations',
+        payload
+      )
+    );
+  }
+
+  tryCubeQuery(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/cube/try-query',
+        payload
+      )
+    );
+  }
+
+  proposeCubeAiDraft(projectId, payload = {}) {
+    return callApi(() =>
+      this.api.post(`${ROOT}/${segment(projectId)}/cube/ai-draft`, payload)
+    );
+  }
+
+  listBiDeviceTokens(projectId, designId) {
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/bi/devices`
+      )
+    );
+  }
+
+  manageBiDeviceTokens(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/bi/devices`,
+        payload
+      )
+    );
+  }
+
+  biKioskUrl(publicationId, token = '') {
+    const base = `/cdeadmin/designs/kiosk/${segment(publicationId)}`;
+    return token ? `${base}#token=${encodeURIComponent(String(token))}` : base;
+  }
+
+  traceScreenMeshScreenshot(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/screen-mesh/trace',
+        payload
+      )
+    );
+  }
+
+  getScreenMeshFieldSpec(
+    projectId,
+    designId,
+    {format = 'json', version = null, catalogMetadata = null} = {}
+  ) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/screen-mesh/field-spec',
+        {
+          format,
+          version,
+          catalog_metadata: catalogMetadata,
+        }
+      )
+    );
+  }
+
+  compareScreenMeshScreenshots(projectId, designId, payload = {}) {
+    return callApi(() =>
+      this.api.post(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}` +
+          '/screen-mesh/compare-screenshot',
+        payload
+      )
+    );
+  }
 }
 
 /**
@@ -1292,10 +1473,175 @@ export class SharedDDNTaskController {
         ...options,
       }
     );
-    if (options?.saveVersion && result?.saved?.design?.version?.version) {
-      await this.load({version: result.saved.design.version.version});
+    if (options?.saveVersion) {
+      const nextVer =
+        result?.saved?.design?.version?.version ??
+        result?.saved?.head_version ??
+        null;
+      await this.load(nextVer ? {version: nextVer} : {});
     }
     return result;
+  }
+
+  inspectErdElements({version = null} = {}) {
+    return this.client.inspectErdElements(this.projectId, this.designId, {
+      version: version ?? this.session?.design?.version?.version ?? null,
+    });
+  }
+
+  async mutateErdElements(payload = {}) {
+    const res = await this.client.mutateErdElements(
+      this.projectId,
+      this.designId,
+      {
+        expected_head_version: this.session?.design?.head_version ?? null,
+        ...payload,
+      }
+    );
+    const nextVer =
+      res?.design?.version?.version ?? res?.head_version ?? null;
+    await this.load(nextVer ? {version: nextVer} : {});
+    return res;
+  }
+
+  async promoteErdWhiteboard(payload = {}) {
+    const res = await this.client.promoteErdWhiteboard(
+      this.projectId,
+      this.designId,
+      {
+        expected_head_version: this.session?.design?.head_version ?? null,
+        ...payload,
+      }
+    );
+    if (payload?.save_version !== false) {
+      const nextVer =
+        res?.design?.version?.version ?? res?.head_version ?? null;
+      await this.load(nextVer ? {version: nextVer} : {});
+    }
+    return res;
+  }
+
+  async evaluateErdStandards(payload = {}) {
+    const res = await this.client.evaluateErdStandards(
+      this.projectId,
+      this.designId,
+      {
+        version: this.session?.design?.version?.version ?? null,
+        expected_head_version: this.session?.design?.head_version ?? null,
+        ...payload,
+      }
+    );
+    if (
+      payload?.action === 'apply_fixes' ||
+      payload?.action === 'save_waivers'
+    ) {
+      const nextVer =
+        res?.design?.version?.version ?? res?.head_version ?? null;
+      await this.load(nextVer ? {version: nextVer} : {});
+    }
+    return res;
+  }
+
+  deployErdPlan(payload = {}) {
+    return this.client.deployErdPlan(this.projectId, this.designId, {
+      desired_version: this.session?.design?.version?.version ?? null,
+      ...payload,
+    });
+  }
+
+  checkCubeConnection(payload = {}) {
+    return this.client.checkCubeConnection(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...payload,
+    });
+  }
+
+  async reduceCubeAggregations(payload = {}) {
+    const res = await this.client.reduceCubeAggregations(
+      this.projectId,
+      this.designId,
+      {
+        version: this.session?.design?.version?.version ?? null,
+        expected_head_version: this.session?.design?.head_version ?? null,
+        ...payload,
+      }
+    );
+    if (payload?.save_version) {
+      const nextVer =
+        res?.design?.version?.version ?? res?.head_version ?? null;
+      await this.load(nextVer ? {version: nextVer} : {});
+    }
+    return res;
+  }
+
+  tryCubeQuery(payload = {}) {
+    return this.client.tryCubeQuery(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...payload,
+    });
+  }
+
+  listBiDeviceTokens() {
+    return this.client.listBiDeviceTokens(this.projectId, this.designId);
+  }
+
+  manageBiDeviceTokens(payload = {}) {
+    return this.client.manageBiDeviceTokens(
+      this.projectId,
+      this.designId,
+      payload
+    );
+  }
+
+  async traceScreenMeshScreenshot(payload = {}) {
+    const res = await this.client.traceScreenMeshScreenshot(
+      this.projectId,
+      this.designId,
+      {
+        expected_head_version: this.session?.design?.head_version ?? null,
+        ...payload,
+      }
+    );
+    const nextVer =
+      res?.design?.version?.version ?? res?.head_version ?? null;
+    await this.load(nextVer ? {version: nextVer} : {});
+    return res;
+  }
+
+  getScreenMeshFieldSpec(options = {}) {
+    return this.client.getScreenMeshFieldSpec(this.projectId, this.designId, {
+      version: this.session?.design?.version?.version ?? null,
+      ...options,
+    });
+  }
+
+  async compareScreenMeshScreenshots(payload = {}) {
+    const res = await this.client.compareScreenMeshScreenshots(
+      this.projectId,
+      this.designId,
+      payload
+    );
+    if (payload?.replace_screenshot) {
+      const nextVer =
+        res?.design?.version?.version ?? res?.head_version ?? null;
+      await this.load(nextVer ? {version: nextVer} : {});
+    }
+    return res;
+  }
+
+  queryWhereUsed(options = {}) {
+    return this.client.queryWhereUsed(this.projectId, {
+      designId: this.designId,
+      ...options,
+    });
+  }
+
+  diffDesignVersions(options = {}) {
+    return this.client.diffDesignVersions(
+      this.projectId,
+      this.designId,
+      options
+    );
   }
 
   previewErdAlterPlan(options = {}) {

@@ -36,7 +36,7 @@ export function Icon({
     'aria-label': label || definition.label,
   };
   const style = size ? {width: size, height: size, fontSize: size} :
-    (definition.kind === 'component' ? {
+    (definition.kind === 'component' || definition.kind === 'svg' ? {
       width: '1em',
       height: '1em',
       flexShrink: 0,

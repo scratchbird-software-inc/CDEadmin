@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box} from '@mui/material';
+import {Box} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Select} from '../../primitives/Choice';
 import {EmptyState} from '../../feedback/EmptyState';
@@ -12,13 +12,16 @@ import {sourceSet,checkOpen,entriesOf,selectView,captureSVG,ingestData} from './
 import FormReference from '../../navigation/FormReference';
 
 export function DDNViewerSurface(props) {
-  const {files,snapshot,entry,view,presentation=false,viewSelection=false,liveData} = props;
+  const {files,snapshot,entry,view,presentation=false,viewSelection=false,showViewSelector=true,liveData} = props;
   const callbacks=useRef(props); callbacks.current=props;
   const host=useRef(null), image=useRef(null), session=useRef(null), retained=useRef(null);
+  const prevRequested=useRef({entry:'',view:''});
   const [entries,setEntries]=useState([]), [selection,setSelection]=useState({entry:'',view:''});
   const [loading,setLoading]=useState(true), [error,setError]=useState(null), [result,setResult]=useState(null);
   const sourceFiles=useMemo(()=>snapshot ? validateDDNSnapshot(snapshot).files : validateDDNFiles(files),[files,snapshot]);
   const sourceSignature=JSON.stringify(sourceFiles);
+  const requestedEntry=entry || snapshot?.entry || '';
+  const requestedView=view || snapshot?.view || '';
   const report=failure=>{setResult(null);image.current?.removeAttribute('src');setError(failure);setLoading(false);callbacks.current.onError?.(failure);};
   const draw=async(current,chosen)=> {
     try {
@@ -44,7 +47,11 @@ export function DDNViewerSurface(props) {
       current={runtime,viewer:libraries.viewer.createViewer(host.current,{runtime,controls:'host'})};
       session.current=current;
       current.pending=(async()=> {
-        const requested=snapshot ? validateDDNSnapshot(snapshot) : {entry,view};
+        const validated=snapshot ? validateDDNSnapshot(snapshot) : null;
+        const requested={entry:entry || validated?.entry, view:view || validated?.view};
+        const propChanged=prevRequested.current.entry!==(requested.entry||'') || prevRequested.current.view!==(requested.view||'');
+        prevRequested.current={entry:requested.entry||'',view:requested.view||''};
+        if(propChanged && (requested.entry || requested.view)) retained.current=null;
         const opened=checkOpen(await current.viewer.open(sourceSet(sourceFiles,requested.entry || Object.keys(sourceFiles)[0])));
         if(!active) return;
         const available=entriesOf(libraries,opened.snapshot);
@@ -60,7 +67,7 @@ export function DDNViewerSurface(props) {
       await current.pending;
     })().catch(failure=>{if(active) report(failure);});
     return ()=>{active=false;if(session.current===current) session.current=null;current?.viewer.destroy();current?.runtime.destroy();};
-  },[sourceSignature,entry,view,presentation,viewSelection]);
+  },[sourceSignature,requestedEntry,requestedView,presentation,viewSelection]);
   useEffect(()=> {
     const current=session.current;
     if(!current?.selection || !current.runtime.snapshot()) return;
@@ -90,7 +97,7 @@ export function DDNViewerSurface(props) {
   return <Box data-cde-surface="diagram.ddn.viewer" sx={{display:'flex',flexDirection:'column',height:presentation?'auto':'100%',minHeight:0}}>
     <FormReference formKey="ddn-viewer" />
     {((presentation && viewSelection && options.length>1) || !presentation) && <Box component="header" sx={{display:'flex',gap:1,alignItems:'center',p:0.5}}>
-      <Select label={presentation?'Dashboard view':'DDN view'} size="small" value={selection.entry?`${selection.entry}\0${selection.view}`:''} options={options} onChange={chooseView}/>
+      {(presentation || showViewSelector) && <Select label={presentation?'Dashboard view':'DDN view'} size="small" value={selection.entry?`${selection.entry}\0${selection.view}`:''} options={options} onChange={chooseView}/>}
       {!presentation && <>
         <Button disabled={!result} onClick={()=>run('ddn.viewer.fit',()=>session.current.viewer.navigate({kind:'fit-workarea'}))}>Fit</Button>
         <Button disabled={!result} onClick={()=>run('ddn.viewer.export',async()=>callbacks.current.onExport?.((await captureSVG(session.current.viewer,selection)).svg,selection))}>Export SVG</Button>
@@ -107,5 +114,5 @@ export function DDNViewerSurface(props) {
   </Box>;
 }
 DDNViewerSurface.propTypes={files:PropTypes.object,snapshot:PropTypes.object,entry:PropTypes.string,view:PropTypes.string,
-  presentation:PropTypes.bool,viewSelection:PropTypes.bool,liveData:PropTypes.array,executeCommand:PropTypes.func,
+  presentation:PropTypes.bool,viewSelection:PropTypes.bool,showViewSelector:PropTypes.bool,liveData:PropTypes.array,executeCommand:PropTypes.func,
   onExport:PropTypes.func,onReady:PropTypes.func,onError:PropTypes.func,onSelectionChange:PropTypes.func};

@@ -120,15 +120,24 @@ if (process.env.CDEADMIN_DESKTOP_PYTHON || process.env.CDEADMIN_DESKTOP_LAUNCHER
   }
   pythonPath = path.resolve(process.env.CDEADMIN_DESKTOP_PYTHON);
   cdeadminFile = path.resolve(process.env.CDEADMIN_DESKTOP_LAUNCHER);
-} else if (fs.existsSync('dev_config.json')) {
-  try {
-    let dev_config = JSON.parse(fs.readFileSync('dev_config.json'));
-    pythonPath = path.resolve(dev_config['pythonPath']);
-    cdeadminFile = path.resolve(
-      dev_config['cdeadminFile'] || dev_config['pgadminFile'],
-    );
-  } catch (error) {
-    console.error('Failed to load dev_config', error);
+} else {
+  const devConfigCandidates = [
+    path.resolve('dev_config.json'),
+    path.resolve(__dirname, '../../dev_config.json'),
+  ];
+  const devConfigPath = devConfigCandidates.find((candidate) => fs.existsSync(candidate));
+  if (devConfigPath) {
+    try {
+      const devConfigDir = path.dirname(devConfigPath);
+      let dev_config = JSON.parse(fs.readFileSync(devConfigPath, 'utf8'));
+      pythonPath = path.resolve(devConfigDir, dev_config['pythonPath']);
+      cdeadminFile = path.resolve(
+        devConfigDir,
+        dev_config['cdeadminFile'] || dev_config['pgadminFile'],
+      );
+    } catch (error) {
+      console.error('Failed to load dev_config', error);
+    }
   }
 }
 
@@ -396,11 +405,15 @@ function launchCDEadminWindow() {
     'height': 768,
     'focus': true,
     'show': false,
+    'autoHideMenuBar': true,
     webPreferences: {
       nodeIntegrationInSubFrames: true,
       preload: path.join(__dirname, 'cdeadmin_preload.js'),
     },
   });
+  if (process.platform !== 'darwin') {
+    cdeadminMainScreen.setMenuBarVisibility(false);
+  }
 
   splashWindow.close();
   cdeadminMainScreen.webContents.session.clearCache();
@@ -447,6 +460,7 @@ function launchCDEadminWindow() {
           'position': 'center',
           'minWidth': 640,
           'minHeight': 480,
+          'autoHideMenuBar': true,
           icon: '../../assets/cdeadmin.png',
           ...cdeadminMainScreen.getBounds(),
           webPreferences: {

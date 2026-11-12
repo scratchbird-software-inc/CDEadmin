@@ -1,7 +1,8 @@
-import {createContext, useContext, useEffect, useState, useSyncExternalStore} from 'react';
+import {createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import PropTypes from 'prop-types';
 import {Box, MenuItem, TextField, Tabs, Tab} from '@mui/material';
 import CodeEditor from './CodeEditor';
+import {Button} from '../primitives/Button';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from './QueryToolControls';
 import {workbenchContextService} from '../platform/PlatformRegistry';
 let entries = [], selected = '';
@@ -90,7 +91,7 @@ export function SQLConnectionSlot() {
   return entryId === null ? null : <SQLConnectionSelect />;
 }
 
-function DisconnectedQueryTool({hasConnections}) {
+function DisconnectedQueryTool({hasConnections, sqlText, onSqlTextChange, onSaveAsBiQuestion}) {
   const [panel, setPanel] = useState('data');
   return <QueryToolFrame aria-label="SQL query tool">
     <QueryToolToolbar aria-label="SQL execution toolbar">
@@ -102,13 +103,14 @@ function DisconnectedQueryTool({hasConnections}) {
         InputProps={{sx: {width: 200}}} />
       <TextField size="small" label="Max rows" value={500} type="number" disabled InputProps={{sx: {width: 80}}} />
       <SQLConnectionSelect />
+      <Button size="sm" variant="secondary" onClick={onSaveAsBiQuestion}>Save as BI Question…</Button>
     </QueryToolToolbar>
     <Box role="status" sx={{px: 1, py: 0.5, color: 'text.secondary'}}>
       {hasConnections ? 'Select a connected database to enable execution and its engine-specific tools.' :
         'Connect to a database in the explorer to select its connection.'}
     </Box>
     <Box sx={{height: '45%', minHeight: 120, resize: 'vertical', overflow: 'auto', flexShrink: 0}}>
-      <CodeEditor label="SQL source" value="" readonly disabled />
+      <CodeEditor label="SQL source" language="sql" value={sqlText} onChange={onSqlTextChange} />
     </Box>
     <Box sx={{flex: 1, minHeight: 120, overflow: 'auto'}}>
       <Tabs value={panel} onChange={(_, value) => setPanel(value)} aria-label="SQL result panels">
@@ -124,15 +126,99 @@ function DisconnectedQueryTool({hasConnections}) {
   </QueryToolFrame>;
 }
 
-DisconnectedQueryTool.propTypes = {hasConnections: PropTypes.bool};
+DisconnectedQueryTool.propTypes = {
+  hasConnections: PropTypes.bool,
+  sqlText: PropTypes.string,
+  onSqlTextChange: PropTypes.func,
+  onSaveAsBiQuestion: PropTypes.func,
+};
 
 export default function SQLConnections() {
   const state = useSQLConnections();
+  const rootRef = useRef(null);
+  const [draftSql, setDraftSql] = useState('');
+  const draftSqlRef = useRef('');
+  draftSqlRef.current = draftSql;
   const hosted = Boolean(state.selected) && slotHosts.has(state.selected);
-  return <QueryToolFrame sx={{color: 'text.primary', bgcolor: 'background.default'}}>
-    {state.selected && !hosted && <QueryToolToolbar><SQLConnectionSelect /></QueryToolToolbar>}
-    {!state.selected && <DisconnectedQueryTool hasConnections={state.entries.length > 0} />}
-    {state.entries.filter(item => item.content).map(item => <Box key={item.id} sx={{display: item.id === state.selected ? 'flex' : 'none',
-      flexDirection: 'column', flex: 1, minHeight: 0}}><SlotContext.Provider value={item.id}>{item.content}</SlotContext.Provider></Box>)}
+
+  const handleDraftSqlChange = useCallback((val) => {
+    const next = typeof val === 'string' ? val : val?.target?.value ?? '';
+    if (next === draftSqlRef.current) return;
+    draftSqlRef.current = next;
+    setDraftSql(next);
+  }, []);
+
+  const readCurrentEditorSql = useCallback(() => {
+    if (state.selected && rootRef.current) {
+      const activeBox = rootRef.current.querySelector('[data-active-connection="true"]');
+      const field = activeBox?.querySelector('textarea, input[type="text"], input:not([type])');
+      if (field && typeof field.value === 'string' && field.value.trim()) {
+        return field.value;
+      }
+    }
+    return draftSql;
+  }, [state.selected, draftSql]);
+
+  const handleSaveAsBiQuestion = useCallback(() => {
+    const sql = String(readCurrentEditorSql() || '').trim();
+    const detail = {
+      activity: 'activity.bi-designs',
+      design_shortcut: 'bi_question_from_sql',
+      sql,
+    };
+    if (typeof window !== 'undefined') {
+      window.__cdeadminPendingDesignShortcut = detail;
+      window.dispatchEvent(new CustomEvent('cdeadmin:design-shortcut', {detail}));
+      window.pgAdmin?.Browser?.CDEadminCommandContext?.()?.showActivity?.('activity.bi-designs');
+    }
+  }, [readCurrentEditorSql]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onOpenSqlInEditor = (event) => {
+      const incomingSql = String(event?.detail?.sql ?? '');
+      setDraftSql(incomingSql);
+      if (selected) {
+        requestSQLSource(selected, {
+          sql: incomingSql,
+          dialect: event?.detail?.dialect || '',
+          parameters: event?.detail?.parameters || {},
+          title: event?.detail?.title || '',
+        });
+      }
+      if (rootRef.current) {
+        const activeBox = rootRef.current.querySelector('[data-active-connection="true"]');
+        const field = activeBox?.querySelector('textarea, input[type="text"], input:not([type])');
+        if (field) {
+          const proto = field.tagName === 'TEXTAREA'
+            ? window.HTMLTextAreaElement?.prototype
+            : window.HTMLInputElement?.prototype;
+          const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+          if (desc?.set) desc.set.call(field, incomingSql);
+          else field.value = incomingSql;
+          field.dispatchEvent(new Event('input', {bubbles: true}));
+          field.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      }
+    };
+    window.addEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
+    return () => window.removeEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
+  }, []);
+
+  return <QueryToolFrame ref={rootRef} sx={{color: 'text.primary', bgcolor: 'background.default'}}>
+    {state.selected && <QueryToolToolbar>
+      {!hosted && <SQLConnectionSelect />}
+      <Button size="sm" variant="secondary" onClick={handleSaveAsBiQuestion}>Save as BI Question…</Button>
+    </QueryToolToolbar>}
+    {!state.selected && <DisconnectedQueryTool
+      hasConnections={state.entries.length > 0}
+      sqlText={draftSql}
+      onSqlTextChange={handleDraftSqlChange}
+      onSaveAsBiQuestion={handleSaveAsBiQuestion}
+    />}
+    {state.entries.filter(item => item.content).map(item => <Box key={item.id}
+      data-active-connection={item.id === state.selected ? 'true' : 'false'}
+      sx={{display: item.id === state.selected ? 'flex' : 'none',
+        flexDirection: 'column', flex: 1, minHeight: 0}}><SlotContext.Provider value={item.id}>{item.content}</SlotContext.Provider></Box>)}
   </QueryToolFrame>;
 }

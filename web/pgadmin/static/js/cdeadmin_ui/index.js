@@ -20,6 +20,30 @@ export {
   Stack,
 } from './primitives/Layout';
 export {Dialog} from './overlays/Dialog';
+export {ScratchScrollArea} from './base/ScratchScrollArea';
+export {ScratchAlertDialog, ScratchPopoverPalette} from './base/ScratchOverlays';
+export {
+  ScratchBranchedTree,
+  DEFAULT_BRANCHED_TREE_OPTIONS,
+  computeBranchedTreeGeometry,
+  readBranchedTreePreferences,
+  writeBranchedTreePreferences,
+} from './navigation/ScratchBranchedTree';
+export {
+  ScratchRecordsTable,
+  ScratchFilterTable,
+  ScratchDiffTable,
+} from './data/beautiful';
+export {
+  DEFAULT_QUERY_LIMITS,
+  QueryExecutionToolbarCluster,
+  QueryStepStatusFooter,
+  readDefaultQueryLimits,
+  resolveQueryEngineCapabilities,
+  sliceRowsForStep,
+  useQueryExecutionController,
+  writeDefaultQueryLimits,
+} from './query';
 export {StatusBadge} from './status/StatusBadge';
 export {EmptyState} from './feedback/EmptyState';
 export {ProgressOverlay} from './feedback/ProgressOverlay';
@@ -100,15 +124,30 @@ export {
   createCommandDescriptor,
 } from './commands/CommandRegistry';
 export {
+  T_ACTION_SCHEMA,
+  T_ACTION_STATUS,
+  T_ACTION_TARGET_KIND,
+  TActionsRegistry,
+  createTAction,
+  t_actions,
+  useTActions,
+} from './actions/t_actions';
+export {
   MenuBindingRegistry,
   MenuStructureRegistry,
+  ProjectTopMenuRegistry,
   CDEADMIN_MENU_STRUCTURE,
   MENU_CUSTOMIZATION_SCHEMA,
+  PROJECT_MINIMAL_MENUS,
+  PROJECT_TOP_MENU_INDICES,
   PROVISIONAL_MENU_STRUCTURE,
+  assertUnsignedMenuIndex,
   createMenuCustomizationDocument,
   menuBindingRegistry,
   menuStructureRegistry,
   normalizeMenuCustomizations,
+  projectTopMenuRegistry,
+  sortProjectMenuItems,
 } from './commands/MenuStructure';
 export {ShortcutRegistry, shortcutRegistry} from './commands/ShortcutRegistry';
 export {ProjectExplorer} from './projects/ProjectExplorer';

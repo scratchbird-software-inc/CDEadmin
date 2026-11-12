@@ -1,7 +1,9 @@
 // The public DDN designer owns its palette, inspector, layout and undo/redo UI.
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button} from '@mui/material';
+import {Box} from '../../primitives/Layout';
+import {Button} from '../../primitives/Button';
+import {Banner} from '../../feedback/Indicators';
 import {DDNSessionController} from './DDNSessionController';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import FormReference from '../../navigation/FormReference';
@@ -43,7 +45,7 @@ export function DDNDesignerSurface(props) {
       })}>Export SVG</Button>
       <Box role="status" sx={{ml:'auto'}}>{ready?LABELS[state?.persistence]:'Opening DDN editor'}</Box>
     </Box>
-    {error && <Alert severity="error">{error.message}</Alert>}
+    {error && <Banner status="error">{error.message}</Banner>}
     <Box ref={host} aria-label="DDN Designer" sx={{flex:1,minHeight:400}}/>
   </Box>;
 }

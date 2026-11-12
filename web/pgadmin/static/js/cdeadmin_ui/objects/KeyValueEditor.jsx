@@ -19,6 +19,7 @@ import {Box, Stack} from '../primitives/Layout';
 import {TextField} from '../primitives/Field';
 import {Button, IconButton} from '../primitives/Button';
 import {ValidationMessage} from '../feedback/Indicators';
+import {ensureScratchBaseStyles} from '../base/ScratchBaseStyles';
 
 function entries(value) {
   if(value && typeof value === 'object' && !Array.isArray(value)) {
@@ -53,10 +54,12 @@ export default function KeyValueEditor({field, value, onChange, disabled=false, 
   };
   const set = (index, part, next) => commit(rows.map((row, position) =>
     position === index ? {...row, [part]: next} : row));
+  ensureScratchBaseStyles();
   return <Box role="group" aria-labelledby={headingId} data-cdeadmin-qa-key={`object-editor.keyvalue.${field.field_id}`}
-    sx={{border: '1px solid', borderColor: error ? 'error.main' : 'divider', p: 1}}>
-    <Stack direction="row" gap="compact" sx={{alignItems: 'center', mb: 1}}>
-      <Box id={headingId} component="span" sx={{fontSize: '0.8125rem', fontWeight: 600, flex: 1}}>
+    className="sr-bui-table-card"
+    sx={{borderColor: error ? 'var(--sr-danger)' : undefined}}>
+    <Stack direction="row" gap="compact" className="sr-bui-toolbar" sx={{alignItems: 'center'}}>
+      <Box id={headingId} component="span" className="sr-bui-toolbar-title" sx={{flex: 1}}>
         {field.label}{field.required ? ' *' : ''}
       </Box>
       <Button size="small" intent="neutral" disabled={disabled}
@@ -64,7 +67,7 @@ export default function KeyValueEditor({field, value, onChange, disabled=false, 
         Add setting
       </Button>
     </Stack>
-    <Stack gap="compact">
+    <Stack gap="compact" sx={{p: 1.25}}>
       {rows.map((row, index) => <Stack key={index} direction="row" gap="compact">
         <TextField size="small" label={`Name ${index + 1}`} value={row.key} disabled={disabled}
           onChange={(event) => set(index, 'key', event.target.value)} sx={{flex: 1}} />
@@ -76,8 +79,8 @@ export default function KeyValueEditor({field, value, onChange, disabled=false, 
       </Stack>)}
       {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>No settings.</Box>}
     </Stack>
-    {error && <ValidationMessage status="error">{error}</ValidationMessage>}
-    {!error && help && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', mt: 0.5}}>{help}</Box>}
+    {error && <Box sx={{px: 1.25, pb: 1}}><ValidationMessage status="error">{error}</ValidationMessage></Box>}
+    {!error && help && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.25, pb: 1}}>{help}</Box>}
   </Box>;
 }
 

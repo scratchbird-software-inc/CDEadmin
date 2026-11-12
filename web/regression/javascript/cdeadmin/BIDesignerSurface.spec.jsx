@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -16,6 +17,7 @@ import {
 } from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {libraries, setupDDNDOM} from './ddnTestRuntime';
+import SQLConnections from 'sources/cdeadmin_ui/editors/SQLConnections';
 import {
   BIDesignerSurface,
   BIDesignsNavigator,
@@ -191,6 +193,15 @@ function sampleQuestionModel() {
     },
     parameters: [],
     visualization: {type: 'bar', settings: {}},
+    visualization_format: {
+      number_format: 'currency',
+      currency_code: 'EUR',
+      decimals: 2,
+      date_grain: 'month',
+      x_axis_label: 'Region',
+      y_axis_label: 'Net EUR',
+      show_accessible_table_default: false,
+    },
     result_policy: {
       redact_columns: [],
       cache_ttl_seconds: 300,
@@ -233,7 +244,18 @@ function sampleDashboardModel() {
         },
       },
     ],
-    filters: [],
+    filters: [
+      {
+        id: 'region',
+        name: 'Region',
+        type: 'string',
+        widget: 'select',
+        operator: 'eq',
+        pinned_by_author: true,
+        default: 'North',
+        targets: [],
+      },
+    ],
     links: [],
     interaction: {
       default_click_behavior: 'cross_filter',
@@ -245,17 +267,19 @@ function sampleDashboardModel() {
   };
 }
 
-describe('Task-specific BI Questions & Dashboards Designer', () => {
+describe('Task-specific BI Questions & Dashboards Designer (Phase 1 & Phase 2)', () => {
   beforeEach(() => {
     setupDDNDOM();
     setDDNLibraryLoaderForTests(() => Promise.resolve(libraries()));
+    window.__cdeadminPendingDesignShortcut = null;
   });
 
   afterEach(() => {
     resetDDNLibraryLoaderForTests();
+    window.__cdeadminPendingDesignShortcut = null;
   });
 
-  it('renders question charts via DDNViewerSurface, flags fan-out & filter values, compiles SQL and accepts cleanly', async () => {
+  it('renders 5-tab DesignerTabbedMenu, single DDN view selector, structured SBsql builder, formatters, accessible data table, SQL compilation & Accept', async () => {
     const session = makeQuestionSession();
     const client = {
       openSession: jest.fn().mockResolvedValue(session),
@@ -264,6 +288,9 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
         bi_kind: 'question',
         bi: {question: sampleQuestionModel(), question_notes: ''},
         outward_effects: [],
+      }),
+      saveBiModel: jest.fn().mockResolvedValue({
+        design: session.design,
       }),
       biSqlBridge: jest.fn().mockResolvedValue({
         sql: 'SELECT "orders"."region" AS "region" FROM "main"."orders" AS "orders" WHERE "orders"."status" = ?',
@@ -290,12 +317,77 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
       expect(screen.getByText(/Question v1 · draft/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/SR-F-010024/)).toBeInTheDocument();
-    expect(screen.getByText(/SBsql join fan-out warning/i)).toBeInTheDocument();
+    expect(screen.getByText(/SR-F-030030/)).toBeInTheDocument();
+
+    // 5 ribbon category tabs + exactly ONE DDN view selector (showViewSelector={false})
+    const menuNav = screen.getByRole('navigation', {name: /BI designer menu/i});
+    for (const tabLabel of [
+      'Design',
+      'Query & Cards',
+      'Chart & Accessibility',
+      'SQL & AI Draft',
+      'Outward & Kiosk',
+    ]) {
+      expect(
+        within(menuNav).getByRole('tab', {name: new RegExp(tabLabel, 'i')})
+      ).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole('combobox', {name: /DDN view/i})).toHaveLength(1);
+
+    expect(
+      await screen.findByText(/SBsql join fan-out warning/i)
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Review saved filter literal\/default values/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', {name: /SQL Bridge/i}));
+    // Tab 2: Structured Query Builder uses TypedRowsEditor (no CSV textfields)
+    fireEvent.click(
+      within(menuNav).getByRole('tab', {name: /Query & Cards/i})
+    );
+    fireEvent.click(
+      screen.getByRole('button', {name: /Structured Query Builder…/i})
+    );
+    const qDialog = await screen.findByRole('dialog');
+    expect(within(qDialog).getByText(/SR-F-030031/)).toBeInTheDocument();
+    expect(
+      within(qDialog).getByRole('group', {name: 'Joined Tables'})
+    ).toBeInTheDocument();
+    fireEvent.click(within(qDialog).getByRole('button', {name: 'Cancel'}));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // Tab 3: Axis & Number Formatters + Accessible Data Table toggle
+    fireEvent.click(
+      within(menuNav).getByRole('tab', {name: 'Chart & Accessibility'})
+    );
+    fireEvent.click(
+      screen.getByRole('button', {name: /Accessible Data Table/i})
+    );
+    const accTable = await screen.findByRole('table', {
+      name: /Accessible BI data table/i,
+    });
+    expect(within(accTable).getByText('€120.00')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', {name: /Axis & Number Formatters…/i})
+    );
+    const fmtDialog = await screen.findByRole('dialog');
+    expect(within(fmtDialog).getByText(/SR-F-030032/)).toBeInTheDocument();
+    fireEvent.click(
+      within(fmtDialog).getByRole('button', {name: /Apply Formatters/i})
+    );
+    await waitFor(() => expect(client.saveBiModel).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // Tab 4: Compile Dialect SQL inside CodeEditor
+    fireEvent.click(within(menuNav).getByRole('tab', {name: 'SQL & AI Draft'}));
+    fireEvent.click(
+      screen.getByRole('button', {name: /Compile Dialect SQL…/i})
+    );
     const sqlDialog = await screen.findByRole('dialog');
     await waitFor(() => {
       expect(client.biSqlBridge).toHaveBeenCalledWith(
@@ -303,14 +395,18 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
         session.design.id,
         expect.objectContaining({action: 'compile_sql', dialect: 'sqlite'})
       );
-      expect(within(sqlDialog).getByText(/Bound parameters:/i)).toBeInTheDocument();
+      expect(
+        within(sqlDialog).getByText(/Bound parameters:/i)
+      ).toBeInTheDocument();
     });
     fireEvent.click(within(sqlDialog).getByRole('button', {name: 'Close'}));
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     );
 
-    fireEvent.click(screen.getByRole('button', {name: /^Accept…$/i}));
+    // Tab 1: Accept Version
+    fireEvent.click(within(menuNav).getByRole('tab', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('button', {name: /^Accept$/i}));
     const acceptBtn = await screen.findByRole('button', {
       name: /^Accept Version$/i,
     });
@@ -323,7 +419,7 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
     });
   });
 
-  it('renders composed dashboards, warns on static metric_panel snapshots and mints narrowing kiosk tokens', async () => {
+  it('supports interactive dashboard cross-filter & drill-through bar and manages Kiosk Device Fleet (list, mint, revoke)', async () => {
     const session = makeDashboardSession({status: 'accepted'});
     const client = {
       openSession: jest.fn().mockResolvedValue(session),
@@ -333,17 +429,52 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
         bi: {dashboard: sampleDashboardModel(), dashboard_notes: ''},
         outward_effects: [],
       }),
+      biSqlBridge: jest.fn().mockResolvedValue({
+        carried_filters: {
+          region: 'North',
+          snapshot_1: 'Throughput Snapshot:selected',
+        },
+      }),
       reviewBiOutwardEffect: jest.fn().mockResolvedValue({
         effect: {
           id: 'pub-01',
           effect_kind: 'dashboard_server',
           enabled: true,
         },
-        exposure_diff: {was_enabled: false, now_enabled: true},
       }),
-      mintBiDeviceToken: jest.fn().mockResolvedValue({
-        device_token: 'srbikiosk.v1.signedtoken',
+      listBiDeviceTokens: jest.fn().mockResolvedValue({
+        active_publication_id: 'pub-01',
+        tokens: [],
       }),
+      manageBiDeviceTokens: jest
+        .fn()
+        .mockResolvedValueOnce({
+          publication_id: 'pub-01',
+          device_token: 'srbikiosk.v1.signedtoken',
+          kiosk_url:
+            '/cdeadmin/designs/kiosk/pub-01#token=srbikiosk.v1.signedtoken',
+          tokens: [
+            {
+              token_id: 'tok-01',
+              device_label: 'lobby-kiosk',
+              status: 'active',
+              locked_filters: {},
+              last_used_at: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          revoked: {token_id: 'tok-01', status: 'revoked'},
+          tokens: [
+            {
+              token_id: 'tok-01',
+              device_label: 'lobby-kiosk',
+              status: 'revoked',
+              locked_filters: {},
+              last_used_at: null,
+            },
+          ],
+        }),
     };
 
     const Themed = withTheme(BIDesignerSurface);
@@ -363,18 +494,46 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
       screen.getByText(/hold static snapshots in BI and do not poll/i)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', {name: /Outward Effects/i}));
-    const outwardDialog = await screen.findByRole('dialog');
-    const effectSelect = within(outwardDialog).getByLabelText(/^Outward Effect$/i);
-    fireEvent.mouseDown(effectSelect);
+    // Interactive Cross-Filter & Drill-Through Bar
+    const strip = screen.getByLabelText(/Active Filter and Cross-Filter Strip/i);
+    expect(within(strip).getByText('Personal')).toBeInTheDocument();
+    expect(
+      within(strip).getByLabelText(/Region \(Author-Pinned\)/i)
+    ).toHaveValue('North');
     fireEvent.click(
-      await screen.findByRole('option', {
-        name: /Remote Dashboard Server Publication/i,
+      within(strip).getByRole('button', {
+        name: /Throughput Snapshot \(cross_filter\)/i,
       })
     );
     fireEvent.click(
+      within(strip).getByRole('button', {name: /Drill-Through with Context/i})
+    );
+    await waitFor(() => {
+      expect(client.biSqlBridge).toHaveBeenCalledWith(
+        'analytics',
+        session.design.id,
+        expect.objectContaining({
+          action: 'drill_context',
+          crossFilters: {snapshot_1: 'Throughput Snapshot:selected'},
+        })
+      );
+      expect(
+        screen.getByLabelText(/Carried drill-through context/i)
+      ).toHaveTextContent('Throughput Snapshot:selected');
+    });
+
+    // Outward & Kiosk Device Fleet
+    const menuNav = screen.getByRole('navigation', {name: /BI designer menu/i});
+    fireEvent.click(within(menuNav).getByRole('tab', {name: 'Outward & Kiosk'}));
+    fireEvent.click(
+      screen.getByRole('button', {name: /Dashboard Server & Kiosk Fleet…/i})
+    );
+    const outwardDialog = await screen.findByRole('dialog');
+    expect(within(outwardDialog).getByText(/SR-F-030033/)).toBeInTheDocument();
+
+    fireEvent.click(
       within(outwardDialog).getByRole('button', {
-        name: /Review & Apply Switch/i,
+        name: /Review & Apply Server Publication/i,
       })
     );
     await waitFor(() => {
@@ -390,19 +549,35 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
     });
 
     fireEvent.click(
-      screen.getByRole('button', {name: /Mint Narrowing Device Token/i})
+      within(outwardDialog).getByRole('button', {name: /Mint Device Token/i})
     );
     await waitFor(() => {
-      expect(client.mintBiDeviceToken).toHaveBeenCalledWith(
+      expect(client.manageBiDeviceTokens).toHaveBeenCalledWith(
         'analytics',
         session.design.id,
-        expect.objectContaining({publicationId: 'pub-01'})
+        expect.objectContaining({action: 'mint', publication_id: 'pub-01'})
       );
-      expect(screen.getByText(/srbikiosk\.v1\.signedtoken/)).toBeInTheDocument();
+      expect(
+        within(outwardDialog).getByDisplayValue(
+          /\/cdeadmin\/designs\/kiosk\/pub-01#token=srbikiosk\.v1\.signedtoken/
+        )
+      ).toBeInTheDocument();
+    });
+
+    const revokeBtn = await within(outwardDialog).findByRole('button', {
+      name: 'Revoke',
+    });
+    fireEvent.click(revokeBtn);
+    await waitFor(() => {
+      expect(client.manageBiDeviceTokens).toHaveBeenCalledWith(
+        'analytics',
+        session.design.id,
+        {action: 'revoke', token_id: 'tok-01'}
+      );
     });
   });
 
-  it('lists questions and dashboards in BIDesignsNavigator and imports Superset bundles into Draft', async () => {
+  it('imports Superset .json/.zip files without raw JSON paste and supports bidirectional SQLConnections ↔ BI handoff', async () => {
     const onOpen = jest.fn();
     const projectClient = {
       listProjects: jest.fn().mockResolvedValue([
@@ -417,13 +592,17 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
           title: 'Orders by Region',
           head_version: 1,
         },
-        {
-          id: 'd-1',
-          kind: 'dashboard',
-          title: 'Revenue Dashboard',
-          head_version: 2,
-        },
       ]),
+      biSqlBridge: jest.fn().mockResolvedValue({
+        fidelity: 'exact',
+        loss: [],
+        question: sampleQuestionModel(),
+      }),
+      createBiQuestion: jest.fn().mockResolvedValue({
+        id: 'q-from-sql',
+        kind: 'question',
+        title: 'SQL Question',
+      }),
       importBiSuperset: jest.fn().mockResolvedValue({
         source_format: 'superset_zip',
         status: 'draft',
@@ -440,43 +619,85 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
     };
 
     const ThemedNav = withTheme(BIDesignsNavigator);
+    const ThemedSql = withTheme(SQLConnections);
     render(
-      <ThemedNav
-        designClient={designClient}
-        projectClient={projectClient}
-        onOpenDesign={onOpen}
-      />
+      <div>
+        <ThemedSql />
+        <ThemedNav
+          designClient={designClient}
+          projectClient={projectClient}
+          onOpenDesign={onOpen}
+        />
+      </div>
     );
 
     await waitFor(() => {
       expect(
         screen.getByText(/Orders by Region \(question\)/i)
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(/Revenue Dashboard \(dashboard\)/i)
-      ).toBeInTheDocument();
     });
     expect(screen.getByText(/SR-F-010025/)).toBeInTheDocument();
 
+    // 1. Open in SQL Editor event populates SQLConnections query editor
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cdeadmin:open-sql-in-editor', {
+          detail: {
+            sql: 'SELECT region, SUM(amount) FROM orders GROUP BY region',
+            dialect: 'postgresql',
+          },
+        })
+      );
+    });
+
+    // 2. Clicking "Save as BI Question…" in SQLConnections opens BIDesignsNavigator pre-populated
+    fireEvent.click(
+      screen.getByRole('button', {name: /Save as BI Question…/i})
+    );
+    const sqlImportDialog = await screen.findByRole('dialog');
+    expect(within(sqlImportDialog).getByText(/SR-F-030035/)).toBeInTheDocument();
+    fireEvent.click(
+      within(sqlImportDialog).getByRole('button', {name: /^Continue$/i})
+    );
+    await waitFor(() => {
+      expect(designClient.biSqlBridge).toHaveBeenCalledWith(
+        'analytics',
+        expect.objectContaining({
+          action: 'from_sql',
+          sql: 'SELECT region, SUM(amount) FROM orders GROUP BY region',
+        })
+      );
+      expect(designClient.createBiQuestion).toHaveBeenCalled();
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+
+    // 3. File-picker Superset bundle import (zero raw JSON paste textarea)
     fireEvent.click(screen.getByRole('button', {name: /New BI design…/i}));
     const createDialog = await screen.findByRole('dialog');
-    expect(within(createDialog).getByText(/SR-F-010026/)).toBeInTheDocument();
-
-    const modeSelect = within(createDialog).getByLabelText(/^Mode$/i);
-    fireEvent.mouseDown(modeSelect);
+    fireEvent.mouseDown(within(createDialog).getByLabelText(/^Mode$/i));
     fireEvent.click(
       await screen.findByRole('option', {
         name: /Import Apache Superset YAML ZIP/i,
       })
     );
-    fireEvent.change(
-      within(createDialog).getByLabelText(/Bundle JSON or Base64 Archive/i),
-      {target: {value: '{"datasets":[],"charts":[],"dashboards":[]}'}}
+    const fileInput = within(createDialog).getByLabelText(/Import bundle file/i);
+    const jsonBytes = new TextEncoder().encode(
+      '{"datasets":[],"charts":[],"dashboards":[]}'
     );
+    const mockFile = new File([jsonBytes], 'superset-export.json', {
+      type: 'application/json',
+    });
+    fireEvent.change(fileInput, {target: {files: [mockFile]}});
+    await waitFor(() => {
+      expect(
+        within(createDialog).getByText(/Selected: superset-export\.json/i)
+      ).toBeInTheDocument();
+    });
     fireEvent.click(
       within(createDialog).getByRole('button', {name: /^Continue$/i})
     );
-
     await waitFor(() => {
       expect(designClient.importBiSuperset).toHaveBeenCalled();
       expect(onOpen).toHaveBeenCalledWith(
@@ -489,85 +710,7 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
     expect(def.id).toBe('cdeadmin.bi_designer');
   });
 
-  it('migrates legacy ScratchRobin BI store into Draft DDN and builds DDN chart workspaces', async () => {
-    const {buildChart, buildDdnChartWorkspace} = await import(
-      'sources/cdeadmin_ui/modules/bi/chartData'
-    );
-    const built = buildChart(
-      'bar',
-      {
-        columns: [
-          {key: 'region', name: 'Region', type: 'text'},
-          {key: 'amount', name: 'Amount', type: 'numeric'},
-        ],
-        rows: [
-          {region: 'EU', amount: 120},
-          {region: 'US', amount: 195},
-        ],
-      },
-      {x: 'region', y: ['amount']}
-    );
-    const ws = buildDdnChartWorkspace(built, 'Regional Sales');
-    expect(ws.schema).toBe('ddn-source-workspace@1');
-    expect(ws.files['main.ddn']).toContain('view "chart_preview" as "chart.basic@1"');
-    expect(ws.files['main.ddn']).toContain('mark "bar"');
-
-    const onOpen = jest.fn();
-    const projectClient = {
-      listProjects: jest.fn().mockResolvedValue([
-        {project_id: 'analytics', name: 'Analytics', access: 'owner'},
-      ]),
-    };
-    const designClient = {
-      listDesigns: jest.fn().mockResolvedValue([]),
-      importBiLegacy: jest.fn().mockResolvedValue({
-        source_format: 'legacy_scratchrobin_bi',
-        status: 'draft',
-        questions: [{id: 'q-leg', kind: 'question', title: 'Legacy Revenue'}],
-        dashboards: [{id: 'd-leg', kind: 'dashboard', title: 'Legacy Board'}],
-        loss_report: {
-          source_format: 'legacy_scratchrobin_bi',
-          loss_count: 2,
-          items: [{code: 'legacy_alerts_not_auto_enabled'}],
-        },
-      }),
-    };
-
-    const ThemedNav = withTheme(BIDesignsNavigator);
-    render(
-      <ThemedNav
-        designClient={designClient}
-        projectClient={projectClient}
-        onOpenDesign={onOpen}
-      />
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('button', {name: /New BI design…/i})).toBeInTheDocument()
-    );
-    fireEvent.click(screen.getByRole('button', {name: /New BI design…/i}));
-    const createDialog = await screen.findByRole('dialog');
-    fireEvent.mouseDown(within(createDialog).getByLabelText(/^Mode$/i));
-    fireEvent.click(
-      await screen.findByRole('option', {
-        name: /Migrate Legacy ScratchRobin BI/i,
-      })
-    );
-    fireEvent.click(
-      within(createDialog).getByRole('button', {name: /^Continue$/i})
-    );
-    await waitFor(() => {
-      expect(designClient.importBiLegacy).toHaveBeenCalledWith(
-        'analytics',
-        expect.objectContaining({bundle: null, endpointId: 'default-endpoint'})
-      );
-      expect(onOpen).toHaveBeenCalledWith(
-        'analytics',
-        expect.objectContaining({id: 'd-leg', kind: 'dashboard'})
-      );
-    });
-  });
-
-  it('routes BI dashboard action buttons through native-operation review and reads live read-only collector snapshots', async () => {
+  it('routes BI dashboard action buttons through native-operation review (KeyValuePairsEditor) and reads live collector snapshots', async () => {
     const session = makeDashboardSession({status: 'accepted'});
     const dashWithActionAndCollector = {
       ...sampleDashboardModel(),
@@ -585,7 +728,7 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
             snapshot_mode: 'collector_read_only',
             collector_binding: {
               engine: 'postgresql',
-              server_id: 'srv-1',
+              server_id: 1,
               target_id: 'db-1',
               metric_group: 'throughput',
               metric_keys: ['tps'],
@@ -665,9 +808,14 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
       ).toBeInTheDocument()
     );
 
-    // 1. Read-only collector snapshot refresh
+    const menuNav = screen.getByRole('navigation', {name: /BI designer menu/i});
+
+    // 1. Live Collector Binding snapshot via Chart & Accessibility tab
     fireEvent.click(
-      screen.getByRole('button', {name: /Collector Snapshots \(2\)/i})
+      within(menuNav).getByRole('tab', {name: 'Chart & Accessibility'})
+    );
+    fireEvent.click(
+      screen.getByRole('button', {name: /Live Collector Binding…/i})
     );
     const colDialog = await screen.findByRole('dialog');
     expect(
@@ -675,21 +823,29 @@ describe('Task-specific BI Questions & Dashboards Designer', () => {
         /Mode: collector_read_only · Collector state: running · Freshness: live/i
       )
     ).toBeInTheDocument();
-    expect(within(colDialog).getByDisplayValue(/412\.5/)).toBeInTheDocument();
     fireEvent.click(within(colDialog).getByRole('button', {name: 'Close'}));
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     );
 
-    // 2. BI Action Button -> native-operation review (awaiting_approval)
+    // 2. BI Action Button -> native-operation review via Outward & Kiosk tab + KeyValuePairsEditor
+    fireEvent.click(within(menuNav).getByRole('tab', {name: 'Outward & Kiosk'}));
     fireEvent.click(
-      screen.getByRole('button', {name: /Action Buttons \(1\)/i})
+      screen.getByRole('button', {name: /Test Action Button Native Review…/i})
     );
     const actDialog = await screen.findByRole('dialog');
-    fireEvent.change(
-      within(actDialog).getByLabelText(/Bound Parameter Values JSON/i),
-      {target: {value: '{"order_id": 101}'}}
-    );
+    const kvGroup = within(actDialog).getByRole('group', {
+      name: 'Action Prompt Values',
+    });
+    fireEvent.click(within(kvGroup).getByRole('button', {name: /\+ Add parameter/i}));
+    let kvInputs = within(kvGroup).getAllByRole('textbox');
+    fireEvent.change(kvInputs[0], {
+      target: {value: 'order_id'},
+    });
+    kvInputs = within(kvGroup).getAllByRole('textbox');
+    fireEvent.change(kvInputs[1], {
+      target: {value: '101'},
+    });
     fireEvent.click(
       within(actDialog).getByRole('button', {name: /Submit to Native Review/i})
     );

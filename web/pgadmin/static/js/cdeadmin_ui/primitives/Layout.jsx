@@ -8,86 +8,242 @@
 //////////////////////////////////////////////////////////////
 
 import PropTypes from 'prop-types';
-import {
-  Box as MuiBox,
-  Divider as MuiDivider,
-  Link as MuiLink,
-  Paper,
-  Stack as MuiStack,
-} from '@mui/material';
+import {Separator as BaseSeparator} from '@base-ui/react/separator';
+import {ScratchScrollArea} from '../base/ScratchScrollArea';
 
-export function Box(props) {
-  return <MuiBox {...props} />;
+function spacingPx(value) {
+  const map = {compact: 4, standard: 8, comfortable: 16};
+  if (map[value] !== undefined) return `${map[value]}px`;
+  if (typeof value === 'number') return `${value * 8}px`;
+  return value;
 }
 
-export function Stack({gap='standard', ...props}) {
-  const spacing = {compact: 0.5, standard: 1, comfortable: 2};
-  return <MuiStack spacing={spacing[gap] ?? gap} {...props} />;
+export function Box({
+  component: Component = 'div',
+  sx,
+  style,
+  display,
+  flex,
+  flexDirection,
+  flexWrap,
+  alignItems,
+  justifyContent,
+  gap,
+  minWidth,
+  maxWidth,
+  minHeight,
+  maxHeight,
+  width,
+  height,
+  overflow,
+  position,
+  // Strip MUI-only theme props if passed directly
+  // eslint-disable-next-line no-unused-vars
+  bgcolor,
+  // eslint-disable-next-line no-unused-vars
+  borderColor,
+  // eslint-disable-next-line no-unused-vars
+  p,
+  // eslint-disable-next-line no-unused-vars
+  px,
+  // eslint-disable-next-line no-unused-vars
+  py,
+  // eslint-disable-next-line no-unused-vars
+  m,
+  // eslint-disable-next-line no-unused-vars
+  mt,
+  // eslint-disable-next-line no-unused-vars
+  mb,
+  // eslint-disable-next-line no-unused-vars
+  ml,
+  // eslint-disable-next-line no-unused-vars
+  mr,
+  ...props
+}) {
+  const directStyle = {
+    ...(display !== undefined ? {display} : {}),
+    ...(flex !== undefined ? {flex} : {}),
+    ...(flexDirection !== undefined ? {flexDirection} : {}),
+    ...(flexWrap !== undefined ? {flexWrap} : {}),
+    ...(alignItems !== undefined ? {alignItems} : {}),
+    ...(justifyContent !== undefined ? {justifyContent} : {}),
+    ...(gap !== undefined ? {gap: typeof gap === 'number' ? `${gap * 8}px` : spacingPx(gap)} : {}),
+    ...(minWidth !== undefined ? {minWidth} : {}),
+    ...(maxWidth !== undefined ? {maxWidth} : {}),
+    ...(minHeight !== undefined ? {minHeight} : {}),
+    ...(maxHeight !== undefined ? {maxHeight} : {}),
+    ...(width !== undefined ? {width} : {}),
+    ...(height !== undefined ? {height} : {}),
+    ...(overflow !== undefined ? {overflow} : {}),
+    ...(position !== undefined ? {position} : {}),
+  };
+  const sxStyle = sx && typeof sx === 'object' ? {
+    ...(sx.display !== undefined ? {display: sx.display} : {}),
+    ...(sx.flex !== undefined ? {flex: sx.flex} : {}),
+    ...(sx.flexDirection !== undefined ? {flexDirection: sx.flexDirection} : {}),
+    ...(sx.flexWrap !== undefined ? {flexWrap: sx.flexWrap} : {}),
+    ...(sx.alignItems !== undefined ? {alignItems: sx.alignItems} : {}),
+    ...(sx.justifyContent !== undefined ? {justifyContent: sx.justifyContent} : {}),
+    ...(sx.gap !== undefined ? {gap: typeof sx.gap === 'number' ? `${sx.gap * 8}px` : sx.gap} : {}),
+    ...(sx.p !== undefined ? {padding: typeof sx.p === 'number' ? `${sx.p * 8}px` : sx.p} : {}),
+    ...(sx.px !== undefined ? {paddingInline: typeof sx.px === 'number' ? `${sx.px * 8}px` : sx.px} : {}),
+    ...(sx.py !== undefined ? {paddingBlock: typeof sx.py === 'number' ? `${sx.py * 8}px` : sx.py} : {}),
+    ...(sx.m !== undefined ? {margin: typeof sx.m === 'number' ? `${sx.m * 8}px` : sx.m} : {}),
+    ...(sx.mt !== undefined ? {marginTop: typeof sx.mt === 'number' ? `${sx.mt * 8}px` : sx.mt} : {}),
+    ...(sx.mb !== undefined ? {marginBottom: typeof sx.mb === 'number' ? `${sx.mb * 8}px` : sx.mb} : {}),
+    ...(sx.ml !== undefined ? {marginLeft: sx.ml === 'auto' ? 'auto' : `${sx.ml * 8}px`} : {}),
+    ...(sx.mr !== undefined ? {marginRight: sx.mr === 'auto' ? 'auto' : `${sx.mr * 8}px`} : {}),
+    ...(sx.minWidth !== undefined ? {minWidth: sx.minWidth} : {}),
+    ...(sx.maxWidth !== undefined ? {maxWidth: sx.maxWidth} : {}),
+    ...(sx.minHeight !== undefined ? {minHeight: sx.minHeight} : {}),
+    ...(sx.maxHeight !== undefined ? {maxHeight: sx.maxHeight} : {}),
+    ...(sx.width !== undefined ? {width: sx.width} : {}),
+    ...(sx.height !== undefined ? {height: sx.height} : {}),
+    ...(sx.overflow !== undefined ? {overflow: sx.overflow} : {}),
+    ...(sx.position !== undefined ? {position: sx.position} : {}),
+  } : undefined;
+
+  return <Component style={{...directStyle, ...sxStyle, ...style}} {...props} />;
 }
 
-export function Grid({columns=1, gap='standard', ...props}) {
-  const spacing = {compact: 0.5, standard: 1, comfortable: 2};
-  return <MuiBox
-    display="grid"
-    gridTemplateColumns={typeof columns === 'number' ?
-      `repeat(${columns}, minmax(0, 1fr))` : columns}
-    gap={spacing[gap] ?? gap}
-    {...props}
-  />;
+Box.propTypes = {
+  component: PropTypes.elementType,
+  sx: PropTypes.object,
+  style: PropTypes.object,
+};
+
+export function Stack({gap = 'standard', direction = 'column', style, ...props}) {
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: direction,
+        gap: spacingPx(gap),
+        ...style,
+      }}
+      {...props}
+    />
+  );
 }
 
-export function Panel({variant='flat', ...props}) {
-  return <Paper
-    variant={variant === 'flat' ? 'outlined' : 'elevation'}
-    elevation={variant === 'raised' ? 2 : 0}
-    {...props}
-  />;
+export function Grid({columns = 1, gap = 'standard', style, ...props}) {
+  return (
+    <Box
+      style={{
+        display: 'grid',
+        gridTemplateColumns: typeof columns === 'number'
+          ? `repeat(${columns}, minmax(0, 1fr))`
+          : columns,
+        gap: spacingPx(gap),
+        ...style,
+      }}
+      {...props}
+    />
+  );
 }
 
-export function ScrollArea({label, ...props}) {
-  return <MuiBox
-    role={label ? 'region' : undefined}
-    aria-label={label}
-    tabIndex={label ? 0 : undefined}
-    overflow="auto"
-    {...props}
-  />;
+export function Panel({variant = 'flat', style, ...props}) {
+  return (
+    <Box
+      style={{
+        borderRadius: 'var(--sr-island-radius, 12px)',
+        border: '1px solid var(--sr-border-default, #cbd5e1)',
+        background: 'var(--sr-surface-card, #ffffff)',
+        boxShadow: variant === 'raised' ? 'var(--sr-popup-shadow)' : 'none',
+        ...style,
+      }}
+      {...props}
+    />
+  );
 }
 
-export function Divider(props) {
-  return <MuiDivider {...props} />;
+export function ScrollArea({label, orientation = 'both', sx, style, ...props}) {
+  const sxStyle = sx && typeof sx === 'object' ? {
+    ...(sx.flex !== undefined ? {flex: sx.flex} : {}),
+    ...(sx.height !== undefined ? {height: sx.height} : {}),
+    ...(sx.maxHeight !== undefined ? {maxHeight: sx.maxHeight} : {}),
+    ...(sx.minHeight !== undefined ? {minHeight: sx.minHeight} : {}),
+    ...(sx.width !== undefined ? {width: sx.width} : {}),
+  } : undefined;
+  return (
+    <ScratchScrollArea
+      label={label}
+      orientation={orientation}
+      style={{...sxStyle, ...style}}
+      {...props}
+    />
+  );
 }
 
-export function Link({external=false, disabled=false, children, ...props}) {
-  return <MuiLink
-    {...props}
-    component={disabled ? 'span' : props.component}
-    href={disabled ? undefined : props.href}
-    role={disabled ? 'link' : props.role}
-    aria-disabled={disabled || undefined}
-    tabIndex={disabled ? -1 : props.tabIndex}
-    target={external ? '_blank' : props.target}
-    rel={external ? 'noopener noreferrer' : props.rel}
-    sx={{...props.sx, cursor: disabled ? 'not-allowed' : 'pointer',
-      color: disabled ? 'text.disabled' : undefined}}
-  >{children}</MuiLink>;
+export function Divider({orientation = 'horizontal', style, ...props}) {
+  return (
+    <BaseSeparator
+      orientation={orientation}
+      style={{
+        backgroundColor: 'var(--sr-border-subtle, #e2e8f0)',
+        ...(orientation === 'vertical'
+          ? {width: 1, alignSelf: 'stretch', marginInline: 4}
+          : {height: 1, width: '100%', marginBlock: 4}),
+        ...style,
+      }}
+      {...props}
+    />
+  );
+}
+
+Divider.propTypes = {
+  orientation: PropTypes.oneOf(['horizontal', 'vertical']),
+  style: PropTypes.object,
+};
+
+export function Link({external = false, disabled = false, children, sx, style, ...props}) {
+  const Tag = disabled ? 'span' : (props.component || 'a');
+  const rest = {...props};
+  delete rest.component;
+  return (
+    <Tag
+      {...rest}
+      href={disabled ? undefined : props.href}
+      role={disabled ? 'link' : props.role}
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled ? -1 : props.tabIndex}
+      target={external ? '_blank' : props.target}
+      rel={external ? 'noopener noreferrer' : props.rel}
+      style={{
+        color: disabled ? 'var(--sr-text-muted)' : 'var(--sr-accent)',
+        textDecoration: 'underline',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        ...(sx || {}),
+        ...style,
+      }}
+    >
+      {children}
+    </Tag>
+  );
 }
 
 Stack.propTypes = {
   gap: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  direction: PropTypes.string,
+  style: PropTypes.object,
 };
 
 Grid.propTypes = {
   columns: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   gap: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  style: PropTypes.object,
 };
 
 Panel.propTypes = {
   variant: PropTypes.oneOf(['flat', 'raised']),
+  style: PropTypes.object,
 };
 
 ScrollArea.propTypes = {
   label: PropTypes.string,
+  orientation: PropTypes.oneOf(['both', 'vertical', 'horizontal']),
+  sx: PropTypes.object,
+  style: PropTypes.object,
 };
 
 Link.propTypes = {
@@ -99,6 +255,7 @@ Link.propTypes = {
   role: PropTypes.string,
   tabIndex: PropTypes.number,
   sx: PropTypes.object,
+  style: PropTypes.object,
   target: PropTypes.string,
   rel: PropTypes.string,
 };

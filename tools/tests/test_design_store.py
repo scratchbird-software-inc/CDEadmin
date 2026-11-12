@@ -696,3 +696,32 @@ def test_firebird_and_mysql_family_physical_erd_bridge(tmp_path):
         parsed_my = _run_read_relations(engine, exported_my['workspace'])
         assert len(parsed_my['rows']) >= 1
         assert len(parsed_my['field_records']) == 1
+
+
+def test_delete_design_and_optimistic_head_version(tmp_path):
+    store = DesignStore(tmp_path / 'designs.db')
+    created = store.create_design(
+        project_id='proj-del',
+        key='ephemeral-erd',
+        kind='erd',
+        title='Ephemeral ERD',
+        ddn_text=(
+            'ddn 1\n'
+            'element t1 table with {\n'
+            '  title "orders"\n'
+            '}\n'
+        ),
+        actor_id=1,
+    )
+    did = created['id']
+    assert len(store.search('orders', project_id='proj-del')) >= 1
+
+    with pytest.raises(DesignStoreConflict):
+        store.delete_design(did, expected_head_version=99)
+
+    deleted = store.delete_design(did, expected_head_version=1)
+    assert deleted == {'deleted': True, 'id': did}
+    assert store.list_designs(project_id='proj-del') == []
+    assert store.search('orders', project_id='proj-del') == []
+    with pytest.raises(DesignStoreNotFound):
+        store.delete_design(did)

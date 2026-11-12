@@ -1,1 +1,525 @@
-{"schema":"cdeadmin.ui-tools.v1","engine":"mysql","tools":[{"command_id":"endpoint.mysql.data_drift","scope":"endpoint","slot":"after_verify","label":"Compare table data...","handler":"open_workspace","group":"diagnostics","arguments":{"tab":"mysql-data-drift","database_target_id":null},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can compare native table scopes."}},{"command_id":"endpoint.mysql.spatial","scope":"endpoint","slot":"after_verify","label":"Inspect spatial data...","handler":"open_workspace","group":"diagnostics","arguments":{"tab":"mysql-spatial","database_target_id":null},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can inspect native spatial data."}},{"command_id":"endpoint.mysql.content_search","scope":"endpoint","slot":"after_verify","label":"Search database content...","handler":"open_workspace","group":"diagnostics","arguments":{"tab":"mysql-content-search","database_target_id":null},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can search native table values."}},{"command_id":"endpoint.mysql.workload","scope":"endpoint","slot":"after_verify","label":"Analyze workload...","handler":"open_workspace","group":"diagnostics","arguments":{"tab":"mysql-workload","database_target_id":null},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can inspect its native workload."}},{"command_id":"endpoint.mysql.host","scope":"endpoint","slot":"after_verify","label":"Manage database host...","handler":"open_mysql_host","group":"maintenance","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its database SSH host."}},{"command_id":"endpoint.mysql.routers","scope":"endpoint","slot":"after_verify","label":"Manage Router hosts and services...","handler":"open_mysql_routers","group":"availability","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native Router deployments."}},{"command_id":"endpoint.mysql.physical","scope":"endpoint","slot":"after_verify","label":"Manage physical backups...","handler":"open_mysql_physical","icon":"action.backup","group":"backup","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer native physical backup jobs."}},{"command_id":"endpoint.mysql.raw_binlogs","scope":"endpoint","slot":"after_verify","label":"Manage binary-log archives...","handler":"open_mysql_raw_binlogs","icon":"action.backup","group":"backup","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer native raw archive jobs."}},{"command_id":"endpoint.mysql.binlog_replay","scope":"endpoint","slot":"after_verify","label":"Replay binary logs...","handler":"open_mysql_binlog_replay","icon":"action.restore","group":"restore","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer native replay jobs."}},{"command_id":"endpoint.mysql.sandboxes","scope":"endpoint","slot":"after_verify","label":"Manage local sandboxes...","handler":"open_mysql_sandboxes","icon":"action.settings","group":"availability","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can open local sandbox administration."}},{"command_id":"endpoint.mysql.topologies","scope":"endpoint","slot":"after_verify","label":"Manage replication topologies...","handler":"open_mysql_topologies","icon":"action.settings","group":"availability","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native topologies."}},{"command_id":"endpoint.mysql.local_clone","scope":"endpoint","slot":"after_verify","label":"Clone physical instance...","handler":"open_mysql_local_clone","icon":"action.backup","group":"backup","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native clone jobs."}},{"command_id":"endpoint.mysql.monitoring","scope":"endpoint","slot":"after_verify","label":"Open dashboard...","handler":"open_workspace","icon":"tool.dashboard","group":"availability","arguments":{"tab":"monitoring","dashboard_viewer":"relational_monitoring"},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can monitor it."}},{"command_id":"endpoint.mysql.monitoring_policy","scope":"endpoint","slot":"after_verify","label":"Configure monitoring collection...","handler":"open_workspace","icon":"tool.dashboard","group":"availability","mutation":"admin","arguments":{"tab":"monitoring_policy"},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can monitor it."}},{"command_id":"endpoint.mysql.dashboard_editor","scope":"endpoint","slot":"after_verify","label":"Edit dashboard...","handler":"open_mysql_dashboard_editor","icon":"action.edit","group":"availability","mutation":"write","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can edit it."}},{"command_id":"endpoint.mysql.server_catalog","scope":"endpoint","slot":"after_verify","label":"Capture server metadata and DDN...","handler":"open_workspace","icon":"action.export","group":"database","arguments":{"tab":"export","server_catalog":true},"enabled_when":["verified","owner"],"disabled_reasons":{"owner":"Only the endpoint owner can inspect it."}},{"command_id":"database.mysql.monitoring","scope":"database","slot":"post_tasks","label":"Open dashboard...","handler":"open_workspace","icon":"tool.dashboard","group":"availability","arguments":{"tab":"monitoring","dashboard_viewer":"relational_monitoring"}},{"command_id":"database.mysql.monitoring_policy","scope":"database","slot":"post_tasks","label":"Configure monitoring collection...","handler":"open_workspace","icon":"tool.dashboard","group":"availability","mutation":"admin","arguments":{"tab":"monitoring_policy"}},{"command_id":"database.mysql.spatial","scope":"database","slot":"post_tasks","label":"Inspect spatial data...","handler":"open_workspace","group":"diagnostics","arguments":{"tab":"mysql-spatial"}},{"command_id":"database.mysql.dashboard_editor","scope":"database","slot":"post_tasks","label":"Edit dashboard...","handler":"open_mysql_dashboard_editor","icon":"action.edit","group":"availability","mutation":"write"},{"command_id":"database.mysql.catalog_ddn","scope":"database","slot":"post_tasks","label":"Capture metadata and DDN...","handler":"open_workspace","icon":"action.export","group":"database","priority":44,"arguments":{"tab":"export"}},{"command_id":"database.mysql.test_data","scope":"database","slot":"post_tasks","label":"Generate test data...","handler":"open_workspace","icon":"action.insert","group":"database","priority":45,"arguments":{"tab":"mysql-test-data"}},{"command_id":"endpoint.mysql.binlogs","scope":"endpoint","slot":"after_verify","label":"Manage binary-log archives...","handler":"open_mysql_binlogs","icon":"action.backup","group":"backup","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native archive jobs."}},{"command_id":"endpoint.mysql.instance_backups","scope":"endpoint","slot":"after_verify","label":"Manage instance backups...","handler":"open_mysql_instance_backups","icon":"action.backup","group":"backup","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native instance backups."}},{"command_id":"endpoint.mysql.instance_restores","scope":"endpoint","slot":"after_verify","label":"Manage instance restores...","handler":"open_mysql_instance_restores","icon":"action.restore","group":"restore","mutation":"admin","enabled_when":["owner"],"disabled_reasons":{"owner":"Only the endpoint owner can administer its native instance restores."}}]}
+{
+  "schema": "cdeadmin.ui-tools.v1",
+  "engine": "mysql",
+  "tools": [
+    {
+      "command_id": "endpoint.mysql.data_drift",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Compare table data...",
+      "handler": "open_workspace",
+      "group": "diagnostics",
+      "arguments": {
+        "tab": "mysql-data-drift",
+        "database_target_id": null
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can compare native table scopes."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.spatial",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Inspect spatial data...",
+      "handler": "open_workspace",
+      "group": "diagnostics",
+      "arguments": {
+        "tab": "mysql-spatial",
+        "database_target_id": null
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can inspect native spatial data."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.content_search",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Search database content...",
+      "handler": "open_workspace",
+      "group": "diagnostics",
+      "arguments": {
+        "tab": "mysql-content-search",
+        "database_target_id": null
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can search native table values."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.workload",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Analyze workload...",
+      "handler": "open_workspace",
+      "group": "diagnostics",
+      "arguments": {
+        "tab": "mysql-workload",
+        "database_target_id": null
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can inspect its native workload."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.host",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage database host...",
+      "handler": "open_mysql_host",
+      "group": "maintenance",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its database SSH host."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.routers",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage Router hosts and services...",
+      "handler": "open_mysql_routers",
+      "group": "availability",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native Router deployments."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.physical",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage physical backups...",
+      "handler": "open_mysql_physical",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer native physical backup jobs."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.raw_binlogs",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage binary-log archives...",
+      "handler": "open_mysql_raw_binlogs",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer native raw archive jobs."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.binlog_replay",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Replay binary logs...",
+      "handler": "open_mysql_binlog_replay",
+      "icon": "action.restore",
+      "group": "restore",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer native replay jobs."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.sandboxes",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage local sandboxes...",
+      "handler": "open_mysql_sandboxes",
+      "icon": "action.settings",
+      "group": "availability",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can open local sandbox administration."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.topologies",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage replication topologies...",
+      "handler": "open_mysql_topologies",
+      "icon": "action.settings",
+      "group": "availability",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native topologies."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.local_clone",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Clone physical instance...",
+      "handler": "open_mysql_local_clone",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native clone jobs."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.monitoring",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Open dashboard...",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "arguments": {
+        "tab": "monitoring",
+        "dashboard_viewer": "relational_monitoring"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.monitoring_policy",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Configure monitoring collection...",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can monitor it."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.dashboard_editor",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Edit dashboard...",
+      "handler": "open_mysql_dashboard_editor",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can edit it."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.server_catalog",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Capture server metadata and DDN...",
+      "handler": "open_workspace",
+      "icon": "action.export",
+      "group": "database",
+      "arguments": {
+        "tab": "export",
+        "server_catalog": true
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can inspect it."
+      }
+    },
+    {
+      "command_id": "database.mysql.monitoring",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Open dashboard...",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "arguments": {
+        "tab": "monitoring",
+        "dashboard_viewer": "relational_monitoring"
+      }
+    },
+    {
+      "command_id": "database.mysql.monitoring_policy",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Configure monitoring collection...",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "monitoring_policy"
+      }
+    },
+    {
+      "command_id": "database.mysql.spatial",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Inspect spatial data...",
+      "handler": "open_workspace",
+      "group": "diagnostics",
+      "arguments": {
+        "tab": "mysql-spatial"
+      }
+    },
+    {
+      "command_id": "database.mysql.dashboard_editor",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Edit dashboard...",
+      "handler": "open_mysql_dashboard_editor",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "write"
+    },
+    {
+      "command_id": "database.mysql.catalog_ddn",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Capture metadata and DDN...",
+      "handler": "open_workspace",
+      "icon": "action.export",
+      "group": "database",
+      "priority": 44,
+      "arguments": {
+        "tab": "export"
+      }
+    },
+    {
+      "command_id": "database.mysql.test_data",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Generate test data...",
+      "handler": "open_workspace",
+      "icon": "action.insert",
+      "group": "database",
+      "priority": 45,
+      "arguments": {
+        "tab": "mysql-test-data"
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.binlogs",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage binary-log archives...",
+      "handler": "open_mysql_binlogs",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native archive jobs."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.instance_backups",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage instance backups...",
+      "handler": "open_mysql_instance_backups",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native instance backups."
+      }
+    },
+    {
+      "command_id": "endpoint.mysql.instance_restores",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage instance restores...",
+      "handler": "open_mysql_instance_restores",
+      "icon": "action.restore",
+      "group": "restore",
+      "mutation": "admin",
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer its native instance restores."
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.bi_questions",
+      "scope": "endpoint",
+      "label": "BI questions...",
+      "description": "Collections, the visual query builder, saved questions and their revision history.",
+      "handler": "open_tool",
+      "slot": "after_verify",
+      "icon": "tool.data-explorer",
+      "group": "information",
+      "priority": 72,
+      "arguments": {
+        "surface": "bi.questions"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.design_erd",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Design from this database...",
+      "description": "Import this database schema into a Draft four-level ERD & Data Model.",
+      "handler": "open_tool",
+      "icon": "tool.erd",
+      "group": "database",
+      "priority": 74,
+      "arguments": {
+        "activity": "activity.erd-models",
+        "design_shortcut": "erd_from_database"
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_cube",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New cube from this table...",
+      "description": "Seed a Draft dimensional cube using this table as its fact source.",
+      "handler": "open_tool",
+      "icon": "tool.cube",
+      "group": "object",
+      "priority": 61,
+      "arguments": {
+        "activity": "activity.cubes",
+        "design_shortcut": "cube_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_bi_question",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New BI question from this table...",
+      "description": "Seed a Draft BI question structured query targeting this table.",
+      "handler": "open_tool",
+      "icon": "tool.bi",
+      "group": "object",
+      "priority": 62,
+      "arguments": {
+        "activity": "activity.bi-designs",
+        "design_shortcut": "bi_question_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_screen_mesh",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New screen mesh from this table...",
+      "description": "Seed a Draft wireframe screen mesh with controls bound to this table.",
+      "handler": "open_tool",
+      "icon": "tool.screen-mesh",
+      "group": "object",
+      "priority": 63,
+      "arguments": {
+        "activity": "activity.screen-meshes",
+        "design_shortcut": "screen_mesh_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.where_used_designs",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Where used in designs...",
+      "description": "Inspect ERD models, cubes, BI questions/dashboards and screen meshes bound to this table.",
+      "handler": "open_tool",
+      "icon": "action.view",
+      "group": "object",
+      "priority": 64,
+      "arguments": {
+        "activity": "activity.erd-models",
+        "design_shortcut": "where_used"
+      },
+      "when": {
+        "resource_kinds": [
+          "table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    }
+  ]
+}

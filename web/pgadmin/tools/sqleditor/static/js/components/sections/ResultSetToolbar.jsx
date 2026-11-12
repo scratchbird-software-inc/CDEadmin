@@ -41,6 +41,7 @@ import { setEditorPosition } from '../QueryToolDataGrid/Editors';
 import { InputText } from '../../../../../../static/js/components/FormComponents';
 import { isEmptyString, minMaxValidator } from '../../../../../../static/js/validators';
 import {queryToolControlStyles} from 'sources/cdeadmin_ui/editors/QueryToolControls';
+import {useQueryExecutionController, QueryFetchLimitsPopover} from 'sources/cdeadmin_ui/query';
 
 const StyledDiv = styled('div')(({theme})=>({
   padding: '2px 4px',
@@ -474,10 +475,11 @@ export function ResultSetToolbar({query, canEdit, totalRowCount, pagination, all
             )
           }
         </Box>
-        {totalRowCount > 0 &&
-        <Box>
-          <PaginationInputs key={JSON.stringify(pagination)} pagination={pagination} totalRowCount={totalRowCount} clearSelection={clearSelection} serverCursor={queryToolCtx.server_cursor}/>
-        </Box>}
+        <Box sx={{display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap'}}>
+          <ResultSetStepControls queryToolCtx={queryToolCtx} eventBus={eventBus} pagination={pagination} />
+          {totalRowCount > 0 &&
+            <PaginationInputs key={JSON.stringify(pagination)} pagination={pagination} totalRowCount={totalRowCount} clearSelection={clearSelection} serverCursor={queryToolCtx.server_cursor}/>}
+        </Box>
       </StyledDiv>
       <PgMenu
         anchorRef={copyMenuRef}
@@ -504,5 +506,37 @@ ResultSetToolbar.propTypes = {
   canEdit: PropTypes.bool,
   totalRowCount: PropTypes.number,
   allRowsSelect: PropTypes.string,
+  pagination: PropTypes.object,
+};
+
+function ResultSetStepControls({queryToolCtx, eventBus, pagination}) {
+  const controller = useQueryExecutionController({
+    engine: queryToolCtx?.params?.engine || 'postgresql',
+    initialRowsPerStep: pagination?.page_size || undefined,
+  });
+  return (
+    <QueryFetchLimitsPopover
+      maxRows={controller.maxRows}
+      rowsPerStep={controller.rowsPerStep}
+      capabilities={controller.capabilities}
+      onMaxRowsChange={controller.setMaxRows}
+      onRowsPerStepChange={(nextStep) => {
+        controller.setRowsPerStep(nextStep);
+        if (eventBus && pagination?.rows_from) {
+          eventBus.fireEvent(
+            QUERY_TOOL_EVENTS.FETCH_WINDOW,
+            1,
+            Math.min(controller.maxRows, nextStep)
+          );
+        }
+      }}
+      qaKey="resultset-fetch-limits"
+    />
+  );
+}
+
+ResultSetStepControls.propTypes = {
+  queryToolCtx: PropTypes.object,
+  eventBus: PropTypes.object,
   pagination: PropTypes.object,
 };

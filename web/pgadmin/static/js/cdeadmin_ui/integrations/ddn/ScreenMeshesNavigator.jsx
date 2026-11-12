@@ -7,28 +7,35 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Box, Stack} from '../../primitives/Layout';
 import {Icon} from '../../icons';
 import {ProjectAssetClient} from '../../projects/ProjectAssetClient';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Button} from '../../primitives/Button';
-import {TextArea, TextField} from '../../primitives/Field';
-import {Select} from '../../primitives/Choice';
+import {TextField} from '../../primitives/Field';
+import {Checkbox, Select} from '../../primitives/Choice';
 import {TreeRow} from '../../navigation/AdvancedNavigation';
 import {Dialog} from '../../overlays/Dialog';
 import {Banner} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import FormReference from '../../navigation/FormReference';
+import {DesignerModalTabs, FormGrid, TypedRowsEditor} from './DesignerChrome';
 import {DesignStoreClient} from './sharedDesignLibrary';
 
 export const SCREEN_MESH_CREATE_EVENT = 'cdeadmin:screen-mesh-create';
 export const SCREEN_MESH_OPEN_EVENT = 'cdeadmin:screen-mesh-open';
+export const DESIGN_SHORTCUT_EVENT = 'cdeadmin:design-shortcut';
+
 const NEW_PROJECT = '\u0000new-project';
 const WRITABLE = new Set(['owner', 'manager', 'editor']);
 let pendingCreate = false;
+
+// Valid 16x12 minimal RGB PNG used only when the user opts into a synthetic QA sample capture
+const SAMPLE_QA_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAYAAABr5z2BAAAAFElEQVR42mP4//8/AyUYtfBoGAAANBYM8f0t8rAAAAAElFTkSuQmCC';
 
 export function requestScreenMeshCreate() {
   pendingCreate = true;
@@ -42,6 +49,7 @@ function takePendingCreate() {
 }
 
 export function openScreenMeshDesign(projectId, design) {
+  if (!design) return;
   window.dispatchEvent(
     new CustomEvent(SCREEN_MESH_OPEN_EVENT, {
       detail: {
@@ -65,6 +73,95 @@ function slugKey(name, fallback = 'screen-mesh') {
   );
 }
 
+function makeSeededTableMesh({
+  title,
+  tableRef,
+  formReference = '',
+  engine = '',
+  endpointId = '',
+  databaseTargetId = '',
+}) {
+  const baseStamp = Date.now().toString(16).padStart(12, '0').slice(-12);
+  const screenId = `019a0000-0000-7000-8001-${baseStamp}`;
+  const filterId = `019a0000-0000-7000-8002-${baseStamp}`;
+  const gridId = `019a0000-0000-7000-8003-${baseStamp}`;
+  const btnId = `019a0000-0000-7000-8004-${baseStamp}`;
+  const bndId = `019a0000-0000-7000-8005-${baseStamp}`;
+  const shortName = String(tableRef || 'records')
+    .split('.')
+    .filter(Boolean)
+    .pop();
+
+  return {
+    name: title,
+    look_handdrawn: false,
+    screens: [
+      {
+        id: screenId,
+        name: `${shortName} Screen`,
+        width: 960,
+        height: 640,
+        form_reference: formReference || '',
+      },
+    ],
+    controls: [
+      {
+        id: filterId,
+        screen_id: screenId,
+        role: 'ui.input',
+        name: `Filter ${shortName}`,
+        placeholder: `Search ${tableRef}…`,
+        bounds: {x: 24, y: 24, width: 320, height: 36},
+      },
+      {
+        id: btnId,
+        screen_id: screenId,
+        role: 'ui.button',
+        name: 'Refresh Records',
+        bounds: {x: 360, y: 24, width: 148, height: 36},
+      },
+      {
+        id: gridId,
+        screen_id: screenId,
+        role: 'ui.grid',
+        name: `${shortName} Grid`,
+        bounds: {x: 24, y: 80, width: 880, height: 420},
+        columns: [
+          {id: 'id', name: 'ID', width: 110, datatype: 'integer'},
+          {id: 'name', name: 'Name', width: 220, datatype: 'text'},
+        ],
+      },
+    ],
+    regions: [],
+    bindings: [
+      {
+        id: bndId,
+        source_id: gridId,
+        target_kind: 'table',
+        target_ref: tableRef,
+        access_mode: 'read',
+        ...(engine ? {target_engine: engine} : {}),
+        ...(endpointId ? {target_endpoint_id: endpointId} : {}),
+        ...(databaseTargetId ? {target_database_target_id: databaseTargetId} : {}),
+      },
+    ],
+    navigations: [],
+  };
+}
+
+function extractShortcutTableRef(detail = {}) {
+  if (!detail || typeof detail !== 'object') return '';
+  if (detail.resource_id) return String(detail.resource_id).trim();
+  if (detail.qualified_name) return String(detail.qualified_name).trim();
+  if (detail.target_ref) return String(detail.target_ref).trim();
+  if (detail.schema && (detail.table || detail.table_name || detail.name)) {
+    return `${detail.schema}.${detail.table || detail.table_name || detail.name}`;
+  }
+  return String(
+    detail.table || detail.table_name || detail.name || detail.label || ''
+  ).trim();
+}
+
 export function ScreenMeshesNavigator({
   designClient: suppliedDesignClient,
   projectClient: suppliedProjectClient,
@@ -79,18 +176,27 @@ export function ScreenMeshesNavigator({
     [suppliedProjectClient]
   );
 
+  const manifestInputRef = useRef(null);
   const [groups, setGroups] = useState([]);
   const [descriptorForms, setDescriptorForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
+  const [dialogTab, setDialogTab] = useState('source');
   const [importSummary, setImportSummary] = useState(null);
   const [draft, setDraft] = useState({
     mode: 'new_mesh',
     title: '',
     formReference: '',
     selectedDescriptorRef: '',
-    qaManifestJson: '',
+    qaManifestPayload: null,
+    qaManifestFileName: '',
+    qaRegions: [],
+    includeSampleQaCapture: false,
+    seededTableRef: '',
+    seededEngine: '',
+    seededEndpointId: '',
+    seededDatabaseTargetId: '',
     project: '',
     projectId: 'ui-meshes',
     projectName: 'Screen Meshes',
@@ -126,7 +232,10 @@ export function ScreenMeshesNavigator({
     }
   }, [designClient, projectClient]);
 
-  const writable = groups.filter(({project}) => WRITABLE.has(project.access));
+  const writable = useMemo(
+    () => groups.filter(({project}) => WRITABLE.has(project.access)),
+    [groups]
+  );
 
   const loadDescriptorCatalog = useCallback(async () => {
     if (typeof designClient.listDescriptorForms !== 'function') return;
@@ -145,19 +254,30 @@ export function ScreenMeshesNavigator({
     }
   }, [designClient]);
 
-  const beginCreate = useCallback(() => {
-    setCreateError('');
-    loadDescriptorCatalog();
-    setDraft((cur) => ({
-      ...cur,
-      mode: 'new_mesh',
-      title: '',
-      formReference: '',
-      qaManifestJson: '',
-      project: cur.project || writable[0]?.project.project_id || NEW_PROJECT,
-    }));
-    setOpen(true);
-  }, [writable, loadDescriptorCatalog]);
+  const beginCreate = useCallback(
+    (overrides = {}) => {
+      setCreateError('');
+      setDialogTab('source');
+      loadDescriptorCatalog();
+      setDraft((cur) => ({
+        ...cur,
+        mode: overrides.mode || 'new_mesh',
+        title: overrides.title ?? '',
+        formReference: overrides.formReference ?? '',
+        qaManifestPayload: null,
+        qaManifestFileName: '',
+        qaRegions: [],
+        includeSampleQaCapture: false,
+        seededTableRef: overrides.seededTableRef ?? '',
+        seededEngine: overrides.seededEngine ?? '',
+        seededEndpointId: overrides.seededEndpointId ?? '',
+        seededDatabaseTargetId: overrides.seededDatabaseTargetId ?? '',
+        project: cur.project || writable[0]?.project.project_id || NEW_PROJECT,
+      }));
+      setOpen(true);
+    },
+    [writable, loadDescriptorCatalog]
+  );
 
   useEffect(() => {
     refresh().then((loaded) => {
@@ -168,6 +288,7 @@ export function ScreenMeshesNavigator({
           ...cur,
           mode: 'new_mesh',
           title: '',
+          seededTableRef: '',
           project: first?.project.project_id || NEW_PROJECT,
         }));
         setOpen(true);
@@ -183,6 +304,50 @@ export function ScreenMeshesNavigator({
     window.addEventListener(SCREEN_MESH_CREATE_EVENT, listener);
     return () => window.removeEventListener(SCREEN_MESH_CREATE_EVENT, listener);
   }, [beginCreate]);
+
+  useEffect(() => {
+    const onShortcut = (event) => {
+      const detail = event?.detail || {};
+      const shortcut =
+        detail.design_shortcut || detail.shortcut || detail.action || '';
+      if (shortcut !== 'screen_mesh_from_table') return;
+      const tableRef = extractShortcutTableRef(detail) || 'main.records';
+      const shortTable = tableRef.split('.').filter(Boolean).pop() || 'Table';
+      beginCreate({
+        mode: 'new_mesh',
+        title: `${shortTable} Screen Mesh`,
+        seededTableRef: tableRef,
+        seededEngine: String(detail.providerId || detail.engine || ''),
+        seededEndpointId: String(detail.endpointId || detail.endpoint_id || ''),
+        seededDatabaseTargetId: String(
+          detail.database_target_id || detail.databaseId || ''
+        ),
+      });
+    };
+    window.addEventListener(DESIGN_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(DESIGN_SHORTCUT_EVENT, onShortcut);
+  }, [beginCreate]);
+
+  const handleQaManifestFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '').trim();
+      try {
+        const parsed =
+          text.startsWith('[') || text.startsWith('{') ? JSON.parse(text) : text;
+        setDraft((cur) => ({
+          ...cur,
+          qaManifestPayload: parsed,
+          qaManifestFileName: file.name,
+        }));
+        setCreateError('');
+      } catch (parseErr) {
+        setCreateError(`Invalid QA manifest file: ${parseErr.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const create = async () => {
     setSaving(true);
@@ -210,22 +375,40 @@ export function ScreenMeshesNavigator({
             'Select or enter an SR-F descriptor form reference to import.'
           );
         }
-        let parsedManifest = null;
-        const rawManifest = draft.qaManifestJson.trim();
-        if (rawManifest) {
-          parsedManifest =
-            rawManifest.startsWith('[') || rawManifest.startsWith('{')
-              ? JSON.parse(rawManifest)
-              : rawManifest;
+        let qaManifest = draft.qaManifestPayload;
+        if (
+          !qaManifest &&
+          (draft.qaRegions.length > 0 || draft.includeSampleQaCapture)
+        ) {
+          qaManifest = [
+            {
+              form_reference: refCode,
+              media_type: 'image/png',
+              image_base64: draft.includeSampleQaCapture
+                ? SAMPLE_QA_PNG_BASE64
+                : '',
+              regions: draft.qaRegions
+                .filter((r) => String(r.name || '').trim())
+                .map((r) => ({
+                  name: String(r.name).trim(),
+                  bounds: {
+                    x: Math.max(0, Number(r.x) || 0),
+                    y: Math.max(0, Number(r.y) || 0),
+                    width: Math.max(1, Number(r.width) || 160),
+                    height: Math.max(1, Number(r.height) || 48),
+                  },
+                })),
+            },
+          ];
         }
         const imported = await designClient.importDescriptorMesh(projectId, {
           formReference: refCode,
-          qaManifest: parsedManifest,
+          qaManifest,
         });
         setImportSummary(imported.loss_report || null);
         await refresh();
         setOpen(false);
-        if (imported.design) {
+        if (imported?.design) {
           onOpenDesign(projectId, imported.design);
         }
         return;
@@ -236,15 +419,27 @@ export function ScreenMeshesNavigator({
         throw new Error('A Screen Mesh needs a title.');
       }
       const key = `${slugKey(trimmedTitle)}-${Date.now().toString(36)}`;
+      const seededMesh = draft.seededTableRef.trim()
+        ? makeSeededTableMesh({
+          title: trimmedTitle,
+          tableRef: draft.seededTableRef.trim(),
+          formReference: draft.formReference.trim(),
+          engine: draft.seededEngine,
+          endpointId: draft.seededEndpointId,
+          databaseTargetId: draft.seededDatabaseTargetId,
+        })
+        : null;
+
       const created = await designClient.createScreenMesh(projectId, {
         key,
         title: trimmedTitle,
+        mesh: seededMesh,
         formReference: draft.formReference.trim() || null,
       });
 
       await refresh();
       setOpen(false);
-      onOpenDesign(projectId, created);
+      onOpenDesign(projectId, created?.design || created);
     } catch (saveErr) {
       setCreateError(saveErr.message);
     } finally {
@@ -278,7 +473,12 @@ export function ScreenMeshesNavigator({
     >
       <FormReference formKey="screen-meshes-navigator" />
       <Toolbar label="Screen Mesh commands">
-        <Button onClick={beginCreate}>New Screen Mesh…</Button>
+        <Button onClick={() => beginCreate()}>New Screen Mesh…</Button>
+        <Button
+          onClick={() => beginCreate({mode: 'import_descriptor'})}
+        >
+          Import SR-F Form…
+        </Button>
         <Button onClick={refresh}>Refresh</Button>
       </Toolbar>
       {importSummary && (
@@ -308,7 +508,7 @@ export function ScreenMeshesNavigator({
           <EmptyState
             message="No Screen Meshes yet. Create a wireframe mesh or import an SR-F UI descriptor form into Draft DDN."
             actionLabel="New Screen Mesh"
-            onAction={beginCreate}
+            onAction={() => beginCreate()}
           />
         )}
         {!error &&
@@ -341,8 +541,8 @@ export function ScreenMeshesNavigator({
 
       <Dialog
         open={open}
-        size="medium"
-        title="New or imported Screen Mesh"
+        size="large"
+        title="New or Imported Screen Mesh"
         busy={saving}
         validationError={createError}
         onClose={() => setOpen(false)}
@@ -350,7 +550,7 @@ export function ScreenMeshesNavigator({
         actions={
           <>
             <Button onClick={() => setOpen(false)}>Cancel</Button>
-            <Button variant="contained" disabled={saving} onClick={create}>
+            <Button intent="primary" disabled={saving} onClick={create}>
               {draft.mode === 'import_descriptor'
                 ? 'Import SR-F Form'
                 : 'Create Screen Mesh'}
@@ -358,95 +558,268 @@ export function ScreenMeshesNavigator({
           </>
         }
       >
-        <FormReference formKey="screen-mesh-create" />
-        <Stack spacing={1.5}>
-          <Select
-            label="Project"
-            options={projectOptions}
-            value={draft.project}
-            onChange={(val) => setDraft((cur) => ({...cur, project: val}))}
-          />
-          {draft.project === NEW_PROJECT && (
-            <>
-              <TextField
-                label="New project ID"
-                value={draft.projectId}
-                onChange={(e) =>
-                  setDraft((cur) => ({...cur, projectId: e.target.value}))
-                }
-              />
-              <TextField
-                label="New project name"
-                value={draft.projectName}
-                onChange={(e) =>
-                  setDraft((cur) => ({...cur, projectName: e.target.value}))
-                }
-              />
-            </>
-          )}
-          <Select
-            label="Source"
-            options={[
-              {
-                value: 'new_mesh',
-                label: 'Blank Wireframe Screen Mesh (wireframe.ui@1)',
-              },
-              {
-                value: 'import_descriptor',
-                label: 'Import ScratchRobin SR-F UI Descriptor Form',
-              },
-            ]}
-            value={draft.mode}
-            onChange={(val) => setDraft((cur) => ({...cur, mode: val}))}
-          />
-          {draft.mode === 'new_mesh' ? (
-            <>
-              <TextField
-                label="Screen Mesh title"
-                value={draft.title}
-                onChange={(e) =>
-                  setDraft((cur) => ({...cur, title: e.target.value}))
-                }
-              />
-              <TextField
-                label="Optional SR-F form reference"
-                value={draft.formReference}
-                onChange={(e) =>
-                  setDraft((cur) => ({...cur, formReference: e.target.value}))
-                }
-              />
-            </>
-          ) : (
-            <>
-              {descriptorOptions.length > 0 ? (
-                <Select
-                  label="SR-F UI descriptor form"
-                  options={descriptorOptions}
-                  value={draft.selectedDescriptorRef}
-                  onChange={(val) =>
-                    setDraft((cur) => ({...cur, selectedDescriptorRef: val}))
-                  }
-                />
-              ) : (
-                <TextField
-                  label="SR-F form reference (e.g. SR-F-020073)"
-                  value={draft.formReference}
-                  onChange={(e) =>
-                    setDraft((cur) => ({...cur, formReference: e.target.value}))
-                  }
-                />
-              )}
-              <TextArea
-                rows={3}
-                label="Optional QA screenshot manifest (JSON or CSV)"
-                value={draft.qaManifestJson}
-                onChange={(e) =>
-                  setDraft((cur) => ({...cur, qaManifestJson: e.target.value}))
-                }
-              />
-            </>
-          )}
-        </Stack>
+        <DesignerModalTabs
+          formKey={
+            draft.mode === 'import_descriptor'
+              ? 'screen-mesh-import'
+              : 'screen-mesh-workspace'
+          }
+          activeTab={dialogTab}
+          onTabChange={setDialogTab}
+          minHeight={240}
+          tabs={[
+            {
+              id: 'source',
+              label: 'Mesh & Source',
+              render: () => (
+                <Stack gap="standard">
+                  <FormGrid columns={2}>
+                    <Select
+                      label="Project"
+                      options={projectOptions}
+                      value={draft.project}
+                      onChange={(val) =>
+                        setDraft((cur) => ({...cur, project: val}))
+                      }
+                    />
+                    <Select
+                      label="Source"
+                      options={[
+                        {
+                          value: 'new_mesh',
+                          label: 'Blank Wireframe Screen Mesh (wireframe.ui@1)',
+                        },
+                        {
+                          value: 'import_descriptor',
+                          label: 'Import ScratchRobin SR-F UI Descriptor Form',
+                        },
+                      ]}
+                      value={draft.mode}
+                      onChange={(val) =>
+                        setDraft((cur) => ({...cur, mode: val}))
+                      }
+                    />
+                  </FormGrid>
+
+                  {draft.project === NEW_PROJECT && (
+                    <FormGrid columns={2}>
+                      <TextField
+                        label="New project ID"
+                        value={draft.projectId}
+                        onChange={(e) =>
+                          setDraft((cur) => ({
+                            ...cur,
+                            projectId: e.target.value,
+                          }))
+                        }
+                      />
+                      <TextField
+                        label="New project name"
+                        value={draft.projectName}
+                        onChange={(e) =>
+                          setDraft((cur) => ({
+                            ...cur,
+                            projectName: e.target.value,
+                          }))
+                        }
+                      />
+                    </FormGrid>
+                  )}
+
+                  {draft.mode === 'new_mesh' ? (
+                    <FormGrid columns={2}>
+                      <TextField
+                        label="Screen Mesh title"
+                        value={draft.title}
+                        onChange={(e) =>
+                          setDraft((cur) => ({...cur, title: e.target.value}))
+                        }
+                      />
+                      <TextField
+                        label="Optional SR-F form reference"
+                        value={draft.formReference}
+                        onChange={(e) =>
+                          setDraft((cur) => ({
+                            ...cur,
+                            formReference: e.target.value,
+                          }))
+                        }
+                      />
+                      <TextField
+                        label="Seed from catalog table (optional)"
+                        placeholder="e.g. main.orders"
+                        value={draft.seededTableRef}
+                        onChange={(e) =>
+                          setDraft((cur) => ({
+                            ...cur,
+                            seededTableRef: e.target.value,
+                          }))
+                        }
+                      />
+                    </FormGrid>
+                  ) : (
+                    <FormGrid columns={2}>
+                      {descriptorOptions.length > 0 ? (
+                        <Select
+                          label="SR-F UI descriptor form"
+                          options={descriptorOptions}
+                          value={draft.selectedDescriptorRef}
+                          onChange={(val) =>
+                            setDraft((cur) => ({
+                              ...cur,
+                              selectedDescriptorRef: val,
+                            }))
+                          }
+                        />
+                      ) : (
+                        <TextField
+                          label="SR-F form reference (e.g. SR-F-020073)"
+                          value={draft.formReference}
+                          onChange={(e) =>
+                            setDraft((cur) => ({
+                              ...cur,
+                              formReference: e.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                      <Box sx={{pt: 0.5}}>
+                        <Checkbox
+                          label="Attach sample QA screenshot frame"
+                          checked={Boolean(draft.includeSampleQaCapture)}
+                          onChange={(checked) =>
+                            setDraft((cur) => ({
+                              ...cur,
+                              includeSampleQaCapture: checked,
+                            }))
+                          }
+                        />
+                      </Box>
+                    </FormGrid>
+                  )}
+                </Stack>
+              ),
+            },
+            ...(draft.mode === 'import_descriptor'
+              ? [
+                {
+                  id: 'qa_manifest',
+                  label: 'QA Manifest & Regions',
+                  render: () => (
+                    <Stack gap="standard">
+                      <Box
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer?.files?.[0];
+                          if (file) handleQaManifestFile(file);
+                        }}
+                        sx={{
+                          border: '1px dashed',
+                          borderColor: 'divider',
+                          p: 1.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 1,
+                        }}
+                      >
+                        <Box sx={{fontSize: '0.8125rem'}}>
+                          {draft.qaManifestFileName ? (
+                            <>
+                                Loaded QA manifest:{' '}
+                              <strong>{draft.qaManifestFileName}</strong>
+                            </>
+                          ) : (
+                            'Drop a QA screenshot manifest (.json or .csv) here or choose a file.'
+                          )}
+                        </Box>
+                        <Stack direction="row" gap="compact">
+                          <input
+                            ref={manifestInputRef}
+                            type="file"
+                            aria-label="Upload QA screenshot manifest file"
+                            accept=".json,.csv,application/json,text/csv"
+                            style={{display: 'none'}}
+                            onChange={(e) =>
+                              handleQaManifestFile(e.target.files?.[0])
+                            }
+                          />
+                          <Button
+                            size="small"
+                            onClick={() => manifestInputRef.current?.click()}
+                          >
+                              Choose Manifest File…
+                          </Button>
+                          {draft.qaManifestFileName && (
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                setDraft((cur) => ({
+                                  ...cur,
+                                  qaManifestPayload: null,
+                                  qaManifestFileName: '',
+                                }))
+                              }
+                            >
+                                Clear File
+                            </Button>
+                          )}
+                        </Stack>
+                      </Box>
+
+                      <TypedRowsEditor
+                        label="QA Hotspot Regions"
+                        addLabel="Add QA Region"
+                        rows={draft.qaRegions}
+                        onChange={(rows) =>
+                          setDraft((cur) => ({...cur, qaRegions: rows}))
+                        }
+                        columns={[
+                          {
+                            key: 'name',
+                            label: 'Region Name',
+                            placeholder: 'Columns Grid Area',
+                            minWidth: 160,
+                          },
+                          {
+                            key: 'x',
+                            label: 'X',
+                            type: 'number',
+                            default: 20,
+                            minWidth: 72,
+                          },
+                          {
+                            key: 'y',
+                            label: 'Y',
+                            type: 'number',
+                            default: 60,
+                            minWidth: 72,
+                          },
+                          {
+                            key: 'width',
+                            label: 'Width',
+                            type: 'number',
+                            default: 280,
+                            minWidth: 84,
+                          },
+                          {
+                            key: 'height',
+                            label: 'Height',
+                            type: 'number',
+                            default: 96,
+                            minWidth: 84,
+                          },
+                        ]}
+                      />
+                    </Stack>
+                  ),
+                },
+              ]
+              : []),
+          ]}
+        />
       </Dialog>
     </Box>
   );

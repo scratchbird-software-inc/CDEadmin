@@ -6297,6 +6297,102 @@
     "descriptor-form:yugabytedb:view": {
       "reference": "SR-F-020122",
       "title": "yugabytedb view descriptor form"
+    },
+    "cube-designer-workspace": {
+      "reference": "SR-F-030001",
+      "title": "Cube designer workspace"
+    },
+    "cube-designer-star": {
+      "reference": "SR-F-030002",
+      "title": "Cube star view and live connection check"
+    },
+    "cube-designer-dimension": {
+      "reference": "SR-F-030003",
+      "title": "Cube dimension and hierarchy editor"
+    },
+    "cube-designer-measures": {
+      "reference": "SR-F-030004",
+      "title": "Cube measure, usage matrix and AI draft editor"
+    },
+    "cube-designer-aggregations": {
+      "reference": "SR-F-030005",
+      "title": "Cube aggregation grid, combinatorial reducer and materialization plan"
+    },
+    "cube-designer-governance": {
+      "reference": "SR-F-030006",
+      "title": "Cube perspectives, locales, role visibility and interchange export"
+    },
+    "erd-designer-workspace": {
+      "reference": "SR-F-030010",
+      "title": "ERD and data modelling workspace"
+    },
+    "erd-designer-whiteboard": {
+      "reference": "SR-F-030011",
+      "title": "ERD conceptual whiteboard and promotion wizard"
+    },
+    "erd-designer-standards": {
+      "reference": "SR-F-030012",
+      "title": "ERD naming standards and waiver inspector"
+    },
+    "erd-designer-alter-plan": {
+      "reference": "SR-F-030013",
+      "title": "ERD alter plan, risk review and migration handoff"
+    },
+    "erd-designer-deploy": {
+      "reference": "SR-F-030014",
+      "title": "ERD system drift, engine conversion and deployment matrix"
+    },
+    "erd-designer-import": {
+      "reference": "SR-F-030015",
+      "title": "ERD SQL DDL, DBML and catalog importer"
+    },
+    "screen-mesh-workspace": {
+      "reference": "SR-F-030020",
+      "title": "Screen mesh designer workspace"
+    },
+    "screen-mesh-screenshot": {
+      "reference": "SR-F-030021",
+      "title": "Screen mesh screenshot regions, redaction, trace and visual diff"
+    },
+    "screen-mesh-field-spec": {
+      "reference": "SR-F-030022",
+      "title": "Screen mesh field specification table and export"
+    },
+    "screen-mesh-import": {
+      "reference": "SR-F-030023",
+      "title": "Screen mesh SR-F descriptor form importer"
+    },
+    "bi-designer-workspace": {
+      "reference": "SR-F-030030",
+      "title": "BI question and dashboard workspace"
+    },
+    "bi-designer-query": {
+      "reference": "SR-F-030031",
+      "title": "BI structured query, SQL bridge and AI draft"
+    },
+    "bi-designer-chart": {
+      "reference": "SR-F-030032",
+      "title": "BI chart formatters, accessibility and collector panel"
+    },
+    "bi-designer-outward": {
+      "reference": "SR-F-030033",
+      "title": "BI outward effects, write-back review and kiosk device fleet"
+    },
+    "bi-designer-kiosk": {
+      "reference": "SR-F-030034",
+      "title": "BI display-only remote kiosk viewer"
+    },
+    "bi-designer-import": {
+      "reference": "SR-F-030035",
+      "title": "BI Superset, Metabase and legacy bundle importer"
+    },
+    "design-checkpoints-diff": {
+      "reference": "SR-F-030040",
+      "title": "Design checkpoints, directed save points and version diff"
+    },
+    "design-where-used": {
+      "reference": "SR-F-030041",
+      "title": "Cross-design where-used and impact explorer"
     }
   }
 }

@@ -14,6 +14,8 @@ import CDEadminLogo from './CDEadminLogo';
 import url_for from 'sources/url_for';
 import {Icon} from 'sources/cdeadmin_ui/icons';
 import {useWorkbenchActivities} from 'sources/cdeadmin_ui/shell/WorkbenchShell';
+import {useProjectShell} from 'sources/cdeadmin_ui/shell/ProjectShell';
+import {translateShell} from 'sources/cdeadmin_ui/shell/shellMenuI18n';
 
 const Root = styled('div')(({theme}) => ({
   background: theme.palette.grey[400],
@@ -28,8 +30,9 @@ const Root = styled('div')(({theme}) => ({
     minWidth: 0,
     wordWrap: 'break-word',
     backgroundColor: theme.otherVars.tableBg,
-    border: `1px solid ${theme.otherVars.borderColor}`,
-    borderRadius: theme.shape.borderRadius,
+    border: `1px solid var(--sr-island-border, ${theme.otherVars.borderColor})`,
+    borderRadius: 'var(--sr-island-radius, 12px)',
+    overflow: 'hidden',
     marginBottom: 'clamp(10px, 1.5vw, 20px)',
   },
   '& .WelcomeDashboard-cardHeader': {
@@ -70,8 +73,8 @@ const Root = styled('div')(({theme}) => ({
     minWidth: 0,
     minHeight: '132px',
     padding: '16px 10px',
-    border: `1px solid ${theme.otherVars.borderColor}`,
-    borderRadius: theme.shape.borderRadius,
+    border: `1px solid var(--sr-island-border, ${theme.otherVars.borderColor})`,
+    borderRadius: 'var(--sr-island-radius, 12px)',
     background: theme.palette.background.default,
     color: `${theme.palette.text.primary} !important`,
     font: 'inherit',
@@ -114,13 +117,28 @@ const Root = styled('div')(({theme}) => ({
 
 function ActivityLaunchers() {
   const {activities, activate} = useWorkbenchActivities();
+  const projectShell = useProjectShell();
+  const locale = projectShell?.locale || 'en';
+  const resolvedActivities =
+    activities.length > 0
+      ? activities
+      : (projectShell?.authorizedApps || []).map((app) => ({
+        id: app.id,
+        label: translateShell(locale, `app.${app.id}.label`, app.label),
+        iconKey: app.iconKey,
+        disabled: false,
+      }));
+  const handleActivate = (id) => {
+    if (activities.length > 0) activate(id);
+    else projectShell?.openApplication?.(id);
+  };
   return <div className="WelcomeDashboard-launchGrid"
     data-cdeadmin-qa-key="dashboard.welcome.workspace-launchers">
-    {activities.map((activity) => <button type="button"
+    {resolvedActivities.map((activity) => <button type="button"
       className="WelcomeDashboard-launchTile" key={activity.id}
       disabled={activity.disabled === true}
       title={activity.disabledReason || activity.label}
-      onClick={() => activate(activity.id)}>
+      onClick={() => handleActivate(activity.id)}>
       <Icon iconKey={activity.iconKey || 'command.default'} decorative />
       <span>{activity.label}</span>
     </button>)}

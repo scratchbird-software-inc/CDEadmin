@@ -66,14 +66,14 @@ export function screenMeshModuleDefinition() {
     id: SCREEN_MESH_MODULE_ID,
     version: '1.0.0',
     title: 'Screen Mesh Designer',
-    iconKey: 'tool.erd',
+    iconKey: 'tool.screen-mesh',
     serviceRequirements: [PROJECT_ASSET_SERVICE_ID, DESIGN_STORE_SERVICE_ID],
     contributions: {
       surfaces: [
         {
           id: 'diagram.screen_mesh.designer',
           title: 'Screen Mesh Designer',
-          iconKey: 'tool.erd',
+          iconKey: 'tool.screen-mesh',
           assetTypes: [
             SCREEN_MESH_DESIGN_ASSET_TYPE,
             SCREEN_FLOW_DESIGN_ASSET_TYPE,
@@ -111,7 +111,7 @@ export function screenMeshModuleDefinition() {
           label: 'New Screen Mesh…',
           description:
             'Create a wireframe Screen Mesh or import a ScratchRobin SR-F UI descriptor form into Draft DDN.',
-          iconKey: 'tool.erd',
+          iconKey: 'tool.screen-mesh',
           surfaces: ['tools', 'project'],
           permission: ['project.asset.edit'],
           execute: (_args, context) => {
@@ -124,7 +124,7 @@ export function screenMeshModuleDefinition() {
           label: 'Screen Meshes',
           description:
             'List and open wireframe Screen Meshes and annotated screenshots across projects.',
-          iconKey: 'tool.erd',
+          iconKey: 'tool.screen-mesh',
           surfaces: ['tools', 'view'],
           execute: (_args, context) => {
             if (typeof context.showActivity !== 'function') {
@@ -138,7 +138,7 @@ export function screenMeshModuleDefinition() {
           label: 'Open in Screen Mesh Designer',
           description:
             'Open a versioned Screen Mesh design from the design store.',
-          iconKey: 'tool.erd',
+          iconKey: 'tool.screen-mesh',
           surfaces: ['toolbar'],
           validateArguments: validateDesignArguments,
           execute: async (args, context) => {
@@ -180,7 +180,7 @@ export function screenMeshModuleDefinition() {
         {
           id: 'activity.screen_meshes',
           label: 'Screen Meshes',
-          iconKey: 'tool.erd',
+          iconKey: 'tool.screen-mesh',
           priority: 56,
           surfaceId: 'diagram.screen_mesh.designer',
           render: () => React.createElement(ScreenMeshesNavigator),

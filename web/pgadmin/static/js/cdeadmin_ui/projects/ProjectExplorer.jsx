@@ -9,7 +9,8 @@
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box} from '@mui/material';
+import {Box} from '../primitives/Layout';
+import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {Icon} from '../icons';
 import {ProjectAssetClient} from './ProjectAssetClient';
 import {Toolbar} from '../layout/WorkbenchChrome';
@@ -135,42 +136,46 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
     </Toolbar>
     <Box sx={{p: 0.5}}><SearchField label="Filter projects and assets"
       value={query} onChange={setQuery} resultCount={visibleProjects.length} /></Box>
-    <Box role="tree" aria-label="Projects and authored assets"
-      sx={{position: 'relative', flex: 1, minHeight: 0, overflow: 'auto'}}>
-      {error && <EmptyState role="alert" message={error} actionLabel="Retry"
-        onAction={refresh} />}
-      {!error && !loading && !visibleProjects.length && <EmptyState
-        message="No projects match this view. Create a project to store queries, diagrams, models, and other authored assets."
-        actionLabel="New project" onAction={beginCreate} />}
-      {!error && visibleProjects.map((project) => {
-        const isExpanded = expanded.has(project.project_id);
-        const state = states[project.project_id];
-        const assets = (state?.assets ?? []).filter((asset) => !filter ||
-          `${asset.name} ${asset.path} ${asset.asset_type}`.toLowerCase().includes(filter));
-        return <Box key={project.project_id} role="group">
-          <TreeRow level={1} label={project.name} expandable expanded={isExpanded}
-            loading={state?.loading} warning={state?.error ?? ''}
-            icon={<Icon iconKey="object.schema" decorative />}
-            trailing={project.access === 'owner' ? 'Owner' : project.access}
-            onToggle={() => toggle(project)} onOpen={() => toggle(project)} />
-          {isExpanded && state?.error && <Box role="alert" sx={{pl: 4, py: 1}}>
-            {state.error} <Button onClick={() => loadProject(project)}>
-              Retry
-            </Button>
-          </Box>}
-          {isExpanded && !state?.loading && !state?.error && !assets.length &&
-            <Box sx={{pl: 5, py: 1}}>This project has no matching assets.</Box>}
-          {isExpanded && assets.map((asset) => <TreeRow level={2}
-            key={asset.asset_id} label={asset.name}
-            icon={<Icon iconKey={assetIcon(asset.asset_type)} decorative />}
-            warning={asset.validation_state === 'invalid' ? 'Validation failed' : ''}
-            trailing={`v${asset.version}`}
-            onSelect={() => onSelectAsset?.(project, asset)}
-            onOpen={() => onOpenAsset?.(project, asset)} />)}
-        </Box>;
-      })}
-      <ProgressOverlay message={loading ? 'Loading projects' : ''} />
-    </Box>
+    <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
+      <Box role="tree" aria-label="Projects and authored assets"
+        sx={{position: 'relative', minHeight: 120, p: 0.5}}>
+        {error && <EmptyState role="alert" message={error} actionLabel="Retry"
+          onAction={refresh} />}
+        {!error && !loading && !visibleProjects.length && <EmptyState
+          message="No projects match this view. Create a project to store queries, diagrams, models, and other authored assets."
+          actionLabel="New project" onAction={beginCreate} />}
+        {!error && visibleProjects.map((project, pIdx) => {
+          const isExpanded = expanded.has(project.project_id);
+          const state = states[project.project_id];
+          const assets = (state?.assets ?? []).filter((asset) => !filter ||
+            `${asset.name} ${asset.path} ${asset.asset_type}`.toLowerCase().includes(filter));
+          return <Box key={project.project_id} role="group">
+            <TreeRow level={1} label={project.name} expandable expanded={isExpanded}
+              isLast={pIdx === visibleProjects.length - 1}
+              loading={state?.loading} warning={state?.error ?? ''}
+              icon={<Icon iconKey="object.schema" decorative />}
+              trailing={project.access === 'owner' ? 'Owner' : project.access}
+              onToggle={() => toggle(project)} onOpen={() => toggle(project)} />
+            {isExpanded && state?.error && <Box role="alert" sx={{pl: 4, py: 1}}>
+              {state.error} <Button onClick={() => loadProject(project)}>
+                Retry
+              </Button>
+            </Box>}
+            {isExpanded && !state?.loading && !state?.error && !assets.length &&
+              <Box sx={{pl: 5, py: 1}}>This project has no matching assets.</Box>}
+            {isExpanded && assets.map((asset, aIdx) => <TreeRow level={2}
+              key={asset.asset_id} label={asset.name}
+              isLast={aIdx === assets.length - 1}
+              icon={<Icon iconKey={assetIcon(asset.asset_type)} decorative />}
+              warning={asset.validation_state === 'invalid' ? 'Validation failed' : ''}
+              trailing={`v${asset.version}`}
+              onSelect={() => onSelectAsset?.(project, asset)}
+              onOpen={() => onOpenAsset?.(project, asset)} />)}
+          </Box>;
+        })}
+        <ProgressOverlay message={loading ? 'Loading projects' : ''} />
+      </Box>
+    </ScratchScrollArea>
     <Dialog open={createOpen} title="New project" size="medium"
       onClose={() => !saving && setCreateOpen(false)} busy={saving}
       validationError={createError} defaultAction={createProject}

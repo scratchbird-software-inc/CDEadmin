@@ -132,10 +132,13 @@ FORBIDDEN_SECRET_KEYS = frozenset({
 
 SUPPORTED_SCREENSHOT_MEDIA = frozenset({
     'image/png',
+    'image/jpeg',
+    'image/jpg',
     'image/webp',
 })
 
 _PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
+_JPEG_SOI = b'\xff\xd8'
 _WEBP_RIFF = b'RIFF'
 
 
@@ -263,10 +266,12 @@ def _paeth_predictor(a: int, b: int, c: int) -> int:
 def inspect_image_header(data: bytes, media_type: str) -> dict[str, int]:
     """Validate screenshot header and return ``{width, height}``."""
     mtype = str(media_type or '').strip().lower()
+    if mtype == 'image/jpg':
+        mtype = 'image/jpeg'
     if mtype not in SUPPORTED_SCREENSHOT_MEDIA:
         raise DesignStoreError(
             f'Unsupported screenshot media_type {media_type!r}; expected '
-            f'image/png or image/webp'
+            f'image/png, image/jpeg or image/webp'
         )
     if mtype == 'image/png':
         if (
@@ -279,6 +284,38 @@ def inspect_image_header(data: bytes, media_type: str) -> dict[str, int]:
         if w <= 0 or h <= 0:
             raise DesignStoreError('PNG dimensions must be positive')
         return {'width': int(w), 'height': int(h)}
+
+    if mtype == 'image/jpeg':
+        if len(data) < 4 or data[:2] != _JPEG_SOI:
+            raise DesignStoreError('Invalid JPEG screenshot header')
+        idx = 2
+        sof_markers = {
+            0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+            0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+        }
+        while idx + 4 <= len(data):
+            if data[idx] != 0xFF:
+                idx += 1
+                continue
+            while idx < len(data) and data[idx] == 0xFF:
+                idx += 1
+            if idx >= len(data):
+                break
+            marker = data[idx]
+            idx += 1
+            if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
+                continue
+            if idx + 2 > len(data):
+                break
+            seg_len = struct.unpack('>H', data[idx:idx + 2])[0]
+            if seg_len < 2 or idx + seg_len > len(data):
+                break
+            if marker in sof_markers and seg_len >= 7:
+                h, w = struct.unpack('>HH', data[idx + 3:idx + 7])
+                if w > 0 and h > 0:
+                    return {'width': int(w), 'height': int(h)}
+            idx += seg_len
+        return {'width': 800, 'height': 600}
 
     if len(data) < 30 or data[:4] != _WEBP_RIFF or data[8:12] != b'WEBP':
         raise DesignStoreError('Invalid WebP screenshot header')
@@ -522,6 +559,7 @@ def default_screen_mesh_model(
     regions: list[dict[str, Any]] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     navigations: list[dict[str, Any]] | None = None,
+    look_handdrawn: bool = False,
     notes: str = '',
 ) -> dict[str, Any]:
     """Build and validate a canonical Screen Mesh model."""
@@ -548,6 +586,7 @@ def default_screen_mesh_model(
         'regions': list(regions or []),
         'bindings': list(bindings or []),
         'navigations': list(navigations or []),
+        'look_handdrawn': bool(look_handdrawn),
         'notes': str(notes or ''),
     })
 
@@ -658,7 +697,19 @@ def validate_screen_mesh(raw: Mapping[str, Any]) -> dict[str, Any]:
             for o in (craw.get('options') or [])
             if str(o).strip()
         ]
-        controls.append({
+        ctrl_bounds: dict[str, float] | None = None
+        cbraw = craw.get('bounds')
+        if isinstance(cbraw, Mapping):
+            cbw = float(cbraw.get('width', cbraw.get('w', 0)) or 0)
+            cbh = float(cbraw.get('height', cbraw.get('h', 0)) or 0)
+            if cbw > 0 and cbh > 0:
+                ctrl_bounds = {
+                    'x': round(float(cbraw.get('x', 0)), 2),
+                    'y': round(float(cbraw.get('y', 0)), 2),
+                    'width': round(cbw, 2),
+                    'height': round(cbh, 2),
+                }
+        ctrl_entry: dict[str, Any] = {
             'id': cid,
             'screen_id': owner_screen,
             'role': role,
@@ -673,7 +724,10 @@ def validate_screen_mesh(raw: Mapping[str, Any]) -> dict[str, Any]:
             'field_id': str(craw.get('field_id') or '').strip(),
             'tab': str(craw.get('tab') or '').strip(),
             'notes': str(craw.get('notes') or '').strip(),
-        })
+        }
+        if ctrl_bounds is not None:
+            ctrl_entry['bounds'] = ctrl_bounds
+        controls.append(ctrl_entry)
 
     regions: list[dict[str, Any]] = []
     region_ids: set[str] = set()
@@ -706,7 +760,7 @@ def validate_screen_mesh(raw: Mapping[str, Any]) -> dict[str, Any]:
             raise DesignStoreError(
                 'ui.region bounds width and height must be positive'
             )
-        regions.append({
+        reg_entry: dict[str, Any] = {
             'id': rid,
             'screen_id': owner_screen,
             'role': 'ui.region',
@@ -721,7 +775,11 @@ def validate_screen_mesh(raw: Mapping[str, Any]) -> dict[str, Any]:
                 'height': round(bh, 2),
             },
             'notes': str(rraw.get('notes') or '').strip(),
-        })
+        }
+        kind_hint = str(rraw.get('kind_hint') or '').strip()
+        if kind_hint:
+            reg_entry['kind_hint'] = kind_hint
+        regions.append(reg_entry)
 
     bindable_ids = screen_ids | control_ids | region_ids
     bindings: list[dict[str, Any]] = []
@@ -851,6 +909,7 @@ def validate_screen_mesh(raw: Mapping[str, Any]) -> dict[str, Any]:
         'regions': regions,
         'bindings': bindings,
         'navigations': navigations,
+        'look_handdrawn': bool(raw.get('look_handdrawn', False)),
         'notes': str(raw.get('notes') or '').strip(),
     }
 
@@ -895,14 +954,18 @@ def _emit_view_block(
     view_id: str,
     title: str,
     include_ids: list[str],
+    *,
+    look_handdrawn: bool = False,
 ) -> None:
     lines.extend([
         f'view {_q(view_id)} as {_q(WIREFRAME_PROFILE)}',
         '    with',
         f'        id {_q(view_id)}',
         f'        title {_q(title)}',
-        '        selection',
     ])
+    if look_handdrawn:
+        lines.append('        look "handdrawn"')
+    lines.append('        selection')
     if not include_ids:
         lines.append('            include empty list')
     else:
@@ -999,11 +1062,18 @@ def screen_mesh_to_ddn(
             '            x_diagram',
             f'                owner {_q(owner_sid)}',
         ])
+        ctrl_bounds = ctrl.get('bounds')
+        if ctrl_bounds and cid not in pos_map:
+            pos_map[cid] = {
+                'x': float(ctrl_bounds['x']),
+                'y': float(ctrl_bounds['y']),
+            }
         need_x_ui = (
             bool(ctrl['placeholder'])
             or ctrl['role'] in ('ui.checkbox', 'ui.radio')
             or bool(ctrl['options'])
             or bool(ctrl['columns'])
+            or bool(ctrl_bounds)
             or cid in source_access_lookup
         )
         if need_x_ui:
@@ -1022,6 +1092,16 @@ def screen_mesh_to_ddn(
                     f'                access_mode '
                     f'{_q(source_access_lookup[cid])}'
                 )
+            if ctrl_bounds:
+                lines.extend([
+                    '                bounds',
+                    f'                    x {json.dumps(ctrl_bounds["x"])}',
+                    f'                    y {json.dumps(ctrl_bounds["y"])}',
+                    f'                    width '
+                    f'{json.dumps(ctrl_bounds["width"])}',
+                    f'                    height '
+                    f'{json.dumps(ctrl_bounds["height"])}',
+                ])
             if ctrl['options']:
                 lines.append('                options')
                 for opt in ctrl['options']:
@@ -1182,7 +1262,14 @@ def screen_mesh_to_ddn(
     )
 
     # 7. Emit main wireframe view, per-screen views, and derived screen_flow
-    _emit_view_block(lines, 'screen_mesh_main', mesh['name'], main_items)
+    handdrawn = bool(mesh.get('look_handdrawn', False))
+    _emit_view_block(
+        lines,
+        'screen_mesh_main',
+        mesh['name'],
+        main_items,
+        look_handdrawn=handdrawn,
+    )
     if len(mesh['screens']) > 1:
         for idx, scr in enumerate(mesh['screens'], start=1):
             _emit_view_block(
@@ -1190,20 +1277,49 @@ def screen_mesh_to_ddn(
                 f'screen_{idx}',
                 f'Screen: {scr["name"]}',
                 per_screen_items[scr['id']],
+                look_handdrawn=handdrawn,
             )
     _emit_view_block(
         lines,
         'screen_flow',
         f'{mesh["name"]} — Screen Flow',
         flow_items,
+        look_handdrawn=handdrawn,
     )
 
     return '\n'.join(lines).rstrip() + '\n', id_map
 
 
+def _extract_ddn_bounds(body: str) -> dict[str, float] | None:
+    m = re.search(
+        r'\bbounds\s*\n'
+        r'\s+x\s+(-?[0-9]+(?:\.[0-9]+)?)\s*\n'
+        r'\s+y\s+(-?[0-9]+(?:\.[0-9]+)?)\s*\n'
+        r'\s+width\s+([0-9]+(?:\.[0-9]+)?)\s*\n'
+        r'\s+height\s+([0-9]+(?:\.[0-9]+)?)',
+        body or '',
+    )
+    if not m:
+        return None
+    return {
+        'x': round(float(m.group(1)), 2),
+        'y': round(float(m.group(2)), 2),
+        'width': round(float(m.group(3)), 2),
+        'height': round(float(m.group(4)), 2),
+    }
+
+
+def _detect_ddn_handdrawn(blocks: list[dict[str, Any]]) -> bool:
+    for blk in blocks:
+        if str(blk.get('props', {}).get('look') or '').lower() == 'handdrawn':
+            return True
+    return False
+
+
 def ddn_to_screen_mesh(ddn_text: str) -> dict[str, Any]:
     """Parse a Screen Mesh DDN document back into its canonical model."""
     blocks = _parse_blocks(ddn_text)
+    ddn_has_handdrawn = _detect_ddn_handdrawn(blocks)
     for blk in blocks:
         xrec = _extract_x_record(blk)
         if not xrec:
@@ -1223,7 +1339,10 @@ def ddn_to_screen_mesh(ddn_text: str) -> dict[str, Any]:
             else:
                 parsed = None
             if parsed is not None:
-                mesh = validate_screen_mesh(parsed['mesh'])
+                raw_mesh = dict(parsed['mesh'])
+                if 'look_handdrawn' not in raw_mesh and ddn_has_handdrawn:
+                    raw_mesh['look_handdrawn'] = True
+                mesh = validate_screen_mesh(raw_mesh)
                 return {
                     'mesh': mesh,
                     'element_ids': dict(parsed.get('element_ids') or {}),
@@ -1242,6 +1361,8 @@ def ddn_to_screen_mesh(ddn_text: str) -> dict[str, Any]:
         role = str(blk.get('role') or '')
         eid = str(blk.get('id') or '')
         title = str(blk.get('title') or eid)
+        parsed_bounds = _extract_ddn_bounds(blk.get('body') or '')
+        owner_id = str(blk.get('props', {}).get('owner') or '').strip()
         if role == 'ui.frame':
             screens.append({
                 'id': eid if is_uuid7(eid) else uuid7(),
@@ -1250,32 +1371,45 @@ def ddn_to_screen_mesh(ddn_text: str) -> dict[str, Any]:
                 'height': 640,
             })
         elif role == 'ui.region':
-            regions.append({
+            reg_item: dict[str, Any] = {
                 'id': eid if is_uuid7(eid) else uuid7(),
                 'name': title,
-                'bounds': {'x': 0, 'y': 0, 'width': 120, 'height': 48},
-            })
+                'bounds': parsed_bounds
+                or {'x': 0, 'y': 0, 'width': 120, 'height': 48},
+            }
+            if owner_id:
+                reg_item['screen_id'] = owner_id
+            regions.append(reg_item)
         elif role in UI_CONTROL_ROLES:
-            controls.append({
+            ctrl_item: dict[str, Any] = {
                 'id': eid if is_uuid7(eid) else uuid7(),
                 'role': role,
                 'name': title,
-            })
+            }
+            if owner_id:
+                ctrl_item['screen_id'] = owner_id
+            if parsed_bounds is not None:
+                ctrl_item['bounds'] = parsed_bounds
+            controls.append(ctrl_item)
     if not screens:
         raise DesignStoreError(
             'DDN document does not contain a valid Screen Mesh'
         )
+    valid_sids = {s['id'] for s in screens}
     if controls or regions:
         first_sid = screens[0]['id']
         for c in controls:
-            c['screen_id'] = first_sid
+            if c.get('screen_id') not in valid_sids:
+                c['screen_id'] = first_sid
         for r in regions:
-            r['screen_id'] = first_sid
+            if r.get('screen_id') not in valid_sids:
+                r['screen_id'] = first_sid
     mesh = validate_screen_mesh({
         'name': screens[0]['name'],
         'screens': screens,
         'controls': controls,
         'regions': regions,
+        'look_handdrawn': ddn_has_handdrawn,
     })
     return {'mesh': mesh, 'element_ids': {}, 'layout_positions': {}}
 
@@ -1831,7 +1965,13 @@ class ScreenMeshSync:
                 f'Screen {screen_id!r} not found in Screen Mesh {design_id!r}'
             )
 
-        ext = 'webp' if media_type.lower() == 'image/webp' else 'png'
+        mtype_lower = media_type.lower()
+        if mtype_lower == 'image/webp':
+            ext = 'webp'
+        elif mtype_lower in ('image/jpeg', 'image/jpg'):
+            ext = 'jpg'
+        else:
+            ext = 'png'
         asset_path = f"screenshots/{target_scr['id']}.{ext}"
         blob = self.store.put_blob(media_type, data)
         target_scr['screenshot_path'] = asset_path
@@ -1992,11 +2132,13 @@ class ScreenMeshSync:
                 screenshot_bytes = base64.b64decode(raw_b64)
                 screenshot_media = qa_entry['media_type']
                 dims = inspect_image_header(screenshot_bytes, screenshot_media)
-                ext = (
-                    'webp'
-                    if screenshot_media.lower() == 'image/webp'
-                    else 'png'
-                )
+                mtype_qa = screenshot_media.lower()
+                if mtype_qa == 'image/webp':
+                    ext = 'webp'
+                elif mtype_qa in ('image/jpeg', 'image/jpg'):
+                    ext = 'jpg'
+                else:
+                    ext = 'png'
                 mesh['screens'][0]['screenshot_path'] = (
                     f"screenshots/{mesh['screens'][0]['id']}.{ext}"
                 )

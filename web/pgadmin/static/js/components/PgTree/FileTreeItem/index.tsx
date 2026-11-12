@@ -37,6 +37,9 @@ interface IItemRendererXProps {
     onMouseLeave: (ev: React.MouseEvent, item: FileEntry | Directory) => void
     onItemHovered: (ev: React.MouseEvent, item: FileEntry | Directory, type: ItemType) => void
     events: Notificar<FileTreeXEvent>
+    activeItem?: FileOrDir | null
+    branchStepX?: number
+    branchRadius?: number
 }
 
 // DO NOT EXTEND FROM PureComponent!!! You might miss critical changes made deep within `item` prop
@@ -129,7 +132,12 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
           draggable={descriptor.capabilities.enabled &&
             descriptor.capabilities.draggable}>
 
-          <TreeBranchGuides item={item as FileOrDir} />
+          <TreeBranchGuides
+            item={item as FileOrDir}
+            activeItem={this.props.activeItem}
+            stepX={this.props.branchStepX}
+            radius={this.props.branchRadius}
+          />
 
           {!isNewPrompt && fileOrDir === 'directory' ?
             <button

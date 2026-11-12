@@ -10,8 +10,8 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import {platform} from 'os';
 import { app, session } from 'electron';
+import { resolveAppPaths } from './appPaths.js';
 
 let cdeadminServerProcess = null;
 
@@ -23,43 +23,9 @@ const createDir = (dirName) => {
   }
 };
 
-const insideFlatpak = () => {
-  return platform() === 'linux' && fs.existsSync('/.flatpak-info');
-};
-
 // This function is used to get the python executable path
-// based on the platform. Use this for deployment.
-export const getAppPaths = (basePath) => {
-  let pythonPath, cdeadminFile;
-  switch (platform()) {
-  case 'win32':
-    pythonPath = '../../../../../python/python.exe';
-    cdeadminFile = '../../../../../web/CDEadmin.py';
-    break;
-  case 'darwin':
-    pythonPath = '../../../../Frameworks/Python.framework/Versions/Current/bin/python3';
-    cdeadminFile = '../../../web/CDEadmin.py';
-    break;
-  case 'linux':
-    pythonPath = '../../../../../venv/bin/python3';
-    cdeadminFile = '../../../../../web/CDEadmin.py';
-    if (insideFlatpak()) {
-      pythonPath = '/usr/bin/python';
-      cdeadminFile = '/app/CDEadmin/web/CDEadmin.py';
-      return [pythonPath, cdeadminFile];
-    }
-    break;
-  default:
-    cdeadminFile = '../../../web/CDEadmin.py';
-    if (platform().startsWith('win')) {
-      pythonPath = '../python/python.exe';
-    } else {
-      pythonPath = '../venv/bin/python3';
-    }
-  }
-
-  return [path.join(basePath, pythonPath), path.join(basePath, cdeadminFile)];
-};
+// based on the platform. Supports both packaged deployments and source checkouts.
+export const getAppPaths = (basePath) => resolveAppPaths(basePath);
 
 // This function is used to get the [local] app data path
 // based on the platform. Use this for logs etc.

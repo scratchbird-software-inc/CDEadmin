@@ -32,6 +32,7 @@ upstream attribution.
    cdeadmin_architecture
    six_engine_completion
    six_engine_remaining_work
+   project_shell_behaviour
    ui_unified_design
    ui_unification_status
    ui_server_editor_retirement

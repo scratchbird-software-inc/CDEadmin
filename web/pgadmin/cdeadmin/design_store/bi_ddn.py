@@ -98,11 +98,17 @@ CHART_PROFILE_MAP: dict[str, tuple[str, str | None]] = {
     'scatter': ('chart.basic@1', 'point'),
     'pie': ('chart.basic@1', 'pie'),
     'metric': ('chart.gauge@1', 'gauge'),
+    'kpi': ('chart.gauge@1', 'gauge'),
+    'funnel': ('chart.basic@1', 'bar'),
     'histogram': ('chart.histogram@1', 'histogram'),
     'timeline': ('timeline.basic@1', None),
     'graph': ('chart.force@1', 'force'),
     'vector-neighbors': ('chart.dotplot@1', 'dotplot'),
 }
+
+NUMBER_FORMATS = frozenset({'standard', 'currency', 'percent', 'compact'})
+CURRENCY_CODES = frozenset({'USD', 'EUR', 'GBP', 'CAD'})
+DATE_GRAINS = frozenset({'auto', 'day', 'week', 'month', 'quarter', 'year'})
 
 CLICK_BEHAVIORS = frozenset({'inherit', 'cross_filter', 'highlight', 'none'})
 VERIFICATION_TIERS = frozenset({'draft', 'verified', 'endorsed'})
@@ -1352,6 +1358,53 @@ def sql_to_bi_question_model(
 # ---------------------------------------------------------------------------
 
 
+def normalize_visualization_format(
+    raw: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Normalize structured axis/number/currency/date format metadata."""
+    fmt = dict(raw or {})
+    number_format = str(fmt.get('number_format') or 'standard').strip().lower()
+    if number_format not in NUMBER_FORMATS:
+        raise DesignStoreError(
+            f'Unsupported visualization_format.number_format: '
+            f'{number_format!r}'
+        )
+    currency_code = str(fmt.get('currency_code') or 'USD').strip().upper()
+    if currency_code not in CURRENCY_CODES:
+        raise DesignStoreError(
+            f'Unsupported visualization_format.currency_code: '
+            f'{currency_code!r}'
+        )
+    dec_raw = fmt.get('decimals', 2)
+    if (
+        isinstance(dec_raw, bool)
+        or not isinstance(dec_raw, int)
+        or not 0 <= dec_raw <= 4
+    ):
+        raise DesignStoreError(
+            'visualization_format.decimals must be an integer between 0 and 4'
+        )
+    date_grain = str(fmt.get('date_grain') or 'auto').strip().lower()
+    if date_grain not in DATE_GRAINS:
+        raise DesignStoreError(
+            f'Unsupported visualization_format.date_grain: {date_grain!r}'
+        )
+    x_axis_label = str(fmt.get('x_axis_label') or '').strip()[:160]
+    y_axis_label = str(fmt.get('y_axis_label') or '').strip()[:160]
+    show_accessible_table_default = bool(
+        fmt.get('show_accessible_table_default', False)
+    )
+    return {
+        'number_format': number_format,
+        'currency_code': currency_code,
+        'decimals': dec_raw,
+        'date_grain': date_grain,
+        'x_axis_label': x_axis_label,
+        'y_axis_label': y_axis_label,
+        'show_accessible_table_default': show_accessible_table_default,
+    }
+
+
 def default_question_model(
     name: str = 'New Question',
     *,
@@ -1360,6 +1413,7 @@ def default_question_model(
     raw_sql: str | None = None,
     parameters: list[dict[str, Any]] | None = None,
     visualization: Mapping[str, Any] | None = None,
+    visualization_format: Mapping[str, Any] | None = None,
     result_policy: Mapping[str, Any] | None = None,
     preview_rows: list[list[Any]] | None = None,
     verification_tier: str = 'draft',
@@ -1413,6 +1467,20 @@ def default_question_model(
             entry['allowed_values'] = list(praw['allowed_values'])
         norm_params.append(entry)
 
+    vis_settings = copy.deepcopy(
+        dict((visualization or {}).get('settings') or {})
+    )
+    fmt_source = (
+        visualization_format
+        if visualization_format is not None
+        else (
+            (visualization or {}).get('format')
+            if isinstance((visualization or {}).get('format'), Mapping)
+            else None
+        )
+    )
+    vis_format = normalize_visualization_format(fmt_source)
+
     rpol = dict(result_policy or {})
     question = {
         'contract_version': '1.0.0',
@@ -1424,10 +1492,9 @@ def default_question_model(
         'parameters': norm_params,
         'visualization': {
             'type': vis_type,
-            'settings': copy.deepcopy(
-                dict((visualization or {}).get('settings') or {})
-            ),
+            'settings': vis_settings,
         },
+        'visualization_format': vis_format,
         'result_policy': {
             'redact_columns': list(rpol.get('redact_columns') or []),
             'cache_ttl_seconds': int(rpol.get('cache_ttl_seconds', 300)),
@@ -1464,6 +1531,7 @@ def validate_bi_question(raw: Mapping[str, Any]) -> dict[str, Any]:
         raw_sql=qblock.get('sql') if qkind == 'sql' else None,
         parameters=list(raw.get('parameters') or []),
         visualization=raw.get('visualization'),
+        visualization_format=raw.get('visualization_format'),
         result_policy=raw.get('result_policy'),
         preview_rows=list(raw.get('preview_rows') or []),
         verification_tier=str(raw.get('verification_tier') or 'draft'),
@@ -1801,9 +1869,12 @@ def question_to_ddn(
         for el_id, *_ in elements
     }
 
+    envelope_q = dict(question)
+    if envelope_q.get('visualization_format') == normalize_visualization_format():
+        envelope_q.pop('visualization_format', None)
     envelope = {
         'bi_kind': 'question',
-        'question': question,
+        'question': envelope_q,
         'question_notes': str(question_notes or ''),
         'element_ids': dict(id_map),
     }
@@ -1908,6 +1979,7 @@ def ddn_to_question(ddn_text: str) -> dict[str, Any]:
     blocks = _parse_blocks(ddn_text)
     positions: dict[str, dict[str, float]] = {}
     envelope: dict[str, Any] | None = None
+    root_format: dict[str, Any] | None = None
     for blk in blocks:
         xrec = _extract_x_record(blk)
         if xrec is None or xrec.get('module') != BI_QUESTION_MODULE:
@@ -1922,14 +1994,25 @@ def ddn_to_question(ddn_text: str) -> dict[str, Any]:
                 }
             except (TypeError, ValueError):
                 pass
-        if xrec.get('block') == 'question_root' and rec.get('envelope_json'):
-            envelope = json.loads(str(rec['envelope_json']))
+        if xrec.get('block') == 'question_root':
+            if rec.get('format_json'):
+                try:
+                    parsed_fmt = json.loads(str(rec['format_json']))
+                    if isinstance(parsed_fmt, Mapping):
+                        root_format = dict(parsed_fmt)
+                except (TypeError, ValueError):
+                    pass
+            if rec.get('envelope_json'):
+                envelope = json.loads(str(rec['envelope_json']))
     if envelope is None:
         raise DesignStoreError(
             'DDN document does not contain a scratchrobin.bi.question@1 '
             'saved_view envelope'
         )
-    question = validate_bi_question(envelope['question'])
+    raw_q = dict(envelope['question'])
+    if 'visualization_format' not in raw_q and root_format is not None:
+        raw_q['visualization_format'] = root_format
+    question = validate_bi_question(raw_q)
     return {
         'question': question,
         'question_notes': str(envelope.get('question_notes') or ''),
@@ -2985,7 +3068,68 @@ CREATE TABLE IF NOT EXISTS bi_outward_effect (
 
 CREATE INDEX IF NOT EXISTS ix_bi_outward_effect_design
     ON bi_outward_effect (design_id, effect_kind);
+
+CREATE TABLE IF NOT EXISTS bi_device_token_registry (
+    token_id TEXT PRIMARY KEY,
+    design_id TEXT NOT NULL REFERENCES design(id) ON DELETE CASCADE,
+    publication_id TEXT NOT NULL
+        REFERENCES bi_outward_effect(id) ON DELETE CASCADE,
+    device_label TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    locked_filters_json TEXT NOT NULL,
+    created_by INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    last_used_at TEXT,
+    revoked_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_bi_device_token_registry_design
+    ON bi_device_token_registry (design_id, publication_id);
 """
+
+
+def _hash_device_token(token: str) -> str:
+    """Return SHA-256 hex digest of a device token (never store raw token)."""
+    return hashlib.sha256(str(token).encode('utf-8')).hexdigest()
+
+
+def _is_timestamp_expired(expires_at: Any, now_iso: str | None = None) -> bool:
+    if not expires_at:
+        return False
+    exp_dt = _parse_iso_dt(expires_at)
+    now_dt = _parse_iso_dt(now_iso or _utc_now())
+    if exp_dt is not None and now_dt is not None:
+        return exp_dt < now_dt
+    return str(expires_at) < str(now_iso or _utc_now())
+
+
+def _device_token_row_to_public(
+    row: Mapping[str, Any],
+    *,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
+    revoked_at = row.get('revoked_at')
+    expires_at = row.get('expires_at')
+    if revoked_at:
+        status = 'revoked'
+    elif _is_timestamp_expired(expires_at, now_iso):
+        status = 'expired'
+    else:
+        status = 'active'
+    return {
+        'token_id': str(row['token_id']),
+        'design_id': str(row['design_id']),
+        'publication_id': str(row['publication_id']),
+        'device_label': str(row['device_label']),
+        'locked_filters': json.loads(row['locked_filters_json'] or '{}'),
+        'created_by': int(row['created_by']),
+        'created_at': str(row['created_at']),
+        'expires_at': expires_at,
+        'last_used_at': row.get('last_used_at'),
+        'revoked_at': revoked_at,
+        'status': status,
+    }
 
 
 def _ensure_bi_runtime_tables(store: DesignStore) -> None:
@@ -3654,8 +3798,14 @@ class BIDesignSync:
         device_label: str = 'kiosk',
         locked_filters: Mapping[str, Any] | None = None,
         expires_at: str | None = None,
+        created_by: int | None = None,
     ) -> str:
-        """Mint an HMAC-SHA256 display-only remote device token (E9)."""
+        """Mint an HMAC-SHA256 display-only remote device token (E9).
+
+        Persists non-secret metadata and a SHA-256 ``token_hash`` (never the
+        raw token string) in ``bi_device_token_registry``.
+        """
+        _ensure_bi_runtime_tables(self.store)
         conn = self.store._connect()
         try:
             row = conn.execute(
@@ -3663,42 +3813,138 @@ class BIDesignSync:
                 "AND effect_kind = 'dashboard_server' AND enabled = 1",
                 (publication_id,),
             ).fetchone()
+            if row is None:
+                raise DesignStoreNotFound(
+                    f'Active dashboard-server publication {publication_id!r} '
+                    f'was not found'
+                )
+            pub_cfg = json.loads(row['config_json'])
+            base_locked = dict(pub_cfg.get('locked_filters') or {})
+            merged_locked = dict(base_locked)
+            for k, v in (locked_filters or {}).items():
+                if k in base_locked:
+                    merged_locked[k] = _narrow_filter_value(
+                        base_locked[k], v, k
+                    )
+                else:
+                    merged_locked[k] = copy.deepcopy(v)
+
+            token_id = uuid7()
+            clean_label = str(device_label or 'kiosk').strip()[:64] or 'kiosk'
+            claims = {
+                'tid': token_id,
+                'pub': publication_id,
+                'did': row['design_id'],
+                'ver': int(row['version']),
+                'uid': int(row['publisher_user_id']),
+                'dev': clean_label,
+                'ro': True,
+                'flt': merged_locked,
+                'exp': expires_at,
+            }
+            payload_b64 = _b64u_encode(_json_str(claims).encode('utf-8'))
+            sig = hmac.new(
+                self.token_secret.encode('utf-8'),
+                payload_b64.encode('ascii'),
+                hashlib.sha256,
+            ).digest()
+            token_str = f'{payload_b64}.{_b64u_encode(sig)}'
+            token_hash = _hash_device_token(token_str)
+            actor = (
+                int(created_by)
+                if created_by is not None
+                else int(row['reviewed_by'])
+            )
+            now = _utc_now()
+            conn.execute(
+                """
+                INSERT INTO bi_device_token_registry (
+                    token_id, design_id, publication_id, device_label,
+                    token_hash, locked_filters_json, created_by, created_at,
+                    expires_at, last_used_at, revoked_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                """,
+                (
+                    token_id,
+                    row['design_id'],
+                    publication_id,
+                    clean_label,
+                    token_hash,
+                    _json_str(merged_locked),
+                    actor,
+                    now,
+                    expires_at,
+                ),
+            )
+            conn.commit()
+            return token_str
         finally:
             conn.close()
-        if row is None:
-            raise DesignStoreNotFound(
-                f'Active dashboard-server publication {publication_id!r} '
-                f'was not found'
-            )
-        pub_cfg = json.loads(row['config_json'])
-        base_locked = dict(pub_cfg.get('locked_filters') or {})
-        merged_locked = dict(base_locked)
-        for k, v in (locked_filters or {}).items():
-            if k in base_locked:
-                merged_locked[k] = _narrow_filter_value(base_locked[k], v, k)
-            else:
-                merged_locked[k] = copy.deepcopy(v)
 
-        claims = {
-            'pub': publication_id,
-            'did': row['design_id'],
-            'ver': int(row['version']),
-            'uid': int(row['publisher_user_id']),
-            'dev': str(device_label or 'kiosk')[:64],
-            'ro': True,
-            'flt': merged_locked,
-            'exp': expires_at,
-        }
-        payload_b64 = _b64u_encode(_json_str(claims).encode('utf-8'))
-        sig = hmac.new(
-            self.token_secret.encode('utf-8'),
-            payload_b64.encode('ascii'),
-            hashlib.sha256,
-        ).digest()
-        return f'{payload_b64}.{_b64u_encode(sig)}'
+    def list_device_tokens(self, design_id: str) -> list[dict[str, Any]]:
+        """List device token metadata for ``design_id`` (never raw tokens)."""
+        _ensure_bi_runtime_tables(self.store)
+        now = _utc_now()
+        conn = self.store._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT token_id, design_id, publication_id, device_label,
+                       locked_filters_json, created_by, created_at,
+                       expires_at, last_used_at, revoked_at
+                FROM bi_device_token_registry
+                WHERE design_id = ?
+                ORDER BY created_at DESC, token_id DESC
+                """,
+                (design_id,),
+            ).fetchall()
+            return [
+                _device_token_row_to_public(dict(r), now_iso=now)
+                for r in rows
+            ]
+        finally:
+            conn.close()
+
+    def revoke_device_token(
+        self,
+        design_id: str,
+        token_id: str,
+    ) -> dict[str, Any]:
+        """Revoke a minted device token by ``token_id``."""
+        _ensure_bi_runtime_tables(self.store)
+        now = _utc_now()
+        conn = self.store._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT * FROM bi_device_token_registry
+                WHERE design_id = ? AND token_id = ?
+                """,
+                (design_id, token_id),
+            ).fetchone()
+            if row is None:
+                raise DesignStoreNotFound(
+                    f'Device token {token_id!r} was not found for design '
+                    f'{design_id!r}'
+                )
+            revoked_ts = row['revoked_at'] or now
+            conn.execute(
+                """
+                UPDATE bi_device_token_registry
+                SET revoked_at = ?
+                WHERE design_id = ? AND token_id = ?
+                """,
+                (revoked_ts, design_id, token_id),
+            )
+            conn.commit()
+            updated = dict(row)
+            updated['revoked_at'] = revoked_ts
+            return _device_token_row_to_public(updated, now_iso=now)
+        finally:
+            conn.close()
 
     def verify_device_token(self, token: str) -> dict[str, Any]:
-        """Verify an HMAC device token and check active publication status."""
+        """Verify an HMAC device token, revocation state & publication."""
         if not isinstance(token, str) or '.' not in token:
             raise DesignStoreForbidden('Invalid device token format')
         payload_b64, sig_b64 = token.split('.', 1)
@@ -3713,12 +3959,17 @@ class BIDesignSync:
             raise DesignStoreForbidden('Malformed device token') from exc
         if not hmac.compare_digest(expected_sig, actual_sig):
             raise DesignStoreForbidden('Device token signature is invalid')
-        claims = json.loads(_b64u_decode(payload_b64).decode('utf-8'))
+        try:
+            claims = json.loads(_b64u_decode(payload_b64).decode('utf-8'))
+        except Exception as exc:
+            raise DesignStoreForbidden('Malformed device token payload') from exc
         if claims.get('ro') is not True:
             raise DesignStoreForbidden('Device token must be display-only')
-        if claims.get('exp'):
-            if str(claims['exp']) < _utc_now():
-                raise DesignStoreForbidden('Device token has expired')
+        now = _utc_now()
+        if claims.get('exp') and _is_timestamp_expired(claims['exp'], now):
+            raise DesignStoreForbidden('Device token has expired')
+        _ensure_bi_runtime_tables(self.store)
+        token_hash = _hash_device_token(token)
         conn = self.store._connect()
         try:
             row = conn.execute(
@@ -3726,12 +3977,28 @@ class BIDesignSync:
                 "AND effect_kind = 'dashboard_server' AND enabled = 1",
                 (claims['pub'],),
             ).fetchone()
+            reg_row = conn.execute(
+                'SELECT * FROM bi_device_token_registry WHERE token_hash = ?',
+                (token_hash,),
+            ).fetchone()
+            if reg_row is None and claims.get('tid'):
+                reg_row = conn.execute(
+                    'SELECT * FROM bi_device_token_registry WHERE token_id = ?',
+                    (claims['tid'],),
+                ).fetchone()
         finally:
             conn.close()
         if row is None:
             raise DesignStoreForbidden(
                 'Dashboard server publication has been disabled or revoked'
             )
+        if reg_row is not None:
+            if reg_row['revoked_at']:
+                raise DesignStoreForbidden('Device token has been revoked')
+            if reg_row['expires_at'] and _is_timestamp_expired(
+                reg_row['expires_at'], now
+            ):
+                raise DesignStoreForbidden('Device token has expired')
         return claims
 
     def render_dashboard_server_view(
@@ -3757,6 +4024,21 @@ class BIDesignSync:
                 )
             else:
                 effective_filters[key] = copy.deepcopy(val)
+        now = _utc_now()
+        token_hash = _hash_device_token(device_token)
+        conn = self.store._connect()
+        try:
+            conn.execute(
+                """
+                UPDATE bi_device_token_registry
+                SET last_used_at = ?
+                WHERE token_hash = ?
+                """,
+                (now, token_hash),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         session = self.process.open_session(
             claims['did'],
             version=claims['ver'],
@@ -4131,6 +4413,19 @@ class BIDesignSync:
                 'engine': engine,
                 'collector_state': 'unauthorized',
                 'freshness_status': 'unauthorized',
+                'observed_at': None,
+                'age_seconds': None,
+                'columns': copy.deepcopy(mp['columns']),
+                'rows': [],
+                'collector_mutated': False,
+            }
+        except (LookupError, ValueError):
+            return {
+                'card_id': card_id,
+                'snapshot_mode': 'collector_read_only',
+                'engine': engine,
+                'collector_state': 'unavailable',
+                'freshness_status': 'target_not_found',
                 'observed_at': None,
                 'age_seconds': None,
                 'columns': copy.deepcopy(mp['columns']),

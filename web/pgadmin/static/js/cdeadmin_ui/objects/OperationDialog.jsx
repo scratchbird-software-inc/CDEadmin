@@ -22,6 +22,7 @@ import {TextField} from '../primitives/Field';
 import {Select} from '../primitives/Choice';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import CodeEditor from '../editors/CodeEditor';
+import {ScratchDiffTable} from '../data/beautiful';
 import FieldControl from './FieldControl';
 import {activeFields, fieldVisible, toOperationDraft} from './descriptors';
 import {planSqlText} from './ObjectEditor';
@@ -166,6 +167,22 @@ export default function OperationDialog({open, operation, targetName, context={}
           The provider will not run this: {(planState.plan.blockers || []).join(', ') || 'blocked'}.
         </Banner>}
         {(planState.plan.warnings || []).length > 0 && <Banner status="info">{planState.plan.warnings.join(' ')}</Banner>}
+        {Array.isArray(planState.plan.statements) && planState.plan.statements.length > 0 && (
+          <Box sx={{mt: 1, mb: 1}}>
+            <ScratchDiffTable
+              title="Planned Statement Impact"
+              qaKey="operation-dialog.plan.diff-table"
+              items={planState.plan.statements.map((stmt, idx) => ({
+                id: `stmt-${idx}`,
+                delta: operation.confirmation === 'typed_name' ? 'remove' : 'modify',
+                kind: operation.resource_kind || 'operation',
+                name: typeof stmt === 'string' ? `Step ${idx + 1}` : (stmt.label || stmt.kind || `Step ${idx + 1}`),
+                summary: typeof stmt === 'string' ? stmt : (stmt.sql || stmt.statement || stmt.summary || ''),
+                risk: operation.confirmation === 'typed_name' ? 'destructive' : 'safe',
+              }))}
+            />
+          </Box>
+        )}
         <Box component="h4" sx={{m: 0, mt: 1, mb: 0.5, fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary'}}>
           Provider plan
         </Box>

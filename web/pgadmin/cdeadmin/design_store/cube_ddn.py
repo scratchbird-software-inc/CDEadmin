@@ -27,7 +27,7 @@ from __future__ import annotations
 import copy
 import json
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from pgadmin.cdeadmin.semantic_models import (
     SEMI_ADDITIVE_AGGREGATIONS,
@@ -380,6 +380,8 @@ def semantic_model_to_ddn(
         ['Measures', str(len(normalized['measures']))],
         ['Aggregations', str(len(normalized['materializations']))],
     ]
+    if normalized.get('description'):
+        cube_rows.insert(0, ['Description', normalized['description']])
     if normalized.get('perspectives'):
         cube_rows.append([
             'Perspectives', str(len(normalized['perspectives'])),
@@ -389,14 +391,17 @@ def semantic_model_to_ddn(
             t['locale'] for t in normalized['translations']
         )
         cube_rows.append(['Translations', locales_lbl])
+    if normalized.get('description'):
+        lines.append(
+            '// @cube.description: '
+            + json.dumps(normalized['description'], ensure_ascii=False)
+        )
     lines.extend([
         f'element {_q(cube_el_id)} as "cube"',
         '    with',
         f'        id {_q(cube_el_id)}',
         f'        title {_q(normalized["name"])}',
     ])
-    if normalized.get('description'):
-        lines.append(f'        subtitle {_q(normalized["description"])}')
     _emit_inline_table(
         lines,
         [('property', 'Property'), ('value', 'Value')],
@@ -475,8 +480,12 @@ def semantic_model_to_ddn(
         )
         own_rel = _alloc_id(id_map, f'rel:cube_owns_mg:{gid}')
         star_items.append(own_rel)
+        if not normalized['dimensions']:
+            if cube_el_id not in matrix_items:
+                matrix_items.append(cube_el_id)
+            matrix_items.append(own_rel)
         lines.extend([
-            f'relation {_q(own_rel)} as "owns"',
+            f'relation {_q(own_rel)} as "uses"',
             f'    endpoint {_q(cube_el_id)}',
             f'    endpoint {_q(gel_id)}',
             '    with',
@@ -505,9 +514,28 @@ def semantic_model_to_ddn(
                 'active' if dim.get('active', True) else 'inactive'
             )
             d_rows.append(['Role of', f"{dim['role_of']} ({state_lbl})"])
-        for attr in dim.get('attributes', []):
+        if (
+            dim.get('unknown_member_policy')
+            or dim.get('unknown_member_caption')
+        ):
+            um_pol = dim.get('unknown_member_policy', 'unknown')
+            um_cap = dim.get('unknown_member_caption', 'Unknown')
             d_rows.append([
-                f"Attr: {attr['name']}",
+                'Unknown member',
+                f'{um_pol} ({um_cap})' if um_pol == 'unknown' else um_pol,
+            ])
+        if dim.get('visible_roles'):
+            d_rows.append([
+                'Visible roles', ', '.join(dim['visible_roles']),
+            ])
+        for attr in dim.get('attributes', []):
+            rel_tag = (
+                ' (fixed)'
+                if attr.get('relationship_type') == 'fixed'
+                else ''
+            )
+            d_rows.append([
+                f"Attr{rel_tag}: {attr['name']}",
                 _field_label(attr.get('field')),
             ])
         for hier in dim.get('hierarchies', []):
@@ -621,6 +649,10 @@ def semantic_model_to_ddn(
             m_rows.append(['Folder', measure['display_folder']])
         if measure.get('format'):
             m_rows.append(['Format', measure['format']])
+        if measure.get('visible_roles'):
+            m_rows.append([
+                'Visible roles', ', '.join(measure['visible_roles']),
+            ])
         m_filters = measure.get('filters') or []
         if m_filters:
             summary = '; '.join(
@@ -673,13 +705,28 @@ def semantic_model_to_ddn(
         ael_id = _alloc_id(id_map, f'materialization:{mat_id}')
         arec_id = _alloc_id(id_map, f'record:materialization:{mat_id}')
         star_items.append(ael_id)
-        agg_record_ids.append(ael_id)
+        agg_record_ids.append(arec_id)
 
         grain_str = ', '.join(mat.get('grain_dimensions') or []) or '(all)'
         meas_str = ', '.join(mat.get('measures') or []) or '(all)'
         target_str = '.'.join(mat.get('target_relation') or []) or mat_id
         enabled_str = 'enabled' if mat.get('enabled') else 'disabled'
-        db_change = highlights.get(mat_id, 'unchanged')
+        db_change = highlights.get(mat_id, 'unchanged') or 'unchanged'
+        p_field = mat.get('partition_field')
+        if isinstance(p_field, Mapping):
+            p_field_str = _field_label(p_field)
+        else:
+            p_field_str = str(p_field or '').strip()
+        p_grain = str(mat.get('partition_grain') or 'none').strip()
+        if p_field_str and p_grain and p_grain != 'none':
+            partition_str = f'{p_field_str} ({p_grain})'
+        elif p_field_str:
+            partition_str = p_field_str
+        elif p_grain and p_grain != 'none':
+            partition_str = p_grain
+        else:
+            partition_str = '—'
+        refresh_str = str(mat.get('refresh_policy') or 'manual').strip() or '—'
 
         a_rows = [
             ['Strategy', mat['strategy']],
@@ -688,6 +735,10 @@ def semantic_model_to_ddn(
             ['Target', target_str],
             ['State', enabled_str],
         ]
+        if partition_str != '—':
+            a_rows.append(['Partition', partition_str])
+        if mat.get('refresh_policy'):
+            a_rows.append(['Refresh', refresh_str])
         if db_change != 'unchanged':
             a_rows.append(['DB review', f'HIGHLIGHT: {db_change}'])
 
@@ -696,17 +747,6 @@ def semantic_model_to_ddn(
             '    with',
             f'        id {_q(ael_id)}',
             f'        title {_q(mat["name"])}',
-            '        metadata',
-            '            x_record',
-            f'                rule_name {_q(mat["name"])}',
-            f'                measure_group '
-            f'{_q(mat.get("measure_group_id") or "(default)")}',
-            f'                grain_dimensions {_q(grain_str)}',
-            f'                measures {_q(meas_str)}',
-            f'                strategy {_q(mat["strategy"])}',
-            f'                target_relation {_q(target_str)}',
-            f'                enabled {_q(enabled_str)}',
-            f'                db_review {_q(db_change)}',
         ])
         _emit_inline_table(
             lines,
@@ -720,7 +760,19 @@ def semantic_model_to_ddn(
             block_kind='materialization',
             subject_id=ael_id,
             logical_name=mat_id,
-            fields={'materialization_json': _json_str(mat)},
+            fields={
+                'materialization_json': _json_str(mat),
+                'rule_name': mat['name'] or '—',
+                'measure_group': mat.get('measure_group_id') or '(default)',
+                'grain_dimensions': grain_str or '—',
+                'measures': meas_str or '—',
+                'strategy': mat.get('strategy') or '—',
+                'target_relation': target_str or '—',
+                'partition': partition_str or '—',
+                'refresh_policy': refresh_str or '—',
+                'enabled': enabled_str or '—',
+                'db_review': db_change or 'unchanged',
+            },
         )
         for m_ref in (mat.get('measures') or list(measure_el_ids)[:1]):
             if m_ref in measure_el_ids:
@@ -729,7 +781,7 @@ def semantic_model_to_ddn(
                 )
                 star_items.append(arel_id)
                 lines.extend([
-                    f'relation {_q(arel_id)} as "derives"',
+                    f'relation {_q(arel_id)} as "uses"',
                     f'    endpoint {_q(measure_el_ids[m_ref])}',
                     f'    endpoint {_q(ael_id)}',
                     '    with',
@@ -750,20 +802,29 @@ def semantic_model_to_ddn(
             ],
             ['Measures', ', '.join(persp.get('measures') or []) or '(groups)'],
         ]
+        if persp.get('description'):
+            p_rows.insert(0, ['Description', persp['description']])
         if persp.get('measure_groups'):
             p_rows.append([
                 'Measure groups', ', '.join(persp['measure_groups']),
             ])
         if persp.get('default_measure'):
             p_rows.append(['Default measure', persp['default_measure']])
+        if persp.get('visible_roles'):
+            p_rows.append([
+                'Visible roles', ', '.join(persp['visible_roles']),
+            ])
+        if persp.get('description'):
+            lines.append(
+                f'// @cube.perspective_description {pid}: '
+                + json.dumps(persp['description'], ensure_ascii=False)
+            )
         lines.extend([
             f'element {_q(pel_id)} as "semantic_model"',
             '    with',
             f'        id {_q(pel_id)}',
             f'        title {_q(persp["name"])}',
         ])
-        if persp.get('description'):
-            lines.append(f'        subtitle {_q(persp["description"])}')
         _emit_inline_table(
             lines,
             [('scope', 'Scope'), ('included', 'Included')],
@@ -828,6 +889,31 @@ def semantic_model_to_ddn(
             fields={'translation_json': _json_str(tr)},
         )
 
+    if not agg_record_ids:
+        empty_agg_rec_id = _alloc_id(
+            id_map, 'record:materialization:__empty__'
+        )
+        agg_record_ids.append(empty_agg_rec_id)
+        _emit_companion_record(
+            lines,
+            empty_agg_rec_id,
+            block_kind='materialization_empty',
+            subject_id=cube_el_id,
+            logical_name='(none)',
+            fields={
+                'rule_name': '(no aggregation rules defined)',
+                'measure_group': '—',
+                'grain_dimensions': '—',
+                'measures': '—',
+                'strategy': '—',
+                'target_relation': '—',
+                'partition': '—',
+                'refresh_policy': '—',
+                'enabled': '—',
+                'db_review': '—',
+            },
+        )
+
     preserved_envelope['element_ids'] = dict(id_map)
     _emit_companion_record(
         lines,
@@ -857,7 +943,7 @@ def semantic_model_to_ddn(
     lines.append('')
 
     # 2. Dimension usage matrix view (matrix.relations@1)
-    matrix_rel_role = 'uses' if dim_el_ids else 'owns'
+    matrix_rel_role = 'uses'
     matrix_rows = (
         list(group_el_ids.values()) if dim_el_ids else [cube_el_id]
     )
@@ -906,7 +992,15 @@ def semantic_model_to_ddn(
         '        id "cube_aggregation_grid"',
         f'        title {_q(f"{cube_title} — Aggregation Grid")}',
         '        selection',
-        '            include empty list',
+    ])
+    if agg_record_ids:
+        lines.append('            include')
+        for rec_el_id in agg_record_ids:
+            lines.append('                item')
+            lines.append(f'                    id {_q(rec_el_id)}')
+    else:
+        lines.append('            include empty list')
+    lines.extend([
         '        projection',
         '            options',
     ])
@@ -915,6 +1009,8 @@ def semantic_model_to_ddn(
         for rec_el_id in agg_record_ids:
             lines.append('                    item')
             lines.append(f'                        id {_q(rec_el_id)}')
+    else:
+        lines.append('                records empty list')
     lines.append('                columns')
     grid_cols = [
         ('rule_name', 'Rule'),
@@ -923,6 +1019,8 @@ def semantic_model_to_ddn(
         ('measures', 'Measures'),
         ('strategy', 'Strategy'),
         ('target_relation', 'Target Relation'),
+        ('partition', 'Partition'),
+        ('refresh_policy', 'Refresh Policy'),
         ('enabled', 'State'),
         ('db_review', 'DB Review'),
     ]
@@ -931,7 +1029,7 @@ def semantic_model_to_ddn(
             '                    item',
             f'                        id {_q(f"x_record.{col_key}")}',
             f'                        path '
-            f'{_q(f"metadata.x_record.{col_key}")}',
+            f'{_q(f"metadata.x_record.record.{col_key}")}',
             f'                        label {_q(col_label)}',
         ])
     lines.append('')
@@ -963,6 +1061,19 @@ def _extract_notes(block_body: str) -> list[str]:
     return notes
 
 
+def _decode_comment_text(raw: str) -> str:
+    val = raw.strip()
+    if not val:
+        return ''
+    try:
+        parsed = json.loads(val)
+        if isinstance(parsed, str):
+            return parsed
+    except ValueError:
+        pass
+    return val
+
+
 def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
     """Parse a Cube DDN document back into a normalized semantic model dict.
 
@@ -970,6 +1081,24 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
     """
     if not isinstance(ddn_text, str) or not ddn_text.strip():
         raise DesignStoreError('Cube DDN text must be a non-empty string')
+
+    cube_desc_comment: str | None = None
+    persp_desc_comments: dict[str, str] = {}
+    cube_desc_re = re.compile(r'^\s*//\s*@cube\.description:\s*(.*)$')
+    persp_desc_re = re.compile(
+        r'^\s*//\s*@cube\.perspective_description\s+'
+        r'([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$'
+    )
+    for line in ddn_text.splitlines():
+        m_cube = cube_desc_re.match(line)
+        if m_cube:
+            cube_desc_comment = _decode_comment_text(m_cube.group(1))
+            continue
+        m_persp = persp_desc_re.match(line)
+        if m_persp:
+            persp_desc_comments[m_persp.group(1)] = _decode_comment_text(
+                m_persp.group(2)
+            )
 
     blocks = _parse_blocks(ddn_text)
     titles_by_id: dict[str, str] = {}
@@ -1055,7 +1184,9 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
             persp = json.loads(rec['perspective_json'])
             if subj_id in titles_by_id:
                 persp['name'] = titles_by_id[subj_id]
-            if subj_id in subtitles_by_id:
+            if persp.get('id') in persp_desc_comments:
+                persp['description'] = persp_desc_comments[persp['id']]
+            elif subj_id in subtitles_by_id:
                 persp['description'] = subtitles_by_id[subj_id]
             perspectives.append(persp)
             element_ids[f"perspective:{persp['id']}"] = subj_id
@@ -1077,7 +1208,9 @@ def ddn_to_semantic_model(ddn_text: str) -> dict[str, Any]:
         annotations.pop('ddn_notes', None)
 
     description = envelope.get('description', '')
-    if cube_subject_id and cube_subject_id in subtitles_by_id:
+    if cube_desc_comment is not None:
+        description = cube_desc_comment
+    elif cube_subject_id and cube_subject_id in subtitles_by_id:
         description = subtitles_by_id[cube_subject_id]
 
     raw_model: dict[str, Any] = {
@@ -1400,6 +1533,51 @@ def preview_cube_materialization_plan(
         else 'DROP TABLE IF EXISTS'
     )
 
+    def _partition_ddl_annotations(mat_obj: dict[str, Any]) -> tuple[str, str]:
+        p_field = mat_obj.get('partition_field')
+        if isinstance(p_field, Mapping):
+            col_name = str(p_field.get('field') or '').strip()
+        else:
+            col_name = str(p_field or '').strip()
+        p_grain = str(mat_obj.get('partition_grain') or 'none').strip()
+        r_pol = str(mat_obj.get('refresh_policy') or '').strip()
+        rg = mat_obj.get('rule_group')
+        header_lines: list[str] = []
+        if r_pol:
+            header_lines.append(f'-- Refresh policy: {r_pol}')
+        if rg and isinstance(rg, Mapping):
+            rg_parts = []
+            if rg.get('mandatory_dimensions'):
+                rg_parts.append(
+                    f"mandatory={','.join(rg['mandatory_dimensions'])}"
+                )
+            if rg.get('max_dimension_combinations') is not None:
+                rg_parts.append(
+                    f"max_dims={rg['max_dimension_combinations']}"
+                )
+            if rg_parts:
+                header_lines.append(f"-- Rule group: {'; '.join(rg_parts)}")
+        suffix = ''
+        if col_name and p_grain and p_grain != 'none':
+            q_col = _quote_ident(col_name, engine)
+            grain_expr = {
+                'day': f"DATE_TRUNC('day', {q_col})",
+                'month': f"DATE_TRUNC('month', {q_col})",
+                'year': f"DATE_TRUNC('year', {q_col})",
+            }.get(p_grain, q_col)
+            header_lines.append(
+                f'-- Partition clause ({p_grain}): PARTITION BY RANGE '
+                f'({grain_expr})'
+            )
+            if not supports_mat_view and engine in ('postgresql', 'mysql'):
+                suffix = f'\n/* PARTITION BY RANGE ({q_col}) -- {p_grain} */'
+        elif p_grain and p_grain != 'none':
+            header_lines.append(f'-- Partition grain: {p_grain}')
+        header = ('\n'.join(header_lines) + '\n') if header_lines else ''
+        return header, suffix
+
+    destructive_items: list[str] = []
+
     for mat_id in sorted(set(before_map) | set(after_map)):
         before = before_map.get(mat_id)
         after = after_map.get(mat_id)
@@ -1411,10 +1589,14 @@ def preview_cube_materialization_plan(
             select_sql = _compile_materialization_select(
                 candidate_model, after, engine
             )
+            p_header, p_suffix = _partition_ddl_annotations(after)
             ddl = (
-                f'{create_kw} {rel_sql} AS\n{select_sql};'
+                f'{p_header}{create_kw} {rel_sql} AS\n{select_sql}{p_suffix};'
                 if after.get('enabled')
-                else f'-- Disabled aggregate {rel_sql} (no DB object created)'
+                else (
+                    f'{p_header}-- Disabled aggregate {rel_sql} '
+                    '(no DB object created)'
+                )
             )
             if after.get('enabled'):
                 statements.append(ddl)
@@ -1425,6 +1607,8 @@ def preview_cube_materialization_plan(
                 'name': after['name'],
                 'change_kind': kind,
                 'target_relation': rel_parts,
+                'partition_grain': after.get('partition_grain', 'none'),
+                'refresh_policy': after.get('refresh_policy', 'manual'),
                 'sql': ddl,
                 'warnings': mat_warns,
             })
@@ -1435,6 +1619,7 @@ def preview_cube_materialization_plan(
             ddl = f'{drop_kw} {rel_sql};'
             if before.get('enabled'):
                 statements.append(ddl)
+                destructive_items.append(rel_sql)
             differences.append({
                 'materialization_id': mat_id,
                 'name': before['name'],
@@ -1452,19 +1637,23 @@ def preview_cube_materialization_plan(
             highlights[mat_id] = kind
             rel_parts = after.get('target_relation') or [after['id']]
             rel_sql = '.'.join(_quote_ident(p, engine) for p in rel_parts)
+            p_header, p_suffix = _partition_ddl_annotations(after)
             if after.get('enabled'):
                 select_sql = _compile_materialization_select(
                     candidate_model, after, engine
                 )
                 ddl = (
-                    f'{drop_kw} {rel_sql};\n'
-                    f'{create_kw} {rel_sql} AS\n{select_sql};'
+                    f'{p_header}{drop_kw} {rel_sql};\n'
+                    f'{create_kw} {rel_sql} AS\n{select_sql}{p_suffix};'
                 )
                 statements.append(ddl)
+                if before.get('enabled'):
+                    destructive_items.append(rel_sql)
             else:
-                ddl = f'{drop_kw} {rel_sql};'
+                ddl = f'{p_header}{drop_kw} {rel_sql};'
                 if before.get('enabled'):
                     statements.append(ddl)
+                    destructive_items.append(rel_sql)
             mat_warns = _check_mat_grain(after)
             grain_warnings.extend(mat_warns)
             differences.append({
@@ -1472,6 +1661,8 @@ def preview_cube_materialization_plan(
                 'name': after['name'],
                 'change_kind': kind,
                 'target_relation': rel_parts,
+                'partition_grain': after.get('partition_grain', 'none'),
+                'refresh_policy': after.get('refresh_policy', 'manual'),
                 'sql': ddl,
                 'warnings': mat_warns,
             })
@@ -1481,6 +1672,14 @@ def preview_cube_materialization_plan(
             for warn in _check_mat_grain(after):
                 if warn not in grain_warnings:
                     grain_warnings.append(warn)
+
+    destructive_warning = (
+        f'Dropping or rebuilding materialized objects '
+        f'({", ".join(destructive_items)}) removes existing materialized data '
+        'and requires native operation review.'
+        if destructive_items
+        else ''
+    )
 
     highlighted_ddn, _ = semantic_model_to_ddn(
         candidate_model,
@@ -1493,6 +1692,7 @@ def preview_cube_materialization_plan(
         'differences': differences,
         'statements': statements,
         'grain_warnings': grain_warnings,
+        'destructive_warning': destructive_warning,
         'sql_preview': '\n\n'.join(statements),
         'highlighted_ddn_text': highlighted_ddn,
         'requires_native_review': True,
