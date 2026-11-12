@@ -395,6 +395,10 @@ define('pgadmin.node.server', [
               const initialData = _.omit(data, ['id', '_id', 'connected', 'version', 'server_owner',
                 'gss_authenticated', 'gss_encrypted', 'connection_string', 'password', 'tunnel_password']);
               initialData.name = gettext('Copy of %s', data.name || nodeData.label);
+              // Tags come back display-shaped (old_text marks an edited row); a copy starts them fresh.
+              if(Array.isArray(initialData.tags)) {
+                initialData.tags = initialData.tags.map((tag) => _.omit(tag, ['old_text']));
+              }
               return tryOpenServerForm({item: groupItem, mode: 'create', engine, profileId: nodeData.cde_profile_id,
                 initialData, intent: 'endpoint', verifyNow: Boolean(data.cde_verify_now),
                 panelTitle: gettext('Copy %s', nodeData.label || nodeData._label)});

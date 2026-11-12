@@ -906,8 +906,32 @@ and applies exactly ALTER SEQUENCE ... INCREMENT BY 7. Failed and fixed:
   ``json`` controls as read-only "unsupported" boxes, so no comment could
   be edited from a provider-native form. Both are editable text now.
 
-Observed, not changed: a resource group under a schema expands by
-double-click but not by its chevron or the arrow key; the SQL tab of an
+Save paths, checked the same day (servers API and lifecycle route against
+the demos, then in Chrome):
+
+- A PostgreSQL edit saved with the editor's envelope changes only the edited
+  field; saved password, tags, connection parameters, host and port stay,
+  and the server reconnects.
+- MySQL registration changes pass the provider's lifecycle admission (owner
+  work 2026-10-23), so the servers API refuses a MySQL update and the editor's
+  Save failed for MySQL. The editor now saves a MySQL edit through the
+  endpoint's workspace action with the provider edit form's complete values;
+  a change to a field that form does not own (the comment) is refused with
+  its name rather than dropped. Verified: one timeout change, every other
+  route value unchanged.
+- Copy registers once the password is entered (a copy never carries the
+  secret); host, port, database, user, comment and connection parameters
+  match the source. The copy's tags carried a display-only key, now
+  stripped. A refused registration showed only "status code 401"; the
+  editor now shows the servers API's reason.
+- Moving a server between groups: the update API honours it, but the
+  descriptor Server form has no usable group control (it is UI-only and
+  the editor supplies no group list), so with the legacy dialog retired no
+  screen moves a server between groups. Recorded for the owner; not built.
+- Tree chevrons work: a first open fetches the node's children and took
+  several seconds on the loaded machine; reopening takes a quarter second.
+
+Observed, not changed: the SQL tab of an
 applied native plan shows the plan's JSON envelope rather than the
 statement alone; an owner whose catalog value is an OID shows empty in the
 schema and sequence editors (documented: empty keeps the owner).

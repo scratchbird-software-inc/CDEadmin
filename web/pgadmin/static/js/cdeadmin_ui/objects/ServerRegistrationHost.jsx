@@ -34,8 +34,48 @@ export function registrationPayload(form, draft, {profileId, intent='endpoint', 
   return {...data, cde_profile_id: profile ?? profileId, cde_registration_intent: intent, cde_verify_now: verifyNow};
 }
 
+/*
+ * An endpoint whose registration changes pass the provider's lifecycle admission (MySQL, owner work
+ * 2026-10-23: retained SQL sessions block route changes) is edited through its workspace action
+ * endpoint_profile_update, never the generic servers update, which refuses it. That action takes
+ * the provider edit form's complete values, so the request is the current record merged with the
+ * changes, limited to the fields that form owns. A change to a field it does not own is refused
+ * here rather than silently dropped; an unchanged secret is left out so the stored one stays.
+ */
+export function lifecycleProfileRequest(ownedFields, record, changes) {
+  const owned = new Set(ownedFields);
+  const refused = Object.keys(changes).filter((key) => !owned.has(key));
+  if(refused.length) {
+    throw new Error(`This endpoint's registration changes go through its provider, which does not edit: ${refused.join(', ')}`);
+  }
+  const merged = {...record, ...changes};
+  const request = {};
+  for(const field of ownedFields) {
+    if(/password/i.test(field) && !(field in changes && changes[field])) continue;
+    if(field in merged && merged[field] !== undefined) request[field] = merged[field];
+  }
+  return request;
+}
+
+/*
+ * The servers API answers a refused registration with an HTTP error whose body says why (a
+ * password is required to verify, a field is missing). Show that sentence, not the transport's
+ * "Request failed with status code 401" (browser pass 2026-11-12).
+ */
+async function send(api, request) {
+  let response;
+  try {
+    response = await api(request);
+  } catch(error) {
+    const body = error?.response?.data;
+    throw new Error(body?.errormsg || body?.info || error?.message || String(error));
+  }
+  if(response?.data?.success === 0) throw new Error(response.data.errormsg || response.data.info || 'Request refused');
+  return response;
+}
+
 export default function ServerRegistrationHost({api, engine, version, versionSupport, mode='create', urlFor, initialData={}, profileId,
-  intent='endpoint', verifyNow=true, displayName, onClose, onSaved, descriptorClient}) {
+  intent='endpoint', verifyNow=true, displayName, onClose, onSaved, descriptorClient, lifecycleUrl}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
   const [state, setState] = useState({status: 'loading', bundle: null, record: {}, error: null});
 
@@ -76,9 +116,17 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
     fromBackend.profile = record.cde_profile_id || profileId;
   }
   const apply = async ({draft}) => {
+    if(mode === 'alter' && lifecycleUrl) {
+      const read = await send(api, {url: lifecycleUrl, method: 'POST', data: {action: 'endpoint_profile_read'}});
+      const editForm = read?.data?.data?.endpoint_registration?.forms?.forms?.edit;
+      if(!editForm) throw new Error(read?.data?.errormsg || 'The provider did not return its edit form');
+      const request = lifecycleProfileRequest(editForm.fields.map((field) => field.field_id), fromBackend, draft);
+      const response = await send(api, {url: lifecycleUrl, method: 'POST', data: {action: 'endpoint_profile_update', request}});
+      onSaved?.(response.data);
+      return response.data;
+    }
     const payload = registrationPayload(form, draft, {profileId: record.cde_profile_id || profileId, intent, verifyNow});
-    const response = await api({url: urlFor(mode === 'create'), method: mode === 'create' ? 'POST' : 'PUT', data: payload});
-    if(response?.data?.success === 0) throw new Error(response.data.errormsg || response.data.info || 'Registration failed');
+    const response = await send(api, {url: urlFor(mode === 'create'), method: mode === 'create' ? 'POST' : 'PUT', data: payload});
     onSaved?.(response.data);
     return response.data;
   };
@@ -103,5 +151,7 @@ ServerRegistrationHost.propTypes = {
   displayName: PropTypes.string,
   onClose: PropTypes.func,
   onSaved: PropTypes.func,
+  // Workspace URL of an endpoint edited through its provider lifecycle (see lifecycleProfileRequest).
+  lifecycleUrl: PropTypes.string,
   descriptorClient: PropTypes.object,
 };

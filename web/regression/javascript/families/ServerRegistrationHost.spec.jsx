@@ -3,7 +3,7 @@ import Theme from 'sources/Theme';
 import {
   ServerRegistrationHost, recordFromBackend,
 } from '../../../pgadmin/static/js/cdeadmin_ui/objects';
-import {registrationPayload} from '../../../pgadmin/static/js/cdeadmin_ui/objects/ServerRegistrationHost';
+import {lifecycleProfileRequest, registrationPayload} from '../../../pgadmin/static/js/cdeadmin_ui/objects/ServerRegistrationHost';
 import {loadEngineBundle} from './familyFixtures';
 
 beforeEach(() => {
@@ -81,5 +81,43 @@ describe('ServerRegistrationHost', () => {
     expect(request.url).toBe('/browser/server/obj/1/7');
     expect(request.data).toMatchObject({name: 'New'});
     expect(request.data).not.toHaveProperty('db');
+  });
+});
+
+describe('lifecycleProfileRequest (MySQL edits through the provider lifecycle, browser pass 2026-11-12)', () => {
+  const owned = ['name', 'host', 'port', 'username', 'connection_timeout', 'password'];
+  const record = {name: 'm', host: 'h', port: 3306, username: 'u', connection_timeout: 10, password: '', comment: 'c'};
+
+  it('sends the complete owned values with the change merged in, and keeps the stored secret', () => {
+    expect(lifecycleProfileRequest(owned, record, {connection_timeout: 11}))
+      .toEqual({name: 'm', host: 'h', port: 3306, username: 'u', connection_timeout: 11});
+  });
+
+  it('sends a secret only when it was changed', () => {
+    expect(lifecycleProfileRequest(owned, record, {password: 'new'}).password).toBe('new');
+  });
+
+  it('refuses a change the provider edit form does not own instead of dropping it', () => {
+    expect(() => lifecycleProfileRequest(owned, record, {comment: 'x'})).toThrow(/does not edit: comment/);
+  });
+});
+
+describe('ServerRegistrationHost refusals (browser pass 2026-11-12)', () => {
+  it('shows the servers API reason instead of the HTTP status', async () => {
+    const bundle = loadEngineBundle('sqlite');
+    const api = jest.fn(async () => {
+      const error = new Error('Request failed with status code 401');
+      error.response = {status: 401, data: {success: 0, errormsg: 'A password is required to verify this endpoint.'}};
+      throw error;
+    });
+    api.get = jest.fn(async () => ({data: {success: 1, data: bundle}}));
+    render(<Theme><ServerRegistrationHost api={api} engine="sqlite" mode="create" urlFor={() => '/browser/server/obj/1/'}
+      initialData={{name: 'S', cde_profile_id: 'sqlite-native'}} profileId="sqlite-native" displayName="Register SQLite"
+      onClose={() => {}} onSaved={() => {}} /></Theme>);
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText(/^Database file/), {target: {value: '/tmp/a.db'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Register'}));
+    expect(await screen.findByText(/A password is required to verify this endpoint/)).toBeTruthy();
+    expect(screen.queryByText(/status code 401/)).toBeNull();
   });
 });

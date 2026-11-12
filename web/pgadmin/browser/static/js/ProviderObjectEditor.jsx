@@ -291,6 +291,13 @@ export function familyEditorContextActions(itemData, item) {
  * editing ('alter', on a server item) a provider endpoint. Resolves true when it opened and false
  * when the legacy dialog must handle it: no bundle, or the engine's server form is not complete.
  */
+/*
+ * Engines whose registration changes the servers API refuses and routes through the provider's
+ * lifecycle admission (servers/__init__.py update guard); their editor saves through the
+ * endpoint's workspace action instead.
+ */
+export const LIFECYCLE_EDIT_ENGINES = new Set(['mysql']);
+
 export async function tryOpenServerForm({item, mode='create', engine, profileId, initialData={}, intent='endpoint',
   verifyNow=true, panelTitle}) {
   if(!engine || !item) return false;
@@ -310,11 +317,19 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
   const base = generateNodeUrl.call(serverNode, treeNodeInfo, mode === 'create' ? 'create' : 'edit', nodeData, false,
     serverNode.url_jump_after_node);
   const urlFor = (isNew) => base + (isNew ? '' : nodeData._id);
+  const lifecycleUrl = mode !== 'create' && LIFECYCLE_EDIT_ENGINES.has(engine) ?
+    urlFor(false).replace('/obj/', '/cde_workspace/') : undefined;
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = mode === 'create' ? `id-server-register-${++editorSequence}` : `id-server-edit-${nodeData._id}`;
   const onClose = () => workspace.close(panelId);
   const onSaved = (response) => {
     setTimeout(() => serverNode.clear_cache?.(item), 0);
+    if(mode !== 'create' && !response?.node) {
+      // A lifecycle update returns the endpoint, not a tree node: reload the node instead.
+      tree.refresh?.(item);
+      onClose();
+      return;
+    }
     if(mode === 'create') {
       pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
     } else {
@@ -333,7 +348,8 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
       <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
         versionSupport={nodeData.version_support}
         mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
-        intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved} />
+        intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved}
+        lifecycleUrl={lifecycleUrl} />
     </ErrorBoundary>,
   }, BROWSER_PANELS.MAIN, 'middle');
   return true;
