@@ -1282,12 +1282,27 @@ def test_view_lifecycle_round_trips(live):
             'check_option': 'cascaded'}, native)
         native = view_native('View schema', 'ours')
         assert native['view_facts']['check_option'] == 'cascaded' and 'positive' in native['view_facts']['definition']
+        # The family form's shape (owner direction 2026-11-11): privileges as the words the grid sends, a revoke.
+        reader = f'ui_ops_viewreader_{UNIQUE}'
+        query(f'CREATE ROLE {reader}')
+        try:
+            run_kind(live, 'view', 'alter', {'datacl': [{'grantee': reader, 'privileges': ['SELECT']}]}, native)
+            assert one(f"SELECT has_table_privilege('{reader}', '\"View schema\".ours', 'SELECT')") is True
+            run_kind(live, 'view', 'alter', {'revoke': [{'grantee': reader}]}, native)
+            assert one(f"SELECT has_table_privilege('{reader}', '\"View schema\".ours', 'SELECT')") is False
+        finally:
+            query(f'DROP OWNED BY {reader}; DROP ROLE {reader}')
         run_kind(live, 'view', 'drop', {'confirmation': 'ours'}, native)
         assert query("SELECT count(*) FROM pg_class WHERE relname='ours'") == [(0,)]
         # Materialized view: created without data, fill factor set, query replaced by drop and create.
         run_kind(live, 'materialized-view', 'create', {
             'name': 'load', 'schema': 'View schema', 'definition': 'SELECT count(*) AS n FROM "View schema".t',
-            'with_data': False, 'fillfactor': 80})
+            'with_data': False, 'fillfactor': 80, 'toast_tuple_target': 256, 'autovacuum_enabled': 'f'})
+        loaded = view_native('View schema', 'load')['view_facts']
+        assert (loaded['toast_tuple_target'], loaded['autovacuum_enabled'], loaded['amname']) == (256, 'f', None)
+        # The autovacuum setting reset through the dialog's "Not set".
+        run_kind(live, 'materialized-view', 'alter', {'autovacuum_enabled': 'x'}, view_native('View schema', 'load'))
+        assert view_native('View schema', 'load')['view_facts']['autovacuum_enabled'] == 'x'
         native = view_native('View schema', 'load')
         assert (native['view_facts']['with_data'], native['view_facts']['fillfactor']) == (False, 80)
         run_kind(live, 'materialized-view', 'alter', {'fillfactor': 80, 'reset_fillfactor': True, 'comment': 'rows'},

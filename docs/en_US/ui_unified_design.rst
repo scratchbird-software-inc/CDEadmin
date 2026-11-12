@@ -763,6 +763,18 @@ their own engine-object form. Observed live on PostgreSQL 18.3: the
 existing trigger, event trigger and rule lifecycles pass under the
 family-field forms.
 
+Form close-outs, view. The view and materialized view editor admits every
+family field: privileges stated through the grid and revoked through a
+Revoke grid, security labels, and for materialized views the TOAST tuple
+target, the autovacuum grids (set and reset, as the table editor does),
+the access method on edit (SET ACCESS METHOD, PostgreSQL 15 and later)
+and extension dependencies; a recreate keeps the current storage
+parameters under the dialog's changes; the owner, tablespace and access
+method are facts. Observed live on PostgreSQL 18.3: SELECT granted on a
+view as the word the grid sends and revoked, a materialized view created
+with a TOAST tuple target and autovacuum off, the setting reset through
+the dialog's "Not set".
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

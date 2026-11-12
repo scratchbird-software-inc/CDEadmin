@@ -148,7 +148,16 @@ def test_forms_and_routes():
         'view_facts', 'check_option']
     mview = {f['field_id']: f for f in form('materialized-view', 'create',
                                            field)['fields']}
-    assert mview['with_data']['default'] is True and 'amname' in mview
+    assert 'with_data' in mview and 'amname' in mview
+    # Every family field id is admitted (owner direction 2026-11-11).
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'view.form.json').read_text())
+    for operation, served in (('alter', view), ('create', mview)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
         adapt_catalog)
     catalog = adapt_catalog({'objects': []})
@@ -161,3 +170,54 @@ def test_forms_and_routes():
             'provider-native', kind
         assert routes['inspect'] == 'legacy-preserved', kind
     assert routes['refresh'] == 'provider-native'
+
+
+def test_privileges_labels_storage_and_dependencies():
+    # Views: word privileges, a revoke and a label; dependencies refused.
+    assert statements('view', 'alter', {
+        'revoke': [{'grantee': 'public'}],
+        'datacl': [{'grantee': 'reader', 'privileges': ['SELECT']}],
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}]}) == [
+        'REVOKE ALL ON TABLE "service"."open_work_orders" FROM PUBLIC',
+        'GRANT SELECT ON TABLE "service"."open_work_orders" TO "reader"',
+        'SECURITY LABEL FOR "selinux" ON VIEW "service"."open_work_orders" '
+        "IS 'x'"]
+    with pytest.raises(PostgreSQLNativeAdminError, match='materialized'):
+        compile_kind('view', 'alter', {'dependsonextensions': ['plpgsql']},
+                     VIEW)
+    # Materialized views: TOAST tuple target, autovacuum grids and an
+    # extension dependency on create; the same again as a diff on alter.
+    assert statements('materialized-view', 'create', {
+        'name': 'm', 'schema': 's', 'definition': 'SELECT 1', 'fillfactor': 80,
+        'toast_tuple_target': 256, 'autovacuum_enabled': 'f',
+        'autovacuum_custom': True,
+        'vacuum_table': [{'label': 'autovacuum_vacuum_threshold',
+                          'value': 100}],
+        'dependsonextensions': ['plpgsql']}) == [
+        'CREATE MATERIALIZED VIEW "s"."m" WITH (fillfactor=80, '
+        'toast_tuple_target=256, autovacuum_enabled=false, '
+        'autovacuum_vacuum_threshold=100) AS SELECT 1 WITH DATA',
+        'ALTER MATERIALIZED VIEW "s"."m" DEPENDS ON EXTENSION "plpgsql"']
+    current = facts(MVIEW)
+    assert (current['autovacuum_enabled'], current['autovacuum_custom'],
+            current['toast_tuple_target']) == ('x', False, None)
+    assert statements('materialized-view', 'alter', {
+        'toast_tuple_target': 512, 'autovacuum_enabled': 't',
+        'reset_fillfactor': True}) == [
+        'ALTER MATERIALIZED VIEW "service"."workload" SET '
+        '(toast_tuple_target=512, autovacuum_enabled=true)',
+        'ALTER MATERIALIZED VIEW "service"."workload" RESET (fillfactor)']
+    with pytest.raises(PostgreSQLNativeAdminError, match='not known'):
+        compile_kind('materialized-view', 'alter', {'amname': 'heap2'},
+                     MVIEW)
+    known = dict(MVIEW, catalog_row=dict(MVIEW['catalog_row'],
+                                         access_method_name='heap'))
+    assert statements('materialized-view', 'alter', {'amname': 'heap2'},
+                      known) == [
+        'ALTER MATERIALIZED VIEW "service"."workload" SET ACCESS METHOD '
+        '"heap2"']
+    # A recreate keeps the current storage parameters under the changes.
+    assert statements('materialized-view', 'alter', {
+        'definition': 'SELECT 2', 'toast_tuple_target': 300})[1] == (
+        'CREATE MATERIALIZED VIEW "service"."workload" WITH (fillfactor=70, '
+        'toast_tuple_target=300) AS SELECT 2 WITH DATA')
