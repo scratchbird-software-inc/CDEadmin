@@ -72,7 +72,7 @@ def test_rule_and_event_trigger_facts():
         'INSERT INTO service.log VALUES (1)')
     event = event_trigger_facts(EVENT)
     assert (event['eventname'], event['when'], event['enabled']) == (
-        'sql_drop', 'DROP TABLE', 'O')
+        'SQL_DROP', 'DROP TABLE', 'O')
 
 
 def test_trigger_create_with_every_clause():
@@ -221,6 +221,19 @@ def test_forms_and_routes():
     assert trigger['tfunction']['initial_value_path'] == [
         'trigger_facts', 'tfunction']
     assert 'is_enable_trigger' in trigger and 'schema' not in trigger
+    # Every family field id is admitted for both variants (owner direction
+    # 2026-11-11).
+    import json, pathlib
+    family = json.loads(pathlib.Path(
+        'web/pgadmin/cdeadmin/ui_descriptors/postgresql/forms/'
+        'trigger.form.json').read_text())
+    event = {f['field_id']: f
+             for f in form('event-trigger', 'create', field)['fields']}
+    for operation, served in (('alter', trigger), ('create', event)):
+        for item in family['fields']:
+            if not item.get('modes') or operation in item['modes']:
+                assert item['field_id'] in served, (operation, item['field_id'])
+    assert event['eventname']['required'] and 'schema' not in event
     rule = {f['field_id']: f for f in form('rule', 'create', field)['fields']}
     assert rule['event']['default'] == 'SELECT'
     from pgadmin.cdeadmin.providers.postgresql.preserved_surface import (
@@ -234,3 +247,26 @@ def test_forms_and_routes():
         assert routes['create'] == routes['alter'] == routes['drop'] == \
             'provider-native', kind
         assert routes['inspect'] == 'legacy-preserved', kind
+
+
+def test_family_shapes_for_triggers_and_event_triggers():
+    # The dialog's column list is plain names; inline code is refused.
+    assert statements('trigger', 'create', {
+        'name': 't', 'schema': 's', 'table': 'o', 'fires': 'BEFORE',
+        'evnt_update': True, 'columns': ['status', 'note'],
+        'tfunction': 's.f'}, TRIGGER) == [
+        'CREATE TRIGGER "t" BEFORE UPDATE OF "status", "note" ON "s"."o" FOR '
+        'EACH ROW EXECUTE FUNCTION s.f()']
+    with pytest.raises(PostgreSQLNativeAdminError, match='EDB feature'):
+        compile_kind('trigger', 'alter', {'prosrc': 'begin end'}, TRIGGER)
+    # The event name as the dialog's upper-case option; the facts match it;
+    # security labels compile.
+    assert event_trigger_facts(EVENT)['eventname'] == 'SQL_DROP'
+    assert statements('event-trigger', 'create', {
+        'name': 'e', 'eventname': 'DDL_COMMAND_END', 'eventfunname': 'f',
+        'seclabels': [{'provider': 'selinux', 'label': 'x'}]}, EVENT) == [
+        'CREATE EVENT TRIGGER "e" ON ddl_command_end EXECUTE FUNCTION f()',
+        'SECURITY LABEL FOR "selinux" ON EVENT TRIGGER "e" IS \'x\'']
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_kind('event-trigger', 'alter', {'eventname': 'SQL_DROP'},
+                     EVENT)

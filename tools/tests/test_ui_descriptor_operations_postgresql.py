@@ -778,7 +778,7 @@ def test_sequence_lifecycle_round_trips(live, sequence_reader):
     reader = sequence_reader
     plan = run_sequence(live, 'create', {
         'schema': 'Seq schema', 'name': 'ticket no', 'comment': "it's", 'increment': 2, 'start': 10,
-        'minimum': 1, 'maximum': 1000, 'cache': 5, 'cycled': True, 'relpersistence': 'logged',
+        'minimum': 1, 'maximum': 1000, 'cache': 5, 'cycled': True, 'relpersistence': False,
         'owned_table': 'owner_t', 'owned_column': 'id',
         'relacl': [{'grantee': reader, 'privileges': 'rU'}],
         'securities': []})
@@ -797,19 +797,32 @@ def test_sequence_lifecycle_round_trips(live, sequence_reader):
         # bound is removed through its flag.
         'increment': 2, 'start': 10, 'minimum': 1, 'maximum': 1000, 'no_maximum': True, 'cache': 5,
         'cycled': False,
-        'relpersistence': 'unlogged', 'owned_by_none': True, 'revoke': [{'grantee': reader}],
+        'relpersistence': True, 'owned_by_none': True, 'revoke': [{'grantee': reader}],
         'relacl': [{'grantee': reader, 'privileges': 'r', 'with_grant': True}]}, native)
     statement = plan['command_preview']['statement']
     assert 'INCREMENT BY' not in statement and 'NO MAXVALUE NO CYCLE' in statement
     native = sequence_native('Seq schema', 'ticket_number')
     assert native['comment'] is None and native['catalog_row']['relpersistence'] == 'u'
+    # The family form's shape (owner direction 2026-11-11): persistence as a boolean, privileges as words.
+    from pgadmin.cdeadmin.providers.postgresql.sequences import facts as sequence_facts
+    assert sequence_facts(native)['relpersistence'] is True
+    run_sequence(live, 'alter', {'relpersistence': False, 'relacl': [{'grantee': reader, 'privileges': ['USAGE']}],
+                                 'owned_table': 'Seq schema.owner_t', 'owned_column': 'id'}, native)
+    native = sequence_native('Seq schema', 'ticket_number')
+    assert native['catalog_row']['relpersistence'] == 'p'
+    assert query("SELECT count(*) FROM pg_depend WHERE objid='\"Seq schema\".ticket_number'::regclass "
+                 "AND deptype='a'") == [(1,)]
+    run_sequence(live, 'alter', {'owned_by_none': True}, native)
+    assert [item for item in native['catalog_row']['relacl'] if item.startswith(reader)] == [
+        f'{reader}=r*U/{SETTINGS["user"]}']
     assert native['children']['pg_sequence'][0]['seqmax'] == 9223372036854775807
     assert native['children']['pg_sequence'][0]['seqcycle'] is False
     assert query("SELECT nextval('\"Seq schema\".ticket_number')") == [(500,)]
     assert query("SELECT count(*) FROM pg_depend WHERE objid='\"Seq schema\".ticket_number'::regclass "
                  "AND deptype='a'") == [(0,)]
+    # SELECT with grant option from the earlier alter, USAGE from the word grant above.
     assert [item for item in native['catalog_row']['relacl'] if item.startswith(reader)] == [
-        f'{reader}=r*/{SETTINGS["user"]}']
+        f'{reader}=r*U/{SETTINGS["user"]}']
     # Drop needs the typed name and refuses a wrong one before anything runs.
     provider, route = live
     with pytest.raises(Exception):
@@ -1585,7 +1598,7 @@ def test_event_trigger_lifecycle_round_trips(live):
             'eventfunname': 'public.ui_ops_note', 'comment': "it's"})
         native = event_trigger_native('ui_ops_notes')
         assert (native['event_trigger_facts']['eventname'], native['event_trigger_facts']['when'],
-                native['comment']) == ('ddl_command_end', 'CREATE TABLE, DROP TABLE', "it's")
+                native['comment']) == ('DDL_COMMAND_END', 'CREATE TABLE, DROP TABLE', "it's")
         run_kind(live, 'event-trigger', 'alter', {'enabled': 'D', 'comment': '', 'name': 'ui_ops_quiet'}, native)
         native = event_trigger_native('ui_ops_quiet')
         assert (native['event_trigger_facts']['enabled'], native['comment']) == ('D', None)

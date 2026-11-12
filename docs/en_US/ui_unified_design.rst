@@ -744,6 +744,25 @@ stays read-only, as in the inherited dialog. Observed live on PostgreSQL
 sends and PUBLIC revoked, an extension dependency recorded, a
 set-returning function created through the flag.
 
+Form close-outs, sequence. The sequence editor admits every family
+field; persistence is the dialog's boolean (checked = UNLOGGED) beside
+the words; the owner is a fact; the provider's No minimum, No maximum,
+OWNED BY NONE and Revoke controls join the family form, since a cleared
+number never reaches the provider; the table picker's schema.table is
+accepted for OWNED BY. Observed live on PostgreSQL 18.3: persistence
+switched through the boolean, USAGE granted as the word the grid sends,
+the sequence re-owned through the picker's dotted path.
+
+Form close-outs, trigger. The trigger family form serves two kinds, the
+table or view trigger and the event trigger; both now admit every family
+field. The dialog's column list arrives as plain names, the event
+trigger's event as the dialog's upper-case option (the facts match it),
+event trigger security labels compile, and the inline trigger code
+field, an EDB feature, is refused with that message. Rewrite rules keep
+their own engine-object form. Observed live on PostgreSQL 18.3: the
+existing trigger, event trigger and rule lifecycles pass under the
+family-field forms.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

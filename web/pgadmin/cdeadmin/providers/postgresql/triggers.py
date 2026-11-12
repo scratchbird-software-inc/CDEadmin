@@ -14,6 +14,11 @@ dialog does. Rules: CREATE [OR REPLACE] RULE AS ON event TO table [WHERE]
 DO [INSTEAD] NOTHING | (commands), rename, ALTER TABLE ENABLE | DISABLE
 RULE, comment. Transition tables and constraint triggers, which YugabyteDB
 refuses, are offered here. Field ids follow the inherited dialogs.
+Owner direction 2026-11-11: every field of the trigger family form is
+admitted; the event trigger's event is read as the dialog's upper-case
+option or as the catalog's lower-case name, its security labels compile,
+and the inline trigger code (an EDB feature) is refused with that
+message.
 
 The alter dialogs' initial values come from ``pg_get_triggerdef`` and
 ``pg_get_ruledef`` read back through PostgreSQL's own parser.
@@ -114,8 +119,9 @@ def rule_facts(native):
         result.update({
             'view': statement.relation.relname,
             'schema': statement.relation.schemaname or result['schema'],
-            'event': RULE_EVENTS.get(int(getattr(statement.event, 'value',
-                                                statement.event)), 'SELECT'),
+            'event': RULE_EVENTS.get(
+                int(getattr(statement.event, 'value', statement.event)),
+                'SELECT'),
             'do_instead': bool(statement.instead),
             'condition': _render(statement.whereClause)
             if statement.whereClause is not None else None,
@@ -128,8 +134,10 @@ def rule_facts(native):
 
 def event_trigger_facts(native):
     row = native.get('catalog_row') or {}
+    event = row.get('evtevent')
     return {'name': native.get('name') or row.get('evtname'),
-            'eventname': row.get('evtevent'),
+            # The dialog's option values are upper case.
+            'eventname': event.upper() if isinstance(event, str) else event,
             'when': ', '.join(row.get('evttags') or []),
             'eventfunname': None,
             'enabled': row.get('evtenabled', 'O'),
@@ -212,7 +220,14 @@ def _trigger_definition(draft, current, replace):
     return text, name, table
 
 
+def _no_inline_code(draft):
+    if not _blank(draft.get('prosrc')):
+        raise PostgreSQLNativeAdminError(
+            'inline trigger code is an EDB feature; name a trigger function')
+
+
 def _trigger_create(draft):
+    _no_inline_code(draft)
     text, name, table = _trigger_definition(draft, None, False)
     statements = [text]
     if not _blank(draft.get('description')):
@@ -222,6 +237,7 @@ def _trigger_create(draft):
 
 
 def _trigger_alter(native, draft):
+    _no_inline_code(draft)
     current = native.get('trigger_facts') or trigger_facts(native)
     if current.get('is_internal'):
         raise PostgreSQLNativeAdminError(
@@ -292,9 +308,29 @@ def _tags(value):
     return [_literal(str(item).strip("'"), 'tag') for item in value]
 
 
+def _event_labels(name, draft):
+    statements = []
+    value = draft.get('seclabels')
+    if value in (None, ''):
+        return statements
+    if not isinstance(value, list) or any(
+            not isinstance(item, dict) for item in value):
+        raise PostgreSQLNativeAdminError('seclabels must be a list of rows')
+    for row in value:
+        provider = _name(row.get('provider'), 'provider')
+        label = row.get('label')
+        if not isinstance(label, str) or not label:
+            raise PostgreSQLNativeAdminError('a security label needs text')
+        statements.append(f'SECURITY LABEL FOR '
+                          f'{_identifier(provider, "provider")} ON EVENT '
+                          f'TRIGGER {name} IS {_literal(label, "label")}')
+    return statements
+
+
 def _event_trigger_definition(draft, current):
     name = _identifier(_value(draft, current, 'name'), 'name')
     event = _value(draft, current, 'eventname')
+    event = event.lower() if isinstance(event, str) else event
     if event not in EVENT_TRIGGER_EVENTS:
         raise PostgreSQLNativeAdminError(
             'event is ' + ', '.join(EVENT_TRIGGER_EVENTS))
@@ -320,6 +356,7 @@ def _event_trigger_create(draft):
     if not _blank(draft.get('comment')):
         statements.append(f'COMMENT ON EVENT TRIGGER {name} IS '
                           + _literal(str(draft['comment']), 'comment'))
+    statements.extend(_event_labels(name, draft))
     return statements
 
 
@@ -329,8 +366,10 @@ def _event_trigger_alter(native, draft):
     name = _name(current['name'], 'name')
     quoted = _identifier(name, 'name')
     statements = []
-    changed = any(draft.get(key) is not None and draft[key] != current[key]
-                  for key in ('eventname', 'when'))
+    changed = any(draft.get(key) is not None and (
+        str(draft[key]).lower() if key == 'eventname' else draft[key]) != (
+        str(current[key]).lower() if key == 'eventname' and current.get(key)
+        else current[key]) for key in ('eventname', 'when'))
     if changed or not _blank(draft.get('eventfunname')):
         # As the inherited dialog: event, tags and function change by drop
         # and create (there is no ALTER for them).
@@ -352,6 +391,7 @@ def _event_trigger_alter(native, draft):
         text = 'NULL' if _blank(draft['comment']) else _literal(
             str(draft['comment']), 'comment')
         statements.append(f'COMMENT ON EVENT TRIGGER {quoted} IS {text}')
+    statements.extend(_event_labels(quoted, draft))
     new_name = draft.get('name')
     if not _blank(new_name) and new_name != name:
         statements.append(f'ALTER EVENT TRIGGER {quoted} RENAME TO '
@@ -409,8 +449,8 @@ def _rule_definition(draft, current, replace):
     condition = _value(draft, current, 'condition')
     if not _blank(condition):
         text += ' WHERE (' + expression(condition, 'condition') + ')'
-    text += ' DO' + (' INSTEAD' if _value(draft, current, 'do_instead',
-                                         False) else ' ALSO')
+    instead = _value(draft, current, 'do_instead', False)
+    text += ' DO' + (' INSTEAD' if instead else ' ALSO')
     return text + ' ' + _commands(_value(draft, current, 'statements')), \
         name, table
 
@@ -522,6 +562,8 @@ def form(kind, operation, field):
         fields = [field('cascade', 'Drop dependent objects', 'boolean'),
                   field('confirmation', f'Type the {label} name to confirm',
                         required=True)]
+    elif kind in ('trigger', 'event-trigger'):
+        return _family_form(kind, operation, field, label, facts_key)
     elif kind == 'trigger':
         fields = [field('name', 'Name', required=not alter, **initial('name'))]
         if not alter:
@@ -608,3 +650,79 @@ def form(kind, operation, field):
     return {'form_id': f'postgresql-{kind}-{operation}',
             'form_key': f'native:postgresql:schema:{kind}',
             'title': f'{operation.title()} {label}', 'fields': fields}
+
+
+# The trigger family form's field ids (trigger.form.json: the table/view
+# trigger and event trigger variants); the validator admits exactly these,
+# plus the provider's schema and table on a trigger create.
+_FAMILY_FIELDS = (
+    'variant', 'name', 'oid', 'eventowner', 'is_sys_trigger', 'is_sys_obj',
+    'description', 'comment', 'fires', 'evnt_insert', 'evnt_update',
+    'evnt_delete', 'evnt_truncate', 'columns', 'whenclause',
+    'is_enable_trigger', 'is_row_trigger', 'is_constraint_trigger',
+    'tgdeferrable', 'tginitdeferred', 'tfunction', 'tgargs', 'enabled',
+    'eventfunname', 'eventname', 'when', 'prosrc', 'tgoldtable',
+    'tgnewtable', 'seclabels')
+_FAMILY_BOOLEANS = ('is_sys_trigger', 'is_sys_obj', 'evnt_insert',
+                    'evnt_update', 'evnt_delete', 'evnt_truncate',
+                    'is_row_trigger', 'is_constraint_trigger', 'tgdeferrable',
+                    'tginitdeferred')
+_FAMILY_GRIDS = ('columns', 'seclabels')
+_FAMILY_SELECTS = {
+    'fires': [{'value': item, 'label': item.title()} for item in FIRES],
+    'is_enable_trigger': [{'value': code, 'label': word.title()}
+                          for code, word in ENABLE_STATES.items()],
+    'enabled': [{'value': code, 'label': word.title()}
+                for code, word in ENABLE_STATES.items()],
+    'eventname': [{'value': item.upper(), 'label': item}
+                  for item in EVENT_TRIGGER_EVENTS] + [
+        {'value': item, 'label': item} for item in EVENT_TRIGGER_EVENTS],
+}
+
+
+def _family_form(kind, operation, field, label, facts_key):
+    """The validator's view of the trigger family form: every field id the
+    dialog sends, typed loosely; the family form file carries the labels,
+    tabs, options and grid columns."""
+    alter = operation == 'alter'
+
+    def initial(key):
+        return {'initial_value_path': [facts_key, key]} if alter else {}
+    fields = []
+    if kind == 'trigger' and not alter:
+        fields += [field('schema', 'Schema', required=True),
+                   field('table', 'Table', required=True)]
+    for field_id in _FAMILY_FIELDS:
+        title = field_id.replace('_', ' ').capitalize()
+        if field_id in _FAMILY_GRIDS:
+            fields.append(field(field_id, title, 'grid', columns=[],
+                                **initial(field_id)))
+        elif field_id in _FAMILY_BOOLEANS:
+            fields.append(field(field_id, title, 'boolean',
+                                **initial(field_id)))
+        elif field_id in _FAMILY_SELECTS:
+            fields.append(field(field_id, title, 'select',
+                                options=_FAMILY_SELECTS[field_id],
+                                required=(kind == 'event-trigger' and
+                                          field_id == 'eventname' and
+                                          not alter),
+                                **initial(field_id)))
+        elif field_id == 'oid':
+            fields.append(field(field_id, 'OID', 'number'))
+        elif field_id in ('whenclause', 'when', 'prosrc'):
+            fields.append(field(field_id, title, 'code', **initial(field_id)))
+        else:
+            fields.append(field(field_id, title, required=(
+                field_id == 'name' or
+                (kind == 'trigger' and field_id == 'tfunction') or
+                (kind == 'event-trigger' and field_id in ('eventname',
+                                                          'eventfunname')))
+                and not alter, **initial(field_id)))
+    return {'form_id': f'postgresql-{kind}-{operation}',
+            'form_key': f'native:postgresql:schema:{kind}',
+            'title': f'{operation.title()} {label}', 'fields': fields,
+            'notes': ('A changed definition runs CREATE OR REPLACE TRIGGER '
+                      '(constraint triggers are dropped and created); an '
+                      'event trigger\'s event, tags or function change by '
+                      'drop and create. Inline trigger code is an EDB '
+                      'feature and is refused.')}

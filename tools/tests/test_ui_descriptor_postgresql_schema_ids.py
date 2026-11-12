@@ -24,7 +24,7 @@ PROVIDER_TREE_IDS = {
     'revoke', 'reset_fillfactor', 'reset_toast_tuple_target',
     'reset_parallel_workers', 'add_options', 'set_options', 'drop_options',
     'revoke_membership', 'revoke_members', 'reset_variables', 'admin_only',
-    'reset_parameters',
+    'reset_parameters', 'no_minimum', 'no_maximum', 'owned_by_none',
 }
 
 
