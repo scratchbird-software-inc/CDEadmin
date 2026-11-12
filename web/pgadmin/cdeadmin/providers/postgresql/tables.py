@@ -28,7 +28,7 @@ from .views import _options
 
 PRIVILEGE_CODES = {'a': 'INSERT', 'r': 'SELECT', 'w': 'UPDATE',
                    'd': 'DELETE', 'D': 'TRUNCATE', 'x': 'REFERENCES',
-                   't': 'TRIGGER'}
+                   't': 'TRIGGER', 'm': 'MAINTAIN'}  # m: PostgreSQL 17+
 REPLICA_IDENTITY = {'d': 'DEFAULT', 'f': 'FULL', 'n': 'NOTHING',
                     'i': 'USING INDEX'}
 PARTITION_TYPES = ('range', 'list', 'hash')
@@ -60,10 +60,12 @@ def _blank(value):
     return value is None or value == ''
 
 
-def facts(native):
-    """Table-level facts from the captured pg_class row. Owner, tablespace
-    and access method are OIDs in the row, so their names are not known
-    here; the editor treats a value the dialog supplies as a change."""
+def facts(native, partitions=None):
+    """Table-level facts from the captured pg_class row; the capture
+    names the owner, tablespace and access method beside their OIDs
+    (owner direction 2026-11-11), so the editor diffs them. ``partitions``
+    lists a partitioned table's partitions (``oid``, ``schema``, ``name``,
+    ``bound``) for the Partitions grid."""
     row = native.get('catalog_row') or {}
     options = _options(row.get('reloptions'))
     autovacuum = {key: value for key, value in options.items()
@@ -76,10 +78,10 @@ def facts(native):
     return {
         'schema': native.get('schema'),
         'name': native.get('name') or row.get('relname'),
-        'relowner': native.get('owner'),
+        'relowner': native.get('owner') or row.get('owner_name'),
         'relpersistence': row.get('relpersistence') == 'u',
         'description': native.get('comment') or '',
-        'spcname': native.get('tablespace'),
+        'spcname': native.get('tablespace') or row.get('tablespace_name'),
         'fillfactor': number('fillfactor'),
         'parallel_workers': number('parallel_workers'),
         'toast_tuple_target': number('toast_tuple_target'),
@@ -92,8 +94,16 @@ def facts(native):
         'replica_identity': REPLICA_IDENTITY.get(row.get('relreplident'),
                                                  None),
         'is_partitioned': row.get('relkind') == 'p',
+        'partition_scheme': row.get('partition_key_sql'),
+        'partitions': [{
+            'oid': item.get('oid'),
+            'partition_name': f"{item.get('schema')}.{item.get('name')}",
+            'is_default': item.get('bound') == 'DEFAULT',
+            'bound': item.get('bound'),
+        } for item in (partitions if partitions is not None
+                       else native.get('partitions') or [])],
         'relkind': row.get('relkind'),
-        'amname': native.get('access_method'),
+        'amname': native.get('access_method') or row.get('access_method_name'),
     }
 
 
@@ -292,6 +302,53 @@ def _with_options(draft):
     return ' WITH (' + ', '.join(items) + ')' if items else ''
 
 
+def _partition_bound(row):
+    """The inherited Partitions grid's bound columns as a bound clause."""
+    from .partitions import bound
+    if _flag(row, 'is_default') if 'is_default' in row else False:
+        return 'DEFAULT'
+    if not _blank(row.get('values_in')):
+        return bound(f"FOR VALUES IN ({row['values_in']})")
+    if not _blank(row.get('values_from')) or not _blank(row.get('values_to')):
+        return bound(f"FOR VALUES FROM ({row.get('values_from')}) "
+                     f"TO ({row.get('values_to')})")
+    if not _blank(row.get('values_modulus')):
+        return bound(f"FOR VALUES WITH (MODULUS {row.get('values_modulus')}, "
+                     f"REMAINDER {row.get('values_remainder')})")
+    _refuse('a partition row needs a default, range, list or hash bound')
+
+
+def _partition_rows(parent, schema, rows):
+    """CREATE or ATTACH statements for the Partitions grid's new rows."""
+    from .partitions import _reference_table
+    statements = []
+    for row in rows:
+        name = row.get('partition_name')
+        if _blank(name):
+            _refuse('a partition row needs a name')
+        clause = _partition_bound(row)
+        attach = row.get('is_attach')
+        if attach is True or attach == 'true':
+            child = _reference_table(name if '.' in str(name)
+                                     else f'{schema}.{name}', 'partition')
+            statements.append(f'ALTER TABLE {parent} ATTACH PARTITION '
+                              f'{child} {clause}')
+            continue
+        child = (_reference_table(name, 'partition') if '.' in str(name)
+                 else _qualified(schema, _name(name, 'partition_name')))
+        statement = f'CREATE TABLE {child} PARTITION OF {parent} {clause}'
+        if _flag(row, 'is_sub_partitioned') if 'is_sub_partitioned' in row \
+                else False:
+            statement += _partition_by({
+                'partition_type': row.get('sub_partition_type'),
+                'partition_keys': row.get('sub_partition_keys')})
+        if not _blank(row.get('amname')):
+            statement += ' USING ' + _identifier(
+                _name(row['amname'], 'amname'), 'amname')
+        statements.append(statement)
+    return statements
+
+
 def _create(draft):
     schema = _name(draft.get('schema'), 'schema')
     name = _name(draft.get('name'), 'name')
@@ -355,6 +412,11 @@ def _create(draft):
     if not _blank(draft.get('description')):
         statements.append(f'COMMENT ON TABLE {qualified} IS '
                           + _literal(str(draft['description']), 'comment'))
+    partitions = _rows(draft, 'partitions')
+    if partitions and not (_flag(draft, 'is_partitioned')
+                           if 'is_partitioned' in draft else False):
+        _refuse('partitions belong to a partitioned table')
+    statements.extend(_partition_rows(qualified, schema, partitions))
     for row in _rows(draft, 'columns'):
         if not _blank(row.get('name')) and not _blank(row.get('description')):
             statements.append(
@@ -408,6 +470,15 @@ def _alter(native, draft):
         statements.append(f'{alter} SET TABLESPACE '
                           + _identifier(_name(draft['spcname'], 'spcname'),
                                         'spcname'))
+    if not _blank(draft.get('amname')) and \
+            draft['amname'] != current['amname']:
+        # SET ACCESS METHOD rewrites the table; only on a known change.
+        if current['amname'] is None:
+            _refuse('the access method of this table is not known to the '
+                    'listing; refresh before changing it')
+        statements.append(f'{alter} SET ACCESS METHOD '
+                          + _identifier(_name(draft['amname'], 'amname'),
+                                        'amname'))
     if 'rlspolicy' in draft and _flag(draft, 'rlspolicy') != \
             current['rlspolicy']:
         statements.append(f'{alter} '
@@ -444,6 +515,27 @@ def _alter(native, draft):
         statements.append(f'{alter} SET (' + ', '.join(sets) + ')')
     if resets:
         statements.append(f'{alter} RESET (' + ', '.join(resets) + ')')
+    if 'partitions' in draft and current['is_partitioned']:
+        # The grid is the full set: new rows create or attach, rows left
+        # out detach (the inherited dialog's "deleting a row detaches").
+        known = {str(item['oid']): item for item in current['partitions']
+                 if item.get('oid') is not None}
+        kept, added = set(), []
+        for row in _rows(draft, 'partitions'):
+            oid = row.get('oid')
+            if _blank(oid):
+                added.append(row)
+            elif str(oid) in known:
+                kept.add(str(oid))
+            else:
+                _refuse(f'partition {oid} does not belong to this table')
+        statements.extend(_partition_rows(qualified, schema, added))
+        for oid in sorted(known.keys() - kept):
+            part_schema, part_name = known[oid]['partition_name'].split(
+                '.', 1)
+            statements.append(f'{alter} DETACH PARTITION '
+                              + _qualified(_name(part_schema, 'schema'),
+                                           _name(part_name, 'name')))
     identity = draft.get('replica_identity')
     if not _blank(identity) and identity != current['replica_identity']:
         statements.append(f'{alter} REPLICA IDENTITY '
@@ -585,6 +677,4 @@ def form(operation, field):
             'fields': fields,
             'notes': ('Columns and constraints of an existing table are '
                       'edited on their own nodes; the Columns and '
-                      'Constraints grids act at creation only. Owner, '
-                      'tablespace and access method are applied when the '
-                      'dialog supplies them.')}
+                      'Constraints grids act at creation only.')}

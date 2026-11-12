@@ -13,7 +13,9 @@ TABLE = {'catalog': 'pg_class', 'oid': 24601, 'name': 'orders',
                          'relforcerowsecurity': False, 'relreplident': 'd',
                          'reloptions': ['fillfactor=90',
                                         'autovacuum_enabled=false',
-                                        'autovacuum_vacuum_threshold=100']}}
+                                        'autovacuum_vacuum_threshold=100'],
+                         'owner_name': 'app', 'tablespace_name': None,
+                         'access_method_name': 'heap'}}
 
 
 def compile_table(operation, draft, native=TABLE):
@@ -35,6 +37,8 @@ def test_facts_read_the_captured_relation():
             current['replica_identity'], current['is_partitioned']) == (
         90, 'f', True, {'autovacuum_enabled': 'false',
                         'autovacuum_vacuum_threshold': '100'}, 'DEFAULT', False)
+    assert (current['relowner'], current['spcname'], current['amname']) == (
+        'app', None, 'heap')
 
 
 def test_create_renders_the_inherited_template_as_one_statement():
@@ -146,6 +150,15 @@ def test_alter_emits_one_statement_per_changed_table_fact():
                                 'autovacuum_enabled': 'x'}) == [
         'ALTER TABLE "shop"."orders" RESET (autovacuum_enabled, '
         'autovacuum_vacuum_threshold)']
+    # Owner, tablespace and access method are diffed against the captured names.
+    with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
+        compile_table('alter', {'relowner': 'app', 'amname': 'heap'})
+    assert statements('alter', {'amname': 'heap2'}) == [
+        'ALTER TABLE "shop"."orders" SET ACCESS METHOD "heap2"']
+    unknown = dict(TABLE, catalog_row={k: v for k, v in TABLE['catalog_row'].items()
+                                       if k != 'access_method_name'})
+    with pytest.raises(PostgreSQLNativeAdminError, match='not known'):
+        compile_table('alter', {'amname': 'heap2'}, unknown)
     assert statements('alter', {'replica_identity': 'using index orders_pk'}) == [
         'ALTER TABLE "shop"."orders" REPLICA IDENTITY USING INDEX "orders_pk"']
     with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
@@ -208,3 +221,62 @@ def test_forms_admit_every_family_field():
     assert create['name']['required'] and create['schema']['required']
     drop = {f['field_id'] for f in form('drop', field)['fields']}
     assert drop == {'cascade', 'confirmation'}
+
+
+def test_partitions_grid_creates_attaches_and_detaches():
+    # Create: each row creates a partition after the table, or attaches one.
+    lines = statements('create', {
+        'name': 'events', 'schema': 'app', 'is_partitioned': True,
+        'partition_type': 'range',
+        'partition_keys': [{'pt_column': 'at'}],
+        'columns': [{'name': 'at', 'cltype': 'date'}],
+        'partitions': [
+            {'partition_name': 'events_2026', 'values_from': "'2026-01-01'",
+             'values_to': "'2027-01-01'"},
+            {'partition_name': 'arch.events_rest', 'is_default': True,
+             'amname': 'heap'},
+            {'partition_name': 'events_old', 'is_attach': True,
+             'values_from': "'2020-01-01'", 'values_to': "'2021-01-01'"},
+            {'partition_name': 'events_h', 'values_modulus': 4,
+             'values_remainder': 1, 'is_sub_partitioned': True,
+             'sub_partition_type': 'list',
+             'sub_partition_keys': [{'pt_column': 'kind'}]}]})
+    assert lines[1:] == [
+        'CREATE TABLE "app"."events_2026" PARTITION OF "app"."events" '
+        "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')",
+        'CREATE TABLE "arch"."events_rest" PARTITION OF "app"."events" '
+        'DEFAULT USING "heap"',
+        'ALTER TABLE "app"."events" ATTACH PARTITION "app"."events_old" '
+        "FOR VALUES FROM ('2020-01-01') TO ('2021-01-01')",
+        'CREATE TABLE "app"."events_h" PARTITION OF "app"."events" '
+        'FOR VALUES WITH (MODULUS 4, REMAINDER 1) PARTITION BY LIST ("kind")']
+    with pytest.raises(PostgreSQLNativeAdminError, match='partitioned'):
+        compile_table('create', {'name': 't', 'schema': 's',
+                                 'partitions': [{'partition_name': 'p',
+                                                 'is_default': True}]})
+    with pytest.raises(PostgreSQLNativeAdminError, match='bound'):
+        compile_table('create', {'name': 't', 'schema': 's', 'is_partitioned': True,
+                                 'partition_type': 'list',
+                                 'partition_keys': [{'pt_column': 'k'}],
+                                 'partitions': [{'partition_name': 'p'}]})
+    # Alter: the grid is the full set; a left-out partition detaches.
+    parent = dict(TABLE, catalog_row=dict(TABLE['catalog_row'], relkind='p',
+                                          partition_key_sql='RANGE (at)'),
+                  partitions=[{'oid': 11, 'schema': 'shop', 'name': 'orders_a',
+                               'bound': "FOR VALUES IN ('a')"},
+                              {'oid': 12, 'schema': 'shop', 'name': 'orders_b',
+                               'bound': "FOR VALUES IN ('b')"}])
+    assert facts(parent)['partitions'][0] == {
+        'oid': 11, 'partition_name': 'shop.orders_a', 'is_default': False,
+        'bound': "FOR VALUES IN ('a')"}
+    assert statements('alter', {'partitions': [
+        {'oid': 11, 'partition_name': 'shop.orders_a'},
+        {'partition_name': 'orders_c', 'values_in': "'c'"}]}, parent) == [
+        'CREATE TABLE "shop"."orders_c" PARTITION OF "shop"."orders" '
+        "FOR VALUES IN ('c')",
+        'ALTER TABLE "shop"."orders" DETACH PARTITION "shop"."orders_b"']
+    with pytest.raises(PostgreSQLNativeAdminError, match='does not belong'):
+        compile_table('alter', {'partitions': [{'oid': 99}]}, parent)
+    assert statements('alter', {'relacl': [{'grantee': 'ops',
+                                            'privileges': 'm'}]}) == [
+        'GRANT MAINTAIN ON TABLE "shop"."orders" TO "ops"']

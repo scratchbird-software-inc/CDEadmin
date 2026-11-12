@@ -2442,16 +2442,19 @@ def table_native(schema, name):
     """What the provider's capture attaches to a table node."""
     from pgadmin.cdeadmin.providers.postgresql.tables import facts
     rows = query(f"""SELECT c.oid::int, c.relkind, c.relpersistence, c.reloptions::text[], c.relrowsecurity,
-                            c.relforcerowsecurity, c.relreplident, d.description, pg_get_userbyid(c.relowner)
+                            c.relforcerowsecurity, c.relreplident, d.description, pg_get_userbyid(c.relowner),
+                            (SELECT spcname FROM pg_tablespace WHERE oid=c.reltablespace),
+                            (SELECT amname FROM pg_am WHERE oid=c.relam)
                      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                      LEFT JOIN pg_description d ON d.objoid=c.oid AND d.classoid='pg_class'::regclass AND d.objsubid=0
                      WHERE n.nspname='{schema}' AND c.relname='{name}'""")
     assert len(rows) == 1, (schema, name)
-    oid, relkind, persistence, options, rls, force, replident, comment, owner = rows[0]
-    native = {'catalog': 'pg_class', 'oid': oid, 'name': name, 'schema': schema, 'comment': comment, 'owner': owner,
+    oid, relkind, persistence, options, rls, force, replident, comment, owner, spcname, amname = rows[0]
+    native = {'catalog': 'pg_class', 'oid': oid, 'name': name, 'schema': schema, 'comment': comment,
               'catalog_row': {'relname': name, 'relkind': relkind, 'relpersistence': persistence,
                               'reloptions': options, 'relrowsecurity': rls, 'relforcerowsecurity': force,
-                              'relreplident': replident}}
+                              'relreplident': replident, 'owner_name': owner, 'tablespace_name': spcname,
+                              'access_method_name': amname}}
     native['table_facts'] = facts(native)
     return native
 
@@ -2496,8 +2499,11 @@ def test_table_lifecycle_round_trips(live):
                 current['vacuum_settings'], current['replica_identity'], current['description']) == (
             False, None, 'x', {}, 'FULL', '')
         assert one(f"SELECT has_table_privilege('{owner}', 'm_arch.m_tbl2', 'SELECT')") is False
+        assert current['amname'] == 'heap' and current['relowner'] == owner
+        # The same owner and access method are no change.
         with pytest.raises(Exception):
-            run_kind(live, 'table', 'alter', {'description': ''}, table_native('m_arch', 'm_tbl2'))
+            run_kind(live, 'table', 'alter', {'description': '', 'relowner': owner, 'amname': 'heap'},
+                     table_native('m_arch', 'm_tbl2'))
         run_kind(live, 'table', 'drop', {'confirmation': 'm_tbl2'}, table_native('m_arch', 'm_tbl2'))
         assert query("SELECT count(*) FROM pg_class WHERE relname='m_tbl2'") == [(0,)]
     finally:
@@ -2562,6 +2568,30 @@ def test_partitions_create_attach_and_detach(live):
     assert one("SELECT relispartition FROM pg_class WHERE relname='m_part_2026'") is False
     plan, outcome = run(live, 'count-rows', kind='partitioned-table', native=parent)
     assert outcome['result']['rows'] == [{'row_count': 0}]
+    # The Partitions grid on the table editor (owner direction 2026-11-11): create a partitioned table with its
+    # partitions, then alter the grid to add one and leave one out (detach).
+    query('DROP TABLE IF EXISTS public.m_grid CASCADE; DROP TABLE IF EXISTS public.m_grid_old CASCADE; '
+          'CREATE TABLE public.m_grid_old (id int, kind text)')
+    run_kind(live, 'table', 'create', {
+        'name': 'm_grid', 'schema': 'public', 'columns': [{'name': 'id', 'cltype': 'int'}, {'name': 'kind', 'cltype': 'text'}],
+        'is_partitioned': True, 'partition_type': 'list', 'partition_keys': [{'key_type': 'column', 'pt_column': 'kind'}],
+        'partitions': [{'partition_name': 'm_grid_a', 'values_in': "'a'"},
+                       {'partition_name': 'm_grid_rest', 'is_default': True},
+                       {'partition_name': 'm_grid_old', 'is_attach': True, 'values_in': "'old'"}]})
+    children = lambda: sorted(r[0] for r in query("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid WHERE i.inhparent='public.m_grid'::regclass"))
+    assert children() == ['m_grid_a', 'm_grid_old', 'm_grid_rest']
+    grid = table_native('public', 'm_grid')
+    grid['partitions'] = [{'oid': r[0], 'schema': 'public', 'name': r[1], 'bound': r[2]} for r in query(
+        "SELECT c.oid::int, c.relname, pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i JOIN pg_class c ON c.oid=i.inhrelid "
+        "WHERE i.inhparent='public.m_grid'::regclass ORDER BY c.relname")]
+    from pgadmin.cdeadmin.providers.postgresql.tables import facts as table_facts
+    grid['table_facts'] = table_facts(grid)
+    rows = [{'oid': p['oid'], 'partition_name': p['partition_name']} for p in grid['table_facts']['partitions']
+            if not p['partition_name'].endswith('m_grid_old')]
+    run_kind(live, 'table', 'alter', {'partitions': rows + [{'partition_name': 'm_grid_b', 'values_in': "'b'"}]}, grid)
+    assert children() == ['m_grid_a', 'm_grid_b', 'm_grid_rest']
+    assert one("SELECT relispartition FROM pg_class WHERE relname='m_grid_old'") is False
+    query('DROP TABLE public.m_grid CASCADE; DROP TABLE public.m_grid_old')
     with pytest.raises(Exception):
         run(live, 'detach-partition', kind='table', native=partition_native('public', 'm_part_2026'), values={'mode': 'plain'})
     query('DROP TABLE public.m_part CASCADE; DROP TABLE public.m_part_2026; DROP TABLE public.m_part_old; DROP TABLE public.m_part_rest')

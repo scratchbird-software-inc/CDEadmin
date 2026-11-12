@@ -1240,6 +1240,24 @@ class PostgreSQLProvider:
             if n.get('catalog') == 'pg_class':
                 attributes[int(n['oid'])] = (
                     n.get('children') or {}).get('pg_attribute') or []
+        # A partitioned table's partitions, from each child's pg_inherits
+        # row, for the Partitions grid (owner direction 2026-11-11).
+        partitions_of: dict[int, list] = {}
+        for r in capture['resources']:
+            n = r.get('native') or {}
+            if n.get('catalog') != 'pg_class' or not (
+                    n.get('catalog_row') or {}).get('relispartition'):
+                continue
+            for inherit in (n.get('children') or {}).get('pg_inherits') or []:
+                parent_oid = inherit.get('inhparent')
+                if isinstance(parent_oid, str) and parent_oid.isdigit():
+                    parent_oid = int(parent_oid)
+                if type(parent_oid) is int:
+                    partitions_of.setdefault(parent_oid, []).append({
+                        'oid': n.get('oid'), 'schema': n.get('schema'),
+                        'name': r['display_name'],
+                        'bound': (n.get('catalog_row') or {}).get(
+                            'partition_bound_sql')})
         # Schema-scope VACUUM/ANALYZE name the schema's tables and
         # materialized views (M6): PostgreSQL has no schema form.
         schema_relations: dict[str, list[str]] = {}
@@ -1281,6 +1299,9 @@ class PostgreSQLProvider:
                 # (parent, bound) for the detach operation (M7).
                 from .partitions import partition_facts
                 from .tables import facts as table_facts
+                native['partitions'] = partitions_of.get(
+                    int(native['oid']) if str(native.get('oid')).isdigit()
+                    else native.get('oid'), [])
                 native['table_facts'] = table_facts(native)
                 native['partition_facts'] = partition_facts(native, relations)
                 # Not ``parent``: that is this listing's parent resource.

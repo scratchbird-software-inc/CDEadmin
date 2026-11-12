@@ -643,6 +643,24 @@ that does not vouch that nothing changed. Observed live: pausing WAL
 replay on the demo primary now answers SQLSTATE 55000 with the server's
 own words through both the harness and the running application.
 
+Table form gaps closed (owner direction 2026-11-11). The capture now
+names a relation's owner, tablespace and access method beside their
+OIDs, so the table editor diffs them and emits SET ACCESS METHOD only on
+a known change. The Partitions grid is compiled: on create each row
+creates a partition or attaches an existing table after the table; on
+alter the grid is the full set, so a new row creates or attaches and a
+row left out detaches (plainly; the partition's own Detach operation
+offers CONCURRENTLY and FINALIZE). MAINTAIN is the ``m`` privilege code
+for PostgreSQL 17 and later. The table family form is marked complete,
+with its deliberate differences from the inherited dialog recorded in
+its notes: the data type is typed and admitted by PostgreSQL's parser
+rather than picked, the grids do not cross-sync, and columns and
+constraints of an existing table are edited on their own nodes. Observed
+live on PostgreSQL 18.3: a list-partitioned table created with two
+partitions and an attached table from the grid, then one partition added
+and one detached through the grid on alter; owner and access method
+reported back by name and an unchanged pair refused as no change.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
