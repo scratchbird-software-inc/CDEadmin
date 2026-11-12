@@ -168,6 +168,17 @@ describe('provider-owned Object Explorer menus', () => {
     pgAdmin.Tools = {...(pgAdmin.Tools || {}), maintenance: {callback_maintenance: maintenance}};
     openInheritedTool('maintenance', 'item-3');
     expect(maintenance).toHaveBeenCalledWith({}, 'item-3');
+    const debug = jest.fn();
+    const breakpoint = jest.fn();
+    const schemaDiff = jest.fn();
+    pgAdmin.Tools = {...(pgAdmin.Tools || {}), Debugger: {getFunctionInformation: debug, checkFuncDebuggable: breakpoint},
+      SchemaDiff: {launchSchemaDiff: schemaDiff}};
+    openInheritedTool('debugger', 'item-4');
+    expect(debug).toHaveBeenCalledWith({data: {debug_type: 'direct'}}, 'item-4');
+    openInheritedTool('debugger_indirect', 'item-4');
+    expect(breakpoint).toHaveBeenCalledWith({data: {debug_type: 'indirect'}}, 'item-4');
+    openInheritedTool('schema_diff', 'item-5');
+    expect(schemaDiff).toHaveBeenCalled();
     expect(() => openInheritedTool('vacuum', 'item-1')).toThrow(/not known/);
   });
   it('admits the PostgreSQL per-database dashboard the provider tree declares', () => {

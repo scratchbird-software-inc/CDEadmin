@@ -375,6 +375,13 @@ export function openInheritedTool(tool, item) {
     return pgAdmin.Tools.SearchObjects.show_search_objects(null, item);
   case 'maintenance':
     return pgAdmin.Tools.maintenance.callback_maintenance({}, item);
+  case 'debugger':
+    // Direct debugging of the function or procedure the node stands for.
+    return pgAdmin.Tools.Debugger.getFunctionInformation({data: {debug_type: 'direct'}}, item);
+  case 'debugger_indirect':
+    return pgAdmin.Tools.Debugger.checkFuncDebuggable({data: {debug_type: 'indirect'}}, item);
+  case 'schema_diff':
+    return pgAdmin.Tools.SchemaDiff.launchSchemaDiff();
   default:
     throw new Error(gettext('The inherited tool "%s" is not known.', String(tool)));
   }

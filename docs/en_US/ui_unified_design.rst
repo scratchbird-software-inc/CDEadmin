@@ -611,6 +611,23 @@ postgres_fdw created, re-optioned and dropped. The partitions grid of the
 table create form is still not compiled; partitions are created from the
 parent instead.
 
+M7 seventh slice (2026-11-11), the debugger and Schema Diff openers,
+closing the parity matrix: a provider-tree function or procedure offers
+Debug (direct) and Set breakpoint (indirect), a trigger offers Set
+breakpoint, and a database node offers Schema Diff, all through the
+inherited tools. The debugger reads the clicked item through the
+identity bridge, so a provider routine stands for the inherited function
+or procedure node, and the server, database, schema and function ids it
+builds its routes from come from the bridged hierarchy; the node carries
+the routine's language for the debugger's own check. The demo image has
+no pldbgapi extension, so the live check stopped at the debugger's
+initialisation route answering for the bridged ids; the debugger session
+itself was not exercised. On the way a regression from the partitions
+slice was found and fixed: a loop variable named ``parent`` shadowed the
+listing's parent, so every resource after the first table lost its
+parent id and the provider tree's navigator refused the page; the live
+listing test now asserts every item names the listing's parent.
+
 What is deleted when this is done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

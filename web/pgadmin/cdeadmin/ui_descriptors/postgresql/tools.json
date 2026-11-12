@@ -414,6 +414,65 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "resource.postgresql.debug",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Debug...",
+      "description": "The inherited PL/pgSQL debugger, direct mode, on this routine (needs the pldbgapi extension).",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "diagnostics",
+      "priority": 10,
+      "arguments": {
+        "tool": "debugger"
+      },
+      "when": {
+        "resource_kinds": [
+          "function",
+          "procedure"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.postgresql.debug_indirect",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Set breakpoint...",
+      "description": "The inherited debugger, indirect mode (global breakpoint) on this routine or trigger; superusers only.",
+      "handler": "open_inherited_tool",
+      "icon": "action.script",
+      "group": "diagnostics",
+      "priority": 11,
+      "arguments": {
+        "tool": "debugger_indirect"
+      },
+      "when": {
+        "resource_kinds": [
+          "function",
+          "procedure",
+          "trigger"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "database.postgresql.schema_diff",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Schema Diff...",
+      "description": "The inherited Schema Diff tool.",
+      "handler": "open_inherited_tool",
+      "icon": "action.view",
+      "group": "information",
+      "priority": 20,
+      "arguments": {
+        "tool": "schema_diff"
+      }
     }
   ]
 }

@@ -127,6 +127,18 @@ def test_postgresql_provider_tree_declares_the_inherited_utilities():
     assert database['database.postgresql.maintenance']['arguments']['tool'] == 'maintenance'
     assert 'resource.postgresql.maintenance' in offered('table')
     assert 'resource.postgresql.maintenance' not in offered('view')
+    # Debugger and Schema Diff (M7 close): routines debug, triggers take a global breakpoint.
+    routines = {'objects': [{'resource_kind': kind, 'title': kind, 'operations': [], 'editor': {'sections': []}}
+                            for kind in ('function', 'procedure', 'trigger', 'table')]}
+    def offered_in(kind):
+        resource = {'resource_id': f'{kind}:r', 'resource_kind': kind, 'display_name': 'r', 'display_path': ['r']}
+        return set(ids(resource_context_actions(profile('postgresql'), resource, routines,
+                                                database_target_id='postgresql-database:16384')))
+    assert {'resource.postgresql.debug', 'resource.postgresql.debug_indirect'} <= offered_in('function')
+    assert 'resource.postgresql.debug' not in offered_in('trigger')
+    assert 'resource.postgresql.debug_indirect' in offered_in('trigger')
+    assert not {'resource.postgresql.debug', 'resource.postgresql.debug_indirect'} & offered_in('table')
+    assert database['database.postgresql.schema_diff']['arguments']['tool'] == 'schema_diff'
     # Scripts (M7): the inherited Scripts menu's kinds per relation.
     assert {'resource.postgresql.script_insert', 'resource.postgresql.script_update',
             'resource.postgresql.script_delete'} <= offered('table')

@@ -2054,7 +2054,10 @@ def test_vacuum_and_analyze_at_schema_and_database_scope(live):
     assert outcome['maintenance_receipt']['transaction_mode'] == 'transaction'
     # The provider's own listing carries the schema's relation list the compiler consumed.
     provider, route = live
-    listed = provider._captured_resources({'resource_id': None, 'authority_path': []}, route)
+    listed = provider._captured_resources({'resource_id': 'ROOT', 'authority_path': []}, route)
+    # Every listed item names this listing's parent (a loop variable once shadowed it, M7.6).
+    assert {r.get('parent_resource_id') for r in listed} == {'ROOT'}, sorted(
+        (r['resource_kind'], r.get('parent_resource_id')) for r in listed if r.get('parent_resource_id') != 'ROOT')[:5]
     public = next(r for r in listed if r['resource_kind'] == 'schema' and r['display_name'] == 'public')
     relations = public['extensions']['postgresql']['native']['relations']
     assert {'m_sv', 'm_sv_mv'} <= set(relations)

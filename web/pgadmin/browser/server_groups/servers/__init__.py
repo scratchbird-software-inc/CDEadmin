@@ -544,6 +544,11 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 snapshot.get('visual_admin'), value['resource_kind']),
             'cde_native_editor': _native_editor_operations(
                 snapshot.get('visual_admin'), value['resource_kind']),
+            # The inherited debugger reads the routine's language off the
+            # node (M7); the provider's routine facts carry it.
+            'language': ((resource.get('extensions') or {}).get(
+                'postgresql', {}).get('native', {}).get(
+                'routine_facts') or {}).get('lanname'),
             'cde_section': value.get('section'),
         })
     return nodes if profile['engine_id'] == 'firebird' else sorted(nodes, key=lambda item: item['label'].casefold())

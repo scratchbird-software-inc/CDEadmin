@@ -1223,9 +1223,10 @@ class PostgreSQLProvider:
                 from .tables import facts as table_facts
                 native['table_facts'] = table_facts(native)
                 native['partition_facts'] = partition_facts(native, relations)
-                parent = native['partition_facts'].get('parent') or {}
-                if parent.get('name'):
-                    native['parent_table'] = parent
+                # Not ``parent``: that is this listing's parent resource.
+                owner_table = native['partition_facts'].get('parent') or {}
+                if owner_table.get('name'):
+                    native['parent_table'] = owner_table
             if item['resource_kind'] == 'foreign-table':
                 from .foreign_tables import facts as foreign_table_facts
                 native['table_facts'] = foreign_table_facts(
