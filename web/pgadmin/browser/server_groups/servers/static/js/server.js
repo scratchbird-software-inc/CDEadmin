@@ -423,12 +423,9 @@ define('pgadmin.node.server', [
           const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
             this, {action: 'create', item, initialData, panelTitle}
           );
-          // Descriptor Server editor for the plain endpoint intent; every other
-          // intent, and engines whose server form is not complete, keep the legacy dialog.
-          if(registrationIntent !== 'endpoint') {
-            legacy();
-            return false;
-          }
+          // Owner direction 2026-11-12: every intent (endpoint, register an existing database file,
+          // create a database file) opens the descriptor Server editor; the host carries the
+          // intent in the registration envelope.
           // Retired engines (see LEGACY_REGISTRATION_RETIRED): no legacy fallback, report instead.
           // LEGACY-FALLBACK (restore by uncommenting and removing the engine from the set):
           //   .then((opened) => { if(!opened) legacy(); }).catch(() => legacy());

@@ -1352,7 +1352,7 @@ class EndpointService:
     @staticmethod
     def _is_preserved_postgresql(server):
         endpoint = getattr(server, 'endpoint_profile', None)
-        from pgadmin.cdeadmin.providers.postgresql.provider import (
+        from pgadmin.cdeadmin.providers.postgresql.identity import (
             PROVIDER_ID, PROVIDER_VERSION, PROFILE_ID, PROFILE_VERSION)
         return (endpoint is not None and getattr(endpoint, 'provider_id', None) == PROVIDER_ID and
                 (endpoint.provider_version is None or (

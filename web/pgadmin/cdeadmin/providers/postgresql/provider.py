@@ -65,10 +65,10 @@ from .preserved_surface import (
 )
 
 
-PROVIDER_ID = 'org.pgadmin.postgresql'
-PROVIDER_VERSION = '9.17.0'
-PROFILE_ID = 'postgresql-native'
-PROFILE_VERSION = '18.3'
+# The identity is one module, importable without this one.
+from .identity import (  # noqa: E402
+    PROFILE_ID, PROFILE_VERSION, PROVIDER_ID, PROVIDER_VERSION,
+)
 LEGACY_DRIVER_TYPE = 'psycopg3'
 APPROVED_DRIVER_VERSIONS = frozenset({'3.2.13', '3.3.4'})
 EVIDENCE_REFERENCE = 'cde-prep-050:postgresql-preservation-20260831'

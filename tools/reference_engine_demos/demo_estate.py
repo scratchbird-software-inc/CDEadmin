@@ -883,6 +883,9 @@ def start_tikv_stack():
              f"--pd={TIKV_PD}:2379", "--data-dir=/data/tikv",
              "--config=/etc/tikv/cdeadmin-api-v2.toml"),
         ))
+    # The advertised host address is part of the definition: a container
+    # created under an earlier address cannot start once it changes (2026-11-12).
+    tikv_configuration = f"{TIKV_CONFIGURATION};host={host_address}"
     for name, image, ports, volumes, bind_mounts, args in definitions:
         if docker_exists(name):
             observed = run([
@@ -891,7 +894,7 @@ def start_tikv_stack():
                 "\"org.cdeadmin.demo.configuration\"}}", name,
             ], check=False, capture=True)
             if observed.returncode or (
-                    observed.stdout.strip() != TIKV_CONFIGURATION):
+                    observed.stdout.strip() != tikv_configuration):
                 if docker_running(name):
                     run(["docker", "stop", "--timeout", "30", name])
                 # Container definitions are disposable. API-v1 volumes remain
@@ -901,7 +904,7 @@ def start_tikv_stack():
             command = ["docker", "create", "--name", name,
                        "--network", NETWORK, "--label",
                        "org.cdeadmin.demo.configuration=" +
-                       TIKV_CONFIGURATION]
+                       tikv_configuration]
             for host_port, container_port in ports:
                 binding = (str(host_port) if ":" in str(host_port)
                            else f"127.0.0.1:{host_port}")

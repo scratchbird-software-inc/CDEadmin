@@ -181,3 +181,19 @@ describe('operation targets', () => {
     expect(calls).toEqual(['resource_inspect', 'resource_page']);
   });
 });
+
+
+describe('legacy registration retirement (owner direction 2026-11-12)', () => {
+  it('retires the legacy dialog for every engine that has a descriptor package', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const {DESCRIPTOR_ROOT} = require('./familyFixtures');
+    const {LEGACY_REGISTRATION_RETIRED} = require('pgbrowser/ProviderObjectEditor');
+    const engines = fs.readdirSync(DESCRIPTOR_ROOT).filter((name) =>
+      fs.existsSync(path.join(DESCRIPTOR_ROOT, name, 'capabilities.json')));
+    expect(engines.length).toBeGreaterThanOrEqual(24);
+    for(const engine of engines) expect(LEGACY_REGISTRATION_RETIRED.has(engine)).toBe(true);
+    // The OpenSearch SQL/PPL profile registers from the OpenSearch package under its own engine id.
+    expect(LEGACY_REGISTRATION_RETIRED.has('opensearch_sql_ppl')).toBe(true);
+  });
+});

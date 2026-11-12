@@ -8,6 +8,15 @@ Firebird, DuckDB and SQLite **without a prior real-browser test**, accepting the
 risk, with the old paths commented out and fully documented so that a person or a
 locally hosted AI can trace and correct failures.
 
+Extended (owner, 2026-11-12): retired for **every** engine, including
+PostgreSQL, and for every registration intent (``endpoint``,
+``register_existing``, ``create_database``). ``LEGACY_REGISTRATION_RETIRED``
+lists all 25 engine ids; ``server.ui.js`` is no longer reached from the
+register or edit actions. Each engine's Server form is complete and the
+registrations were exercised through the servers API with the form's payload
+(see :doc:`ui_unified_design`, decision of 2026-11-11); still not run in a
+browser.
+
 Status: **UNVERIFIED IN A BROWSER.** Verified only by Jest
 (``web/regression/javascript/families/ServerRegistrationHost.spec.jsx``), the Python
 round trips (``tools/tests/test_ui_descriptor_server_forms.py``) and descriptor
@@ -24,8 +33,9 @@ What changed
   ``edit_endpoint``: for retired engines a failure shows an error notification instead
   of opening the legacy dialog. The old fallback expression is kept as a
   ``LEGACY-FALLBACK`` comment.
-* ``server.ui.js`` is untouched apart from a header comment: PostgreSQL, MySQL and
-  the ``create_database`` / ``register_existing`` intents still use it.
+* ``server.ui.js`` is untouched apart from a header comment. Until 2026-11-12
+  PostgreSQL, MySQL and the ``create_database`` / ``register_existing`` intents
+  still used it; since then no register or edit action reaches it.
 
 Data flow
 ---------

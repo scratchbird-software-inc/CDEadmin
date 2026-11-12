@@ -841,6 +841,16 @@ the host cannot open. What this took:
   now reads as unset, which is what pymongo 4 accepts; Redis reads the
   generic database as the text the servers API stores.
 
+Decided 2026-11-12 (owner): the legacy registration dialog is retired for
+every engine, and every registration intent (endpoint, register an
+existing database file, create a database file) opens the descriptor
+Server editor; a host that cannot open reports instead of falling back
+(``LEGACY_REGISTRATION_RETIRED`` lists all 25 engine ids). The endpoint
+service reads the PostgreSQL provider's identity from
+``providers/postgresql/identity.py`` rather than importing the provider
+module, which had dragged the application model into three
+endpoint-registration unit tests that now pass again.
+
 Verification: MongoDB, Redis, Neo4j, ClickHouse, InfluxDB and OpenSearch
 (both profiles) registered through the servers API with their form's
 payload against the pinned demos, verified at create, read back and
