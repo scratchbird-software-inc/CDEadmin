@@ -1,9 +1,13 @@
 # CDEadmin reference-engine demonstration estate
 
-For a fresh developer machine, start with the
+For a fresh developer machine, start with
+[../../DEVELOPER_SETUP.md](../../DEVELOPER_SETUP.md) and the
 [Windows/macOS/Linux development setup guide](../development/README.md).
-It covers the application, account setup, native clients, Docker and per-engine
-startup rather than assuming an existing configured Linux workspace.
+They cover cloning `CDEadmin` + `Diagram-Design-Notation`, installing native
+clients, pre-pulling all **29 pinned Docker images** (`docker_images.py` /
+`bash tools/development/dev.sh images` and `pull`), per-engine startup, and
+creating isolated developer test databases (`create_test_database.py` /
+`bash tools/development/dev.sh create-db`).
 
 This directory contains the portable lifecycle, configuration, seed, and
 verification materials for every CDEadmin reference engine except native

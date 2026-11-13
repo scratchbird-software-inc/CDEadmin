@@ -23,12 +23,27 @@ PYTHON_OPTIMIZATIONS = ('--enable-optimizations', '--with-lto')
 SQLITE_OPTIONS = ('ENABLE_SESSION', 'ENABLE_PREUPDATE_HOOK', 'ENABLE_CARRAY',
                   'ENABLE_DBPAGE_VTAB', 'ENABLE_DBSTAT_VTAB')
 ACTIONS = ('doctor', 'interpreter', 'python', 'configure', 'frontend', 'ddn', 'clients',
+           'images', 'pull', 'create-db',
            'init', 'run', 'register', 'list', 'status', 'start', 'stop',
            'seed', 'verify', 'prepare')
 
 
 def run(args, cwd=ROOT, env=None):
     subprocess.run([str(arg) for arg in args], cwd=cwd, env=env, check=True)
+
+
+def _resolve_ddn_source():
+    explicit = os.environ.get('SCRATCHROBIN_DDN_SOURCE')
+    if explicit:
+        return Path(explicit).expanduser()
+    for candidate in (
+        ROOT.parent / 'Diagram-Design-Notation',
+        ROOT.parents[1] / 'Sandbox/Diagram-Design-Notation'
+        if len(ROOT.parents) > 1 else ROOT.parent / 'Diagram-Design-Notation',
+    ):
+        if (candidate / 'project/ddn').is_dir():
+            return candidate
+    return ROOT.parent / 'Diagram-Design-Notation'
 
 
 def doctor():
@@ -42,6 +57,11 @@ def doctor():
     for name in ('docker', 'node', 'corepack', 'go', 'cc', 'make', 'git',
                  'javac', 'jar', 'pkg-config', 'pg_config', 'mariadb_config'):
         checks.append((name, bool(shutil.which(name))))
+    ddn_source = _resolve_ddn_source()
+    checks.append((
+        f'DDN sister checkout ({ddn_source})',
+        (ddn_source / 'project/ddn').is_dir(),
+    ))
     commands = [
         ('Local Docker endpoint', ['docker', 'context', 'inspect', '--format',
                                    '{{.Endpoints.docker.Host}}']),
@@ -55,6 +75,10 @@ def doctor():
         print(f'{"OK" if ok else "MISSING"}: {name}')
         if not ok:
             failures.append(name)
+    if not (ddn_source / 'project/ddn').is_dir():
+        print('  Hint: clone https://github.com/scratchbird-software-inc/'
+              'Diagram-Design-Notation.git into ../Diagram-Design-Notation '
+              'or set SCRATCHROBIN_DDN_SOURCE.')
     for name, args in commands:
         try:
             result = subprocess.run(args, capture_output=True, text=True,
@@ -80,6 +104,28 @@ def doctor():
         except (OSError, subprocess.SubprocessError, ValueError) as error:
             print(f'FAILED: {name}: {error}')
             failures.append(name)
+    map_count_path = Path('/proc/sys/vm/max_map_count')
+    if map_count_path.is_file():
+        try:
+            map_count = int(map_count_path.read_text(encoding='utf-8').strip())
+            if map_count < 262144:
+                print(f'ADVISORY: vm.max_map_count={map_count} (< 262144; '
+                      'OpenSearch fixture needs sudo sysctl -w '
+                      'vm.max_map_count=262144)')
+            else:
+                print(f'OK: vm.max_map_count: {map_count}')
+        except (OSError, ValueError):
+            pass
+    chrome_sandbox = ROOT / 'runtime/node_modules/electron/dist/chrome-sandbox'
+    if chrome_sandbox.is_file():
+        stat_result = chrome_sandbox.stat()
+        has_suid = (stat_result.st_uid == 0 and
+                    (stat_result.st_mode & 0o7777) == 0o4755)
+        if has_suid:
+            print('OK: Electron chrome-sandbox SUID (root:04755)')
+        else:
+            print('ADVISORY: Electron desktop runtime needs root:04755 on '
+                  f'{chrome_sandbox} (sudo chown root:root && sudo chmod 4755)')
     print('Prerequisites only: does not qualify engines or VM networking.')
     return 1 if failures else 0
 
@@ -228,6 +274,10 @@ def main(argv=None):
         run(['corepack', 'yarn', 'webpacker'], ROOT / 'web', environment)
     elif args.action == 'ddn':
         ddn()
+    elif args.action in ('images', 'pull'):
+        interpreter_bin = PYTHON if PYTHON.exists() else sys.executable
+        run([interpreter_bin, DEMO / 'docker_images.py',
+             args.action, *args.arguments])
     else:
         if not PYTHON.exists():
             parser.error('Run the python stage first to create .venv.')
@@ -236,6 +286,8 @@ def main(argv=None):
             parser.error('Run configure first to set application paths.')
         if args.action == 'clients':
             run([PYTHON, DEMO / 'bootstrap.py', *args.arguments])
+        elif args.action == 'create-db':
+            run([PYTHON, DEMO / 'create_test_database.py', *args.arguments])
         elif args.action == 'init':
             run([PYTHON, ROOT / 'web/setup.py', 'setup-db'])
         elif args.action == 'run':

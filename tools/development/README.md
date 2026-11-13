@@ -165,12 +165,18 @@ the whole workflow there instead.
 
 ## 3. Clone and check prerequisites
 
-In the Linux execution environment:
+For the complete single-page onboarding reference — including the **full 29-image
+Docker catalog**, **Electron desktop setup**, and **processes for creating new
+test databases** — see [../../DEVELOPER_SETUP.md](../../DEVELOPER_SETUP.md).
+
+In the Linux execution environment, clone **both** `CDEadmin` and the mandatory
+public `Diagram-Design-Notation` (`ddn-next-1`) sister repository side by side:
 
 ```bash
 mkdir -p ~/src
 cd ~/src
 git clone https://github.com/scratchbird-software-inc/CDEadmin.git
+git clone https://github.com/scratchbird-software-inc/Diagram-Design-Notation.git
 cd CDEadmin
 git rev-parse HEAD
 export SCRATCHROBIN_PYTHON=/absolute/path/to/python3.14
@@ -353,11 +359,34 @@ Browse to `http://127.0.0.1:5051`, log in, and expand PostgreSQL → localhost �
 `cdeadmin_demo`. For this fixture: host `127.0.0.1`, port **55432**, username and
 database **cdeadmin_demo**, password **CDEadminDemo-2026!**.
 
-For all reference samples, run sequential preparation when sufficient resources
-and download time are available:
+For all reference samples, inspect or pre-pull pinned Docker images first, or run
+sequential preparation when sufficient resources and download time are available:
 
 ```bash
+# Inspect local status of all 29 pinned Docker images and pre-pull a group:
+bash tools/development/dev.sh images
+bash tools/development/dev.sh pull core
+
+# Prepare and verify every reference sample sequentially:
 bash tools/development/dev.sh prepare all
+
+# Create an isolated developer test database without modifying cdeadmin_demo:
+bash tools/development/dev.sh create-db \
+  --engine postgresql \
+  --name dev_feature_test \
+  --seed \
+  --register-user developer@example.com
+```
+
+To run the **Electron desktop application** instead of browser-only mode:
+
+```bash
+cd runtime
+corepack yarn install
+sudo chown root:root node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+source ../tools/reference_engine_demos/environment.sh
+corepack yarn start
 ```
 
 This seeds/verifies each logical profile, collects failures, and stops network

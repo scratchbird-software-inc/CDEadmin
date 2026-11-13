@@ -30,12 +30,19 @@ are separate from the application release gate.
 
 ## Developer setup
 
-For a fresh development machine, see the
-[Windows/macOS/Linux development and demo setup guide](tools/development/README.md).
+Start with the complete first-time developer guide:
+**[Developer Onboarding, Docker Estate & Test Database Guide](DEVELOPER_SETUP.md)**.
+It covers cloning both `CDEadmin` and the mandatory sibling
+`Diagram-Design-Notation` (`ddn-next-1`) repository, installing toolchains,
+building the backend/frontend/Electron desktop app, pre-pulling all **29 pinned
+Docker images** (`bash tools/development/dev.sh images` / `pull`), and creating,
+seeding, and registering both canonical (`cdeadmin_demo`) and isolated custom
+test databases (`bash tools/development/dev.sh create-db`).
 
-[Native Windows and macOS development setup](tools/development/NATIVE.md) includes the GitHub qualification matrix.
-It covers dependencies, frontend builds, account setup, Docker fixtures, sample
-credentials, and per-engine start/stop/verification commands.
+For host-specific reference details, also see:
+- [Linux / WSL2 / VM development and demo setup guide](tools/development/README.md)
+- [Native Windows and macOS development setup](tools/development/NATIVE.md) (includes the GitHub qualification matrix)
+
 The `dev.sh frontend` build sets an 8 GiB Node heap; set `CDEADMIN_NODE_HEAP_MB`
 to change it. (2026-11-05: raised from 3 GiB, which the bundle no longer fits.)
 
