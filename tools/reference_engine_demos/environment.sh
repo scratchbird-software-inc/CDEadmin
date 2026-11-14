@@ -22,8 +22,8 @@ export CDEADMIN_MILVUS_PASSWORD="CDEadminDemo-2026!"
 # MySQL Shell finds its private OpenSSL through its own RPATH (lib/mysqlsh);
 # it is not on this path, so the application never loads that OpenSSL.
 if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-    LD_LIBRARY_PATH="$CDEADMIN_DEMO_ROOT/runtime/sqlite-3.53.0/lib:$CDEADMIN_DEMO_ROOT/runtime/foundationdb/lib:$LD_LIBRARY_PATH"
+    LD_LIBRARY_PATH="$CDEADMIN_DEMO_ROOT/runtime/sqlite-3.53.0/lib:$CDEADMIN_DEMO_ROOT/runtime/foundationdb/lib:$CDEADMIN_DEMO_ROOT/runtime/firebird/lib:$LD_LIBRARY_PATH"
 else
-    LD_LIBRARY_PATH="$CDEADMIN_DEMO_ROOT/runtime/sqlite-3.53.0/lib:$CDEADMIN_DEMO_ROOT/runtime/foundationdb/lib"
+    LD_LIBRARY_PATH="$CDEADMIN_DEMO_ROOT/runtime/sqlite-3.53.0/lib:$CDEADMIN_DEMO_ROOT/runtime/foundationdb/lib:$CDEADMIN_DEMO_ROOT/runtime/firebird/lib"
 fi
 export LD_LIBRARY_PATH

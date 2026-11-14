@@ -21,16 +21,22 @@ import { toPrettySize } from '../../../../static/js/utils';
 import withStandardTabInfo from '../../../../static/js/helpers/withStandardTabInfo';
 import { BROWSER_PANELS } from '../../../../browser/static/js/constants';
 import { usePgAdmin } from '../../../../static/js/PgAdminProvider';
-import { parseApiError } from '../../../../static/js/api_instance';
+
+const AUTH_STATS_MESSAGE = gettext(
+  'You will need to authenticate and connect the server or a database on that server to see the statistics.'
+);
 
 const Root = styled('div')(({theme}) => ({
   height : '100%',
+  padding: '16px 24px',
+  boxSizing: 'border-box',
   '& .Statistics-emptyPanel': {
     minHeight: '100%',
     minWidth: '100%',
     background: theme.otherVars.emptySpaceBg,
     overflow: 'auto',
-    padding: '8px',
+    padding: '16px 24px',
+    boxSizing: 'border-box',
     display: 'flex',
   }
 }));
@@ -81,22 +87,64 @@ function getColumn(data, singleLineStatistics, prettifyFields=[]) {
   return columns;
 }
 
+function isKeyValueStatisticColumns(columns) {
+  return (
+    Array.isArray(columns) &&
+    columns.length === 2 &&
+    columns[0]?.name === 'Statistic' &&
+    columns[1]?.name === 'Value'
+  );
+}
+
 function getTableData(res, node) {
   let nodeStats = [],
     colData;
-  if (res.data.data) {
+  if (res?.data?.data) {
     let data = res.data.data;
-    if (node.hasCollectiveStatistics || data['rows'].length > 1) {
-      data.rows.forEach((row) => {
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (
+      isKeyValueStatisticColumns(data.columns) ||
+      node?.hasCollectiveStatistics ||
+      rows.length > 1
+    ) {
+      rows.forEach((row) => {
         nodeStats.push({ ...row, icon: '' });
       });
-      colData = getColumn(data.columns, false, node.statsPrettifyFields);
-    } else {
-      nodeStats = createSingleLineStatistics(data, node.statsPrettifyFields);
+      colData = getColumn(data.columns, false, node?.statsPrettifyFields);
+    } else if (rows.length === 1) {
+      nodeStats = createSingleLineStatistics(data, node?.statsPrettifyFields);
       colData = getColumn(data.columns, true);
     }
   }
   return [nodeStats, colData];
+}
+
+export function resolveStatisticsUrl(nodeData, treeNodeInfo, node, nodeItem) {
+  const nodeType = nodeData?._type;
+  const gid = treeNodeInfo?.server_group?._id || 1;
+
+  if (nodeType === 'engine_type' || nodeType === 'localhost_placeholder') {
+    const engineId = nodeData?.engine_id || nodeData?._id;
+    if (!engineId) return null;
+    return `/browser/engine_type/stats/${encodeURIComponent(gid)}/${encodeURIComponent(engineId)}`;
+  }
+
+  if (nodeType === 'cde_database_target') {
+    const sid = treeNodeInfo?.server?._id || nodeData?._pid;
+    const targetId = nodeData?.cde_database_target_id || nodeData?._id;
+    if (!sid || !targetId) return null;
+    return `/browser/server/stats/${encodeURIComponent(gid)}/${encodeURIComponent(sid)}?database_target_id=${encodeURIComponent(targetId)}`;
+  }
+
+  if (nodeType === 'server' && nodeData?._id != null) {
+    return `/browser/server/stats/${encodeURIComponent(gid)}/${encodeURIComponent(nodeData._id)}`;
+  }
+
+  if (node?.hasStatistics) {
+    return getURL(nodeData, true, treeNodeInfo, node, nodeItem, 'stats');
+  }
+
+  return null;
 }
 
 function createSingleLineStatistics(data, prettifyFields) {
@@ -133,14 +181,14 @@ function Statistics({ nodeData, nodeItem, node, treeNodeInfo, isActive, isStale,
   const [loaderText, setLoaderText] = React.useState('');
   const [columns, setColumns] = React.useState([
     {
-      header: 'Statictics',
+      header: gettext('Statistic'),
       accessorKey: 'name',
       enableSorting: true,
       enableResizing: true,
       enableFilters: true,
     },
     {
-      header: 'Value',
+      header: gettext('Value'),
       accessorKey: 'value',
       enableSorting: true,
       enableResizing: true,
@@ -154,60 +202,64 @@ function Statistics({ nodeData, nodeItem, node, treeNodeInfo, isActive, isStale,
       return;
     }
 
-    let url,
-      message = gettext('Please select an object in the tree view.');
-
-    if (node) {
-      url = getURL(nodeData, true, treeNodeInfo, node, nodeItem, 'stats');
-
-      message = gettext('No statistics are available for the selected object.');
-
-      const api = getApiInstance();
-      if (node.hasStatistics) {
-        setLoaderText('Loading...');
-        api({
-          url: url,
-          type: 'GET',
-        })
-          .then((res) => {
-            let [nodeStats, colData] = getTableData(res, node);
-            setTableData(nodeStats);
-            if (!_.isUndefined(colData)) {
-              setColumns(colData);
-            }
-            setLoaderText('');
-          })
-          .catch((err) => {
-            // show failed message.
-            setLoaderText('');
-
-            if (err?.response?.data?.info == 'CRYPTKEY_MISSING') {
-              pgAdmin.Browser.notifier.pgNotifier('error', err.request, 'The master password is not set', function(mesg) {
-                setTimeout(function() {
-                  if (mesg == 'CRYPTKEY_SET') {
-                    setMsg('No statistics are available for the selected object.');
-                  } else if (mesg == 'CRYPTKEY_NOT_SET') {
-                    setMsg(gettext('The master password is not set.'));
-                  }
-                }, 100);
-              });
-            } else {
-              pgAdmin.Browser.notifier.alertText(
-                gettext('Failed to retrieve data from the server.'),
-                parseApiError(err)
-              );
-              setMsg(gettext('Failed to retrieve data from the server.'));
-            }
-          });
-      } else {
-        setLoaderText('');
-        setMsg('No statistics are available for the selected object.');
-      }
-    }
-    if (message != '') {
+    if (!node && !nodeData) {
       setTableData([]);
-      setMsg(message);
+      setLoaderText('');
+      setMsg(gettext('Please select an object in the tree view.'));
+      setIsStale(false);
+      return;
     }
+
+    const url = resolveStatisticsUrl(nodeData, treeNodeInfo, node, nodeItem);
+    if (!url) {
+      setTableData([]);
+      setLoaderText('');
+      setMsg(gettext('No statistics are available for the selected object.'));
+      setIsStale(false);
+      return;
+    }
+
+    const api = getApiInstance();
+    setTableData([]);
+    setMsg('');
+    setLoaderText(gettext('Loading...'));
+
+    api({
+      url: url,
+      type: 'GET',
+    })
+      .then((res) => {
+        let [nodeStats, colData] = getTableData(res, node);
+        setTableData(nodeStats);
+        if (!_.isUndefined(colData)) {
+          setColumns(colData);
+        }
+        if (!nodeStats || nodeStats.length === 0) {
+          setMsg(res?.data?.info || AUTH_STATS_MESSAGE);
+        } else {
+          setMsg('');
+        }
+        setLoaderText('');
+      })
+      .catch((err) => {
+        setLoaderText('');
+        setTableData([]);
+
+        if (err?.response?.data?.info == 'CRYPTKEY_MISSING') {
+          pgAdmin?.Browser?.notifier?.pgNotifier?.('error', err.request, 'The master password is not set', function(mesg) {
+            setTimeout(function() {
+              if (mesg == 'CRYPTKEY_SET') {
+                setMsg(AUTH_STATS_MESSAGE);
+              } else if (mesg == 'CRYPTKEY_NOT_SET') {
+                setMsg(gettext('The master password is not set.'));
+              }
+            }, 100);
+          });
+        } else {
+          setMsg(err?.response?.data?.info || AUTH_STATS_MESSAGE);
+        }
+      });
+
     setIsStale(false);
   }, [isStale, isActive, nodeData?.id]);
 
@@ -234,7 +286,7 @@ Statistics.propTypes = {
   nodeData: PropTypes.object,
   nodeItem: PropTypes.object,
   treeNodeInfo: PropTypes.object,
-  node: PropTypes.func,
+  node: PropTypes.oneOfType([PropTypes.func, PropTypes.object]),
   isActive: PropTypes.bool,
   isStale: PropTypes.bool,
   setIsStale: PropTypes.func,

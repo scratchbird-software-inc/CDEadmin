@@ -564,8 +564,12 @@ def register_database_target_for_user(engine, descriptor, user_email):
     web_dir = REPOSITORY / "web"
     if str(web_dir) not in sys.path:
         sys.path.insert(0, str(web_dir))
+    import os
+    if 'PGADMIN_SERVER_MODE' in os.environ:
+        builtins.SERVER_MODE = (os.environ['PGADMIN_SERVER_MODE'] != 'OFF')
+    else:
+        builtins.SERVER_MODE = None
     import config  # noqa: E402
-    builtins.SERVER_MODE = None
 
     from pgadmin import create_app
     app = create_app(config.APP_NAME + "-create-test-db")

@@ -127,6 +127,7 @@ export function ComboBox({
   helperText,
   validationMessage,
   placeholder = '',
+  inputProps,
 }) {
   useEffect(() => {
     ensureScratchBaseStyles();
@@ -134,16 +135,35 @@ export function ComboBox({
 
   const inputId = useId();
   const listId = `${inputId}-listbox`;
+  const helpId = inputProps?.['aria-describedby'] || `${inputId}-help`;
+  const inputRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(() => (value == null ? '' : optionLabel(value)));
+  const [queryFiltered, setQueryFiltered] = useState(false);
+  const displayForValue = (val) => {
+    if (val == null) return '';
+    if (typeof val === 'object') return optionLabel(val);
+    if (!freeEntry) {
+      const match = options.find((opt) => optionValue(opt) === val);
+      if (match) return optionLabel(match);
+    }
+    return String(val);
+  };
+  const [inputValue, setInputValue] = useState(() => displayForValue(value));
 
   useEffect(() => {
-    setInputValue(value == null ? '' : optionLabel(value));
+    setInputValue(displayForValue(value));
   }, [value, freeEntry]);
 
-  const filtered = options.filter((opt) =>
-    optionLabel(opt).toLowerCase().includes(inputValue.toLowerCase())
-  );
+  const rawValue = value != null && typeof value === 'object' ? optionValue(value) : value;
+  const filtered = queryFiltered && inputValue.trim() !== ''
+    ? options.filter((opt) => {
+      const q = inputValue.toLowerCase();
+      return (
+        optionLabel(opt).toLowerCase().includes(q) ||
+        String(optionValue(opt) ?? '').toLowerCase().includes(q)
+      );
+    })
+    : options;
   const isInvalid = Boolean(validationMessage);
   const effectiveHelp = validationMessage || helperText;
 
@@ -157,22 +177,36 @@ export function ComboBox({
       )}
       <div className="sr-input-wrap" data-invalid={isInvalid ? 'true' : undefined} data-disabled={disabled ? 'true' : undefined}>
         <input
+          ref={inputRef}
           id={inputId}
           role="combobox"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-autocomplete="list"
-          aria-invalid={isInvalid ? 'true' : undefined}
+          aria-invalid={isInvalid ? 'true' : 'false'}
+          aria-describedby={effectiveHelp ? helpId : undefined}
           disabled={disabled}
           required={required}
           placeholder={placeholder}
           value={inputValue}
           className="sr-input"
-          onFocus={() => !disabled && setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          {...inputProps}
+          onFocus={() => {
+            if (!disabled) {
+              setQueryFiltered(false);
+              setOpen(true);
+            }
+          }}
+          onBlur={() =>
+            setTimeout(() => {
+              setOpen(false);
+              setQueryFiltered(false);
+            }, 120)
+          }
           onChange={(event) => {
             const nextText = event.target.value;
             setInputValue(nextText);
+            setQueryFiltered(true);
             setOpen(true);
             if (freeEntry) {
               onChange?.(nextText);
@@ -182,38 +216,76 @@ export function ComboBox({
             }
           }}
         />
+        {options.length > 0 && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
+            disabled={disabled}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              if (disabled) return;
+              setQueryFiltered(false);
+              setOpen((prev) => {
+                const next = !prev;
+                if (next) inputRef.current?.focus();
+                return next;
+              });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 2,
+              border: 'none',
+              background: 'transparent',
+              color: 'inherit',
+              opacity: disabled ? 0.4 : 0.65,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+              <polyline points="2.5 4.5 6 8 9.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
       </div>
       {open && filtered.length > 0 && (
         <div
           id={listId}
           role="listbox"
           className="sr-select-popup"
-          style={{position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0}}
+          style={{position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, maxHeight: 240, overflowY: 'auto'}}
         >
           {filtered.map((opt) => {
             const optText = optionLabel(opt);
-            const optKey = String(optionValue(opt));
+            const optVal = optionValue(opt);
+            const optKey = String(optVal);
+            const isSelected = rawValue !== null && rawValue !== undefined && String(rawValue) === optKey;
             return (
               <div
                 key={optKey}
                 role="option"
-                aria-selected={optionLabel(value) === optText}
+                aria-selected={isSelected}
                 className="sr-select-item"
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  setInputValue(optText);
+                  setInputValue(freeEntry && typeof value !== 'object' ? String(optVal) : optText);
+                  setQueryFiltered(false);
                   onChange?.(opt);
                   setOpen(false);
                 }}
               >
-                {optText}
+                <span>{optText}</span>
+                {isSelected && <span style={{color: 'var(--sr-accent)'}}>✓</span>}
               </div>
             );
           })}
         </div>
       )}
       {effectiveHelp && (
-        <div className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
+        <div id={helpId} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
           {effectiveHelp}
         </div>
       )}
@@ -232,6 +304,7 @@ ComboBox.propTypes = {
   helperText: PropTypes.node,
   validationMessage: PropTypes.node,
   placeholder: PropTypes.string,
+  inputProps: PropTypes.object,
 };
 
 export function Radio({label, value, options = [], onChange, disabled = false}) {
@@ -360,6 +433,7 @@ export function MultiSelect({
   options = [],
   value = [],
   onChange,
+  placeholder = '',
   required = false,
   disabled = false,
   helperText,
@@ -413,9 +487,11 @@ export function MultiSelect({
           id={inputId}
           role="combobox"
           aria-expanded={open}
-          aria-invalid={isInvalid ? 'true' : undefined}
+          aria-invalid={isInvalid ? 'true' : 'false'}
+          aria-describedby={effectiveHelp ? `${inputId}-help` : undefined}
           disabled={disabled}
           required={required && value.length === 0}
+          placeholder={value.length === 0 ? placeholder : ''}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -450,7 +526,7 @@ export function MultiSelect({
         </div>
       )}
       {effectiveHelp && (
-        <div className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
+        <div id={`${inputId}-help`} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
           {effectiveHelp}
         </div>
       )}

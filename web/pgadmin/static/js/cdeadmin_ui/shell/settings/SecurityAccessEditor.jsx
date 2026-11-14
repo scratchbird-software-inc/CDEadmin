@@ -107,14 +107,29 @@ function buildFallbackSecurityState(applications = []) {
 
 export function SecurityAccessEditor({
   subView = 'apps',
+  hideTabs = false,
   applications = [],
   fetchImpl = null,
   onPermittedAppsChange,
   onRefreshAuthorization,
+  onNavigateSubView,
 }) {
   const runFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+  const [activeSubView, setActiveSubView] = useState(subView);
   const [secState, setSecState] = useState(() => buildFallbackSecurityState(applications));
   const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    setActiveSubView(subView);
+  }, [subView]);
+
+  const switchSubView = useCallback(
+    (nextView) => {
+      setActiveSubView(nextView);
+      onNavigateSubView?.(nextView);
+    },
+    [onNavigateSubView]
+  );
 
   // Group editor state
   const [selectedGroupId, setSelectedGroupId] = useState('administrators');
@@ -133,12 +148,26 @@ export function SecurityAccessEditor({
   const [draftUser, setDraftUser] = useState({
     username: 'desktop',
     email: 'desktop@localhost',
+    password: '',
     active: true,
     locked: false,
     groups: ['administrators'],
     enabled_applications: [],
     disabled_applications: [],
   });
+
+  const permissionTreeNodes = useMemo(() => {
+    const byCat = new Map();
+    (secState.permission_catalog || DEFAULT_PERMISSION_CATALOG).forEach((p) => {
+      if (!byCat.has(p.category)) byCat.set(p.category, []);
+      byCat.get(p.category).push({id: p.id, label: p.label});
+    });
+    return [...byCat.entries()].map(([cat, children]) => ({
+      id: `cat:${cat}`,
+      label: cat,
+      children,
+    }));
+  }, [secState.permission_catalog]);
 
   useEffect(() => {
     if (!runFetch) return undefined;
@@ -154,6 +183,7 @@ export function SecurityAccessEditor({
           setDraftUser({
             username: first.username,
             email: first.email || '',
+            password: '',
             active: first.active !== false,
             locked: Boolean(first.locked),
             groups: first.groups || ['administrators'],
@@ -213,15 +243,50 @@ export function SecurityAccessEditor({
     [onPermittedAppsChange, onRefreshAuthorization, runFetch, secState]
   );
 
+  const subViewTabsBar = hideTabs ? null : (
+    <div
+      role="tablist"
+      aria-label={gettext('Security Configuration Sections')}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        paddingBottom: 8,
+        borderBottom: '1px solid var(--sr-border-subtle)',
+      }}
+    >
+      {[
+        ['apps', gettext('Application Availability')],
+        ['users', gettext('Users & Grants')],
+        ['groups', gettext('Groups & Permissions')],
+      ].map(([key, label]) => {
+        const selected = activeSubView === key;
+        return (
+          <Button
+            key={key}
+            role="tab"
+            aria-selected={selected}
+            intent={selected ? 'primary' : 'neutral'}
+            data-cdeadmin-qa-key={`security-tab-${key}`}
+            onClick={() => switchSubView(key)}
+          >
+            {label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+
   // -------------------------------------------------------------------------
   // Sub-view 1: Application Availability Switchboard
   // -------------------------------------------------------------------------
-  if (subView === 'apps') {
+  if (activeSubView === 'apps') {
     return (
       <div
         data-cdeadmin-qa-key="settings-security-apps-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 12}}
       >
+        {subViewTabsBar}
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
             {gettext('Workspace Application Availability')}
@@ -280,12 +345,13 @@ export function SecurityAccessEditor({
   // -------------------------------------------------------------------------
   // Sub-view 2: Users & Access Overrides
   // -------------------------------------------------------------------------
-  if (subView === 'users') {
+  if (activeSubView === 'users') {
     const selectUser = (user) => {
       setSelectedUsername(user.username);
       setDraftUser({
         username: user.username,
         email: user.email || '',
+        password: '',
         active: user.active !== false,
         locked: Boolean(user.locked),
         groups: user.groups || ['administrators'],
@@ -316,6 +382,7 @@ export function SecurityAccessEditor({
         return {...prev, users: nextUsers};
       });
       setSelectedUsername(cleanRecord.username);
+      setDraftUser((p) => ({...p, password: ''}));
       setFeedback(gettext('Saved user "%s" access policy.', cleanRecord.username));
 
       if (runFetch) {
@@ -369,6 +436,7 @@ export function SecurityAccessEditor({
         data-cdeadmin-qa-key="settings-security-users-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 12}}
       >
+        {subViewTabsBar}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
           <div>
             <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
@@ -388,6 +456,7 @@ export function SecurityAccessEditor({
               setDraftUser({
                 username: '',
                 email: '',
+                password: '',
                 active: true,
                 locked: false,
                 groups: ['analysts'],
@@ -461,7 +530,7 @@ export function SecurityAccessEditor({
             gap: 10,
           }}
         >
-          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
+          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10}}>
             <TextField
               label={gettext('Username')}
               value={draftUser.username}
@@ -473,6 +542,14 @@ export function SecurityAccessEditor({
               value={draftUser.email}
               inputProps={{'data-cdeadmin-qa-key': 'security-user-email'}}
               onChange={(e) => setDraftUser((p) => ({...p, email: e.target.value}))}
+            />
+            <TextField
+              label={gettext('Password (optional / local)')}
+              type="password"
+              value={draftUser.password || ''}
+              placeholder={gettext('Leave blank to keep unchanged')}
+              inputProps={{'data-cdeadmin-qa-key': 'security-user-password'}}
+              onChange={(e) => setDraftUser((p) => ({...p, password: e.target.value}))}
             />
           </div>
 
@@ -570,19 +647,6 @@ export function SecurityAccessEditor({
   const activeGroup =
     secState.groups.find((g) => g.id === selectedGroupId) || secState.groups[0];
 
-  const permissionTreeNodes = useMemo(() => {
-    const byCat = new Map();
-    (secState.permission_catalog || DEFAULT_PERMISSION_CATALOG).forEach((p) => {
-      if (!byCat.has(p.category)) byCat.set(p.category, []);
-      byCat.get(p.category).push({id: p.id, label: p.label});
-    });
-    return [...byCat.entries()].map(([cat, children]) => ({
-      id: `cat:${cat}`,
-      label: cat,
-      children,
-    }));
-  }, [secState.permission_catalog]);
-
   const updateActiveGroupLocal = (patch) => {
     if (!activeGroup) return;
     setSecState((prev) => ({
@@ -639,6 +703,7 @@ export function SecurityAccessEditor({
       data-cdeadmin-qa-key="settings-security-groups-editor"
       style={{display: 'flex', flexDirection: 'column', gap: 12}}
     >
+      {subViewTabsBar}
       <div>
         <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
           {gettext('Security Groups, Application Access & Permission Grants')}
@@ -743,8 +808,8 @@ export function SecurityAccessEditor({
               }}
             >
               <ScratchBranchedTree
-                ariaLabel={gettext('Group Capability Permissions')}
-                nodes={permissionTreeNodes}
+                label={gettext('Group Capability Permissions')}
+                items={permissionTreeNodes}
                 checkable
                 checkedIds={activeGroup.permissions || []}
                 onCheckedChange={(nextChecked) =>
@@ -754,7 +819,7 @@ export function SecurityAccessEditor({
                 }
                 expandedIds={permTreeExpanded}
                 onExpandedChange={setPermTreeExpanded}
-                showStickyAncestors={false}
+                stickyAncestors={false}
                 style={{height: 190}}
               />
             </div>
@@ -805,8 +870,10 @@ export function SecurityAccessEditor({
 
 SecurityAccessEditor.propTypes = {
   subView: PropTypes.oneOf(['apps', 'users', 'groups']),
+  hideTabs: PropTypes.bool,
   applications: PropTypes.array,
   fetchImpl: PropTypes.func,
   onPermittedAppsChange: PropTypes.func,
   onRefreshAuthorization: PropTypes.func,
+  onNavigateSubView: PropTypes.func,
 };

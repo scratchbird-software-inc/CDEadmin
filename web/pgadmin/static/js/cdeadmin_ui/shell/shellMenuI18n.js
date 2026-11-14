@@ -42,6 +42,18 @@ const SHELL_STRINGS = {
     'menu.applications.data_sources.text': 'Data Sources',
     'menu.applications.data_sources.hint':
       'Configure database servers, engines, and connection profiles.',
+    'menu.applications.database_engines.text': 'Database Engines (On / Off)',
+    'menu.applications.database_engines.hint':
+      'Enable or disable PostgreSQL, Firebird, DuckDB, SQLite, MariaDB, ScratchBird, and other engines.',
+    'menu.applications.security.text': 'Security, Users & Groups',
+    'menu.applications.security.hint':
+      'Turn workspace applications ON/OFF, manage users & groups, and grant or revoke permissions.',
+    'menu.applications.menus_toolbars.text': 'Menus, Toolbars & Icons',
+    'menu.applications.menus_toolbars.hint':
+      'Place action icons onto global menus, application menus, and tabbed-notebook-iconbars.',
+    'menu.applications.schemes_fonts.text': 'Colour Schemes & Fonts',
+    'menu.applications.schemes_fonts.hint':
+      'Select or build custom colour schemes and customize UI, SQL, and diagram fonts.',
     'menu.applications.preferences.text': 'Preferences',
     'menu.applications.preferences.hint':
       'Personalize colors, typography, shortcuts, and user API keys.',

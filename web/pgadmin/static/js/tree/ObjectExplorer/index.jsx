@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {Tree} from '../tree';
 import * as pgadminUtils from '../../utils';
 
-import { Directory } from 'react-aspen';
+import { Directory, FileType } from 'react-aspen';
 import { ManageTreeNodes } from '../tree_nodes';
 import {
   Tree as CDETree,
@@ -29,6 +29,7 @@ import { generateNodeUrl } from '../../../../browser/static/js/node_ajax';
 import { copyToClipboard } from '../../clipboard';
 import { usePgAdmin } from '../../PgAdminProvider';
 import ObjectExplorerFilter from './ObjectExplorerFilter';
+import usePreferences from '../../../../preferences/static/js/store';
 import gettext from 'sources/gettext';
 import {
   isProviderContextNode,
@@ -119,12 +120,61 @@ export default function ObjectExplorer() {
   const [contextPos, setContextPos] = React.useState(null);
   const [contextNode, setContextNode] = React.useState(null);
   const [contextItem, setContextItem] = React.useState(null);
+  const [, setLocaleRev] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+    window.addEventListener('scratchrobin:language-changed', onLang);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLang);
+  }, []);
   const pgAdmin = usePgAdmin();
+  const engineTypePrefs = usePreferences().getPreferencesForModule('NODE-engine_type');
   const contextMenuItems = pgAdmin.Browser.BrowserContextMenu;
   const [treeModelLoaded, setTreeModelLoaded] = useState(false);
   const treeModelXRef = useRef();
+  const treeHandleRef = useRef(null);
   const MOUNT_POINT = '/browser';
   const mtree = useMemo(()=>new ManageTreeNodes(), []);
+
+  const expandRootServerGroups = React.useCallback(async (handle = treeHandleRef.current) => {
+    const root = treeModelXRef.current?.root;
+    if (!root || typeof handle?.openDirectory !== 'function') return;
+    try {
+      await root.ensureLoaded();
+      const children = Array.isArray(root.children) ? [...root.children] : [];
+      for (const group of children) {
+        if (group && group.type === FileType.Directory && !group.isExpanded) {
+          await handle.openDirectory(group);
+        }
+      }
+    } catch {
+      // Ignore transient load/expand race during unmount or refresh.
+    }
+  }, []);
+
+  const showEmptyEnginesBanner = useMemo(() => {
+    if (!engineTypePrefs || typeof engineTypePrefs !== 'object') return false;
+    const keys = Object.keys(engineTypePrefs).filter((k) => k.startsWith('show_connector_'));
+    if (keys.length === 0) return false;
+    return !keys.some((k) => Boolean(engineTypePrefs[k]));
+  }, [engineTypePrefs]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleConnectorsChanged = async () => {
+      if (mtree?.tempTree) {
+        mtree.tempTree.children = [];
+      }
+      if (treeModelXRef.current?.root?.hardReloadChildren) {
+        treeModelXRef.current.root.isExpanded = false;
+        await treeModelXRef.current.root.hardReloadChildren();
+        await expandRootServerGroups(treeHandleRef.current);
+      }
+    };
+    window.addEventListener('scratchrobin:connectors-changed', handleConnectorsChanged);
+    return () => window.removeEventListener('scratchrobin:connectors-changed', handleConnectorsChanged);
+  }, [expandRootServerGroups, mtree]);
 
   useEffect(()=>{
     // Init Tree with the Tree Parent node '/browser'
@@ -162,8 +212,10 @@ export default function ObjectExplorer() {
   }, []);
 
   const itemHandle = function onReady(handler) {
+    treeHandleRef.current = handler;
     pgAdmin.Browser.tree = new Tree(handler, mtree, pgAdmin.Browser);
     postTreeReady(pgAdmin.Browser);
+    void expandRootServerGroups(handler);
   };
   // Create Node
   const create = async (parentPath, _data) => {
@@ -223,23 +275,71 @@ export default function ObjectExplorer() {
   ) : [];
 
   return (
-    <>
-      <CDETree
-        ariaLabel={gettext('Database object explorer')}
-        model={treeModelXRef.current}
-        onReady={itemHandle}
-        create={create} update={update} remove={remove}
-        height={'100%'} disableCache={true} onContextMenu={onContextMenu}
-        onScroll={()=>{
-          contextPos && setContextPos(null);
-        }}
-      />
+    <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
+      {showEmptyEnginesBanner && (
+        <div
+          data-cdeadmin-qa-key="object-explorer-empty-engines-banner"
+          style={{
+            margin: '4px 6px',
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: '1px solid var(--sr-accent, #28749e)',
+            background: 'var(--sr-accent-subtle, rgba(40,116,158,0.10))',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontSize: '0.78rem',
+          }}
+        >
+          <div style={{fontWeight: 600}}>
+            {gettext('No database engines are enabled yet.')}
+          </div>
+          <button
+            type="button"
+            data-cdeadmin-qa-key="object-explorer-enable-engines"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('scratchrobin:open-preferences', {
+                    detail: {mode: 'global', sectionId: 'engines:connectors'},
+                  })
+                );
+              }
+            }}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '4px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--sr-accent, #28749e)',
+              background: 'var(--sr-accent, #28749e)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '0.76rem',
+              cursor: 'pointer',
+            }}
+          >
+            {gettext('Enable Database Engines…')}
+          </button>
+        </div>
+      )}
+      <div style={{flex: 1, minHeight: 0}}>
+        <CDETree
+          ariaLabel={gettext('Database object explorer')}
+          model={treeModelXRef.current}
+          onReady={itemHandle}
+          create={create} update={update} remove={remove}
+          height={'100%'} disableCache={true} onContextMenu={onContextMenu}
+          onScroll={()=>{
+            contextPos && setContextPos(null);
+          }}
+        />
+      </div>
       <ObjectExplorerFilter />
       <ContextMenu position={contextPos} onClose={()=>{
         setContextPos(null);
         setContextNode(null);
         setContextItem(null);
       }} menuItems={providerMenuItems} label="Object Context Menu" />
-    </>
+    </div>
   );
 }

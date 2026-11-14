@@ -4405,10 +4405,10 @@ export function DatabaseTargetWorkspace({initialCatalog, visualCatalog,
         },
       });
       setResult(value);
-      if (value.database_targets) {
+      if (value?.database_targets) {
         setCatalog(value.database_targets);
-        onTargetCatalogChanged?.(value.database_targets);
       }
+      onTargetCatalogChanged?.(value?.database_targets);
       setPlan(null);
       if (mode !== 'drop') onRefresh?.();
     } catch (requestError) {
@@ -5136,7 +5136,7 @@ DataMovementWorkspace.propTypes = {
 export default function ProviderWorkspaceContent({
   closeModal, endpointUrl, initialTab='resources', initialContext={},
   onEndpointRemoved, onEndpointProfileSaved, onCredentialRequired, onOpenSearchResult,
-  onRecreateEmpty, onTargetCatalogChanged,
+  onRecreateEmpty, onTargetCatalogChanged, onCatalogMutated,
 }) {
   const api = useMemo(() => getApiInstance(), []);
   const queryDatabaseTargetId = initialContext.database_target_id || (
@@ -5588,6 +5588,7 @@ export default function ProviderWorkspaceContent({
           } : null;
           setResourcePage(refreshed);
           setSelectedResource(nextSelected);
+          onCatalogMutated?.({targetResource, operationId, result});
         }
       }
     } catch (requestError) {
@@ -5807,6 +5808,14 @@ export default function ProviderWorkspaceContent({
       setHistoryNotice(occurrence.sql_history?.warning || '');
       setOccurrenceId(occurrence.occurrence_id);
       await poll(occurrence.occurrence_id);
+      if (
+        !planMode &&
+        !profileMode &&
+        !sessionCommand &&
+        /\b(CREATE|ALTER|DROP|RECREATE|RENAME|COMMENT\s+ON)\b/i.test(String(executionSource || ''))
+      ) {
+        onCatalogMutated?.({source: executionSource});
+      }
     } catch (requestError) {
       setError(errorMessage(requestError));
       setBusy(false);
@@ -5854,6 +5863,9 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId,
       });
       observeTransaction(observation);
+      if (action === 'commit') {
+        onCatalogMutated?.({transactionAction: action});
+      }
     } catch (requestError) {
       if (managedAutocommit) setSessionAutocommit(null);
       setError(errorMessage(requestError));
@@ -6641,6 +6653,7 @@ ProviderWorkspaceContent.propTypes = {
   onEndpointRemoved: PropTypes.func,
   onEndpointProfileSaved: PropTypes.func,
   onTargetCatalogChanged: PropTypes.func,
+  onCatalogMutated: PropTypes.func,
   onRecreateEmpty: PropTypes.func,
   onCredentialRequired: PropTypes.func,
 };

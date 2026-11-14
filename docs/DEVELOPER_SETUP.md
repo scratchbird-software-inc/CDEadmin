@@ -8,7 +8,10 @@ This document provides complete, step-by-step instructions for a new developer c
 4. **Downloading and managing all 29 pinned Docker images used across the 26 reference-engine profiles**
 5. **Creating, seeding, verifying, and registering test databases** — both the canonical `cdeadmin_demo` estate, isolated developer test databases (`dev.sh create-db`), and adding new engine test fixtures
 
-> **Platform note:** Primary full-estate development runs on **x86_64 Linux** (Ubuntu 24.04 LTS native, WSL2 Ubuntu 24.04 with local Docker Engine, or an x86_64 Linux VM). For host-native Windows x64 and macOS development without Docker/Linux `.so` clients, also see [tools/development/NATIVE.md](tools/development/NATIVE.md).
+> **Using an AI Coding Agent to Provision Your Machine?**
+> Point your AI agent directly at **[AI_AGENT_TEST_ENVIRONMENT_SETUP.md](AI_AGENT_TEST_ENVIRONMENT_SETUP.md)**. It contains the deterministic OS/version/shell detection matrix (Ubuntu 24.04 vs 22.04 `glibc`, Fedora/RHEL `dnf`, Arch `pacman`, Windows 10/11 PowerShell 5.1 & 7+ in WSL2 or Native x64 modes, and macOS Sonoma/Sequoia on Apple Silicon & Intel), the full 29-image Docker manifest, complete per-engine users/roles/passwords, test database creation workflows, and ready-to-generate `.sh` / `.ps1` launcher scripts (`start_robin` for both Electron & Web Browser plus `<engine>` `start | stop | status` scripts).
+
+> **Platform note:** Primary full-estate development runs on **x86_64 Linux** (Ubuntu 24.04 LTS native, WSL2 Ubuntu 24.04 with local Docker Engine, or an x86_64 Linux VM). For host-native Windows x64 and macOS development without Docker/Linux `.so` clients, also see [../tools/development/NATIVE.md](../tools/development/NATIVE.md) and [AI_AGENT_TEST_ENVIRONMENT_SETUP.md](AI_AGENT_TEST_ENVIRONMENT_SETUP.md).
 
 ---
 
@@ -242,10 +245,17 @@ bash tools/development/dev.sh verify firebird
 # and stops each network engine between runs so memory stays bounded):
 bash tools/development/dev.sh prepare all
 
-# 2. Preview and register all 26 demo server profiles under your CDEadmin login account
-#    (Stop CDEadmin first if it is running; creates an automatic backup of cdeadmin.db)
+# 2a. Server Mode (`web/config_local.py`): preview & register all 26 demo profiles
+#     (Stop CDEadmin first if it is running; creates an automatic backup of cdeadmin.db)
 bash tools/development/dev.sh register --user developer@example.com --dry-run
 bash tools/development/dev.sh register --user developer@example.com
+
+# 2b. Electron Desktop / Single-User Web Mode (`~/.cdeadmin/cdeadmin.db`):
+source tools/reference_engine_demos/environment.sh
+PGADMIN_SERVER_MODE=OFF .venv/bin/python tools/reference_engine_demos/register_demo_profiles.py \
+  --user cdeadmin@localhost --dry-run
+PGADMIN_SERVER_MODE=OFF .venv/bin/python tools/reference_engine_demos/register_demo_profiles.py \
+  --user cdeadmin@localhost
 ```
 
 ### Process B: Create New Isolated Test Databases (`dev.sh create-db`)
@@ -297,20 +307,20 @@ Supported `--engine` targets for `create-db`:
 
 When onboarding a new database engine (or adding a new protocol profile) into ScratchRobin's test estate, complete every item in this checklist so portability and CI gates stay green:
 
-1. **Pin Exact Version Metadata** in [engine_versions.json](tools/reference_engine_demos/engine_versions.json):
+1. **Pin Exact Version Metadata** in [engine_versions.json](../tools/reference_engine_demos/engine_versions.json):
    - Add `{"engine": "<id>", "product": "<Name>", "version": "<exact-semver>", "deployment": "docker"}` (never `:latest`).
-2. **Register the Exact Docker Image(s)** in [docker_images.py](tools/reference_engine_demos/docker_images.py):
+2. **Register the Exact Docker Image(s)** in [docker_images.py](../tools/reference_engine_demos/docker_images.py):
    - Add the pinned image tag, container name(s), loopback port mapping (`127.0.0.1:<5xxxx>-><container_port>`), and `bootstrap_client` flag.
-3. **Define Container Lifecycle & Protocol Readiness** in [demo_estate.py](tools/reference_engine_demos/demo_estate.py):
+3. **Define Container Lifecycle & Protocol Readiness** in [demo_estate.py](../tools/reference_engine_demos/demo_estate.py):
    - Add `<id>` to `ENGINE_ORDER`, `CONTAINERS` (or custom multi-node start/stop functions), and `READY_PORTS`.
    - Wait for **actual protocol readiness** (not just an open TCP proxy socket) before returning from `start()`, and attach a named `cdeadmin-demo-<id>` Docker volume so `stop`/`start` retains state.
-4. **Extract Matching Native Host Clients (if required)** in [bootstrap.py](tools/reference_engine_demos/bootstrap.py) & [environment.sh](tools/reference_engine_demos/environment.sh):
+4. **Extract Matching Native Host Clients (if required)** in [bootstrap.py](../tools/reference_engine_demos/bootstrap.py) & [environment.sh](../tools/reference_engine_demos/environment.sh):
    - Copy exact-version CLI/shared libraries from `docker create <pinned-image>` into `tools/reference_engine_demos/runtime/<id>/` (never hardcode `/home/<user>` paths).
-5. **Add Portable Connection Profile Template** in [connection_profiles.template.json](tools/reference_engine_demos/connection_profiles.template.json) & [register_demo_profiles.py](tools/reference_engine_demos/register_demo_profiles.py):
+5. **Add Portable Connection Profile Template** in [connection_profiles.template.json](../tools/reference_engine_demos/connection_profiles.template.json) & [register_demo_profiles.py](../tools/reference_engine_demos/register_demo_profiles.py):
    - Use `${DEMO_ROOT}` / `${REPOSITORY_ROOT}` placeholders where file paths are needed; never store plaintext passwords in route JSON.
 6. **Implement Idempotent Seed, Verify & `create-db` Adapters**:
-   - Add `seed_<id>()` and `verify_<id>()` in [seed_demo.py](tools/reference_engine_demos/seed_demo.py) and register in `SEEDERS` / `VERIFIERS`.
-   - Add isolated database creation support in [create_test_database.py](tools/reference_engine_demos/create_test_database.py).
+   - Add `seed_<id>()` and `verify_<id>()` in [seed_demo.py](../tools/reference_engine_demos/seed_demo.py) and register in `SEEDERS` / `VERIFIERS`.
+   - Add isolated database creation support in [create_test_database.py](../tools/reference_engine_demos/create_test_database.py).
 7. **Create the Per-Engine Executable Lifecycle Script**:
    - Create `tools/reference_engine_demos/lifecycle/<id>.sh` (`chmod +x`) delegating to `_engine_lifecycle.sh <id> "$@"`.
 8. **Run Static Portability & Live Roundtrip Gates**:

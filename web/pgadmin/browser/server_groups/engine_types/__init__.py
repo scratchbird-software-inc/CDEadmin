@@ -20,6 +20,11 @@ from pgadmin.browser.utils import NodeView
 from pgadmin.cdeadmin.context_menu import connector_context_actions
 from pgadmin.cdeadmin.endpoints import registration_profiles
 from pgadmin.cdeadmin.navigator import is_loopback_server
+from pgadmin.cdeadmin.server_statistics import (
+    AUTH_STATS_MESSAGE,
+    build_connector_statistics,
+    firebird_client_statistics,
+)
 from pgadmin.user_login_check import pga_login_required
 from pgadmin.utils.ajax import bad_request, make_json_response
 
@@ -244,6 +249,7 @@ class EngineTypeNode(NodeView):
     operations = {
         'nodes': [{'get': 'node'}, {'get': 'nodes'}],
         'children': [{'get': 'children'}],
+        'stats': [{'get': 'statistics'}],
     }
 
     def _connector_children(self, gid, eid):
@@ -316,6 +322,18 @@ class EngineTypeNode(NodeView):
                 eid, engine_registration_profiles(eid), status=status,
             ),
         ))
+
+    @pga_login_required
+    def statistics(self, gid, eid):
+        engines = dict(supported_engine_types())
+        if eid not in engines:
+            return bad_request(errormsg=gettext(
+                'The selected engine type is unavailable.'
+            ))
+        status = localhost_engine_status(eid)
+        return make_json_response(
+            data=build_connector_statistics(eid, engines[eid], status)
+        )
 
 
 EngineTypeNode.register_node_view(blueprint)

@@ -142,6 +142,39 @@ def _cde_registration(server):
     return registration_profile_for_endpoint(endpoint)
 
 
+_INTERNAL_USERNAME_SENTINELS = frozenset({
+    'endpoint-profile',
+    'embedded-process',
+})
+
+
+def _effective_server_username(server, provider_endpoint):
+    """Return the configured user for a server, omitting internal sentinels."""
+    if not provider_endpoint:
+        return server.username
+    endpoint = getattr(server, 'endpoint_profile', None)
+    if endpoint is not None:
+        route_model = min(
+            endpoint.routes,
+            key=lambda item: item.priority,
+            default=None,
+        )
+        if route_model is not None:
+            try:
+                route_user = json.loads(route_model.configuration).get('user')
+                if isinstance(route_user, str) and route_user.strip():
+                    return route_user.strip()
+            except (TypeError, ValueError):
+                pass
+    if (
+        isinstance(server.username, str) and
+        server.username.strip() and
+        server.username not in _INTERNAL_USERNAME_SENTINELS
+    ):
+        return server.username.strip()
+    return None
+
+
 def inherited_postgresql_tools_apply(profile):
     """Whether the inherited PostgreSQL tools may list this registration.
 
@@ -298,6 +331,16 @@ def _runtime_node_fields(server):
     """
     runtime = getattr(getattr(server, 'endpoint_profile', None),
                       'runtime_identity', None)
+    has_children = True
+    try:
+        profile = _cde_registration(server)
+        if profile.get('workflow') == 'provider_endpoint':
+            catalog = endpoint_service_for_app(current_app).database_catalog(
+                server
+            )
+            has_children = bool(database_entries(catalog))
+    except Exception:
+        has_children = True
     return {
         'verified_runtime_version': getattr(
             runtime, 'verified_runtime_version', None),
@@ -306,6 +349,7 @@ def _runtime_node_fields(server):
         # Owner decision 2026-11-10: a PostgreSQL registration may be
         # browsed through the provider tree, chosen per server.
         'cde_provider_tree': provider_tree_enabled(server),
+        'has_children': has_children,
     }
 
 
@@ -486,7 +530,8 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 'icon': 'icon-coll-object',
                 'icon_key': f"object.{value['resource_kind']}",
                 'inode': True,
-                'expandable': True,
+                'expandable': bool(value.get('has_children', True)),
+                'has_children': bool(value.get('has_children', True)),
                 'node_kind': 'container',
                 '_type': 'cde_resource_group',
                 '_id': node_id,
@@ -540,6 +585,7 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
             'icon_key': f"object.{value['resource_kind']}",
             'inode': value['has_children'],
             'expandable': value['has_children'],
+            'has_children': bool(value['has_children']),
             'node_kind': 'object',
             '_type': 'cde_resource',
             '_id': node_id,
@@ -903,7 +949,7 @@ class ServerModule(sg.ServerGroupPluginModule):
                 was_connected=was_connected,
                 errmsg=errmsg,
                 user_id=server.user_id,
-                username=server.username,
+                username=_effective_server_username(server, provider_endpoint),
                 shared=server.shared,
                 is_kerberos_conn=bool(server.kerberos_conn),
                 gss_authenticated=(
@@ -1364,18 +1410,20 @@ class ServerNode(PGChildNodeView):
                 server = \
                     ServerModule.get_shared_server_properties(server,
                                                               shared_server)
-            manager = driver.connection_manager(server.id)
-            conn = manager.connection()
-            connected = conn.connected()
             profile = _cde_registration(server)
             provider_endpoint = profile['workflow'] == 'provider_endpoint'
+            manager = None
+            conn = None
+            connected = False
+            if not provider_endpoint:
+                manager = driver.connection_manager(server.id)
+                conn = manager.connection()
+                connected = conn.connected()
             credential_values = {}
             verification_state = (
                 server.endpoint_profile.runtime_identity.verification_state
                 if provider_endpoint else 'legacy'
             )
-            if provider_endpoint:
-                connected = False
             errmsg = None
             in_recovery = None
             wal_paused = None
@@ -1402,10 +1450,10 @@ class ServerNode(PGChildNodeView):
                     self.node_type,
                     connected=connected,
                     server_type=server_type,
-                    version=manager.version,
-                    db=manager.db,
+                    version=manager.version if manager is not None else None,
+                    db=manager.db if manager is not None else None,
                     host=server.host,
-                    user=manager.user_info if connected else None,
+                    user=manager.user_info if connected and manager is not None else None,
                     in_recovery=in_recovery,
                     wal_pause=wal_paused,
                     is_password_saved=bool(server.save_password),
@@ -1422,7 +1470,10 @@ class ServerNode(PGChildNodeView):
                         server, profile
                     ),
                     is_kerberos_conn=bool(server.kerberos_conn),
-                    gss_authenticated=manager.gss_authenticated,
+                    gss_authenticated=(
+                        False if provider_endpoint or manager is None
+                        else manager.gss_authenticated
+                    ),
                     description=server.comment,
                     tags=server.tags
                 )
@@ -1454,17 +1505,21 @@ class ServerNode(PGChildNodeView):
             server = ServerModule.get_shared_server_properties(server,
                                                                shared_server)
 
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(server.id)
-        conn = manager.connection()
-        connected = conn.connected()
         profile = _cde_registration(server)
         provider_endpoint = profile['workflow'] == 'provider_endpoint'
+        manager = None
+        conn = None
+        connected = False
+        if not provider_endpoint:
+            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(
+                server.id
+            )
+            conn = manager.connection()
+            connected = conn.connected()
         verification_state = (
             server.endpoint_profile.runtime_identity.verification_state
             if provider_endpoint else 'legacy'
         )
-        if provider_endpoint:
-            connected = False
         errmsg = None
         in_recovery = None
         wal_paused = None
@@ -1494,10 +1549,10 @@ class ServerNode(PGChildNodeView):
                 True,
                 self.node_type,
                 connected=connected,
-                server_type=manager.server_type if connected else 'pg',
-                version=manager.version,
-                db=manager.db,
-                user=manager.user_info if connected else None,
+                server_type=manager.server_type if connected and manager is not None else 'pg',
+                version=manager.version if manager is not None else None,
+                db=manager.db if manager is not None else None,
+                user=manager.user_info if connected and manager is not None else None,
                 in_recovery=in_recovery,
                 wal_pause=wal_paused,
                 host=server.host,
@@ -1520,7 +1575,10 @@ class ServerNode(PGChildNodeView):
                     else ([] if provider_tree_enabled(server) else None)),
                 username=server.username,
                 is_kerberos_conn=bool(server.kerberos_conn),
-                gss_authenticated=manager.gss_authenticated,
+                gss_authenticated=(
+                    False if provider_endpoint or manager is None
+                    else manager.gss_authenticated
+                ),
                 tags=server.tags
             ),
         )
@@ -1711,14 +1769,19 @@ class ServerNode(PGChildNodeView):
         if 'shared' in data and data['shared'] is False:
             data['shared_username'] = ''
 
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        conn = manager.connection()
-        connected = conn.connected()
+        manager = None
+        conn = None
+        connected = False
+        if not provider_endpoint:
+            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+            conn = manager.connection()
+            connected = conn.connected()
 
         self._server_modify_disallowed_when_connected(
             connected, data, disp_lbl)
 
         typed_credential_kinds = None
+        submitted_credentials = {}
         if provider_endpoint and endpoint_registration.get('secret_fields'):
             route_model = min(
                 server.endpoint_profile.routes,
@@ -1768,38 +1831,39 @@ class ServerNode(PGChildNodeView):
                     kind: value for kind, value in stored_credentials.items()
                     if kind in active_kinds
                 }
-                missing = [
-                    field['label']
-                    for field in active_secret_fields(
-                        endpoint_registration, prospective_route
-                    )
-                    if field['required'] and field['secret_kind'] not in (
-                        stored_credentials
-                    )
-                ]
-                if missing:
-                    raise EndpointRegistrationError(
-                        'Required credentials are unavailable: ' +
-                        ', '.join(missing)
-                    )
+                if data.get('cde_verify_now'):
+                    missing = [
+                        field['label']
+                        for field in active_secret_fields(
+                            endpoint_registration, prospective_route
+                        )
+                        if field['required'] and field['secret_kind'] not in (
+                            stored_credentials
+                        )
+                    ]
+                    if missing:
+                        raise EndpointRegistrationError(
+                            'Required credentials are unavailable: ' +
+                            ', '.join(missing)
+                        )
             except (EndpointRegistrationError, ValueError) as exc:
                 return bad_request(errormsg=str(exc))
             save_credentials = data.get(
                 'save_password', bool(server.save_password)
             )
-            if submitted_credentials and not save_credentials:
-                return bad_request(errormsg=gettext(
-                    'Typed provider credentials require Save password.'
-                ))
             data = dict(data)
             if save_credentials and stored_credentials:
                 data['password'] = encode_credential_bundle(
                     stored_credentials
                 )
-            elif data.get('save_password') is False:
-                server.password = None
-                stored_credentials = {}
-            typed_credential_kinds = sorted(stored_credentials)
+                typed_credential_kinds = sorted(stored_credentials)
+            elif data.get('save_password') is False or not save_credentials:
+                if data.get('save_password') is False:
+                    server.password = None
+                typed_credential_kinds = (
+                    sorted(stored_credentials)
+                    if (server.password and stored_credentials) else []
+                )
 
         idx = self._set_valid_attr_value(gid, data, config_param_map, server,
                                          sharedserver)
@@ -1851,17 +1915,19 @@ class ServerNode(PGChildNodeView):
                     route_value = provider_route_options(
                         endpoint_registration, data, existing_route
                     )
-                    if typed_credential_kinds is not None:
+                    if typed_credential_kinds:
                         route_value['credential_kinds'] = (
                             typed_credential_kinds
                         )
+                    elif typed_credential_kinds == []:
+                        route_value.pop('credential_kinds', None)
                 except EndpointRegistrationError as exc:
                     db.session.rollback()
                     return bad_request(errormsg=str(exc))
                 route_value.update({
                     'host': server.host,
                     'port': server.port,
-                    'user': server.username,
+                    'user': _effective_server_username(server, True),
                     'database': server.maintenance_db,
                     'connection_timeout': connection_timeout,
                 })
@@ -1882,6 +1948,17 @@ class ServerNode(PGChildNodeView):
 
         try:
             db.session.commit()
+            if (
+                provider_endpoint and not embedded_endpoint and
+                isinstance(data.get('db'), str) and data['db'].strip()
+            ):
+                submitted_db = data['db'].strip()
+                endpoint_service_for_app(
+                    current_app
+                ).retain_registered_database(server, {
+                    'database': submitted_db,
+                    'display_name': submitted_db.rsplit('/', 1)[-1],
+                })
         except Exception as e:
             current_app.logger.exception(e)
             return make_json_response(
@@ -1889,17 +1966,32 @@ class ServerNode(PGChildNodeView):
                 errormsg=str(e)
             )
 
+        verify_warning = None
+        if provider_endpoint and data.get('cde_verify_now'):
+            transient_secret = (
+                None if server.password is not None else (
+                    submitted_credentials or data.get('password')
+                )
+            )
+            if server.password is not None or transient_secret:
+                try:
+                    endpoint_service_for_app(current_app).verify_server(
+                        server, transient_secret
+                    )
+                except EndpointRegistrationError as exc:
+                    verify_warning = str(exc)
+
         # When server is connected, we don't require to update the connection
         # manager. Because - we don't allow to change any of the parameters,
         # which will affect the connections.
-        if not conn.connected():
+        if not provider_endpoint and conn is not None and not conn.connected():
             manager.update(server)
             # Suppress passexec for non-owners so the manager
             # never holds the owner's password-exec command.
             if _is_non_owner(server):
                 manager.passexec = None
 
-        return jsonify(
+        payload = dict(
             node=self.blueprint.generate_browser_node(
                 "%d" % (server.id),
                 _cde_navigator_parent(_cde_registration(server)),
@@ -1937,7 +2029,7 @@ class ServerNode(PGChildNodeView):
                 ),
                 shared=server.shared,
                 user_id=server.user_id,
-                user=manager.user_info if connected else None,
+                user=manager.user_info if connected and manager is not None else None,
                 server_type='pg',  # default server type
                 username=server.username,
                 role=server.role,
@@ -1946,6 +2038,9 @@ class ServerNode(PGChildNodeView):
                 tags=(sharedserver or server).tags
             )
         )
+        if verify_warning:
+            payload['info'] = verify_warning
+        return jsonify(**payload)
 
     @staticmethod
     def _update_server_details(server, sharedserver,
@@ -2051,7 +2146,9 @@ class ServerNode(PGChildNodeView):
                 'host': server.host,
                 'port': server.port,
                 'db': server.maintenance_db,
-                'username': server.username,
+                'username': _effective_server_username(
+                    server, provider_endpoint
+                ),
                 'gid': server.servergroup_id,
                 'group-name': sg.name,
                 'comment': server.comment,
@@ -2149,7 +2246,7 @@ class ServerNode(PGChildNodeView):
             'shared': server.shared if config.SERVER_MODE else None,
             'shared_username': server.shared_username
             if config.SERVER_MODE else None,
-            'username': server.username,
+            'username': _effective_server_username(server, provider_endpoint),
             'gid': str(server.servergroup_id),
             'group-name': sg.name if (sg and sg.name) else gettext('Servers'),
             'comment': server.comment,
@@ -2479,9 +2576,12 @@ class ServerNode(PGChildNodeView):
                     )
                     credential_values = provider_secret_values(
                         endpoint_registration, route_configuration, data,
-                        require_all=True,
+                        require_all=bool(data.get('cde_verify_now')),
                     )
-                    if endpoint_registration.get('secret_fields'):
+                    if (
+                        endpoint_registration.get('secret_fields') and
+                        credential_values
+                    ):
                         route_configuration['credential_kinds'] = sorted(
                             credential_values
                         )
@@ -2762,27 +2862,50 @@ class ServerNode(PGChildNodeView):
 
     @pga_login_required
     def statistics(self, gid, sid):
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        conn = manager.connection()
-
-        if conn.connected():
-            status, res = conn.execute_dict(
-                render_template(
-                    "/servers/sql/#{0}#/stats.sql".format(manager.version),
-                    conn=conn, _=gettext
-                )
-            )
-
-            if not status:
-                return internal_server_error(errormsg=res)
-
-            return make_json_response(data=res)
-
-        return make_json_response(
-            info=gettext(
-                "Server has no active connection for generating statistics."
-            )
+        from pgadmin.cdeadmin.server_statistics import (
+            AUTH_STATS_MESSAGE,
+            build_endpoint_statistics,
         )
+
+        auth_msg = gettext(AUTH_STATS_MESSAGE)
+        server = get_server(sid)
+        if server is None:
+            return make_json_response(info=auth_msg)
+
+        profile = _cde_registration(server)
+        if profile['workflow'] == 'provider_endpoint':
+            database_target_id = request.args.get('database_target_id') or None
+            data, info = build_endpoint_statistics(
+                server,
+                profile,
+                database_target_id=database_target_id,
+                snapshot_loader=lambda srv, db_target: (
+                    provider_workspace_for_app(current_app).navigator_snapshot(
+                        srv, database_target_id=db_target
+                    )
+                ),
+            )
+            if data is not None:
+                return make_json_response(data=data)
+            return make_json_response(info=info or auth_msg)
+
+        try:
+            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+            conn = manager.connection()
+            if conn.connected():
+                status, res = conn.execute_dict(
+                    render_template(
+                        "/servers/sql/#{0}#/stats.sql".format(manager.version),
+                        conn=conn, _=gettext
+                    )
+                )
+                if not status:
+                    return internal_server_error(errormsg=res)
+                return make_json_response(data=res)
+        except Exception:
+            return make_json_response(info=auth_msg)
+
+        return make_json_response(info=auth_msg)
 
     @pga_login_required
     def dependencies(self, gid, sid):
@@ -2850,44 +2973,110 @@ class ServerNode(PGChildNodeView):
             save_password = {'true': True, 'false': False}.get(save_password)
         if not isinstance(save_password, bool):
             return bad_request(gettext('Save password must be true or false.'))
-        if connect_as and save_password:
+        adopt_default_user = bool(
+            _effective_server_username(server, True) is None and
+            connect_as and
+            not data.get('database_target_id') and
+            profile.get('route_kind') != 'embedded_file'
+        )
+        if connect_as and save_password and not adopt_default_user:
             return bad_request(gettext(
                 'Credentials used to connect as another user are session '
                 'only. Edit the connection profile to change and save the '
                 'default user credentials.'
             ))
         verification = None
+        endpoint_service = endpoint_service_for_app(current_app)
         try:
             # Check policy/key availability before creating a verified session.
             protected_password = encrypted_credentials(password) if (
                 password and save_password) else None
-            verification = endpoint_service_for_app(
-                current_app
-            ).verify_server(
+            verification = endpoint_service.verify_server(
                 server, password, connect_as=connect_as,
                 database_target_id=data.get('database_target_id') or None)
-            if protected_password is not None:
+            route_model = min(
+                server.endpoint_profile.routes,
+                key=lambda item: item.priority,
+                default=None,
+            )
+            route_cfg = None
+            if route_model is not None:
+                try:
+                    route_cfg = json.loads(route_model.configuration)
+                except (TypeError, ValueError):
+                    route_cfg = {}
+            repair_empty_credential_kinds = (
+                isinstance(route_cfg, dict) and
+                route_cfg.get('credential_kinds') == []
+            )
+            if (
+                adopt_default_user or
+                protected_password is not None or
+                repair_empty_credential_kinds
+            ):
                 with protected_configuration_write(db.session):
-                    target_id = data.get('database_target_id')
-                    target = (endpoint_service_for_app(current_app).
-                              _owned_database_target(server.endpoint_profile, target_id)
-                              if target_id else None)
-                    if target is not None and target.registration_credentials:
-                        target.registration_password = protected_password
-                    else:
-                        server.password = protected_password
-                        server.save_password = 1
+                    if route_model is not None and isinstance(route_cfg, dict):
+                        route_dirty = False
+                        if adopt_default_user:
+                            server.username = connect_as
+                            route_cfg['user'] = connect_as
+                            route_dirty = True
+                            with endpoint_service._principal_lock:
+                                endpoint_service._principal_overrides.pop(
+                                    server.endpoint_profile.id, None
+                                )
+                        if repair_empty_credential_kinds:
+                            route_cfg.pop('credential_kinds', None)
+                            route_dirty = True
+                        if (
+                            protected_password is not None and
+                            not data.get('database_target_id') and
+                            profile.get('secret_fields')
+                        ):
+                            primary_kinds = [
+                                field['secret_kind']
+                                for field in active_secret_fields(
+                                    profile, route_cfg
+                                )
+                                if field.get('primary') or field.get('required')
+                            ]
+                            if primary_kinds:
+                                existing_kinds = [
+                                    item for item in (
+                                        route_cfg.get('credential_kinds') or []
+                                    )
+                                    if isinstance(item, str)
+                                ]
+                                route_cfg['credential_kinds'] = sorted(
+                                    set(existing_kinds) | {primary_kinds[0]}
+                                )
+                                route_dirty = True
+                        if route_dirty:
+                            route_model.configuration = json.dumps(
+                                route_cfg, sort_keys=True,
+                                separators=(',', ':'),
+                            )
+                    if protected_password is not None:
+                        target_id = data.get('database_target_id')
+                        target = (endpoint_service.
+                                  _owned_database_target(server.endpoint_profile, target_id)
+                                  if target_id else None)
+                        if target is not None and target.registration_credentials:
+                            target.registration_password = protected_password
+                        else:
+                            server.password = protected_password
+                            server.save_password = 1
                     db.session.commit()
         except EndpointRegistrationError as exc:
             if verification is not None:
-                endpoint_service_for_app(
-                    current_app).forget_server_credentials(server)
+                endpoint_service.forget_server_credentials(server)
             return make_json_response(
                 status=401, success=0, errormsg=str(exc)
             )
         return make_json_response(
             data={
                 **verification,
+                'username': _effective_server_username(server, True),
                 'runtime_verification_state': 'verified',
                 'is_password_saved': bool(server.save_password),
                 'icon': server_icon_and_background(

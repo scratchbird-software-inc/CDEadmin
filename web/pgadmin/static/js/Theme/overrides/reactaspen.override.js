@@ -12,10 +12,6 @@ export default function reactAspenOverride(theme) {
   const reducedMotionLoader =
     'html[data-cdeadmin-motion="reduced"] '
     + '.file-entry button.directory-toggle.loading';
-  const forcedColorGuides =
-    '.file-entry span.tree-branch-segment:before, '
-    + '.file-entry span.tree-branch-segment:after, '
-    + '.file-entry span.tree-node-terminal.leaf:before';
   return {
     '.drag-tree-node': {
       position: 'absolute',
@@ -60,9 +56,6 @@ export default function reactAspenOverride(theme) {
     },
 
     '@media (forced-colors: active)': {
-      [forcedColorGuides]: {
-        backgroundColor: 'CanvasText',
-      },
       '.file-entry button.directory-toggle': {
         borderColor: 'CanvasText',
         color: 'CanvasText',
@@ -71,7 +64,7 @@ export default function reactAspenOverride(theme) {
     },
 
     '.file-tree>': {
-      div: {
+      'div:not(.sr-branched-sticky-ancestors)': {
         position: 'absolute' + ' !important',
         height: '100%' + ' !important',
         top: '0px' + ' !important',
@@ -89,9 +82,11 @@ export default function reactAspenOverride(theme) {
       display: 'flex',
       alignItems: 'center',
       whiteSpace: 'nowrap',
-      padding: '2px 0',
-      minHeight: 'var(--cde-tree-row-height, 28px)',
-      paddingLeft: '2px',
+      padding: '0 4px 0 4px',
+      height: '28px',
+      minHeight: '28px',
+      border: 'none',
+      boxShadow: 'none',
       cursor: 'default',
 
       'span.tree-branch': {
@@ -104,79 +99,71 @@ export default function reactAspenOverride(theme) {
       'span.tree-branch-segment': {
         alignSelf: 'stretch',
         display: 'inline-block',
-        flex: '0 0 var(--cde-tree-indent, 18px)',
+        flexShrink: 0,
         position: 'relative',
-        width: 'var(--cde-tree-indent, 18px)',
-
-        '&.ancestor.continues:before, &.current:before': {
-          backgroundColor: 'var(--cde-tree-guide-color, '
-            + theme.otherVars.tree.textFg + ')',
-          bottom: '-2px',
-          content: '""',
-          left: 'calc(2px + (var(--cde-tree-expander-size, 16px) / 2) - '
-            + '(var(--cde-tree-guide-width, 1px) / 2))',
-          position: 'absolute',
-          top: '-2px',
-          width: 'var(--cde-tree-guide-width, 1px)',
-        },
-
-        '&.current.is-last:before': {
-          bottom: 'auto',
-          height: 'calc(50% + 2px)',
-        },
       },
 
-      'button.directory-toggle, span.tree-node-terminal': {
-        flex: '0 0 var(--cde-tree-expander-size, 16px)',
-        height: 'var(--cde-tree-expander-size, 16px)',
-        margin: '0 2px',
+      'span.directory-toggle-slot': {
+        alignItems: 'center',
+        alignSelf: 'stretch',
+        display: 'inline-flex',
+        flexShrink: 0,
+        justifyContent: 'center',
         position: 'relative',
-        width: 'var(--cde-tree-expander-size, 16px)',
-        zIndex: 1,
+
+        'svg.directory-toggle-stem': {
+          inset: 0,
+          overflow: 'visible',
+          pointerEvents: 'none',
+          position: 'absolute',
+        },
       },
 
       'button.directory-toggle': {
         appearance: 'none',
-        backgroundColor: theme.otherVars.tree.inputBg,
-        border: 'var(--cde-tree-guide-width, 1px) solid '
-          + 'var(--cde-tree-guide-color, ' + theme.palette.grey[500] + ')',
-        borderRadius: '2px',
-        color: theme.otherVars.tree.textFg,
+        backgroundColor: 'var(--sr-drawer-bg, ' + theme.otherVars.tree.inputBg + ')',
+        border: '2px solid var(--sr-tree-guide, ' + (theme.palette.grey?.[600] || theme.otherVars.tree.iconFg) + ')',
+        borderRadius: '50%',
+        color: 'var(--sr-fg, ' + theme.otherVars.tree.textFg + ')',
         cursor: 'pointer',
+        flex: '0 0 16px',
+        height: '16px',
+        margin: 0,
         padding: 0,
+        position: 'relative',
+        transition: 'border-color 120ms ease, background-color 120ms ease, color 120ms ease',
+        width: '16px',
+        zIndex: 1,
 
-        '&:not(.open):not(.loading)': {
-          backgroundColor: theme.palette.primary.main,
-          borderColor: theme.palette.primary.main,
-          color: theme.palette.primary.contrastText,
+        '&:hover': {
+          borderColor: 'var(--sr-accent, ' + theme.palette.primary.main + ')',
+          color: 'var(--sr-accent, ' + theme.palette.primary.main + ')',
         },
 
-        '&:before, &:after': {
+        '&:before': {
           backgroundColor: 'currentColor',
+          borderRadius: '1px',
           content: '""',
-          left: '25%',
+          height: '2px',
+          left: 'calc(50% - 4px)',
           position: 'absolute',
-          top: 'calc(50% - (var(--cde-tree-guide-width, 1px) / 2))',
-          width: '50%',
-          height: 'var(--cde-tree-guide-width, 1px)',
+          top: 'calc(50% - 1px)',
+          width: '8px',
         },
 
-        '&:after': {
-          left: 'calc(50% - (var(--cde-tree-guide-width, 1px) / 2))',
-          top: '25%',
-          width: 'var(--cde-tree-guide-width, 1px)',
-          height: '50%',
+        '&:not(.open):not(.loading):after': {
+          backgroundColor: 'currentColor',
+          borderRadius: '1px',
+          content: '""',
+          height: '8px',
+          left: 'calc(50% - 1px)',
+          position: 'absolute',
+          top: 'calc(50% - 4px)',
+          width: '2px',
         },
 
         '&.open:after': {
-          backgroundColor: 'var(--cde-tree-guide-color, '
-            + theme.otherVars.tree.textFg + ')',
-          display: 'block',
-          height: 'calc((var(--cde-tree-row-height, 30px) - '
-            + 'var(--cde-tree-expander-size, 16px)) / 2 + 2px)',
-          left: 'calc(50% - (var(--cde-tree-guide-width, 1px) / 2))',
-          top: '100%',
-          width: 'var(--cde-tree-guide-width, 1px)',
+          display: 'none',
         },
 
         '&.loading': {
@@ -196,16 +183,12 @@ export default function reactAspenOverride(theme) {
         },
       },
 
-      'span.tree-node-terminal.leaf:before': {
-        backgroundColor: 'var(--cde-tree-guide-color, '
-          + theme.otherVars.tree.textFg + ')',
-        borderRadius: '50%',
-        content: '""',
-        height: 'calc(2px + var(--cde-tree-guide-width, 1px))',
-        left: 'calc(50% - 1px)',
-        position: 'absolute',
-        top: 'calc(50% - 1px)',
-        width: 'calc(2px + var(--cde-tree-guide-width, 1px))',
+      'span.tree-node-terminal.leaf': {
+        display: 'inline-block',
+        flex: '0 0 4px',
+        height: '1px',
+        margin: 0,
+        width: '4px',
       },
 
       'input.tree-node-check': {
@@ -242,8 +225,9 @@ export default function reactAspenOverride(theme) {
       '&.active, &.prompt': {
         color: theme.otherVars.tree.textHoverFg + ' !important',
         backgroundColor: theme.otherVars.tree.bgSelected + ' !important',
-        borderColor: theme.otherVars.tree.bgSelected,
-        borderRight: '3px solid ' + theme.palette.primary.main + ' !important',
+        border: 'none !important',
+        boxShadow: 'none !important',
+        outline: 'none',
         'span.file-label': {
           'span.file-name': {
             color: theme.otherVars.textHoverFg,

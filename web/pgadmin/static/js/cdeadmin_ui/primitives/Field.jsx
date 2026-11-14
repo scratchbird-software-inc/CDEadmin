@@ -64,7 +64,7 @@ export const TextField = forwardRef(function TextField({
 
   const generatedId = useId();
   const controlId = idProp || inputProps?.id || generatedId;
-  const helpId = `${controlId}-help`;
+  const helpId = inputProps?.['aria-describedby'] || `${controlId}-help`;
   const isInvalid = Boolean(validationMessage) || Boolean(error);
   const effectiveHelp = validationMessage || helperText;
   const isReadOnly = Boolean(readOnlyProp ?? InputProps?.readOnly ?? inputProps?.readOnly);

@@ -49,6 +49,10 @@ define('pgadmin.node.server', [
       },
       dropAsRemove: true,
       dropPriority: 5,
+      refreshParent: function(item) {
+        const parent = pgBrowser.tree?.hasParent?.(item) ? pgBrowser.tree.parent(item) : null;
+        return Boolean(parent && pgBrowser.tree?.itemData?.(parent)?._type === 'engine_type');
+      },
       hasStatistics: true,
       hasCollectiveStatistics: true,
       can_expand: function(d) {
@@ -133,13 +137,6 @@ define('pgadmin.node.server', [
           applies: ['object','context'], callback: 'disconnect_all_servers',
           priority: 5, label: gettext('Disconnect from all servers'),
           data:{action: 'disconnect_all'}, enable: 'can_disconnect_all'
-        },{
-          name: 'create_server', node: 'server', module: this,
-          applies: ['object', 'context'], callback: 'register_engine_server',
-          category: 'register', priority: 3,
-          label: gettext('Register another server / instance...'),
-          shortcut_preference: ['browser', 'sub_menu_create'],
-          data: {action: 'create'}, enable: 'canCreate', permission: AllPermissionTypes.OBJECT_REGISTER_SERVER
         },{
           name: 'connect_server', node: 'server', module: this,
           applies: ['object', 'context'], callback: 'connect_server',
@@ -381,7 +378,8 @@ define('pgadmin.node.server', [
           const report = (error) => reportServerEditorFailure(engine, error?.message || String(error));
           if(action === 'edit') {
             return tryOpenServerForm({item: nodeItem, mode: 'alter', engine, profileId: nodeData.cde_profile_id,
-              panelTitle: gettext('Edit %s', nodeData.label || nodeData._label)})
+              verifyNow: 'auto', applyLabel: gettext('Apply Changes'),
+              panelTitle: gettext('Server Properties — %s', nodeData.label || nodeData._label)})
               .then((opened) => opened || report(gettext('server form unavailable'))).catch(report);
           }
           // Copy: register a new endpoint under the same group, prefilled from this one's registration.
@@ -427,7 +425,13 @@ define('pgadmin.node.server', [
                   {action: 'endpoint_profile_remove', request: {confirmation: data.name}}))
                 .then(({data: res}) => {
                   if(res?.success === 0) throw new Error(res.errormsg || res.info);
-                  pgBrowser.removeTreeNode(nodeItem, true);
+                  const parentItem = tree.hasParent?.(nodeItem) ? tree.parent(nodeItem) : null;
+                  if (parentItem && tree.itemData?.(parentItem)?._type === 'engine_type') {
+                    pgBrowser.Events.trigger('pgadmin:browser:tree:refresh', parentItem, {openIfClosed: true});
+                    setTimeout(() => tree.select?.(parentItem), 10);
+                  } else {
+                    pgBrowser.removeTreeNode(nodeItem, true);
+                  }
                 })
                 .catch((error) => pgAdmin.Browser.notifier.alertText(
                   gettext('Error removing server: "%s"', label),
@@ -448,26 +452,42 @@ define('pgadmin.node.server', [
         },
         register_engine_server: function(args) {
           const tree = pgBrowser.tree;
-          let item = args?.item || tree.selected();
-          const selected = item ? tree.itemData(item) : undefined;
-          if (!selected) return false;
-          let engineId = selected.engine_id || selected.cde_engine_id;
-          if (!engineId && selected.cde_profile_id) {
+          if (!tree) return false;
+          let item = args?.item || tree.selected?.();
+          const selected = item ? tree.itemData?.(item) : undefined;
+          const registrationContext = args?.registrationContext || {};
+          let engineId =
+            args?.engineId ||
+            registrationContext.engine_id ||
+            selected?.engine_id ||
+            selected?.cde_engine_id;
+          if (!engineId && selected?.cde_profile_id) {
             engineId = endpointProfiles.get(
               selected.cde_profile_id)?.engine_id;
           }
+          if (!engineId && registrationContext.profile_id) {
+            engineId = endpointProfiles.get(
+              registrationContext.profile_id)?.engine_id;
+          }
+          if (!engineId) return false;
           if (engineId === 'opensearch_sql_ppl') engineId = 'opensearch';
-          const registrationContext = args?.registrationContext || {};
           const profiles = endpointProfiles.interfaces(engineId);
           if (!profiles.length) return false;
-          while (item && tree.itemData(item)?._type !== 'server_group') {
-            item = tree.hasParent(item) ? tree.parent(item) : null;
+          while (item && tree.itemData?.(item)?._type !== 'server_group') {
+            item = tree.hasParent?.(item) ? tree.parent(item) : null;
+          }
+          if (!item) {
+            const rootItems = tree.children?.() || [];
+            item =
+              rootItems.find((c) => tree.itemData?.(c)?._type === 'server_group') ||
+              rootItems[0] ||
+              null;
           }
           if (!item) return false;
           const profile = profiles.find((candidate) =>
             candidate.profile_id === registrationContext.profile_id) ||
             profiles.find((candidate) =>
-              candidate.profile_id === selected.cde_profile_id) || profiles[0];
+              candidate.profile_id === selected?.cde_profile_id) || profiles[0];
           const registrationIntent =
             registrationContext.registration_intent || 'endpoint';
           const intentTitles = {
@@ -488,10 +508,9 @@ define('pgadmin.node.server', [
             port: registrationContext.port || profile.default_port,
             db: registrationContext.database || '',
             ...(registrationContext.username ? {username: registrationContext.username} : {}),
-            connect_now: profile.workflow !== 'provider_endpoint',
-            cde_verify_now: profile.workflow === 'provider_endpoint',
+            connect_now: false,
           };
-          const panelTitle = intentTitles[registrationIntent] ||
+          const panelTitle = args?.panelTitle || intentTitles[registrationIntent] ||
             intentTitles.endpoint;
           const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
             this, {action: 'create', item, initialData, panelTitle}
@@ -505,7 +524,8 @@ define('pgadmin.node.server', [
           const retired = LEGACY_REGISTRATION_RETIRED.has(profile.engine_id);
           tryOpenServerForm({
             item, mode: 'create', engine: profile.engine_id, profileId: profile.profile_id,
-            initialData, intent: registrationIntent, verifyNow: initialData.cde_verify_now, panelTitle,
+            initialData, intent: registrationIntent, verifyNow: 'auto', panelTitle,
+            applyLabel: args?.applyLabel,
           }).then((opened) => {
             if(opened) return;
             if(retired) reportServerEditorFailure(profile.engine_id, gettext('server form unavailable'));
@@ -544,8 +564,17 @@ define('pgadmin.node.server', [
             !data?.cde_endpoint && data?.connected;
           if (!providerReady && !postgresReady && !localProfile) {
             if(data?.cde_endpoint) {
+              let verifyTitle = gettext('Verify Endpoint');
+              if (initialTab === 'connections' &&
+                  ['define', 'attach'].includes(initialContext.database_mode)) {
+                verifyTitle = gettext('Authenticate Server to Register Database');
+              } else if (initialTab === 'connections' &&
+                  initialContext.database_mode === 'create') {
+                verifyTitle = gettext('Authenticate Server to Create Database');
+              }
               this.callbacks.verify_cde_endpoint.call(this, {
                 item,
+                title: verifyTitle,
                 onSuccess: ()=>this.callbacks.open_cde_workspace.call(
                   this, {item}, initialTab, initialContext
                 ),
@@ -709,19 +738,31 @@ define('pgadmin.node.server', [
             return false;
           }
           showEndpointVerification(
-            gettext('Verify Endpoint'), node, data, tree, item,
+            input.title || gettext('Verify Endpoint'), node, data, tree, item,
             (response) => {
               data.runtime_verification_state =
                 response.data.runtime_verification_state;
+              if (response.data.verified_runtime_version) {
+                data.verified_runtime_version = response.data.verified_runtime_version;
+              }
+              if (response.data.username || response.data.connected_as) {
+                data.username = response.data.username || response.data.connected_as;
+              }
               data.is_password_saved = response.data.is_password_saved;
               data.cde_session_authenticated = true;
-              // Preserve the live menu state; persisted verification is not
-              // sufficient to decide whether this browser can disconnect.
+              // Re-enable server actions that were gated solely on endpoint verification,
+              // while respecting any engine-level database create_form restriction.
+              const verifiedProfile = endpointProfiles?.get?.(data.cde_profile_id);
+              const createForm = verifiedProfile?.form_contract?.database?.forms?.create;
               (data.cde_context_actions || []).forEach(action => {
-                if (action.handler === 'disconnect_endpoint' &&
-                    action.disabled_reason === 'Endpoint is not verified.') {
-                  action.enabled = true;
-                  action.disabled_reason = '';
+                if (['Endpoint is not verified.', 'Verify this endpoint before using it.'].includes(action.disabled_reason)) {
+                  if (String(action.command_id).endsWith('.create_database') && createForm?.supported === false) {
+                    action.enabled = false;
+                    action.disabled_reason = createForm.disabled_reason || '';
+                  } else {
+                    action.enabled = true;
+                    action.disabled_reason = '';
+                  }
                 }
               });
               if (!input.databaseTargetId) showProviderWorkspace(
@@ -734,8 +775,9 @@ define('pgadmin.node.server', [
                 data.icon = response.data.icon;
                 tree.addIcon(item, {icon: response.data.icon});
               }
+              pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:node:updated', item, data, data);
               pgAdmin.Browser.notifier.success(response.info);
-              if (!input.openOnSuccessItem && !input.onSuccess) {
+              if (!input.openOnSuccessItem) {
                 this.callbacks.refresh.call(this, null, item);
               }
               if (typeof input.onSuccess === 'function') {
@@ -1540,9 +1582,10 @@ define('pgadmin.node.server', [
       parent_type: 'server',
       type: 'cde_database_target',
       label: gettext('Provider database'),
-      hasProperties: false,
+      hasProperties: true,
       hasSQL: false,
-      hasStatistics: false,
+      hasStatistics: true,
+      hasCollectiveStatistics: true,
       hasDependencies: false,
       hasDependents: false,
       can_expand: true,

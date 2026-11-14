@@ -11,7 +11,14 @@ import {FieldControl, ObjectEditor, OperationDialog, RecordGrid} from '../../../
 import {gridColumns, MAX_INLINE_COLUMNS} from '../../../pgadmin/static/js/cdeadmin_ui/objects/RecordGrid';
 import {MAX_CHECKBOX_CHOICES, showsChoicesAsCheckboxes} from '../../../pgadmin/static/js/cdeadmin_ui/objects/FieldControl';
 import {enterSubmits} from '../../../pgadmin/static/js/cdeadmin_ui/overlays/Dialog';
-import {validateDraft} from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
+import {validateDraft, initialDraft} from '../../../pgadmin/static/js/cdeadmin_ui/objects/descriptors';
+import {getSystemTimeZone} from '../../../pgadmin/static/js/cdeadmin_ui/objects/smartFieldDefaults';
+import {
+  computeCellGridLayout,
+  estimateFieldNaturalWidth,
+} from '../../../pgadmin/static/js/cdeadmin_ui/objects/formCellLayout';
+import {navigatorTabIdsForNodeType} from '../../../pgadmin/static/js/BrowserComponent';
+import {resolveStatisticsUrl} from '../../../pgadmin/misc/statistics/static/js/Statistics';
 import {loadEngineBundle} from './familyFixtures';
 
 const READY = {plan_id: 'p1', state: 'ready', execution_available: true,
@@ -290,5 +297,131 @@ describe('free-text controls of provider-native forms (browser pass 2026-11-12)'
     expect(JSON.parse(box.value)).toEqual({a: 1});
     fireEvent.change(box, {target: {value: '{"a": 2}'}});
     expect(onChange).toHaveBeenCalledWith('{"a": 2}');
+  });
+});
+
+describe('compact pop-below hints, sample placeholders and OS defaults (2026-11-13)', () => {
+  it('renders field help as a non-error pop-below element and validation errors with data-error="true"', () => {
+    const {rerender} = render(<Theme><FieldControl
+      field={{field_id: 'port', label: 'Server port', control: 'number', help: 'TCP port of the server.', placeholder: 'e.g. 3050'}}
+      value={3050} onChange={() => {}} /></Theme>);
+    const helpNode = screen.getByText('TCP port of the server.');
+    expect(helpNode.classList.contains('sr-field-help')).toBe(true);
+    expect(helpNode.getAttribute('data-error')).toBeNull();
+    expect(screen.getByRole('spinbutton', {name: 'Server port'}).getAttribute('placeholder')).toBe('e.g. 3050');
+
+    rerender(<Theme><FieldControl
+      field={{field_id: 'port', label: 'Server port', control: 'number', help: 'TCP port of the server.'}}
+      value="" error="Server port is required." onChange={() => {}} /></Theme>);
+    const errNode = screen.getByText('Server port is required.');
+    expect(errNode.getAttribute('data-error')).toBe('true');
+  });
+
+  it('autopopulates OS local time zone on session_time_zone and offers a combobox dropdown of other time zones', () => {
+    const fbServerForm = loadEngineBundle('firebird').forms.server;
+    const draft = initialDraft(fbServerForm);
+    const osTz = getSystemTimeZone();
+    expect(draft.session_time_zone).toBe(osTz);
+    expect(draft.charset).toBe('UTF8');
+
+    const tzField = fbServerForm.tabs
+      .flatMap((t) => t.fields)
+      .find((f) => f.field_id === 'session_time_zone');
+    const onChange = jest.fn();
+    render(<Theme><FieldControl field={tzField} value={draft.session_time_zone} onChange={onChange} /></Theme>);
+    const combo = screen.getByRole('combobox', {name: /Session time zone/i});
+    expect(combo.value).toBe(osTz);
+    fireEvent.focus(combo);
+    const listbox = screen.getByRole('listbox');
+    expect(within(listbox).getByRole('option', {name: 'UTC'})).toBeTruthy();
+    fireEvent.mouseDown(within(listbox).getByRole('option', {name: 'UTC'}));
+    expect(onChange).toHaveBeenCalledWith('UTC');
+  });
+});
+
+describe('datatype-sized dynamic cell packing and selection-scoped tabs (2026-11-13)', () => {
+  it('packs fields into average-sized cells and leaves trailing cells empty when the next field exceeds remaining space', () => {
+    // 9 fields whose average natural width is 200px => 1 cell = 200px.
+    // Field 1 = 250px (1.25 cells -> spans cells 1..2), Field 2 = 100px (0.5 cells -> fits in cell 3),
+    // Field 3 = 200px (1.0 cell -> starts on row 2, cell 1).
+    const fields = [
+      {field_id: 'f1', width_px: 250},
+      {field_id: 'f2', width_px: 100},
+      {field_id: 'f3', width_px: 200},
+      {field_id: 'f4', width_px: 200},
+      {field_id: 'f5', width_px: 200},
+      {field_id: 'f6', width_px: 200},
+      {field_id: 'f7', width_px: 250},
+      {field_id: 'f8', width_px: 200},
+      {field_id: 'f9', width_px: 200},
+    ];
+    // 3 cells of 200px + 2 gaps of 16px = 632px available width => 3 columns.
+    const layout = computeCellGridLayout(fields, 640, {}, {colGap: 16});
+    expect(layout.cellWidth).toBe(200);
+    expect(layout.numCols).toBe(3);
+    expect(layout.placements[0]).toMatchObject({colStart: 1, span: 2, row: 1, gridColumn: '1 / span 2'});
+    expect(layout.placements[1]).toMatchObject({colStart: 3, span: 1, row: 1, gridColumn: '3 / span 1'});
+    expect(layout.placements[2]).toMatchObject({colStart: 1, span: 1, row: 2, gridColumn: '1 / span 1'});
+
+    // When field 2 also requires >1 cell (e.g. 250px = 1.25 cells -> span 2), cell 3 on row 1 is left empty
+    // and field 2 starts on row 2 at cell 1.
+    const widerSecond = [
+      {field_id: 'f1', width_px: 250},
+      {field_id: 'f2', width_px: 250},
+      {field_id: 'f3', width_px: 100},
+      {field_id: 'f4', width_px: 200},
+      {field_id: 'f5', width_px: 200},
+      {field_id: 'f6', width_px: 200},
+      {field_id: 'f7', width_px: 200},
+      {field_id: 'f8', width_px: 200},
+      {field_id: 'f9', width_px: 200},
+    ];
+    const wrapped = computeCellGridLayout(widerSecond, 640, {}, {colGap: 16});
+    expect(wrapped.numCols).toBe(3);
+    expect(wrapped.placements[0]).toMatchObject({colStart: 1, span: 2, row: 1, gridColumn: '1 / span 2'});
+    expect(wrapped.placements[1]).toMatchObject({colStart: 1, span: 2, row: 2, gridColumn: '1 / span 2'});
+    expect(wrapped.placements[2]).toMatchObject({colStart: 3, span: 1, row: 2, gridColumn: '3 / span 1'});
+  });
+
+  it('sizes fields according to their datatype and renders prose code comments as a textarea', () => {
+    const portWidth = estimateFieldNaturalWidth({field_id: 'port', label: 'Port', control: 'number'});
+    const hostWidth = estimateFieldNaturalWidth({field_id: 'host', label: 'Server host', control: 'text'});
+    const pathWidth = estimateFieldNaturalWidth(
+      {field_id: 'database_root', label: 'Approved database creation root', control: 'text'}
+    );
+    expect(portWidth).toBeLessThan(hostWidth);
+    expect(hostWidth).toBeLessThan(pathWidth);
+
+    const fbServerForm = loadEngineBundle('firebird').forms.server;
+    const commentField = fbServerForm.tabs
+      .flatMap((t) => t.fields)
+      .find((f) => f.field_id === 'comment');
+    render(<Theme><FieldControl field={commentField} value="" onChange={() => {}} /></Theme>);
+    expect(screen.getByRole('textbox', {name: /Comments/i}).tagName).toBe('TEXTAREA');
+  });
+
+  it('hides Connectors, SQL, Dependencies and Dependents on servers and resolves provider statistics URLs', () => {
+    expect(navigatorTabIdsForNodeType('server_group')).toEqual(['connectors']);
+    expect(navigatorTabIdsForNodeType('engine_type')).toEqual(['properties', 'statistics']);
+    expect(navigatorTabIdsForNodeType('localhost_placeholder')).toEqual(['properties', 'statistics']);
+    expect(navigatorTabIdsForNodeType('server')).toEqual(['properties', 'statistics']);
+    expect(navigatorTabIdsForNodeType('cde_database_target')).toEqual(['properties', 'statistics']);
+    expect(navigatorTabIdsForNodeType('database')).toEqual(['properties', 'sql', 'statistics']);
+
+    expect(resolveStatisticsUrl(
+      {_type: 'engine_type', engine_id: 'firebird'},
+      {server_group: {_id: 1}},
+      {hasStatistics: true}
+    )).toBe('/browser/engine_type/stats/1/firebird');
+    expect(resolveStatisticsUrl(
+      {_type: 'server', _id: 7},
+      {server_group: {_id: 1}},
+      {hasStatistics: true}
+    )).toBe('/browser/server/stats/1/7');
+    expect(resolveStatisticsUrl(
+      {_type: 'cde_database_target', _id: 'emp_target', _pid: 7},
+      {server_group: {_id: 1}, server: {_id: 7}},
+      {hasStatistics: true}
+    )).toBe('/browser/server/stats/1/7?database_target_id=emp_target');
   });
 });

@@ -62,6 +62,9 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   private readonly handleBranchPrefsChanged = () => {
     this.setState({ branchPrefs: readBranchedTreePreferences() });
   };
+  private readonly handleLanguageChanged = () => {
+    this.forceUpdate();
+  };
   constructor(props: IFileTreeXProps) {
     super(props);
     this.events = new Notificar();
@@ -78,32 +81,25 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
     const { height, model, disableCache } = this.props;
     const { decorations } = model;
     const { branchPrefs } = this.state;
-    const stickyAncestors = branchPrefs.stickyAncestors && this.activeFile && ((this.activeFile as any).depth ?? 0) >= 3
+    const stickyAncestors = branchPrefs.stickyAncestors && this.activeFile && ((this.activeFile as any).depth ?? 0) >= 4
       ? collectActiveAncestors(this.activeFile, model?.root)
       : [];
 
     return <div
-      onKeyDown={this.handleKeyDown}
-      className='file-tree'
-      onBlur={this.handleBlur}
-      onClick={this.handleClick}
-      onScroll={this.props.onScroll}
-      ref={this.wrapperRef}
-      role="tree"
-      aria-label={this.props.ariaLabel || 'Object explorer'}
       style={{
         height: height || 'calc(100vh - 60px)',
         width: '100%',
         display: 'flex',
         flexDirection: 'column',
-        flex: 1
-      }}
-      tabIndex={-1}>
+        flex: 1,
+        minHeight: 0,
+      }}>
       {stickyAncestors.length > 0 && (
-        <div
+        <nav
           className="sr-branched-sticky-ancestors"
           data-cdeadmin-qa-key="pgtree-sticky-ancestors"
           aria-label="Active catalog branch ancestors"
+          style={{flexShrink: 0}}
         >
           {stickyAncestors.map((anc, idx) => {
             const ancLabel = anc?.getMetadata?.('data')?.label || anc?.fileName || '';
@@ -112,7 +108,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
                 {idx > 0 && <span aria-hidden="true" style={{opacity: 0.5}}>›</span>}
                 <button
                   type="button"
-                  className="sr-branched-sticky-crumb"
+                  className="sr-branched-ancestor-crumb"
                   onClick={(ev) => {
                     ev.stopPropagation();
                     this.setActiveFile(anc, true, 'auto');
@@ -123,36 +119,54 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
               </React.Fragment>
             );
           })}
-        </div>
+        </nav>
       )}
-      <div style={{flex: 1, minHeight: 0, width: '100%'}}>
-        <AutoSizer onResize={this.onResize}
-          renderProp={({ width = 100, height = 100 }) => (
-            <FileTree
-              height={height}
-              width={width}
-              model={model}
-              itemHeight={this.props.itemHeight || FileTreeItem.renderHeight}
-              onReady={this.handleTreeReady}
-              disableCache={disableCache || false}
-            >
-              {(props: IItemRendererProps) => <FileTreeItem
-                item={props.item}
-                itemType={props.itemType}
-                decorations={decorations.getDecorations(props.item as FileEntry|Directory)}
-                activeItem={this.activeFile}
-                branchStepX={branchPrefs.stepX}
-                branchRadius={branchPrefs.radius}
-                onClick={this.handleItemClicked}
-                onDoubleClick={this.handleItemDoubleClicked}
-                onContextMenu={this.handleItemCtxMenu}
-                onMouseEnter={this.onItemMouseEnter}
-                onMouseLeave={this.onItemMouseLeave}
-                changeDirectoryCount={this.changeDirectoryCount}
-                events={this.events}/>}
-            </FileTree>
-          )}
-        />
+      <div
+        onKeyDown={this.handleKeyDown}
+        className='file-tree'
+        onBlur={this.handleBlur}
+        onClick={this.handleClick}
+        onScroll={this.props.onScroll}
+        ref={this.wrapperRef}
+        role="tree"
+        aria-label={this.props.ariaLabel || 'Object explorer'}
+        style={{
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+        }}
+        tabIndex={-1}>
+        <div style={{flex: 1, minHeight: 0, width: '100%'}}>
+          <AutoSizer onResize={this.onResize}
+            renderProp={({ width = 100, height = 100 }) => (
+              <FileTree
+                height={height}
+                width={width}
+                model={model}
+                itemHeight={this.props.itemHeight || FileTreeItem.renderHeight}
+                onReady={this.handleTreeReady}
+                disableCache={disableCache || false}
+              >
+                {(props: IItemRendererProps) => <FileTreeItem
+                  item={props.item}
+                  itemType={props.itemType}
+                  decorations={decorations.getDecorations(props.item as FileEntry|Directory)}
+                  activeItem={this.activeFile}
+                  branchStepX={branchPrefs.stepX}
+                  branchRadius={branchPrefs.radius}
+                  onClick={this.handleItemClicked}
+                  onDoubleClick={this.handleItemDoubleClicked}
+                  onContextMenu={this.handleItemCtxMenu}
+                  onMouseEnter={this.onItemMouseEnter}
+                  onMouseLeave={this.onItemMouseLeave}
+                  changeDirectoryCount={this.changeDirectoryCount}
+                  events={this.events}/>}
+              </FileTree>
+            )}
+          />
+        </div>
       </div>
     </div>;
   }
@@ -160,6 +174,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   public componentDidMount() {
     if (typeof window !== 'undefined') {
       window.addEventListener('scratchrobin:branched-tree-prefs', this.handleBranchPrefsChanged);
+      window.addEventListener('scratchrobin:language-changed', this.handleLanguageChanged);
     }
     for(const child of this.props.model.root.children) {
       this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'loaded', child);
@@ -169,6 +184,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   componentWillUnmount() {
     if (typeof window !== 'undefined') {
       window.removeEventListener('scratchrobin:branched-tree-prefs', this.handleBranchPrefsChanged);
+      window.removeEventListener('scratchrobin:language-changed', this.handleLanguageChanged);
     }
     const { model } = this.props;
     model.decorations.removeDecoration(this.activeFileDec);
@@ -375,9 +391,12 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   private readonly refresh = async (item): Promise<void> => {
     const isOpen = item.isExpanded;
     if (item.children && item.children.length > 0) {
-      for(const entry of item.children) {
+      for(const entry of [...item.children]) {
         await this.remove(entry).then(() => {/*intentional*/}, () => {console.warn('Error removing item');});
       }
+    }
+    if (Array.isArray((item as any)._children) && (item as any)._children.length === 0) {
+      (item as any)._children = null;
     }
     if (isOpen) {
       const ref = FileTreeItem.itemIdToRefMap.get(item.id);
@@ -387,9 +406,20 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
       }
 
       await this.fileTreeHandle.closeDirectory(item as Directory);
+      (item as any)._children = null;
       await this.fileTreeHandle.openDirectory(item as Directory);
       await this.changeResolvePath(item as Directory);
+      if (item._metadata?.data) {
+        const count = Array.isArray(item.children) ? item.children.length : 0;
+        if (count === 0) {
+          item._metadata.data.has_children = false;
+          await this.fileTreeHandle.closeDirectory(item as Directory);
+        } else {
+          item._metadata.data.has_children = true;
+        }
+      }
       this.changeDirectoryCount(item);
+      this.forceUpdate();
 
       if (ref) {
         this.hideLoader(ref);
@@ -400,7 +430,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   private readonly unload = async (item): Promise<void> => {
     const isOpen = item.isExpanded;
     if (item.children && item.children.length > 0) {
-      for(const entry of item.children) {
+      for(const entry of [...item.children]) {
         await this.remove(entry).then(() => {/*intentional*/}, error => {console.warn(error);});
       }
     }
@@ -701,9 +731,18 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   };
 
   private readonly handleItemDoubleClicked = async (ev: React.MouseEvent, item: FileOrDir) => {
+    if (item._metadata?.data?._type === 'cde_resource' && item._metadata?.data?.has_children === false) {
+      await this.setActiveFile(item as FileEntry);
+      this.events.dispatch(FileTreeXEvent.onTreeEvents, ev, 'activated', item);
+      return;
+    }
     if (item._metadata?.data?._type === 'cde_resource') {
       await this.setActiveFile(item as FileEntry);
       this.events.dispatch(FileTreeXEvent.onTreeEvents, ev, 'activated', item);
+      return;
+    }
+    if (item._metadata?.data?.has_children === false && !(Array.isArray((item as any).children) && (item as any).children.length > 0)) {
+      await this.setActiveFile(item as FileEntry);
       return;
     }
     await this.toggleDirectory(item as Directory);

@@ -31,6 +31,8 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
   onScroll,
   style,
   viewportStyle,
+  contentStyle,
+  fillViewport = false,
   forceBaseScrollArea = false,
   children,
   ...props
@@ -41,6 +43,11 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
 
   const showVertical = orientation === 'both' || orientation === 'vertical';
   const showHorizontal = orientation === 'both' || orientation === 'horizontal';
+  const rootClassName = [
+    'sr-scroll-root',
+    fillViewport ? 'sr-scroll-fill' : '',
+    className,
+  ].filter(Boolean).join(' ');
 
   // In synchronous JSDOM tests (where layout dimensions are 0x0 and BaseScrollArea
   // schedules un-awaited post-mount measurement timeouts), render the identical
@@ -54,7 +61,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
         role={label ? 'region' : props.role}
         aria-label={label}
         tabIndex={label ? (props.tabIndex ?? 0) : props.tabIndex}
-        className={['sr-scroll-root', className].filter(Boolean).join(' ')}
+        className={rootClassName}
         style={style}
         {...props}
       >
@@ -64,7 +71,10 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
           className={['sr-scroll-viewport', viewportClassName].filter(Boolean).join(' ')}
           style={{overflowX, overflowY, ...viewportStyle}}
         >
-          <div className={['sr-scroll-content', contentClassName].filter(Boolean).join(' ')}>
+          <div
+            className={['sr-scroll-content', contentClassName].filter(Boolean).join(' ')}
+            style={contentStyle}
+          >
             {children}
           </div>
         </div>
@@ -78,7 +88,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
       role={label ? 'region' : props.role}
       aria-label={label}
       tabIndex={label ? (props.tabIndex ?? 0) : props.tabIndex}
-      className={['sr-scroll-root', className].filter(Boolean).join(' ')}
+      className={rootClassName}
       style={style}
       {...props}
     >
@@ -90,6 +100,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
       >
         <BaseScrollArea.Content
           className={['sr-scroll-content', contentClassName].filter(Boolean).join(' ')}
+          style={contentStyle}
         >
           {children}
         </BaseScrollArea.Content>
@@ -119,6 +130,8 @@ ScratchScrollArea.propTypes = {
   onScroll: PropTypes.func,
   style: PropTypes.object,
   viewportStyle: PropTypes.object,
+  contentStyle: PropTypes.object,
+  fillViewport: PropTypes.bool,
   forceBaseScrollArea: PropTypes.bool,
   role: PropTypes.string,
   tabIndex: PropTypes.number,

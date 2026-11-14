@@ -109,10 +109,17 @@ export function showEndpointVerification(
     itemNodeData, 'verify_endpoint', nodeData, true
   );
   const profile = endpointProfiles.get(nodeData.cde_profile_id);
+  const rawUsername =
+    nodeData.username && !['endpoint-profile', 'embedded-process'].includes(nodeData.username)
+      ? nodeData.username
+      : '';
+  const suggestedUsername = rawUsername || (profile?.engine_id === 'firebird' ? 'SYSDBA' : '');
   const prompt = {
     prompt_password: true,
     prompt_tunnel_password: false,
-    username: nodeData.username,
+    username: rawUsername,
+    suggested_username: suggestedUsername,
+    require_username_input: Boolean(profile?.route_kind === 'network' && !rawUsername),
     server_label: nodeData.label || nodeData._label,
     allow_save_password: current_user.allow_save_password,
     allow_user_override: profile?.route_kind === 'network',
@@ -138,9 +145,10 @@ export function showEndpointVerification(
     ), {id: 'id-verify-endpoint'}
   );
   const verify = () => {
-    // An explicit passwordless account (owner direction 2026-10-29) is
-    // verified the same way: without a password, prompting only on 401.
-    if (profile?.requires_secret === false || nodeData.cde_passwordless) {
+    // An explicit passwordless account (owner direction 2026-10-29) or a
+    // saved endpoint password is verified first without prompting, falling
+    // back to the credential dialog only if the server responds with 401.
+    if (profile?.requires_secret === false || nodeData.cde_passwordless || nodeData.is_password_saved) {
     // Passwordless and conditionally-authenticated providers must first be
     // verified without fabricating a database password. If the retained
     // route activates an optional secret, the server responds with 401 and
@@ -307,15 +315,53 @@ export function showProviderWorkspace(
   const panelId = `id-provider-workspace-${++providerWorkspaceSequence}`;
   const closeGuards = createCloseGuardRegistry();
   const onClose = () => workspace.close(panelId);
+  const resolveServerTreeItem = () => {
+    const tree = pgAdmin?.Browser?.tree;
+    if (!tree || !itemNodeData) return itemNodeData;
+    let cur = itemNodeData;
+    while (cur && tree.itemData?.(cur)?._type !== 'server' && tree.hasParent?.(cur)) {
+      cur = tree.parent(cur);
+    }
+    return cur || itemNodeData;
+  };
+  const refreshServerTargets = () => {
+    const srvItem = resolveServerTreeItem();
+    if (srvItem) {
+      pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:tree:refresh', srvItem, {openIfClosed: true});
+    }
+  };
+  const refreshDatabaseCatalog = () => {
+    const tree = pgAdmin?.Browser?.tree;
+    if (!tree || !itemNodeData) return;
+    let cur = itemNodeData;
+    while (
+      cur &&
+      !['cde_database_target', 'database', 'server'].includes(tree.itemData?.(cur)?._type) &&
+      tree.hasParent?.(cur)
+    ) {
+      cur = tree.parent(cur);
+    }
+    if (cur && tree.itemData?.(cur)?._type === 'server' && databaseTargetId) {
+      const dbMatch = (tree.children?.(cur) || []).find(
+        (child) => tree.itemData?.(child)?.cde_database_target_id === databaseTargetId
+      );
+      if (dbMatch) cur = dbMatch;
+    }
+    if (cur) {
+      pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:tree:refresh', cur, {openIfClosed: true});
+    }
+  };
   const recoveryTargetRegistered = () => {
     const tree = pgAdmin.Browser.tree;
-    const parent = tree.parent(itemNodeData);
-    const connector = pgAdmin.Browser.Nodes[tree.itemData(parent)?._type];
-    connector?.callbacks?.refresh?.call(connector, null, parent);
+    const srvItem = resolveServerTreeItem();
+    const parent = srvItem && tree?.hasParent?.(srvItem) ? tree.parent(srvItem) : null;
+    if (parent) {
+      pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:tree:refresh', parent, {openIfClosed: true});
+    }
   };
   const serverTool=initialTab==='mysql-routers' ? <MySQLRouters post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-physical' ? <MySQLPhysical onTargetRegistered={recoveryTargetRegistered} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-spatial' ? <MySQLSpatial databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-data-drift' ? <MySQLDataDrift databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-content-search' ? <MySQLContentSearch databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-workload' ? <MySQLWorkload databaseTargetId={databaseTargetId} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-sandboxes' ? <MySQLSandboxes post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-topologies' ? <MySQLTopologies post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-instance-restores' ? <MySQLInstanceRestores post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-instance-backups' ? <MySQLInstanceBackups endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='mysql-host' ? <MySQLHost post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='duckdb-session-receipts' ? <DuckDBOperationReceipts databaseTargetId={databaseTargetId}
     post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab==='sqlite-recovery' ? <SQLiteRecovery databaseTargetId={databaseTargetId}
-    onTargetCatalogChanged={() => nodeObj.callbacks.refresh.call(nodeObj,null,itemNodeData)}
+    onTargetCatalogChanged={refreshServerTargets}
     post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlog-replay','mariadb-binlog-replay'].includes(initialTab) ?
     <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
@@ -331,12 +377,7 @@ export function showProviderWorkspace(
       <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
         post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
           .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
-        onChanged={() => {
-          const tree = pgAdmin.Browser.tree;
-          const connector = tree.parent(itemNodeData);
-          const node = pgAdmin.Browser.Nodes[tree.itemData(connector)?._type];
-          node?.callbacks?.refresh?.call(node, null, connector);
-        }} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
+        onChanged={recoveryTargetRegistered} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
         (['mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : nodeData.cde_profile_id === 'sqlite-native' ? 'sqlite' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
           targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
           <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
@@ -345,9 +386,8 @@ export function showProviderWorkspace(
           endpointUrl={endpointUrl}
           initialTab={initialTab}
           initialContext={initialContext}
-          onTargetCatalogChanged={() => {
-            nodeObj.callbacks.refresh.call(nodeObj, null, itemNodeData);
-          }}
+          onTargetCatalogChanged={refreshServerTargets}
+          onCatalogMutated={refreshDatabaseCatalog}
           onRecreateEmpty={(databasePath) => {
             showProviderWorkspace(
               gettext('Create empty Firebird database'), nodeObj, nodeData,

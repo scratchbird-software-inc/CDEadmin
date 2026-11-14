@@ -213,6 +213,7 @@ def test_color_schemes_typography_placements_engines_and_security(tmp_path):
     assert eng_get.status_code == 200
     engines_data = eng_get.get_json()
     assert len(engines_data['engines']) >= 10
+    assert all('local_detected' in row and 'local_available' in row for row in engines_data['engines'])
 
     eng_put = client.put(
         '/cdeadmin/api/shell/engines',
@@ -264,3 +265,18 @@ def test_color_schemes_typography_placements_engines_and_security(tmp_path):
     alice_authz2 = _store.resolve_user_authorization('alice')
     alice_apps2 = {a['id']: a['authorized'] for a in alice_authz2['applications']}
     assert alice_apps2['bi-designer'] is False
+
+    # 4. Live language switching returns merged UI translation catalog immediately
+    lang_post = client.post('/cdeadmin/api/shell/language', json={'language': 'fr'})
+    assert lang_post.status_code == 200
+    lang_payload = lang_post.get_json()
+    assert lang_payload['current'] == 'fr'
+    assert isinstance(lang_payload.get('catalog'), dict)
+    assert lang_payload['catalog'].get('Properties') == 'Propriétés'
+    assert lang_payload['catalog'].get('Verify Endpoint') == 'Vérifier le point de terminaison'
+
+    lang_get = client.get('/cdeadmin/api/shell/languages')
+    assert lang_get.status_code == 200
+    lang_get_payload = lang_get.get_json()
+    assert lang_get_payload['current'] == 'fr'
+    assert lang_get_payload['catalog'].get('Connectors (%s)') == 'Connecteurs (%s)'

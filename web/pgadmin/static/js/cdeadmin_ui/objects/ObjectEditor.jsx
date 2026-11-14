@@ -20,7 +20,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box, Grid, ScrollArea, Stack} from '../primitives/Layout';
+import {Box, ScrollArea, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Tab} from '../navigation/TabsAndBreadcrumbs';
 import FormReference from '../navigation/FormReference';
@@ -28,7 +28,9 @@ import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
 import FieldControl from './FieldControl';
-import {activeFields, initialDraft, toBackendDraft, validateDraft} from './descriptors';
+import {activeFields, fieldOptions, initialDraft, toBackendDraft, validateDraft} from './descriptors';
+import {computeCellGridLayout} from './formCellLayout';
+import {resolveSmartOptions} from './smartFieldDefaults';
 
 /** Extract SQL text from a provider plan's command preview, whatever its shape. */
 export function planSqlText(plan) {
@@ -64,6 +66,131 @@ function cellErrorsFor(fieldId, errors) {
   return Object.fromEntries(Object.entries(errors).filter(([key]) => key.startsWith(prefix)));
 }
 
+const COL_GAP_PX = 16;
+const ROW_GAP_PX = 12;
+
+function AdaptiveFieldGroupGrid({
+  fields,
+  draft,
+  errors,
+  shownError,
+  mode,
+  context,
+  resourceKind,
+  disabled,
+  fixedFields,
+  onFieldChange,
+}) {
+  const containerRef = useRef(null);
+  const [availableWidth, setAvailableWidth] = useState(760);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const w = el.clientWidth || el.getBoundingClientRect?.().width || 0;
+      if (w > 80) {
+        setAvailableWidth((prev) => (Math.abs(prev - w) >= 4 ? w : prev));
+      }
+    };
+    measure();
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    return undefined;
+  }, []);
+
+  const optionsByField = useMemo(() => {
+    const map = {};
+    for (const field of fields) {
+      const raw = fieldOptions(field, {context, draft, resourceKind});
+      map[field.field_id] = resolveSmartOptions(field, raw);
+    }
+    return map;
+  }, [fields, context, draft, resourceKind]);
+
+  const layout = useMemo(
+    () => computeCellGridLayout(fields, availableWidth, optionsByField, {colGap: COL_GAP_PX}),
+    [fields, availableWidth, optionsByField]
+  );
+
+  const placementByField = useMemo(() => {
+    const map = new Map();
+    for (const p of layout.placements) {
+      map.set(p.fieldId, p);
+    }
+    return map;
+  }, [layout.placements]);
+
+  return (
+    <div
+      ref={containerRef}
+      data-cdeadmin-qa-key="object-editor.cell-grid"
+      data-cell-columns={layout.numCols}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${layout.numCols}, minmax(0, 1fr))`,
+        columnGap: `${COL_GAP_PX}px`,
+        rowGap: `${ROW_GAP_PX}px`,
+        alignItems: 'start',
+        width: '100%',
+      }}
+    >
+      {fields.map((field) => {
+        const show = shownError(field.field_id);
+        const placement = placementByField.get(field.field_id) || {row: 1, colStart: 1, span: 1};
+        return (
+          <div
+            key={field.field_id}
+            data-cell-span={placement.span}
+            style={{
+              gridRow: placement.row,
+              gridColumn: `${placement.colStart} / span ${placement.span}`,
+              minWidth: 0,
+            }}
+          >
+            <FieldControl
+              field={field}
+              value={draft[field.field_id]}
+              draft={draft}
+              context={context}
+              resourceKind={resourceKind}
+              error={show ? errors[field.field_id] : undefined}
+              cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined}
+              mode={mode}
+              disabled={
+                disabled ||
+                fixedFields.includes(field.field_id) ||
+                (mode === 'alter' && field.editable_after_create === false)
+              }
+              onChange={(value) => onFieldChange(field.field_id, value)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+AdaptiveFieldGroupGrid.propTypes = {
+  fields: PropTypes.array.isRequired,
+  draft: PropTypes.object.isRequired,
+  errors: PropTypes.object.isRequired,
+  shownError: PropTypes.func.isRequired,
+  mode: PropTypes.string.isRequired,
+  context: PropTypes.object,
+  resourceKind: PropTypes.string,
+  disabled: PropTypes.bool,
+  fixedFields: PropTypes.arrayOf(PropTypes.string),
+  onFieldChange: PropTypes.func.isRequired,
+};
+
 function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, fixedFields=[],
   onFieldChange}) {
   // A hidden field (registration envelope: profile, intent, verification, server group) stays in
@@ -90,21 +217,21 @@ function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourc
     </Box>}
     {visibleGroups.map((group) => <Box key={group.name || '_'} component="section"
       aria-label={group.name || tab.title}>
-      {group.name && !useSubTabs && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
-        textTransform: 'uppercase', color: 'text.secondary'}}>{group.name}</Box>}
-      <Grid columns={group.fields.some((field) => ['grid', 'code', 'privileges', 'keyvalue'].includes(field.control)) ?
-        1 : 'repeat(auto-fit, minmax(260px, 1fr))'} gap="standard">
-        {group.fields.map((field) => {
-          const show = shownError(field.field_id);
-          return <FieldControl key={field.field_id} field={field}
-            value={draft[field.field_id]} draft={draft} context={context} resourceKind={resourceKind}
-            error={show ? errors[field.field_id] : undefined}
-            cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined} mode={mode}
-            disabled={disabled || fixedFields.includes(field.field_id) ||
-              (mode === 'alter' && field.editable_after_create === false)}
-            onChange={(value) => onFieldChange(field.field_id, value)} />;
-        })}
-      </Grid>
+      {group.name && !useSubTabs && <Box component="h4" sx={{m: 0, mb: 1.25, pb: 0.5, fontSize: '0.73rem',
+        fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: 'text.secondary',
+        borderBottom: '1px solid', borderColor: 'divider'}}>{group.name}</Box>}
+      <AdaptiveFieldGroupGrid
+        fields={group.fields}
+        draft={draft}
+        errors={errors}
+        shownError={shownError}
+        mode={mode}
+        context={context}
+        resourceKind={resourceKind}
+        disabled={disabled}
+        fixedFields={fixedFields}
+        onFieldChange={onFieldChange}
+      />
     </Box>)}
   </Stack>;
 }
@@ -229,22 +356,25 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
 
   return <Box role="dialog" aria-label={heading} data-cdeadmin-qa-key={`object-editor.${form.family}`}
     sx={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
-    <Box component="h2" sx={{m: 0, px: 2, py: 1.5, fontSize: '1rem', borderBottom: '1px solid', borderColor: 'divider'}}>
-      {heading}
+    <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5,
+      px: 3, py: 1, borderBottom: '1px solid', borderColor: 'divider'}}>
+      <Box component="h2" sx={{m: 0, fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.25}}>
+        {heading}
+      </Box>
+      {form.form_reference && <FormReference reference={form.form_reference} />}
     </Box>
-    {form.form_reference && <FormReference reference={form.form_reference} />}
     {form.status !== 'complete' && <Banner status="info">
       {form.status === 'draft' ? `This ${form.family_title.toLowerCase()} form is a draft: fields are listed, round-trip verification is pending.` :
         'This form is a skeleton; the engine descriptor has no fields yet.'}
     </Banner>}
     <Box role="tablist" aria-label={`${form.family_title} tabs`}
-      sx={{display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider', px: 1}}>
+      sx={{display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider', px: 2.5}}>
       {form.tabs.map((tab) => <Tab key={tab.tab} label={tab.title} active={tab.tab === current?.tab}
         attention={Boolean(tabErrors[tab.tab]) && (submitAttempted || touched)}
         dirty={tab.tab === 'SQL' && planState.status === 'ready'}
         onActivate={() => setActiveTab(tab.tab)} />)}
     </Box>
-    <ScrollArea label={`${current?.title || ''} tab content`} sx={{flex: 1, minHeight: 0, p: 2}}>
+    <ScrollArea label={`${current?.title || ''} tab content`} sx={{flex: 1, minHeight: 0, px: 3, pt: 2, pb: 9}}>
       {current && <Box role="tabpanel" aria-label={current.title} data-cdeadmin-qa-key={`object-editor.tab.${current.tab}`}>
         {current.primitive === 'sql_preview' && <SqlTab planState={planState} canPlan={canPlan} errors={errors}
           onRefresh={refreshPlan} mode={mode} dirty={dirty} />}
@@ -258,7 +388,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
             <EmptyState message={`${current.title} is shown once the object exists.`} />))}
       </Box>}
     </ScrollArea>
-    <Box sx={{display: 'flex', gap: 1, alignItems: 'center', px: 2, py: 1.5, borderTop: '1px solid',
+    <Box sx={{display: 'flex', gap: 1, alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid',
       borderColor: 'divider'}}>
       <Box sx={{flex: 1, fontSize: '0.75rem', color: 'text.secondary'}}>
         {applyState.status === 'done' && <ValidationMessage status="success">Applied.</ValidationMessage>}
@@ -271,7 +401,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
       {!readOnly && dirty && applyState.status !== 'done' && <Button intent="neutral"
         disabled={applyState.status === 'loading'} onClick={reset}
         data-cdeadmin-qa-key="object-editor.reset">Reset</Button>}
-      <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>
+      {onClose && <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>}
       {!readOnly && !directApply && <Button intent="neutral" disabled={!canPlan || planState.status === 'loading'}
         onClick={() => { setActiveTab('SQL'); refreshPlan(); }}>Preview SQL</Button>}
       {!readOnly && <Button intent="primary" loading={applyState.status === 'loading'}

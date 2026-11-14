@@ -47,6 +47,33 @@ def test_virtual_state_round_trip_and_other_engines_remain_unchanged():
 def test_prefixed_domains_stay_inside_programming_domains():
     data=[item('domain','MON$TIMEOUT'),item('domain','SEC$USER_NAME')]
     state={**STATE,'scope':'kind','resource_kind':'firebird-folder','virtual_branch':'programming'}
-    assert all(n['node_type']=='group' for n in resource_children(data,state,CATALOG))
+    groups=resource_children(data,state,CATALOG)
+    assert all(n['node_type']=='group' for n in groups)
+    by_label={n['label']: n['has_children'] for n in groups}
+    assert by_label['domains'] is True
+    assert by_label['exceptions'] is False
+    assert by_label['procedures'] is False
+    assert by_label['sequences'] is False
     domains=resource_children(data,{**state,'resource_kind':'domain'},CATALOG)
     assert [n['label'] for n in domains]==['MON$TIMEOUT','SEC$USER_NAME']
+
+
+def test_generic_navigator_marks_empty_creatable_groups_without_children():
+    catalog = {
+        'engine_id': 'mysql',
+        'objects': [
+            {
+                'resource_kind': 'table',
+                'navigator': {'parent_kinds': ['database']},
+                'operations': [{'operation_id': 'create', 'execution_available': True}],
+            },
+            {
+                'resource_kind': 'view',
+                'navigator': {'parent_kinds': ['database']},
+                'operations': [{'operation_id': 'create', 'execution_available': True}],
+            },
+        ],
+    }
+    groups = resource_children([item('table', 'T')], STATE, catalog)
+    by_label = {n['label']: n['has_children'] for n in groups}
+    assert by_label == {'Tables': True, 'Views': False}

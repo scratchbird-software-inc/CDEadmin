@@ -181,6 +181,7 @@ export {
   DDNDesignerSurface,
   DDNViewerSurface,
 } from './integrations/ddn';
+export * from './icons';
 export * from './platform';
 export * from './shell';
 export * from './customization';

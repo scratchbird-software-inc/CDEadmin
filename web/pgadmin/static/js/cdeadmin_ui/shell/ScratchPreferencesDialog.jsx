@@ -1,13 +1,13 @@
 /////////////////////////////////////////////////////////////
 //
-// ScratchRobin — Comprehensive Preferences, Schemes, Fonts, Menus, Security & Engines
+// ScratchRobin — Unified Configuration Dialog (Branch-Menu + Tabbed Forms)
 //
 // Copyright (C) 2026, The ScratchBird Development Team
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
 
-import {useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Dialog} from '../overlays/Dialog';
@@ -16,6 +16,7 @@ import {NumberField, TextField} from '../primitives/Field';
 import {Checkbox, Select, Switch} from '../primitives/Choice';
 import {SearchField, Slider} from '../primitives/AdvancedControls';
 import {Banner} from '../feedback/Indicators';
+import {Icon} from '../icons';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {
   ScratchBranchedTree,
@@ -43,6 +44,13 @@ const SHORTCUT_REFERENCE_ROWS = Object.freeze([
   {id: 'sc.palette', action: 'Open Command Palette', scope: 'Workbench Shell', shortcut: 'Ctrl+K'},
 ]);
 
+const DEFAULT_EXPANDED_BRANCHES = Object.freeze([
+  'branch:workbench',
+  'branch:databases',
+  'branch:security',
+  'branch:applications',
+]);
+
 function readExtraDomainPrefs() {
   try {
     const raw = window?.localStorage?.getItem(EXTRA_PREFS_STORAGE_KEY);
@@ -63,6 +71,139 @@ function writeExtraDomainPrefs(next) {
   }
 }
 
+/**
+ * Maps legacy or programmatic `sectionId` strings (e.g. `appearance:schemes`,
+ * `actions:iconbars`, `security:users`, `engines:connectors`, `chrome:sql-editor`)
+ * onto `{pageId, tabId}` in the unified branch-menu + top-tabs layout.
+ */
+function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
+  if (!sectionId) {
+    if (mode === 'application' && appId) {
+      return {pageId: `chrome:${appId}`, tabId: 'layout'};
+    }
+    return {pageId: 'appearance', tabId: 'general'};
+  }
+  if (sectionId === 'chrome') {
+    return {pageId: `chrome:${appId || fallbackAppId}`, tabId: 'layout'};
+  }
+  if (sectionId.startsWith('chrome:')) {
+    return {pageId: sectionId, tabId: 'layout'};
+  }
+  switch (sectionId) {
+  case 'appearance':
+  case 'appearance:zoom':
+    return {pageId: 'appearance', tabId: 'general'};
+  case 'catalog':
+  case 'appearance:tree':
+    return {pageId: 'appearance', tabId: 'tree'};
+  case 'themes':
+  case 'appearance:schemes':
+    return {pageId: 'themes', tabId: 'palettes'};
+  case 'fonts':
+  case 'appearance:fonts':
+    return {pageId: 'fonts', tabId: 'typography'};
+  case 'menus':
+  case 'actions':
+  case 'actions:global-menus':
+    return {pageId: 'menus', tabId: 'global-menus'};
+  case 'actions:app-menus':
+    return {pageId: 'menus', tabId: 'app-menus'};
+  case 'actions:iconbars':
+    return {pageId: 'menus', tabId: 'iconbars'};
+  case 'actions:icons':
+    return {pageId: 'menus', tabId: 'icons'};
+  case 'shortcuts':
+    return {pageId: 'shortcuts', tabId: 'keymap'};
+  case 'engines':
+  case 'engines:connectors':
+    return {pageId: 'engines', tabId: 'connectors'};
+  case 'engines:paths':
+    return {pageId: 'engines', tabId: 'paths'};
+  case 'queries':
+  case 'workspace':
+    return {pageId: 'queries', tabId: 'execution'};
+  case 'queries:export':
+    return {pageId: 'queries', tabId: 'export'};
+  case 'ddn':
+    return {pageId: 'ddn', tabId: 'dialect'};
+  case 'ddn:ai':
+    return {pageId: 'ddn', tabId: 'ai'};
+  case 'security':
+  case 'security:apps':
+    return {pageId: 'security', tabId: 'apps'};
+  case 'security:users':
+    return {pageId: 'security', tabId: 'users'};
+  case 'security:groups':
+    return {pageId: 'security', tabId: 'groups'};
+  case 'security:session':
+    return {pageId: 'security', tabId: 'session'};
+  default:
+    return {pageId: 'appearance', tabId: 'general'};
+  }
+}
+
+function SettingsGroup({title, children}) {
+  return (
+    <fieldset
+      style={{
+        margin: 0,
+        padding: '10px 14px 14px',
+        border: '1px solid var(--sr-border-default)',
+        borderRadius: 6,
+        background: 'color-mix(in srgb, var(--sr-surface-subtle) 45%, var(--sr-surface-card))',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        minWidth: 0,
+      }}
+    >
+      {title && (
+        <div
+          style={{
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: 'var(--sr-text-primary)',
+            textAlign: 'center',
+            paddingBottom: 6,
+            borderBottom: '1px solid var(--sr-border-subtle)',
+          }}
+        >
+          {title}
+        </div>
+      )}
+      {children}
+    </fieldset>
+  );
+}
+
+SettingsGroup.propTypes = {
+  title: PropTypes.node,
+  children: PropTypes.node,
+};
+
+const PAGE_HELP_SUMMARY = Object.freeze({
+  appearance:
+    'Configure default workspace spacing, area zoom percentages, and Branched Tree line geometry.',
+  themes:
+    'Select a built-in or custom colour palette and choose which schemes appear in the top-bar quick switcher.',
+  fonts:
+    'Set UI, monospace SQL/code, and DDN diagram font stacks, sizes, line height, and ligatures.',
+  menus:
+    'Customize top-level menus, application menus, tabbed iconbars, quick-access strips, and semantic icons.',
+  shortcuts:
+    'Review workbench and query execution keyboard shortcuts.',
+  engines:
+    'Enable or disable database engine connectors shown in Data Navigator and configure optional local tool paths.',
+  queries:
+    'Control cursor step-fetch limits, default auto-commit behaviour, result delimiters, and destructive DDL prompts.',
+  ddn:
+    'Configure DDN exchange profile defaults, Git review gates on version acceptance, and optional BYOK AI drafting.',
+  security:
+    'Manage enabled workspace applications, user accounts, security groups, permissions, and idle session lock.',
+  chrome:
+    'Override drawer widths, default drawer visibility, area zoom, and reference SQL for the selected application.',
+});
+
 export function ScratchPreferencesDialog({
   open,
   mode = 'global',
@@ -78,41 +219,50 @@ export function ScratchPreferencesDialog({
   onResetDrawers,
   onClose,
 }) {
+  const fallbackAppId = appId || applications[0]?.id || 'data-navigator';
   const isInitialAppMode = mode === 'application' && Boolean(appId) && !initialSection;
   const globalConfig = settings?.global || {};
 
+  const initialTarget = resolveSectionTarget(initialSection, mode, appId, fallbackAppId);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedNodeId, setSelectedNodeId] = useState(() => {
-    if (initialSection) return initialSection;
-    return isInitialAppMode ? `chrome:${appId}` : 'appearance';
-  });
-  const [expandedIds, setExpandedIds] = useState(() => [
-    'appearance',
-    'actions',
-    'security',
-    'engines',
-    'chrome',
-    'workspace',
-  ]);
+  const [selectedPageId, setSelectedPageId] = useState(initialTarget.pageId);
+  const [activeTabByPage, setActiveTabByPage] = useState(() => ({
+    [initialTarget.pageId]: initialTarget.tabId,
+  }));
+  const [expandedIds, setExpandedIds] = useState(() => [...DEFAULT_EXPANDED_BRANCHES]);
   const [statusBanner, setStatusBanner] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
+  const [localeRev, setLocaleRev] = useState(() => gettext.getRevision?.() || 0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLanguageChanged = (ev) => {
+      setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+    };
+    window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
+  }, []);
 
   // Patches accumulated from sub-editors (Schemes, Fonts, Menus/Iconbars, Engines)
   const [pendingGlobalPatch, setPendingGlobalPatch] = useState({});
   const [pendingAppPatches, setPendingAppPatches] = useState({});
+  const [editedAppScope, setEditedAppScope] = useState(false);
+  const [editedGlobalScope, setEditedGlobalScope] = useState(false);
+  const [dirtyExtras, setDirtyExtras] = useState(false);
 
   const activeChromeAppId = useMemo(() => {
-    if (selectedNodeId.startsWith('chrome:')) {
-      return selectedNodeId.slice('chrome:'.length);
+    if (selectedPageId.startsWith('chrome:')) {
+      return selectedPageId.slice('chrome:'.length);
     }
-    return appId || applications[0]?.id || 'data-navigator';
-  }, [selectedNodeId, appId, applications]);
+    return fallbackAppId;
+  }, [selectedPageId, fallbackAppId]);
 
   const activeChromeAppLabel = useMemo(() => {
     const match = applications.find((a) => a.id === activeChromeAppId);
     return match?.label || (activeChromeAppId === appId && appLabel) || activeChromeAppId;
   }, [applications, activeChromeAppId, appId, appLabel]);
 
-  // Domain 1 — Global Appearance & Zoom
+  // Global Appearance & Zoom
   const [globalDefaultRibbon, setGlobalDefaultRibbon] = useState(
     globalConfig.default_tabbed_icon_bar !== false
   );
@@ -144,8 +294,6 @@ export function ScratchPreferencesDialog({
     area_3d: '',
     area_3e: '',
   });
-  const [editedAppScope, setEditedAppScope] = useState(false);
-  const [editedGlobalScope, setEditedGlobalScope] = useState(false);
 
   // Catalog, Branched Tree Geometry & Safety
   const [treePrefs, setTreePrefs] = useState(() => readBranchedTreePreferences());
@@ -168,21 +316,34 @@ export function ScratchPreferencesDialog({
   const [aiDraftingEnabled, setAiDraftingEnabled] = useState(false);
   const [aiModelEndpoint, setAiModelEndpoint] = useState('');
 
-  // Native Binary Paths
+  // Optional External Tool Paths
   const [pgBinPath, setPgBinPath] = useState('');
   const [fbBinPath, setFbBinPath] = useState('');
+
+  const navigateToSection = useCallback(
+    (sectionId) => {
+      const next = resolveSectionTarget(sectionId, mode, appId, fallbackAppId);
+      setSelectedPageId(next.pageId);
+      setActiveTabByPage((prev) => ({...prev, [next.pageId]: next.tabId}));
+    },
+    [mode, appId, fallbackAppId]
+  );
 
   useEffect(() => {
     if (!open) return;
     setStatusBanner('');
+    setShowHelp(false);
     setSearchQuery('');
     setEditedAppScope(false);
     setEditedGlobalScope(false);
+    setDirtyExtras(false);
     setPendingGlobalPatch({});
     setPendingAppPatches({});
-    setSelectedNodeId(
-      initialSection || (mode === 'application' && appId ? `chrome:${appId}` : 'appearance')
-    );
+
+    const next = resolveSectionTarget(initialSection, mode, appId, fallbackAppId);
+    setSelectedPageId(next.pageId);
+    setActiveTabByPage((prev) => ({...prev, [next.pageId]: next.tabId}));
+
     setTreePrefs(readBranchedTreePreferences());
     setQueryLimits(readDefaultQueryLimits());
 
@@ -196,7 +357,7 @@ export function ScratchPreferencesDialog({
     setAiModelEndpoint(extras.aiModelEndpoint || '');
     setPgBinPath(extras.pgBinPath || '');
     setFbBinPath(extras.fbBinPath || '');
-  }, [open, mode, appId, initialSection]);
+  }, [open, mode, appId, initialSection, fallbackAppId]);
 
   useEffect(() => {
     if (!open) return;
@@ -239,161 +400,239 @@ export function ScratchPreferencesDialog({
     });
   }, [open, activeChromeAppId, settings]);
 
-  const domainTreeNodes = useMemo(() => {
+  const branchMenuItems = useMemo(() => {
     const appChildren = (applications.length
       ? applications
       : [{id: activeChromeAppId, label: activeChromeAppLabel}]
     ).map((app) => ({
       id: `chrome:${app.id}`,
       label: app.label || app.id,
-      keywords: `${app.label} ${app.id} drawer width zoom ribbon spacing`,
+      iconKey: app.iconKey || 'command.default',
+      keywords: `${app.label} ${app.id} application drawer width zoom ribbon spacing sql`,
     }));
 
-    const baseNodes = [
+    const branches = [
       {
-        id: 'appearance',
-        label: gettext('1. Appearance, Schemes & Fonts'),
-        keywords: 'theme colour scheme palette dark light nord solarized fonts typography zoom spacing',
+        id: 'branch:workbench',
+        label: gettext('Workbench'),
+        iconKey: 'action.preferences',
+        defaultPageId: 'appearance',
+        keywords: 'workbench interface appearance themes fonts menus toolbars shortcuts',
         children: [
           {
-            id: 'appearance:schemes',
-            label: gettext('Colour Schemes'),
-            keywords: 'colour color scheme palette dark light nord solarized high contrast custom',
+            id: 'appearance',
+            label: gettext('Appearance'),
+            iconKey: 'action.preferences',
+            keywords: 'appearance layout spacing panel gap zoom area branched tree stepx radius',
           },
           {
-            id: 'appearance:fonts',
+            id: 'themes',
+            label: gettext('Colour Themes'),
+            iconKey: 'action.preferences',
+            keywords: 'colour color theme scheme palette dark light nord solarized high contrast custom',
+          },
+          {
+            id: 'fonts',
             label: gettext('Fonts & Typography'),
-            keywords: 'font family size monospace ligatures line height ui sql diagram',
+            iconKey: 'object.type',
+            keywords: 'fonts typography family size monospace ligatures line height ui sql diagram',
           },
           {
-            id: 'appearance:zoom',
-            label: gettext('Island Spacing & Area Zoom'),
-            keywords: 'panel gap spacing zoom area scale',
-          },
-        ],
-      },
-      {
-        id: 'actions',
-        label: gettext('2. Actions, Menus & Iconbars'),
-        keywords: 'action menu editor toolbar iconbar notebookbar ribbon quick access icons',
-        children: [
-          {
-            id: 'actions:global-menus',
-            label: gettext('Global Top Menus (Area 1)'),
-            keywords: 'global top menu applications window help custom menu',
-          },
-          {
-            id: 'actions:app-menus',
-            label: gettext('Application Menus (Area 1)'),
-            keywords: 'application menu object query design cube bi mesh',
-          },
-          {
-            id: 'actions:iconbars',
-            label: gettext('Tabbed-Notebook Iconbars (3b)'),
-            keywords: 'tabbed notebook iconbar 3b 3b1 quick access ribbon icons',
-          },
-          {
-            id: 'actions:icons',
-            label: gettext('Action Icons & Status'),
-            keywords: 'semantic icon assignment enabled disabled invisible status',
-          },
-        ],
-      },
-      {
-        id: 'security',
-        label: gettext('3. Security & Access'),
-        keywords: 'security configuration users groups roles grant revoke applications permissions',
-        children: [
-          {
-            id: 'security:apps',
-            label: gettext('Application Availability'),
-            keywords: 'turn on off applications available workspace dock',
-          },
-          {
-            id: 'security:users',
-            label: gettext('Users & Grants'),
-            keywords: 'users accounts grant revoke roles active locked',
-          },
-          {
-            id: 'security:groups',
-            label: gettext('Groups & Permissions'),
-            keywords: 'groups roles permissions capabilities grant revoke',
-          },
-        ],
-      },
-      {
-        id: 'engines',
-        label: gettext('4. Database Engines'),
-        keywords: 'database engines connectors turn on off postgresql firebird duckdb sqlite mariadb scratchbird',
-        children: [
-          {
-            id: 'engines:connectors',
-            label: gettext('Engines On / Off'),
-            keywords: 'enable disable database engine connector',
+            id: 'menus',
+            label: gettext('Menus & Toolbars'),
+            iconKey: 'action.customize',
+            keywords: 'actions menus toolbars iconbar notebookbar ribbon quick access icons',
           },
           {
             id: 'shortcuts',
-            label: gettext('Binary Paths & Shortcuts'),
-            keywords: 'keyboard shortcuts binary path postgresql firebird gbak isql',
+            label: gettext('Keyboard Shortcuts'),
+            iconKey: 'command.default',
+            keywords: 'keyboard shortcuts hotkeys keybindings f5 execute palette',
           },
         ],
       },
       {
-        id: 'chrome',
-        label: gettext('5. Application Chrome'),
-        keywords: 'application settings left right drawer width ribbon notebookbar override',
-        children: appChildren,
-      },
-      {
-        id: 'workspace',
-        label: gettext('6. Queries, Tree & DDN'),
-        keywords: 'queries max rows step branched tree ddn ai',
+        id: 'branch:databases',
+        label: gettext('Databases & DDN'),
+        iconKey: 'object.database',
+        defaultPageId: 'engines',
+        keywords: 'databases engines connectors queries ddn designers ai',
         children: [
           {
-            id: 'queries',
-            label: gettext('Queries & Step Limits'),
-            keywords: 'max rows per step fetch pause cancel autocommit csv delimiter',
+            id: 'engines',
+            label: gettext('Database Engines'),
+            iconKey: 'object.database',
+            keywords: 'database engines connectors postgresql firebird duckdb sqlite mariadb scratchbird binary path gbak isql',
           },
           {
-            id: 'catalog',
-            label: gettext('Branched Tree & Safety'),
-            keywords: 'branched tree stepx elbow radius sticky ancestors destructive',
+            id: 'queries',
+            label: gettext('Queries & Execution'),
+            iconKey: 'tool.psql',
+            keywords: 'queries execution max rows step fetch pause cancel autocommit csv delimiter destructive',
           },
           {
             id: 'ddn',
-            label: gettext('Designers, DDN & AI'),
-            keywords: 'ddn dialect git review gate ai byok drafting',
+            label: gettext('Designers & DDN'),
+            iconKey: 'tool.erd',
+            keywords: 'designers ddn dialect git review gate ai byok drafting',
           },
         ],
+      },
+      {
+        id: 'branch:security',
+        label: gettext('Security'),
+        iconKey: 'object.role',
+        defaultPageId: 'security',
+        keywords: 'security users groups roles permissions applications session lock timeout',
+        children: [
+          {
+            id: 'security',
+            label: gettext('Users, Groups & Access'),
+            iconKey: 'object.role',
+            keywords: 'security users groups roles grant revoke applications permissions lock screen timeout',
+          },
+        ],
+      },
+      {
+        id: 'branch:applications',
+        label: gettext('Applications'),
+        iconKey: 'object.extension',
+        defaultPageId: appChildren[0]?.id || `chrome:${activeChromeAppId}`,
+        keywords: 'applications chrome drawer width zoom ribbon',
+        children: appChildren,
       },
     ];
 
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return baseNodes;
-    return baseNodes.filter((node) => {
-      const selfMatch = `${node.label} ${node.keywords || ''}`.toLowerCase().includes(q);
-      const childMatch = (node.children || []).some((c) =>
-        `${c.label} ${c.keywords || ''}`.toLowerCase().includes(q)
-      );
-      return selfMatch || childMatch;
-    });
-  }, [applications, activeChromeAppId, activeChromeAppLabel, searchQuery]);
+    if (!q) return branches;
 
-  const activeDomainKey = useMemo(() => {
-    if (selectedNodeId === 'chrome' || selectedNodeId.startsWith('chrome:')) {
-      return 'chrome';
+    return branches
+      .map((branch) => {
+        const selfMatch = `${branch.label} ${branch.keywords || ''}`.toLowerCase().includes(q);
+        const matchingChildren = (branch.children || []).filter((child) =>
+          `${child.label} ${child.keywords || ''}`.toLowerCase().includes(q)
+        );
+        if (matchingChildren.length > 0) {
+          return {...branch, children: matchingChildren};
+        }
+        return selfMatch ? branch : null;
+      })
+      .filter(Boolean);
+  }, [applications, activeChromeAppId, activeChromeAppLabel, searchQuery, localeRev]);
+
+  const pageSpec = useMemo(() => {
+    if (selectedPageId.startsWith('chrome:')) {
+      return {
+        title: activeChromeAppLabel,
+        helpKey: 'chrome',
+        tabs: [
+          {id: 'layout', label: gettext('Layout & Drawers'), qaKey: 'app-tab-layout'},
+          {id: 'defaults', label: gettext('Defaults'), qaKey: 'app-tab-defaults'},
+        ],
+      };
     }
-    if (selectedNodeId === 'appearance' || selectedNodeId === 'appearance:zoom') {
-      return 'appearance:zoom';
+    switch (selectedPageId) {
+    case 'themes':
+      return {
+        title: gettext('Colour Themes'),
+        helpKey: 'themes',
+        tabs: [],
+      };
+    case 'fonts':
+      return {
+        title: gettext('Fonts & Typography'),
+        helpKey: 'fonts',
+        tabs: [],
+      };
+    case 'menus':
+      return {
+        title: gettext('Menus & Toolbars'),
+        helpKey: 'menus',
+        tabs: [
+          {id: 'global-menus', label: gettext('Global Menus'), qaKey: 'actions-tab-global-menus'},
+          {id: 'app-menus', label: gettext('Application Menus'), qaKey: 'actions-tab-app-menus'},
+          {id: 'iconbars', label: gettext('Tabbed Iconbars'), qaKey: 'actions-tab-iconbars'},
+          {id: 'icons', label: gettext('Action Icons'), qaKey: 'actions-tab-icons'},
+        ],
+      };
+    case 'shortcuts':
+      return {
+        title: gettext('Keyboard Shortcuts'),
+        helpKey: 'shortcuts',
+        tabs: [],
+      };
+    case 'engines':
+      return {
+        title: gettext('Database Engines'),
+        helpKey: 'engines',
+        tabs: [
+          {id: 'connectors', label: gettext('Connectors'), qaKey: 'engines-tab-connectors'},
+          {id: 'paths', label: gettext('External Tool Paths'), qaKey: 'engines-tab-paths'},
+        ],
+      };
+    case 'queries':
+      return {
+        title: gettext('Queries & Execution'),
+        helpKey: 'queries',
+        tabs: [
+          {id: 'execution', label: gettext('Execution & Fetch'), qaKey: 'queries-tab-execution'},
+          {id: 'export', label: gettext('Export & Safety'), qaKey: 'queries-tab-export'},
+        ],
+      };
+    case 'ddn':
+      return {
+        title: gettext('Designers & DDN'),
+        helpKey: 'ddn',
+        tabs: [
+          {id: 'dialect', label: gettext('DDN & Version Gates'), qaKey: 'ddn-tab-dialect'},
+          {id: 'ai', label: gettext('AI Assistant'), qaKey: 'ddn-tab-ai'},
+        ],
+      };
+    case 'security':
+      return {
+        title: gettext('Users, Groups & Access'),
+        helpKey: 'security',
+        tabs: [
+          {id: 'apps', label: gettext('Applications'), qaKey: 'security-tab-apps'},
+          {id: 'users', label: gettext('Users'), qaKey: 'security-tab-users'},
+          {id: 'groups', label: gettext('Groups & Permissions'), qaKey: 'security-tab-groups'},
+          {id: 'session', label: gettext('Session'), qaKey: 'security-tab-session'},
+        ],
+      };
+    case 'appearance':
+    default:
+      return {
+        title: gettext('Appearance'),
+        helpKey: 'appearance',
+        tabs: [
+          {id: 'general', label: gettext('General'), qaKey: 'appearance-tab-general'},
+          {id: 'tree', label: gettext('Branched Tree'), qaKey: 'appearance-tab-tree'},
+        ],
+      };
     }
-    if (selectedNodeId === 'actions') return 'actions:global-menus';
-    if (selectedNodeId === 'security') return 'security:apps';
-    if (selectedNodeId === 'engines') return 'engines:connectors';
-    if (selectedNodeId === 'workspace') return 'queries';
-    return selectedNodeId;
-  }, [selectedNodeId]);
+  }, [selectedPageId, activeChromeAppLabel, localeRev]);
+
+  const activeTabId = useMemo(() => {
+    const stored = activeTabByPage[selectedPageId];
+    if (pageSpec.tabs.length === 0) return 'default';
+    if (stored && pageSpec.tabs.some((t) => t.id === stored)) return stored;
+    return pageSpec.tabs[0].id;
+  }, [activeTabByPage, selectedPageId, pageSpec.tabs]);
+
+  const setActiveTab = (tabId) => {
+    setActiveTabByPage((prev) => ({...prev, [selectedPageId]: tabId}));
+  };
+
+  const isAppPage = selectedPageId.startsWith('chrome:');
+  const isDirty =
+    editedGlobalScope ||
+    editedAppScope ||
+    dirtyExtras ||
+    Object.keys(pendingGlobalPatch).length > 0 ||
+    Object.keys(pendingAppPatches).length > 0;
 
   const handleTreePrefChange = (patch) => {
+    setDirtyExtras(true);
     const next = writeBranchedTreePreferences(patch);
     setTreePrefs(next);
   };
@@ -420,7 +659,7 @@ export function ScratchPreferencesDialog({
     }));
   };
 
-  const handleSave = async () => {
+  const persistAllSettings = async () => {
     writeBranchedTreePreferences(treePrefs);
     writeDefaultQueryLimits(queryLimits);
     writeExtraDomainPrefs({
@@ -506,7 +745,7 @@ export function ScratchPreferencesDialog({
       });
     };
 
-    if (activeDomainKey === 'chrome' || (isInitialAppMode && !editedGlobalScope)) {
+    if (isAppPage || (isInitialAppMode && !editedGlobalScope)) {
       await saveAppValues();
       await saveExtraPatchedApps(activeChromeAppId);
       if (editedGlobalScope || Object.keys(pendingGlobalPatch).length > 0) {
@@ -521,7 +760,20 @@ export function ScratchPreferencesDialog({
         await saveExtraPatchedApps(null);
       }
     }
+  };
 
+  const handleApply = async () => {
+    await persistAllSettings();
+    setEditedGlobalScope(false);
+    setEditedAppScope(false);
+    setDirtyExtras(false);
+    setPendingGlobalPatch({});
+    setPendingAppPatches({});
+    setStatusBanner(gettext('Configuration changes applied.'));
+  };
+
+  const handleOk = async () => {
+    await persistAllSettings();
     onClose?.();
   };
 
@@ -531,33 +783,52 @@ export function ScratchPreferencesDialog({
       onClose={onClose}
       size="xlarge"
       title={
-        activeDomainKey === 'chrome'
-          ? gettext('Preferences & Application Settings — %s', activeChromeAppLabel)
-          : gettext('ScratchRobin Preferences & Workspace Settings')
+        isAppPage
+          ? gettext('Configure — %s', activeChromeAppLabel)
+          : gettext('Configure — ScratchRobin')
       }
       actions={
         <div style={{display: 'flex', gap: 8, justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
-          <div>
-            {activeDomainKey === 'chrome' && (
+          <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="settings-help"
+              onClick={() => setShowHelp((prev) => !prev)}
+            >
+              {gettext('Help')}
+            </Button>
+            {isAppPage && (
               <Button
                 intent="neutral"
                 data-cdeadmin-qa-key="settings-reset-drawers"
                 onClick={handleResetDrawers}
               >
-                {gettext('Reset Drawer Sizes to Default')}
+                {gettext('Reset Drawer Sizes')}
               </Button>
             )}
           </div>
-          <div style={{display: 'flex', gap: 8}}>
-            <Button intent="neutral" onClick={onClose}>
-              {gettext('Cancel')}
-            </Button>
+          <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
             <Button
               intent="primary"
               data-cdeadmin-qa-key="settings-save"
-              onClick={handleSave}
+              onClick={handleOk}
             >
-              {gettext('Save Settings')}
+              {gettext('OK')}
+            </Button>
+            <Button
+              intent="neutral"
+              disabled={!isDirty}
+              data-cdeadmin-qa-key="settings-apply"
+              onClick={handleApply}
+            >
+              {gettext('Apply')}
+            </Button>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="settings-cancel"
+              onClick={onClose}
+            >
+              {gettext('Cancel')}
             </Button>
           </div>
         </div>
@@ -565,119 +836,196 @@ export function ScratchPreferencesDialog({
     >
       <div
         data-cdeadmin-qa-key="scratch-preferences-dialog"
-        style={{display: 'flex', flexDirection: 'column', gap: 10, minHeight: 460}}
+        style={{
+          margin: -16,
+          height: 'min(620px, 74vh)',
+          minHeight: 490,
+          display: 'grid',
+          gridTemplateColumns: '246px minmax(0, 1fr)',
+          overflow: 'hidden',
+          background: 'var(--sr-surface-card)',
+        }}
       >
-        <SearchField
-          label={gettext('Search preferences')}
-          placeholder={gettext('Filter settings across schemes, fonts, menus, security, engines & queries…')}
-          value={searchQuery}
-          onChange={setSearchQuery}
-        />
-
-        {statusBanner && <Banner status="info">{statusBanner}</Banner>}
-
+        {/* Left Pane: Compact Search + Branched-Menu Navigation */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: '265px minmax(0, 1fr)',
-            gap: 14,
-            flex: 1,
-            minHeight: 400,
+            borderRight: '1px solid var(--sr-border-default)',
+            background: 'var(--sr-surface-card)',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            overflow: 'hidden',
           }}
         >
-          {/* Left Multi-Domain Branched Menu Navigator */}
           <div
             style={{
-              border: '1px solid var(--sr-border-default)',
-              borderRadius: 'var(--sr-island-radius, 12px)',
-              background: 'var(--sr-surface-subtle)',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
+              padding: '8px 10px',
+              borderBottom: '1px solid var(--sr-border-subtle)',
+              flexShrink: 0,
             }}
           >
-            <ScratchBranchedTree
-              ariaLabel={gettext('Preference Domains')}
-              nodes={domainTreeNodes}
-              selectedId={selectedNodeId}
-              expandedIds={expandedIds}
-              onExpandedChange={setExpandedIds}
-              onSelect={(id) => {
-                if (id === 'chrome') {
-                  setSelectedNodeId(`chrome:${activeChromeAppId}`);
-                } else {
-                  setSelectedNodeId(id);
+            <SearchField
+              aria-label={gettext('Search configuration')}
+              placeholder={gettext('Search…')}
+              value={searchQuery}
+              onChange={(val) => {
+                setSearchQuery(val);
+                if (val && val.trim()) {
+                  setExpandedIds([...DEFAULT_EXPANDED_BRANCHES]);
                 }
               }}
-              showStickyAncestors={false}
-              style={{height: 410}}
+              inputProps={{'data-cdeadmin-qa-key': 'settings-sidebar-search'}}
             />
           </div>
 
-          {/* Right Domain Surface */}
-          <ScratchScrollArea
+          <ScratchBranchedTree
+            label={gettext('Configuration Categories')}
+            items={branchMenuItems}
+            selectedId={selectedPageId}
+            expandedIds={expandedIds}
+            onExpandedChange={setExpandedIds}
+            renderIcon={(node) =>
+              node?.iconKey ? <Icon iconKey={node.iconKey} decorative size="15px" /> : null
+            }
+            onSelect={(nodeOrId) => {
+              const node = typeof nodeOrId === 'object' ? nodeOrId : null;
+              const id = typeof nodeOrId === 'string' ? nodeOrId : node?.id;
+              if (!id) return;
+              if (id.startsWith('branch:')) {
+                setExpandedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+                const firstChild = node?.children?.[0]?.id || node?.defaultPageId;
+                if (firstChild) {
+                  setSelectedPageId(firstChild);
+                }
+                return;
+              }
+              setSelectedPageId(id);
+            }}
+            stickyAncestors={false}
+            style={{flex: 1, minHeight: 0}}
+          />
+        </div>
+
+        {/* Right Pane: Page Header + Optional Kate-Style Top Tab Bar + Form Body */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            minHeight: 0,
+            background: 'var(--sr-surface-card)',
+          }}
+        >
+          {/* Page Header */}
+          <div
             style={{
-              border: '1px solid var(--sr-border-default)',
-              borderRadius: 'var(--sr-island-radius, 12px)',
-              background: 'var(--sr-surface-card)',
-              maxHeight: 430,
+              padding: '11px 18px 9px',
+              borderBottom:
+                pageSpec.tabs.length > 0 ? 'none' : '1px solid var(--sr-border-default)',
+              flexShrink: 0,
             }}
           >
-            <div style={{padding: 14, display: 'flex', flexDirection: 'column', gap: 14}}>
-              {activeDomainKey === 'appearance:zoom' && (
-                <>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
-                    <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
-                      {gettext('1. Appearance, Island Spacing & Global Area Zoom')}
-                    </div>
-                    <div style={{display: 'flex', gap: 6}}>
-                      <Button
-                        intent="neutral"
-                        data-cdeadmin-qa-key="jump-to-schemes"
-                        onClick={() => setSelectedNodeId('appearance:schemes')}
-                      >
-                        {gettext('Colour Schemes…')}
-                      </Button>
-                      <Button
-                        intent="neutral"
-                        data-cdeadmin-qa-key="jump-to-fonts"
-                        onClick={() => setSelectedNodeId('appearance:fonts')}
-                      >
-                        {gettext('Fonts & Typography…')}
-                      </Button>
-                    </div>
-                  </div>
-                  <Checkbox
-                    label={gettext('Enable internal Tabbed-Icon-Bar by default across applications')}
-                    checked={globalDefaultRibbon}
-                    onChange={(checked) => {
-                      setEditedGlobalScope(true);
-                      setGlobalDefaultRibbon(Boolean(checked));
+            <div
+              data-cdeadmin-qa-key="settings-page-title"
+              style={{
+                fontSize: '1.12rem',
+                fontWeight: 600,
+                lineHeight: 1.25,
+                color: 'var(--sr-text-primary)',
+              }}
+            >
+              {pageSpec.title}
+            </div>
+          </div>
+
+          {/* Horizontal Top Tab Bar — rendered only when the page has multiple tabs */}
+          {pageSpec.tabs.length > 0 && (
+            <div
+              role="tablist"
+              aria-label={gettext('%s Sections', pageSpec.title)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${pageSpec.tabs.length}, minmax(0, 1fr))`,
+                borderTop: '1px solid var(--sr-border-default)',
+                borderBottom: '1px solid var(--sr-border-default)',
+                background: 'var(--sr-surface-subtle)',
+                flexShrink: 0,
+              }}
+            >
+              {pageSpec.tabs.map((tab, idx) => {
+                const selected = activeTabId === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    data-cdeadmin-qa-key={tab.qaKey}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      appearance: 'none',
+                      border: 'none',
+                      borderRight:
+                        idx < pageSpec.tabs.length - 1
+                          ? '1px solid var(--sr-border-subtle)'
+                          : 'none',
+                      padding: '7px 12px',
+                      fontSize: '0.8125rem',
+                      fontFamily: 'inherit',
+                      fontWeight: selected ? 600 : 500,
+                      color: selected ? 'var(--sr-text-primary)' : 'var(--sr-text-secondary)',
+                      background: selected
+                        ? 'color-mix(in srgb, var(--sr-accent) 14%, var(--sr-surface-card))'
+                        : 'transparent',
+                      boxShadow: selected ? 'inset 0 -2px 0 var(--sr-accent)' : 'none',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}
-                  />
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
-                    <NumberField
-                      label={gettext('Panel Spacing Between Areas (px, 0–24)')}
-                      value={globalPanelGap}
-                      inputProps={{'data-cdeadmin-qa-key': 'settings-global-panel-gap'}}
-                      onChange={(e) => {
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Scrollable Form Surface */}
+          <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+            <div style={{padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 14}}>
+              {showHelp && PAGE_HELP_SUMMARY[pageSpec.helpKey] && (
+                <Banner status="info">{PAGE_HELP_SUMMARY[pageSpec.helpKey]}</Banner>
+              )}
+              {statusBanner && <Banner status="info">{statusBanner}</Banner>}
+
+              {/* Appearance -> General */}
+              {selectedPageId === 'appearance' && activeTabId === 'general' && (
+                <>
+                  <SettingsGroup title={gettext('Workspace Layout')}>
+                    <Checkbox
+                      label={gettext('Enable internal Tabbed-Icon-Bar by default across applications')}
+                      checked={globalDefaultRibbon}
+                      onChange={(checked) => {
                         setEditedGlobalScope(true);
-                        setGlobalPanelGap(Number(e.target.value));
+                        setGlobalDefaultRibbon(Boolean(checked));
                       }}
                     />
-                    <NumberField
-                      label={gettext('Idle Lock Screen Timeout (minutes, 0 = manual only)')}
-                      value={lockTimeout}
-                      onChange={(e) => {
-                        setEditedGlobalScope(true);
-                        setLockTimeout(Number(e.target.value) || 0);
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <div style={{fontWeight: 600, fontSize: '0.8rem', marginBottom: 8}}>
-                      {gettext('Per-Area Icon & Font Zoom (%)')}
+                    <div style={{maxWidth: 320}}>
+                      <NumberField
+                        label={gettext('Panel Spacing Between Areas (px, 0–24)')}
+                        value={globalPanelGap}
+                        inputProps={{'data-cdeadmin-qa-key': 'settings-global-panel-gap'}}
+                        onChange={(e) => {
+                          setEditedGlobalScope(true);
+                          setGlobalPanelGap(Number(e.target.value));
+                        }}
+                      />
                     </div>
+                  </SettingsGroup>
+
+                  <SettingsGroup title={gettext('Per-Area Interface & Icon Zoom (%)')}>
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
                       {[
                         ['area_1', gettext('Area 1 — Top Menu (%)')],
@@ -703,52 +1051,92 @@ export function ScratchPreferencesDialog({
                         />
                       ))}
                     </div>
-                  </div>
+                  </SettingsGroup>
                 </>
               )}
 
-              {activeDomainKey === 'appearance:schemes' && (
+              {/* Appearance -> Branched Tree */}
+              {selectedPageId === 'appearance' && activeTabId === 'tree' && (
+                <SettingsGroup title={gettext('Branched Menu Tree Geometry')}>
+                  <Slider
+                    label={gettext('Depth Indent Step — stepX (%s px)', treePrefs.stepX)}
+                    min={12}
+                    max={28}
+                    step={1}
+                    value={treePrefs.stepX}
+                    onChange={(val) => handleTreePrefChange({stepX: val})}
+                  />
+                  <Slider
+                    label={gettext('Quadratic Elbow Radius (%s px)', treePrefs.radius)}
+                    min={4}
+                    max={14}
+                    step={1}
+                    value={treePrefs.radius}
+                    onChange={(val) => handleTreePrefChange({radius: val})}
+                  />
+                  <Switch
+                    label={gettext('Show Sticky Ancestor Breadcrumb Bar on Deep Trees')}
+                    checked={treePrefs.stickyAncestors}
+                    onChange={(checked) => handleTreePrefChange({stickyAncestors: checked})}
+                  />
+                </SettingsGroup>
+              )}
+
+              {/* Colour Themes (single form, no top tabs needed) */}
+              {selectedPageId === 'themes' && (
                 <ColorSchemesAndFontsEditor
                   subView="schemes"
+                  hideTabs
                   globalSettings={{...globalConfig, ...pendingGlobalPatch}}
                   onChangeGlobal={handleGlobalSubPatch}
+                  onNavigateSubView={(sub) => navigateToSection(`appearance:${sub}`)}
                 />
               )}
 
-              {activeDomainKey === 'appearance:fonts' && (
+              {/* Fonts & Typography (single form, no top tabs needed) */}
+              {selectedPageId === 'fonts' && (
                 <ColorSchemesAndFontsEditor
                   subView="fonts"
+                  hideTabs
                   globalSettings={{...globalConfig, ...pendingGlobalPatch}}
                   onChangeGlobal={handleGlobalSubPatch}
+                  onNavigateSubView={(sub) => navigateToSection(`appearance:${sub}`)}
                 />
               )}
 
-              {activeDomainKey.startsWith('actions:') && (
+              {/* Menus & Toolbars (4 top tabs) */}
+              {selectedPageId === 'menus' && (
                 <ActionMenuToolbarEditor
-                  subView={activeDomainKey.slice('actions:'.length)}
+                  subView={activeTabId}
+                  hideTabs
                   globalSettings={{...globalConfig, ...pendingGlobalPatch}}
                   applicationSettings={settings?.applications || {}}
                   applications={applications}
                   actionsRegistry={actionsRegistry}
                   onChangeGlobal={handleGlobalSubPatch}
                   onChangeApp={handleAppSubPatch}
+                  onNavigateSubView={(sub) => setActiveTab(sub)}
                 />
               )}
 
-              {activeDomainKey.startsWith('security:') && (
-                <SecurityAccessEditor
-                  subView={activeDomainKey.slice('security:'.length)}
-                  applications={applications}
-                  fetchImpl={fetchImpl}
-                  onPermittedAppsChange={(nextAllowed) => {
-                    setEditedGlobalScope(true);
-                    setPermittedApps(nextAllowed);
-                  }}
-                  onRefreshAuthorization={onRefreshAuthorization}
-                />
+              {/* Keyboard Shortcuts (single form, no top tabs needed) */}
+              {selectedPageId === 'shortcuts' && (
+                <SettingsGroup title={gettext('Workbench & Query Surface Shortcuts')}>
+                  <ScratchFilterTable
+                    title={gettext('Keyboard Shortcuts')}
+                    columns={[
+                      {key: 'action', label: gettext('Action')},
+                      {key: 'scope', label: gettext('Scope'), chip: true},
+                      {key: 'shortcut', label: gettext('Shortcut'), mono: true},
+                    ]}
+                    rows={SHORTCUT_REFERENCE_ROWS}
+                    maxHeight={320}
+                  />
+                </SettingsGroup>
               )}
 
-              {activeDomainKey === 'engines:connectors' && (
+              {/* Database Engines -> Connectors */}
+              {selectedPageId === 'engines' && activeTabId === 'connectors' && (
                 <DatabaseEnginesEditor
                   globalSettings={{...globalConfig, ...pendingGlobalPatch}}
                   fetchImpl={fetchImpl}
@@ -756,65 +1144,244 @@ export function ScratchPreferencesDialog({
                 />
               )}
 
-              {activeDomainKey === 'chrome' && (
-                <>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
-                    <div style={{fontWeight: 700, fontSize: '0.9rem'}}>
-                      {gettext('Application Chrome Defaults — %s', activeChromeAppLabel)}
-                    </div>
-                    <Button
-                      intent="neutral"
-                      onClick={() => setSelectedNodeId('actions:iconbars')}
-                    >
-                      {gettext('Customize Iconbar & Menus…')}
-                    </Button>
+              {/* Database Engines -> External Tool Paths */}
+              {selectedPageId === 'engines' && activeTabId === 'paths' && (
+                <SettingsGroup title={gettext('Optional Local Client Utility Paths')}>
+                  <div style={{fontSize: '0.78rem', color: 'var(--sr-text-secondary)'}}>
+                    {gettext(
+                      'ScratchRobin executes backup, restore, and DDL maintenance natively. Set local utility directories only if you also invoke external vendor CLI tools.'
+                    )}
                   </div>
-                  <Checkbox
-                    label={gettext('Show internal Tabbed-Icon-Bar (NotebookBar) when focused')}
-                    checked={showRibbon}
-                    onChange={(checked) => {
-                      setEditedAppScope(true);
-                      setShowRibbon(Boolean(checked));
-                    }}
-                  />
-                  <Checkbox
-                    label={gettext('Open Left Side Drawer by default for new instances')}
-                    checked={defaultLeftOpen}
-                    onChange={(checked) => {
-                      setEditedAppScope(true);
-                      setDefaultLeftOpen(Boolean(checked));
-                    }}
-                  />
-                  <Checkbox
-                    label={gettext('Open Right Side Drawer by default for new instances')}
-                    checked={defaultRightOpen}
-                    onChange={(checked) => {
-                      setEditedAppScope(true);
-                      setDefaultRightOpen(Boolean(checked));
-                    }}
-                  />
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
+                    <TextField
+                      label={gettext('PostgreSQL Client Directory')}
+                      value={pgBinPath}
+                      placeholder="/usr/bin"
+                      onChange={(e) => {
+                        setDirtyExtras(true);
+                        setPgBinPath(e.target.value);
+                      }}
+                    />
+                    <TextField
+                      label={gettext('Firebird Client Directory')}
+                      value={fbBinPath}
+                      placeholder="/opt/firebird/bin"
+                      onChange={(e) => {
+                        setDirtyExtras(true);
+                        setFbBinPath(e.target.value);
+                      }}
+                    />
+                  </div>
+                </SettingsGroup>
+              )}
+
+              {/* Queries & Execution -> Execution & Fetch */}
+              {selectedPageId === 'queries' && activeTabId === 'execution' && (
+                <SettingsGroup title={gettext('Cursor Fetch & Transaction Defaults')}>
                   <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
                     <NumberField
-                      label={gettext('Left Drawer Width (px)')}
-                      value={leftWidth}
+                      label={gettext('Default Max Rows (0 = Unlimited)')}
+                      min={0}
+                      step={100}
+                      value={queryLimits.maxRows}
                       onChange={(e) => {
-                        setEditedAppScope(true);
-                        setLeftWidth(Number(e.target.value) || 288);
+                        setDirtyExtras(true);
+                        setQueryLimits((prev) => ({
+                          ...prev,
+                          maxRows: Math.max(0, Number(e.target.value) || 0),
+                        }));
                       }}
                     />
                     <NumberField
-                      label={gettext('Right Drawer Width (px)')}
-                      value={rightWidth}
+                      label={gettext('Default Rows per Step')}
+                      min={10}
+                      step={50}
+                      value={queryLimits.rowsPerStep}
                       onChange={(e) => {
-                        setEditedAppScope(true);
-                        setRightWidth(Number(e.target.value) || 320);
+                        setDirtyExtras(true);
+                        setQueryLimits((prev) => ({
+                          ...prev,
+                          rowsPerStep: Math.max(10, Number(e.target.value) || 250),
+                        }));
                       }}
                     />
                   </div>
-                  <div>
-                    <div style={{fontWeight: 600, fontSize: '0.8rem', marginBottom: 8}}>
-                      {gettext('Application Layout Spacing & Area Zoom Overrides (blank = Global)')}
+                  <Checkbox
+                    label={gettext('Auto-commit statements by default in new SQL Editor tabs')}
+                    checked={autoCommit}
+                    onChange={(checked) => {
+                      setDirtyExtras(true);
+                      setAutoCommit(Boolean(checked));
+                    }}
+                  />
+                </SettingsGroup>
+              )}
+
+              {/* Queries & Execution -> Export & Safety */}
+              {selectedPageId === 'queries' && activeTabId === 'export' && (
+                <>
+                  <SettingsGroup title={gettext('Result Copy & CSV Formatting')}>
+                    <div style={{maxWidth: 320}}>
+                      <Select
+                        label={gettext('CSV / Result Copy Delimiter')}
+                        value={csvDelimiter}
+                        onChange={(val) => {
+                          setDirtyExtras(true);
+                          setCsvDelimiter(val);
+                        }}
+                        options={[
+                          {value: ',', label: gettext('Comma (,)')},
+                          {value: ';', label: gettext('Semicolon (;)')},
+                          {value: '\t', label: gettext('Tab (\\t)')},
+                          {value: '|', label: gettext('Pipe (|)')},
+                        ]}
+                      />
                     </div>
+                  </SettingsGroup>
+
+                  <SettingsGroup title={gettext('Metadata Modification Safety')}>
+                    <Checkbox
+                      label={gettext('Confirm destructive metadata operations (DROP / TRUNCATE)')}
+                      checked={confirmDestructive}
+                      onChange={(checked) => {
+                        setDirtyExtras(true);
+                        setConfirmDestructive(Boolean(checked));
+                      }}
+                    />
+                  </SettingsGroup>
+                </>
+              )}
+
+              {/* Designers & DDN -> DDN & Version Gates */}
+              {selectedPageId === 'ddn' && activeTabId === 'dialect' && (
+                <SettingsGroup title={gettext('Diagram-Design-Notation (DDN) & Acceptance Gate')}>
+                  <Select
+                    label={gettext('Canonical DDN Dialect Profile')}
+                    value={ddnDialect}
+                    onChange={(val) => {
+                      setDirtyExtras(true);
+                      setDdnDialect(val);
+                    }}
+                    options={[
+                      {value: 'ddn-next-1', label: 'ddn-next-1 (Standalone Open DDN 1.0)'},
+                    ]}
+                  />
+                  <Checkbox
+                    label={gettext('Require Git review gate when accepting design versions')}
+                    checked={gitReviewGate}
+                    onChange={(checked) => {
+                      setDirtyExtras(true);
+                      setGitReviewGate(Boolean(checked));
+                    }}
+                  />
+                </SettingsGroup>
+              )}
+
+              {/* Designers & DDN -> AI Assistant */}
+              {selectedPageId === 'ddn' && activeTabId === 'ai' && (
+                <SettingsGroup title={gettext('Bring-Your-Own-Key AI Drafting')}>
+                  <Checkbox
+                    label={gettext('Enable BYOK AI drafting (draft proposals only — never accepts or publishes)')}
+                    checked={aiDraftingEnabled}
+                    onChange={(checked) => {
+                      setDirtyExtras(true);
+                      setAiDraftingEnabled(Boolean(checked));
+                    }}
+                  />
+                  <TextField
+                    label={gettext('AI Provider Model / Endpoint Reference')}
+                    value={aiModelEndpoint}
+                    disabled={!aiDraftingEnabled}
+                    placeholder="https://api.example.org/v1/models"
+                    onChange={(e) => {
+                      setDirtyExtras(true);
+                      setAiModelEndpoint(e.target.value);
+                    }}
+                  />
+                </SettingsGroup>
+              )}
+
+              {/* Security -> Applications / Users / Groups */}
+              {selectedPageId === 'security' && activeTabId !== 'session' && (
+                <SecurityAccessEditor
+                  subView={activeTabId}
+                  hideTabs
+                  applications={applications}
+                  fetchImpl={fetchImpl}
+                  onPermittedAppsChange={(nextAllowed) => {
+                    setEditedGlobalScope(true);
+                    setPermittedApps(nextAllowed);
+                  }}
+                  onRefreshAuthorization={onRefreshAuthorization}
+                  onNavigateSubView={(sub) => setActiveTab(sub)}
+                />
+              )}
+
+              {/* Security -> Session */}
+              {selectedPageId === 'security' && activeTabId === 'session' && (
+                <SettingsGroup title={gettext('Workspace Session & Idle Lock')}>
+                  <div style={{maxWidth: 340}}>
+                    <NumberField
+                      label={gettext('Idle Lock Screen Timeout (minutes, 0 = manual only)')}
+                      value={lockTimeout}
+                      onChange={(e) => {
+                        setEditedGlobalScope(true);
+                        setLockTimeout(Number(e.target.value) || 0);
+                      }}
+                    />
+                  </div>
+                </SettingsGroup>
+              )}
+
+              {/* Applications -> <App> -> Layout & Drawers */}
+              {isAppPage && activeTabId === 'layout' && (
+                <>
+                  <SettingsGroup title={gettext('Toolbars & Side Drawers')}>
+                    <Checkbox
+                      label={gettext('Show internal Tabbed-Icon-Bar (NotebookBar) when focused')}
+                      checked={showRibbon}
+                      onChange={(checked) => {
+                        setEditedAppScope(true);
+                        setShowRibbon(Boolean(checked));
+                      }}
+                    />
+                    <Checkbox
+                      label={gettext('Open Left Side Drawer by default for new instances')}
+                      checked={defaultLeftOpen}
+                      onChange={(checked) => {
+                        setEditedAppScope(true);
+                        setDefaultLeftOpen(Boolean(checked));
+                      }}
+                    />
+                    <Checkbox
+                      label={gettext('Open Right Side Drawer by default for new instances')}
+                      checked={defaultRightOpen}
+                      onChange={(checked) => {
+                        setEditedAppScope(true);
+                        setDefaultRightOpen(Boolean(checked));
+                      }}
+                    />
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
+                      <NumberField
+                        label={gettext('Left Drawer Width (px)')}
+                        value={leftWidth}
+                        onChange={(e) => {
+                          setEditedAppScope(true);
+                          setLeftWidth(Number(e.target.value) || 288);
+                        }}
+                      />
+                      <NumberField
+                        label={gettext('Right Drawer Width (px)')}
+                        value={rightWidth}
+                        onChange={(e) => {
+                          setEditedAppScope(true);
+                          setRightWidth(Number(e.target.value) || 320);
+                        }}
+                      />
+                    </div>
+                  </SettingsGroup>
+
+                  <SettingsGroup title={gettext('Spacing & Area Zoom Overrides (blank = Global)')}>
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
                       <NumberField
                         label={gettext('Panel Spacing Override (px, 0–24)')}
@@ -846,7 +1413,13 @@ export function ScratchPreferencesDialog({
                         />
                       ))}
                     </div>
-                  </div>
+                  </SettingsGroup>
+                </>
+              )}
+
+              {/* Applications -> <App> -> Defaults */}
+              {isAppPage && activeTabId === 'defaults' && (
+                <SettingsGroup title={gettext('Startup & Reference Defaults')}>
                   <TextField
                     label={gettext('Default SQL Reference Script')}
                     value={sqlScript}
@@ -856,173 +1429,7 @@ export function ScratchPreferencesDialog({
                       setSqlScript(e.target.value);
                     }}
                   />
-                </>
-              )}
-
-              {activeDomainKey === 'catalog' && (
-                <>
-                  <div style={{fontWeight: 700, fontSize: '0.9rem'}}>
-                    {gettext('Branched Menu Tree Geometry & Metadata Safety')}
-                  </div>
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 8,
-                      border: '1px solid var(--sr-border-subtle)',
-                      background: 'var(--sr-surface-subtle)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{fontWeight: 600, fontSize: '0.8rem'}}>
-                      {gettext('Branched Menu Tree Live Tuning')}
-                    </div>
-                    <Slider
-                      label={gettext('Depth Indent Step — stepX (%s px)', treePrefs.stepX)}
-                      min={12}
-                      max={28}
-                      step={1}
-                      value={treePrefs.stepX}
-                      onChange={(val) => handleTreePrefChange({stepX: val})}
-                    />
-                    <Slider
-                      label={gettext('Quadratic Elbow Radius (%s px)', treePrefs.radius)}
-                      min={4}
-                      max={14}
-                      step={1}
-                      value={treePrefs.radius}
-                      onChange={(val) => handleTreePrefChange({radius: val})}
-                    />
-                    <Switch
-                      label={gettext('Show Sticky Ancestor Breadcrumb Bar on Deep Trees')}
-                      checked={treePrefs.stickyAncestors}
-                      onChange={(checked) => handleTreePrefChange({stickyAncestors: checked})}
-                    />
-                  </div>
-
-                  <Switch
-                    label={gettext('Confirm Destructive Metadata Operations (DROP / TRUNCATE)')}
-                    checked={confirmDestructive}
-                    onChange={setConfirmDestructive}
-                  />
-                </>
-              )}
-
-              {activeDomainKey === 'queries' && (
-                <>
-                  <div style={{fontWeight: 700, fontSize: '0.9rem'}}>
-                    {gettext('Queries, Fetch Step Limits & Execution')}
-                  </div>
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
-                    <NumberField
-                      label={gettext('Default Max Rows (0 = Unlimited)')}
-                      min={0}
-                      step={100}
-                      value={queryLimits.maxRows}
-                      onChange={(e) =>
-                        setQueryLimits((prev) => ({
-                          ...prev,
-                          maxRows: Math.max(0, Number(e.target.value) || 0),
-                        }))
-                      }
-                    />
-                    <NumberField
-                      label={gettext('Default Rows per Step')}
-                      min={10}
-                      step={50}
-                      value={queryLimits.rowsPerStep}
-                      onChange={(e) =>
-                        setQueryLimits((prev) => ({
-                          ...prev,
-                          rowsPerStep: Math.max(10, Number(e.target.value) || 250),
-                        }))
-                      }
-                    />
-                  </div>
-                  <Switch
-                    label={gettext('Auto-Commit Statements by Default')}
-                    checked={autoCommit}
-                    onChange={setAutoCommit}
-                  />
-                  <Select
-                    label={gettext('CSV / Result Copy Delimiter')}
-                    value={csvDelimiter}
-                    onChange={setCsvDelimiter}
-                    options={[
-                      {value: ',', label: gettext('Comma (,)')},
-                      {value: ';', label: gettext('Semicolon (;)')},
-                      {value: '\t', label: gettext('Tab (\\t)')},
-                      {value: '|', label: gettext('Pipe (|)')},
-                    ]}
-                  />
-                </>
-              )}
-
-              {activeDomainKey === 'ddn' && (
-                <>
-                  <div style={{fontWeight: 700, fontSize: '0.9rem'}}>
-                    {gettext('Designers, DDN & Optional BYOK AI')}
-                  </div>
-                  <Select
-                    label={gettext('Canonical DDN Dialect Profile')}
-                    value={ddnDialect}
-                    onChange={setDdnDialect}
-                    options={[
-                      {value: 'ddn-next-1', label: 'ddn-next-1 (Standalone Open DDN 1.0)'},
-                    ]}
-                  />
-                  <Switch
-                    label={gettext('Require Git Review Gate When Accepting Design Versions')}
-                    checked={gitReviewGate}
-                    onChange={setGitReviewGate}
-                  />
-                  <Switch
-                    label={gettext('Enable Bring-Your-Own-Key AI Drafting (Drafts Only — Never Accepts)')}
-                    checked={aiDraftingEnabled}
-                    onChange={setAiDraftingEnabled}
-                  />
-                  {aiDraftingEnabled && (
-                    <TextField
-                      label={gettext('AI Provider Model / Endpoint Reference')}
-                      value={aiModelEndpoint}
-                      placeholder="https://api.example.org/v1/models"
-                      onChange={(e) => setAiModelEndpoint(e.target.value)}
-                    />
-                  )}
-                </>
-              )}
-
-              {activeDomainKey === 'shortcuts' && (
-                <>
-                  <div style={{fontWeight: 700, fontSize: '0.9rem'}}>
-                    {gettext('Keyboard Shortcuts & Engine Binary Paths')}
-                  </div>
-                  <ScratchFilterTable
-                    title={gettext('Keyboard Shortcuts')}
-                    columns={[
-                      {key: 'action', label: gettext('Action')},
-                      {key: 'scope', label: gettext('Scope'), chip: true},
-                      {key: 'shortcut', label: gettext('Shortcut'), mono: true},
-                    ]}
-                    rows={SHORTCUT_REFERENCE_ROWS}
-                    maxHeight={200}
-                  />
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
-                    <TextField
-                      label={gettext('PostgreSQL Binary Path')}
-                      value={pgBinPath}
-                      placeholder="/usr/bin"
-                      onChange={(e) => setPgBinPath(e.target.value)}
-                    />
-                    <TextField
-                      label={gettext('Firebird Binary Path (isql / gbak)')}
-                      value={fbBinPath}
-                      placeholder="/opt/firebird/bin"
-                      onChange={(e) => setFbBinPath(e.target.value)}
-                    />
-                  </div>
-                </>
+                </SettingsGroup>
               )}
             </div>
           </ScratchScrollArea>

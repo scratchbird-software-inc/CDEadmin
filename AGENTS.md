@@ -630,3 +630,43 @@ functionality. Keep key material out of public plans, receipts and downloads;
 private fingerprint binding and existing native setup/store/generate/remove
 remain in scope. This ruling does not implicitly defer native RANDOM PASSWORD
 credential delivery or other protected-result workflows.
+
+## Native executables and per-engine driver packs (owner direction, 2026-11-13)
+
+ScratchRobin targets small, optimised, platform-specific native executables
+(`linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-arm64`,
+`macos-arm64`, `macos-x86_64`, single-architecture per download) paired with
+signed, platform-specific per-engine driver packs (`.srpack`), rather than
+shipping a full Python virtual environment, pip/wheel tooling or every engine's
+client libraries in the base download. The owning specification and 13-pack
+matrix are `docs/en_US/native_packaging_and_driver_packs.rst`.
+
+Owner decisions, 2026-11-13:
+- Drivers share an underlying `.srpack` unless doing so would lose native
+  functionality or type fidelity. Wire-compatible engines without feature loss
+  share a pack (`pg-wire` serves PostgreSQL, CockroachDB, YugabyteDB YSQL,
+  immudb and XTDB; `mysql-wire` serves MySQL, TiDB, Vitess and Dolt;
+  `cassandra-wire` serves Apache Cassandra and YugabyteDB YCQL), while MariaDB
+  uses its own `mariadb` pack so neither MariaDB's patched temporal/type C
+  connector nor MySQL's patched query-attribute connector is compromised.
+- Do not bundle external vendor CLI utilities (`pg_dump`, `pg_restore`, `psql`,
+  `mysqlsh`, `mysqlbinlog`, `mariadb-*`, `gbak`, `nbackup`, `gfix`, `isql`,
+  `fdbcli`, `fdbbackup`, `cqlsh`, `ycqlsh`, `nodetool`, `sstableloader`) in
+  Core or in driver packs. Provide those backup/restore, binlog, service and
+  scripting capabilities natively inside ScratchRobin over engine wire
+  protocols, C libraries and service APIs (retaining first-party bridges such
+  as `cdeadmin-tikv-helper` and Core's tracked SQLite 3.53.0 C helpers); users
+  needing standalone external CLIs use the engine vendor's own installer, with
+  optional host binary path passthrough.
+- Use a two-tier directory-mode compilation pipeline (`--onedir` /
+  `--standalone`, never `--onefile` `/tmp` self-extractors) against the custom
+  CPython 3.14 + tracked SQLite 3.53.0 build, static module manifest and
+  `zstd`-compressed asset/catalog packs: `PyInstaller --onedir` for fast local
+  and PR CI iteration, and `Nuitka --standalone --lto=yes` for release builds.
+- Deliver and qualify the dependency split, native CLI replacements, `.srpack`
+  loader (with Linux `patchelf` `$ORIGIN` RPATH, macOS `@loader_path` +
+  same-`%TEAMID%` Hardened Runtime signing, and Windows `os.add_dll_directory`
+  + Authenticode) and frozen `scratchrobin-core` executable inside the existing
+  Electron runtime first; migrate the desktop UI shell from Electron to Tauri
+  v2 only after everything is working and qualified in Electron.
+

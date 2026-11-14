@@ -32,6 +32,8 @@ export function Checkbox({
   }, []);
 
   const ariaLabel = props['aria-label'] || inputProps?.['aria-label'] || undefined;
+  const ariaDescribedBy = props['aria-describedby'] || inputProps?.['aria-describedby'] || undefined;
+  const qaKey = props['data-cdeadmin-qa-key'] || inputProps?.['data-cdeadmin-qa-key'] || undefined;
 
   return (
     <label
@@ -41,12 +43,17 @@ export function Checkbox({
       onClick={(e) => e.stopPropagation()}
     >
       <BaseCheckbox.Root
+        ref={(el) => {
+          if (el) el.checked = Boolean(checked);
+        }}
         nativeButton
         render={<button type="button" />}
         checked={Boolean(checked)}
         indeterminate={Boolean(indeterminate)}
         disabled={Boolean(disabled)}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        data-cdeadmin-qa-key={qaKey}
         onCheckedChange={(nextChecked, details) => {
           onChange?.(nextChecked, details?.event);
         }}
@@ -150,6 +157,7 @@ export function Select({
   error = false,
   helperText,
   placeholder = '',
+  inputProps,
   className = '',
   style,
   sx,
@@ -168,6 +176,7 @@ export function Select({
 
   const [open, setOpen] = useState(false);
   const labelId = useId();
+  const helpId = inputProps?.['aria-describedby'] || `${labelId}-help`;
   const isInvalid = Boolean(validationMessage) || Boolean(error);
   const effectiveHelp = validationMessage || helperText;
   const currentOption = options.find((opt) => opt.value === value);
@@ -202,8 +211,10 @@ export function Select({
         <BaseSelect.Trigger
           render={<div />}
           nativeButton={false}
+          {...inputProps}
           aria-labelledby={label ? labelId : props['aria-labelledby']}
           aria-label={!label ? props['aria-label'] : undefined}
+          aria-describedby={effectiveHelp ? helpId : undefined}
           aria-invalid={isInvalid ? 'true' : undefined}
           className="sr-select-trigger"
           onMouseDown={(event) => {
@@ -213,7 +224,11 @@ export function Select({
           }}
         >
           <BaseSelect.Value>
-            {currentOption ? currentOption.label : (placeholder || '')}
+            {currentOption ? (
+              currentOption.label
+            ) : (
+              <span style={{color: 'var(--sr-text-muted)', opacity: 0.72}}>{placeholder || ''}</span>
+            )}
           </BaseSelect.Value>
           <BaseSelect.Icon style={{display: 'inline-flex', opacity: 0.65}}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
@@ -250,7 +265,7 @@ export function Select({
         </BaseSelect.Portal>
       </BaseSelect.Root>
       {effectiveHelp && (
-        <div className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
+        <div id={helpId} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
           {effectiveHelp}
         </div>
       )}
@@ -263,6 +278,7 @@ Select.propTypes = {
   disabled: PropTypes.bool,
   required: PropTypes.bool,
   placeholder: PropTypes.string,
+  inputProps: PropTypes.object,
   validationMessage: PropTypes.node,
   error: PropTypes.bool,
   helperText: PropTypes.node,

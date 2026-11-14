@@ -917,6 +917,11 @@ class ShellAuthorityStore:
         if not uname:
             raise ValueError('Username is required.')
         uid = str(user_payload.get('id') or uname).strip()
+        email = str(user_payload.get('email') or f'{uname}@localhost').strip()
+        active = bool(user_payload.get('active', True))
+        locked = bool(user_payload.get('locked', False))
+        auth_source = str(user_payload.get('auth_source') or 'internal')
+        raw_password = str(user_payload.get('password') or '').strip()
         groups = [str(g) for g in (user_payload.get('groups') or ['administrators']) if str(g).strip()]
         enabled_apps = [str(x) for x in (user_payload.get('enabled_applications') or [])]
         disabled_apps = [
@@ -925,10 +930,10 @@ class ShellAuthorityStore:
         record = {
             'id': uid,
             'username': uname,
-            'email': str(user_payload.get('email') or f'{uname}@localhost').strip(),
-            'active': bool(user_payload.get('active', True)),
-            'locked': bool(user_payload.get('locked', False)),
-            'auth_source': str(user_payload.get('auth_source') or 'internal'),
+            'email': email,
+            'active': active,
+            'locked': locked,
+            'auth_source': auth_source,
             'groups': groups,
             'enabled_applications': enabled_apps,
             'disabled_applications': disabled_apps,
@@ -950,6 +955,52 @@ class ShellAuthorityStore:
                 'action_overrides': user_payload.get('action_overrides') or {},
             },
         )
+
+        # Best-effort sync to SQLAlchemy User / Role tables when running inside Flask app
+        try:
+            import uuid
+            from pgadmin.model import Role, User, db
+
+            db_user = User.query.filter_by(username=uname).first()
+            is_admin = 'administrators' in {g.lower() for g in groups}
+            target_role = Role.query.filter_by(
+                name='Administrator' if is_admin else 'User'
+            ).first()
+            if db_user is None:
+                pw_hash = None
+                if raw_password:
+                    try:
+                        from flask_security.utils import hash_password
+                        pw_hash = hash_password(raw_password)
+                    except Exception:
+                        pw_hash = raw_password
+                db_user = User(
+                    username=uname,
+                    email=email,
+                    password=pw_hash,
+                    active=active,
+                    auth_source=auth_source,
+                    fs_uniquifier=uuid.uuid4().hex,
+                    locked=locked,
+                    roles=[target_role] if target_role is not None else [],
+                )
+                db.session.add(db_user)
+            else:
+                db_user.email = email
+                db_user.active = active
+                db_user.locked = locked
+                if raw_password:
+                    try:
+                        from flask_security.utils import hash_password
+                        db_user.password = hash_password(raw_password)
+                    except Exception:
+                        pass
+                if target_role is not None:
+                    db_user.roles = [target_role]
+            db.session.commit()
+        except Exception:
+            pass
+
         return self.get_security_configuration()
 
     def delete_security_user(self, username_or_id: str) -> dict[str, Any]:
@@ -962,6 +1013,15 @@ class ShellAuthorityStore:
             if str(u.get('username', '')).lower() != key and str(u.get('id', '')).lower() != key
         ]
         self._put_json('security', 'users', users)
+        try:
+            from pgadmin.model import User, db
+
+            db_user = User.query.filter(db.func.lower(User.username) == key).first()
+            if db_user is not None and getattr(db_user, 'id', None) != 1:
+                db.session.delete(db_user)
+                db.session.commit()
+        except Exception:
+            pass
         return self.get_security_configuration()
 
     def list_database_engines(self) -> dict[str, Any]:
@@ -992,7 +1052,9 @@ class ShellAuthorityStore:
                     from pgadmin.utils.preferences import Preferences
                     pref = Preferences.module('NODE-engine_type').preference(f'show_connector_{engine_id}')
                     if pref is not None:
-                        pref_enabled = bool(pref.get())
+                        pref_val = pref.get()
+                        if pref_val is not None:
+                            pref_enabled = bool(pref_val)
                 except Exception:
                     pref_enabled = None
 
@@ -1015,6 +1077,7 @@ class ShellAuthorityStore:
                 except Exception:
                     local_obs = {'available': False, 'observation': 'unknown'}
 
+                is_local = bool(local_obs.get('available', False))
                 catalog_rows.append(
                     {
                         'id': engine_id,
@@ -1024,7 +1087,8 @@ class ShellAuthorityStore:
                         'enabled': bool(enabled),
                         'interfaces': interfaces,
                         'default_ports': ports,
-                        'local_available': bool(local_obs.get('available', False)),
+                        'local_available': is_local,
+                        'local_detected': is_local,
                         'observation': str(local_obs.get('observation') or ''),
                     }
                 )
@@ -1040,6 +1104,7 @@ class ShellAuthorityStore:
                         'interfaces': [engine_id],
                         'default_ports': [],
                         'local_available': False,
+                        'local_detected': False,
                         'observation': '',
                     }
                 )
@@ -1058,12 +1123,31 @@ class ShellAuthorityStore:
         # Synchronize live Object Explorer connector preferences when Preferences DB is active
         try:
             from pgadmin.utils.preferences import Preferences
+
+            all_engine_ids = set(ENGINE_CATEGORIES.keys())
+            try:
+                from pgadmin.browser.server_groups.engine_types import ENGINE_LABELS
+                all_engine_ids.update(ENGINE_LABELS.keys())
+            except Exception:
+                pass
+
+            uid = None
+            try:
+                from flask_login import current_user
+                raw_uid = getattr(current_user, 'id', None)
+                uid = int(raw_uid) if raw_uid is not None else 1
+            except Exception:
+                uid = 1
+
             mod = Preferences.module('NODE-engine_type', create=False)
             if mod is not None:
-                for eid in ENGINE_CATEGORIES:
+                for eid in sorted(all_engine_ids):
                     pref = mod.preference(f'show_connector_{eid}')
                     if pref is not None:
-                        pref.set(eid in clean_ids)
+                        try:
+                            pref.set(eid in clean_ids, user_id=uid)
+                        except TypeError:
+                            pref.set(eid in clean_ids)
         except Exception:
             pass
 
@@ -1372,7 +1456,7 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
         if denied is not None:
             return denied
         langs = getattr(app_config_module, 'LANGUAGES', {'en': 'English'}) or {'en': 'English'}
-        current_lang = request.cookies.get('PGADMIN_LANGUAGE') or 'en'
+        current_lang = request.cookies.get('PGADMIN_LANGUAGE') or session.get('PGADMIN_LANGUAGE') or 'en'
         try:
             from pgadmin.utils.preferences import Preferences
             pref = Preferences.module('misc').preference('user_language')
@@ -1386,6 +1470,7 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
                 {'code': str(code), 'label': str(label)}
                 for code, label in langs.items()
             ],
+            'catalog': _load_locale_catalog(current_lang),
         })
 
     @bp.route('/language', methods=['POST'])
@@ -1405,7 +1490,15 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
                 pref.set(requested)
         except Exception:
             pass
-        resp = make_response(jsonify({'current': requested, 'label': str(langs[requested])}))
+        session['PGADMIN_LANGUAGE'] = requested
+        setattr(session, 'PGADMIN_LANGUAGE', requested)
+        session.modified = True
+        catalog = _load_locale_catalog(requested)
+        resp = make_response(jsonify({
+            'current': requested,
+            'label': str(langs[requested]),
+            'catalog': catalog,
+        }))
         resp.set_cookie(
             'PGADMIN_LANGUAGE',
             value=requested,
@@ -1530,3 +1623,475 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
     if 'cdeadmin_shell_authority' not in app.blueprints:
         app.register_blueprint(bp)
     return store
+
+
+_LOCALE_CATALOG_CACHE: dict[str, dict[str, str]] = {}
+
+SCRATCHROBIN_UI_TRANSLATIONS: dict[str, dict[str, str]] = {
+    'fr': {
+        'Data Navigator': 'Navigateur de données',
+        'Navigator': 'Navigateur',
+        'Connectors': 'Connecteurs',
+        'Connectors (%s)': 'Connecteurs (%s)',
+        'Enabled Database Connectors (%s)': 'Connecteurs de bases de données activés (%s)',
+        'Click any enabled engine below or expand Connectors in the Left Side Drawer to inspect local endpoints and register servers.': 'Cliquez sur un moteur activé ci-dessous ou développez Connecteurs dans le panneau gauche pour inspecter les points locaux et enregistrer des serveurs.',
+        'Database Engines (On / Off)': 'Moteurs de base de données (Marche / Arrêt)',
+        'Database Engines (On / Off)…': 'Moteurs de base de données (Marche / Arrêt)…',
+        'Configure Database Engines…': 'Configurer les moteurs de base de données…',
+        'Open Catalog Tree Drawer': 'Ouvrir le panneau du catalogue',
+        'Local listener detected': 'Écoute locale détectée',
+        'Enabled': 'Activé',
+        'Register…': 'Enregistrer…',
+        'Register Server…': 'Enregistrer un serveur…',
+        'Register Server': 'Enregistrer un serveur',
+        'Register Existing Database': 'Enregistrer une base existante',
+        'Register Database…': 'Enregistrer une base…',
+        'Create Database…': 'Créer une base de données…',
+        'Create Database': 'Créer une base de données',
+        'Verify / Connect…': 'Vérifier / Connecter…',
+        'Re-verify / Connect…': 'Revérifier / Connecter…',
+        'Verify Endpoint': 'Vérifier le point de terminaison',
+        'Verify Endpoint...': 'Vérifier le point de terminaison…',
+        'Open in Separate Tab…': 'Ouvrir dans un onglet séparé…',
+        'Remove Server…': 'Supprimer le serveur…',
+        'Remove Database…': 'Retirer la base de données…',
+        'Drop Database…': 'Supprimer définitivement la base…',
+        'Remove…': 'Supprimer…',
+        'Properties': 'Propriétés',
+        'Properties…': 'Propriétés…',
+        'Server Properties…': 'Propriétés du serveur…',
+        'Statistics': 'Statistiques',
+        'Dependencies': 'Dépendances',
+        'Dependents': 'Dépendants',
+        'Connection': 'Connexion',
+        'Authentication': 'Authentification',
+        'Advanced': 'Avancé',
+        'Tags': 'Étiquettes',
+        'Apply Changes': 'Appliquer les modifications',
+        'Save Settings': 'Enregistrer les paramètres',
+        'ScratchRobin Preferences & Workspace Settings': 'Préférences et paramètres ScratchRobin',
+        'Search preferences': 'Rechercher dans les préférences',
+        'Selected Object': 'Objet sélectionné',
+        'Catalog': 'Catalogue',
+        'Refresh Catalog': 'Actualiser le catalogue',
+        'Filter Objects': 'Filtrer les objets',
+        'Browse data': 'Parcourir les données',
+        'Not yet verified': 'Non encore vérifié',
+        'Verified / Ready': 'Vérifié / Prêt',
+        'Connected / Active': 'Connecté / Actif',
+        'Registered': 'Enregistré',
+        'User or principal': 'Utilisateur ou principal',
+        'Save Password': 'Enregistrer le mot de passe',
+        'Hide password': 'Masquer le mot de passe',
+        'Show password': 'Afficher le mot de passe',
+        'Cancel': 'Annuler',
+        'Close': 'Fermer',
+        'Apply': 'Appliquer',
+        'Help': 'Aide',
+        'Settings': 'Paramètres',
+        'Engines': 'Moteurs',
+        'New': 'Nouveau',
+        'Save': 'Enregistrer',
+        'Undo': 'Annuler',
+        'Redo': 'Rétablir',
+    },
+    'de': {
+        'Data Navigator': 'Daten-Navigator',
+        'Navigator': 'Navigator',
+        'Connectors': 'Konnektoren',
+        'Connectors (%s)': 'Konnektoren (%s)',
+        'Enabled Database Connectors (%s)': 'Aktivierte Datenbank-Konnektoren (%s)',
+        'Database Engines (On / Off)': 'Datenbank-Engines (Ein / Aus)',
+        'Database Engines (On / Off)…': 'Datenbank-Engines (Ein / Aus)…',
+        'Configure Database Engines…': 'Datenbank-Engines konfigurieren…',
+        'Local listener detected': 'Lokaler Dienst erkannt',
+        'Enabled': 'Aktiviert',
+        'Register…': 'Registrieren…',
+        'Register Server…': 'Server registrieren…',
+        'Register Server': 'Server registrieren',
+        'Register Existing Database': 'Vorhandene Datenbank registrieren',
+        'Register Database…': 'Datenbank registrieren…',
+        'Create Database…': 'Datenbank erstellen…',
+        'Create Database': 'Datenbank erstellen',
+        'Verify / Connect…': 'Prüfen / Verbinden…',
+        'Re-verify / Connect…': 'Erneut prüfen / Verbinden…',
+        'Verify Endpoint': 'Endpunkt überprüfen',
+        'Open in Separate Tab…': 'In separatem Tab öffnen…',
+        'Remove Server…': 'Server entfernen…',
+        'Remove Database…': 'Datenbank entfernen…',
+        'Drop Database…': 'Datenbank löschen…',
+        'Remove…': 'Entfernen…',
+        'Properties': 'Eigenschaften',
+        'Properties…': 'Eigenschaften…',
+        'Server Properties…': 'Server-Eigenschaften…',
+        'Statistics': 'Statistiken',
+        'Dependencies': 'Abhängigkeiten',
+        'Dependents': 'Abhängige Objekte',
+        'Connection': 'Verbindung',
+        'Authentication': 'Authentifizierung',
+        'Advanced': 'Erweitert',
+        'Tags': 'Schlagwörter',
+        'Apply Changes': 'Änderungen anwenden',
+        'Save Settings': 'Einstellungen speichern',
+        'ScratchRobin Preferences & Workspace Settings': 'ScratchRobin-Einstellungen & Arbeitsbereich',
+        'Search preferences': 'Einstellungen durchsuchen',
+        'Selected Object': 'Ausgewähltes Objekt',
+        'Catalog': 'Katalog',
+        'Refresh Catalog': 'Katalog aktualisieren',
+        'Filter Objects': 'Objekte filtern',
+        'Browse data': 'Daten durchsuchen',
+        'Not yet verified': 'Noch nicht überprüft',
+        'Verified / Ready': 'Überprüft / Bereit',
+        'Connected / Active': 'Verbunden / Aktiv',
+        'Registered': 'Registriert',
+        'User or principal': 'Benutzer oder Prinzipal',
+        'Save Password': 'Passwort speichern',
+        'Hide password': 'Passwort ausblenden',
+        'Show password': 'Passwort anzeigen',
+        'Cancel': 'Abbrechen',
+        'Close': 'Schließen',
+        'Apply': 'Anwenden',
+        'Help': 'Hilfe',
+        'Settings': 'Einstellungen',
+        'Engines': 'Engines',
+        'New': 'Neu',
+        'Save': 'Speichern',
+        'Undo': 'Rückgängig',
+        'Redo': 'Wiederholen',
+    },
+    'es': {
+        'Data Navigator': 'Navegador de datos',
+        'Navigator': 'Navegador',
+        'Connectors': 'Conectores',
+        'Connectors (%s)': 'Conectores (%s)',
+        'Enabled Database Connectors (%s)': 'Conectores de bases de datos habilitados (%s)',
+        'Database Engines (On / Off)': 'Motores de base de datos (Activar / Desactivar)',
+        'Database Engines (On / Off)…': 'Motores de base de datos (Activar / Desactivar)…',
+        'Configure Database Engines…': 'Configurar motores de base de datos…',
+        'Local listener detected': 'Servicio local detectado',
+        'Enabled': 'Habilitado',
+        'Register…': 'Registrar…',
+        'Register Server…': 'Registrar servidor…',
+        'Register Server': 'Registrar servidor',
+        'Register Existing Database': 'Registrar base de datos existente',
+        'Register Database…': 'Registrar base de datos…',
+        'Create Database…': 'Crear base de datos…',
+        'Create Database': 'Crear base de datos',
+        'Verify / Connect…': 'Verificar / Conectar…',
+        'Re-verify / Connect…': 'Reverificar / Conectar…',
+        'Verify Endpoint': 'Verificar punto de conexión',
+        'Open in Separate Tab…': 'Abrir en pestaña separada…',
+        'Remove Server…': 'Quitar servidor…',
+        'Remove Database…': 'Quitar base de datos…',
+        'Drop Database…': 'Eliminar base de datos…',
+        'Remove…': 'Quitar…',
+        'Properties': 'Propiedades',
+        'Properties…': 'Propiedades…',
+        'Server Properties…': 'Propiedades del servidor…',
+        'Statistics': 'Estadísticas',
+        'Dependencies': 'Dependencias',
+        'Dependents': 'Dependientes',
+        'Connection': 'Conexión',
+        'Authentication': 'Autenticación',
+        'Advanced': 'Avanzado',
+        'Tags': 'Etiquetas',
+        'Apply Changes': 'Aplicar cambios',
+        'Save Settings': 'Guardar configuración',
+        'ScratchRobin Preferences & Workspace Settings': 'Preferencias y configuración de ScratchRobin',
+        'Search preferences': 'Buscar preferencias',
+        'Selected Object': 'Objeto seleccionado',
+        'Catalog': 'Catálogo',
+        'Refresh Catalog': 'Actualizar catálogo',
+        'Filter Objects': 'Filtrar objetos',
+        'Browse data': 'Explorar datos',
+        'Not yet verified': 'Aún no verificado',
+        'Verified / Ready': 'Verificado / Listo',
+        'Connected / Active': 'Conectado / Activo',
+        'Registered': 'Registrado',
+        'User or principal': 'Usuario o principal',
+        'Save Password': 'Guardar contraseña',
+        'Hide password': 'Ocultar contraseña',
+        'Show password': 'Mostrar contraseña',
+        'Cancel': 'Cancelar',
+        'Close': 'Cerrar',
+        'Apply': 'Aplicar',
+        'Help': 'Ayuda',
+        'Settings': 'Configuración',
+        'Engines': 'Motores',
+        'New': 'Nuevo',
+        'Save': 'Guardar',
+        'Undo': 'Deshacer',
+        'Redo': 'Rehacer',
+    },
+    'it': {
+        'Data Navigator': 'Navigatore dati',
+        'Navigator': 'Navigatore',
+        'Connectors': 'Connettori',
+        'Connectors (%s)': 'Connettori (%s)',
+        'Enabled Database Connectors (%s)': 'Connettori database abilitati (%s)',
+        'Database Engines (On / Off)…': 'Motori database (On / Off)…',
+        'Local listener detected': 'Servizio locale rilevato',
+        'Register…': 'Registra…',
+        'Register Server…': 'Registra server…',
+        'Verify / Connect…': 'Verifica / Connetti…',
+        'Verify Endpoint': 'Verifica endpoint',
+        'Create Database…': 'Crea database…',
+        'Register Database…': 'Registra database…',
+        'Open in Separate Tab…': 'Apri in scheda separata…',
+        'Remove Server…': 'Rimuovi server…',
+        'Properties': 'Proprietà',
+        'Statistics': 'Statistiche',
+        'Apply Changes': 'Applica modifiche',
+        'Save Settings': 'Salva impostazioni',
+        'Cancel': 'Annulla',
+        'Close': 'Chiudi',
+        'Apply': 'Applica',
+        'Help': 'Aiuto',
+        'Settings': 'Impostazioni',
+    },
+    'pt_BR': {
+        'Data Navigator': 'Navegador de Dados',
+        'Navigator': 'Navegador',
+        'Connectors': 'Conectores',
+        'Connectors (%s)': 'Conectores (%s)',
+        'Enabled Database Connectors (%s)': 'Conectores de banco de dados ativados (%s)',
+        'Database Engines (On / Off)…': 'Motores de banco de dados (Ativar / Desativar)…',
+        'Local listener detected': 'Serviço local detectado',
+        'Register…': 'Registrar…',
+        'Register Server…': 'Registrar servidor…',
+        'Verify / Connect…': 'Verificar / Conectar…',
+        'Verify Endpoint': 'Verificar endpoint',
+        'Create Database…': 'Criar banco de dados…',
+        'Register Database…': 'Registrar banco de dados…',
+        'Open in Separate Tab…': 'Abrir em aba separada…',
+        'Remove Server…': 'Remover servidor…',
+        'Properties': 'Propriedades',
+        'Statistics': 'Estatísticas',
+        'Apply Changes': 'Aplicar alterações',
+        'Save Settings': 'Salvar configurações',
+        'Cancel': 'Cancelar',
+        'Close': 'Fechar',
+        'Apply': 'Aplicar',
+        'Help': 'Ajuda',
+        'Settings': 'Configurações',
+    },
+    'ja': {
+        'Data Navigator': 'データナビゲーター',
+        'Navigator': 'ナビゲーター',
+        'Connectors': 'コネクター',
+        'Connectors (%s)': 'コネクター (%s)',
+        'Enabled Database Connectors (%s)': '有効なデータベースコネクター (%s)',
+        'Database Engines (On / Off)…': 'データベースエンジン (オン / オフ)…',
+        'Local listener detected': 'ローカルリスナー検出済み',
+        'Register…': '登録…',
+        'Register Server…': 'サーバーを登録…',
+        'Verify / Connect…': '検証 / 接続…',
+        'Verify Endpoint': 'エンドポイントの検証',
+        'Create Database…': 'データベースを作成…',
+        'Register Database…': 'データベースを登録…',
+        'Open in Separate Tab…': '別のタブで開く…',
+        'Remove Server…': 'サーバーを削除…',
+        'Properties': 'プロパティ',
+        'Statistics': '統計情報',
+        'Apply Changes': '変更を適用',
+        'Save Settings': '設定を保存',
+        'Cancel': 'キャンセル',
+        'Close': '閉じる',
+        'Apply': '適用',
+        'Help': 'ヘルプ',
+        'Settings': '設定',
+    },
+    'ko': {
+        'Data Navigator': '데이터 탐색기',
+        'Navigator': '탐색기',
+        'Connectors': '커넥터',
+        'Connectors (%s)': '커넥터 (%s)',
+        'Enabled Database Connectors (%s)': '활성 데이터베이스 커넥터 (%s)',
+        'Database Engines (On / Off)…': '데이터베이스 엔진 (켜기 / 끄기)…',
+        'Local listener detected': '로컬 리스너 감지됨',
+        'Register…': '등록…',
+        'Verify / Connect…': '검증 / 연결…',
+        'Verify Endpoint': '엔드포인트 검증',
+        'Create Database…': '데이터베이스 생성…',
+        'Register Database…': '데이터베이스 등록…',
+        'Remove Server…': '서버 제거…',
+        'Properties': '속성',
+        'Statistics': '통계',
+        'Apply Changes': '변경사항 적용',
+        'Save Settings': '설정 저장',
+        'Cancel': '취소',
+        'Close': '닫기',
+        'Apply': '적용',
+        'Help': '도움말',
+        'Settings': '설정',
+    },
+    'zh_Hans_CN': {
+        'Data Navigator': '数据导航器',
+        'Navigator': '导航器',
+        'Connectors': '连接器',
+        'Connectors (%s)': '连接器 (%s)',
+        'Enabled Database Connectors (%s)': '已启用的数据库连接器 (%s)',
+        'Database Engines (On / Off)…': '数据库引擎 (开启 / 关闭)…',
+        'Local listener detected': '已检测到本地监听',
+        'Register…': '注册…',
+        'Verify / Connect…': '验证 / 连接…',
+        'Verify Endpoint': '验证端点',
+        'Create Database…': '创建数据库…',
+        'Register Database…': '注册数据库…',
+        'Open in Separate Tab…': '在独立标签页中打开…',
+        'Remove Server…': '移除服务器…',
+        'Properties': '属性',
+        'Statistics': '统计信息',
+        'Apply Changes': '应用更改',
+        'Save Settings': '保存设置',
+        'Cancel': '取消',
+        'Close': '关闭',
+        'Apply': '应用',
+        'Help': '帮助',
+        'Settings': '设置',
+    },
+    'zh_Hant_TW': {
+        'Data Navigator': '資料導覽器',
+        'Navigator': '導覽器',
+        'Connectors': '連接器',
+        'Connectors (%s)': '連接器 (%s)',
+        'Enabled Database Connectors (%s)': '已啟用的資料庫連接器 (%s)',
+        'Database Engines (On / Off)…': '資料庫引擎 (開啟 / 關閉)…',
+        'Local listener detected': '已偵測到本機監聽',
+        'Register…': '註冊…',
+        'Verify / Connect…': '驗證 / 連線…',
+        'Verify Endpoint': '驗證端點',
+        'Create Database…': '建立資料庫…',
+        'Register Database…': '註冊資料庫…',
+        'Open in Separate Tab…': '在獨立分頁中開啟…',
+        'Remove Server…': '移除伺服器…',
+        'Properties': '屬性',
+        'Statistics': '統計資訊',
+        'Apply Changes': '套用變更',
+        'Save Settings': '儲存設定',
+        'Cancel': '取消',
+        'Close': '關閉',
+        'Apply': '套用',
+        'Help': '說明',
+        'Settings': '設定',
+    },
+    'ru': {
+        'Data Navigator': 'Навигатор данных',
+        'Navigator': 'Навигатор',
+        'Connectors': 'Коннекторы',
+        'Connectors (%s)': 'Коннекторы (%s)',
+        'Enabled Database Connectors (%s)': 'Активные коннекторы БД (%s)',
+        'Database Engines (On / Off)…': 'СУБД (Вкл / Выкл)…',
+        'Local listener detected': 'Обнаружен локальный сервис',
+        'Register…': 'Регистрация…',
+        'Verify / Connect…': 'Проверить / Подключить…',
+        'Verify Endpoint': 'Проверка подключения',
+        'Create Database…': 'Создать базу данных…',
+        'Register Database…': 'Зарегистрировать базу…',
+        'Remove Server…': 'Удалить сервер…',
+        'Properties': 'Свойства',
+        'Statistics': 'Статистика',
+        'Apply Changes': 'Применить изменения',
+        'Save Settings': 'Сохранить настройки',
+        'Cancel': 'Отмена',
+        'Close': 'Закрыть',
+        'Apply': 'Применить',
+        'Help': 'Справка',
+        'Settings': 'Настройки',
+    },
+    'pl': {
+        'Data Navigator': 'Nawigator danych',
+        'Navigator': 'Nawigator',
+        'Connectors': 'Konektory',
+        'Connectors (%s)': 'Konektory (%s)',
+        'Properties': 'Właściwości',
+        'Statistics': 'Statystyki',
+        'Apply Changes': 'Zastosuj zmiany',
+        'Save Settings': 'Zapisz ustawienia',
+        'Cancel': 'Anuluj',
+        'Close': 'Zamknij',
+        'Apply': 'Zastosuj',
+        'Help': 'Pomoc',
+        'Settings': 'Ustawienia',
+    },
+    'cs': {
+        'Data Navigator': 'Navigátor dat',
+        'Navigator': 'Navigátor',
+        'Connectors': 'Konektory',
+        'Connectors (%s)': 'Konektory (%s)',
+        'Properties': 'Vlastnosti',
+        'Statistics': 'Statistiky',
+        'Apply Changes': 'Použít změny',
+        'Save Settings': 'Uložit nastavení',
+        'Cancel': 'Zrušit',
+        'Close': 'Zavřít',
+        'Apply': 'Použít',
+        'Help': 'Nápověda',
+        'Settings': 'Nastavení',
+    },
+    'sv': {
+        'Data Navigator': 'Datanavigator',
+        'Navigator': 'Navigator',
+        'Connectors': 'Anslutningar',
+        'Connectors (%s)': 'Anslutningar (%s)',
+        'Properties': 'Egenskaper',
+        'Statistics': 'Statistik',
+        'Apply Changes': 'Verkställ ändringar',
+        'Save Settings': 'Spara inställningar',
+        'Cancel': 'Avbryt',
+        'Close': 'Stäng',
+        'Apply': 'Verkställ',
+        'Help': 'Hjälp',
+        'Settings': 'Inställningar',
+    },
+    'id': {
+        'Data Navigator': 'Navigator Data',
+        'Navigator': 'Navigator',
+        'Connectors': 'Konektor',
+        'Connectors (%s)': 'Konektor (%s)',
+        'Properties': 'Properti',
+        'Statistics': 'Statistik',
+        'Apply Changes': 'Terapkan Perubahan',
+        'Save Settings': 'Simpan Pengaturan',
+        'Cancel': 'Batal',
+        'Close': 'Tutup',
+        'Apply': 'Terapkan',
+        'Help': 'Bantuan',
+        'Settings': 'Pengaturan',
+    },
+}
+
+
+def _load_locale_catalog(locale_code: str) -> dict[str, str]:
+    code = str(locale_code or 'en').strip()
+    if not code or code == 'en':
+        return {}
+    cached = _LOCALE_CATALOG_CACHE.get(code)
+    if cached is not None:
+        return cached
+    merged: dict[str, str] = {}
+    try:
+        from babel.support import Translations
+        translations_dir = os.path.join(current_app.root_path, 'translations')
+        trans = Translations.load(translations_dir, [code])
+        raw_catalog = getattr(trans, '_catalog', None) or {}
+        for key, val in raw_catalog.items():
+            if not isinstance(val, str) or not val:
+                continue
+            if isinstance(key, str) and key:
+                merged[key] = val
+            elif (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and key[1] == 0
+                and isinstance(key[0], str)
+                and key[0]
+            ):
+                merged.setdefault(key[0], val)
+    except Exception:
+        pass
+    overlay = SCRATCHROBIN_UI_TRANSLATIONS.get(code) or SCRATCHROBIN_UI_TRANSLATIONS.get(code.split('_')[0]) or {}
+    merged.update(overlay)
+    if merged:
+        _LOCALE_CATALOG_CACHE[code] = merged
+    return merged

@@ -1259,6 +1259,8 @@ class EndpointService:
             route_configuration['credential_kinds'] = sorted(
                 credential_values
             )
+        elif not save_password:
+            route_configuration.pop('credential_kinds', None)
         route.configuration = self._encoded_route(route_configuration)
         server.name = name
         if profile.get('secret_fields'):
@@ -2029,13 +2031,21 @@ class EndpointService:
             if registration_secret:
                 models['database_password'] = registration_secret
             present = None if registration_secret else route.get('credential_kinds')
-            if present is None:
-                # No record of which credentials were supplied (a legacy-
-                # created endpoint, or verification during registration):
-                # reference rows exist for every declared field, but only a
-                # primary or required credential can have been supplied.
-                # Optional factors stay unrequested until the user supplies
-                # them, which records credential_kinds.
+            if present is not None and (
+                not isinstance(present, list) or not all(
+                    isinstance(item, str) for item in present
+                )
+            ):
+                raise EndpointRegistrationError(
+                    'endpoint credential-kind presence is invalid'
+                )
+            if not present:
+                # No record of which credentials were supplied (an unverified
+                # or prompt-for-password registration, or legacy endpoint):
+                # reference rows exist for every declared field, and only an
+                # active primary or required credential can be supplied.
+                # Passwordless/trusted-auth routes deactivate primary/required
+                # fields in active_secret_fields.
                 models = {
                     kind: model for kind, model in models.items()
                     if any(field['secret_kind'] == kind and (
@@ -2043,12 +2053,6 @@ class EndpointService:
                         for field in fields)
                 }
             else:
-                if not isinstance(present, list) or not all(
-                    isinstance(item, str) for item in present
-                ):
-                    raise EndpointRegistrationError(
-                        'endpoint credential-kind presence is invalid'
-                    )
                 models = {
                     kind: model for kind, model in models.items()
                     if kind in present

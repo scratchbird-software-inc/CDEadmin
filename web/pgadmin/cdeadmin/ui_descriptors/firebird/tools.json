@@ -17,11 +17,9 @@
         "registration_intent": "create_database"
       },
       "when": {
-        "route_kind": "network"
-      },
-      "enabled_when": [
-        "available"
-      ]
+        "route_kind": "network",
+        "localhost_placeholder": false
+      }
     },
     {
       "command_id": "connector.firebird.register_database",
@@ -37,11 +35,9 @@
         "registration_intent": "register_existing"
       },
       "when": {
-        "route_kind": "network"
-      },
-      "enabled_when": [
-        "available"
-      ]
+        "route_kind": "network",
+        "localhost_placeholder": false
+      }
     },
     {
       "command_id": "connector.firebird.docker",

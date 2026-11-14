@@ -145,6 +145,80 @@ function ActivityLaunchers() {
   </div>;
 }
 
+function SystemAdministrationLaunchers() {
+  const projectShell = useProjectShell();
+  const openSection = (sectionId) => {
+    if (typeof projectShell?.openSettingsDialog === 'function') {
+      projectShell.openSettingsDialog('global', null, sectionId);
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:open-preferences', {
+          detail: {mode: 'global', sectionId},
+        })
+      );
+    }
+  };
+
+  const items = [
+    {
+      id: 'engines:connectors',
+      qaKey: 'dashboard.welcome.settings-engines',
+      iconKey: 'object.server',
+      label: gettext('Database Engines (On / Off)'),
+      hint: gettext('Enable or disable PostgreSQL, Firebird, DuckDB, SQLite, MariaDB, ScratchBird & more'),
+    },
+    {
+      id: 'security:apps',
+      qaKey: 'dashboard.welcome.settings-security-apps',
+      iconKey: 'object.role',
+      label: gettext('Security & Application Access'),
+      hint: gettext('Turn workspace applications ON or OFF across ScratchRobin'),
+    },
+    {
+      id: 'security:users',
+      qaKey: 'dashboard.welcome.settings-users-groups',
+      iconKey: 'object.user',
+      label: gettext('Users, Roles & Groups'),
+      hint: gettext('Create users, configure security groups, and grant or revoke permissions'),
+    },
+    {
+      id: 'actions:global-menus',
+      qaKey: 'dashboard.welcome.settings-menus-toolbars',
+      iconKey: 'action.customize',
+      label: gettext('Menus, Toolbars & Icons'),
+      hint: gettext('Place action icons on global menus, application menus & tabbed-notebook-iconbars'),
+    },
+    {
+      id: 'appearance:schemes',
+      qaKey: 'dashboard.welcome.settings-schemes-fonts',
+      iconKey: 'action.preferences',
+      label: gettext('Colour Schemes & Fonts'),
+      hint: gettext('Configure curated or custom colour schemes and UI / SQL / diagram fonts'),
+    },
+  ];
+
+  return (
+    <div
+      className="WelcomeDashboard-launchGrid"
+      data-cdeadmin-qa-key="dashboard.welcome.system-settings"
+    >
+      {items.map((item) => (
+        <button
+          type="button"
+          key={item.id}
+          data-cdeadmin-qa-key={item.qaKey}
+          className="WelcomeDashboard-launchTile"
+          title={item.hint}
+          onClick={() => openSection(item.id)}
+        >
+          <Icon iconKey={item.iconKey} decorative />
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function DocumentationLaunchers() {
   return <div className="WelcomeDashboard-launchGrid"
     data-cdeadmin-qa-key="dashboard.welcome.documentation-launchers">
@@ -183,6 +257,15 @@ export default function WelcomeDashboard({pgBrowser: _pgBrowser}) {
         </div>
         <div className="WelcomeDashboard-cardBody">
           <ActivityLaunchers />
+        </div>
+      </section>
+      <section className="WelcomeDashboard-card"
+        aria-labelledby="system-settings-launcher-title">
+        <div className="WelcomeDashboard-cardHeader" id="system-settings-launcher-title">
+          {gettext('System Administration & Settings')}
+        </div>
+        <div className="WelcomeDashboard-cardBody">
+          <SystemAdministrationLaunchers />
         </div>
       </section>
       <section className="WelcomeDashboard-card"

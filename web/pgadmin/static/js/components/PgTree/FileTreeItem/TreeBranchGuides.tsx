@@ -72,40 +72,70 @@ function activeAncestorsSet(activeItem?: FileOrDir | null): Set<FileOrDir> {
 export function TreeBranchGuides({
   item,
   activeItem = null,
-  stepX = 18,
+  stepX = 20,
   radius = 8,
+  hasToggle = false,
 }: {
   item: FileOrDir
   activeItem?: FileOrDir | null
   stepX?: number
   radius?: number
+  hasToggle?: boolean
 }) {
   const segments = treeBranchSegments(item);
   const activeSet = activeItem ? activeAncestorsSet(activeItem) : null;
   const isSelfActive = Boolean(activeItem && activeItem === item);
-  const w = Math.max(12, Math.min(28, Number(stepX) || 18));
-  const r = Math.max(4, Math.min(12, Number(radius) || 8));
+  const w = Math.max(18, Math.min(28, Number(stepX) || 20));
+  const cx = Math.round(w / 2);
+  const r = Math.max(4, Math.min(cx - 1, Number(radius) || 8));
   const h = 28;
-  const cx = Math.round(w * 0.45);
   const midY = h / 2;
+  const circleRadius = 8;
+  const guideStroke = 'var(--sr-tree-guide, rgba(71, 85, 105, 0.78))';
+  const activeStroke = 'var(--sr-accent, #0f62fe)';
+  const strokeWidth = 2.2;
+  const activeStrokeWidth = 2.5;
+
+  // Build ancestor chain per visible segment column so active trace highlights only real ancestors.
+  const ancestorsByColumn: (FileOrDir | null)[] = [];
+  if (segments.length > 0) {
+    let cursor = (item?.parent as FileOrDir) || null;
+    for (let idx = 0; idx < segments.length; idx += 1) {
+      ancestorsByColumn.unshift(cursor);
+      cursor = (cursor?.parent as FileOrDir) || null;
+    }
+  }
 
   return (
-    <span className="tree-branch" aria-hidden="true" style={{display: 'inline-flex', alignItems: 'stretch'}}>
+    <span className="tree-branch" aria-hidden="true" style={{display: 'inline-flex', alignItems: 'stretch', height: h}}>
       {segments.map((segment, index) => {
-        const elbowEnd = Math.min(w - 1, cx + r);
         const isCurrent = segment.kind === 'current';
         const showTrunkTop = isCurrent || segment.continues;
         const showTrunkBottom = segment.continues;
         const showActiveElbow = isCurrent && isSelfActive;
+        const columnAncestor = ancestorsByColumn[index];
         const showActivePassThrough =
           !isCurrent &&
+          showTrunkBottom &&
           Boolean(
             activeSet &&
-              item?.parent &&
-              activeSet.has(item.parent as FileOrDir) &&
-              activeItem !== item.parent &&
+              columnAncestor &&
+              activeSet.has(columnAncestor) &&
+              activeItem !== columnAncestor &&
               (activeItem?.depth ?? 0) > (item?.depth ?? 0)
           );
+
+        // When the row has a circular (+/-) toggle in the next `w`-wide slot, its circle
+        // has radius `circleRadius` centered at `w + cx`, so its left border is at
+        // `w + cx - circleRadius`. Extending 1px inside the 2px circle border fuses
+        // the curved line seamlessly to the circle with zero gap at any zoom.
+        // When the row has no children (`!hasToggle`), end cleanly right before the icon.
+        const horizEnd = hasToggle
+          ? w + Math.max(0, cx - circleRadius) + 1
+          : w + 1;
+        const elbowCornerEnd = Math.min(horizEnd, cx + r);
+        const currentColor = showActiveElbow ? activeStroke : guideStroke;
+        const currentWidth = showActiveElbow ? activeStrokeWidth : strokeWidth;
 
         return (
           <span
@@ -126,40 +156,50 @@ export function TreeBranchGuides({
               viewBox={`0 0 ${w} ${h}`}
               fill="none"
               aria-hidden="true"
-              style={{display: 'block', overflow: 'visible'}}
+              style={{display: 'block', overflow: 'visible', pointerEvents: 'none'}}
             >
               {showTrunkTop && !isCurrent && showTrunkBottom && (
                 <path
                   d={`M ${cx} 0 V ${h}`}
-                  stroke="var(--sr-border-default, rgba(100,116,139,0.35))"
-                  strokeWidth="1.25"
+                  stroke={guideStroke}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="butt"
                 />
               )}
               {isCurrent && segment.continues && (
                 <path
                   d={`M ${cx} 0 V ${h}`}
-                  stroke="var(--sr-border-default, rgba(100,116,139,0.35))"
-                  strokeWidth="1.25"
+                  stroke={guideStroke}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="butt"
                 />
               )}
               {isCurrent && (
-                <path
-                  d={`M ${cx} 0 V ${midY - r} Q ${cx} ${midY} ${elbowEnd} ${midY} H ${w}`}
-                  stroke={
-                    showActiveElbow
-                      ? 'var(--sr-accent, #1a73e8)'
-                      : 'var(--sr-border-default, rgba(100,116,139,0.4))'
-                  }
-                  strokeWidth={showActiveElbow ? '1.85' : '1.25'}
-                  strokeLinecap="round"
-                />
+                <>
+                  <path
+                    d={`M ${cx} 0 V ${midY - r} Q ${cx} ${midY} ${elbowCornerEnd} ${midY} H ${horizEnd}`}
+                    stroke={currentColor}
+                    strokeWidth={currentWidth}
+                    strokeLinecap="butt"
+                    strokeLinejoin="round"
+                  />
+                  {!hasToggle && (
+                    <circle
+                      cx={horizEnd}
+                      cy={midY}
+                      r={currentWidth / 2}
+                      fill={currentColor}
+                    />
+                  )}
+                </>
               )}
               {showActivePassThrough && (
                 <path
                   d={`M ${cx} 0 V ${h}`}
-                  stroke="var(--sr-accent, #1a73e8)"
-                  strokeWidth="1.75"
-                  opacity="0.7"
+                  stroke={activeStroke}
+                  strokeWidth={activeStrokeWidth}
+                  strokeLinecap="butt"
+                  opacity="0.82"
                 />
               )}
             </svg>

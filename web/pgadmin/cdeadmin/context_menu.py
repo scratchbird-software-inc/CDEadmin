@@ -338,6 +338,17 @@ def connector_context_actions(
                 }, enabled=available,
                 disabled_reason=unavailable_reason,
             ))
+            if localhost_placeholder:
+                actions.append(_action(
+                    f'connector.{engine_id}.register_custom_endpoint.{profile_id}',
+                    f'Register {display} server / custom port...',
+                    'register_endpoint', icon='action.settings',
+                    group='register', priority=20 + index,
+                    mutation='admin', arguments={
+                        **base_arguments,
+                        'registration_intent': 'endpoint',
+                    }, enabled=True,
+                ))
             actions.extend(declared_tool_actions(
                 engine_id, 'connector', 'profile', state={
                     'engine_id': engine_id, 'display': display,

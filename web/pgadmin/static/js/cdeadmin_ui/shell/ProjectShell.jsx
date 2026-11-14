@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
@@ -920,15 +921,22 @@ export function ProjectShellProvider({
       instanceCounter.current += 1;
       const instanceId =
         tabSpec.instanceId || `inline-${targetAppId}-${instanceCounter.current}`;
+      const parentAppInstance = instancesRef.current.find(
+        (i) => i.appId === targetAppId && typeof i.renderLeftDrawer === 'function'
+      );
+      const supportsLeft = Boolean(tabSpec.supportsLeftDrawer);
       const newTab = {
         instanceId,
         appId: targetAppId,
         title: tabSpec.title || gettext('Object Editor'),
         iconKey: tabSpec.iconKey || 'object.table',
-        supportsLeftDrawer: Boolean(tabSpec.supportsLeftDrawer),
+        supportsLeftDrawer: supportsLeft,
         supportsRightDrawer: tabSpec.supportsRightDrawer !== false,
         supportsTabbedIconBar: tabSpec.supportsTabbedIconBar !== false,
-        leftOpen: Boolean(tabSpec.leftOpen),
+        leftOpen:
+          typeof tabSpec.leftOpen === 'boolean'
+            ? tabSpec.leftOpen
+            : Boolean(supportsLeft && parentAppInstance?.leftOpen),
         rightOpen: Boolean(tabSpec.rightOpen),
         rightMode: tabSpec.rightMode || 'properties',
         rightViews: tabSpec.rightViews || [{id: 'properties', label: gettext('Properties')}],
@@ -944,7 +952,10 @@ export function ProjectShellProvider({
         renderWorkArea:
           tabSpec.renderWorkArea ||
           (() => <Box sx={{p: 2}}>{tabSpec.title || gettext('Object Editor')}</Box>),
-        renderLeftDrawer: tabSpec.renderLeftDrawer || (() => null),
+        renderLeftDrawer:
+          tabSpec.renderLeftDrawer ||
+          (supportsLeft && parentAppInstance?.renderLeftDrawer) ||
+          (() => null),
         renderRightDrawer:
           tabSpec.renderRightDrawer ||
           ((inst) =>
@@ -1484,17 +1495,46 @@ export function ProjectShellProvider({
       const code = String(langCode || 'en').trim();
       setLocaleState(code);
       actionsRegistry.setLocale(code);
+      gettext.setCatalog?.(null, code);
       if (runFetch) {
-        await runFetch('/cdeadmin/api/shell/language', {
+        const res = await runFetch('/cdeadmin/api/shell/language', {
           method: 'POST',
           credentials: 'same-origin',
           headers: {'Content-Type': 'application/json', ...csrfHeaders()},
           body: JSON.stringify({language: code}),
-        }).catch(() => {});
+        }).catch(() => null);
+        if (res && typeof res.json === 'function' && res.ok) {
+          const payload = await res.json().catch(() => null);
+          if (payload?.catalog && typeof payload.catalog === 'object') {
+            gettext.setCatalog?.(payload.catalog, payload.current || code);
+          }
+        }
       }
     },
     [actionsRegistry, runFetch]
   );
+
+  useEffect(() => {
+    if (locale === 'en' && gettext.getLocale?.() && gettext.getLocale() !== 'en') {
+      gettext.setCatalog?.(null, 'en');
+    }
+    if (instancesRef.current.length === 0 || typeof gettext.retranslate !== 'function') {
+      return;
+    }
+    let changed = false;
+    const nextList = instancesRef.current.map((inst) => {
+      const nextTitle = gettext.retranslate(inst.title);
+      if (nextTitle && nextTitle !== inst.title) {
+        changed = true;
+        return {...inst, title: nextTitle};
+      }
+      return inst;
+    });
+    if (changed) {
+      instancesRef.current = nextList;
+      setInstances(nextList);
+    }
+  }, [locale]);
 
   const applyAuthorizationPayload = useCallback(
     (data) => {
@@ -1653,6 +1693,9 @@ export function ProjectShellProvider({
         if (data.current) {
           setLocaleState(data.current);
           actionsRegistry.setLocale(data.current);
+          if (data.current !== 'en' || (data.catalog && Object.keys(data.catalog).length > 0)) {
+            gettext.setCatalog?.(data.catalog || null, data.current);
+          }
         }
       })
       .catch(() => {});
@@ -1855,6 +1898,57 @@ export function ProjectShellProvider({
       },
     });
     [
+      [
+        'shell.engines.open',
+        'engines:connectors',
+        gettext('Database Engines (On / Off)'),
+        gettext('Enable or disable database engine connectors'),
+        'object.server',
+      ],
+      [
+        'shell.security.open',
+        'security:apps',
+        gettext('Security, Users & Groups'),
+        gettext('Configure application availability, users, groups, and grants'),
+        'object.role',
+      ],
+      [
+        'shell.users.open',
+        'security:users',
+        gettext('Users & Group Grants'),
+        gettext('Create and manage users, roles, and group grants'),
+        'object.user',
+      ],
+      [
+        'shell.menus.open',
+        'actions:global-menus',
+        gettext('Menus, Toolbars & Icons'),
+        gettext('Place action icons on global menus, application menus, and iconbars'),
+        'action.customize',
+      ],
+      [
+        'shell.schemes.open',
+        'appearance:schemes',
+        gettext('Colour Schemes & Fonts'),
+        gettext('Configure colour schemes and UI / SQL / diagram fonts'),
+        'action.preferences',
+      ],
+    ].forEach(([id, initialSection, label, hint, icon]) => {
+      actionsRegistry.upsert({
+        id,
+        icon,
+        application: 'project',
+        defaultText: label,
+        defaultHint: hint,
+        status: T_ACTION_STATUS.ENABLED,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () =>
+            setSettingsDialog({open: true, mode: 'global', appId: null, initialSection}),
+        },
+      });
+    });
+    [
       ['shell.help.sql_reference', 'sql', gettext('SQL Reference'), 'tool.query'],
       ['shell.help.engine_reference', 'engines', gettext('Database Engine Reference'), 'object.database'],
       ['shell.help.glossary', 'glossary', gettext('Glossary of Terms'), 'action.help'],
@@ -1939,6 +2033,7 @@ export function ProjectShellProvider({
     shellLeftDrawerOpen,
     toggleInstanceRightDrawer,
     toggleLeftDrawer,
+    locale,
   ]);
 
   const showTabbedIconBar = useMemo(() => {
@@ -1977,10 +2072,14 @@ export function ProjectShellProvider({
       {
         id: 'shell.preferences.open',
         actionId: 'shell.preferences.open',
-        label: translateShell(locale, 'menu.applications.preferences.text', 'Preferences'),
+        label: translateShell(
+          locale,
+          'menu.applications.preferences.text',
+          'Configure ScratchRobin…'
+        ),
         i18nKey: 'menu.applications.preferences.text',
         hintKey: 'menu.applications.preferences.hint',
-        iconKey: 'action.preferences',
+        iconKey: 'action.settings',
         index: 20,
         callback: () => actionsRegistry.execute('shell.preferences.open'),
       },
@@ -2567,12 +2666,74 @@ export function ProjectApplicationNotebookBar() {
       />
       {typeof shell.focusedInstance.renderToolbarExtras === 'function' && (
         <div className="sr-3b-extras-bar" data-cdeadmin-qa-key="notebookbar-extras">
-          {shell.focusedInstance.renderToolbarExtras(shell.focusedInstance, shell)}
+          <ShellSurfaceErrorBoundary
+            resetKey={`${shell.focusedInstance.instanceId}:extras`}
+            surfaceName={gettext('%s Toolbar', shell.focusedInstance.title)}
+            compact
+          >
+            {shell.focusedInstance.renderToolbarExtras(shell.focusedInstance, shell)}
+          </ShellSurfaceErrorBoundary>
         </div>
       )}
     </div>
   );
 }
+
+class ShellSurfaceErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {error: null};
+  }
+
+  static getDerivedStateFromError(error) {
+    return {error};
+  }
+
+  componentDidUpdate(prevProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({error: null});
+    }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[ScratchRobin Surface Error]', this.props.surfaceName, error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      if (this.props.compact) {
+        return null;
+      }
+      return (
+        <Box
+          role="alert"
+          data-cdeadmin-qa-key="shell-surface-error-boundary"
+          sx={{p: 2.5, display: 'flex', flexDirection: 'column', gap: 1}}
+        >
+          <Box sx={{fontWeight: 700, fontSize: '0.9rem'}}>
+            {gettext('%s encountered a rendering error', this.props.surfaceName || gettext('Application surface'))}
+          </Box>
+          <Box sx={{fontSize: '0.8rem', color: 'text.secondary', fontFamily: 'monospace'}}>
+            {this.state.error?.message || String(this.state.error)}
+          </Box>
+          <Box>
+            <Button size="small" onClick={() => this.setState({error: null})}>
+              {gettext('Retry Surface')}
+            </Button>
+          </Box>
+        </Box>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+ShellSurfaceErrorBoundary.propTypes = {
+  children: PropTypes.node,
+  compact: PropTypes.bool,
+  resetKey: PropTypes.string,
+  surfaceName: PropTypes.string,
+};
 
 /**
  * Complete Main Form body below Area 1 Top Menu sitting on Background Colour `a`:
@@ -2746,8 +2907,13 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                     {focusedInstance.title}
                   </Box>
                 </Toolbar>
-                <ScratchScrollArea style={{flex: 1, minHeight: 0}}>
-                  {focusedInstance.renderLeftDrawer(focusedInstance)}
+                <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+                  <ShellSurfaceErrorBoundary
+                    resetKey={`${focusedInstance.instanceId}:left`}
+                    surfaceName={gettext('%s Left Drawer', focusedInstance.title)}
+                  >
+                    {focusedInstance.renderLeftDrawer(focusedInstance)}
+                  </ShellSurfaceErrorBoundary>
                 </ScratchScrollArea>
               </div>
               <DrawerInsetResizeHandle
@@ -2940,8 +3106,13 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                         flexDirection: 'column',
                       }}
                     >
-                      <ScratchScrollArea style={{flex: 1, minHeight: 0, position: 'relative'}}>
-                        {activeDockedItem.renderWorkArea(activeDockedItem)}
+                      <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0, position: 'relative'}}>
+                        <ShellSurfaceErrorBoundary
+                          resetKey={`${activeDockedItem.instanceId}:work`}
+                          surfaceName={activeDockedItem.title}
+                        >
+                          {activeDockedItem.renderWorkArea(activeDockedItem)}
+                        </ShellSurfaceErrorBoundary>
                       </ScratchScrollArea>
                     </Box>
                   )}
@@ -2999,8 +3170,13 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                         ))}
                       </Box>
                     </Toolbar>
-                    <ScratchScrollArea style={{flex: 1, minHeight: 0}}>
-                      {focusedInstance.renderRightDrawer(focusedInstance)}
+                    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+                      <ShellSurfaceErrorBoundary
+                        resetKey={`${focusedInstance.instanceId}:right:${focusedInstance.rightMode || ''}`}
+                        surfaceName={gettext('%s Right Drawer', focusedInstance.title)}
+                      >
+                        {focusedInstance.renderRightDrawer(focusedInstance)}
+                      </ShellSurfaceErrorBoundary>
                     </ScratchScrollArea>
                   </div>
                 </aside>

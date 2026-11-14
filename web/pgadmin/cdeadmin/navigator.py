@@ -261,12 +261,13 @@ def resource_children(resources, state, visual_catalog=None):
             raise ProviderNavigatorError(
                 'navigator resource is unavailable'
             )
-        kinds = {
+        present_kinds = {
             item['resource_kind'] for item in prepared
             if len(item['_navigator_path']) == len(parent_path) + 1 and
             tuple(item['_navigator_path'][:len(parent_path)]) == parent_path
             and belongs_to_parent(item)
         }
+        kinds = set(present_kinds)
         kinds.update(_empty_group_kinds(resources, state, visual_catalog))
         kinds = sorted(kinds, key=lambda value: kind_label(value).casefold())
         return system_folder + [{
@@ -274,7 +275,7 @@ def resource_children(resources, state, visual_catalog=None):
             'label': kind_label(kind),
             'resource_kind': kind,
             'parent_path': list(parent_path),
-            'has_children': True,
+            'has_children': kind in present_kinds,
         } for kind in kinds]
 
     kind = state.get('resource_kind')

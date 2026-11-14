@@ -182,11 +182,13 @@ class ContextMenuTests(unittest.TestCase):
     def test_firebird_connector_separates_endpoint_create_and_register(self):
         actions = connector_context_actions(
             'firebird', [profile('firebird', multiple=True)],
-            status={'available': True, 'listening_ports': [3050]},
+            status={'available': False, 'listening_ports': []},
         )
         by_id = {item['command_id']: item for item in actions}
         self.assertIn('connector.firebird.create_database', by_id)
         self.assertIn('connector.firebird.register_database', by_id)
+        self.assertTrue(by_id['connector.firebird.create_database']['enabled'])
+        self.assertTrue(by_id['connector.firebird.register_database']['enabled'])
         self.assertEqual(
             by_id['connector.firebird.create_database']['arguments'][
                 'registration_intent'
@@ -211,6 +213,14 @@ class ContextMenuTests(unittest.TestCase):
         ] == 'register_endpoint')
         self.assertFalse(registration['enabled'])
         self.assertTrue(registration['disabled_reason'])
+        custom_port = next(
+            item for item in actions
+            if item['command_id'].startswith(
+                'connector.mysql.register_custom_endpoint.'
+            )
+        )
+        self.assertTrue(custom_port['enabled'])
+        self.assertEqual(custom_port['handler'], 'register_endpoint')
 
     def test_provider_endpoint_actions_never_contain_postgresql_commands(self):
         actions = endpoint_context_actions(

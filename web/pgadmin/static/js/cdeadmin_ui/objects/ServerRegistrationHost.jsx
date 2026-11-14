@@ -31,7 +31,13 @@ export function registrationPayload(form, draft, {profileId, intent='endpoint', 
   // A multi-profile form (Firebird native/embedded) carries its profile as a select.
   const profile = data.profile ?? profileId;
   delete data.profile;
-  return {...data, cde_profile_id: profile ?? profileId, cde_registration_intent: intent, cde_verify_now: verifyNow};
+  const resolvedVerifyNow = verifyNow === 'auto'
+    ? Boolean(
+      data.connect_now ||
+      Object.keys(data).some((k) => /password/i.test(k) && Boolean(data[k]))
+    )
+    : verifyNow;
+  return {...data, cde_profile_id: profile ?? profileId, cde_registration_intent: intent, cde_verify_now: resolvedVerifyNow};
 }
 
 /*
@@ -62,12 +68,26 @@ export function lifecycleProfileRequest(ownedFields, record, changes) {
  * password is required to verify, a field is missing). Show that sentence, not the transport's
  * "Request failed with status code 401" (browser pass 2026-11-12).
  */
-async function send(api, request) {
+async function send(api, request, allowMasterPassRetry = true) {
   let response;
   try {
     response = await api(request);
   } catch(error) {
     const body = error?.response?.data;
+    if (
+      allowMasterPassRetry &&
+      body?.info === 'CRYPTKEY_MISSING' &&
+      typeof window !== 'undefined' &&
+      typeof window.pgAdmin?.Browser?.set_master_password === 'function'
+    ) {
+      return new Promise((resolve, reject) => {
+        window.pgAdmin.Browser.set_master_password(
+          '',
+          () => send(api, request, false).then(resolve, reject),
+          () => reject(new Error('Master password unlock was cancelled.'))
+        );
+      });
+    }
     throw new Error(body?.errormsg || body?.info || error?.message || String(error));
   }
   if(response?.data?.success === 0) throw new Error(response.data.errormsg || response.data.info || 'Request refused');
@@ -75,7 +95,7 @@ async function send(api, request) {
 }
 
 export default function ServerRegistrationHost({api, engine, version, versionSupport, mode='create', urlFor, initialData={}, profileId,
-  intent='endpoint', verifyNow=true, displayName, onClose, onSaved, descriptorClient, lifecycleUrl}) {
+  intent='endpoint', verifyNow=true, displayName, applyLabel, onClose, onSaved, descriptorClient, lifecycleUrl}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
   const [state, setState] = useState({status: 'loading', bundle: null, record: {}, error: null});
 
@@ -103,12 +123,13 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
   if(state.status === 'error') {
     return <Box sx={{p: 2}}>
       <ValidationMessage status="error">{state.error}</ValidationMessage>
-      <Box sx={{mt: 1}}><Button intent="neutral" onClick={onClose}>Close</Button></Box>
+      {onClose && <Box sx={{mt: 1}}><Button intent="neutral" onClick={onClose}>Close</Button></Box>}
     </Box>;
   }
   const {bundle, record} = state;
   if(!editorAvailable(bundle, 'server')) {
-    return <EmptyState message={`No server editor is declared for ${engine} yet.`} actionLabel="Close" onAction={onClose} />;
+    return <EmptyState message={`No server editor is declared for ${engine} yet.`}
+      actionLabel={onClose ? 'Close' : undefined} onAction={onClose} />;
   }
   const form = formForKind(bundle, 'server');
   const fromBackend = recordFromBackend(form, record);
@@ -136,10 +157,16 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
     return response.data;
   };
   const notice = versionSupportNotice(versionSupport);
+  const resolvedApplyLabel = applyLabel || (mode === 'create' ? 'Register' : 'Save');
   const editor = <ObjectEditor form={form} mode={mode} resourceKind="server" record={fromBackend} context={{}}
-    title={displayName} directApply applyLabel={mode === 'create' ? 'Register' : 'Save'}
+    title={displayName} directApply applyLabel={resolvedApplyLabel}
     apply={apply} onClose={onClose} />;
-  return notice ? <Box><Banner status="info">{notice}</Banner>{editor}</Box> : editor;
+  return notice
+    ? <Box sx={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
+      <Banner status="info">{notice}</Banner>
+      <Box sx={{flex: 1, minHeight: 0}}>{editor}</Box>
+    </Box>
+    : editor;
 }
 
 ServerRegistrationHost.propTypes = {
@@ -152,8 +179,9 @@ ServerRegistrationHost.propTypes = {
   initialData: PropTypes.object,
   profileId: PropTypes.string,
   intent: PropTypes.string,
-  verifyNow: PropTypes.bool,
+  verifyNow: PropTypes.oneOfType([PropTypes.bool, PropTypes.oneOf(['auto'])]),
   displayName: PropTypes.string,
+  applyLabel: PropTypes.string,
   onClose: PropTypes.func,
   onSaved: PropTypes.func,
   // Workspace URL of an endpoint edited through its provider lifecycle (see lifecycleProfileRequest).

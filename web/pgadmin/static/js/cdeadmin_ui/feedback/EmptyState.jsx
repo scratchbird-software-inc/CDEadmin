@@ -30,24 +30,44 @@ const Root = styled(Box)(({theme}) => ({
   paddingInline: theme.spacing(1),
 }));
 
-export function EmptyState({message, icon, actionLabel, onAction, style,
-  ...props}) {
+export function EmptyState({
+  message,
+  title,
+  description,
+  icon,
+  actionLabel,
+  onAction,
+  action,
+  style,
+  ...props
+}) {
+  const resolvedMessage = message ?? title ?? description;
   return <Root data-cde-empty-state="true" style={style} {...props}>
     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5,
       width: '100%', maxWidth: 520, minWidth: 0, textAlign: 'center',
+      justifyContent: 'center',
       '& > svg': {flexShrink: 0}}}>
       {icon ?? <InfoRoundedIcon aria-hidden="true" style={{height: '1.2rem'}} />}
       <Box component="span" sx={{minWidth: 0, overflowWrap: 'anywhere'}}>
-        {message}</Box>
+        {resolvedMessage}</Box>
     </Box>
+    {description && (message || title) && (
+      <Box sx={{fontSize: '0.78rem', color: 'text.secondary', maxWidth: 520, textAlign: 'center'}}>
+        {description}
+      </Box>
+    )}
     {actionLabel && <Button onClick={onAction}>{actionLabel}</Button>}
+    {!actionLabel && action ? action : null}
   </Root>;
 }
 
 EmptyState.propTypes = {
   message: PropTypes.node,
+  title: PropTypes.node,
+  description: PropTypes.node,
   icon: PropTypes.node,
   actionLabel: PropTypes.node,
   onAction: PropTypes.func,
+  action: PropTypes.node,
   style: PropTypes.object,
 };

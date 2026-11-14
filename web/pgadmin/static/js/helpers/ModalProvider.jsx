@@ -8,7 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import { Box, Dialog, DialogContent, DialogTitle, Paper } from '@mui/material';
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getEpoch } from 'sources/utils';
 import { DefaultButton, PgIconButton, PrimaryButton } from '../components/Buttons';
 import Draggable from 'react-draggable';
@@ -50,20 +50,34 @@ export function useModal() {
   return React.useContext(ModalContext);
 }
 
-export function AlertContent({ text, confirm, okLabel = gettext('OK'), cancelLabel = gettext('Cancel'), onOkClick, onCancelClick, okIcon = 'default', plainText = false}) {
-  const body = (typeof text === 'string')
+export function AlertContent({ text, confirm, okLabel, cancelLabel, onOkClick, onCancelClick, okIcon = 'default', plainText = false}) {
+  const [, setLocaleRev] = useState(() => gettext.getRevision?.() || 0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+    window.addEventListener('scratchrobin:language-changed', onLang);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLang);
+  }, []);
+  const resolvedOkLabel = okLabel
+    ? (typeof okLabel === 'string' && gettext.retranslate ? gettext.retranslate(okLabel) : okLabel)
+    : gettext('OK');
+  const resolvedCancelLabel = cancelLabel
+    ? (typeof cancelLabel === 'string' && gettext.retranslate ? gettext.retranslate(cancelLabel) : cancelLabel)
+    : gettext('Cancel');
+  const resolvedText = typeof text === 'string' && gettext.retranslate ? gettext.retranslate(text) : text;
+  const body = (typeof resolvedText === 'string')
     ? (plainText
-      ? <SafeMessage text={text} />
-      : HTMLReactParser(DOMPurify.sanitize(text)))
-    : text;
+      ? <SafeMessage text={resolvedText} />
+      : HTMLReactParser(DOMPurify.sanitize(resolvedText)))
+    : resolvedText;
   return (
     <StyledBox display="flex" flexDirection="column" height="100%">
       <Box flexGrow="1" p={2} whiteSpace='pre-line'>{body}</Box>
       <Box className='Alert-footer'>
         {confirm &&
-          <DefaultButton startIcon={<CloseIcon />} onClick={onCancelClick}>{cancelLabel}</DefaultButton>
+          <DefaultButton startIcon={<CloseIcon />} onClick={onCancelClick}>{resolvedCancelLabel}</DefaultButton>
         }
-        <PrimaryButton className='Alert-margin' startIcon={buttonIconMap[okIcon]} onClick={onOkClick} autoFocus>{okLabel}</PrimaryButton>
+        <PrimaryButton className='Alert-margin' startIcon={buttonIconMap[okIcon]} onClick={onOkClick} autoFocus>{resolvedOkLabel}</PrimaryButton>
       </Box>
     </StyledBox>
   );
@@ -429,6 +443,17 @@ export function ModalContainer({ id, title, content, dialogHeight, dialogWidth, 
     }
   };
   const [isFullScreen, setIsFullScreen] = useState(fullScreen);
+  const [localeRev, setLocaleRev] = useState(() => gettext.getRevision?.() || 0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+    window.addEventListener('scratchrobin:language-changed', onLang);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLang);
+  }, []);
+  const resolvedTitle = typeof title === 'string' && gettext.retranslate
+    ? gettext.retranslate(title)
+    : title;
+  const resolvedA11y = modalAccessibilityAttributes(id, resolvedTitle, showTitle);
 
   return (
     <StyleDialog
@@ -446,19 +471,19 @@ export function ModalContainer({ id, title, content, dialogHeight, dialogWidth, 
           height: dialogHeight,
           minHeight: minHeight,
           minWidth: minWidth,
-          ...accessibilityAttributes,
+          ...resolvedA11y,
         },
       }}
       fullScreen={isFullScreen}
       fullWidth={isFullWidth}
       disablePortal
-      {...accessibilityAttributes}
+      {...resolvedA11y}
       {...props}
     >
       { showTitle &&
         <DialogTitle id={titleId} className='modal-drag-area'>
           <Box className='Modal-titleBar'>
-            <Box sx={{ marginRight:'0.25rem', flexGrow: 1}}>{title}</Box>
+            <Box sx={{ marginRight:'0.25rem', flexGrow: 1}}>{resolvedTitle}</Box>
             {
               showFullScreen && !isFullScreen &&
                 <Box className='Modal-iconButtonStyle'><PgIconButton title={gettext('Maximize')} icon={<ExpandDialogIcon className='Modal-icon' />} size="xs" noBorder onClick={() => { setIsFullScreen(!isFullScreen); }} /></Box>
@@ -474,7 +499,7 @@ export function ModalContainer({ id, title, content, dialogHeight, dialogWidth, 
       }
       <DialogContent height="100%">
         <ModalCloseGuardContext.Provider value={registerCloseGuard}>
-          {useMemo(()=>{ return content(closeModal); }, [])}
+          {useMemo(()=>{ return content(closeModal); }, [localeRev])}
         </ModalCloseGuardContext.Provider>
       </DialogContent>
     </StyleDialog>

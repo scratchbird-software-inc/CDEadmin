@@ -1520,6 +1520,43 @@ class EndpointVerificationTests(unittest.TestCase):
         self.assertEqual(['database_password', 'database_password_2'],
                          sorted(result['credential_references']))
 
+    def test_empty_credential_kinds_still_binds_active_primary_secret(self):
+        # Servers registered without an initial saved password previously
+        # stored credential_kinds=[]; verifying with SYSDBA + password must
+        # still bind the primary database_password reference rather than
+        # sending password=None to Firebird service_mgr (status 335544472).
+        route = SimpleNamespace(
+            id=str(uuid.uuid4()), priority=0,
+            configuration=json.dumps({
+                'host': 'localhost', 'port': 53050, 'user': None,
+                'trusted_auth': False, 'wire_crypt': 'Required',
+                'credential_kinds': [],
+            }),
+        )
+        reference = SimpleNamespace(
+            id=str(uuid.uuid4()), secret_kind='database_password',
+            storage_kind='legacy_protected_column',
+            secret_reference='server:1:password:database_password',
+        )
+        endpoint = SimpleNamespace(
+            id=str(uuid.uuid4()), endpoint_mode='legacy_native',
+            secret_references=[reference], routes=[route],
+        )
+        security = SimpleNamespace(secrets=SimpleNamespace(
+            register_resolver=lambda *_args: None,
+            register_reference=lambda *_args: None,
+        ))
+        service = EndpointService(SimpleNamespace(), security)
+        result, primary = service._route_and_reference(
+            SimpleNamespace(user_id=1), endpoint,
+            registration_profile('firebird-native'),
+            principal_override='SYSDBA',
+        )
+        self.assertIsNotNone(primary)
+        self.assertEqual('database_password', primary.secret_kind)
+        self.assertEqual(reference.id, result['credential_reference_id'])
+        self.assertEqual('SYSDBA', result['user'])
+
     def test_embedded_route_does_not_require_or_invent_a_secret(self):
         route = SimpleNamespace(
             id=str(uuid.uuid4()), priority=0,

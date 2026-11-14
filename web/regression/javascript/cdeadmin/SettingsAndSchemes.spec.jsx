@@ -101,7 +101,8 @@ describe('ScratchRobin Settings Expansion — Schemes, Fonts, Action/Menu Editor
       );
     });
 
-    await screen.findByText('Fonts & Typography');
+    await screen.findAllByText('Fonts & Typography');
+    expect(document.querySelector('[data-cdeadmin-qa-key="settings-fonts-editor"]')).toBeTruthy();
 
     const uiFamily = document.querySelector('[data-cdeadmin-qa-key="font-ui-family"]');
     fireEvent.change(uiFamily, {target: {value: '"IBM Plex Sans", sans-serif'}});
@@ -254,5 +255,98 @@ describe('ScratchRobin Settings Expansion — Schemes, Fonts, Action/Menu Editor
         )
       ).toBe(true);
     });
+  });
+
+  it('consolidates shell entry points and supports Apply, OK, Cancel, and right-pane top tabs', async () => {
+    const {container} = renderShell();
+
+    // Redundant duplicate shell links are removed in favour of the unified Settings entry point
+    expect(container.querySelector('[data-cdeadmin-qa-key="top-menu-engines"]')).toBeNull();
+    const topSettingsBtn = container.querySelector('[data-cdeadmin-qa-key="top-menu-settings"]');
+    expect(topSettingsBtn).toBeTruthy();
+    fireEvent.click(topSettingsBtn);
+
+    expect(await screen.findByText('Configure — ScratchRobin')).toBeTruthy();
+    // Apply starts disabled until a setting is modified
+    const applyBtn = document.querySelector('[data-cdeadmin-qa-key="settings-apply"]');
+    expect(applyBtn).toBeTruthy();
+    expect(applyBtn.disabled).toBe(true);
+
+    // Modify Panel Spacing -> Apply enables, saves without closing, then disables again
+    fireEvent.change(
+      document.querySelector('[data-cdeadmin-qa-key="settings-global-panel-gap"]'),
+      {target: {value: '10'}}
+    );
+    expect(applyBtn.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(applyBtn);
+    });
+    expect(screen.getByText('Configure — ScratchRobin')).toBeTruthy();
+    expect(applyBtn.disabled).toBe(true);
+
+    // Navigate via left branch-menu to Users, Groups & Access and switch across right-pane top tabs
+    fireEvent.click(screen.getByText('Users, Groups & Access'));
+    await screen.findByText('Workspace Application Availability');
+
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="security-tab-users"]'));
+    await screen.findByText('Users, Group Assignments & Application Overrides');
+
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="security-tab-groups"]'));
+    await screen.findByText('Security Groups, Application Access & Permission Grants');
+
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="security-tab-session"]'));
+    await screen.findByText('Workspace Session & Idle Lock');
+
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="security-tab-apps"]'));
+    await screen.findByText('Workspace Application Availability');
+
+    // Side Dock Settings Gear offers clean Application Settings + Global Settings only
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="settings-cancel"]'));
+    const gearBtn = container.querySelector('[data-cdeadmin-qa-key="side-menu-settings-gear"]');
+    fireEvent.click(gearBtn);
+
+    expect(container.querySelector('[data-cdeadmin-qa-key="gear-application-settings"]')).toBeTruthy();
+    expect(container.querySelector('[data-cdeadmin-qa-key="gear-global-settings"]')).toBeTruthy();
+    expect(container.querySelector('[data-cdeadmin-qa-key="gear-database-engines"]')).toBeNull();
+    expect(container.querySelector('[data-cdeadmin-qa-key="gear-security-settings"]')).toBeNull();
+  });
+
+  it('renders left Branched-Menu categories with sidebar search and omits top tabs on single-form pages', async () => {
+    const {container} = renderShell();
+
+    // Launch Data Navigator and confirm Area 3a Left Drawer & Area 3e Work Area use fillViewport (.sr-scroll-fill)
+    const navDockBtn = container.querySelector('[data-cdeadmin-qa-key="side-menu-app-data-navigator"]');
+    expect(navDockBtn).toBeTruthy();
+    fireEvent.click(navDockBtn);
+
+    const leftDrawer = container.querySelector('[data-cdeadmin-qa-key="project-left-drawer"]');
+    expect(leftDrawer).toBeTruthy();
+    expect(leftDrawer.querySelector('.sr-scroll-fill')).toBeTruthy();
+
+    // Open Global Configuration and verify left ScratchBranchedTree renders all 4 branches & leaves
+    fireEvent.click(container.querySelector('[data-cdeadmin-qa-key="top-menu-settings"]'));
+    await screen.findByText('Workbench');
+    expect(screen.getByText('Databases & DDN')).toBeTruthy();
+    expect(screen.getByText('Security')).toBeTruthy();
+    expect(screen.getAllByText('Applications').length).toBeGreaterThan(0);
+    expect(screen.queryByText('No items available')).toBeNull();
+
+    // Single-form page ('Fonts & Typography') renders without an unnecessary right-pane tablist
+    fireEvent.click(screen.getByText('Fonts & Typography'));
+    expect(document.querySelector('[data-cdeadmin-qa-key="settings-fonts-editor"]')).toBeTruthy();
+    const dialogRoot = document.querySelector('[data-cdeadmin-qa-key="scratch-preferences-dialog"]');
+    expect(dialogRoot.querySelector('[role="tablist"]')).toBeNull();
+
+    // Multi-tab page ('Database Engines') renders its right-pane top tablist (Connectors | External Tool Paths)
+    fireEvent.click(screen.getByText('Database Engines'));
+    await screen.findByText(/Database Engines & Connectors On\/Off/);
+    expect(dialogRoot.querySelector('[role="tablist"]')).toBeTruthy();
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="engines-tab-paths"]'));
+    await screen.findByText('Optional Local Client Utility Paths');
+
+    // Left-sidebar search filters the branch-menu cleanly
+    const sidebarSearch = document.querySelector('[data-cdeadmin-qa-key="settings-sidebar-search"]');
+    fireEvent.change(sidebarSearch, {target: {value: 'Shortcuts'}});
+    expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy();
   });
 });

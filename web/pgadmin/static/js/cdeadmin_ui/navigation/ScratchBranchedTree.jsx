@@ -14,8 +14,8 @@ import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {Checkbox} from '../primitives/Choice';
 
 export const DEFAULT_BRANCHED_TREE_OPTIONS = Object.freeze({
-  stepX: 15,
-  radius: 7,
+  stepX: 20,
+  radius: 8,
   rowHeight: 28,
   stickyAncestors: true,
 });
@@ -28,12 +28,12 @@ export function readBranchedTreePreferences() {
     if (!raw) return DEFAULT_BRANCHED_TREE_OPTIONS;
     const parsed = JSON.parse(raw);
     return {
-      stepX: Number.isFinite(Number(parsed.stepX)) ? Math.min(28, Math.max(10, Number(parsed.stepX))) : DEFAULT_BRANCHED_TREE_OPTIONS.stepX,
+      stepX: Number.isFinite(Number(parsed.stepX)) ? Math.min(28, Math.max(18, Number(parsed.stepX))) : DEFAULT_BRANCHED_TREE_OPTIONS.stepX,
       radius: Number.isFinite(Number(parsed.radius)) ? Math.min(12, Math.max(3, Number(parsed.radius))) : DEFAULT_BRANCHED_TREE_OPTIONS.radius,
       rowHeight: Number.isFinite(Number(parsed.rowHeight)) ? Math.min(38, Math.max(22, Number(parsed.rowHeight))) : DEFAULT_BRANCHED_TREE_OPTIONS.rowHeight,
       stickyAncestors: typeof parsed.stickyAncestors === 'boolean' ? parsed.stickyAncestors : DEFAULT_BRANCHED_TREE_OPTIONS.stickyAncestors,
     };
-  } catch (_err) {
+  } catch {
     return DEFAULT_BRANCHED_TREE_OPTIONS;
   }
 }
@@ -45,7 +45,7 @@ export function writeBranchedTreePreferences(partial) {
       window.localStorage?.setItem(TREE_PREFS_STORAGE_KEY, JSON.stringify(next));
       window.dispatchEvent(new CustomEvent('scratchrobin:branched-tree-prefs', {detail: next}));
     }
-  } catch (_err) {
+  } catch {
     // Ignore storage quota or sandbox errors
   }
   return next;
@@ -85,7 +85,7 @@ function computeCheckState(node, checkedSet) {
  * 1) Structural trunk + quadratic elbow SVG path commands for every expanded branch
  * 2) Continuous unbroken multi-level stepped waterfall active trace from root to active node
  */
-export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, radius = 7, rowHeight = 28, basePad = 10} = {}) {
+export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 20, radius = 8, rowHeight = 28, basePad = 10} = {}) {
   const trunkX = (depth) => basePad + (depth - 1) * stepX + 8;
   const r = Math.min(radius, Math.floor(stepX * 0.6), Math.floor(rowHeight * 0.45));
   const structuralPaths = [];
@@ -113,7 +113,8 @@ export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, r
     if (parentIdx === undefined || childIndices.length === 0) continue;
     const firstChild = flatRows[childIndices[0]];
     const x = trunkX(firstChild.depth);
-    const yStart = parentIdx * rowHeight + Math.round(rowHeight * 0.72);
+    // Start flush at the bottom border of the parent's 16px circular toggle (center + 7px)
+    const yStart = parentIdx * rowHeight + Math.round(rowHeight * 0.5) + 7;
     const lastIdx = childIndices[childIndices.length - 1];
     const yLast = lastIdx * rowHeight + Math.round(rowHeight * 0.5);
 
@@ -121,10 +122,14 @@ export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, r
       structuralPaths.push(`M ${x} ${yStart} V ${yLast - r}`);
     }
     for (const cIdx of childIndices) {
+      const childEntry = flatRows[cIdx];
       const yChild = cIdx * rowHeight + Math.round(rowHeight * 0.5);
       const yCurveStart = Math.max(yStart, yChild - r);
-      const xEnd = x + stepX - 2;
-      structuralPaths.push(`M ${x} ${yCurveStart} Q ${x} ${yChild} ${x + r} ${yChild} H ${xEnd}`);
+      const childIndent = basePad + childEntry.depth * stepX;
+      // Connect flush to the left border of an expandable child's 16px circle, or end cleanly before leaf label
+      const xEnd = childEntry.expandable ? childIndent + 1 : childIndent + 2;
+      const xCorner = Math.min(xEnd, x + r);
+      structuralPaths.push(`M ${x} ${yCurveStart} Q ${x} ${yChild} ${xCorner} ${yChild} H ${xEnd}`);
     }
   }
 
@@ -152,11 +157,14 @@ export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, r
           const cIdx = indexById.get(childEntry.id);
           const x = trunkX(childEntry.depth);
           const yParentJoin = i === 1
-            ? pIdx * rowHeight + Math.round(rowHeight * 0.72)
+            ? pIdx * rowHeight + Math.round(rowHeight * 0.5) + 7
             : pIdx * rowHeight + Math.round(rowHeight * 0.5);
           const yChildCenter = cIdx * rowHeight + Math.round(rowHeight * 0.5);
           const isFinal = i === chain.length - 1;
-          const xHorizEnd = isFinal ? x + stepX - 2 : trunkX(chain[i + 1].depth);
+          const childIndent = basePad + childEntry.depth * stepX;
+          const xHorizEnd = isFinal
+            ? (childEntry.expandable ? childIndent + 1 : childIndent + 2)
+            : trunkX(chain[i + 1].depth);
 
           if (i === 1) {
             segments.push(`M ${x} ${yParentJoin}`);
@@ -165,12 +173,13 @@ export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, r
           if (yElbowStart > yParentJoin) {
             segments.push(`V ${yElbowStart}`);
           }
-          segments.push(`Q ${x} ${yChildCenter} ${x + r} ${yChildCenter}`);
-          if (xHorizEnd > x + r) {
+          const xCorner = Math.min(xHorizEnd, x + r);
+          segments.push(`Q ${x} ${yChildCenter} ${xCorner} ${yChildCenter}`);
+          if (xHorizEnd > xCorner) {
             if (!isFinal) {
               // Smooth corner turning downward into the next child trunk!
-              const nextR = Math.min(r, Math.max(1, xHorizEnd - (x + r)));
-              if (xHorizEnd - nextR > x + r) {
+              const nextR = Math.min(r, Math.max(1, xHorizEnd - xCorner));
+              if (xHorizEnd - nextR > xCorner) {
                 segments.push(`H ${xHorizEnd - nextR}`);
               }
               segments.push(`Q ${xHorizEnd} ${yChildCenter} ${xHorizEnd} ${yChildCenter + nextR}`);
@@ -201,8 +210,10 @@ export function computeBranchedTreeGeometry(flatRows, selectedId, {stepX = 15, r
  * wrapped in @base-ui/react/scroll-area for auto-hiding X & Y overlay scrollbars.
  */
 export function ScratchBranchedTree({
-  items = [],
-  label = 'Navigation tree',
+  items,
+  nodes,
+  label: labelProp,
+  ariaLabel,
   selectedId: controlledSelectedId,
   defaultSelectedId = null,
   expandedIds: controlledExpandedIds,
@@ -210,6 +221,7 @@ export function ScratchBranchedTree({
   onSelect,
   onActivate,
   onToggle,
+  onExpandedChange,
   onContextMenu,
   onDragStart,
   checkable = false,
@@ -219,6 +231,7 @@ export function ScratchBranchedTree({
   radius: radiusProp,
   rowHeight: rowHeightProp,
   stickyAncestors: stickyAncestorsProp,
+  showStickyAncestors,
   virtualizeThreshold = 250,
   emptyMessage = 'No items available',
   renderIcon,
@@ -229,6 +242,13 @@ export function ScratchBranchedTree({
   useEffect(() => {
     ensureScratchBaseStyles();
   }, []);
+
+  const resolvedItems = useMemo(() => {
+    if (Array.isArray(items) && items.length > 0) return items;
+    if (Array.isArray(nodes)) return nodes;
+    return Array.isArray(items) ? items : [];
+  }, [items, nodes]);
+  const label = labelProp || ariaLabel || 'Navigation tree';
 
   const [prefs, setPrefs] = useState(() => readBranchedTreePreferences());
   useEffect(() => {
@@ -246,7 +266,8 @@ export function ScratchBranchedTree({
   const stepX = stepXProp ?? prefs.stepX ?? DEFAULT_BRANCHED_TREE_OPTIONS.stepX;
   const radius = radiusProp ?? prefs.radius ?? DEFAULT_BRANCHED_TREE_OPTIONS.radius;
   const rowHeight = rowHeightProp ?? prefs.rowHeight ?? DEFAULT_BRANCHED_TREE_OPTIONS.rowHeight;
-  const stickyAncestors = stickyAncestorsProp ?? prefs.stickyAncestors ?? DEFAULT_BRANCHED_TREE_OPTIONS.stickyAncestors;
+  const stickyAncestors =
+    stickyAncestorsProp ?? showStickyAncestors ?? prefs.stickyAncestors ?? DEFAULT_BRANCHED_TREE_OPTIONS.stickyAncestors;
 
   const [uncontrolledSelectedId, setUncontrolledSelectedId] = useState(defaultSelectedId);
   const selectedId = controlledSelectedId !== undefined ? controlledSelectedId : uncontrolledSelectedId;
@@ -255,7 +276,7 @@ export function ScratchBranchedTree({
     if (Array.isArray(defaultExpandedIds)) return new Set(defaultExpandedIds);
     // Default expand depth 0 roots that declare defaultExpanded !== false
     const initial = new Set();
-    for (const root of items) {
+    for (const root of resolvedItems) {
       if (root.defaultExpanded || root.expanded) initial.add(root.id);
     }
     return initial;
@@ -270,9 +291,9 @@ export function ScratchBranchedTree({
 
   const flatRows = useMemo(() => {
     const out = [];
-    const walk = (nodes, depth, parentId, ancestors) => {
-      if (!Array.isArray(nodes)) return;
-      for (const node of nodes) {
+    const walk = (branchNodes, depth, parentId, ancestors) => {
+      if (!Array.isArray(branchNodes)) return;
+      for (const node of branchNodes) {
         const children = Array.isArray(node.children) ? node.children : [];
         const expandable = Boolean(node.hasChildren || node.expandable || children.length > 0);
         const expanded = expandable && expandedSet.has(node.id);
@@ -294,9 +315,9 @@ export function ScratchBranchedTree({
         }
       }
     };
-    walk(items, 0, null, []);
+    walk(resolvedItems, 0, null, []);
     return out;
-  }, [items, expandedSet]);
+  }, [resolvedItems, expandedSet]);
 
   const selectedEntry = useMemo(
     () => flatRows.find((r) => r.id === selectedId) || null,
@@ -340,16 +361,15 @@ export function ScratchBranchedTree({
   const handleToggle = useCallback((entry, nextExpanded, event) => {
     if (entry.disabled || !entry.expandable) return;
     const targetState = typeof nextExpanded === 'boolean' ? nextExpanded : !entry.expanded;
+    const nextExpandedSet = new Set(expandedSet);
+    if (targetState) nextExpandedSet.add(entry.id);
+    else nextExpandedSet.delete(entry.id);
     if (controlledExpandedIds === undefined) {
-      setUncontrolledExpanded((prev) => {
-        const next = new Set(prev);
-        if (targetState) next.add(entry.id);
-        else next.delete(entry.id);
-        return next;
-      });
+      setUncontrolledExpanded(nextExpandedSet);
     }
+    onExpandedChange?.(Array.from(nextExpandedSet));
     onToggle?.(entry.node, targetState, event);
-  }, [controlledExpandedIds, onToggle]);
+  }, [controlledExpandedIds, expandedSet, onExpandedChange, onToggle]);
 
   const handleCheckToggle = useCallback((entry, nextChecked) => {
     if (entry.disabled) return;
@@ -555,20 +575,22 @@ export function ScratchBranchedTree({
                       }}
                     >
                       <svg
-                        width="11"
-                        height="11"
-                        viewBox="0 0 12 12"
+                        width="10"
+                        height="10"
+                        viewBox="0 0 10 10"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.8"
+                        strokeWidth="2"
                         aria-hidden="true"
-                        style={{transform: entry.expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 160ms ease'}}
                       >
-                        <polyline points="4 2.5 8 6 4 9.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <line x1="1.5" y1="5" x2="8.5" y2="5" strokeLinecap="round" />
+                        {!entry.expanded && (
+                          <line x1="5" y1="1.5" x2="5" y2="8.5" strokeLinecap="round" />
+                        )}
                       </svg>
                     </button>
                   ) : (
-                    <span style={{width: 16, flexShrink: 0}} aria-hidden="true" />
+                    <span style={{width: 4, flexShrink: 0}} aria-hidden="true" />
                   )}
 
                   {checkable && (
@@ -642,7 +664,9 @@ export function ScratchBranchedTree({
 
 ScratchBranchedTree.propTypes = {
   items: PropTypes.array,
+  nodes: PropTypes.array,
   label: PropTypes.string,
+  ariaLabel: PropTypes.string,
   selectedId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   defaultSelectedId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   expandedIds: PropTypes.array,
@@ -650,6 +674,7 @@ ScratchBranchedTree.propTypes = {
   onSelect: PropTypes.func,
   onActivate: PropTypes.func,
   onToggle: PropTypes.func,
+  onExpandedChange: PropTypes.func,
   onContextMenu: PropTypes.func,
   onDragStart: PropTypes.func,
   checkable: PropTypes.bool,
@@ -659,6 +684,7 @@ ScratchBranchedTree.propTypes = {
   radius: PropTypes.number,
   rowHeight: PropTypes.number,
   stickyAncestors: PropTypes.bool,
+  showStickyAncestors: PropTypes.bool,
   virtualizeThreshold: PropTypes.number,
   emptyMessage: PropTypes.node,
   renderIcon: PropTypes.func,

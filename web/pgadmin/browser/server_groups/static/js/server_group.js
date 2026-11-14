@@ -30,12 +30,22 @@ define('pgadmin.node.server_group', [
         this.initialized = true;
 
         pgAdmin.Browser.add_menus([{
-          name: 'create_server_group', node: 'server_group', module: this,
-          applies: ['object', 'context'], callback: 'show_obj_properties',
-          category: 'create', priority: 1, label: gettext('Server Group...'),
-          data: {'action': 'create'},
-          shortcut_preference: ['browser', 'sub_menu_create'],
+          name: 'manage_database_engines_on_server_group', node: 'server_group', module: this,
+          applies: ['object', 'context'], callback: 'open_database_engines_settings',
+          priority: 2, label: gettext('Database Engines (On / Off)...'),
+          enable: true,
         }]);
+      },
+      callbacks: {
+        open_database_engines_settings: function() {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('scratchrobin:open-preferences', {
+                detail: {mode: 'global', sectionId: 'engines:connectors'},
+              })
+            );
+          }
+        },
       },
       getSchema: ()=>new ServerGroupSchema(),
       canEdit: function(itemData) {

@@ -46,6 +46,14 @@ export default class Preferences {
 
   // This is a callback function to show preferences.
   show() {
+    if (typeof window !== 'undefined' && document?.querySelector?.('[data-cdeadmin-qa-key="project-workbench-frame"]')) {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:open-preferences', {
+          detail: {mode: 'global'},
+        })
+      );
+      return;
+    }
     let handler = this.pgBrowser.getDockerHandler?.(BROWSER_PANELS.USER_MANAGEMENT, this.pgBrowser.docker.default_workspace);
     handler.focus();
     handler.docker.openTab(preferencesPanelData, BROWSER_PANELS.MAIN, 'middle', true);

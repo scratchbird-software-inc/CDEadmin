@@ -21,21 +21,33 @@ export default function withStandardTabInfo(Component, tabId) {
     const node = nodeData && pgAdmin.Browser.Nodes[nodeData?._type];
     const treeNodeInfo = pgAdmin.Browser.tree?.getTreeNodeHierarchy(nodeItem);
     const [isActive, setIsActive] = React.useState(false);
+    const [localeRev, setLocaleRev] = React.useState(0);
     const layoutDocker = useContext(LayoutDockerContext);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') return undefined;
+      const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+      window.addEventListener('scratchrobin:language-changed', onLang);
+      return () => window.removeEventListener('scratchrobin:language-changed', onLang);
+    }, []);
+
+    const isSurfaceVisible = () => {
+      if (layoutDocker?.isTabVisible?.(tabId)) return true;
+      return (
+        typeof document !== 'undefined' &&
+        Boolean(document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]'))
+      );
+    };
 
     useEffect(() => {
       const i = pgAdmin.Browser.tree?.selected();
       if(i) {
         setNodeInfo([true, i, pgAdmin.Browser.tree.itemData(i)]);
       }
-      setIsActive(layoutDocker.isTabVisible(tabId));
+      setIsActive(isSurfaceVisible());
 
       const onTabActive = _.debounce(()=>{
-        if(layoutDocker.isTabVisible(tabId)) {
-          setIsActive(true);
-        } else {
-          setIsActive(false);
-        }
+        setIsActive(isSurfaceVisible());
       }, 100);
 
       const onUpdate =  () => {
@@ -48,22 +60,24 @@ export default function withStandardTabInfo(Component, tabId) {
 
       let destroyTree = pgAdmin.Browser.Events.on('pgadmin-browser:tree:destroyed', onUpdate);
       let deregisterTree = pgAdmin.Browser.Events.on('pgadmin-browser:node:selected', onUpdate);
+      let deregisterTreeSelected = pgAdmin.Browser.Events.on('pgadmin-browser:tree:selected', onUpdate);
       let deregisterTreeUpdate = pgAdmin.Browser.Events.on('pgadmin-browser:tree:updated', onUpdate);
       let deregisterDbConnected = pgAdmin.Browser.Events.on('pgadmin:database:connected', onUpdate);
       let deregisterServerConnected = pgAdmin.Browser.Events.on('pgadmin:server:connected', onUpdate);
-      let deregisterActive = layoutDocker.eventBus.registerListener(LAYOUT_EVENTS.ACTIVE, onTabActive);
+      let deregisterActive = layoutDocker?.eventBus?.registerListener?.(LAYOUT_EVENTS.ACTIVE, onTabActive);
       // if there is any dock changes to the tab and it appears to be active/inactive
-      let deregisterChange = layoutDocker.eventBus.registerListener(LAYOUT_EVENTS.CHANGE, onTabActive);
+      let deregisterChange = layoutDocker?.eventBus?.registerListener?.(LAYOUT_EVENTS.CHANGE, onTabActive);
 
       return () => {
         onTabActive?.cancel();
-        destroyTree();
-        deregisterTree();
-        deregisterTreeUpdate();
-        deregisterDbConnected();
-        deregisterServerConnected();
-        deregisterActive();
-        deregisterChange();
+        destroyTree?.();
+        deregisterTree?.();
+        deregisterTreeSelected?.();
+        deregisterTreeUpdate?.();
+        deregisterDbConnected?.();
+        deregisterServerConnected?.();
+        deregisterActive?.();
+        deregisterChange?.();
       };
     }, []);
 
@@ -87,6 +101,7 @@ export default function withStandardTabInfo(Component, tabId) {
           treeNodeInfo={treeNodeInfo}
           isActive={isActive}
           isStale={isStale}
+          localeRevision={localeRev}
           setIsStale={(v)=>setNodeInfo((prev)=>[v, prev[1], prev[2]])}
         />
       </ErrorBoundary>

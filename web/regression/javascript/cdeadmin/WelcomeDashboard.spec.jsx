@@ -79,4 +79,39 @@ describe('ScratchRobin welcome dashboard', () => {
       .querySelector('[data-icon-key="engine.scratchbird"]'))
       .toBeInTheDocument();
   });
+
+  it('exposes System Administration & Settings launchers for Engines, Security, Users, Menus & Schemes', () => {
+    const events = [];
+    const onOpenPrefs = (e) => events.push(e.detail);
+    window.addEventListener('scratchrobin:open-preferences', onOpenPrefs);
+
+    try {
+      const Component = withTheme(WorkbenchShell);
+      render(<Component activities={activities} navigationViews={{}}>
+        <WelcomeDashboard pgBrowser={{}} />
+      </Component>);
+
+      const settingsGrid = document.querySelector(
+        '[data-cdeadmin-qa-key="dashboard.welcome.system-settings"]'
+      );
+      expect(settingsGrid).toBeInTheDocument();
+      const scope = within(settingsGrid);
+
+      fireEvent.click(scope.getByRole('button', {name: 'Database Engines (On / Off)'}));
+      fireEvent.click(scope.getByRole('button', {name: 'Security & Application Access'}));
+      fireEvent.click(scope.getByRole('button', {name: 'Users, Roles & Groups'}));
+      fireEvent.click(scope.getByRole('button', {name: 'Menus, Toolbars & Icons'}));
+      fireEvent.click(scope.getByRole('button', {name: 'Colour Schemes & Fonts'}));
+
+      expect(events.map((d) => d.sectionId)).toEqual([
+        'engines:connectors',
+        'security:apps',
+        'security:users',
+        'actions:global-menus',
+        'appearance:schemes',
+      ]);
+    } finally {
+      window.removeEventListener('scratchrobin:open-preferences', onOpenPrefs);
+    }
+  });
 });

@@ -70,6 +70,7 @@ upstream attribution.
    interface_designer
    implementation_status
    python_runtime_policy
+   native_packaging_and_driver_packs
    report_delivery
    external_database
    connecting

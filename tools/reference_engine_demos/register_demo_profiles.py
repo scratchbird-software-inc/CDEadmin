@@ -18,9 +18,14 @@ REPOSITORY = ROOT.parents[1]
 WEB = REPOSITORY / "web"
 sys.path.insert(0, str(WEB))
 
-import config  # noqa: E402
+import os
 
-builtins.SERVER_MODE = None
+if 'PGADMIN_SERVER_MODE' in os.environ:
+    builtins.SERVER_MODE = (os.environ['PGADMIN_SERVER_MODE'] != 'OFF')
+else:
+    builtins.SERVER_MODE = None
+
+import config  # noqa: E402
 
 
 PROFILE_OVERRIDES = {

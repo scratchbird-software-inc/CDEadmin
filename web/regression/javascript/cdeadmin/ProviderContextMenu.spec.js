@@ -9,6 +9,7 @@
 
 import pgAdmin from 'sources/pgadmin';
 import {
+  canLaunchServerMenu,
   isProviderContextNode, providerContextMenuItems,
   providerTreeContextActions, registerProviderMenuCategories, openInheritedTool} from 'pgbrowser/ProviderContextMenu';
 
@@ -194,5 +195,129 @@ describe('provider-owned Object Explorer menus', () => {
     expect(menus.map(menu => menu.commandId)).toEqual([
       'database.postgresql.monitoring', 'database.postgresql.monitoring_policy']);
     expect(menus.every(menu => typeof menu.commandHandler === 'function')).toBe(true);
+  });
+
+  it('exposes top-level Properties... on greyed-out localhost_placeholder and server nodes', () => {
+    const localhostMenu = providerTreeContextActions({
+      _type: 'localhost_placeholder',
+      engine_id: 'firebird',
+      label: 'localhost (not detected)',
+      cde_context_actions: [action({
+        command_id: 'connector.firebird.register_endpoint.firebird-native',
+        handler: 'register_endpoint',
+        menu_group: 'register',
+        enabled: false,
+      })],
+    }, {id: 'firebird__localhost'});
+    expect(localhostMenu[0]).toEqual(expect.objectContaining({
+      id: 'localhost-server-properties',
+      label: 'Properties...',
+      iconKey: 'action.properties',
+      enabled: true,
+    }));
+    expect(localhostMenu[0].children).toBeUndefined();
+
+    const serverMenu = providerTreeContextActions({
+      _type: 'server',
+      cde_engine_id: 'firebird',
+      cde_profile_id: 'firebird-native',
+      runtime_verification_state: 'unverified',
+      label: 'Firebird 5.0 on localhost',
+      cde_context_actions: [action()],
+    }, {id: 'server-1'});
+    expect(serverMenu[0]).toEqual(expect.objectContaining({
+      id: 'server-endpoint-properties',
+      label: 'Properties...',
+      iconKey: 'action.properties',
+      enabled: true,
+    }));
+    expect(serverMenu[0].children).toBeUndefined();
+    expect(serverMenu.map((entry) => entry.id)).toContain('server-endpoint-remove');
+  });
+
+  it('enforces logical hierarchy across engine_type, server and cde_database_target menus', () => {
+    const engineMenu = providerTreeContextActions({
+      _type: 'engine_type',
+      engine_id: 'firebird',
+      cde_context_actions: [action({
+        command_id: 'connector.firebird.register_endpoint.firebird-native',
+        label: 'Register Firebird 5.0 server / instance...',
+        handler: 'register_endpoint',
+        menu_group: 'register',
+      })],
+    }, {id: 'engine_type_firebird'});
+    expect(engineMenu.map((m) => m.label)).toContain('Register Firebird 5.0 server / instance...');
+    expect(engineMenu[0].children).toBeUndefined();
+
+    const serverMenu = providerTreeContextActions({
+      _type: 'server',
+      cde_engine_id: 'firebird',
+      cde_profile_id: 'firebird-native',
+      cde_context_actions: [
+        action({command_id: 'endpoint.firebird.register_again', handler: 'register_endpoint', label: 'Register another server...', menu_group: 'register'}),
+        action({command_id: 'endpoint.firebird.create_database', handler: 'open_workspace', label: 'Create Firebird 5.0 database...', menu_group: 'database'}),
+        action({command_id: 'endpoint.firebird.register_database', handler: 'open_workspace', label: 'Register existing Firebird 5.0 database...', menu_group: 'database'}),
+        action({command_id: 'endpoint.firebird.forget', handler: 'open_workspace', label: 'Remove endpoint registration...', menu_group: 'endpoint', mutation_class: 'destructive'}),
+      ],
+    }, {id: 'server-fb'});
+    const serverLabels = serverMenu.map((m) => m.label);
+    expect(serverLabels[0]).toBe('Properties...');
+    expect(serverLabels).toContain('Create Firebird 5.0 database...');
+    expect(serverLabels).toContain('Register existing Firebird 5.0 database...');
+    expect(serverLabels).toContain('Remove Server...');
+    expect(serverLabels).not.toContain('Register another server...');
+
+    const dbMenu = providerTreeContextActions({
+      _type: 'cde_database_target',
+      cde_engine_id: 'firebird',
+      cde_database_target_id: 'fb-db-1',
+      cde_context_actions: [
+        action({command_id: 'endpoint.firebird.register_again', handler: 'register_endpoint', label: 'Register server...', menu_group: 'register'}),
+        action({command_id: 'database.firebird.studio', handler: 'open_workspace', label: 'Open Firebird SQL editor...', menu_group: 'database', arguments: {tab: 'studio'}}),
+        action({command_id: 'database.firebird.remove', handler: 'open_workspace', label: 'Remove database registration...', menu_group: 'database-lifecycle', mutation_class: 'destructive'}),
+      ],
+    }, {id: 'db-1'});
+    const dbLabels = dbMenu.map((m) => m.label);
+    expect(dbLabels).toContain('Properties...');
+    expect(dbLabels).toContain('Open Firebird SQL editor...');
+    expect(dbLabels).toContain('Remove database registration...');
+    expect(dbLabels).not.toContain('Register server...');
+  });
+
+  it('keeps Register Database and Create Database selectable on unverified server nodes', () => {
+    const unverifiedServer = {
+      _type: 'server',
+      cde_endpoint: true,
+      cde_engine_id: 'firebird',
+      cde_profile_id: 'firebird-native',
+      runtime_verification_state: 'unverified',
+      cde_context_actions: [
+        action({
+          command_id: 'endpoint.firebird.create_database',
+          handler: 'open_workspace',
+          label: 'Create Firebird database...',
+          menu_group: 'database',
+          enabled: false,
+          disabled_reason: 'Verify this endpoint before using it.',
+        }),
+        action({
+          command_id: 'endpoint.firebird.register_database',
+          handler: 'open_workspace',
+          label: 'Register existing Firebird database...',
+          menu_group: 'database',
+          enabled: false,
+          disabled_reason: 'Verify this endpoint before using it.',
+        }),
+      ],
+    };
+    const rawMenus = providerContextMenuItems(unverifiedServer, {id: 'srv-1'});
+    expect(canLaunchServerMenu(rawMenus[0], unverifiedServer, {id: 'srv-1'})).toBe(true);
+    expect(canLaunchServerMenu(rawMenus[1], unverifiedServer, {id: 'srv-1'})).toBe(true);
+
+    const treeMenus = providerTreeContextActions(unverifiedServer, {id: 'srv-1'});
+    const registerEntry = treeMenus.find((m) => m.id === 'endpoint.firebird.register_database');
+    const createEntry = treeMenus.find((m) => m.id === 'endpoint.firebird.create_database');
+    expect(registerEntry.enabled).toBe(true);
+    expect(createEntry.enabled).toBe(true);
   });
 });

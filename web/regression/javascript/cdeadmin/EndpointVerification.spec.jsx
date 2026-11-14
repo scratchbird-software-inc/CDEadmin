@@ -71,6 +71,20 @@ describe('provider endpoint verification', () => {
       expect(api.post).not.toHaveBeenCalled();
     });
 
+  it('verifies automatically without prompting when a saved password exists',
+    async () => {
+      const onSuccess = jest.fn();
+      showEndpointVerification(
+        'Verify Endpoint', node,
+        {cde_profile_id: 'qualified-native', label: 'Secured engine',
+          is_password_saved: true},
+        {}, {}, onSuccess, jest.fn()
+      );
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+      expect(pgAdmin.Browser.notifier.showModal).not.toHaveBeenCalled();
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+
   it('uses the selected registration principal for its password prompt', async () => {
     const profile = jest.spyOn(endpointProfiles, 'get').mockReturnValue({
       profile_id: 'firebird-native', route_kind: 'network', requires_secret: false,

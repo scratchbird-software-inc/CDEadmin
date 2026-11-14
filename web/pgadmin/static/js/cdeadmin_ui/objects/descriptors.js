@@ -308,6 +308,8 @@ export function referenceOffered(field, row, context={}) {
   return true;
 }
 
+import {resolveSmartDefault} from './smartFieldDefaults';
+
 /**
  * The value a reference picker sends. Providers take object references as
  * dotted display paths (schema.name) unless the field names another part
@@ -329,11 +331,13 @@ export function initialDraft(form, {mode='create', record={}}={}) {
       const backendId = field.backend_field_id || field.field_id;
       let existing = recordValue(field, record);
       if(existing === undefined) existing = readDotted(record, backendId);
-      if(existing !== undefined) {
+      const smartDefault = resolveSmartDefault(field);
+      if(existing !== undefined && !(existing === '' && smartDefault !== undefined)) {
         draft[field.field_id] = field.control === 'grid' && Array.isArray(existing) ?
           existing.map((row, index) => gridRowFromRecord(field, row, index)) : existing;
       }
       else if(field.default !== undefined) draft[field.field_id] = field.default;
+      else if(smartDefault !== undefined) draft[field.field_id] = smartDefault;
       else if(field.control === 'grid') draft[field.field_id] = [];
       else if(field.control === 'boolean') draft[field.field_id] = false;
     }
