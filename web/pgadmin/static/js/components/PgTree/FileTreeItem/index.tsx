@@ -66,6 +66,7 @@ interface IItemRendererXProps {
     activeItem?: FileOrDir | null
     branchStepX?: number
     branchRadius?: number
+    rowHeight?: number
 }
 
 // DO NOT EXTEND FROM PureComponent!!! You might miss critical changes made deep within `item` prop
@@ -128,6 +129,8 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
       (!explicitlyNoChildren || hasLoadedChildren);
     const stepW = Math.max(18, Math.min(28, Number(this.props.branchStepX) || 20));
     const slotCenterX = Math.round(stepW / 2);
+    const rowH = Math.max(24, Math.round(Number(this.props.rowHeight) || FileTreeItem.renderHeight));
+    const midY = Math.round(rowH / 2);
     const showExpandedStem =
       showDirectoryToggle &&
       isDirExpanded &&
@@ -153,6 +156,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
             new: isNewPrompt,
             disabled: !descriptor.capabilities.enabled,
           }, showDirectoryToggle ? 'directory' : 'file', decorations ? decorations.classlist : null, `depth-${item.depth}`, extraClasses)}
+          style={{height: rowH, minHeight: rowH}}
           data-depth={item.depth}
           onContextMenu={this.handleContextMenu}
           onDragStart={this.handleDragStartItem}
@@ -182,24 +186,25 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
             stepX={stepW}
             radius={this.props.branchRadius}
             hasToggle={showDirectoryToggle}
+            rowHeight={rowH}
           />
 
           {showDirectoryToggle ? (
             <span
               className={cn('directory-toggle-slot', showExpandedStem ? 'expanded-stem' : '')}
-              style={{width: stepW, height: FileTreeItem.renderHeight}}
+              style={{width: stepW, height: rowH}}
             >
               {showExpandedStem ? (
                 <svg
                   className="directory-toggle-stem"
                   width={stepW}
-                  height={FileTreeItem.renderHeight}
-                  viewBox={`0 0 ${stepW} ${FileTreeItem.renderHeight}`}
+                  height={rowH}
+                  viewBox={`0 0 ${stepW} ${rowH}`}
                   fill="none"
                   aria-hidden="true"
                 >
                   <path
-                    d={`M ${slotCenterX} 21 V ${FileTreeItem.renderHeight}`}
+                    d={`M ${slotCenterX} ${midY + 7} V ${rowH}`}
                     stroke="var(--sr-tree-guide, rgba(71, 85, 105, 0.78))"
                     strokeWidth="2.2"
                     strokeLinecap="butt"

@@ -16,13 +16,31 @@ import ErrorBoundary from './ErrorBoundary';
 export default function withStandardTabInfo(Component, tabId) {
    
   const HOCComponent = (props)=>{
-    const [[isStale, nodeItem, nodeData], setNodeInfo] = useState([true, undefined, undefined]);
+    const hasBoundTarget = Object.prototype.hasOwnProperty.call(props, 'boundNodeData') &&
+      props.boundNodeData !== undefined;
+    const [[isStale, nodeItem, nodeData], setNodeInfo] = useState([
+      true,
+      hasBoundTarget ? props.boundNodeItem : undefined,
+      hasBoundTarget ? props.boundNodeData : undefined,
+    ]);
     const pgAdmin = usePgAdmin();
-    const node = nodeData && pgAdmin.Browser.Nodes[nodeData?._type];
-    const treeNodeInfo = pgAdmin.Browser.tree?.getTreeNodeHierarchy(nodeItem);
+    const effectiveItem = hasBoundTarget ? props.boundNodeItem : nodeItem;
+    const liveBoundData = hasBoundTarget
+      ? (props.boundNodeItem && pgAdmin.Browser?.tree?.itemData?.(props.boundNodeItem)) || props.boundNodeData
+      : undefined;
+    const effectiveData = hasBoundTarget ? liveBoundData : nodeData;
+    const node = effectiveData && pgAdmin.Browser?.Nodes?.[effectiveData?._type];
+    const rawTreeNodeInfo = pgAdmin.Browser?.tree?.getTreeNodeHierarchy?.(effectiveItem);
+    const treeNodeInfo = rawTreeNodeInfo || (hasBoundTarget && effectiveData ? {} : undefined);
     const [isActive, setIsActive] = React.useState(false);
     const [localeRev, setLocaleRev] = React.useState(0);
     const layoutDocker = useContext(LayoutDockerContext);
+
+    useEffect(() => {
+      if (hasBoundTarget) {
+        setNodeInfo([true, props.boundNodeItem, props.boundNodeData]);
+      }
+    }, [hasBoundTarget, props.boundNodeData, props.boundNodeItem]);
 
     useEffect(() => {
       if (typeof window === 'undefined') return undefined;
@@ -51,6 +69,13 @@ export default function withStandardTabInfo(Component, tabId) {
       }, 100);
 
       const onUpdate =  () => {
+        if (hasBoundTarget) {
+          const refreshed =
+            (props.boundNodeItem && pgAdmin.Browser?.tree?.itemData?.(props.boundNodeItem)) ||
+            props.boundNodeData;
+          setNodeInfo([true, props.boundNodeItem, refreshed]);
+          return;
+        }
         // Only use the selected tree node item.
         const item = pgAdmin.Browser.tree?.selected();
         setNodeInfo([
@@ -79,7 +104,7 @@ export default function withStandardTabInfo(Component, tabId) {
         deregisterActive?.();
         deregisterChange?.();
       };
-    }, []);
+    }, [hasBoundTarget, props.boundNodeData, props.boundNodeItem]);
 
     ////////
     // Special case:
@@ -95,8 +120,8 @@ export default function withStandardTabInfo(Component, tabId) {
       <ErrorBoundary>
         <Component
           {...props}
-          nodeItem={treeNodeInfo ? nodeItem : undefined}
-          nodeData={treeNodeInfo ? nodeData : undefined}
+          nodeItem={treeNodeInfo ? effectiveItem : undefined}
+          nodeData={treeNodeInfo ? effectiveData : undefined}
           node={treeNodeInfo ? node : undefined}
           treeNodeInfo={treeNodeInfo}
           isActive={isActive}
@@ -109,6 +134,8 @@ export default function withStandardTabInfo(Component, tabId) {
   };
 
   HOCComponent.propTypes = {
+    boundNodeData: PropTypes.object,
+    boundNodeItem: PropTypes.object,
     pgAdmin: PropTypes.object
   };
 

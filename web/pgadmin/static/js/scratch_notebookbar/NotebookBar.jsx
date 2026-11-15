@@ -109,7 +109,8 @@ OverflowMenu.propTypes = {
 };
 
 export function NotebookBar({model, state={}, context, onCommand, selectedTab,
-  onSelectTab, collapsed, onCollapsedChange, start, end, contributions,
+  onSelectTab, onCloseTab, closeTabLabel, getTabProps, collapsed,
+  onCollapsedChange, start, end, contributions,
   customization, catalog, label='Commands', dir, injectStyles=true,
   accessKeyTrigger='Alt', messages}) {
   useNotebookBarStyles(injectStyles);
@@ -425,6 +426,44 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       <div ref={stripRef} className="snb-tabs" role="tablist" aria-label={label}>
         {tabs.map((tab, index) => {
           const isSelected = tab.id === current?.id;
+          const extraTabProps = getTabProps ? (getTabProps(tab, isSelected) || {}) : {};
+          const canCloseTab = Boolean(onCloseTab && isSelected && tab.closable !== false);
+          if (onCloseTab) {
+            return <div key={tab.id} role="tab"
+              id={`${id}-tab-${tab.id}`} data-snb-tab={tab.id}
+              aria-label={tab.label}
+              className={`snb-tab${tab.context.length ? ' snb-contextual' : ''}`}
+              aria-selected={isSelected} aria-controls={showPanel && isSelected ?
+                panelId : undefined}
+              aria-expanded={isCollapsed ? Boolean(peek && isSelected) : undefined}
+              tabIndex={isSelected ? 0 : -1}
+              {...extraTabProps}
+              onClick={(event) => {
+                extraTabProps.onClick?.(event);
+                if (event.defaultPrevented) return;
+                if(isCollapsed) setPeek(!(peek && isSelected));
+                select(tab.id);
+              }}
+              onDoubleClick={() => setCollapsedState(!isCollapsed)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget &&
+                    (event.key === 'Enter' || event.key === ' ')) {
+                  return;
+                }
+                onTabKeyDown(event, index);
+              }}>
+              <span className="snb-tab-title" title={tab.label}>{tab.label}</span>
+              {canCloseTab && <button type="button" className="snb-tab-close"
+                aria-label={closeTabLabel ? closeTabLabel(tab) : `Close ${tab.label}`}
+                data-cdeadmin-qa-key="active-tab-close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseTab(tab.id, tab);
+                }}>×</button>}
+              {layer === 1 && hints[`tab:${tab.id}`] && <span className="snb-hint"
+                aria-hidden="true">{hints[`tab:${tab.id}`]}</span>}
+            </div>;
+          }
           return <button key={tab.id} type="button" role="tab"
             id={`${id}-tab-${tab.id}`} data-snb-tab={tab.id}
             className={`snb-tab${tab.context.length ? ' snb-contextual' : ''}`}
@@ -432,6 +471,7 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
               panelId : undefined}
             aria-expanded={isCollapsed ? Boolean(peek && isSelected) : undefined}
             tabIndex={isSelected ? 0 : -1}
+            {...extraTabProps}
             onClick={() => {
               if(isCollapsed) setPeek(!(peek && isSelected));
               select(tab.id);
@@ -466,6 +506,9 @@ NotebookBar.propTypes = {
   onCommand: PropTypes.func,
   selectedTab: PropTypes.string,
   onSelectTab: PropTypes.func,
+  onCloseTab: PropTypes.func,
+  closeTabLabel: PropTypes.func,
+  getTabProps: PropTypes.func,
   collapsed: PropTypes.bool,
   onCollapsedChange: PropTypes.func,
   start: PropTypes.node,

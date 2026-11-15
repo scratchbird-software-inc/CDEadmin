@@ -75,12 +75,14 @@ export function TreeBranchGuides({
   stepX = 20,
   radius = 8,
   hasToggle = false,
+  rowHeight = 28,
 }: {
   item: FileOrDir
   activeItem?: FileOrDir | null
   stepX?: number
   radius?: number
   hasToggle?: boolean
+  rowHeight?: number
 }) {
   const segments = treeBranchSegments(item);
   const activeSet = activeItem ? activeAncestorsSet(activeItem) : null;
@@ -88,8 +90,8 @@ export function TreeBranchGuides({
   const w = Math.max(18, Math.min(28, Number(stepX) || 20));
   const cx = Math.round(w / 2);
   const r = Math.max(4, Math.min(cx - 1, Number(radius) || 8));
-  const h = 28;
-  const midY = h / 2;
+  const h = Math.max(24, Math.round(Number(rowHeight) || 28));
+  const midY = Math.round(h / 2);
   const circleRadius = 8;
   const guideStroke = 'var(--sr-tree-guide, rgba(71, 85, 105, 0.78))';
   const activeStroke = 'var(--sr-accent, #0f62fe)';

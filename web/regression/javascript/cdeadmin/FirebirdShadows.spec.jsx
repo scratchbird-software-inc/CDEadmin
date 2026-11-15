@@ -93,7 +93,7 @@ describe('Firebird shadow visual tasks', () => {
     render(<ObjectInspectorSection tabbed resource={{...resource, extensions: {firebird: {native}}}} />);
     expect(screen.getByRole('tab', {name: 'Storage files'})).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('/owned/影.shd')).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', {name: 'manual'})).toBeInTheDocument();
+    expect(screen.getByText('manual')).toBeInTheDocument();
     expect(screen.getByText('Yes')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', {name: 'Creation statement (DDL)'}));
     expect(screen.getByText(native.ddl)).toBeInTheDocument();

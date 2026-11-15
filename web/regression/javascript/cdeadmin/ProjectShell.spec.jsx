@@ -154,17 +154,36 @@ function ShellHarness({
     }
 
     if (appId === 'data-navigator') {
+      const refreshId = `nav.refresh.${instanceId}`;
       return {
         title: sequence > 1 ? `Data Navigator #${sequence}` : 'Data Navigator',
         supportsLeftDrawer: true,
         supportsRightDrawer: true,
         supportsTabbedIconBar: true,
+        actions: [
+          {
+            id: refreshId,
+            icon: 'action.refresh',
+            application: 'data-navigator',
+            defaultText: 'Refresh Tree',
+            defaultHint: 'Refresh Catalog Tree',
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: jest.fn()},
+          },
+        ],
         menus: [
           {
             name: 'object',
             label: 'Object',
             index: 20,
-            items: [{id: 'nav.refresh', label: 'Refresh Tree', index: 10, callback: () => {}}],
+            items: [{id: refreshId, actionId: refreshId, label: 'Refresh Tree', index: 10}],
+          },
+        ],
+        ribbonTabs: [
+          {
+            id: `nav-ribbon-${instanceId}`,
+            label: 'Navigator',
+            groups: [{id: 'catalog', label: 'Catalog', controls: [refreshId]}],
           },
         ],
         renderLeftDrawer: () => <div>Engines &gt; Servers &gt; Schemas &gt; Tables</div>,
@@ -341,7 +360,7 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
 
     // Startup Area 3: tabless User Dashboard placeholder, no tab strip, no NotebookBar
     expect(screen.getByText('User Dashboard')).toBeInTheDocument();
-    expect(screen.queryByRole('tablist', {name: 'Open Applications'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('tablist', {name: 'Open Pages'})).not.toBeInTheDocument();
     expect(document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]'))
       .not.toBeInTheDocument();
 
@@ -371,7 +390,7 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     expect(document.querySelector('[data-cdeadmin-qa-key="gear-global-settings"]')).not.toBeDisabled();
   });
 
-  it('manages 1-app tabless view, 2+ tabs with [x] on active tab, NotebookBar [x], Window > User Dashboard lifecycle, and teardown-before-activate', () => {
+  it('manages unified Tabbed-Icon-Bar page tabs, active-page-only icons, Window > User Dashboard lifecycle, and teardown-before-activate', () => {
     const teardownSteps = [];
     const Component = withTheme(ShellHarness);
     render(
@@ -381,14 +400,29 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
       />
     );
 
-    // 1. Open first application (Data Navigator): placeholder disappears, STILL NO tab strip!
+    const panelIcons = () =>
+      Array.from(
+        document.querySelectorAll('.sr-island-3b .snb-panel [data-snb-control]')
+      ).map((el) => el.getAttribute('aria-label'));
+
+    // 1. Open first application (Data Navigator): adds its page tab to Area 3b with NO inner work-area tabs
     fireEvent.click(screen.getByRole('button', {name: 'Open Data Navigator'}));
     expect(screen.getByText('Selected Catalog Object Details')).toBeInTheDocument();
-    expect(screen.queryByRole('tablist', {name: 'Open Applications'})).not.toBeInTheDocument();
+    expect(document.querySelector('.sr-area3-app-tabs')).toBeNull();
+    const firstTabList = screen.getByRole('tablist', {name: 'Open Pages'});
+    expect(within(firstTabList).getAllByRole('tab')).toHaveLength(1);
+    expect(within(firstTabList).getByRole('tab', {name: 'Data Navigator'})).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(panelIcons()).toEqual(['Refresh Tree']);
 
-    // Standard [x] close button IS present on the Main Form NotebookBar even with 1 tabless app
+    // Standard [x] close button IS present on both the active tab and 3b4
     expect(
       document.querySelector('[data-cdeadmin-qa-key="notebookbar-close-active"]')
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-cdeadmin-qa-key="active-tab-close"]')
     ).toBeInTheDocument();
     // And Left Drawer opened automatically for Data Navigator, enabling Area 2's toggle
     expect(
@@ -412,12 +446,13 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
       '4.incoming_activated',
     ]);
 
-    // Area 3 now has >= 2 docked apps -> tab strip appears, ONLY active tab has [x]
-    const tabList = screen.getByRole('tablist', {name: 'Open Applications'});
+    // Area 3b now has 2 page tabs -> ONLY active tab has [x], and icons on Area 3b are ONLY Firebird 5's
+    const tabList = screen.getByRole('tablist', {name: 'Open Pages'});
     const tabsAfterTwo = within(tabList).getAllByRole('tab');
     expect(tabsAfterTwo).toHaveLength(2);
     expect(within(tabsAfterTwo[0]).queryByRole('button')).not.toBeInTheDocument();
     expect(within(tabsAfterTwo[1]).getByRole('button', {name: /Close SQL Editor \(Firebird 5\)/})).toBeInTheDocument();
+    expect(panelIcons()).toEqual(['Run on Firebird 5']);
 
     // Open Left & Right drawers on Firebird SQL Editor
     fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="side-menu-left-drawer-toggle"]'));
@@ -426,41 +461,47 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     fireEvent.click(screen.getByRole('menuitemcheckbox', {name: 'Right Side Drawer'}));
     expect(screen.getByText('Firebird 5 Inspector (properties)')).toBeInTheDocument();
 
-    // Open second SQL Editor (MySQL 8) -> its Left & Right drawers start closed independently!
+    // Open second SQL Editor (MySQL 8) -> its Left & Right drawers start closed independently, and Area 3b icons swap to MySQL 8!
     fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
     expect(screen.getByText('MySQL 8 Query Buffer')).toBeInTheDocument();
     expect(screen.queryByText('MySQL 8 Schema Tree')).not.toBeInTheDocument();
     expect(screen.queryByText(/MySQL 8 Inspector/)).not.toBeInTheDocument();
+    expect(panelIcons()).toEqual(['Run on MySQL 8']);
 
-    // Switch back to Firebird 5 tab -> Firebird's Left & Right drawers restore automatically!
+    // Switch back to Firebird 5 tab -> Firebird's Left & Right drawers AND Firebird's icons restore automatically!
     fireEvent.click(screen.getByRole('tab', {name: /SQL Editor \(Firebird 5\)/}));
     expect(screen.getByText('Firebird 5 Schema Tree')).toBeInTheDocument();
     expect(screen.getByText('Firebird 5 Inspector (properties)')).toBeInTheDocument();
+    expect(panelIcons()).toEqual(['Run on Firebird 5']);
 
     // 3. Open User Dashboard as a tab via Window > User Dashboard
     fireEvent.click(screen.getByRole('menuitem', {name: 'Window'}));
     fireEvent.click(screen.getByRole('menuitemcheckbox', {name: 'User Dashboard'}));
     expect(screen.getByRole('tab', {name: /User Dashboard/})).toHaveAttribute('aria-selected', 'true');
-    // User Dashboard NEVER shows a Tabbed-Icon-Bar and disables Left Drawer toggle
+    // User Dashboard collapses the icon panel on Area 3b (zero page icons) and disables Left Drawer toggle while keeping open page tabs switchable
     expect(
       document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]')
-    ).not.toBeInTheDocument();
+    ).toHaveAttribute('data-dashboard-tab-active', 'true');
+    expect(document.querySelector('.sr-island-3b .snb-panel')).toBeNull();
     expect(
       document.querySelector('[data-cdeadmin-qa-key="side-menu-left-drawer-toggle"]')
     ).toBeDisabled();
 
     // 4. Close all 3 application instances -> User Dashboard tab automatically reverts to tabless placeholder!
-    const openAppsTabs = () => screen.getByRole('tablist', {name: 'Open Applications'});
-    fireEvent.click(within(openAppsTabs()).getByRole('tab', {name: /SQL Editor \(MySQL 8\)/}));
+    const openPagesTabs = () => screen.getByRole('tablist', {name: 'Open Pages'});
+    fireEvent.click(within(openPagesTabs()).getByRole('tab', {name: /SQL Editor \(MySQL 8\)/}));
     fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="notebookbar-close-active"]'));
-    fireEvent.click(within(openAppsTabs()).getByRole('tab', {name: /SQL Editor \(Firebird 5\)/}));
+    fireEvent.click(within(openPagesTabs()).getByRole('tab', {name: /SQL Editor \(Firebird 5\)/}));
     fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="active-tab-close"]'));
-    fireEvent.click(within(openAppsTabs()).getByRole('tab', {name: /Data Navigator/}));
+    fireEvent.click(within(openPagesTabs()).getByRole('tab', {name: /Data Navigator/}));
     fireEvent.click(screen.getByRole('menuitem', {name: 'Window'}));
     fireEvent.click(screen.getByRole('menuitem', {name: 'Close'}));
 
-    // Zero docked apps remain -> User Dashboard tab strip disappears and reverts to placeholder mode!
-    expect(screen.queryByRole('tablist', {name: 'Open Applications'})).not.toBeInTheDocument();
+    // Zero docked apps remain -> Tabbed-Icon-Bar disappears and User Dashboard reverts to placeholder mode!
+    expect(screen.queryByRole('tablist', {name: 'Open Pages'})).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]')
+    ).not.toBeInTheDocument();
     expect(document.querySelector('[data-cdeadmin-qa-key="user-dashboard-surface"]'))
       .toHaveAttribute('data-dashboard-mode', 'placeholder');
     // Stale menus, left drawer toggle, and gear application settings are completely cleared
@@ -495,7 +536,7 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
 
     // Drag SQL Editor tab outside Area 3 bounds -> detaches into native pop-out window
     const sqlTab = within(
-      screen.getByRole('tablist', {name: 'Open Applications'})
+      screen.getByRole('tablist', {name: 'Open Pages'})
     ).getByRole('tab', {name: /SQL Editor \(Firebird 5\)/});
     fireEvent.dragStart(sqlTab);
     fireEvent.dragLeave(sqlTab);
@@ -509,19 +550,24 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     expect(popupDoc.querySelector('[data-cdeadmin-qa-key="project-top-menu"]')).toBeNull();
     expect(popupDoc.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]')).toBeNull();
 
-    // Only 1 docked app (Data Navigator) remains in Area 3 -> Area 3 tab strip hides!
-    expect(screen.queryByRole('tablist', {name: 'Open Applications'})).not.toBeInTheDocument();
-
-    // Click docked Data Navigator in Area 3 -> Main Form menus switch to Object (20)
+    // Click docked Data Navigator in Area 3 -> Main Form menus & Area 3b switch to Data Navigator (only 1 docked tab)
     fireEvent.pointerDown(screen.getByText('Selected Catalog Object Details'));
     expect(screen.getByRole('menuitem', {name: 'Object'})).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', {name: 'Query'})).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('tablist', {name: 'Open Pages'})).getAllByRole('tab')
+    ).toHaveLength(1);
 
-    // Focus the floating SQL Editor window -> Main Form menus & Ribbon update to SQL Editor (Query 25)!
+    // Focus the floating SQL Editor window -> Main Form menus & Area 3b update to SQL Editor (Query 25)!
     act(() => {
       popups[0].triggerEvent('focus');
     });
     expect(screen.getByRole('menuitem', {name: 'Query'})).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('tablist', {name: 'Open Pages'})).getByRole('tab', {
+        name: /SQL Editor \(Firebird 5\) \(Floating\)/,
+      })
+    ).toHaveAttribute('aria-selected', 'true');
 
     // Drag floating sub-form back onto Area 3 -> pop-out closes and tab re-docks!
     const redockBtn = popupDoc.querySelector('[data-cdeadmin-qa-key^="floating-redock-"]');
@@ -529,7 +575,9 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     fireEvent.drop(area3);
 
     expect(popups[0].close).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('tablist', {name: 'Open Applications'})).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('tablist', {name: 'Open Pages'})).getAllByRole('tab')
+    ).toHaveLength(2);
     expect(screen.getByText('Firebird 5 Query Buffer')).toBeInTheDocument();
   });
 

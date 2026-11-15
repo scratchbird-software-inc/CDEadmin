@@ -178,10 +178,20 @@ export const DEFAULT_PROJECT_APPLICATIONS = Object.freeze([
 
 const DEFAULT_SUPPORTED_LANGUAGES = Object.freeze([
   {code: 'en', label: 'English'},
+  {code: 'zh_Hans_CN', label: '中文（简体）'},
+  {code: 'zh_Hant_TW', label: '中文（繁體）'},
+  {code: 'cs', label: 'Čeština'},
   {code: 'fr', label: 'Français'},
   {code: 'de', label: 'Deutsch'},
-  {code: 'es', label: 'Español'},
+  {code: 'id', label: 'Bahasa Indonesia'},
+  {code: 'it', label: 'Italiano'},
   {code: 'ja', label: '日本語'},
+  {code: 'ko', label: '한국어'},
+  {code: 'pl', label: 'Polski'},
+  {code: 'pt_BR', label: 'Português (Brasil)'},
+  {code: 'ru', label: 'Русский'},
+  {code: 'es', label: 'Español'},
+  {code: 'sv', label: 'Svenska'},
 ]);
 
 function csrfHeaders() {
@@ -350,10 +360,41 @@ function copyStylesToPopup(sourceDoc, targetDoc) {
 }
 
 const ProjectShellContext = createContext(null);
+const ProjectInstanceScopeContext = createContext(null);
 
 export function useProjectShell() {
   return useContext(ProjectShellContext);
 }
+
+export function useProjectInstanceScope() {
+  return useContext(ProjectInstanceScopeContext);
+}
+
+function InstanceWorkAreaScope({instanceId, setInstanceSubsections, children}) {
+  const setSubsections = useCallback(
+    (spec) => {
+      if (instanceId && typeof setInstanceSubsections === 'function') {
+        setInstanceSubsections(instanceId, spec);
+      }
+    },
+    [instanceId, setInstanceSubsections]
+  );
+  const value = useMemo(
+    () => (instanceId ? {instanceId, setSubsections} : null),
+    [instanceId, setSubsections]
+  );
+  return (
+    <ProjectInstanceScopeContext.Provider value={value}>
+      {children}
+    </ProjectInstanceScopeContext.Provider>
+  );
+}
+
+InstanceWorkAreaScope.propTypes = {
+  instanceId: PropTypes.string,
+  setInstanceSubsections: PropTypes.func,
+  children: PropTypes.node,
+};
 
 /**
  * Renders a detached floating application instance into its native pop-out
@@ -367,6 +408,7 @@ function FloatingSubFormPortal({
   onFocusInstance,
   onRedockInstance,
   onBeginDragBack,
+  setInstanceSubsections,
 }) {
   if (!instance?.detached || !instance?.popupContainer) return null;
 
@@ -404,9 +446,14 @@ function FloatingSubFormPortal({
         data-cdeadmin-qa-key={`floating-workarea-${instance.instanceId}`}
         sx={{flex: 1, minHeight: 0, overflow: 'auto', position: 'relative'}}
       >
-        {typeof instance.renderWorkArea === 'function'
-          ? instance.renderWorkArea(instance)
-          : instance.workArea}
+        <InstanceWorkAreaScope
+          instanceId={instance.instanceId}
+          setInstanceSubsections={setInstanceSubsections}
+        >
+          {typeof instance.renderWorkArea === 'function'
+            ? instance.renderWorkArea(instance)
+            : instance.workArea}
+        </InstanceWorkAreaScope>
       </Box>
       {showStatusBar && (
         <StatusBar label={`${instance.title} status`}>
@@ -452,6 +499,7 @@ FloatingSubFormPortal.propTypes = {
   onFocusInstance: PropTypes.func,
   onRedockInstance: PropTypes.func,
   onBeginDragBack: PropTypes.func,
+  setInstanceSubsections: PropTypes.func,
 };
 
 /**
@@ -570,6 +618,9 @@ export function ProjectShellProvider({
   }, []);
 
   const [instances, setInstances] = useState([]);
+  const [subsectionsByInstance, setSubsectionsByInstance] = useState({});
+  const subsectionHandlersRef = useRef({});
+  const subsectionActionIdsRef = useRef({});
   // Focused target: an instanceId (docked or floating), USER_DASHBOARD_ID, or null.
   const [focusedId, setFocusedId] = useState(null);
   const [dashboardTabbed, setDashboardTabbed] = useState(false);
@@ -585,6 +636,78 @@ export function ProjectShellProvider({
   instancesRef.current = instances;
   const focusedIdRef = useRef(focusedId);
   focusedIdRef.current = focusedId;
+
+  const setInstanceSubsections = useCallback(
+    (instanceId, spec) => {
+      if (!instanceId) return;
+      const toToken = (val, fallback) =>
+        String(val ?? '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 48)
+          .replace(/_+$/g, '') || fallback;
+      const safeInst = toToken(instanceId, 'inst');
+      const prevIds = subsectionActionIdsRef.current[instanceId] || [];
+      if (!spec || !Array.isArray(spec.items) || spec.items.length === 0) {
+        prevIds.forEach((aid) => actionsRegistry.unregister?.(aid));
+        delete subsectionActionIdsRef.current[instanceId];
+        delete subsectionHandlersRef.current[instanceId];
+        setSubsectionsByInstance((prev) => {
+          if (!prev[instanceId]) return prev;
+          const next = {...prev};
+          delete next[instanceId];
+          return next;
+        });
+        return;
+      }
+
+      subsectionHandlersRef.current[instanceId] = spec.onSelect || null;
+      const normalized = spec.items.map((raw, idx) => {
+        const subId = String(raw.id ?? idx);
+        const safeSub = toToken(subId, `s${idx}`);
+        const actionId = `shell.subsec.${safeInst}.${safeSub}_${idx}`;
+        const label = String(raw.label || subId);
+        const hint = String(raw.hint || label);
+        const icon = raw.icon || 'action.layers';
+        const checked = Boolean(raw.checked);
+        const disabled = Boolean(raw.disabled);
+        actionsRegistry.upsert({
+          id: actionId,
+          icon,
+          application: 'project',
+          defaultText: label,
+          defaultHint: hint,
+          checked,
+          focusScoped: false,
+          status: disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED,
+          target: {
+            kind: T_ACTION_TARGET_KIND.CLIENT,
+            invoke: () => subsectionHandlersRef.current[instanceId]?.(subId),
+          },
+        });
+        actionsRegistry.setStatus(
+          actionId,
+          disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED
+        );
+        actionsRegistry.setChecked(actionId, checked);
+        return {id: subId, actionId, label, hint, icon, checked, disabled};
+      });
+
+      const nextIds = new Set(normalized.map((n) => n.actionId));
+      prevIds.forEach((aid) => {
+        if (!nextIds.has(aid)) actionsRegistry.unregister?.(aid);
+      });
+      subsectionActionIdsRef.current[instanceId] = [...nextIds];
+
+      const sig = JSON.stringify(normalized);
+      setSubsectionsByInstance((prev) => {
+        if (prev[instanceId]?.sig === sig) return prev;
+        return {...prev, [instanceId]: {sig, items: normalized}};
+      });
+    },
+    [actionsRegistry]
+  );
 
   const authorizedApps = useMemo(() => {
     const permitted = catalogApps.filter((a) => a.authorized !== false);
@@ -637,9 +760,9 @@ export function ProjectShellProvider({
         setTeardownHistory((prev) => [...prev.slice(-24), {step, ...detail}]);
       };
 
-      // Step 1: Unmerge/remove outgoing menus & hide focus-scoped t_actions
+      // Step 1: Unmerge/remove outgoing menus & hide ALL focus-scoped t_actions
       menuRegistry.clearFocusedApplicationMenus();
-      actionsRegistry.deactivateApplication(prevInstance?.appId || null);
+      actionsRegistry.deactivateApplication(null);
       recordStep('1.menus_cleared', {outgoingAppId: prevInstance?.appId || null});
 
       // Step 2: Reset Left Side Drawer to closed & grey out Area 2 toggle
@@ -668,14 +791,24 @@ export function ProjectShellProvider({
       if (incoming) {
         if (Array.isArray(incoming.actions)) {
           incoming.actions.forEach((act) => {
+            const desiredStatus =
+              incoming.actionStatuses?.[act.id] !== undefined
+                ? incoming.actionStatuses[act.id]
+                : act.status ?? T_ACTION_STATUS.ENABLED;
             actionsRegistry.upsert({
               ...act,
               application: incoming.appId,
               focusScoped: act.focusScoped !== false,
+              status: desiredStatus,
             });
+            actionsRegistry.setStatus(act.id, desiredStatus);
+            if (typeof act.checked === 'boolean') {
+              actionsRegistry.setChecked(act.id, act.checked);
+            }
           });
+        } else {
+          actionsRegistry.activateApplication(incoming.appId, incoming.actionStatuses || {});
         }
-        actionsRegistry.activateApplication(incoming.appId, incoming.actionStatuses || {});
 
         const resolvedMenus =
           typeof incoming.buildMenus === 'function'
@@ -802,6 +935,8 @@ export function ProjectShellProvider({
         instanceId,
         appId: appMeta.id,
         title,
+        leftDrawerTitle: custom?.leftDrawerTitle || options.leftDrawerTitle || null,
+        leftDrawerSharedKey: custom?.leftDrawerSharedKey || options.leftDrawerSharedKey || null,
         iconKey: custom?.iconKey || appMeta.iconKey || 'command.default',
         detached: false,
         popupWindow: null,
@@ -909,6 +1044,11 @@ export function ProjectShellProvider({
               ...tabSpec,
               instanceId: existing.instanceId,
               appId: existing.appId,
+              meta: {
+                isCustomInlineTab: true,
+                ...(item.meta || {}),
+                ...(tabSpec.meta || {}),
+              },
             }
             : item
         );
@@ -925,10 +1065,30 @@ export function ProjectShellProvider({
         (i) => i.appId === targetAppId && typeof i.renderLeftDrawer === 'function'
       );
       const supportsLeft = Boolean(tabSpec.supportsLeftDrawer);
+      let fallbackLeftSpec = null;
+      if (supportsLeft && !tabSpec.renderLeftDrawer && !parentAppInstance) {
+        const appMeta =
+          authorizedApps.find((a) => a.id === targetAppId) ||
+          catalogApps.find((a) => a.id === targetAppId);
+        if (appMeta) {
+          fallbackLeftSpec = createDefaultInstanceSpec(appMeta, instanceId, 1, {});
+        }
+      }
+      const resolvedTitle = tabSpec.title || gettext('Object Editor');
       const newTab = {
         instanceId,
         appId: targetAppId,
-        title: tabSpec.title || gettext('Object Editor'),
+        title: resolvedTitle,
+        leftDrawerTitle:
+          tabSpec.leftDrawerTitle ||
+          parentAppInstance?.leftDrawerTitle ||
+          fallbackLeftSpec?.leftDrawerTitle ||
+          null,
+        leftDrawerSharedKey:
+          tabSpec.leftDrawerSharedKey ||
+          parentAppInstance?.leftDrawerSharedKey ||
+          fallbackLeftSpec?.leftDrawerSharedKey ||
+          null,
         iconKey: tabSpec.iconKey || 'object.table',
         supportsLeftDrawer: supportsLeft,
         supportsRightDrawer: tabSpec.supportsRightDrawer !== false,
@@ -936,7 +1096,9 @@ export function ProjectShellProvider({
         leftOpen:
           typeof tabSpec.leftOpen === 'boolean'
             ? tabSpec.leftOpen
-            : Boolean(supportsLeft && parentAppInstance?.leftOpen),
+            : supportsLeft
+              ? Boolean(parentAppInstance ? parentAppInstance.leftOpen : true)
+              : false,
         rightOpen: Boolean(tabSpec.rightOpen),
         rightMode: tabSpec.rightMode || 'properties',
         rightViews: tabSpec.rightViews || [{id: 'properties', label: gettext('Properties')}],
@@ -946,15 +1108,16 @@ export function ProjectShellProvider({
         actions: tabSpec.actions || [],
         menus: tabSpec.menus || [],
         ribbonTabs: tabSpec.ribbonTabs || [],
-        quickAccess: tabSpec.quickAccess || null,
+        quickAccess: tabSpec.quickAccess || DEFAULT_QUICK_ACCESS_IDS,
         quickActions: tabSpec.quickActions || null,
-        statusText: tabSpec.statusText || gettext('Inline Editor — Ready'),
+        statusText: tabSpec.statusText || `${resolvedTitle} — ${gettext('Ready')}`,
         renderWorkArea:
           tabSpec.renderWorkArea ||
           (() => <Box sx={{p: 2}}>{tabSpec.title || gettext('Object Editor')}</Box>),
         renderLeftDrawer:
           tabSpec.renderLeftDrawer ||
-          (supportsLeft && parentAppInstance?.renderLeftDrawer) ||
+          (supportsLeft &&
+            (parentAppInstance?.renderLeftDrawer || fallbackLeftSpec?.renderLeftDrawer)) ||
           (() => null),
         renderRightDrawer:
           tabSpec.renderRightDrawer ||
@@ -968,7 +1131,7 @@ export function ProjectShellProvider({
         renderStatus: tabSpec.renderStatus || null,
         onBeforeClose: tabSpec.onBeforeClose || null,
         inspectorNode: tabSpec.inspectorNode || null,
-        meta: {...(tabSpec.meta || {})},
+        meta: {isCustomInlineTab: true, ...(tabSpec.meta || {})},
       };
 
       const nextList = [...instancesRef.current, newTab];
@@ -978,7 +1141,7 @@ export function ProjectShellProvider({
       executeFocusTransition(instanceId, nextList);
       return newTab;
     },
-    [executeFocusTransition]
+    [authorizedApps, catalogApps, createDefaultInstanceSpec, executeFocusTransition]
   );
 
   const focusInstance = useCallback(
@@ -1018,7 +1181,7 @@ export function ProjectShellProvider({
   }, [executeFocusTransition]);
 
   const closeInstance = useCallback(
-    (targetId = focusedIdRef.current) => {
+    (targetId = focusedIdRef.current, options = {}) => {
       if (!targetId) return false;
       if (targetId === USER_DASHBOARD_ID) {
         if (!dashboardTabbed) return false;
@@ -1031,9 +1194,14 @@ export function ProjectShellProvider({
 
       const target = instancesRef.current.find((i) => i.instanceId === targetId);
       if (!target) return false;
-      if (typeof target.onBeforeClose === 'function') {
+      if (!options?.force && typeof target.onBeforeClose === 'function') {
         const allowed = target.onBeforeClose(target);
         if (allowed === false) return false;
+        if (allowed && typeof allowed.then === 'function') {
+          return allowed
+            .then((ok) => (ok === false ? false : closeInstance(targetId, {force: true})))
+            .catch(() => false);
+        }
       }
       if (target.popupWindow && !target.popupWindow.closed) {
         try {
@@ -1043,6 +1211,11 @@ export function ProjectShellProvider({
           // Ignore popup close error.
         }
       }
+
+      (target.actions || []).forEach((act) => {
+        if (act?.id) actionsRegistry.unregister?.(act.id);
+      });
+      setInstanceSubsections(targetId, null);
 
       const nextList = instancesRef.current.filter((i) => i.instanceId !== targetId);
       instancesRef.current = nextList;
@@ -1064,7 +1237,7 @@ export function ProjectShellProvider({
       }
       return true;
     },
-    [dashboardTabbed, executeFocusTransition]
+    [actionsRegistry, dashboardTabbed, executeFocusTransition, setInstanceSubsections]
   );
 
   const toggleLeftDrawer = useCallback(() => {
@@ -1106,15 +1279,60 @@ export function ProjectShellProvider({
   );
   toggleInstanceRightDrawerRef.current = toggleInstanceRightDrawer;
 
-  const updateInstance = useCallback((instanceId, patch) => {
-    const nextList = instancesRef.current.map((item) => {
-      if (item.instanceId !== instanceId) return item;
-      const resolvedPatch = typeof patch === 'function' ? patch(item) : patch;
-      return {...item, ...resolvedPatch};
-    });
-    instancesRef.current = nextList;
-    setInstances(nextList);
-  }, []);
+  const updateInstance = useCallback(
+    (instanceId, patch) => {
+      let prevItem = null;
+      let updatedItem = null;
+      const nextList = instancesRef.current.map((item) => {
+        if (item.instanceId !== instanceId) return item;
+        prevItem = item;
+        const resolvedPatch = typeof patch === 'function' ? patch(item) : patch;
+        updatedItem = {...item, ...resolvedPatch};
+        return updatedItem;
+      });
+      if (!updatedItem) return;
+      instancesRef.current = nextList;
+      setInstances(nextList);
+
+      const nextActionIds = new Set((updatedItem.actions || []).map((a) => a?.id).filter(Boolean));
+      (prevItem?.actions || []).forEach((oldAct) => {
+        if (oldAct?.id && !nextActionIds.has(oldAct.id)) {
+          actionsRegistry.unregister?.(oldAct.id);
+        }
+      });
+
+      if (focusedIdRef.current === instanceId) {
+        if (Array.isArray(updatedItem.actions)) {
+          updatedItem.actions.forEach((act) => {
+            const desiredStatus =
+              updatedItem.actionStatuses?.[act.id] !== undefined
+                ? updatedItem.actionStatuses[act.id]
+                : act.status ?? T_ACTION_STATUS.ENABLED;
+            actionsRegistry.upsert({
+              ...act,
+              application: updatedItem.appId,
+              focusScoped: act.focusScoped !== false,
+              status: desiredStatus,
+            });
+            actionsRegistry.setStatus(act.id, desiredStatus);
+            if (typeof act.checked === 'boolean') {
+              actionsRegistry.setChecked(act.id, act.checked);
+            }
+          });
+        }
+        const resolvedMenus =
+          typeof updatedItem.buildMenus === 'function'
+            ? updatedItem.buildMenus(updatedItem)
+            : updatedItem.menus || [];
+        if (resolvedMenus.length > 0) {
+          menuRegistry.setFocusedApplicationMenus(updatedItem.instanceId, resolvedMenus);
+        } else {
+          menuRegistry.clearFocusedApplicationMenus();
+        }
+      }
+    },
+    [actionsRegistry, menuRegistry]
+  );
 
   /**
    * Detach a docked application tab into a native pop-out window.
@@ -1524,9 +1742,14 @@ export function ProjectShellProvider({
     let changed = false;
     const nextList = instancesRef.current.map((inst) => {
       const nextTitle = gettext.retranslate(inst.title);
-      if (nextTitle && nextTitle !== inst.title) {
+      const nextStatusText = `${nextTitle || inst.title} — ${gettext('Ready')}`;
+      if ((nextTitle && nextTitle !== inst.title) || nextStatusText !== inst.statusText) {
         changed = true;
-        return {...inst, title: nextTitle};
+        return {
+          ...inst,
+          title: nextTitle || inst.title,
+          statusText: nextStatusText,
+        };
       }
       return inst;
     });
@@ -2374,6 +2597,8 @@ export function ProjectShellProvider({
       detachInstance,
       redockInstance,
       updateInstance,
+      subsectionsByInstance,
+      setInstanceSubsections,
       openUserDashboardTab,
       toggleLeftDrawer,
       toggleInstanceRightDrawer,
@@ -2421,10 +2646,12 @@ export function ProjectShellProvider({
       saveSettings,
       saveShellSettings,
       setDrawerWidth,
+      setInstanceSubsections,
       settings,
       shellLeftDrawerOpen,
       showStatusBar,
       showTabbedIconBar,
+      subsectionsByInstance,
       teardownHistory,
       toggleInstanceRightDrawer,
       toggleLeftDrawer,
@@ -2465,6 +2692,7 @@ export function ProjectShellProvider({
             onBeginDragBack={(id) => {
               draggedFloatingRef.current = id;
             }}
+            setInstanceSubsections={setInstanceSubsections}
           />
         ))}
       {!locked && (
@@ -2564,6 +2792,8 @@ export function ProjectApplicationNotebookBar() {
   const shell = useProjectShell();
   useTActions(shell?.actionsRegistry);
   const [, bumpPlacements] = useState(0);
+  const draggedTabOutsideRef = useRef(false);
+  const [hoverHint, setHoverHint] = useState(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -2572,15 +2802,128 @@ export function ProjectApplicationNotebookBar() {
     return () => window.removeEventListener(ACTION_PLACEMENTS_CHANGED_EVENT, onPlacementsChanged);
   }, []);
 
-  if (!shell || !shell.showTabbedIconBar || !shell.focusedInstance) return null;
+  if (!shell) return null;
 
-  const {ribbonTabs, quickAccess, iconAssignments} = resolveInstanceNotebookBarSpec(
-    shell.focusedInstance,
-    shell.settings
+  const dashboardItem = {
+    instanceId: USER_DASHBOARD_ID,
+    title: gettext('User Dashboard'),
+    iconKey: 'tool.scratchrobin',
+    isDashboard: true,
+  };
+  const dockedList =
+    shell.dockedInstances.length > 0 && shell.dashboardTabbed
+      ? [dashboardItem, ...shell.dockedInstances]
+      : [...shell.dockedInstances];
+  const openPageItems =
+    shell.focusedInstance?.detached &&
+    !dockedList.some((d) => d.instanceId === shell.focusedInstance.instanceId)
+      ? [...dockedList, shell.focusedInstance]
+      : dockedList;
+
+  if (openPageItems.length === 0) return null;
+
+  const isDashboardActive =
+    shell.focusedId === USER_DASHBOARD_ID && shell.dashboardTabbed;
+  const activeInstance = !isDashboardActive ? shell.focusedInstance : null;
+  if (!isDashboardActive && !activeInstance) return null;
+  if (openPageItems.length === 1 && !isDashboardActive && !shell.showTabbedIconBar) {
+    return null;
+  }
+
+  const {ribbonTabs, quickAccess, iconAssignments} = activeInstance
+    ? resolveInstanceNotebookBarSpec(activeInstance, shell.settings)
+    : {ribbonTabs: [], quickAccess: [], iconAssignments: {}};
+
+  const seenControlIds = new Set();
+  const dedupeControlSpec = (ctrl) => {
+    if (!ctrl) return null;
+    if (ctrl.type === 'separator') return ctrl;
+    if (ctrl.type === 'stack' && Array.isArray(ctrl.controls)) {
+      const children = ctrl.controls.map(dedupeControlSpec).filter(Boolean);
+      return children.length > 0 ? {...ctrl, controls: children} : null;
+    }
+    const id = typeof ctrl === 'string' ? ctrl : ctrl.controlId || ctrl.actionId || ctrl.id;
+    if (!id || seenControlIds.has(id)) return null;
+    seenControlIds.add(id);
+    return ctrl;
+  };
+
+  const toNotebookSafeId = (prefix, rawId, fallbackIndex = 0) => {
+    const cleaned = String(rawId ?? fallbackIndex)
+      .replace(/[^A-Za-z0-9_.:-]/g, '_')
+      .slice(0, 108);
+    return `${prefix}.${cleaned || fallbackIndex}`;
+  };
+
+  const baseActiveGroups = activeInstance
+    ? (ribbonTabs || []).flatMap((rt, tIdx) =>
+      (rt.groups || []).map((g, gIdx) => ({
+        ...g,
+        rawGroupId: g.id || '',
+        id: toNotebookSafeId(
+          'grp',
+          `${activeInstance.instanceId}.t${tIdx}.${g.id || `g${gIdx}`}`,
+          gIdx
+        ),
+        controls: (g.controls || []).map(dedupeControlSpec).filter(Boolean),
+      }))
+    )
+    : [];
+
+  const activeSubsections =
+    activeInstance && shell.subsectionsByInstance
+      ? shell.subsectionsByInstance[activeInstance.instanceId]
+      : null;
+  const subsectionControls =
+    activeSubsections?.items?.length > 0
+      ? activeSubsections.items
+        .map((item) => dedupeControlSpec(item.actionId))
+        .filter(Boolean)
+      : [];
+  const activeGroups = [...baseActiveGroups];
+  if (activeInstance && subsectionControls.length > 0) {
+    const subGroup = {
+      id: toNotebookSafeId('grp', `${activeInstance.instanceId}.subsections`, 998),
+      label: gettext('Sections'),
+      controls: subsectionControls,
+    };
+    let insertIdx = 0;
+    while (
+      insertIdx < activeGroups.length &&
+      (activeGroups[insertIdx].rawGroupId === 'page-views' ||
+        activeGroups[insertIdx].rawGroupId === 'page-connector-modes')
+    ) {
+      insertIdx += 1;
+    }
+    activeGroups.splice(insertIdx, 0, subGroup);
+  }
+
+  const floatingSuffix = translateShell(
+    shell.locale,
+    'menu.window.open_app_floating_suffix',
+    '(Floating)'
   );
+  const tabIdByInstanceId = new Map();
+  const instanceIdByTabId = new Map();
+  const tabsSpec = openPageItems.map((item, idx) => {
+    const safeTabId = toNotebookSafeId('page', item.instanceId, idx);
+    tabIdByInstanceId.set(item.instanceId, safeTabId);
+    instanceIdByTabId.set(safeTabId, item.instanceId);
+    return {
+      id: safeTabId,
+      label: item.detached ? `${item.title} ${floatingSuffix}` : item.title,
+      allowEmpty: true,
+      closable: true,
+      draggable: !item.isDashboard && !item.detached,
+      groups:
+        activeInstance && item.instanceId === activeInstance.instanceId
+          ? activeGroups
+          : [],
+    };
+  });
 
   const bar = shell.actionsRegistry.toNotebookBar(
-    ribbonTabs || [],
+    tabsSpec,
     (action) => {
       const resolvedIcon =
         iconAssignments?.[action.id] ||
@@ -2589,23 +2932,22 @@ export function ProjectApplicationNotebookBar() {
         'command.default';
       return <Icon iconKey={resolvedIcon} decorative size="100%" />;
     },
-    quickAccess
+    isDashboardActive || !shell.showTabbedIconBar ? [] : quickAccess
   );
 
-  // Ensure at least one tab exists so 3b3 + 3b4 ([x] close button) render cleanly.
-  const model =
-    bar.model.tabs.length > 0
-      ? bar.model
-      : {
-        tabs: [
-          {
-            id: `${shell.focusedInstance.appId}-default`,
-            label: shell.focusedInstance.title,
-            groups: [],
-          },
-        ],
-        quickAccess: bar.model.quickAccess || [],
-      };
+  const selectedSafeTabId = tabIdByInstanceId.get(
+    isDashboardActive ? USER_DASHBOARD_ID : activeInstance.instanceId
+  );
+  const hasActiveIcons = Boolean(
+    activeInstance &&
+      bar.model.tabs.find((t) => t.id === tabIdByInstanceId.get(activeInstance.instanceId))?.groups
+        ?.length
+  );
+  const panelCollapsed =
+    isDashboardActive ||
+    !shell.showTabbedIconBar ||
+    !activeInstance?.supportsTabbedIconBar ||
+    !hasActiveIcons;
 
   const zoom3b = shell.resolveAreaZoom?.('area_3b') ?? 1;
   const barStyle = {
@@ -2626,27 +2968,111 @@ export function ProjectApplicationNotebookBar() {
     '--snb-large-icon-size': 'calc(20px * var(--sr-zoom-3b, 1))',
   };
 
+  const showControlHint = (target) => {
+    const controlEl = target?.closest?.('.snb-control');
+    if (!controlEl) {
+      if (hoverHint) setHoverHint(null);
+      return;
+    }
+    const text =
+      controlEl.getAttribute('data-sr-hint') ||
+      controlEl.getAttribute('title') ||
+      controlEl.getAttribute('aria-label') ||
+      '';
+    if (!text) return;
+    if (controlEl.hasAttribute('title')) {
+      controlEl.setAttribute('data-sr-hint', controlEl.getAttribute('title'));
+      controlEl.removeAttribute('title');
+    }
+    const rect = controlEl.getBoundingClientRect?.();
+    if (!rect) return;
+    setHoverHint({
+      text,
+      left: Math.max(8, Math.round(rect.left + rect.width / 2)),
+      top: Math.round(rect.bottom + 6),
+    });
+  };
+
   return (
     <div
       className="sr-island sr-island-3b"
       data-area-part="3b"
       data-cdeadmin-qa-key="project-application-notebookbar"
+      data-dashboard-tab-active={isDashboardActive ? 'true' : 'false'}
       style={barStyle}
+      onMouseOver={(e) => showControlHint(e.target)}
+      onMouseLeave={() => setHoverHint(null)}
+      onFocus={(e) => showControlHint(e.target)}
+      onBlur={() => setHoverHint(null)}
+      onPointerDown={() => setHoverHint(null)}
     >
       <NotebookBar
-        model={model}
+        model={bar.model}
         state={bar.state}
         catalog={bar.catalog}
+        selectedTab={selectedSafeTabId}
+        onSelectTab={(tabId) => {
+          setHoverHint(null);
+          const instId = instanceIdByTabId.get(tabId) || tabId;
+          shell.focusInstance(instId);
+        }}
+        onCloseTab={(tabId) => {
+          setHoverHint(null);
+          const instId = instanceIdByTabId.get(tabId) || tabId;
+          shell.closeInstance(instId);
+        }}
+        closeTabLabel={(tab) => gettext('Close %s', tab.label)}
+        getTabProps={(tab, isSelected) => {
+          const instId = instanceIdByTabId.get(tab.id) || tab.id;
+          return {
+            'data-cdeadmin-tab-id': instId,
+            'data-tab-active': isSelected ? 'true' : 'false',
+            draggable: Boolean(tab.draggable),
+            onDragStart: (e) => {
+              if (!tab.draggable) return;
+              draggedTabOutsideRef.current = false;
+              e.dataTransfer?.setData('text/plain', instId);
+            },
+            onDragLeave: () => {
+              if (!tab.draggable) return;
+              draggedTabOutsideRef.current = true;
+            },
+            onDragEnd: (e) => {
+              if (!tab.draggable) return;
+              const area3El =
+                typeof document !== 'undefined'
+                  ? document.querySelector('[data-cdeadmin-qa-key="project-area-3"]')
+                  : null;
+              const rect = area3El?.getBoundingClientRect?.();
+              const hasCoords = Number.isFinite(e.clientX) && Number.isFinite(e.clientY);
+              const outsideCoords =
+                rect &&
+                hasCoords &&
+                (e.clientX < rect.left ||
+                  e.clientX > rect.right ||
+                  e.clientY < rect.top ||
+                  e.clientY > rect.bottom);
+              if (outsideCoords || (!hasCoords && draggedTabOutsideRef.current)) {
+                shell.detachInstance(instId);
+              }
+              draggedTabOutsideRef.current = false;
+            },
+          };
+        }}
+        collapsed={panelCollapsed}
         accessKeyTrigger={null}
-        label={gettext('%s Commands', shell.focusedInstance.title)}
+        label={gettext('Open Pages')}
         messages={COMMAND_BAR_MESSAGES}
-        onCommand={(commandId, detail) => bar.onCommand(commandId, detail)}
+        onCommand={(commandId, detail) => {
+          setHoverHint(null);
+          bar.onCommand(commandId, detail);
+        }}
         end={
           <span style={{display: 'inline-flex', alignItems: 'center', gap: 4}}>
-            {shell.focusedInstance.supportsRightDrawer && (
+            {activeInstance?.supportsRightDrawer && (
               <IconButton
                 label={gettext('Toggle Object Properties Drawer')}
-                aria-pressed={Boolean(shell.focusedInstance.rightOpen)}
+                aria-pressed={Boolean(activeInstance.rightOpen)}
                 data-cdeadmin-qa-key="notebookbar-toggle-right-drawer"
                 onClick={() => shell.toggleInstanceRightDrawer()}
               >
@@ -2657,24 +3083,42 @@ export function ProjectApplicationNotebookBar() {
               label={gettext('Close Active Application')}
               data-area-part="3b4"
               data-cdeadmin-qa-key="notebookbar-close-active"
-              onClick={() => shell.closeInstance(shell.focusedInstance.instanceId)}
+              onClick={() =>
+                shell.closeInstance(
+                  isDashboardActive ? USER_DASHBOARD_ID : activeInstance.instanceId
+                )
+              }
             >
               ×
             </IconButton>
           </span>
         }
       />
-      {typeof shell.focusedInstance.renderToolbarExtras === 'function' && (
+      {activeInstance && typeof activeInstance.renderToolbarExtras === 'function' && (
         <div className="sr-3b-extras-bar" data-cdeadmin-qa-key="notebookbar-extras">
           <ShellSurfaceErrorBoundary
-            resetKey={`${shell.focusedInstance.instanceId}:extras`}
-            surfaceName={gettext('%s Toolbar', shell.focusedInstance.title)}
+            resetKey={`${activeInstance.instanceId}:extras`}
+            surfaceName={gettext('%s Toolbar', activeInstance.title)}
             compact
           >
-            {shell.focusedInstance.renderToolbarExtras(shell.focusedInstance, shell)}
+            {activeInstance.renderToolbarExtras(activeInstance, shell)}
           </ShellSurfaceErrorBoundary>
         </div>
       )}
+      {hoverHint &&
+        typeof document !== 'undefined' &&
+        document.body &&
+        createPortal(
+          <div
+            role="tooltip"
+            className="sr-3b-hover-hint"
+            data-cdeadmin-qa-key="notebookbar-icon-hint"
+            style={{left: `${hoverHint.left}px`, top: `${hoverHint.top}px`}}
+          >
+            {hoverHint.text}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -2750,7 +3194,6 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
   const prefStore = usePreferences();
   const shell = useProjectShell();
   const area3Ref = useRef(null);
-  const draggedTabOutsideRef = useRef(false);
   const [dropActive, setDropActive] = useState(false);
   const [domTone, setDomTone] = useState(() => resolveCurrentTone(prefStore));
 
@@ -2814,8 +3257,6 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
       : dashboardTabbed
         ? [dashboardItem, ...dockedInstances]
         : dockedInstances;
-
-  const showTabStrip = dockedItems.length >= 2;
 
   // Determine which docked item displays inside Area 3e right now:
   const activeDockedItem =
@@ -2904,13 +3345,20 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                   }
                 >
                   <Box component="strong" sx={{fontSize: '0.8125rem'}}>
-                    {focusedInstance.title}
+                    {translateShell(
+                      shell.locale,
+                      `app.${focusedInstance.appId}.label`,
+                      gettext.retranslate(focusedInstance.leftDrawerTitle || focusedInstance.title)
+                    )}
                   </Box>
                 </Toolbar>
                 <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
                   <ShellSurfaceErrorBoundary
-                    resetKey={`${focusedInstance.instanceId}:left`}
-                    surfaceName={gettext('%s Left Drawer', focusedInstance.title)}
+                    resetKey={focusedInstance.leftDrawerSharedKey || `${focusedInstance.instanceId}:left`}
+                    surfaceName={gettext(
+                      '%s Left Drawer',
+                      focusedInstance.leftDrawerTitle || focusedInstance.title
+                    )}
                   >
                     {focusedInstance.renderLeftDrawer(focusedInstance)}
                   </ShellSurfaceErrorBoundary>
@@ -2954,100 +3402,7 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                   outlineOffset: '-3px',
                 }}
               >
-                {/* Multi-Application Tab Strip ONLY when >= 2 docked items */}
-                {showTabStrip && (
-                  <div
-                    role="tablist"
-                    aria-label={gettext('Open Applications')}
-                    data-cdeadmin-qa-key="area-3-tab-strip"
-                    className="sr-area3-app-tabs"
-                  >
-                    {dockedItems.map((item) => {
-                      const isActive = item.instanceId === focusedId;
-                      return (
-                        <div
-                          key={item.instanceId}
-                          role="tab"
-                          aria-selected={isActive}
-                          tabIndex={isActive ? 0 : -1}
-                          draggable={!item.isDashboard}
-                          data-cdeadmin-tab-id={item.instanceId}
-                          data-tab-active={isActive ? 'true' : 'false'}
-                          className="sr-area3-app-tab"
-                          onClick={() => shell.focusInstance(item.instanceId)}
-                          onDragStart={(e) => {
-                            if (item.isDashboard) return;
-                            draggedTabOutsideRef.current = false;
-                            e.dataTransfer?.setData('text/plain', item.instanceId);
-                          }}
-                          onDragLeave={() => {
-                            draggedTabOutsideRef.current = true;
-                          }}
-                          onDragEnd={(e) => {
-                            if (item.isDashboard) return;
-                            const rect = area3Ref.current?.getBoundingClientRect();
-                            const hasCoords =
-                              Number.isFinite(e.clientX) && Number.isFinite(e.clientY);
-                            const outsideCoords =
-                              rect &&
-                              hasCoords &&
-                              (e.clientX < rect.left ||
-                                e.clientX > rect.right ||
-                                e.clientY < rect.top ||
-                                e.clientY > rect.bottom);
-                            if (outsideCoords || (!hasCoords && draggedTabOutsideRef.current)) {
-                              shell.detachInstance(item.instanceId);
-                            }
-                            draggedTabOutsideRef.current = false;
-                          }}
-                        >
-                          {!item.isDashboard && (
-                            <Icon
-                              iconKey={item.iconKey || 'command.default'}
-                              decorative
-                              size="1em"
-                            />
-                          )}
-                          <span
-                            title={item.title}
-                            style={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {item.title}
-                          </span>
-                          {/* Active tab carries a small [x] to close the active application */}
-                          {isActive && (
-                            <button
-                              type="button"
-                              aria-label={gettext('Close %s', item.title)}
-                              data-cdeadmin-qa-key="active-tab-close"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                shell.closeInstance(item.instanceId);
-                              }}
-                              style={{
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                                padding: '0 3px',
-                                fontSize: '0.95rem',
-                                lineHeight: 1,
-                              }}
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Area 3e Zoomed Surface: User Dashboard OR Active Docked Application */}
+                {/* Area 3e Zoomed Surface: User Dashboard OR Active Docked Application (zero tabs inside work area; all page tabs live on Area 3b Tabbed-Icon-Bar) */}
                 <div
                   className="sr-zoom-surface"
                   style={{'--sr-surface-zoom': String(zoom3e)}}
@@ -3111,7 +3466,12 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                           resetKey={`${activeDockedItem.instanceId}:work`}
                           surfaceName={activeDockedItem.title}
                         >
-                          {activeDockedItem.renderWorkArea(activeDockedItem)}
+                          <InstanceWorkAreaScope
+                            instanceId={activeDockedItem.instanceId}
+                            setInstanceSubsections={shell.setInstanceSubsections}
+                          >
+                            {activeDockedItem.renderWorkArea(activeDockedItem)}
+                          </InstanceWorkAreaScope>
                         </ShellSurfaceErrorBoundary>
                       </ScratchScrollArea>
                     </Box>

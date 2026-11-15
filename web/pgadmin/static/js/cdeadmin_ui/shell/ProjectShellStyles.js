@@ -288,8 +288,12 @@ html[data-theme="dark"] {
 }
 
 .sr-island-3b .snb-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
   min-height: calc(28px * var(--sr-zoom-3b, 1));
-  padding: 0 14px;
+  padding: 0 12px;
   margin-bottom: 1px;
   border-radius: 9px 9px 0 0;
   border: 1px solid transparent;
@@ -298,7 +302,36 @@ html[data-theme="dark"] {
   color: var(--sr-island-muted);
   font-weight: 500;
   box-shadow: none;
+  cursor: pointer;
+  user-select: none;
   transition: background-color 120ms ease, color 120ms ease;
+}
+
+.sr-island-3b .snb-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-island-3b .snb-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 3px;
+  margin-inline-end: -4px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.sr-island-3b .snb-tab-close:hover {
+  opacity: 1;
+  background-color: var(--sr-tab-inactive-hover-bg);
 }
 
 .sr-island-3b .snb-tab:hover:not([aria-selected="true"]) {
@@ -367,6 +400,23 @@ html[data-theme="dark"] {
   gap: 6px;
   padding: 0 10px 4px 10px;
   background-color: var(--sr-island-bg);
+}
+
+.sr-3b-hover-hint {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 16000;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  background-color: var(--sr-island-fg, #0f172a);
+  color: var(--sr-island-bg, #ffffff);
+  border: 1px solid var(--sr-island-border, rgba(148, 163, 184, 0.4));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
 /* ==========================================================================

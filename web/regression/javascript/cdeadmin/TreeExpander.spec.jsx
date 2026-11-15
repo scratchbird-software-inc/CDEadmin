@@ -309,4 +309,62 @@ describe('CDEadmin tree expander', () => {
     expect(closeDirectory).toHaveBeenCalledTimes(2);
     expect(tree.forceUpdate).toHaveBeenCalled();
   });
+
+  it('scales FileTreeItem and toggle stem to 36px rowHeight with zero gap and expands [+] without selecting a page', async () => {
+    const openData = {
+      id: 'cde_db_1',
+      _id: 'cde_db_1',
+      _type: 'cde_database_target',
+      _label: 'cdeadmin_demo.fdb',
+      label: 'cdeadmin_demo.fdb',
+      inode: true,
+      has_children: true,
+    };
+    const childStub = {id: 51, depth: 4, children: [], _metadata: {data: {_type: 'cde_resource_group'}}};
+    const openItem = {
+      id: 50,
+      depth: 3,
+      type: FileType.Directory,
+      expanded: true,
+      isExpanded: true,
+      children: [childStub],
+      parent: {parent: {parent: null, children: []}, path: '/browser/server', children: []},
+      _metadata: {data: openData},
+      getMetadata: () => openData,
+    };
+    openItem.parent.children.push(openItem);
+
+    const {container} = render(<FileTreeItem
+      item={openItem}
+      itemType={ItemType.Directory}
+      rowHeight={36}
+      decorations={{classlist: [], addChangeListener: jest.fn(), removeChangeListener: jest.fn()}}
+      onClick={jest.fn()}
+      onDoubleClick={jest.fn()}
+      onContextMenu={jest.fn()}
+      onMouseEnter={jest.fn()}
+      onMouseLeave={jest.fn()}
+      changeDirectoryCount={jest.fn()}
+      events={{dispatch: jest.fn()}}
+    />);
+
+    const rowEl = container.querySelector('.file-entry');
+    expect(rowEl.style.height).toBe('36px');
+    expect(rowEl.style.minHeight).toBe('36px');
+    expect(container.querySelector('.directory-toggle-slot').style.height).toBe('36px');
+    expect(container.querySelector('svg.directory-toggle-stem path')).toHaveAttribute('d', 'M 10 25 V 36');
+
+    // Clicking [+] / [-] toggle only expands/collapses the branch and does NOT select/activate a page
+    const tree = new FileTreeX({model: {root: {}}, onEvent: jest.fn(), itemHeight: 36});
+    tree.toggleDirectory = jest.fn().mockResolvedValue();
+    tree.setActiveFile = jest.fn().mockResolvedValue();
+    const toggleBtn = container.querySelector('button.directory-toggle');
+    await tree.handleItemClicked(
+      {button: 0, target: toggleBtn},
+      openItem,
+      ItemType.Directory
+    );
+    expect(tree.toggleDirectory).toHaveBeenCalledWith(openItem);
+    expect(tree.setActiveFile).not.toHaveBeenCalled();
+  });
 });

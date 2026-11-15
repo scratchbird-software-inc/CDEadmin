@@ -280,3 +280,21 @@ def test_color_schemes_typography_placements_engines_and_security(tmp_path):
     lang_get_payload = lang_get.get_json()
     assert lang_get_payload['current'] == 'fr'
     assert lang_get_payload['catalog'].get('Connectors (%s)') == 'Connecteurs (%s)'
+
+    # 5. All 15 supported languages ship complete gettext + shell catalogs
+    expected_codes = {
+        'en', 'zh_Hans_CN', 'zh_Hant_TW', 'cs', 'fr', 'de', 'id', 'it',
+        'ja', 'ko', 'pl', 'pt_BR', 'ru', 'es', 'sv',
+    }
+    listed_codes = {row['code'] for row in lang_get_payload['languages']}
+    assert expected_codes.issubset(listed_codes)
+    for code in sorted(expected_codes - {'en'}):
+        sw = client.post('/cdeadmin/api/shell/language', json={'language': code})
+        assert sw.status_code == 200
+        sw_json = sw.get_json()
+        assert sw_json['current'] == code
+        assert len(sw_json['catalog']) >= 300
+        assert sw_json['catalog'].get('Browse data') not in (None, '', 'Browse data')
+        assert sw_json['catalog'].get('Settings') not in (None, '')
+
+

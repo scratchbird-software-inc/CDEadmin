@@ -18,6 +18,7 @@ export {
   normalizeIconAssignments,
   registerIconDefinition,
   resolveIconDefinition,
+  resolveSectionIconKey,
   semanticEngineIconKey,
   semanticObjectIconKey,
 } from './registry';

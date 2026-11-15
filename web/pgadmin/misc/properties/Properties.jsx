@@ -19,13 +19,18 @@ import {
   LIFECYCLE_EDIT_ENGINES,
   refreshConnectorAfterServerSave,
 } from '../../browser/static/js/ProviderObjectEditor';
-import { canLaunchServerMenu, providerContextMenuItems } from '../../browser/static/js/ProviderContextMenu';
 import ObjectNodeProperties from './ObjectNodeProperties';
 import EmptyPanelMessage from '../../static/js/components/EmptyPanelMessage';
 import getApiInstance from 'sources/api_instance';
 import gettext from 'sources/gettext';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
-import { Banner, Button } from 'sources/cdeadmin_ui';
+import {
+  Banner,
+  Icon,
+  semanticObjectIconKey,
+  useProjectInstanceScope,
+  useProjectShell,
+} from 'sources/cdeadmin_ui';
 import { ServerRegistrationHost } from '../../static/js/cdeadmin_ui/objects';
 import { Box } from '@mui/material';
 import { usePgAdmin } from '../../static/js/PgAdminProvider';
@@ -59,31 +64,38 @@ function resolveServerGroupTarget(pgAdmin, nodeItem) {
   };
 }
 
-function ConnectorRegistrationProperties({nodeData, nodeItem}) {
-  const pgAdmin = usePgAdmin();
-  const rawEngineId = nodeData?.engine_id || nodeData?._id || '';
-  const engineId = rawEngineId === 'opensearch_sql_ppl' ? 'opensearch' : rawEngineId;
-  const profiles = endpointProfiles?.interfaces?.(engineId) || [];
-  const [selectedProfileId, setSelectedProfileId] = useState(null);
-  const [intent, setIntent] = useState('endpoint');
-  const [formIteration, setFormIteration] = useState(0);
+function useLanguageRevision() {
+  const [rev, setRev] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const bump = () => setRev((n) => n + 1);
+    window.addEventListener('scratchrobin:language-changed', bump);
+    return () => window.removeEventListener('scratchrobin:language-changed', bump);
+  }, []);
+  return rev;
+}
 
+export function resolveConnectorModeSelection(engineId, requestedProfileId, requestedIntent) {
+  const normalizedEngine = engineId === 'opensearch_sql_ppl' ? 'opensearch' : engineId;
+  const profiles = endpointProfiles?.interfaces?.(normalizedEngine) || [];
   if (!profiles.length) {
-    return (
-      <Box sx={{my: '4px', width: '100%', minWidth: 0}}>
-        <EmptyPanelMessage text={gettext('No registration profile is available for this connector.')} />
-      </Box>
-    );
+    return {
+      profiles: [],
+      profile: null,
+      activeIntent: 'endpoint',
+      networkSupportsDatabaseIntent: false,
+      networkSupportsCreateIntent: false,
+    };
   }
-
   const profile =
-    profiles.find((p) => p.profile_id === selectedProfileId) || profiles[0];
+    profiles.find((p) => p.profile_id === requestedProfileId) || profiles[0];
   const networkSupportsDatabaseIntent = Boolean(
     profile.route_kind !== 'embedded_file' && profile.database_targeting?.multiple
   );
   const networkSupportsCreateIntent = Boolean(
     networkSupportsDatabaseIntent && profile.database_targeting?.create_and_activate
   );
+  const intent = requestedIntent || 'endpoint';
   const activeIntent =
     profile.route_kind === 'embedded_file' && intent === 'endpoint'
       ? 'register_existing'
@@ -92,6 +104,61 @@ function ConnectorRegistrationProperties({nodeData, nodeItem}) {
         : profile.route_kind !== 'embedded_file' && intent === 'create_database' && !networkSupportsCreateIntent
           ? 'endpoint'
           : intent;
+  return {
+    profiles,
+    profile,
+    activeIntent,
+    networkSupportsDatabaseIntent,
+    networkSupportsCreateIntent,
+  };
+}
+
+function ConnectorRegistrationProperties({nodeData, nodeItem}) {
+  const pgAdmin = usePgAdmin();
+  useLanguageRevision();
+  const shell = useProjectShell();
+  const instanceScope = useProjectInstanceScope();
+  const enclosingInstance =
+    instanceScope && shell?.instances
+      ? shell.instances.find((inst) => inst.instanceId === instanceScope.instanceId)
+      : null;
+
+  const rawEngineId = nodeData?.engine_id || nodeData?._id || '';
+  const engineId = rawEngineId === 'opensearch_sql_ppl' ? 'opensearch' : rawEngineId;
+  const [fallbackProfileId, setFallbackProfileId] = useState(null);
+  const [fallbackIntent, setFallbackIntent] = useState('endpoint');
+  const [formIteration, setFormIteration] = useState(0);
+
+  const selectedProfileId = enclosingInstance
+    ? enclosingInstance.meta?.connectorProfileId ?? null
+    : fallbackProfileId;
+  const intent = enclosingInstance
+    ? enclosingInstance.meta?.connectorIntent || 'endpoint'
+    : fallbackIntent;
+
+  useEffect(() => {
+    if (enclosingInstance || typeof window === 'undefined') return undefined;
+    const onModeEvent = (ev) => {
+      if (ev?.detail?.profileId !== undefined) setFallbackProfileId(ev.detail.profileId);
+      if (ev?.detail?.intent !== undefined) setFallbackIntent(ev.detail.intent);
+    };
+    window.addEventListener('scratchrobin:connector-select-mode', onModeEvent);
+    return () => window.removeEventListener('scratchrobin:connector-select-mode', onModeEvent);
+  }, [enclosingInstance]);
+
+  const {profiles, profile, activeIntent} = resolveConnectorModeSelection(
+    engineId,
+    selectedProfileId,
+    intent
+  );
+
+  if (!profiles.length || !profile) {
+    return (
+      <Box sx={{my: '4px', width: '100%', minWidth: 0}}>
+        <EmptyPanelMessage text={gettext('No registration profile is available for this connector.')} />
+      </Box>
+    );
+  }
 
   const api = getApiInstance();
   const serverNode = pgAdmin?.Browser?.Nodes?.server;
@@ -150,102 +217,6 @@ function ConnectorRegistrationProperties({nodeData, nodeItem}) {
       data-cdeadmin-qa-key={`connector-registration-panel-${engineId}`}
       sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}
     >
-      <Box
-        sx={{
-          px: 3,
-          py: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Box sx={{display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap'}}>
-          {profiles.length > 1 &&
-            profiles.map((candidate) => {
-              const baseLabel = candidate.interface_display_name || candidate.display_name;
-              const label =
-                candidate.route_kind === 'embedded_file'
-                  ? gettext('%s (This computer)', baseLabel)
-                  : gettext('%s (Server)', baseLabel);
-              return (
-                <Button
-                  key={candidate.profile_id}
-                  size="small"
-                  intent={candidate.profile_id === profile.profile_id ? 'primary' : 'neutral'}
-                  onClick={() => setSelectedProfileId(candidate.profile_id)}
-                >
-                  {label}
-                </Button>
-              );
-            })}
-          {profile.route_kind === 'embedded_file' && (
-            <>
-              <Button
-                size="small"
-                intent={activeIntent === 'register_existing' ? 'primary' : 'neutral'}
-                onClick={() => setIntent('register_existing')}
-              >
-                {gettext('Open Existing File')}
-              </Button>
-              <Button
-                size="small"
-                intent={activeIntent === 'create_database' ? 'primary' : 'neutral'}
-                onClick={() => setIntent('create_database')}
-              >
-                {gettext('Create New File')}
-              </Button>
-            </>
-          )}
-          {networkSupportsDatabaseIntent && (
-            <>
-              <Button
-                size="small"
-                intent={activeIntent === 'endpoint' ? 'primary' : 'neutral'}
-                onClick={() => setIntent('endpoint')}
-              >
-                {gettext('Register Server')}
-              </Button>
-              <Button
-                size="small"
-                intent={activeIntent === 'register_existing' ? 'primary' : 'neutral'}
-                onClick={() => setIntent('register_existing')}
-              >
-                {gettext('Register Existing Database')}
-              </Button>
-              {networkSupportsCreateIntent && (
-                <Button
-                  size="small"
-                  intent={activeIntent === 'create_database' ? 'primary' : 'neutral'}
-                  onClick={() => setIntent('create_database')}
-                >
-                  {gettext('Create Database')}
-                </Button>
-              )}
-            </>
-          )}
-        </Box>
-        <Button
-          size="small"
-          intent="neutral"
-          data-cdeadmin-qa-key="connector-open-registration-tab"
-          onClick={() =>
-            serverNode?.callbacks?.register_engine_server?.call(serverNode, {
-              item: nodeItem,
-              engineId,
-              registrationContext: {
-                profile_id: profile.profile_id,
-                registration_intent: activeIntent,
-              },
-            })
-          }
-        >
-          {gettext('Open in Separate Tab…')}
-        </Button>
-      </Box>
       <Box sx={{flex: 1, minHeight: 0}}>
         <ServerRegistrationHost
           key={`${profile.profile_id}-${activeIntent}-${formIteration}`}
@@ -368,26 +339,6 @@ function LocalhostServerProperties({nodeData, nodeItem}) {
               ? gettext('Not detected on default port %s', defaultPorts.join(', '))
               : gettext('Not detected on default port')}
         </Box>
-        <Button
-          size="small"
-          intent="neutral"
-          data-cdeadmin-qa-key="localhost-open-properties-tab"
-          onClick={() =>
-            serverNode?.callbacks?.register_engine_server?.call(serverNode, {
-              item: nodeItem,
-              engineId,
-              panelTitle: gettext('Server Properties — %s on localhost', displayLabel),
-              applyLabel: gettext('Apply Changes'),
-              registrationContext: {
-                profile_id: profile.profile_id,
-                registration_intent: 'endpoint',
-                host: 'localhost',
-              },
-            })
-          }
-        >
-          {gettext('Open in Separate Tab…')}
-        </Button>
       </Box>
       {!nodeData?.localhost_available && (
         <Banner status="info">
@@ -491,14 +442,6 @@ function ServerSettingsProperties({node, treeNodeInfo, nodeData, nodeItem}) {
 
   const verification = nodeData?.runtime_verification_state;
   const isVerified = verification === 'verified' || Boolean(nodeData?.connected);
-  const serverMenus = providerContextMenuItems(nodeData, nodeItem) || [];
-  const createDbMenu = serverMenus.find((m) => String(m.commandId).endsWith('.create_database'));
-  const registerDbMenu = serverMenus.find((m) => String(m.commandId).endsWith('.register_database'));
-  const invokeProviderMenu = (menu) =>
-    menu?.commandHandler?.(
-      menu.commandArguments({itemData: nodeData, item: nodeItem}),
-      {itemData: nodeData, item: nodeItem}
-    );
 
   return (
     <Box
@@ -523,74 +466,6 @@ function ServerSettingsProperties({node, treeNodeInfo, nodeData, nodeItem}) {
           {' · '}
           {isVerified ? gettext('Verified / Ready') : gettext('Not yet verified')}
           {nodeData?.verified_runtime_version ? ` (${nodeData.verified_runtime_version})` : ''}
-        </Box>
-        <Box sx={{display: 'flex', gap: 0.75, flexWrap: 'wrap'}}>
-          <Button
-            size="small"
-            intent="neutral"
-            data-cdeadmin-qa-key="server-settings-verify"
-            onClick={() => serverNode?.callbacks?.connect_server?.call(serverNode, {item: nodeItem})}
-          >
-            {isVerified ? gettext('Re-verify / Connect…') : gettext('Verify / Connect…')}
-          </Button>
-          {createDbMenu && (
-            <Button
-              size="small"
-              intent="neutral"
-              disabled={!canLaunchServerMenu(createDbMenu, nodeData, nodeItem)}
-              title={
-                canLaunchServerMenu(createDbMenu, nodeData, nodeItem)
-                  ? createDbMenu.label
-                  : createDbMenu.disabledReason || createDbMenu.label
-              }
-              data-cdeadmin-qa-key="server-settings-create-database"
-              onClick={() => invokeProviderMenu(createDbMenu)}
-            >
-              {gettext('Create Database…')}
-            </Button>
-          )}
-          {registerDbMenu && (
-            <Button
-              size="small"
-              intent="neutral"
-              disabled={!canLaunchServerMenu(registerDbMenu, nodeData, nodeItem)}
-              title={
-                canLaunchServerMenu(registerDbMenu, nodeData, nodeItem)
-                  ? registerDbMenu.label
-                  : registerDbMenu.disabledReason || registerDbMenu.label
-              }
-              data-cdeadmin-qa-key="server-settings-register-database"
-              onClick={() => invokeProviderMenu(registerDbMenu)}
-            >
-              {gettext('Register Database…')}
-            </Button>
-          )}
-          <Button
-            size="small"
-            intent="neutral"
-            data-cdeadmin-qa-key="server-settings-open-tab"
-            onClick={() =>
-              serverNode?.callbacks?.show_obj_properties?.call(serverNode, {
-                action: 'edit',
-                item: nodeItem,
-              })
-            }
-          >
-            {gettext('Open in Separate Tab…')}
-          </Button>
-          <Button
-            size="small"
-            intent="danger"
-            data-cdeadmin-qa-key="server-settings-remove"
-            onClick={() =>
-              serverNode?.callbacks?.delete_obj?.call(serverNode, {
-                item: nodeItem,
-                url: 'drop',
-              })
-            }
-          >
-            {gettext('Remove Server…')}
-          </Button>
         </Box>
       </Box>
       <Box sx={{flex: 1, minHeight: 0}}>
@@ -623,6 +498,7 @@ ServerSettingsProperties.propTypes = {
 
 function DatabaseTargetProperties({nodeData, nodeItem}) {
   const pgAdmin = usePgAdmin();
+  useLanguageRevision();
   const tree = pgAdmin?.Browser?.tree;
   let parentServerData = null;
   let cur = nodeItem && tree?.hasParent?.(nodeItem) ? tree.parent(nodeItem) : null;
@@ -635,21 +511,6 @@ function DatabaseTargetProperties({nodeData, nodeItem}) {
   const profile = endpointProfiles?.get?.(nodeData?.cde_profile_id);
   const engineLabel =
     profile?.engine_display_name || profile?.display_name || nodeData?.cde_engine_id || '';
-  const menus = providerContextMenuItems(nodeData, nodeItem) || [];
-  const findAction = (suffix) =>
-    menus.find((m) => String(m.commandId).split('.').at(-1) === suffix);
-
-  const connectMenu = findAction('connect');
-  const studioMenu = findAction('studio');
-  const editMenu = findAction('edit') || findAction('alter') || findAction('properties');
-  const removeMenu = findAction('remove');
-  const dropMenu = findAction('drop');
-
-  const invokeMenu = (menu) =>
-    menu?.commandHandler?.(
-      menu.commandArguments({itemData: nodeData, item: nodeItem}),
-      {itemData: nodeData, item: nodeItem}
-    );
 
   const rows = [
     [gettext('Database'), nodeData?.label || nodeData?._label || nodeData?.cde_database || '—'],
@@ -680,84 +541,54 @@ function DatabaseTargetProperties({nodeData, nodeItem}) {
           flexWrap: 'wrap',
         }}
       >
-        <Box sx={{fontSize: '0.8rem', color: 'text.secondary'}}>
-          <strong>
+        <Box sx={{fontSize: '0.85rem', color: 'text.secondary'}}>
+          <strong style={{color: 'inherit'}}>
             {gettext('Database Properties — %s', nodeData?.label || nodeData?._label || '')}
           </strong>
           {engineLabel ? ` · ${engineLabel}` : ''}
         </Box>
-        <Box sx={{display: 'flex', gap: 0.75, flexWrap: 'wrap'}}>
-          {connectMenu && connectMenu.enable(nodeData, nodeItem) && (
-            <Button
-              size="small"
-              intent="neutral"
-              data-cdeadmin-qa-key="database-target-connect"
-              onClick={() => invokeMenu(connectMenu)}
-            >
-              {gettext('Connect…')}
-            </Button>
-          )}
-          {studioMenu && (
-            <Button
-              size="small"
-              intent="primary"
-              disabled={!studioMenu.enable(nodeData, nodeItem)}
-              data-cdeadmin-qa-key="database-target-sql"
-              onClick={() => invokeMenu(studioMenu)}
-            >
-              {gettext('Open SQL Editor…')}
-            </Button>
-          )}
-          {editMenu && (
-            <Button
-              size="small"
-              intent="neutral"
-              disabled={!editMenu.enable(nodeData, nodeItem)}
-              data-cdeadmin-qa-key="database-target-edit"
-              onClick={() => invokeMenu(editMenu)}
-            >
-              {gettext('Edit Connection / Settings…')}
-            </Button>
-          )}
-          {removeMenu && (
-            <Button
-              size="small"
-              intent="danger"
-              disabled={!removeMenu.enable(nodeData, nodeItem)}
-              title={removeMenu.disabledReason || removeMenu.label}
-              data-cdeadmin-qa-key="database-target-remove"
-              onClick={() => invokeMenu(removeMenu)}
-            >
-              {gettext('Remove Database…')}
-            </Button>
-          )}
-          {dropMenu && dropMenu.enable(nodeData, nodeItem) && (
-            <Button
-              size="small"
-              intent="danger"
-              data-cdeadmin-qa-key="database-target-drop"
-              onClick={() => invokeMenu(dropMenu)}
-            >
-              {gettext('Drop Database…')}
-            </Button>
-          )}
-        </Box>
       </Box>
-      <Box sx={{p: 2, overflowY: 'auto', flex: 1, minHeight: 0}}>
+      <Box sx={{p: 2.5, overflowY: 'auto', flex: 1, minHeight: 0}}>
         <Box
+          data-cdeadmin-qa-key="auto-placing-properties-grid"
           sx={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(140px, 200px) 1fr',
-            rowGap: 1,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            rowGap: 1.5,
             columnGap: 2,
-            fontSize: '0.8125rem',
-            maxWidth: 680,
+            alignItems: 'start',
           }}
         >
           {rows.map(([label, val]) => (
-            <Box key={label} sx={{display: 'contents'}}>
-              <Box sx={{fontWeight: 600, color: 'text.secondary'}}>{label}</Box>
-              <Box sx={{wordBreak: 'break-all'}}>{val}</Box>
+            <Box
+              key={label}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.4,
+                minWidth: 0,
+              }}
+            >
+              <Box sx={{fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', lineHeight: 1.25}}>
+                {label}
+              </Box>
+              <Box
+                sx={{
+                  px: 1.25,
+                  py: 0.65,
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  fontSize: '0.8125rem',
+                  minHeight: '2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {val}
+              </Box>
             </Box>
           ))}
         </Box>
@@ -767,6 +598,206 @@ function DatabaseTargetProperties({nodeData, nodeItem}) {
 }
 
 DatabaseTargetProperties.propTypes = {
+  nodeData: PropTypes.object,
+  nodeItem: PropTypes.object,
+};
+
+function VirtualTreeGroupItemsView({nodeData, nodeItem}) {
+  const pgAdmin = usePgAdmin();
+  useLanguageRevision();
+  const [treeRev, setTreeRev] = useState(0);
+  const [loadingChildren, setLoadingChildren] = useState(false);
+
+  const tree = pgAdmin?.Browser?.tree;
+  const resolvedItem = nodeItem || tree?.selected?.() || null;
+
+  useEffect(() => {
+    const events = pgAdmin?.Browser?.Events;
+    if (!events?.on) return undefined;
+    const bump = () => setTreeRev((n) => n + 1);
+    events.on('pgadmin-browser:tree:updated', bump);
+    events.on('pgadmin:browser:node:updated', bump);
+    events.on('pgadmin:browser:tree:add', bump);
+    return () => {
+      events.off?.('pgadmin-browser:tree:updated', bump);
+      events.off?.('pgadmin:browser:node:updated', bump);
+      events.off?.('pgadmin:browser:tree:add', bump);
+    };
+  }, [pgAdmin]);
+
+  useEffect(() => {
+    if (!tree || !resolvedItem) return undefined;
+    const existingChildren = tree.children?.(resolvedItem) || resolvedItem.children || [];
+    const canExpand = Boolean(nodeData?.inode || resolvedItem.type === 1 || typeof resolvedItem.ensureLoaded === 'function');
+    if (existingChildren.length > 0 || !canExpand) return undefined;
+
+    let active = true;
+    setLoadingChildren(true);
+    const loadPromise =
+      typeof tree.open === 'function'
+        ? Promise.resolve(tree.open(resolvedItem))
+        : typeof resolvedItem.ensureLoaded === 'function'
+          ? Promise.resolve(resolvedItem.ensureLoaded())
+          : Promise.resolve();
+    loadPromise
+      .catch(() => {})
+      .finally(() => {
+        if (active) {
+          setLoadingChildren(false);
+          setTreeRev((n) => n + 1);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [nodeData?.inode, resolvedItem, tree]);
+
+  // Reference treeRev so React lint / render tracks updates
+  void treeRev;
+  const childItems =
+    (resolvedItem && (tree?.children?.(resolvedItem) || resolvedItem.children)) || [];
+
+  const rawGroupTitle = String(nodeData?.label || nodeData?._label || '')
+    .replace(/\s*\(\d+\)\s*$/, '')
+    .trim();
+  const groupTitle = rawGroupTitle ? gettext(rawGroupTitle) : gettext('Items');
+
+  const handleSelectChild = (child) => {
+    if (!tree || !child) return;
+    const childData = tree.itemData?.(child) || child._metadata?.data || {};
+    void Promise.resolve(tree.select?.(child, true, 'center')).then(() => {
+      pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:selected', child, childData);
+    });
+  };
+
+  return (
+    <Box
+      data-cdeadmin-qa-key={`virtual-group-items-${rawGroupTitle || nodeData?._type || 'group'}`}
+      sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}
+    >
+      <Box
+        sx={{
+          px: 3,
+          py: 0.75,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{fontSize: '0.85rem', color: 'text.secondary'}}>
+          <strong style={{color: 'inherit'}}>{groupTitle}</strong>
+          {' · '}
+          {gettext('%s items', String(childItems.length))}
+        </Box>
+      </Box>
+      <Box sx={{p: 2.5, overflowY: 'auto', flex: 1, minHeight: 0}}>
+        {loadingChildren && childItems.length === 0 ? (
+          <EmptyPanelMessage text={gettext('Loading items…')} />
+        ) : childItems.length === 0 ? (
+          <EmptyPanelMessage text={gettext('No items in this group.')} />
+        ) : (
+          <Box
+            data-cdeadmin-qa-key="virtual-group-buttons-grid"
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 1.25,
+              alignItems: 'stretch',
+            }}
+          >
+            {childItems.map((child, idx) => {
+              const cData = tree?.itemData?.(child) || child?._metadata?.data || {};
+              const rawChildLabel = String(
+                cData.label || cData._label || child?.fileName || `Item ${idx + 1}`
+              ).trim();
+              const cleanLabel = cData.inode
+                ? gettext(rawChildLabel.replace(/\s*\(\d+\)\s*$/, '').trim() || rawChildLabel)
+                : rawChildLabel;
+              const iconKey =
+                (typeof cData.icon === 'string' && cData.icon.trim()) ||
+                semanticObjectIconKey(cData.cde_resource_kind || cData._type || 'table');
+              const childKey =
+                cData.cde_resource_id ||
+                cData._id ||
+                cData.id ||
+                child?.path ||
+                `${rawChildLabel}-${idx}`;
+              return (
+                <Box
+                  key={String(childKey)}
+                  component="button"
+                  type="button"
+                  title={cleanLabel}
+                  data-cdeadmin-qa-key={`virtual-group-item-btn-${rawChildLabel}`}
+                  onClick={() => handleSelectChild(child)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.1,
+                    px: 1.5,
+                    py: 1,
+                    borderRadius: 1.25,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    minWidth: 0,
+                    transition: 'border-color 120ms ease, background-color 120ms ease',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      bgcolor: 'action.hover',
+                    },
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: '1px',
+                    },
+                  }}
+                >
+                  <Box
+                    component="span"
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      width: 18,
+                      height: 18,
+                    }}
+                  >
+                    <Icon iconKey={iconKey} decorative size="1rem" />
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      minWidth: 0,
+                      flex: 1,
+                    }}
+                  >
+                    {cleanLabel}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+VirtualTreeGroupItemsView.propTypes = {
   nodeData: PropTypes.object,
   nodeItem: PropTypes.object,
 };
@@ -833,6 +864,25 @@ function Properties(props) {
           <ServerSettingsProperties
             node={props.node}
             treeNodeInfo={props.treeNodeInfo}
+            nodeData={props.nodeData}
+            nodeItem={props.nodeItem}
+          />
+        </ErrorBoundary>
+      </StyledBox>
+    );
+  }
+
+  if (
+    props.nodeData?._type === 'cde_resource_group' ||
+    (Boolean(props.nodeData?.inode) &&
+      !isCollection &&
+      props.node &&
+      props.node.hasProperties === false)
+  ) {
+    return (
+      <StyledBox>
+        <ErrorBoundary>
+          <VirtualTreeGroupItemsView
             nodeData={props.nodeData}
             nodeItem={props.nodeItem}
           />

@@ -32,25 +32,30 @@ const SAFE_HANDLERS = new Set([
   'open_inherited_tool',
 ]);
 
+function defineMenuCategory(msgid, priority) {
+  return Object.freeze({
+    get label() {
+      return gettext(msgid);
+    },
+    priority,
+  });
+}
+
 export const PROVIDER_MENU_CATEGORIES = Object.freeze({
-  register: {label: gettext('Registration'), priority: 10},
-  connection: {label: gettext('Connection'), priority: 20},
-  database: {label: gettext('Database workspace'), priority: 30},
-  'database-lifecycle': {
-    label: gettext('Definition and lifecycle'), priority: 40,
-  },
-  backup: {label: gettext('Backup'), priority: 50},
-  restore: {label: gettext('Restore'), priority: 60},
-  diagnostics: {
-    label: gettext('Diagnostics and verification'), priority: 70,
-  },
-  maintenance: {label: gettext('Maintenance'), priority: 80},
-  availability: {label: gettext('Availability'), priority: 90},
-  security: {label: gettext('Security and authorization'), priority: 100},
-  object: {label: gettext('Object workspace'), priority: 110},
-  operations: {label: gettext('Object operations'), priority: 120},
-  endpoint: {label: gettext('Endpoint registration'), priority: 130},
-  information: {label: gettext('Information'), priority: 140},
+  register: defineMenuCategory('Registration', 10),
+  connection: defineMenuCategory('Connection', 20),
+  database: defineMenuCategory('Database workspace', 30),
+  'database-lifecycle': defineMenuCategory('Definition and lifecycle', 40),
+  backup: defineMenuCategory('Backup', 50),
+  restore: defineMenuCategory('Restore', 60),
+  diagnostics: defineMenuCategory('Diagnostics and verification', 70),
+  maintenance: defineMenuCategory('Maintenance', 80),
+  availability: defineMenuCategory('Availability', 90),
+  security: defineMenuCategory('Security and authorization', 100),
+  object: defineMenuCategory('Object workspace', 110),
+  operations: defineMenuCategory('Object operations', 120),
+  endpoint: defineMenuCategory('Endpoint registration', 130),
+  information: defineMenuCategory('Information', 140),
 });
 
 export function registerProviderMenuCategories(browser, actions) {
@@ -62,7 +67,9 @@ export function registerProviderMenuCategories(browser, actions) {
       if(!definition || browser.menu_categories[categoryId]) return;
       browser.menu_categories[categoryId] = {
         name: categoryId,
-        label: definition.label,
+        get label() {
+          return definition.label;
+        },
         priority: definition.priority,
         single: true,
       };
@@ -434,6 +441,8 @@ export function providerQueryTool(itemData, item) {
 
 export function providerContextMenuItems(itemData, item=null) {
   if(!isProviderContextNode(itemData)) return null;
+  const rt = (txt) =>
+    typeof gettext.retranslate === 'function' ? gettext.retranslate(txt) : gettext(txt);
   return itemData.cde_context_actions.filter((action) =>
     action?.schema === ACTION_SCHEMA &&
     typeof action.command_id === 'string' &&
@@ -443,9 +452,9 @@ export function providerContextMenuItems(itemData, item=null) {
     name: action.command_id.replace(/[^a-zA-Z0-9_]+/g, '_'),
     commandId: action.command_id,
     commandVersion: action.command_version || 1,
-    label: action.label,
-    description: action.description || '',
-    disabledReason: action.disabled_reason || '',
+    label: rt(action.label),
+    description: action.description ? rt(action.description) : '',
+    disabledReason: action.disabled_reason ? rt(action.disabled_reason) : '',
     iconKey: action.icon_key || 'command.default',
     category: action.menu_group || 'common',
     priority: action.priority ?? 100,
@@ -570,7 +579,6 @@ const DATABASE_PROMOTED_SUFFIXES = new Set([
   'edit',
   'alter',
   'drop',
-  'remove',
 ]);
 
 const UNVERIFIED_ENDPOINT_REASONS = new Set([
@@ -668,6 +676,9 @@ export function providerTreeContextActions(itemData, item=null) {
       return;
     }
     if (nodeType === 'server' && suffix === 'properties') {
+      return;
+    }
+    if (nodeType === 'cde_database_target' && suffix === 'remove') {
       return;
     }
 

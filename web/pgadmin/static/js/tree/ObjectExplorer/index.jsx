@@ -31,6 +31,8 @@ import { usePgAdmin } from '../../PgAdminProvider';
 import ObjectExplorerFilter from './ObjectExplorerFilter';
 import usePreferences from '../../../../preferences/static/js/store';
 import gettext from 'sources/gettext';
+import getApiInstance from '../../api_instance';
+import {descriptorClient} from 'sources/cdeadmin_ui/objects/DescriptorClient';
 import {
   isProviderContextNode,
   providerTreeContextActions,
@@ -251,8 +253,20 @@ export default function ObjectExplorer() {
     ev.preventDefault();
     if(item) {
       await pgAdmin.Browser.tree.select(item);
+      const itemData = item._metadata?.data ?? {};
+      const hierarchy = pgAdmin.Browser.tree.getTreeNodeHierarchy?.(item) ?? {};
+      const engine = itemData.cde_engine_id || hierarchy?.server?.cde_engine_id;
+      const version = itemData.cde_engine_version || hierarchy?.server?.cde_engine_version;
+      if (engine) {
+        const client = descriptorClient(getApiInstance());
+        if (!client.cached(engine, {version})) {
+          client.bundle(engine, {version})
+            .then(() => setLocaleRev((n) => n + 1))
+            .catch(() => {});
+        }
+      }
       setContextNode(descriptorFromTreeMetadata(
-        item._metadata?.data ?? {}, item.children?.length ?? 0
+        itemData, item.children?.length ?? 0
       ));
       setContextItem(item);
       setContextPos({x: ev.clientX, y: ev.clientY});

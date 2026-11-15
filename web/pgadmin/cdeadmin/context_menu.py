@@ -1031,8 +1031,6 @@ def database_target_context_actions(
         ('edit', f'Edit {noun} connection...', 'action.properties', 'admin'),
         ('alter', f'Alter {noun}...', 'action.edit', 'admin'),
         ('drop', f'Drop {noun}...', 'action.delete', 'destructive'),
-        ('remove', f'Remove {noun} registration...', 'action.delete',
-         'destructive'),
     )
     if engine_id == 'sqlite':
         action_specs = (
@@ -1044,8 +1042,6 @@ def database_target_context_actions(
              'admin'),
             ('drop', 'Delete SQLite database file...', 'action.delete',
              'destructive'),
-            ('remove', 'Remove SQLite file registration...',
-             'action.delete', 'destructive'),
         )
     elif engine_id == 'duckdb':
         action_specs = (
@@ -1057,8 +1053,6 @@ def database_target_context_actions(
              'admin'),
             ('drop', 'Delete DuckDB database file...', 'action.delete',
              'destructive'),
-            ('remove', 'Remove DuckDB file registration...',
-             'action.delete', 'destructive'),
         )
     if engine_id == 'mysql':
         action_specs = tuple(item for item in action_specs if item[0] != 'connect')

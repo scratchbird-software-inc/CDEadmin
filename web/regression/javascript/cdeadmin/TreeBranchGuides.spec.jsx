@@ -112,5 +112,32 @@ describe('CDEadmin branching tree guides', () => {
     const paths = Array.from(container.querySelectorAll('svg path'));
     expect(paths.some((p) => p.getAttribute('stroke-width') === '2.2')).toBe(true);
     expect(paths.some((p) => p.getAttribute('stroke-width') === '2.5')).toBe(true);
+
+    // High Contrast Light (36px row height): branch guides and .file-entry span full 36px with zero vertical gap
+    const hcEntryStyles = reactaspenOverride({
+      ...themeStub,
+      cdeadminPresentation: {treeRowHeight: 36},
+    })['.file-entry'];
+    expect(hcEntryStyles.height).toBe('36px');
+    expect(hcEntryStyles.minHeight).toBe('36px');
+    expect(hcEntryStyles.margin).toBe(0);
+
+    const {container: hcContainer} = render(
+      <TreeBranchGuides item={local} activeItem={local} hasToggle rowHeight={36} />
+    );
+    expect(hcContainer.querySelector('.tree-branch').style.height).toBe('36px');
+    expect(hcContainer.querySelector('.tree-branch-segment').style.height).toBe('36px');
+    expect(hcContainer.querySelector('.tree-branch-segment.ancestor svg')).toHaveAttribute(
+      'viewBox',
+      '0 0 20 36'
+    );
+    expect(hcContainer.querySelector('.tree-branch-segment.current svg')).toHaveAttribute(
+      'viewBox',
+      '0 0 20 36'
+    );
+    const hcPaths = Array.from(hcContainer.querySelectorAll('svg path')).map((p) =>
+      p.getAttribute('d')
+    );
+    expect(hcPaths).toContain('M 10 0 V 36');
   });
 });
