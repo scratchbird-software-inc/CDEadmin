@@ -560,9 +560,70 @@ def normalize_sbsql_query(raw: Mapping[str, Any]) -> dict[str, Any]:
             'alias': str(mraw.get('alias') or default_alias).strip(),
         })
 
-    if not columns and not measures:
+    allowed_win_fns = (
+        *sdk_sql_builder.RANKING_WINDOWS,
+        'sum',
+        'count',
+        'count_distinct',
+        'min',
+        'max',
+        'avg',
+    )
+    windows: list[dict[str, Any]] = []
+    for wraw in raw.get('windows') or []:
+        if not isinstance(wraw, Mapping):
+            raise DesignStoreError('Each window calculation must be an object')
+        wfn = str(wraw.get('function') or 'row_number').lower()
+        if wfn not in allowed_win_fns:
+            raise DesignStoreError(f'Unsupported window function: {wfn!r}')
+        wcol_val = wraw.get('column')
+        if wfn in sdk_sql_builder.RANKING_WINDOWS:
+            if wcol_val not in (None, ''):
+                raise DesignStoreError(
+                    f'Window {wfn.upper()} takes no column argument'
+                )
+            wcol = None
+        else:
+            wcol = (
+                None
+                if wcol_val in (None, '', '*')
+                else _col_parts(wcol_val)
+            )
+            if wcol is None and wfn != 'count':
+                raise DesignStoreError(
+                    f'Window {wfn.upper()} requires a target column'
+                )
+        part_by = [_col_parts(p) for p in (wraw.get('partition_by') or [])]
+        win_order: list[dict[str, Any]] = []
+        for woraw in wraw.get('order_by') or []:
+            if not isinstance(woraw, Mapping):
+                raise DesignStoreError('Window order_by entry must be an object')
+            wdir = str(woraw.get('direction') or 'asc').lower()
+            if wdir not in ('asc', 'desc'):
+                raise DesignStoreError(
+                    'Window order_by direction must be asc or desc'
+                )
+            wtarget = (
+                woraw.get('column') or woraw.get('expr') or woraw.get('field')
+            )
+            win_order.append({
+                'column': _col_parts(wtarget),
+                'direction': wdir,
+            })
+        default_walias = (
+            f'{wfn}_{wcol[-1]}' if wcol is not None else f'{wfn}_val'
+        )
+        windows.append({
+            'function': wfn,
+            'column': wcol,
+            'partition_by': part_by,
+            'order_by': win_order,
+            'alias': str(wraw.get('alias') or default_walias).strip(),
+        })
+
+    if not columns and not measures and not windows:
         raise DesignStoreError(
-            'SBsql query requires at least one column or measure'
+            'SBsql query requires at least one column, measure or window'
         )
 
     filters: list[dict[str, Any]] = []
@@ -628,7 +689,7 @@ def normalize_sbsql_query(raw: Mapping[str, Any]) -> dict[str, Any]:
         ):
             raise DesignStoreError('SBsql limit must be 1..100000')
 
-    return {
+    normalized_out: dict[str, Any] = {
         'dialect': 'sbsql@1',
         'distinct': bool(raw.get('distinct', False)),
         'from': {'relation': base_rel, 'alias': base_alias},
@@ -640,6 +701,9 @@ def normalize_sbsql_query(raw: Mapping[str, Any]) -> dict[str, Any]:
         'order_by': order_by,
         'limit': limit_val,
     }
+    if windows:
+        normalized_out['windows'] = windows
+    return normalized_out
 
 
 def analyze_sbsql_fanout(
@@ -649,11 +713,12 @@ def analyze_sbsql_fanout(
     normalized = normalize_sbsql_query(sbsql_query)
     joins = normalized['joins']
     measures = normalized['measures']
-    if not joins or not measures:
+    windows = normalized.get('windows') or []
+    if not joins or (not measures and not windows):
         return []
     fanout_sensitive = [
-        m for m in measures
-        if m['function'] in ('sum', 'avg', 'count')
+        *[m for m in measures if m['function'] in ('sum', 'avg', 'count')],
+        *[w for w in windows if w['function'] in ('sum', 'avg', 'count')],
     ]
     if not fanout_sensitive:
         return []
@@ -727,6 +792,30 @@ def sbsql_to_sql_builder_model(
             },
             'alias': meas['alias'],
         })
+    for win in q.get('windows') or []:
+        wfn = 'count' if win['function'] == 'count_distinct' else win['function']
+        wdist = win['function'] == 'count_distinct'
+        wbody: dict[str, Any] = {'function': wfn}
+        if wfn not in sdk_sql_builder.RANKING_WINDOWS:
+            wbody['distinct'] = wdist
+            wbody['argument'] = (
+                '*'
+                if win['column'] is None
+                else {'column': list(win['column'])}
+            )
+        if win.get('partition_by'):
+            wbody['partition_by'] = [
+                {'column': list(p)} for p in win['partition_by']
+            ]
+        if win.get('order_by'):
+            wbody['order_by'] = [
+                {
+                    'expr': {'column': list(o['column'])},
+                    'direction': o['direction'],
+                }
+                for o in win['order_by']
+            ]
+        select_cols.append({'expr': {'window': wbody}, 'alias': win['alias']})
 
     builder_joins: list[dict[str, Any]] = []
     for join in q['joins']:
@@ -871,6 +960,7 @@ def sql_builder_model_to_sbsql(
         raise DesignStoreError('SQL builder SELECT requires a base relation')
     columns: list[dict[str, Any]] = []
     measures: list[dict[str, Any]] = []
+    windows: list[dict[str, Any]] = []
     for item in sel.get('columns') or []:
         expr = item.get('expr') or {}
         if 'column' in expr:
@@ -890,6 +980,39 @@ def sql_builder_model_to_sbsql(
                 'function': fn,
                 'column': col,
                 'alias': item.get('alias') or f'{fn}_val',
+            })
+        elif 'window' in expr:
+            win = expr['window']
+            wfn = win['function']
+            if wfn == 'count' and win.get('distinct'):
+                wfn = 'count_distinct'
+            if wfn in sdk_sql_builder.RANKING_WINDOWS:
+                wcol = None
+            else:
+                warg = win.get('argument')
+                wcol = (
+                    None
+                    if warg in (None, '*')
+                    else list(warg.get('column') or [])
+                )
+            windows.append({
+                'function': wfn,
+                'column': wcol,
+                'partition_by': [
+                    list(p['column'])
+                    for p in (win.get('partition_by') or [])
+                    if isinstance(p, Mapping) and 'column' in p
+                ],
+                'order_by': [
+                    {
+                        'column': list(o['expr']['column']),
+                        'direction': o.get('direction', 'asc'),
+                    }
+                    for o in (win.get('order_by') or [])
+                    if isinstance(o, Mapping)
+                    and 'column' in (o.get('expr') or {})
+                ],
+                'alias': item.get('alias') or f'{wfn}_val',
             })
 
     joins: list[dict[str, Any]] = []
@@ -985,6 +1108,7 @@ def sql_builder_model_to_sbsql(
         'joins': joins,
         'columns': columns,
         'measures': measures,
+        **({'windows': windows} if windows else {}),
         'filters': filters,
         'group_by': {'kind': gb_kind, 'columns': gb_cols},
         'order_by': order_by,
@@ -1075,6 +1199,34 @@ def compile_bi_question_sql(
         else:
             inner = f"{fn.upper()}({qcol(meas['column'])})"
         select_exprs.append(f"{inner} AS {qident(meas['alias'])}")
+    for win in sbsql.get('windows') or []:
+        wfn = win['function']
+        if wfn in sdk_sql_builder.RANKING_WINDOWS:
+            wcall = f'{wfn.upper()}()'
+        elif wfn == 'count_distinct':
+            wcall = f"COUNT(DISTINCT {qcol(win['column'])})"
+        elif win['column'] is None:
+            wcall = 'COUNT(*)'
+        else:
+            wcall = f"{wfn.upper()}({qcol(win['column'])})"
+        over_clauses: list[str] = []
+        if win.get('partition_by'):
+            over_clauses.append(
+                'PARTITION BY '
+                + ', '.join(qcol(p) for p in win['partition_by'])
+            )
+        if win.get('order_by'):
+            over_clauses.append(
+                'ORDER BY '
+                + ', '.join(
+                    f"{qcol(o['column'])} {o['direction'].upper()}"
+                    for o in win['order_by']
+                )
+            )
+        select_exprs.append(
+            f"{wcall} OVER ({' '.join(over_clauses)}) AS "
+            f"{qident(win['alias'])}"
+        )
 
     head = 'SELECT DISTINCT' if sbsql['distinct'] else 'SELECT'
     lines = [
@@ -1267,6 +1419,603 @@ def execute_bi_question_connection(
     }
 
 
+def _try_parse_sbsql_join_or_window_sql(
+    sql: str,
+    parameter_types: Mapping[str, str] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, str]]] | None:
+    """Parse multi-table JOIN and/or OVER (...) SQL into unified SBsql."""
+    from pgadmin.cdeadmin.bi.convert import significant, tokenize
+
+    tokens = tokenize(sql)
+    has_comments = any(t.kind == 'comment' for t in tokens)
+    body = significant(tokens)
+    while body and body[-1].kind == 'punct' and body[-1].text == ';':
+        body.pop()
+    if not body:
+        return None
+    words_lower = [t.text.lower() for t in body if t.kind == 'word']
+    forbidden = {
+        'with', 'recursive', 'union', 'intersect', 'except', 'having',
+        'or', 'filter', 'within', 'lateral', 'window', 'offset', 'fetch',
+    }
+    if any(w in forbidden for w in words_lower):
+        return None
+    if words_lower.count('select') != 1:
+        return None
+    if any(t.kind == 'punct' and t.text == ';' for t in body):
+        return None
+
+    idx = 0
+    param_types = dict(parameter_types or {})
+    seen_params: dict[str, None] = {}
+    loss: list[dict[str, str]] = []
+
+    def peek(offset: int = 0):
+        pos = idx + offset
+        return body[pos] if 0 <= pos < len(body) else None
+
+    def word(*choices: str) -> bool:
+        tok = peek()
+        return (
+            tok is not None
+            and tok.kind == 'word'
+            and tok.text.lower() in choices
+        )
+
+    def punct(sym: str, offset: int = 0) -> bool:
+        tok = peek(offset)
+        return tok is not None and tok.kind == 'punct' and tok.text == sym
+
+    def take():
+        nonlocal idx
+        tok = peek()
+        if tok is None:
+            raise ValueError('unexpected end of SQL')
+        idx += 1
+        return tok
+
+    def ident_val(tok) -> str:
+        if tok.kind == 'word':
+            return tok.text
+        if tok.kind == 'qident':
+            inner = tok.text[1:-1]
+            return (
+                inner.replace('``', '`')
+                if tok.text.startswith('`')
+                else inner.replace('""', '"')
+            )
+        raise ValueError('expected identifier')
+
+    def take_ident() -> str:
+        return ident_val(take())
+
+    def take_col_parts() -> list[str]:
+        first = take_ident()
+        if punct('.'):
+            take()
+            second = take_ident()
+            return [first, second]
+        return [first]
+
+    def take_rel_parts() -> list[str]:
+        parts = [take_ident()]
+        while punct('.'):
+            take()
+            parts.append(take_ident())
+        if len(parts) > 4:
+            raise ValueError('relation has too many parts')
+        return parts
+
+    def take_optional_alias(reserved: set[str]) -> str | None:
+        if word('as'):
+            take()
+            return take_ident()
+        tok = peek()
+        if (
+            tok is not None
+            and tok.kind in ('word', 'qident')
+            and (tok.kind == 'qident' or tok.text.lower() not in reserved)
+        ):
+            return take_ident()
+        return None
+
+    def take_literal():
+        tok = take()
+        sign = 1
+        if tok.kind == 'punct' and tok.text in ('+', '-'):
+            sign = -1 if tok.text == '-' else 1
+            tok = take()
+            if tok.kind != 'number':
+                raise ValueError('invalid signed literal')
+        if tok.kind == 'number':
+            num = int(tok.text) if tok.text.isdigit() else float(tok.text)
+            return sign * num
+        if tok.kind == 'string':
+            if tok.text.startswith('$'):
+                raise ValueError('dollar string unsupported')
+            return tok.text[1:-1].replace("''", "'")
+        if tok.kind == 'word' and tok.text.lower() in ('true', 'false'):
+            return tok.text.lower() == 'true'
+        if tok.kind == 'param':
+            seen_params.setdefault(tok.text, None)
+            return ('param', tok.text)
+        raise ValueError('unsupported literal')
+
+    clause_kw = {
+        'from', 'inner', 'left', 'right', 'full', 'cross', 'outer', 'join',
+        'on', 'using', 'where', 'group', 'order', 'limit', 'asc', 'desc',
+        'and', 'over', 'partition',
+    }
+
+    try:
+        if not word('select'):
+            return None
+        take()
+        distinct = False
+        if word('distinct'):
+            take()
+            distinct = True
+
+        raw_items: list[dict[str, Any]] = []
+        agg_fns = {'sum', 'count', 'min', 'max', 'avg'}
+        rank_fns = {'row_number', 'rank', 'dense_rank'}
+        while True:
+            tok = peek()
+            if tok is None:
+                return None
+            if (
+                tok.kind == 'word'
+                and tok.text.lower() in (agg_fns | rank_fns)
+                and punct('(', offset=1)
+            ):
+                fn = take().text.lower()
+                take()  # '('
+                arg_distinct = False
+                arg_col: list[str] | None = None
+                if fn in rank_fns:
+                    if not punct(')'):
+                        return None
+                    take()  # ')'
+                else:
+                    if punct('*'):
+                        if fn != 'count':
+                            return None
+                        take()
+                        arg_col = None
+                    else:
+                        if word('distinct'):
+                            if fn != 'count':
+                                return None
+                            take()
+                            arg_distinct = True
+                        arg_col = take_col_parts()
+                    if not punct(')'):
+                        return None
+                    take()
+                if word('over'):
+                    take()
+                    if not punct('('):
+                        return None
+                    take()
+                    part_cols: list[list[str]] = []
+                    ord_cols: list[dict[str, Any]] = []
+                    if word('partition'):
+                        take()
+                        if not word('by'):
+                            return None
+                        take()
+                        while True:
+                            part_cols.append(take_col_parts())
+                            if punct(','):
+                                take()
+                                continue
+                            break
+                    if word('order'):
+                        take()
+                        if not word('by'):
+                            return None
+                        take()
+                        while True:
+                            ocol = take_col_parts()
+                            odir = 'asc'
+                            if word('asc', 'desc'):
+                                odir = take().text.lower()
+                            ord_cols.append({'column': ocol, 'direction': odir})
+                            if punct(','):
+                                take()
+                                continue
+                            break
+                    if not punct(')'):
+                        return None
+                    take()
+                    alias = take_optional_alias(clause_kw)
+                    eff_fn = (
+                        'count_distinct'
+                        if fn == 'count' and arg_distinct
+                        else fn
+                    )
+                    if not alias:
+                        loss.append({
+                            'code': 'window_alias_generated',
+                            'severity': 'info',
+                            'detail': 'Unaliased window expression received a generated alias.',
+                        })
+                    raw_items.append({
+                        'kind': 'window',
+                        'function': eff_fn,
+                        'column': arg_col,
+                        'partition_by': part_cols,
+                        'order_by': ord_cols,
+                        'alias': alias,
+                    })
+                else:
+                    if fn in rank_fns:
+                        return None
+                    alias = take_optional_alias(clause_kw)
+                    eff_fn = (
+                        'count_distinct'
+                        if fn == 'count' and arg_distinct
+                        else fn
+                    )
+                    if not alias:
+                        loss.append({
+                            'code': 'aggregate_alias_generated',
+                            'severity': 'info',
+                            'detail': 'Unaliased aggregate received a generated alias.',
+                        })
+                    raw_items.append({
+                        'kind': 'measure',
+                        'function': eff_fn,
+                        'column': arg_col,
+                        'alias': alias,
+                    })
+            else:
+                if punct('*'):
+                    return None
+                cparts = take_col_parts()
+                if punct('.'):
+                    return None
+                alias = take_optional_alias(clause_kw)
+                raw_items.append({
+                    'kind': 'column',
+                    'column': cparts,
+                    'alias': alias,
+                })
+            if punct(','):
+                take()
+                continue
+            break
+
+        if not word('from'):
+            return None
+        take()
+        base_rel = take_rel_parts()
+        base_alias = take_optional_alias(clause_kw) or base_rel[-1]
+
+        joins: list[dict[str, Any]] = []
+        while word('join', 'inner', 'left', 'right', 'full', 'cross'):
+            jword = take().text.lower()
+            if jword == 'join':
+                jtype = 'inner'
+            elif jword == 'inner':
+                if not word('join'):
+                    return None
+                take()
+                jtype = 'inner'
+            elif jword in ('left', 'right', 'full'):
+                if word('outer'):
+                    take()
+                if not word('join'):
+                    return None
+                take()
+                jtype = jword
+            else:
+                if not word('join'):
+                    return None
+                take()
+                jtype = 'cross'
+            jrel = take_rel_parts()
+            jalias = (
+                take_optional_alias(clause_kw)
+                or f'{jrel[-1]}_{len(joins) + 1}'
+            )
+            on_clauses: list[dict[str, Any]] = []
+            using_cols: list[str] = []
+            if jtype != 'cross':
+                if word('using'):
+                    take()
+                    if not punct('('):
+                        return None
+                    take()
+                    while True:
+                        using_cols.append(take_ident())
+                        if punct(','):
+                            take()
+                            continue
+                        break
+                    if not punct(')'):
+                        return None
+                    take()
+                elif word('on'):
+                    take()
+                    while True:
+                        left_c = take_col_parts()
+                        op_tok = take()
+                        if op_tok.kind != 'punct' or op_tok.text not in (
+                            '=', '<>', '!=', '<', '<=', '>', '>='
+                        ):
+                            return None
+                        right_c = take_col_parts()
+                        on_clauses.append({
+                            'left': (
+                                left_c
+                                if len(left_c) == 2
+                                else [base_alias, left_c[0]]
+                            ),
+                            'op': '<>' if op_tok.text == '!=' else op_tok.text,
+                            'right': (
+                                right_c
+                                if len(right_c) == 2
+                                else [jalias, right_c[0]]
+                            ),
+                        })
+                        if word('and'):
+                            take()
+                            continue
+                        break
+                else:
+                    return None
+            joins.append({
+                'type': jtype,
+                'relation': jrel,
+                'alias': jalias,
+                'on': on_clauses,
+                'using': using_cols,
+                'cardinality': 'undeclared',
+            })
+
+        def qualify(parts: list[str]) -> list[str]:
+            return parts if len(parts) == 2 else [base_alias, parts[0]]
+
+        filters: list[dict[str, Any]] = []
+        if word('where'):
+            take()
+            op_map = {
+                '=': 'eq', '==': 'eq', '<>': 'ne', '!=': 'ne',
+                '<': 'lt', '<=': 'lte', '>': 'gt', '>=': 'gte',
+            }
+            while True:
+                fcol = qualify(take_col_parts())
+                if word('is'):
+                    take()
+                    neg = False
+                    if word('not'):
+                        take()
+                        neg = True
+                    if not word('null'):
+                        return None
+                    take()
+                    filters.append({
+                        'column': fcol,
+                        'operator': 'is_not_null' if neg else 'is_null',
+                    })
+                elif word('in', 'not'):
+                    neg = False
+                    if word('not'):
+                        take()
+                        neg = True
+                    if not word('in'):
+                        return None
+                    take()
+                    if not punct('('):
+                        return None
+                    take()
+                    vals = []
+                    while True:
+                        lit = take_literal()
+                        if isinstance(lit, tuple):
+                            return None
+                        vals.append(lit)
+                        if punct(','):
+                            take()
+                            continue
+                        break
+                    if not punct(')'):
+                        return None
+                    take()
+                    filters.append({
+                        'column': fcol,
+                        'operator': 'not_in' if neg else 'in',
+                        'value': vals,
+                    })
+                elif word('between'):
+                    take()
+                    lo = take_literal()
+                    if not word('and'):
+                        return None
+                    take()
+                    hi = take_literal()
+                    if isinstance(lo, tuple) or isinstance(hi, tuple):
+                        return None
+                    filters.append({
+                        'column': fcol,
+                        'operator': 'between',
+                        'value': [lo, hi],
+                    })
+                else:
+                    otok = take()
+                    if otok.kind == 'word' and otok.text.lower() == 'like':
+                        fop = 'like'
+                    elif otok.kind == 'punct' and otok.text in op_map:
+                        fop = op_map[otok.text]
+                    else:
+                        return None
+                    rhs = take_literal()
+                    if isinstance(rhs, tuple):
+                        filters.append({
+                            'column': fcol,
+                            'operator': fop,
+                            'parameter': rhs[1],
+                        })
+                    else:
+                        filters.append({
+                            'column': fcol,
+                            'operator': fop,
+                            'value': rhs,
+                        })
+                if word('and'):
+                    take()
+                    continue
+                break
+
+        gb_cols: list[list[str]] = []
+        if word('group'):
+            take()
+            if not word('by'):
+                return None
+            take()
+            while True:
+                gb_cols.append(qualify(take_col_parts()))
+                if punct(','):
+                    take()
+                    continue
+                break
+
+        order_by: list[dict[str, Any]] = []
+        if word('order'):
+            take()
+            if not word('by'):
+                return None
+            take()
+            while True:
+                oparts = take_col_parts()
+                odir = 'asc'
+                if word('asc', 'desc'):
+                    odir = take().text.lower()
+                order_by.append({
+                    'expr': oparts if len(oparts) == 2 else oparts[0],
+                    'direction': odir,
+                })
+                if punct(','):
+                    take()
+                    continue
+                break
+
+        limit_val: int | None = None
+        if word('limit'):
+            take()
+            ltok = take()
+            if ltok.kind != 'number' or not ltok.text.isdigit():
+                return None
+            limit_val = int(ltok.text)
+            if limit_val < 1:
+                return None
+            if limit_val > 100000:
+                loss.append({
+                    'code': 'limit_clamped',
+                    'severity': 'warning',
+                    'detail': 'LIMIT above 100000 was clamped to 100000.',
+                })
+                limit_val = 100000
+        else:
+            loss.append({
+                'code': 'implicit_limit',
+                'severity': 'warning',
+                'detail': (
+                    'Statement had no LIMIT; SBsql applies a default cap of '
+                    '1000 rows.'
+                ),
+            })
+            limit_val = 1000
+
+        if peek() is not None:
+            return None
+
+        if has_comments:
+            loss.append({
+                'code': 'comments_dropped',
+                'severity': 'info',
+                'detail': 'SQL comments are not retained in structured SBsql.',
+            })
+
+        sbsql = normalize_sbsql_query({
+            'distinct': distinct,
+            'from': {'relation': base_rel, 'alias': base_alias},
+            'joins': joins,
+            'columns': [
+                {
+                    'column': qualify(it['column']),
+                    'alias': it['alias'] or it['column'][-1],
+                }
+                for it in raw_items
+                if it['kind'] == 'column'
+            ],
+            'measures': [
+                {
+                    'function': it['function'],
+                    'column': (
+                        qualify(it['column']) if it['column'] else None
+                    ),
+                    **(
+                        {'alias': it['alias']}
+                        if it.get('alias')
+                        else {}
+                    ),
+                }
+                for it in raw_items
+                if it['kind'] == 'measure'
+            ],
+            'windows': [
+                {
+                    'function': it['function'],
+                    'column': (
+                        qualify(it['column']) if it['column'] else None
+                    ),
+                    'partition_by': [
+                        qualify(p) for p in it['partition_by']
+                    ],
+                    'order_by': [
+                        {
+                            'column': qualify(o['column']),
+                            'direction': o['direction'],
+                        }
+                        for o in it['order_by']
+                    ],
+                    **(
+                        {'alias': it['alias']}
+                        if it.get('alias')
+                        else {}
+                    ),
+                }
+                for it in raw_items
+                if it['kind'] == 'window'
+            ],
+            'filters': filters,
+            'group_by': {'kind': 'columns', 'columns': gb_cols},
+            'order_by': order_by,
+            'limit': limit_val,
+        })
+        for warn in analyze_sbsql_fanout(sbsql):
+            if warn['severity'] == 'warning':
+                loss.append({
+                    'code': warn['code'],
+                    'severity': 'warning',
+                    'detail': warn['detail'],
+                })
+        parameters = [
+            {
+                'id': pid,
+                'name': pid,
+                'type': param_types.get(pid, 'string'),
+                'required': True,
+            }
+            for pid in seen_params
+        ]
+        return sbsql, parameters, loss
+    except (ValueError, DesignStoreError):
+        return None
+
+
 def sql_to_bi_question_model(
     sql: str,
     *,
@@ -1315,8 +2064,8 @@ def sql_to_bi_question_model(
                     'column': [alias, f['column']],
                     'operator': f['operator'],
                     **(
-                        {'parameter': f['parameter']}
-                        if f.get('parameter')
+                        {'parameter': f.get('parameter') or f.get('parameter_id')}
+                        if (f.get('parameter') or f.get('parameter_id'))
                         else {'value': f.get('value')}
                     ),
                 }
@@ -1338,14 +2087,40 @@ def sql_to_bi_question_model(
             parameters=raw_q.get('parameters', []),
             visualization=raw_q.get('visualization'),
         )
-    else:
+        return {
+            'question': model,
+            'fidelity': converted['fidelity'],
+            'loss': converted['loss'],
+        }
+
+    extended = _try_parse_sbsql_join_or_window_sql(sql, parameter_types)
+    if extended is not None:
+        ext_sbsql, ext_params, ext_loss = extended
         model = default_question_model(
             name=name,
             endpoint_id=endpoint_id,
-            raw_sql=qspec['sql'],
-            parameters=raw_q.get('parameters', []),
+            sbsql=ext_sbsql,
+            parameters=ext_params,
             visualization=raw_q.get('visualization'),
         )
+        ext_fidelity = (
+            'lossy'
+            if any(item['severity'] == 'warning' for item in ext_loss)
+            else 'exact'
+        )
+        return {
+            'question': model,
+            'fidelity': ext_fidelity,
+            'loss': ext_loss,
+        }
+
+    model = default_question_model(
+        name=name,
+        endpoint_id=endpoint_id,
+        raw_sql=qspec['sql'],
+        parameters=raw_q.get('parameters', []),
+        visualization=raw_q.get('visualization'),
+    )
     return {
         'question': model,
         'fidelity': converted['fidelity'],
@@ -1552,6 +2327,8 @@ def _preview_columns_and_rows(
             cols.append({'id': c['alias'], 'type': 'text'})
         for m in sbsql['measures']:
             cols.append({'id': m['alias'], 'type': 'number'})
+        for w in sbsql.get('windows') or []:
+            cols.append({'id': w['alias'], 'type': 'number'})
     if not cols:
         cols = [
             {'id': 'label', 'type': 'text'},
@@ -1812,6 +2589,24 @@ def question_to_ddn(
                 op_id,
                 m_el,
                 meas['function'].upper(),
+            ))
+        for win in sbsql.get('windows') or []:
+            w_el = _alloc_id(id_map, f"window:{win['alias']}")
+            elements.append((
+                w_el,
+                'metric',
+                win['alias'],
+                {
+                    'window_function': win['function'],
+                    'column': win['column'],
+                },
+            ))
+            relations.append((
+                _alloc_id(id_map, f'rel:win:{w_el}'),
+                'aggregates',
+                op_id,
+                w_el,
+                f"{win['function'].upper()} OVER",
             ))
     else:
         sql_ds_el = _alloc_id(id_map, 'source:sql_dataset')

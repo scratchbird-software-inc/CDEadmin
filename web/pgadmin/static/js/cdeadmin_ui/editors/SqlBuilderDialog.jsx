@@ -22,13 +22,16 @@ import {Button} from '../primitives/Button';
 import {TextField, NumberField} from '../primitives/Field';
 import {Checkbox, Select} from '../primitives/Choice';
 import {MultiSelect} from '../primitives/AdvancedControls';
+import {Badge, Banner} from '../feedback/Indicators';
 import {Dialog} from '../overlays/Dialog';
 import FormReference from '../navigation/FormReference';
+import {DDNViewerSurface} from '../integrations/ddn/DDNViewerSurface';
 import {
-  AGGREGATES, BuilderDraftError, COMPARISONS, GROUPINGS, JOIN_TYPES, SET_OPERATORS,
-  available, columnChoices, columnResolver, cteSource, emptyColumn, emptyCondition,
+  AGGREGATES, BuilderDraftError, COMPARISONS, GROUPINGS, JOIN_TYPES,
+  RANKING_WINDOWS, SET_OPERATORS, WINDOWS, available, columnChoices,
+  columnResolver, cteSource, describeFlowStages, emptyColumn, emptyCondition,
   emptyCte, emptyDraft, emptyJoin, emptyOrder, emptySelect, outputColumns,
-  relationSource, toModel, unavailableReason,
+  relationSource, toModel, toPartialFlowModel, toStageModel, unavailableReason,
 } from './sqlBuilderModel';
 
 function requestError(error) {
@@ -94,9 +97,10 @@ function refLabel(value) {
   }
 }
 
-function ColumnPicker({label, value, choices, onChange}) {
-  return <Select size="small" label={label} value={value}
-    options={withStale(choices, [value], refLabel)} onChange={onChange} />;
+function ColumnPicker({label, value, choices, onChange, disabled=false, helperText, allowEmpty=false}) {
+  const baseChoices = allowEmpty ? [{value: '', label: 'None'}, ...choices] : choices;
+  return <Select size="small" label={label} value={value} disabled={disabled}
+    helperText={helperText} options={withStale(baseChoices, [value], refLabel)} onChange={onChange} />;
 }
 
 function SourcePicker({label, value, sources, onChange}) {
@@ -107,7 +111,8 @@ function SourcePicker({label, value, sources, onChange}) {
 SourcePicker.propTypes = {label: PropTypes.string, value: PropTypes.string,
   sources: PropTypes.array, onChange: PropTypes.func};
 ColumnPicker.propTypes = {label: PropTypes.string, value: PropTypes.string,
-  choices: PropTypes.array, onChange: PropTypes.func};
+  choices: PropTypes.array, onChange: PropTypes.func, disabled: PropTypes.bool,
+  helperText: PropTypes.node, allowEmpty: PropTypes.bool};
 
 function ColumnsPicker({label, value, choices, onChange, disabled=false, helperText}) {
   const offered = withStale(choices, value, refLabel);
@@ -120,12 +125,13 @@ function ColumnsPicker({label, value, choices, onChange, disabled=false, helperT
 ColumnsPicker.propTypes = {label: PropTypes.string, value: PropTypes.array, choices: PropTypes.array,
   onChange: PropTypes.func, disabled: PropTypes.bool, helperText: PropTypes.node};
 
-/* A column, an aggregate, or a value. */
+/* A column, an aggregate, a window calculation, or a value. */
 function OperandEditor({label, operand, onChange, choices, options, kinds}) {
   const set = (patch) => onChange({...operand, ...patch});
   const kindOptions = [
     {value: 'column', label: 'Column'},
     {value: 'aggregate', ...gated(options, 'aggregate', 'Aggregate')},
+    {value: 'window', ...gated(options, 'window', 'Window (OVER)')},
     {value: 'text', label: 'Text value'},
     {value: 'number', label: 'Number value'},
     {value: 'null', label: 'NULL'},
@@ -133,7 +139,12 @@ function OperandEditor({label, operand, onChange, choices, options, kinds}) {
   ].filter((item) => kinds.includes(item.value));
   return <Row>
     <Select size="small" label={`${label} kind`} value={operand.kind} options={kindOptions}
-      onChange={(kind) => set({kind, star: kind === 'aggregate' ? operand.star || !operand.column : operand.star})} />
+      onChange={(kind) => set({
+        kind,
+        func: kind === 'window' ? (WINDOWS.includes(operand.func) ? operand.func : 'row_number') :
+          (AGGREGATES.includes(operand.func) ? operand.func : 'count'),
+        star: kind === 'aggregate' ? operand.star || !operand.column : false,
+      })} />
     {operand.kind === 'column' &&
       <ColumnPicker label={label} value={operand.column} choices={choices} onChange={(column) => set({column})} />}
     {operand.kind === 'aggregate' && <>
@@ -147,6 +158,31 @@ function OperandEditor({label, operand, onChange, choices, options, kinds}) {
       {!operand.star && <Checkbox label={gated(options, 'aggregate.distinct', 'Distinct values').label}
         disabled={!available(options, 'aggregate.distinct')} checked={operand.distinct}
         onChange={(distinct) => set({distinct})} />}
+    </>}
+    {operand.kind === 'window' && <>
+      <Select size="small" label={`${label} window function`} value={operand.func}
+        options={WINDOWS.map((name) => ({value: name, label: name}))}
+        onChange={(func) => set({func, star: func === 'count' ? operand.star : false})} />
+      {!RANKING_WINDOWS.includes(operand.func) && <>
+        {operand.func === 'count' && <Checkbox label="All rows (*)" checked={operand.star}
+          onChange={(star) => set({star, distinct: star ? false : operand.distinct})} />}
+        {!operand.star && <ColumnPicker label={`${label} argument`} value={operand.column} choices={choices}
+          onChange={(column) => set({column})} />}
+        {!operand.star && <Checkbox label={gated(options, 'aggregate.distinct', 'Distinct values').label}
+          disabled={!available(options, 'aggregate.distinct')} checked={operand.distinct}
+          onChange={(distinct) => set({distinct})} />}
+      </>}
+      <ColumnsPicker label={`${label} PARTITION BY`} value={operand.partitionBy || []} choices={choices}
+        {...gatedField(options, 'window.partition_by')}
+        onChange={(partitionBy) => set({partitionBy})} />
+      <ColumnPicker label={`${label} window ORDER BY`} value={operand.windowOrderColumn || ''}
+        choices={choices} allowEmpty {...gatedField(options, 'window.order_by')}
+        onChange={(windowOrderColumn) => set({windowOrderColumn})} />
+      {Boolean(operand.windowOrderColumn) &&
+        <Select size="small" label={`${label} window ORDER BY direction`}
+          value={operand.windowOrderDirection || 'asc'}
+          options={[{value: 'asc', label: 'Ascending'}, {value: 'desc', label: 'Descending'}]}
+          onChange={(windowOrderDirection) => set({windowOrderDirection})} />}
     </>}
     {(operand.kind === 'text' || operand.kind === 'number') &&
       <TextField size="small" label={`${label} value`} value={operand.value}
@@ -284,7 +320,7 @@ function SelectEditor({label, select, onChange, scope}) {
         No columns chosen: every column (*) is read.</Box>}
       {select.columns.map((column, index) => <Row key={column.key}>
         <OperandEditor label={`${label} column ${index + 1}`} operand={column} choices={choices}
-          options={options} kinds={['column', 'aggregate', 'text', 'number', 'null', 'all']}
+          options={options} kinds={['column', 'aggregate', 'window', 'text', 'number', 'null', 'all']}
           onChange={(next) => set({columns: replaceAt(select.columns, index, {...column, ...next})})} />
         {column.kind !== 'all' && <TextField size="small" label={`${label} column ${index + 1} alias`}
           value={column.alias} onChange={(event) => set({columns: replaceAt(select.columns, index,
@@ -383,10 +419,14 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState('');
+  const [ddnFlow, setDdnFlow] = useState(null);
+  const [focusedStage, setFocusedStage] = useState('__query__');
+  const [stagePreview, setStagePreview] = useState(null);
   const [busy, setBusy] = useState(false);
   // The dialog shows errors above the form; after a click at the bottom of
   // a long form, bring the message into view.
   const top = useRef(null);
+  const stageRefs = useRef(new Map());
   useEffect(() => {
     if(error || loadError) top.current?.scrollIntoView?.({block: 'nearest'});
   }, [error, loadError]);
@@ -394,6 +434,7 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
     if(!open) return undefined;
     let active = true;
     setInfo(null); setLoadError(''); setError(''); setPreview('');
+    setDdnFlow(null); setStagePreview(null); setFocusedStage('__query__');
     post({action: 'sql_builder', request: {operation: 'options'}})
       .then((result) => {
         if(!active) return;
@@ -408,8 +449,52 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
   const relations = info?.relations || [];
   const ctes = draft?.ctes || [];
   const columnsOf = useMemo(() => columnResolver(relations, ctes), [relations, ctes]);
+  const flowStages = useMemo(() => describeFlowStages(draft), [draft]);
   const scopeFor = (visible) => ({options, columnsOf, sources: sourceOptions(relations, visible)});
   const named = ctes.filter((cte) => cte.name.trim());
+  const focusStage = (stageKey) => {
+    setFocusedStage(stageKey);
+    const node = stageRefs.current.get(stageKey);
+    node?.scrollIntoView?.({block: 'nearest', behavior: 'smooth'});
+  };
+  const renderDdnFlow = async () => {
+    if(!draft) return;
+    setError('');
+    setBusy(true);
+    try {
+      const model = toPartialFlowModel(draft);
+      const rendered = await post({action: 'sql_builder', request: {operation: 'ddn', model}});
+      setDdnFlow(rendered);
+    } catch(failure) {
+      setError(requestError(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const previewStage = async (stage) => {
+    if(!draft) return;
+    setError('');
+    let model;
+    try {
+      model = toStageModel(draft, stage);
+    } catch(failure) {
+      setError(failure instanceof BuilderDraftError ? failure.message :
+        `The stage could not be read: ${failure.message}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await post({
+        action: 'sql_builder',
+        request: {operation: 'preview_stage', model, stage, limit: 50},
+      });
+      setStagePreview(result);
+    } catch(failure) {
+      setError(requestError(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
   const write = async () => {
     setError('');
     let model;
@@ -453,8 +538,8 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
     {!info && !loadError && <Box component="p">Reading this connection&apos;s options and tables…</Box>}
     {info && draft && <Box sx={{display: 'grid', gap: 1}}>
       <Box component="p" sx={{m: 0}}>
-        The query is written in this connection&apos;s SQL and put in the editor; nothing is run.
-        Options this connection lacks are disabled with the reason
+        The query is written in this connection&apos;s SQL and put in the editor; nothing is run unless
+        you request a bounded stage preview. Options this connection lacks are disabled with the reason
         {info.runtime_version ? ` (runtime ${info.runtime_version})` : ''}.
       </Box>
       <Box component="details" aria-label="Options for this connection">
@@ -469,6 +554,38 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
       </Box>
       {relations.length === 0 && <Box component="p" sx={{m: 0}}>
         This connection&apos;s catalog lists no tables or views.</Box>}
+      <Section title="Query & CTE Dataflow">
+        <Row>
+          <Box role="group" aria-label="Query dataflow stages"
+            sx={{display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center', flex: 1}}>
+            {flowStages.map((stage) => <Button key={stage.key} size="small"
+              intent={focusedStage === stage.key ? 'primary' : 'neutral'}
+              onClick={() => focusStage(stage.key)}>
+              {stage.label}
+              {stage.joins > 0 ? ` · ${stage.joins} join${stage.joins === 1 ? '' : 's'}` : ''}
+              {stage.selectBranches > 1 ? ` · ${stage.selectBranches} branches` : ''}
+              {stage.recursive ? ' · RECURSIVE' : ''}
+              {stage.cycle ? ' · CYCLE' : ''}
+              {stage.materialized ? ` · ${stage.materialized}` : ''}
+            </Button>)}
+          </Box>
+          <Button size="small" disabled={busy} onClick={renderDdnFlow}>
+            {ddnFlow ? 'Refresh DDN dataflow' : 'Render DDN dataflow'}
+          </Button>
+          {ddnFlow && <Button size="small" disabled={busy} onClick={() => setDdnFlow(null)}>
+            Hide diagram
+          </Button>}
+        </Row>
+        {(ddnFlow?.fanout_warnings || []).map((warning, idx) => <Banner key={`${warning.code}-${idx}`}
+          status={warning.severity === 'warning' ? 'warning' : 'info'}>
+          {warning.stage ? `${warning.stage}: ${warning.detail}` : warning.detail}
+        </Banner>)}
+        {ddnFlow?.files && <Box aria-label="Query DDN dataflow"
+          sx={{height: 260, border: '1px solid', borderColor: 'divider'}}>
+          <DDNViewerSurface snapshot={ddnFlow} entry={ddnFlow.entry} view={ddnFlow.view}
+            showViewSelector={false} />
+        </Box>}
+      </Section>
       <Section title="WITH (common table expressions)">
         <Checkbox label={gated(options, 'cte.recursive', 'RECURSIVE').label} checked={draft.recursive}
           disabled={!available(options, 'cte.recursive') || ctes.length === 0}
@@ -477,8 +594,13 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
           // A CTE reads the ones before it; a recursive one also reads itself.
           const visible = named.filter((other, position) => position < index ||
             (draft.recursive && other.key === cte.key));
-          return <Box key={cte.key} sx={{display: 'grid', gap: 1, borderLeft: '3px solid',
-            borderColor: 'primary.main', pl: 1}}>
+          return <Box key={cte.key}
+            ref={(el) => {
+              if(el) stageRefs.current.set(cte.key, el);
+              else stageRefs.current.delete(cte.key);
+            }}
+            sx={{display: 'grid', gap: 1, borderLeft: '3px solid',
+              borderColor: focusedStage === cte.key ? 'secondary.main' : 'primary.main', pl: 1}}>
             <Row>
               <TextField size="small" required label={`CTE ${index + 1} name`} value={cte.name}
                 onChange={(event) => setCte(index, {...cte, name: event.target.value})} />
@@ -490,10 +612,29 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
                 options={[{value: '', label: 'Engine decides'}, {value: 'yes', label: 'MATERIALIZED'},
                   {value: 'no', label: 'NOT MATERIALIZED'}]}
                 onChange={(materialized) => setCte(index, {...cte, materialized})} />
+              <Button size="small" disabled={busy || !cte.name.trim()}
+                onClick={() => previewStage(cte.name.trim())}>Preview stage rows</Button>
               <Button size="small" onClick={() => setDraft((current) => ({...current,
                 ctes: removeAt(current.ctes, index),
                 recursive: current.ctes.length > 1 && current.recursive}))}>Remove</Button>
             </Row>
+            {draft.recursive && <Row>
+              <Checkbox label={gated(options, 'cte.cycle', 'CYCLE detection').label}
+                checked={Boolean(cte.cycleEnabled)} disabled={!available(options, 'cte.cycle')}
+                onChange={(cycleEnabled) => setCte(index, {...cte, cycleEnabled})} />
+              {cte.cycleEnabled && available(options, 'cte.cycle') && <>
+                <TextField size="small" required label={`CTE ${index + 1} CYCLE columns`}
+                  value={cte.cycleColumns || ''}
+                  helperText="Columns checked for cycles, separated by commas."
+                  onChange={(event) => setCte(index, {...cte, cycleColumns: event.target.value})} />
+                <TextField size="small" required label={`CTE ${index + 1} CYCLE SET column`}
+                  value={cte.cycleSetColumn || ''}
+                  onChange={(event) => setCte(index, {...cte, cycleSetColumn: event.target.value})} />
+                <TextField size="small" required label={`CTE ${index + 1} CYCLE USING column`}
+                  value={cte.cycleUsingColumn || ''}
+                  onChange={(event) => setCte(index, {...cte, cycleUsingColumn: event.target.value})} />
+              </>}
+            </Row>}
             <CompoundEditor label={cte.name.trim() || `CTE ${index + 1}`} compound={cte.query}
               scope={scopeFor(visible)} onChange={(query) => setCte(index, {...cte, query})} />
           </Box>;
@@ -503,10 +644,55 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
             emptyCte(`cte${current.ctes.length + 1}`, current.query.selects[0].source)]}))}>
           Add common table expression</GatedButton></Box>
       </Section>
-      <Section title="Query">
-        <CompoundEditor label="Query" compound={draft.query} scope={scopeFor(named)}
-          onChange={(query) => setDraft((current) => ({...current, query}))} />
-      </Section>
+      <Box ref={(el) => {
+        if(el) stageRefs.current.set('__query__', el);
+        else stageRefs.current.delete('__query__');
+      }}>
+        <Section title="Query">
+          <Row>
+            <Button size="small" disabled={busy} onClick={() => previewStage('__query__')}>
+              Preview query rows
+            </Button>
+          </Row>
+          <CompoundEditor label="Query" compound={draft.query} scope={scopeFor(named)}
+            onChange={(query) => setDraft((current) => ({...current, query}))} />
+        </Section>
+      </Box>
+      {stagePreview && <Box aria-label="Stage preview" sx={{border: '1px solid', borderColor: 'divider',
+        p: 1, display: 'grid', gap: 1}}>
+        <Row>
+          <Box component="strong">
+            Stage preview: {stagePreview.stage === '__query__' ? 'Final Query' : stagePreview.stage}
+          </Box>
+          <Badge status={stagePreview.truncated ? 'warning' : 'info'}
+            label={`${stagePreview.row_count ?? (stagePreview.rows || []).length} row(s)${stagePreview.truncated ? ' (capped)' : ''}`} />
+          <Button size="small" onClick={() => setStagePreview(null)}>Close stage preview</Button>
+        </Row>
+        {stagePreview.source && <Box component="pre" sx={{m: 0, p: 0.75, bgcolor: 'action.hover',
+          fontSize: '0.75rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{stagePreview.source}</Box>}
+        <Box sx={{overflowX: 'auto'}}>
+          <Box component="table" role="table" aria-label="Stage preview rows"
+            sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}>
+            <Box component="thead">
+              <Box component="tr">
+                {(stagePreview.columns || []).map((col, idx) => <Box key={`${col.name || idx}-${idx}`}
+                  component="th" scope="col"
+                  sx={{textAlign: 'left', borderBottom: '1px solid', borderColor: 'divider', p: 0.5}}>
+                  {col.name || String(col)}
+                </Box>)}
+              </Box>
+            </Box>
+            <Box component="tbody">
+              {(stagePreview.rows || []).map((row, rIdx) => <Box key={rIdx} component="tr">
+                {(Array.isArray(row) ? row : []).map((cell, cIdx) => <Box key={cIdx} component="td"
+                  sx={{borderBottom: '1px solid', borderColor: 'divider', p: 0.5}}>
+                  {cell === null || cell === undefined ? <em>NULL</em> : String(cell)}
+                </Box>)}
+              </Box>)}
+            </Box>
+          </Box>
+        </Box>
+      </Box>}
       {preview && <Box component="pre" aria-label="SQL preview" sx={{m: 0, p: 1, border: '1px solid',
         borderColor: 'divider', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{preview}</Box>}
     </Box>}

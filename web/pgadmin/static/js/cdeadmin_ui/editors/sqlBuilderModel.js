@@ -26,6 +26,8 @@ export function newKey(prefix='k') {
 }
 
 export const AGGREGATES = ['count', 'sum', 'avg', 'min', 'max'];
+export const RANKING_WINDOWS = ['row_number', 'rank', 'dense_rank'];
+export const WINDOWS = [...RANKING_WINDOWS, ...AGGREGATES];
 export const COMPARISONS = ['=', '<>', '<', '<=', '>', '>=', 'LIKE', 'NOT LIKE',
   'IS NULL', 'IS NOT NULL'];
 export const JOIN_TYPES = [
@@ -57,8 +59,17 @@ export function unavailableReason(options, id) {
 }
 
 export function emptyOperand(kind='column') {
-  return {kind, column: '', func: 'count', distinct: false, star: kind === 'aggregate',
-    value: ''};
+  return {
+    kind,
+    column: '',
+    func: kind === 'window' ? 'row_number' : 'count',
+    distinct: false,
+    star: kind === 'aggregate',
+    value: '',
+    partitionBy: [],
+    windowOrderColumn: '',
+    windowOrderDirection: 'asc',
+  };
 }
 
 export function emptyCondition(leftKind='column') {
@@ -93,7 +104,17 @@ export function emptyDraft(source='') {
 }
 
 export function emptyCte(name, source='') {
-  return {key: newKey('w'), name, columns: '', materialized: '', query: emptyCompound(source)};
+  return {
+    key: newKey('w'),
+    name,
+    columns: '',
+    materialized: '',
+    cycleEnabled: false,
+    cycleColumns: '',
+    cycleSetColumn: 'is_cycle',
+    cycleUsingColumn: 'traversal_path',
+    query: emptyCompound(source),
+  };
 }
 
 // -- sources and columns ------------------------------------------------
@@ -193,6 +214,27 @@ function operandModel(operand, label) {
     }
     return {aggregate: {function: operand.func, distinct: Boolean(operand.distinct),
       argument: operand.star ? '*' : {column: JSON.parse(operand.column)}}};
+  case 'window': {
+    const fn = operand.func || 'row_number';
+    const win = {function: fn};
+    if(!RANKING_WINDOWS.includes(fn)) {
+      if(!operand.star && !operand.column) {
+        throw new BuilderDraftError(`${label}: choose the column for the window function, or *.`);
+      }
+      win.distinct = Boolean(operand.distinct);
+      win.argument = operand.star ? '*' : {column: JSON.parse(operand.column)};
+    }
+    if(Array.isArray(operand.partitionBy) && operand.partitionBy.length) {
+      win.partition_by = operand.partitionBy.map((column) => ({column: JSON.parse(column)}));
+    }
+    if(operand.windowOrderColumn) {
+      win.order_by = [{
+        expr: {column: JSON.parse(operand.windowOrderColumn)},
+        direction: operand.windowOrderDirection || 'asc',
+      }];
+    }
+    return {window: win};
+  }
   case 'number': {
     const number = Number(operand.value);
     if(!operand.value.trim() || !Number.isFinite(number)) {
@@ -305,19 +347,166 @@ function compoundModel(compound, label) {
   return model;
 }
 
+function cteModel(cte, recursive) {
+  const name = cte.name.trim();
+  if(!name) throw new BuilderDraftError('Every common table expression needs a name.');
+  const entry = {name, query: compoundModel(cte.query, name)};
+  const columns = splitNames(cte.columns);
+  if(columns.length) entry.columns = columns;
+  if(cte.materialized) entry.materialized = cte.materialized === 'yes';
+  if(recursive && cte.cycleEnabled) {
+    const cycleColumns = splitNames(cte.cycleColumns || '');
+    if(!cycleColumns.length) {
+      throw new BuilderDraftError(`${name} CYCLE: enter at least one column name.`);
+    }
+    const setColumn = (cte.cycleSetColumn || '').trim();
+    const usingColumn = (cte.cycleUsingColumn || '').trim();
+    if(!setColumn || !usingColumn) {
+      throw new BuilderDraftError(`${name} CYCLE: enter both SET and USING column names.`);
+    }
+    if(setColumn === usingColumn) {
+      throw new BuilderDraftError(`${name} CYCLE: SET and USING column names must differ.`);
+    }
+    entry.cycle = {columns: cycleColumns, set_column: setColumn, using_column: usingColumn};
+  }
+  return entry;
+}
+
 export function toModel(draft) {
   const model = {query: compoundModel(draft.query, 'Query')};
   if(draft.ctes.length) {
-    model.with = draft.ctes.map((cte) => {
-      const name = cte.name.trim();
-      if(!name) throw new BuilderDraftError('Every common table expression needs a name.');
-      const entry = {name, query: compoundModel(cte.query, name)};
-      const columns = splitNames(cte.columns);
-      if(columns.length) entry.columns = columns;
-      if(cte.materialized) entry.materialized = cte.materialized === 'yes';
-      return entry;
-    });
+    model.with = draft.ctes.map((cte) => cteModel(cte, draft.recursive));
     if(draft.recursive) model.recursive = true;
   }
   return model;
+}
+
+/* Build a model for previewing a named CTE stage (validating only CTEs 0..k)
+ * or the final Query stage. */
+export function toStageModel(draft, stage) {
+  if(!stage || stage === '__query__') return toModel(draft);
+  const cutoff = draft.ctes.findIndex((cte) => cte.name.trim() === stage);
+  if(cutoff === -1) {
+    throw new BuilderDraftError(`Unknown CTE stage ${stage}.`);
+  }
+  const model = {
+    with: draft.ctes.slice(0, cutoff + 1).map((cte) => cteModel(cte, draft.recursive)),
+    query: {selects: [{from: {source: {cte: stage}}}]},
+  };
+  if(draft.recursive) model.recursive = true;
+  return model;
+}
+
+function partialSource(value) {
+  if(typeof value !== 'string' || !value) return {relation: ['draft']};
+  if(value.startsWith('rel:')) {
+    try { return {relation: JSON.parse(value.slice(4))}; } catch { return {relation: [value.slice(4)]}; }
+  }
+  return {cte: value.slice(4) || 'cte'};
+}
+
+function partialCompound(compound) {
+  const selects = (compound?.selects || []).map((select) => {
+    const item = {from: {source: partialSource(select.source)}};
+    if(optionalName(select.alias || '')) item.from.alias = select.alias.trim();
+    const joins = (select.joins || [])
+      .filter((join) => join.source)
+      .map((join) => {
+        const j = {type: join.type || 'inner', source: partialSource(join.source)};
+        if(optionalName(join.alias || '')) j.alias = join.alias.trim();
+        return j;
+      });
+    if(joins.length) item.joins = joins;
+    const cols = [];
+    for(const col of select.columns || []) {
+      if(col.kind === 'all') cols.push({all: null});
+      else {
+        try {
+          const expr = operandModel(col, 'Column');
+          const entry = {expr};
+          if(optionalName(col.alias || '')) entry.alias = col.alias.trim();
+          cols.push(entry);
+        } catch {
+          // Skip incomplete column expressions during partial flow preview
+        }
+      }
+    }
+    if(cols.length) item.columns = cols;
+    return item;
+  });
+  const out = {selects: selects.length ? selects : [{from: {source: {relation: ['draft']}}}]};
+  if(compound?.operators?.length) out.operators = [...compound.operators];
+  return out;
+}
+
+/* Tolerant projection of an in-progress draft into a sql_builder flow model
+ * for server-side DDN dataflow rendering. */
+export function toPartialFlowModel(draft) {
+  try {
+    return toModel(draft);
+  } catch {
+    const model = {query: partialCompound(draft?.query)};
+    const ctes = (draft?.ctes || []).map((cte, idx) => {
+      const name = (cte.name || '').trim() || `cte_${idx + 1}`;
+      const entry = {name, query: partialCompound(cte.query)};
+      const columns = splitNames(cte.columns || '');
+      if(columns.length) entry.columns = columns;
+      if(cte.materialized) entry.materialized = cte.materialized === 'yes';
+      if(draft?.recursive && cte.cycleEnabled) {
+        const cycleColumns = splitNames(cte.cycleColumns || '');
+        if(cycleColumns.length) {
+          entry.cycle = {
+            columns: cycleColumns,
+            set_column: (cte.cycleSetColumn || 'is_cycle').trim(),
+            using_column: (cte.cycleUsingColumn || 'traversal_path').trim(),
+          };
+        }
+      }
+      return entry;
+    });
+    if(ctes.length) {
+      model.with = ctes;
+      if(draft?.recursive) model.recursive = true;
+    }
+    return model;
+  }
+}
+
+export function describeFlowStages(draft) {
+  if(!draft) return [];
+  const stages = (draft.ctes || []).map((cte, index) => {
+    const name = cte.name.trim() || `CTE ${index + 1}`;
+    const joins = (cte.query?.selects || []).reduce(
+      (sum, sel) => sum + (sel.joins?.length || 0), 0
+    );
+    return {
+      key: cte.key,
+      stageId: cte.name.trim() || null,
+      kind: 'cte',
+      index,
+      label: `WITH ${name}`,
+      joins,
+      selectBranches: cte.query?.selects?.length || 1,
+      recursive: Boolean(draft.recursive),
+      materialized: cte.materialized === 'yes' ? 'MATERIALIZED' :
+        cte.materialized === 'no' ? 'NOT MATERIALIZED' : '',
+      cycle: Boolean(draft.recursive && cte.cycleEnabled),
+    };
+  });
+  const queryJoins = (draft.query?.selects || []).reduce(
+    (sum, sel) => sum + (sel.joins?.length || 0), 0
+  );
+  stages.push({
+    key: '__query__',
+    stageId: '__query__',
+    kind: 'query',
+    index: stages.length,
+    label: 'Final Query',
+    joins: queryJoins,
+    selectBranches: draft.query?.selects?.length || 1,
+    recursive: false,
+    materialized: '',
+    cycle: false,
+  });
+  return stages;
 }

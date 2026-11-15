@@ -24,7 +24,7 @@ if str(WEB) not in sys.path:
 
 from pgadmin.cdeadmin.sdk.browse import SqlNames  # noqa: E402
 from pgadmin.cdeadmin.sdk.sql_builder import (  # noqa: E402
-    OPTION_IDS, SqlBuilderError, build, relations, resolve_options)
+    OPTIONS, OPTION_IDS, SqlBuilderError, build, relations, resolve_options)
 from pgadmin.cdeadmin.workspace.service import (  # noqa: E402
     ProviderWorkspaceError, ProviderWorkspaceService)
 
@@ -171,11 +171,13 @@ def test_sqlite_options_follow_the_connected_runtime():
     for join in ('join.right', 'join.full'):
         assert not old[join]['available'] and '3.45.1' in old[join]['reason']
         assert new[join]['available'] and new[join]['reason'] == ''
-    for option in ('distinct_on', 'group_by.rollup', 'group_by.cube',
-                   'group_by.grouping_sets', 'group_by.all'):
+    for option in ('cte.cycle', 'distinct_on', 'group_by.rollup',
+                   'group_by.cube', 'group_by.grouping_sets', 'group_by.all'):
         assert not new[option]['available'], option
-    assert all(entry['available'] for entry in
-               options('duckdb', '1.5.2').values())
+    for option in ('window', 'window.partition_by', 'window.order_by'):
+        assert new[option]['available'], option
+    duck = options('duckdb', '1.5.2')
+    assert {k for k, v in duck.items() if not v['available']} == {'cte.cycle'}
 
 
 @pytest.mark.parametrize('rows', [sqlite_rows, duckdb_rows])
@@ -344,3 +346,271 @@ def test_providers_quote_with_their_own_keywords():
                                                                 'ORDER'])
     names = browse_builders.sqlite_names(provider)
     assert names('orders') == 'orders' and names('order') == '"order"'
+
+
+@pytest.mark.parametrize('rows', [sqlite_rows, duckdb_rows])
+def test_window_functions_execute_on_sqlite_and_duckdb(rows):
+    available = options(
+        'sqlite' if rows is sqlite_rows else 'duckdb',
+        '3.53.0' if rows is sqlite_rows else '1.5.2',
+    )
+    win_model = {
+        'query': query(
+            select(
+                'orders',
+                'o',
+                columns=[
+                    {'expr': col('o', 'customer_id')},
+                    {
+                        'expr': {
+                            'window': {
+                                'function': 'row_number',
+                                'partition_by': [col('o', 'customer_id')],
+                                'order_by': [
+                                    {
+                                        'expr': col('o', 'amount'),
+                                        'direction': 'desc',
+                                    }
+                                ],
+                            }
+                        },
+                        'alias': 'rn',
+                    },
+                    {
+                        'expr': {
+                            'window': {
+                                'function': 'sum',
+                                'argument': col('o', 'amount'),
+                                'partition_by': [col('o', 'customer_id')],
+                            }
+                        },
+                        'alias': 'cust_total',
+                    },
+                ],
+                where={'compare': {'left': col('o', 'amount'), 'op': '>=',
+                                   'right': value(3)}},
+            ),
+            order_by=[
+                {'expr': col('o', 'customer_id')},
+                {'expr': col('o', 'amount'), 'direction': 'desc'},
+            ],
+        )
+    }
+    sql = build(win_model, NAMES, available)
+    assert 'row_number() OVER (PARTITION BY' in sql
+    assert 'sum("o"."amount") OVER (PARTITION BY' in sql
+    assert rows(sql) == [(1, 1, 12), (1, 2, 12), (2, 1, 3)]
+
+    # Window functions are rejected outside SELECT projections.
+    bad_where = {
+        'query': query(
+            select(
+                'orders',
+                where={
+                    'compare': {
+                        'left': {'window': {'function': 'row_number'}},
+                        'op': '=',
+                        'right': value(1),
+                    }
+                },
+            )
+        )
+    }
+    with pytest.raises(SqlBuilderError, match='only allowed in SELECT'):
+        build(bad_where, NAMES, available)
+
+
+def test_recursive_cte_cycle_gating_and_writing():
+    all_enabled = {
+        opt: {'label': label, 'available': True, 'reason': ''}
+        for opt, label in OPTIONS
+    }
+    cycled = {
+        'recursive': True,
+        'with': [{
+            **RECURSIVE['with'][0],
+            'cycle': {
+                'columns': ['n'],
+                'set_column': 'is_cycle',
+                'using_column': 'path',
+            },
+        }],
+        'query': RECURSIVE['query'],
+    }
+    sql = build(cycled, NAMES, all_enabled)
+    assert ') CYCLE "n" SET "is_cycle" USING "path"' in sql
+
+    with pytest.raises(SqlBuilderError, match='not available'):
+        build(cycled, NAMES, options('sqlite', '3.53.0'))
+    with pytest.raises(SqlBuilderError, match='not available'):
+        build(cycled, NAMES, options('duckdb', '1.5.2'))
+    with pytest.raises(SqlBuilderError, match='RECURSIVE'):
+        build({**cycled, 'recursive': False}, NAMES, all_enabled)
+    with pytest.raises(SqlBuilderError, match='must differ'):
+        build({
+            **cycled,
+            'with': [{
+                **RECURSIVE['with'][0],
+                'cycle': {
+                    'columns': ['n'],
+                    'set_column': 'same_col',
+                    'using_column': 'same_col',
+                },
+            }],
+        }, NAMES, all_enabled)
+
+
+def test_ddn_query_dataflow_admitted_and_stage_preview_executes():
+    svc = _service('3.53.0')
+    multi_cte_model = {
+        'with': [
+            {
+                'name': 'large_orders',
+                'query': query(
+                    select(
+                        'orders',
+                        'o',
+                        columns=[
+                            {'expr': col('o', 'customer_id')},
+                            {'expr': col('o', 'amount')},
+                        ],
+                        where={
+                            'compare': {
+                                'left': col('o', 'amount'),
+                                'op': '>=',
+                                'right': value(3),
+                            }
+                        },
+                    )
+                ),
+            },
+            {
+                'name': 'customer_rollup',
+                'query': query(
+                    {
+                        'from': {'source': {'cte': 'large_orders'}, 'alias': 'p'},
+                        'joins': [{
+                            'type': 'cross',
+                            'source': {'relation': ['customers']},
+                            'alias': 'c',
+                        }],
+                        'columns': [
+                            {'expr': col('c', 'region')},
+                            {
+                                'expr': {
+                                    'aggregate': {
+                                        'function': 'sum',
+                                        'argument': col('p', 'amount'),
+                                    }
+                                },
+                                'alias': 'rev',
+                            },
+                        ],
+                        'group_by': {'kind': 'columns', 'items': [col('c', 'region')]},
+                    }
+                ),
+            },
+        ],
+        'query': query({
+            'from': {'source': {'cte': 'customer_rollup'}},
+            'columns': [],
+        }),
+    }
+    ddn_resp = ProviderWorkspaceService.sql_builder(
+        svc, None, {'operation': 'ddn', 'model': multi_cte_model}
+    )
+    assert ddn_resp['format'] == 'ddn-source-workspace@1'
+    assert ddn_resp['entry'] == 'query-flow.ddn'
+    assert ddn_resp['view'] == 'query_flow'
+    assert len(ddn_resp['stages']) == 3
+    assert [s['name'] for s in ddn_resp['stages']] == [
+        'large_orders',
+        'customer_rollup',
+        None,
+    ]
+    assert any(
+        w['code'] == 'cross_join_fanout' for w in ddn_resp['fanout_warnings']
+    )
+    assert len(ddn_resp['layout']['nodes']) >= 4
+
+    # Admit generated DDN through ScratchRobin's Node workspace_admission.mjs
+    admission_mjs = (
+        Path(__file__).resolve().parents[2]
+        / 'web/pgadmin/cdeadmin/workspace/ddn/workspace_admission.mjs'
+    )
+    envelope = {
+        'format': ddn_resp['format'],
+        'entry': ddn_resp['entry'],
+        'view': ddn_resp['view'],
+        'files': ddn_resp['files'],
+    }
+    proc = subprocess.run(
+        [
+            'node',
+            '--input-type=module',
+            '-e',
+            (
+                "import {pathToFileURL} from 'node:url';"
+                "const {admitWorkspace} = await import(pathToFileURL(process.argv[1]).href);"
+                "const snap = JSON.parse(process.argv[2]);"
+                "const docs = await admitWorkspace(snap, 'scratchrobin.sql_builder');"
+                "process.stdout.write(String(docs.size));"
+            ),
+            str(admission_mjs),
+            json.dumps(envelope),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    assert proc.stdout == '1'
+
+    # Wire a live SQLite studio harness and verify CTE stage preview execution
+    # and guaranteed session cleanup.
+    closed_sessions = []
+
+    def _exec_sqlite(_ctx, _sid, sql, **_kw):
+        with sqlite3.connect(':memory:') as conn:
+            conn.executescript(SETUP)
+            cur = conn.execute(sql)
+            cols = [{'name': d[0], 'key': d[0]} for d in (cur.description or ())]
+            fetched = [list(r) for r in cur.fetchall()]
+        svc._last_exec = (cols, fetched)
+        return {'occurrence_id': 'occ-1'}
+
+    def _poll_sqlite(_ctx, _oid):
+        cols, fetched = svc._last_exec
+        return {
+            'operation': {'terminal': True, 'status': 'succeeded'},
+            'result': {
+                'complete': True,
+                'schema': {'columns': cols},
+                'rows': fetched,
+            },
+        }
+
+    svc.studio_service = SimpleNamespace(
+        open_session=lambda *_a: {'provider_session': {'session_id': 's-preview'}},
+        execute=_exec_sqlite,
+        poll=_poll_sqlite,
+        close_session=lambda _ctx, sid: closed_sessions.append(sid),
+    )
+    svc.result_service = None
+
+    stage_res = ProviderWorkspaceService.sql_builder(
+        svc,
+        None,
+        {
+            'operation': 'preview_stage',
+            'model': multi_cte_model,
+            'stage': 'large_orders',
+            'limit': 10,
+        },
+    )
+    assert stage_res['stage'] == 'large_orders'
+    assert 'LIMIT 10' in stage_res['source']
+    assert 'customer_rollup' not in stage_res['source']
+    assert stage_res['columns'] == ['customer_id', 'amount']
+    assert stage_res['rows'] == [[1, 5], [1, 7], [2, 3]]
+    assert closed_sessions == ['s-preview']

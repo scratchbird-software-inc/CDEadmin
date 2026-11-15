@@ -740,6 +740,7 @@ export class DesignStoreClient {
     {
       action = 'compile_sql',
       version = null,
+      sbsql = null,
       question = null,
       dashboard = null,
       dialect = 'sqlite',
@@ -763,6 +764,7 @@ export class DesignStoreClient {
         {
           action,
           version,
+          sbsql,
           question,
           dashboard,
           dialect,

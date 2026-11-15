@@ -97,6 +97,18 @@ const AGG_FUNCTION_OPTIONS = Object.freeze([
   {value: 'count_distinct', label: 'COUNT DISTINCT'},
 ]);
 
+const WINDOW_FUNCTION_OPTIONS = Object.freeze([
+  {value: 'row_number', label: 'ROW_NUMBER()'},
+  {value: 'rank', label: 'RANK()'},
+  {value: 'dense_rank', label: 'DENSE_RANK()'},
+  {value: 'sum', label: 'SUM(...) OVER'},
+  {value: 'count', label: 'COUNT(...) OVER'},
+  {value: 'avg', label: 'AVG(...) OVER'},
+  {value: 'min', label: 'MIN(...) OVER'},
+  {value: 'max', label: 'MAX(...) OVER'},
+  {value: 'count_distinct', label: 'COUNT(DISTINCT ...) OVER'},
+]);
+
 const FILTER_OPERATOR_OPTIONS = Object.freeze([
   {value: 'eq', label: '='},
   {value: 'ne', label: '!='},
@@ -304,6 +316,7 @@ export function BIDesignerSurface({
   // Structured SBsql Query & Parameters modal (`bi-designer-query`)
   const [queryOpen, setQueryOpen] = useState(false);
   const [queryModalTab, setQueryModalTab] = useState('joins');
+  const [queryDdnFlow, setQueryDdnFlow] = useState(null);
   const [queryDraft, setQueryDraft] = useState({
     schema: 'main',
     table: 'orders',
@@ -311,6 +324,7 @@ export function BIDesignerSurface({
     joinRows: [],
     dimensionRows: [],
     metricRows: [],
+    windowRows: [],
     filterRows: [],
     paramRows: [],
     limit: 100,
@@ -556,6 +570,7 @@ export function BIDesignerSurface({
           ? [
             ...(qblock.sbsql?.columns || []).map((c) => c.alias),
             ...(qblock.sbsql?.measures || []).map((m) => m.alias),
+            ...(qblock.sbsql?.windows || []).map((w) => w.alias),
           ]
           : ['label', 'value'];
       const effectiveHeaders = headers.length ? headers : ['label', 'value'];
@@ -715,6 +730,7 @@ export function BIDesignerSurface({
     };
     const rel = sbsql.from?.relation || ['main', 'orders'];
     const baseAlias = sbsql.from?.alias || rel[rel.length - 1] || 'orders';
+    setQueryDdnFlow(null);
     setQueryDraft({
       schema: rel.length > 1 ? rel[0] : 'main',
       table: rel[rel.length - 1] || 'orders',
@@ -738,6 +754,19 @@ export function BIDesignerSurface({
         table_alias: m.column?.[0] || baseAlias,
         column_name: m.column?.[m.column.length - 1] || '',
         alias: m.alias || '',
+      })),
+      windowRows: (sbsql.windows || []).map((w) => ({
+        func: w.function || 'row_number',
+        table_alias: w.column?.[0] || baseAlias,
+        column_name: w.column?.[w.column.length - 1] || '',
+        partition_by: (w.partition_by || [])
+          .map((col) => (Array.isArray(col) ? col.join('.') : String(col)))
+          .join(', '),
+        order_by: Array.isArray(w.order_by?.[0]?.column)
+          ? w.order_by[0].column.join('.')
+          : '',
+        direction: w.order_by?.[0]?.direction || 'asc',
+        alias: w.alias || '',
       })),
       filterRows: (sbsql.filters || []).map((f) => ({
         table_alias: f.column?.[0] || baseAlias,
@@ -769,91 +798,169 @@ export function BIDesignerSurface({
     [queryDraft.joinRows]
   );
 
+  const buildSbsqlFromQueryDraft = useCallback((draftState) => {
+    const baseAlias = slugId(draftState.alias || draftState.table, 'tbl');
+    const fromRel = draftState.schema.trim()
+      ? [draftState.schema.trim(), draftState.table.trim() || 'orders']
+      : [draftState.table.trim() || 'orders'];
+
+    const joins = draftState.joinRows
+      .filter((j) => String(j.table || '').trim())
+      .map((j, idx) => {
+        const jAlias = slugId(j.alias || j.table, `j_${idx + 1}`);
+        const leftParts = String(j.left_col || `${baseAlias}.id`)
+          .split('.')
+          .filter(Boolean);
+        const rightParts = String(j.right_col || `${jAlias}.id`)
+          .split('.')
+          .filter(Boolean);
+        return {
+          type: j.join_type || 'left',
+          relation: j.schema?.trim()
+            ? [j.schema.trim(), j.table.trim()]
+            : [j.table.trim()],
+          alias: jAlias,
+          cardinality: j.cardinality || 'many_to_one',
+          on: [
+            {
+              left: leftParts.length >= 2 ? leftParts.slice(-2) : [baseAlias, leftParts[0] || 'id'],
+              op: '=',
+              right: rightParts.length >= 2 ? rightParts.slice(-2) : [jAlias, rightParts[0] || 'id'],
+            },
+          ],
+        };
+      });
+
+    const columns = draftState.dimensionRows
+      .filter((d) => String(d.column_name || '').trim())
+      .map((d) => ({
+        column: [
+          String(d.table_alias || baseAlias).trim(),
+          String(d.column_name).trim(),
+        ],
+        alias: slugId(d.alias || d.column_name, 'dim'),
+      }));
+
+    const measures = draftState.metricRows
+      .filter((m) => String(m.func || '').trim())
+      .map((m, idx) => {
+        const colClean = String(m.column_name || '').trim();
+        const hasCol = colClean && colClean !== '*';
+        return {
+          function: m.func || 'sum',
+          column: hasCol
+            ? [String(m.table_alias || baseAlias).trim(), colClean]
+            : null,
+          alias: slugId(
+            m.alias || `${m.func}_${colClean || 'rows'}`,
+            `metric_${idx + 1}`
+          ),
+        };
+      });
+
+    const windows = (draftState.windowRows || [])
+      .filter((w) => String(w.func || '').trim())
+      .map((w, idx) => {
+        const fn = String(w.func || 'row_number').trim();
+        const isRanking =
+          fn === 'row_number' || fn === 'rank' || fn === 'dense_rank';
+        const colClean = String(w.column_name || '').trim();
+        const hasCol = !isRanking && colClean && colClean !== '*';
+        const parseColRef = (raw) => {
+          const parts = String(raw || '')
+            .split('.')
+            .map((p) => p.trim())
+            .filter(Boolean);
+          return parts.length >= 2 ? parts.slice(-2) : [baseAlias, parts[0]];
+        };
+        const partitionBy = String(w.partition_by || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map(parseColRef);
+        const orderByClean = String(w.order_by || '').trim();
+        const orderBy = orderByClean
+          ? [
+            {
+              column: parseColRef(orderByClean),
+              direction: w.direction === 'desc' ? 'desc' : 'asc',
+            },
+          ]
+          : [];
+        return {
+          function: fn,
+          column: hasCol
+            ? [String(w.table_alias || baseAlias).trim(), colClean]
+            : null,
+          partition_by: partitionBy,
+          order_by: orderBy,
+          alias: slugId(
+            w.alias || `${fn}_${colClean || idx + 1}`,
+            `win_${idx + 1}`
+          ),
+        };
+      });
+
+    const filters = draftState.filterRows
+      .filter((f) => String(f.column_name || '').trim())
+      .map((f) => {
+        const rawTarget = String(f.param_or_value ?? '').trim();
+        const colSpec = [
+          String(f.table_alias || baseAlias).trim(),
+          String(f.column_name).trim(),
+        ];
+        if (rawTarget.startsWith(':') && !f.flag_for_review) {
+          return {
+            column: colSpec,
+            operator: f.operator || 'eq',
+            parameter: slugId(rawTarget.slice(1), 'param'),
+          };
+        }
+        return {
+          column: colSpec,
+          operator: f.operator || 'eq',
+          value: rawTarget,
+        };
+      });
+
+    return {
+      dialect: 'sbsql@1',
+      from: {relation: fromRel, alias: baseAlias},
+      joins,
+      columns,
+      measures: measures.length
+        ? measures
+        : windows.length
+          ? []
+          : [{function: 'count', column: null, alias: 'row_count'}],
+      ...(windows.length ? {windows} : {}),
+      filters,
+      limit: Number(draftState.limit) || 100,
+    };
+  }, []);
+
+  const renderQueryDataflow = async () => {
+    setBusy(true);
+    setSurfaceError('');
+    try {
+      const sbsqlPayload = buildSbsqlFromQueryDraft(queryDraft);
+      const res = await controller.biSqlBridge({
+        action: 'query_ddn',
+        sbsql: sbsqlPayload,
+      });
+      setQueryDdnFlow(res);
+    } catch (err) {
+      setSurfaceError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const applyStructuredQuery = async () => {
     setBusy(true);
     setSurfaceError('');
     try {
-      const baseAlias = slugId(queryDraft.alias || queryDraft.table, 'tbl');
-      const fromRel = queryDraft.schema.trim()
-        ? [queryDraft.schema.trim(), queryDraft.table.trim() || 'orders']
-        : [queryDraft.table.trim() || 'orders'];
-
-      const joins = queryDraft.joinRows
-        .filter((j) => String(j.table || '').trim())
-        .map((j, idx) => {
-          const jAlias = slugId(j.alias || j.table, `j_${idx + 1}`);
-          const leftParts = String(j.left_col || `${baseAlias}.id`)
-            .split('.')
-            .filter(Boolean);
-          const rightParts = String(j.right_col || `${jAlias}.id`)
-            .split('.')
-            .filter(Boolean);
-          return {
-            type: j.join_type || 'left',
-            relation: j.schema?.trim()
-              ? [j.schema.trim(), j.table.trim()]
-              : [j.table.trim()],
-            alias: jAlias,
-            cardinality: j.cardinality || 'many_to_one',
-            on: [
-              {
-                left: leftParts.length >= 2 ? leftParts.slice(-2) : [baseAlias, leftParts[0] || 'id'],
-                op: '=',
-                right: rightParts.length >= 2 ? rightParts.slice(-2) : [jAlias, rightParts[0] || 'id'],
-              },
-            ],
-          };
-        });
-
-      const columns = queryDraft.dimensionRows
-        .filter((d) => String(d.column_name || '').trim())
-        .map((d) => ({
-          column: [
-            String(d.table_alias || baseAlias).trim(),
-            String(d.column_name).trim(),
-          ],
-          alias: slugId(d.alias || d.column_name, 'dim'),
-        }));
-
-      const measures = queryDraft.metricRows
-        .filter((m) => String(m.func || '').trim())
-        .map((m, idx) => {
-          const colClean = String(m.column_name || '').trim();
-          const hasCol = colClean && colClean !== '*';
-          return {
-            function: m.func || 'sum',
-            column: hasCol
-              ? [String(m.table_alias || baseAlias).trim(), colClean]
-              : null,
-            alias: slugId(
-              m.alias || `${m.func}_${colClean || 'rows'}`,
-              `metric_${idx + 1}`
-            ),
-          };
-        });
-
-      const filters = queryDraft.filterRows
-        .filter((f) => String(f.column_name || '').trim())
-        .map((f) => {
-          const rawTarget = String(f.param_or_value ?? '').trim();
-          const colSpec = [
-            String(f.table_alias || baseAlias).trim(),
-            String(f.column_name).trim(),
-          ];
-          if (rawTarget.startsWith(':') && !f.flag_for_review) {
-            return {
-              column: colSpec,
-              operator: f.operator || 'eq',
-              parameter: slugId(rawTarget.slice(1), 'param'),
-            };
-          }
-          return {
-            column: colSpec,
-            operator: f.operator || 'eq',
-            value: rawTarget,
-          };
-        });
-
+      const sbsqlPayload = buildSbsqlFromQueryDraft(queryDraft);
       const parameters = queryDraft.paramRows
         .filter((p) => String(p.id || p.name || '').trim())
         .map((p, idx) => {
@@ -875,17 +982,7 @@ export function BIDesignerSurface({
         endpoint_id: queryDraft.endpointId.trim() || 'default-endpoint',
         query: {
           kind: 'sbsql',
-          sbsql: {
-            dialect: 'sbsql@1',
-            from: {relation: fromRel, alias: baseAlias},
-            joins,
-            columns,
-            measures: measures.length
-              ? measures
-              : [{function: 'count', column: null, alias: 'row_count'}],
-            filters,
-            limit: Number(queryDraft.limit) || 100,
-          },
+          sbsql: sbsqlPayload,
         },
         parameters,
         visualization: questionModel?.visualization || {type: 'bar', settings: {}},
@@ -2440,6 +2537,58 @@ export function BIDesignerSurface({
                       },
                     ]}
                   />
+                  <TypedRowsEditor
+                    label="Window Calculations (OVER)"
+                    addLabel="Add window calculation"
+                    rows={queryDraft.windowRows}
+                    onChange={(windowRows) =>
+                      setQueryDraft((c) => ({...c, windowRows}))
+                    }
+                    columns={[
+                      {
+                        key: 'func',
+                        label: 'Window Function',
+                        type: 'select',
+                        options: WINDOW_FUNCTION_OPTIONS,
+                        default: 'row_number',
+                      },
+                      {
+                        key: 'table_alias',
+                        label: 'Table Alias',
+                        default: queryDraft.alias || 'orders',
+                      },
+                      {
+                        key: 'column_name',
+                        label: 'Column (optional for ranking)',
+                        placeholder: 'amount',
+                      },
+                      {
+                        key: 'partition_by',
+                        label: 'PARTITION BY',
+                        placeholder: 'orders.region',
+                      },
+                      {
+                        key: 'order_by',
+                        label: 'ORDER BY',
+                        placeholder: 'orders.amount',
+                      },
+                      {
+                        key: 'direction',
+                        label: 'Direction',
+                        type: 'select',
+                        options: [
+                          {value: 'asc', label: 'ASC'},
+                          {value: 'desc', label: 'DESC'},
+                        ],
+                        default: 'desc',
+                      },
+                      {
+                        key: 'alias',
+                        label: 'Window Alias',
+                        placeholder: 'region_rank',
+                      },
+                    ]}
+                  />
                 </Stack>
               ),
             },
@@ -2543,6 +2692,64 @@ export function BIDesignerSurface({
                     <Banner status="warning">
                       Flagged literal/default filter values:{' '}
                       {savedFilterFlags.map((f) => f.path).join(', ')}
+                    </Banner>
+                  )}
+                </Stack>
+              ),
+            },
+            {
+              id: 'dataflow',
+              label: 'Query Dataflow (DDN)',
+              render: () => (
+                <Stack gap="standard">
+                  <Stack direction="row" gap="compact" alignItems="center">
+                    <Button
+                      size="small"
+                      intent="primary"
+                      loading={busy}
+                      onClick={renderQueryDataflow}
+                    >
+                      {queryDdnFlow
+                        ? 'Refresh DDN Query Dataflow'
+                        : 'Render DDN Query Dataflow'}
+                    </Button>
+                    {(queryDdnFlow?.stages || []).map((st) => (
+                      <Badge
+                        key={st.id}
+                        status="info"
+                        label={`${st.label} (${st.kind})`}
+                      />
+                    ))}
+                  </Stack>
+                  {(queryDdnFlow?.fanout_warnings || []).map((w, idx) => (
+                    <Banner
+                      key={`${w.code}-${idx}`}
+                      status={w.severity === 'warning' ? 'warning' : 'info'}
+                    >
+                      {w.stage ? `${w.stage}: ${w.detail}` : w.detail}
+                    </Banner>
+                  ))}
+                  {queryDdnFlow?.files ? (
+                    <Box
+                      aria-label="BI Query DDN Dataflow"
+                      sx={{
+                        height: 280,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <DDNViewerSurface
+                        snapshot={queryDdnFlow}
+                        entry={queryDdnFlow.entry}
+                        view={queryDdnFlow.view}
+                        showViewSelector={false}
+                      />
+                    </Box>
+                  ) : (
+                    <Banner status="info">
+                      Render the server-computed DDN query dataflow to inspect
+                      base tables, join edges, fan-out risk, and output
+                      projections on the shared DDNViewerSurface.
                     </Banner>
                   )}
                 </Stack>

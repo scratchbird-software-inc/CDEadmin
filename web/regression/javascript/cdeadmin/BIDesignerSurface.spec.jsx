@@ -870,4 +870,134 @@ describe('Task-specific BI Questions & Dashboards Designer (Phase 1 & Phase 2)',
     ).toBeInTheDocument();
     fireEvent.click(within(actDialog).getByRole('button', {name: 'Close'}));
   });
+
+  it('authors SBsql window calculations (OVER) and renders shared DDN query dataflow in Structured Query Builder', async () => {
+    const session = makeQuestionSession();
+    const qWithWindows = sampleQuestionModel();
+    qWithWindows.query.sbsql.windows = [
+      {
+        function: 'row_number',
+        column: null,
+        partition_by: [['orders', 'region']],
+        order_by: [{column: ['orders', 'amount'], direction: 'desc'}],
+        alias: 'region_rank',
+      },
+    ];
+    const sampleFlowDdn = [
+      'version ddn-next-1',
+      '// ScratchRobin module: scratchrobin.sql_builder.flow@1',
+      '',
+      'view "query_flow" as "ddn@1"',
+      '    with',
+      '        id "query_flow"',
+      '        title "Query & CTE Dataflow"',
+      '        selection',
+      '            include empty list',
+      '',
+    ].join('\n');
+
+    const client = {
+      openSession: jest.fn().mockResolvedValue(session),
+      getBiModel: jest.fn().mockResolvedValue({
+        design: session.design,
+        bi_kind: 'question',
+        bi: {question: qWithWindows, question_notes: ''},
+        outward_effects: [],
+      }),
+      saveBiModel: jest.fn().mockResolvedValue({design: session.design}),
+      biSqlBridge: jest.fn().mockResolvedValue({
+        format: 'ddn-source-workspace@1',
+        entry: 'query-flow.ddn',
+        view: 'query_flow',
+        files: {'query-flow.ddn': sampleFlowDdn},
+        stages: [{id: 'query', kind: 'query', label: 'Final Query'}],
+        fanout_warnings: [
+          {
+            stage: 'Query',
+            code: 'one_to_many_fanout',
+            severity: 'warning',
+            detail: 'LEFT JOIN to main.order_items has one_to_many cardinality.',
+          },
+        ],
+      }),
+    };
+
+    const Themed = withTheme(BIDesignerSurface);
+    render(
+      <Themed
+        projectId="analytics"
+        designId={session.design.id}
+        kind="question"
+        client={client}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question v1 · draft/i)).toBeInTheDocument();
+    });
+
+    const menuNav = screen.getByRole('navigation', {name: /BI designer menu/i});
+    fireEvent.click(within(menuNav).getByRole('tab', {name: /Query & Cards/i}));
+    fireEvent.click(
+      screen.getByRole('button', {name: /Structured Query Builder…/i})
+    );
+    const qDialog = await screen.findByRole('dialog');
+
+    // Switch to Dimensions & Metrics tab and inspect Window Calculations (OVER)
+    fireEvent.click(
+      within(qDialog).getByRole('tab', {name: /Dimensions & Metrics/i})
+    );
+    const winGroup = within(qDialog).getByRole('group', {
+      name: 'Window Calculations (OVER)',
+    });
+    expect(within(winGroup).getByDisplayValue('region_rank')).toBeInTheDocument();
+
+    // Switch to Query Dataflow (DDN) tab and render server-computed DDN flow
+    fireEvent.click(
+      within(qDialog).getByRole('tab', {name: /Query Dataflow \(DDN\)/i})
+    );
+    fireEvent.click(
+      within(qDialog).getByRole('button', {name: /Render DDN Query Dataflow/i})
+    );
+    expect(
+      await within(qDialog).findByLabelText('BI Query DDN Dataflow')
+    ).toBeInTheDocument();
+    expect(client.biSqlBridge).toHaveBeenCalledWith(
+      'analytics',
+      session.design.id,
+      expect.objectContaining({
+        action: 'query_ddn',
+        sbsql: expect.objectContaining({
+          windows: expect.arrayContaining([
+            expect.objectContaining({function: 'row_number', alias: 'region_rank'}),
+          ]),
+        }),
+      })
+    );
+
+    // Saving checkpoint persists windows cleanly
+    fireEvent.click(
+      within(qDialog).getByRole('button', {name: /Save Query Checkpoint/i})
+    );
+    await waitFor(() => {
+      expect(client.saveBiModel).toHaveBeenCalledWith(
+        'analytics',
+        session.design.id,
+        expect.objectContaining({
+          question: expect.objectContaining({
+            query: expect.objectContaining({
+              sbsql: expect.objectContaining({
+                windows: expect.arrayContaining([
+                  expect.objectContaining({
+                    function: 'row_number',
+                    alias: 'region_rank',
+                  }),
+                ]),
+              }),
+            }),
+          }),
+        })
+      );
+    });
+  });
 });
