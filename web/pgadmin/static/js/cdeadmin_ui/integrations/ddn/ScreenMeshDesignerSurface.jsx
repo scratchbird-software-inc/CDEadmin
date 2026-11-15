@@ -9,6 +9,8 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {t_actions} from '../../shell/ProjectShell';
 import {Box, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Checkbox, Select} from '../../primitives/Choice';
@@ -23,10 +25,16 @@ import CodeEditor from '../../editors/CodeEditor';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
   DesignCheckpointHistoryDrawer,
+  DesignerElementNavigator,
   DesignerModalTabs,
+  DesignerShellStatusBar,
   DesignerTabbedMenu,
+  executeDesignerCommand,
+  formatSavePointStatusLabel,
   FormGrid,
   TypedRowsEditor,
+  useDesignerShellRegions,
+  useDesignerWorkbenchEvents,
   WhereUsedDialog,
 } from './DesignerChrome';
 import {
@@ -665,6 +673,7 @@ export function ScreenMeshDesignerSurface({
   client: suppliedClient,
   controller: suppliedController,
   readOnly = false,
+  commands = t_actions,
   executeCommand,
   onStateChange,
   onExport,
@@ -686,6 +695,12 @@ export function ScreenMeshDesignerSurface({
     [suppliedController, client, projectId, designId]
   );
 
+  const shellRegistryRef = useRef(null);
+  const openPropertiesDrawerRef = useRef(() => {});
+  const meshUndoStackRef = useRef([]);
+  const meshRedoStackRef = useRef([]);
+  const meshClipboardRef = useRef(null);
+
   const [sessionState, setSessionState] = useState(() => controller.state());
   const [meshPayload, setMeshPayload] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -693,6 +708,11 @@ export function ScreenMeshDesignerSurface({
   const [busyMessage, setBusyMessage] = useState('');
   const [error, setError] = useState('');
   const [bannerInfo, setBannerInfo] = useState('');
+  const [canvasToolMode, setCanvasToolMode] = useState('pointer');
+  const [selectedMeshElement, setSelectedMeshElement] = useState({
+    kind: 'screen',
+    id: '',
+  });
 
   // Tabbed menu & top-level workspace view modes
   const [menuTab, setMenuTab] = useState('mesh');
@@ -980,6 +1000,8 @@ export function ScreenMeshDesignerSurface({
   const updateDraftMesh = useCallback((mutator) => {
     setMeshPayload((prev) => {
       if (!prev?.mesh) return prev;
+      meshUndoStackRef.current.push(JSON.parse(JSON.stringify(prev)));
+      meshRedoStackRef.current = [];
       const nextMesh = mutator({
         ...prev.mesh,
         screens: [...(prev.mesh.screens || [])],
@@ -993,12 +1015,48 @@ export function ScreenMeshDesignerSurface({
     setDirty(true);
   }, []);
 
-  const runToolbarCommand = (commandId, invoke) => {
-    if (typeof executeCommand === 'function') {
-      return executeCommand(commandId, {enabled: !readOnly, invoke});
+  const handleUndoMesh = useCallback(() => {
+    if (readOnly || meshUndoStackRef.current.length === 0) return;
+    const prev = meshUndoStackRef.current.pop();
+    if (meshPayload) {
+      meshRedoStackRef.current.push(JSON.parse(JSON.stringify(meshPayload)));
     }
-    return invoke();
-  };
+    setMeshPayload(prev);
+    setDirty(true);
+    setBannerInfo(gettext('Reverted last Screen Mesh edit.'));
+  }, [meshPayload, readOnly]);
+
+  const handleRedoMesh = useCallback(() => {
+    if (readOnly || meshRedoStackRef.current.length === 0) return;
+    const next = meshRedoStackRef.current.pop();
+    if (meshPayload) {
+      meshUndoStackRef.current.push(JSON.parse(JSON.stringify(meshPayload)));
+    }
+    setMeshPayload(next);
+    setDirty(true);
+    setBannerInfo(gettext('Restored Screen Mesh edit.'));
+  }, [meshPayload, readOnly]);
+
+  const runToolbarCommand = useCallback(
+    async (commandId, invoke) => {
+      setError('');
+      try {
+        return await executeDesignerCommand({
+          commandId,
+          invoke,
+          executeCommand,
+          commands,
+          shellRegistry: shellRegistryRef.current,
+          enabled: !readOnly,
+        });
+      } catch (cmdErr) {
+        setError(cmdErr?.message || String(cmdErr));
+        onError?.(cmdErr);
+        return null;
+      }
+    },
+    [commands, executeCommand, onError, readOnly]
+  );
 
   const handleSaveCheckpoint = useCallback(async () => {
     if (!mesh) return;
@@ -1706,37 +1764,547 @@ export function ScreenMeshDesignerSurface({
     );
   }, [fieldSpecData, fieldSpecFilter]);
 
+  const activeScreenshots = useMemo(
+    () =>
+      screens.filter((s) => s.screenshot_sha256 || localScreenPreviews[s.id]),
+    [screens, localScreenPreviews]
+  );
+
+  const selectMeshElement = useCallback(
+    (elementKind, id, ownerScreenId = '') => {
+      setSelectedMeshElement({kind: elementKind, id});
+      if (elementKind === 'screen' && id) {
+        setActiveScreenId(id);
+      } else if (ownerScreenId) {
+        setActiveScreenId(ownerScreenId);
+      }
+      openPropertiesDrawerRef.current?.();
+    },
+    []
+  );
+
+  const meshNavigatorSections = useMemo(
+    () => [
+      {
+        id: 'screens',
+        label: gettext('Screens'),
+        emptyText: gettext('No screens defined.'),
+        items: screens.map((scr) => ({
+          id: scr.id,
+          label: scr.name || scr.id,
+          sublabel: `${scr.width}×${scr.height}${scr.form_reference ? ` · ${scr.form_reference}` : ''}`,
+          active:
+            selectedMeshElement.kind === 'screen' &&
+            selectedMeshElement.id === scr.id,
+          onSelect: () => selectMeshElement('screen', scr.id, scr.id),
+        })),
+      },
+      {
+        id: 'controls',
+        label: gettext('Controls'),
+        emptyText: gettext('No wireframe controls defined.'),
+        items: controls.map((ctrl) => ({
+          id: ctrl.id,
+          label: ctrl.name || ctrl.id,
+          sublabel: ctrl.role,
+          active:
+            selectedMeshElement.kind === 'control' &&
+            selectedMeshElement.id === ctrl.id,
+          onSelect: () => selectMeshElement('control', ctrl.id, ctrl.screen_id),
+        })),
+      },
+      {
+        id: 'regions',
+        label: gettext('Regions'),
+        emptyText: gettext('No screenshot regions defined.'),
+        items: regions.map((reg) => ({
+          id: reg.id,
+          label: reg.name || reg.id,
+          sublabel: `${reg.bounds?.width ?? 0}×${reg.bounds?.height ?? 0}`,
+          active:
+            selectedMeshElement.kind === 'region' &&
+            selectedMeshElement.id === reg.id,
+          onSelect: () => selectMeshElement('region', reg.id, reg.screen_id),
+        })),
+      },
+      {
+        id: 'navigations',
+        label: gettext('Navigations'),
+        emptyText: gettext('No navigation links defined.'),
+        items: navigations.map((nav) => ({
+          id: nav.id,
+          label: nav.label || nav.id,
+          sublabel: `${nav.trigger} → ${nav.action}`,
+          active:
+            selectedMeshElement.kind === 'navigation' &&
+            selectedMeshElement.id === nav.id,
+          onSelect: () => selectMeshElement('navigation', nav.id),
+        })),
+      },
+    ],
+    [controls, navigations, regions, screens, selectMeshElement, selectedMeshElement]
+  );
+
+  const meshNavigatorNode = useMemo(
+    () => (
+      <DesignerElementNavigator
+        title={gettext('Screen Mesh Navigator')}
+        sections={meshNavigatorSections}
+      />
+    ),
+    [meshNavigatorSections]
+  );
+
+  const selectedScreenObj = useMemo(
+    () =>
+      selectedMeshElement.kind === 'screen'
+        ? screens.find((s) => s.id === selectedMeshElement.id) || null
+        : null,
+    [screens, selectedMeshElement]
+  );
+  const selectedControlObj = useMemo(
+    () =>
+      selectedMeshElement.kind === 'control'
+        ? controls.find((c) => c.id === selectedMeshElement.id) || null
+        : null,
+    [controls, selectedMeshElement]
+  );
+  const selectedRegionObj = useMemo(
+    () =>
+      selectedMeshElement.kind === 'region'
+        ? regions.find((r) => r.id === selectedMeshElement.id) || null
+        : null,
+    [regions, selectedMeshElement]
+  );
+  const selectedNavigationObj = useMemo(
+    () =>
+      selectedMeshElement.kind === 'navigation'
+        ? navigations.find((n) => n.id === selectedMeshElement.id) || null
+        : null,
+    [navigations, selectedMeshElement]
+  );
+
+  const meshShellInspectorNode = (
+    <Box
+      component="section"
+      aria-label={gettext('Screen Mesh element property inspector')}
+      data-testid="screen-mesh-property-inspector"
+      sx={{p: 1.25, display: 'flex', flexDirection: 'column', gap: 1.25}}
+    >
+      <Box sx={{fontWeight: 700, fontSize: '0.8125rem'}}>
+        {gettext('Screen Mesh Element Inspector')}
+      </Box>
+      {selectedScreenObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="information"
+            label={`${gettext('Screen')}: ${selectedScreenObj.name || selectedScreenObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Screen ID')}
+            disabled
+            value={selectedScreenObj.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Dimensions')}
+            disabled
+            value={`${selectedScreenObj.width}×${selectedScreenObj.height}`}
+          />
+          {selectedScreenObj.form_reference ? (
+            <TextField
+              size="small"
+              label={gettext('Form Reference')}
+              disabled
+              value={selectedScreenObj.form_reference}
+            />
+          ) : null}
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => openDrawRegionsModal(selectedScreenObj.id)}
+            >
+              {gettext('Draw / Edit Regions…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedControlObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="information"
+            label={`${gettext('Control')}: ${selectedControlObj.name || selectedControlObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Control Role')}
+            disabled
+            value={selectedControlObj.role}
+          />
+          {selectedControlObj.columns?.length ? (
+            <TextField
+              size="small"
+              label={gettext('Grid Columns')}
+              disabled
+              value={selectedControlObj.columns.map((c) => c.name).join(', ')}
+            />
+          ) : null}
+          {bindings
+            .filter((b) => b.source_id === selectedControlObj.id)
+            .map((b) => (
+              <Box key={b.id} sx={{fontSize: '0.75rem'}}>
+                [{b.state || 'unknown'}] {b.target_kind}:{b.target_ref}
+              </Box>
+            ))}
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => {
+                setNewBinding({
+                  sourceId: selectedControlObj.id,
+                  columnId: '',
+                  targetKind: 'column',
+                  targetRef: '',
+                  accessMode: 'read',
+                });
+                setBindingDialogOpen(true);
+              }}
+            >
+              {gettext('+ Add Binding…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedRegionObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="information"
+            label={`${gettext('Region')}: ${selectedRegionObj.name || selectedRegionObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Bounds')}
+            disabled
+            value={`(${selectedRegionObj.bounds?.x ?? 0}, ${selectedRegionObj.bounds?.y ?? 0}, ${selectedRegionObj.bounds?.width ?? 0}×${selectedRegionObj.bounds?.height ?? 0})`}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => openDrawRegionsModal(selectedRegionObj.screen_id)}
+            >
+              {gettext('Draw / Edit Regions…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedNavigationObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="information"
+            label={`${gettext('Navigation')}: ${selectedNavigationObj.label || selectedNavigationObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Trigger & Action')}
+            disabled
+            value={`${selectedNavigationObj.trigger} → ${selectedNavigationObj.action}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Destination Screen ID')}
+            disabled
+            value={selectedNavigationObj.to_screen_id || ''}
+          />
+        </Stack>
+      )}
+      {!selectedScreenObj &&
+        !selectedControlObj &&
+        !selectedRegionObj &&
+        !selectedNavigationObj && (
+          <EmptyState
+            message={gettext(
+              'Select a Screen, Control, Region, or Navigation in the navigator to inspect its properties.'
+            )}
+          />
+        )}
+      {bindings.some((b) => b.state === 'suspect' && b.store_binding_id) &&
+        !readOnly && (
+          <Stack gap="compact">
+            <Box sx={{fontWeight: 600, fontSize: '0.75rem'}}>
+              {gettext('Suspect Bindings')}
+            </Box>
+            {bindings
+              .filter((b) => b.state === 'suspect' && b.store_binding_id)
+              .map((bnd) => (
+                <Box key={bnd.id} sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, fontSize: '0.75rem'}}>
+                  <code>{bnd.target_ref}</code>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      handleConfirmSuspect(bnd.store_binding_id, bnd.target_ref)
+                    }
+                  >
+                    {gettext('Confirm Binding')}
+                  </Button>
+                </Box>
+              ))}
+          </Stack>
+        )}
+    </Box>
+  );
+
+  const meshTitle =
+    mesh?.name ||
+    sessionState.design?.title ||
+    sessionState.title ||
+    designId ||
+    gettext('Screen Mesh');
+
+  const meshStatusNode = useMemo(
+    () => (
+      <DesignerShellStatusBar
+        title={meshTitle}
+        version={sessionState.currentVersion}
+        status={sessionState.status || 'draft'}
+        engine="wireframe.ui@1"
+        suspectCount={suspectCount}
+        extra={
+          lookHanddrawn ? (
+            <StatusBadge
+              status="information"
+              label={gettext('Sketch Look')}
+            />
+          ) : null
+        }
+      />
+    ),
+    [
+      lookHanddrawn,
+      meshTitle,
+      sessionState.currentVersion,
+      sessionState.status,
+      suspectCount,
+    ]
+  );
+
+  const meshStatusText = `${meshTitle} · v${sessionState.currentVersion || 1} · ${formatSavePointStatusLabel(
+    sessionState.status || 'draft'
+  )} · wireframe.ui@1 · ${
+    suspectCount > 0
+      ? `${suspectCount} ${gettext('suspect')}`
+      : gettext('valid')
+  }`;
+
+  const {inShell, shell, instanceId, openPropertiesDrawer} =
+    useDesignerShellRegions({
+      title: meshTitle,
+      statusNode: meshStatusNode,
+      statusText: meshStatusText,
+      leftDrawerNode: meshNavigatorNode,
+      rightDrawerNode: meshShellInspectorNode,
+      rightOpen: true,
+      quickActions: {
+        onNew: readOnly
+          ? undefined
+          : () => {
+            setNewScreen({
+              name: '',
+              width: '960',
+              height: '640',
+              formReference: '',
+            });
+            setScreenDialogOpen(true);
+          },
+        onSave: readOnly
+          ? undefined
+          : () =>
+            runToolbarCommand(
+              'screen_mesh.designer.save',
+              handleSaveCheckpoint
+            ),
+        onUndo: readOnly ? undefined : handleUndoMesh,
+        onRedo: readOnly ? undefined : handleRedoMesh,
+      },
+    });
+  shellRegistryRef.current = shell?.actionsRegistry || null;
+  openPropertiesDrawerRef.current = openPropertiesDrawer;
+
+  useDesignerWorkbenchEvents({
+    appId: 'screen-mesh-designer',
+    instanceId,
+    inShell,
+    shell,
+    onToolAction: (tool) => {
+      if (tool === 'checkpoints') {
+        setCheckpointDrawerOpen(true);
+        return;
+      }
+      if (tool === 'layers') {
+        const modes = ['wireframe', 'flow', 'field_spec'];
+        const idx = modes.indexOf(viewMode);
+        const nextMode = modes[(idx + 1) % modes.length];
+        setViewMode(nextMode);
+        setBannerInfo(gettext('Switched Screen Mesh view mode to %s.', nextMode));
+        return;
+      }
+      if (tool === 'align') {
+        handleRecomputeLayout();
+        return;
+      }
+      if (tool === 'pointer' || tool === 'marquee') {
+        setCanvasToolMode(tool);
+        setBannerInfo(gettext('Active canvas tool: %s.', tool));
+        return;
+      }
+      if (tool === 'copy' || tool === 'cut') {
+        const target =
+          selectedControlObj ||
+          selectedRegionObj ||
+          selectedScreenObj ||
+          controls[0] ||
+          screens[0];
+        if (target) {
+          meshClipboardRef.current = {
+            kind: selectedControlObj
+              ? 'control'
+              : selectedRegionObj
+                ? 'region'
+                : 'screen',
+            payload: JSON.parse(JSON.stringify(target)),
+          };
+          setBannerInfo(
+            gettext(
+              tool === 'cut'
+                ? 'Cut "%s" to designer clipboard.'
+                : 'Copied "%s" to designer clipboard.',
+              target.name || target.id
+            )
+          );
+        }
+        return;
+      }
+      if (tool === 'paste') {
+        if (readOnly) return;
+        const clip = meshClipboardRef.current;
+        if (clip?.kind === 'screen') {
+          setNewScreen({
+            name: `${clip.payload.name || 'Screen'} Copy`,
+            width: String(clip.payload.width || 960),
+            height: String(clip.payload.height || 640),
+            formReference: clip.payload.form_reference || '',
+          });
+          setScreenDialogOpen(true);
+        } else if (clip?.kind === 'region') {
+          openDrawRegionsModal(clip.payload.screen_id);
+        } else {
+          openAddControlWithRole(clip?.payload?.role || 'ui.input');
+          if (clip?.payload?.name) {
+            setNewControl((cur) => ({
+              ...cur,
+              name: `${clip.payload.name} Copy`,
+            }));
+          }
+        }
+      }
+    },
+    onPaletteSelect: (paletteKind, itemId) => {
+      if (paletteKind === 'stencil') {
+        if (readOnly) return;
+        if (itemId === 'ui-frame') {
+          setNewScreen({
+            name: '',
+            width: '960',
+            height: '640',
+            formReference: '',
+          });
+          setScreenDialogOpen(true);
+          return;
+        }
+        if (itemId === 'ui-grid') {
+          openAddControlWithRole('ui.grid');
+          return;
+        }
+        if (itemId === 'ui-dropdown') {
+          openAddControlWithRole('ui.dropdown');
+          return;
+        }
+        if (itemId === 'ui-radio') {
+          openAddControlWithRole('ui.radio');
+          return;
+        }
+        if (itemId === 'ui-tabs') {
+          openAddControlWithRole('ui.tabs');
+          return;
+        }
+        if (itemId === 'ui-region') {
+          openDrawRegionsModal();
+          return;
+        }
+        if (itemId === 'nav-link') {
+          setNewNav({
+            fromId: bindableSourceOptions[0]?.value || '',
+            toScreenId: screens[screens.length - 1]?.id || '',
+            trigger: 'click',
+            action: 'navigate',
+            label: '',
+          });
+          setNavDialogOpen(true);
+          return;
+        }
+        openAddControlWithRole('ui.input');
+        return;
+      }
+      if (paletteKind === 'udt') {
+        if (itemId === 'type-map') {
+          setViewMode('field_spec');
+          setBannerInfo(gettext('Opened Field Specification Table for type mapping.'));
+          return;
+        }
+        if (readOnly) return;
+        setNewBinding({
+          sourceId: selectedControlObj?.id || bindableSourceOptions[0]?.value || '',
+          columnId: '',
+          targetKind: 'column',
+          targetRef: '',
+          accessMode: 'read_write',
+        });
+        setBindingDialogOpen(true);
+      }
+    },
+  });
+
   if (!loading && error && !mesh) {
     return (
-      <Box component="section" aria-label="Screen Mesh Designer">
+      <Box component="section" aria-label={gettext('Screen Mesh Designer')}>
         <FormReference formKey="screen-mesh-workspace" />
         <EmptyState
           role="alert"
           message={error}
-          actionLabel="Retry"
+          actionLabel={gettext('Retry')}
           onAction={() => loadAll()}
         />
       </Box>
     );
   }
 
-  const activeScreenshots = screens.filter(
-    (s) => s.screenshot_sha256 || localScreenPreviews[s.id]
-  );
-
   const menuTabs = [
     {
       id: 'mesh',
-      label: 'Mesh',
+      label: gettext('Mesh'),
       dirty,
       groups: [
         {
           id: 'mesh-save',
-          label: 'Checkpoint',
+          label: gettext('Checkpoint'),
           items: [
             {
               id: 'screen-mesh-save',
-              label: `Save Draft${dirty ? ' *' : ''}`,
+              actionId: 'screen_mesh.designer.save',
+              label: `${gettext('Save Draft')}${dirty ? ' *' : ''}`,
               intent: dirty ? 'primary' : 'neutral',
               disabled: readOnly,
               onClick: () =>
@@ -1749,23 +2317,24 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'mesh-lifecycle',
-          label: 'Advance Status',
+          label: gettext('Advance Status'),
           items: [
             {
               id: 'screen-mesh-in-progress',
-              label: 'In Progress',
+              label: gettext('In Progress'),
               disabled: readOnly || sessionState.status !== 'draft',
               onClick: () => handleAdvanceStatusTo('in_progress'),
             },
             {
               id: 'screen-mesh-in-review',
-              label: 'In Review',
+              label: gettext('In Review'),
               disabled: readOnly || sessionState.status !== 'in_progress',
               onClick: () => handleAdvanceStatusTo('in_review'),
             },
             {
               id: 'screen-mesh-accept',
-              label: 'Accept',
+              actionId: 'screen_mesh.designer.accept',
+              label: gettext('Accept'),
               disabled: readOnly,
               onClick: () =>
                 runToolbarCommand('screen_mesh.designer.accept', () =>
@@ -1774,7 +2343,7 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'screen-mesh-branch',
-              label: 'Branch Draft',
+              label: gettext('Branch Draft'),
               disabled: readOnly || !sessionState.activeVersion,
               onClick: handleBranchDraft,
             },
@@ -1782,27 +2351,27 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'mesh-history-git',
-          label: 'History & Sync',
+          label: gettext('History & Sync'),
           items: [
             {
               id: 'screen-mesh-checkpoints',
-              label: 'Checkpoints & Diff…',
+              label: gettext('Checkpoints & Diff…'),
               onClick: () => setCheckpointDrawerOpen(true),
             },
             {
               id: 'screen-mesh-git',
-              label: 'Git Sync…',
+              label: gettext('Git Sync…'),
               disabled: readOnly,
               onClick: () => setGitDialogOpen(true),
             },
             {
               id: 'screen-mesh-export-ddn',
-              label: 'Export DDN',
+              label: gettext('Export DDN'),
               onClick: handleExportDdn,
             },
             {
               id: 'screen-mesh-where-used',
-              label: 'Where Used…',
+              label: gettext('Where Used…'),
               onClick: () => {
                 setWhereUsedSeed('');
                 setWhereUsedOpen(true);
@@ -1814,17 +2383,17 @@ export function ScreenMeshDesignerSurface({
     },
     {
       id: 'screens_controls',
-      label: 'Screens & Controls',
+      label: gettext('Screens & Controls'),
       groups: [
         {
           id: 'active-screen-group',
-          label: 'Active Screen',
+          label: gettext('Active Screen'),
           items: [
             {
               id: 'active-screen-picker',
               render: () => (
                 <Select
-                  aria-label="Active Screen"
+                  aria-label={gettext('Active Screen')}
                   size="small"
                   options={screenOptions}
                   value={effectiveActiveScreen?.id || ''}
@@ -1834,7 +2403,7 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'add-screen-btn',
-              label: '+ Add Screen…',
+              label: gettext('+ Add Screen…'),
               disabled: readOnly,
               onClick: () => {
                 setNewScreen({
@@ -1850,35 +2419,35 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'controls-stencil-group',
-          label: 'Wireframe Stencil',
+          label: gettext('Wireframe Stencil'),
           items: [
             {
               id: 'add-control-btn',
-              label: '+ Add Control…',
+              label: gettext('+ Add Control…'),
               disabled: readOnly,
               onClick: () => openAddControlWithRole('ui.input'),
             },
             {
               id: 'add-grid-btn',
-              label: '+ Grid',
+              label: gettext('+ Grid'),
               disabled: readOnly,
               onClick: () => openAddControlWithRole('ui.grid'),
             },
             {
               id: 'add-dropdown-btn',
-              label: '+ Dropdown',
+              label: gettext('+ Dropdown'),
               disabled: readOnly,
               onClick: () => openAddControlWithRole('ui.dropdown'),
             },
             {
               id: 'add-tabs-btn',
-              label: '+ Tabs',
+              label: gettext('+ Tabs'),
               disabled: readOnly,
               onClick: () => openAddControlWithRole('ui.tabs'),
             },
             {
               id: 'add-binding-btn',
-              label: '+ Add Binding…',
+              label: gettext('+ Add Binding…'),
               disabled: readOnly,
               onClick: () => {
                 setNewBinding({
@@ -1895,11 +2464,11 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'navigation-look-group',
-          label: 'Navigation & Look',
+          label: gettext('Navigation & Look'),
           items: [
             {
               id: 'add-nav-btn',
-              label: '+ Add Navigation…',
+              label: gettext('+ Add Navigation…'),
               disabled: readOnly,
               onClick: () => {
                 setNewNav({
@@ -1914,7 +2483,7 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'sketch-look-toggle',
-              label: lookHanddrawn ? 'Sketch Look: On' : 'Sketch Look',
+              label: lookHanddrawn ? gettext('Sketch Look: On') : gettext('Sketch Look'),
               active: lookHanddrawn,
               disabled: readOnly,
               onClick: handleToggleSketchLook,
@@ -1925,15 +2494,15 @@ export function ScreenMeshDesignerSurface({
     },
     {
       id: 'screenshots_regions',
-      label: 'Screenshots & Regions',
+      label: gettext('Screenshots & Regions'),
       groups: [
         {
           id: 'capture-regions-group',
-          label: 'Screenshot & Hotspots',
+          label: gettext('Screenshot & Hotspots'),
           items: [
             {
               id: 'upload-screenshot-btn',
-              label: 'Upload Screenshot…',
+              label: gettext('Upload Screenshot…'),
               disabled: readOnly,
               onClick: () => {
                 setScreenshotForm({
@@ -1947,7 +2516,7 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'draw-edit-regions-btn',
-              label: 'Draw / Edit Regions…',
+              label: gettext('Draw / Edit Regions…'),
               disabled: readOnly,
               onClick: () => openDrawRegionsModal(),
             },
@@ -1955,11 +2524,12 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'redact-trace-compare-group',
-          label: 'Redaction, Trace & Drift',
+          label: gettext('Redaction, Trace & Drift'),
           items: [
             {
               id: 'redact-regions-btn',
-              label: 'Redact Sensitive Regions…',
+              actionId: 'screen_mesh.designer.redact',
+              label: gettext('Redact Sensitive Regions…'),
               disabled: readOnly || !activeScreenshots.length,
               onClick: () =>
                 runToolbarCommand('screen_mesh.designer.redact', () => {
@@ -1972,13 +2542,13 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'trace-as-mesh-btn',
-              label: 'Trace as Mesh…',
+              label: gettext('Trace as Mesh…'),
               disabled: readOnly || regions.length === 0,
               onClick: openTraceModal,
             },
             {
               id: 'compare-screenshot-btn',
-              label: 'Compare Newer Screenshot…',
+              label: gettext('Compare Newer Screenshot…'),
               disabled: !activeScreenshots.length,
               onClick: () => {
                 setCompareResult(null);
@@ -1999,27 +2569,27 @@ export function ScreenMeshDesignerSurface({
     },
     {
       id: 'views_spec',
-      label: 'Views & Field Spec',
+      label: gettext('Views & Field Spec'),
       groups: [
         {
           id: 'workspace-view-switcher',
-          label: 'Workspace View Mode',
+          label: gettext('Workspace View Mode'),
           items: [
             {
               id: 'view-mode-wireframe',
-              label: 'Screen Wireframe',
+              label: gettext('Screen Wireframe'),
               active: viewMode === 'wireframe',
               onClick: () => setViewMode('wireframe'),
             },
             {
               id: 'view-mode-flow',
-              label: 'Screen Flow',
+              label: gettext('Screen Flow'),
               active: viewMode === 'flow',
               onClick: () => setViewMode('flow'),
             },
             {
               id: 'view-mode-field-spec',
-              label: 'Field Specification Table',
+              label: gettext('Field Specification Table'),
               active: viewMode === 'field_spec',
               onClick: () => setViewMode('field_spec'),
             },
@@ -2029,7 +2599,7 @@ export function ScreenMeshDesignerSurface({
                   id: 'wireframe-screen-view-select',
                   render: () => (
                     <Select
-                      aria-label="Wireframe screen scope"
+                      aria-label={gettext('Wireframe screen scope')}
                       size="small"
                       options={wireframeViewOptions}
                       value={selectedWireframeView}
@@ -2043,11 +2613,11 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'layout-commands',
-          label: 'Layout',
+          label: gettext('Layout'),
           items: [
             {
               id: 'recompute-layout-btn',
-              label: 'Recompute Layout',
+              label: gettext('Recompute Layout'),
               onClick: handleRecomputeLayout,
             },
           ],
@@ -2056,16 +2626,16 @@ export function ScreenMeshDesignerSurface({
     },
     {
       id: 'validate_export',
-      label: 'Validate & Export',
+      label: gettext('Validate & Export'),
       attention: suspectCount > 0,
       groups: [
         {
           id: 'validation-group',
-          label: 'Binding Validation',
+          label: gettext('Binding Validation'),
           items: [
             {
               id: 'suspect-bindings-btn',
-              label: 'Suspect Bindings',
+              label: gettext('Suspect Bindings'),
               badge: suspectCount,
               intent: suspectCount > 0 ? 'warning' : 'neutral',
               onClick: () => setSuspectDialogOpen(true),
@@ -2074,11 +2644,11 @@ export function ScreenMeshDesignerSurface({
         },
         {
           id: 'spec-export-import-group',
-          label: 'Specification & SR-F Import',
+          label: gettext('Specification & SR-F Import'),
           items: [
             {
               id: 'export-spec-btn',
-              label: 'Export Spec (Markdown / CSV / HTML)…',
+              label: gettext('Export Spec (Markdown / CSV / HTML)…'),
               onClick: async () => {
                 await loadFieldSpec('markdown');
                 setSpecPreviewModal({open: true, format: 'markdown'});
@@ -2086,7 +2656,7 @@ export function ScreenMeshDesignerSurface({
             },
             {
               id: 'import-srf-btn',
-              label: 'Import SR-F Form…',
+              label: gettext('Import SR-F Form…'),
               disabled: readOnly,
               onClick: openImportDescriptorModal,
             },
@@ -2104,7 +2674,8 @@ export function ScreenMeshDesignerSurface({
   return (
     <Box
       component="section"
-      aria-label="Screen Mesh Designer"
+      aria-label={gettext('Screen Mesh Designer')}
+      data-canvas-tool={canvasToolMode}
       sx={{
         position: 'relative',
         height: '100%',
@@ -2116,16 +2687,18 @@ export function ScreenMeshDesignerSurface({
       <FormReference formKey="screen-mesh-workspace" />
 
       <DesignerTabbedMenu
-        label="Screen Mesh designer menu"
+        label={gettext('Screen Mesh designer menu')}
         tabs={menuTabs}
         activeTab={menuTab}
         onTabChange={setMenuTab}
+        commands={commands}
+        shellTrailing={null}
         leading={
           <StatusBadge
             label={
               sessionState.loaded
                 ? `v${sessionState.currentVersion} (${sessionState.status})`
-                : 'loading'
+                : gettext('loading')
             }
             status={badgeStatus(sessionState.status)}
           />
@@ -2133,12 +2706,12 @@ export function ScreenMeshDesignerSurface({
         trailing={
           <Stack direction="row" gap="compact">
             {lookHanddrawn && (
-              <StatusBadge status="information" label="Sketch Look" />
+              <StatusBadge status="information" label={gettext('Sketch Look')} />
             )}
             {suspectCount > 0 && (
               <StatusBadge
                 status="warning"
-                label={`${suspectCount} Suspect`}
+                label={`${suspectCount} ${gettext('Suspect')}`}
               />
             )}
           </Stack>
@@ -2175,7 +2748,7 @@ export function ScreenMeshDesignerSurface({
           minHeight: 0,
           display: 'grid',
           gridTemplateColumns:
-            viewMode === 'field_spec'
+            viewMode === 'field_spec' || inShell
               ? '1fr'
               : 'minmax(260px, 320px) 1fr',
           gap: 1,
@@ -2183,9 +2756,9 @@ export function ScreenMeshDesignerSurface({
           overflow: 'hidden',
         }}
       >
-        {viewMode !== 'field_spec' && (
+        {viewMode !== 'field_spec' && !inShell && (
           <ScrollArea
-            label="Screen Mesh inspector"
+            label={gettext('Screen Mesh inspector')}
             sx={{
               border: '1px solid',
               borderColor: 'divider',
@@ -2602,14 +3175,14 @@ export function ScreenMeshDesignerSurface({
       {/* Add Screen Dialog */}
       <Dialog
         open={screenDialogOpen}
-        title="Add Screen (ui.frame)"
+        title={gettext('Add Screen (ui.frame)')}
         onClose={() => setScreenDialogOpen(false)}
         defaultAction={handleAddScreen}
         actions={
           <>
-            <Button onClick={() => setScreenDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => setScreenDialogOpen(false)}>{gettext('Cancel')}</Button>
             <Button intent="primary" onClick={handleAddScreen}>
-              Add Screen
+              {gettext('Add Screen')}
             </Button>
           </>
         }
@@ -2650,14 +3223,14 @@ export function ScreenMeshDesignerSurface({
       <Dialog
         open={controlDialogOpen}
         size="large"
-        title="Add Wireframe Control"
+        title={gettext('Add Wireframe Control')}
         onClose={() => setControlDialogOpen(false)}
         defaultAction={handleAddControl}
         actions={
           <>
-            <Button onClick={() => setControlDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => setControlDialogOpen(false)}>{gettext('Cancel')}</Button>
             <Button intent="primary" onClick={handleAddControl}>
-              Add Control
+              {gettext('Add Control')}
             </Button>
           </>
         }
@@ -3622,13 +4195,13 @@ export function ScreenMeshDesignerSurface({
       {/* Accept Dialog */}
       <Dialog
         open={acceptDialogOpen}
-        title="Accept Screen Mesh Version"
+        title={gettext('Accept Screen Mesh Version')}
         onClose={() => setAcceptDialogOpen(false)}
         actions={
           <>
-            <Button onClick={() => setAcceptDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => setAcceptDialogOpen(false)}>{gettext('Cancel')}</Button>
             <Button intent="primary" onClick={handleAccept}>
-              Accept Version
+              {gettext('Accept Version')}
             </Button>
           </>
         }
@@ -3723,6 +4296,7 @@ ScreenMeshDesignerSurface.propTypes = {
   client: PropTypes.object,
   controller: PropTypes.object,
   readOnly: PropTypes.bool,
+  commands: PropTypes.object,
   executeCommand: PropTypes.func,
   onStateChange: PropTypes.func,
   onExport: PropTypes.func,

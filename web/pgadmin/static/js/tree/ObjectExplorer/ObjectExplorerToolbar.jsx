@@ -58,11 +58,12 @@ export default function ObjectExplorerToolbar() {
   const checkMenuState = ()=>{
     // Owner direction 2026-11-06: View/Edit Data (All Rows, Filtered Rows)
     // became one top-level Browse data entry on the object menu.
-    const objectMenus = pgAdmin.Browser.MainMenus.
+    const mainMenus = pgAdmin?.Browser?.MainMenus || [];
+    const objectMenus = mainMenus.
       find((m)=>(m.name=='object'))?.
       menuItems;
 
-    const toolsMenus = pgAdmin.Browser.MainMenus.
+    const toolsMenus = mainMenus.
       find((m)=>(m.name=='tools'))?.
       menuItems;
 
@@ -82,8 +83,8 @@ export default function ObjectExplorerToolbar() {
     });
     checkMenuState();
     return ()=>{
-      deregister();
-      deregisterFilter();
+      deregister?.();
+      deregisterFilter?.();
     };
   }, []);
 

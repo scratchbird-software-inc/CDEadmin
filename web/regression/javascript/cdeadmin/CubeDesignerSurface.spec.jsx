@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {useEffect, useRef} from 'react';
 import {
   act,
   fireEvent,
@@ -17,6 +18,12 @@ import {
 } from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {libraries, setupDDNDOM} from './ddnTestRuntime';
+import {
+  ProjectShellProvider,
+  ProjectWorkbenchFrame,
+  useProjectShell,
+} from 'sources/cdeadmin_ui/shell/ProjectShell';
+import {TActionsRegistry} from 'sources/cdeadmin_ui/actions/t_actions';
 import {
   CubeDesignerSurface,
   CubesNavigator,
@@ -1103,5 +1110,115 @@ describe('Task-specific Cube Designer', () => {
       await within(wuDialog).findByText('Executive Revenue Dashboard')
     ).toBeInTheDocument();
     fireEvent.click(within(wuDialog).getByRole('button', {name: 'Close'}));
+  });
+
+  it('integrates cooperatively into ProjectShell 6-region anatomy (3a navigator, 3b ribbon + 3b1 quick actions, 3c inspector, 3d status, zero in-3e DesignerTabbedMenu)', async () => {
+    let curVer = 1;
+    const curModel = sampleCubeModel();
+    const mockClient = {
+      openSession: jest.fn(async () => makeCubeSession({status: 'draft', version: curVer})),
+      getCubeModel: jest.fn(async () => ({
+        cube: {model: curModel, element_ids: {}, notes: []},
+      })),
+      saveCubeModel: jest.fn(async () => {
+        curVer += 1;
+        return {
+          design: makeCubeSession({status: 'draft', version: curVer}).design,
+          cube: {model: curModel, element_ids: {}, notes: []},
+          active_drift: {has_active_changes: false, active_changes: []},
+        };
+      }),
+    };
+
+    function AutoOpenCube() {
+      const shell = useProjectShell();
+      const openedRef = useRef(false);
+      useEffect(() => {
+        if (shell && !openedRef.current) {
+          openedRef.current = true;
+          shell.openInlineTab({
+            instanceId: 'cube-designer-1',
+            appId: 'cube-designer',
+            title: 'Sales Cube',
+            supportsLeftDrawer: true,
+            leftOpen: true,
+            supportsRightDrawer: true,
+            rightOpen: true,
+            supportsTabbedIconBar: true,
+            renderWorkArea: () => (
+              <CubeDesignerSurface
+                projectId="analytics"
+                designId="019a0000-0000-7000-8000-000000000020"
+                client={mockClient}
+              />
+            ),
+          });
+        }
+      }, [shell]);
+      return null;
+    }
+
+    const actionsRegistry = new TActionsRegistry();
+    const ShellHarness = withTheme(() => (
+      <ProjectShellProvider
+        actionsRegistry={actionsRegistry}
+        fetchImpl={jest.fn(async () => ({ok: false, status: 404, json: async () => ({})}))}
+      >
+        <AutoOpenCube />
+        <ProjectWorkbenchFrame />
+      </ProjectShellProvider>
+    ));
+
+    const {container} = render(<ShellHarness />);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-area-part="3e"] [data-cde-surface="diagram.ddn.viewer"]')
+      ).not.toBeNull()
+    );
+
+    const area3e = container.querySelector('[data-area-part="3e"]');
+    const area3a = container.querySelector('[data-area-part="3a"]');
+    const area3bPanel = container.querySelector('.sr-island-3b .snb-panel');
+    const area3c = container.querySelector('[data-area-part="3c"]');
+    const area3d = container.querySelector('[data-area-part="3d"]');
+
+    expect(area3e).not.toBeNull();
+    expect(area3a).not.toBeNull();
+    expect(area3bPanel).not.toBeNull();
+    expect(area3c).not.toBeNull();
+    expect(area3d).not.toBeNull();
+
+    // Zero DesignerTabbedMenu inside Area 3e
+    expect(
+      area3e.querySelector('[data-cdeadmin-qa-key="designer-tabbed-menu"]')
+    ).toBeNull();
+
+    // Area 3b hosts promoted Cube commands and invokes real designer callbacks
+    const saveDraftBtn = await within(area3bPanel).findByRole('button', {
+      name: /Save Draft/i,
+    });
+    fireEvent.click(saveDraftBtn);
+    const saveDialog = await screen.findByRole('dialog');
+    fireEvent.click(
+      within(saveDialog).getByRole('button', {name: /Save checkpoint/i})
+    );
+    await waitFor(() => expect(mockClient.saveCubeModel).toHaveBeenCalledTimes(1));
+
+    // Area 3a renders Cube Model Navigator; clicking Orders selects it into Area 3c
+    expect(
+      await within(area3a).findByRole('navigation', {name: /Cube Model Navigator/i})
+    ).toBeInTheDocument();
+    fireEvent.click(within(area3a).getByRole('button', {name: /Orders/i}));
+
+    const inspector3c = await within(area3c).findByTestId('cube-property-inspector');
+    expect(
+      within(inspector3c).getByText(/Measure Group: Orders/i)
+    ).toBeInTheDocument();
+
+    // Area 3d renders status bar with title, status, engine, and valid binding badge
+    expect(within(area3d).getByText('Sales Cube')).toBeInTheDocument();
+    expect(within(area3d).getByText('Draft')).toBeInTheDocument();
+    expect(within(area3d).getByText('valid')).toBeInTheDocument();
   });
 });

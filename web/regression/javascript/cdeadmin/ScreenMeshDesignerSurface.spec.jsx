@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {useEffect, useRef} from 'react';
 import {
   act,
   fireEvent,
@@ -17,6 +18,12 @@ import {
 } from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {libraries, setupDDNDOM} from './ddnTestRuntime';
+import {
+  ProjectShellProvider,
+  ProjectWorkbenchFrame,
+  useProjectShell,
+} from 'sources/cdeadmin_ui/shell/ProjectShell';
+import {TActionsRegistry} from 'sources/cdeadmin_ui/actions/t_actions';
 import {
   ScreenMeshDesignerSurface,
   ScreenMeshesNavigator,
@@ -967,5 +974,112 @@ describe('ScreenMeshDesignerSurface and ScreenMeshesNavigator', () => {
       'screen_mesh.designer.redact',
       'screen_mesh.designer.accept',
     ]);
+  });
+
+  it('integrates cooperatively into ProjectShell 6-region anatomy (3a navigator, 3b ribbon + 3b1 quick actions, 3c inspector, 3d status, zero duplicate sidebar or in-3e DesignerTabbedMenu)', async () => {
+    const mockClient = makeMockClient();
+
+    function AutoOpenMesh() {
+      const shell = useProjectShell();
+      const openedRef = useRef(false);
+      useEffect(() => {
+        if (shell && !openedRef.current) {
+          openedRef.current = true;
+          shell.openInlineTab({
+            instanceId: 'screen-mesh-designer-1',
+            appId: 'screen-mesh-designer',
+            title: 'Orders Workbench',
+            supportsLeftDrawer: true,
+            leftOpen: true,
+            supportsRightDrawer: true,
+            rightOpen: true,
+            supportsTabbedIconBar: true,
+            renderWorkArea: () => (
+              <ScreenMeshDesignerSurface
+                projectId="ui-meshes"
+                designId="019a0000-0000-7000-8000-000000000100"
+                client={mockClient}
+              />
+            ),
+          });
+        }
+      }, [shell]);
+      return null;
+    }
+
+    const actionsRegistry = new TActionsRegistry();
+    const ShellHarness = withTheme(() => (
+      <ProjectShellProvider
+        actionsRegistry={actionsRegistry}
+        fetchImpl={jest.fn(async () => ({ok: false, status: 404, json: async () => ({})}))}
+      >
+        <AutoOpenMesh />
+        <ProjectWorkbenchFrame />
+      </ProjectShellProvider>
+    ));
+
+    const {container} = render(<ShellHarness />);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-area-part="3e"] [data-cde-surface="diagram.ddn.viewer"]')
+      ).not.toBeNull()
+    );
+
+    const area3e = container.querySelector('[data-area-part="3e"]');
+    const area3a = container.querySelector('[data-area-part="3a"]');
+    const area3bPanel = container.querySelector('.sr-island-3b .snb-panel');
+    const area3c = container.querySelector('[data-area-part="3c"]');
+    const area3d = container.querySelector('[data-area-part="3d"]');
+
+    expect(area3e).not.toBeNull();
+    expect(area3a).not.toBeNull();
+    expect(area3bPanel).not.toBeNull();
+    expect(area3c).not.toBeNull();
+    expect(area3d).not.toBeNull();
+
+    // Zero DesignerTabbedMenu or duplicate internal Screen Mesh sidebar inside Area 3e
+    expect(
+      area3e.querySelector('[data-cdeadmin-qa-key="designer-tabbed-menu"]')
+    ).toBeNull();
+    expect(within(area3e).queryByLabelText('Screen Mesh inspector')).toBeNull();
+
+    // Area 3b Save Draft button invokes saveScreenMeshModel
+    const saveBtn = await within(area3bPanel).findByRole('button', {
+      name: /Save Draft/i,
+    });
+    fireEvent.click(saveBtn);
+    await waitFor(() =>
+      expect(mockClient.saveScreenMeshModel).toHaveBeenCalledTimes(1)
+    );
+
+    // Area 3b1 Quick-Access Save invokes saveScreenMeshModel
+    const area3b = container.querySelector('.sr-island-3b');
+    const quickSaveBtn = within(area3b).getAllByRole('button', {
+      name: /^Save$/i,
+    })[0];
+    fireEvent.click(quickSaveBtn);
+    await waitFor(() =>
+      expect(mockClient.saveScreenMeshModel).toHaveBeenCalledTimes(2)
+    );
+
+    // Area 3a renders Screen Mesh Navigator; clicking Orders Grid selects it into Area 3c
+    expect(
+      await within(area3a).findByRole('navigation', {name: /Screen Mesh Navigator/i})
+    ).toBeInTheDocument();
+    fireEvent.click(within(area3a).getByRole('button', {name: /Orders Grid/i}));
+
+    const inspector3c = await within(area3c).findByTestId(
+      'screen-mesh-property-inspector'
+    );
+    expect(
+      within(inspector3c).getByText(/Control: Orders Grid/i)
+    ).toBeInTheDocument();
+
+    // Area 3d renders status bar with title, status, engine, and suspect binding state
+    expect(within(area3d).getByText('Orders Workbench')).toBeInTheDocument();
+    expect(within(area3d).getByText('Draft')).toBeInTheDocument();
+    expect(within(area3d).getByText(/wireframe\.ui@1/i)).toBeInTheDocument();
+    expect(within(area3d).getByText(/1 suspect/i)).toBeInTheDocument();
   });
 });

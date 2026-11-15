@@ -367,25 +367,48 @@ export function showProviderWorkspace(
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
         <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
           <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
+  const isDedicatedBrowseData = Boolean(
+    initialTab === 'studio' &&
+    initialContext.browse_data &&
+    !initialContext.script &&
+    initialContext.resource_id
+  );
+  const resolvedTab = isDedicatedBrowseData ? 'data' : initialTab;
+  const resolvedContext = isDedicatedBrowseData
+    ? {
+      ...initialContext,
+      auto_load_rows: true,
+      browse_nonce: initialContext.browse_nonce || `${Date.now()}-${providerWorkspaceSequence}`,
+    }
+    : initialContext;
+  const resolvedTitle = isDedicatedBrowseData
+    ? `data: ${
+      initialContext.display_name ||
+      nodeData?.label ||
+      nodeData?._label ||
+      String(initialContext.resource_id).split(':').pop()
+    }`
+    : title;
   const panel = {
     id: panelId,
     beforeClose: closeGuards.beforeClose,
-    title,
+    title: resolvedTitle,
+    ...(isDedicatedBrowseData ? {iconKey: 'action.browse_data'} : {}),
     closable: true,
     floatable: true,
-    content: <ModalCloseGuardContext.Provider value={closeGuards.register}><ErrorBoundary>{serverTool || (initialTab === 'firebird-registration' ?
-      <FirebirdRegistration targetId={databaseTargetId} operation={initialContext.registration_operation}
+    content: <ModalCloseGuardContext.Provider value={closeGuards.register}><ErrorBoundary>{serverTool || (resolvedTab === 'firebird-registration' ?
+      <FirebirdRegistration targetId={databaseTargetId} operation={resolvedContext.registration_operation}
         post={payload => getApiInstance().post(endpointUrl, payload).then(response => response.data.data)
           .catch(error => {throw new Error(error?.response?.data?.errormsg || error.message);})}
-        onChanged={recoveryTargetRegistered} /> : ['monitoring', 'monitoring_policy'].includes(initialTab) ?
+        onChanged={recoveryTargetRegistered} /> : ['monitoring', 'monitoring_policy'].includes(resolvedTab) ?
         (['mysql-native', 'mariadb-native', 'duckdb-native', 'sqlite-native'].includes(nodeData.cde_profile_id) ? <MySQLMonitoring engine={nodeData.cde_profile_id === 'mariadb-native' ? 'mariadb' : nodeData.cde_profile_id === 'duckdb-native' ? 'duckdb' : nodeData.cde_profile_id === 'sqlite-native' ? 'sqlite' : 'mysql'} serverId={Number(nodeData._id ?? nodeData.id)}
-          targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} /> :
+          targetId={databaseTargetId} policyMode={resolvedTab === 'monitoring_policy'} /> :
           <FirebirdMonitoring onNavigate={showFirebirdMonitor} serverId={Number(nodeData._id ?? nodeData.id)}
-            targetId={databaseTargetId} policyMode={initialTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
+            targetId={databaseTargetId} policyMode={resolvedTab === 'monitoring_policy'} />) : <ProviderWorkspaceContent
           closeModal={onClose}
           endpointUrl={endpointUrl}
-          initialTab={initialTab}
-          initialContext={initialContext}
+          initialTab={resolvedTab}
+          initialContext={resolvedContext}
           onTargetCatalogChanged={refreshServerTargets}
           onCatalogMutated={refreshDatabaseCatalog}
           onRecreateEmpty={(databasePath) => {
@@ -415,19 +438,17 @@ export function showProviderWorkspace(
           }}
         />)}</ErrorBoundary></ModalCloseGuardContext.Provider>,
   };
-  if (initialTab === 'studio') {
+  if (resolvedTab === 'studio') {
     activateSQLConnection({...connection, content: panel.content});
-    // Browse data: the connection's editor (new or already open) fills in
-    // the relation's SELECT from its own metadata.
-    if ((initialContext.browse_data || initialContext.script) && initialContext.resource_id) {
-      // A script kind (insert, update, delete) rides the same request (M7).
-      requestSQLSource(connection.id, {resource_id: initialContext.resource_id,
-        ...(initialContext.script ? {script: initialContext.script} : {})});
+    // Script kinds (insert, update, delete) open in the SQL Studio editor.
+    if ((resolvedContext.browse_data || resolvedContext.script) && resolvedContext.resource_id) {
+      requestSQLSource(connection.id, {resource_id: resolvedContext.resource_id,
+        ...(resolvedContext.script ? {script: resolvedContext.script} : {})});
     }
     workspace.focus(BROWSER_PANELS.SQL);
     return BROWSER_PANELS.SQL;
   }
-  workspace.openTab(panel, BROWSER_PANELS.MAIN, 'middle');
+  workspace.openTab(panel, BROWSER_PANELS.MAIN, 'middle', isDedicatedBrowseData);
   return panelId;
 }
 

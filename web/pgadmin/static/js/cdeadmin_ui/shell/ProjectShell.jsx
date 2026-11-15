@@ -2474,6 +2474,12 @@ export function ProjectShellProvider({
     return settings?.global?.default_tabbed_icon_bar !== false;
   }, [focusedId, focusedInstance, settings, toolbarRibbonOverrides]);
 
+  const [actionsTick, setActionsTick] = useState(0);
+  useEffect(() => {
+    if (typeof actionsRegistry?.subscribe !== 'function') return undefined;
+    return actionsRegistry.subscribe(() => setActionsTick((t) => t + 1));
+  }, [actionsRegistry]);
+
   // Synchronize baseline Top Menus (0 System, 60 Applications, 70 Window, 80 Help)
   useEffect(() => {
     const canCloseActive =
@@ -2482,6 +2488,13 @@ export function ProjectShellProvider({
       locale,
       'menu.window.open_app_floating_suffix',
       '(Floating)'
+    );
+
+    const moduleLauncherActions = (actionsRegistry?.list?.() || []).filter(
+      (action) =>
+        String(action?.id || '').startsWith('module.open.') &&
+        (typeof actionsRegistry?.isVisibleForContext !== 'function' ||
+          actionsRegistry.isVisibleForContext(action.id))
     );
 
     const appMenuItems = [
@@ -2542,6 +2555,20 @@ export function ProjectShellProvider({
           callback: () => openApplication(app.id),
         };
       }),
+      ...(moduleLauncherActions.length > 0
+        ? [
+          {id: 'sep_platform_modules', type: 'separator', index: 120},
+          ...moduleLauncherActions.map((action, mIdx) => ({
+            id: action.id,
+            actionId: action.id,
+            label: action.text || action.defaultText || action.id,
+            hint: action.hint || action.defaultHint || '',
+            iconKey: action.icon || 'command.default',
+            index: 125 + mIdx * 2,
+            callback: () => actionsRegistry.execute(action.id),
+          })),
+        ]
+        : []),
     ];
 
     const windowItems = [
@@ -2730,6 +2757,7 @@ export function ProjectShellProvider({
     ]);
   }, [
     actionsRegistry,
+    actionsTick,
     authorizedApps,
     closeInstance,
     dashboardTabbed,

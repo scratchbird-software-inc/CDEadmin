@@ -34,13 +34,13 @@ function assetIcon(assetType) {
 }
 
 export function ProjectExplorer({client: suppliedClient, onOpenAsset,
-  onSelectAsset, onCreateProject}) {
+  onSelectAsset, onCreateProject, modules = []}) {
   useLocaleRevision();
   const client = useMemo(
     () => suppliedClient ?? new ProjectAssetClient(), [suppliedClient]
   );
   const [projects, setProjects] = useState([]);
-  const [expanded, setExpanded] = useState(new Set());
+  const [expanded, setExpanded] = useState(new Set(['__platform_modules__']));
   const [states, setStates] = useState({});
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -155,7 +155,7 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
             `${asset.name} ${asset.path} ${asset.asset_type}`.toLowerCase().includes(filter));
           return <Box key={project.project_id} role="group">
             <TreeRow level={1} label={project.name} expandable expanded={isExpanded}
-              isLast={pIdx === visibleProjects.length - 1}
+              isLast={pIdx === visibleProjects.length - 1 && !modules.length}
               loading={state?.loading} warning={state?.error ?? ''}
               icon={<Icon iconKey="object.schema" decorative />}
               trailing={project.access === 'owner' ? gettext('Owner') : project.access}
@@ -177,6 +177,33 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
               onOpen={() => onOpenAsset?.(project, asset)} />)}
           </Box>;
         })}
+        {modules.length > 0 && (() => {
+          const visibleModules = modules.filter((mod) =>
+            !filter || `${mod.label} ${mod.id}`.toLowerCase().includes(filter)
+          );
+          if (!visibleModules.length) return null;
+          const modulesExpanded = expanded.has('__platform_modules__');
+          const toggleModules = () => {
+            const next = new Set(expanded);
+            if (next.has('__platform_modules__')) next.delete('__platform_modules__');
+            else next.add('__platform_modules__');
+            setExpanded(next);
+          };
+          return <Box key="__platform_modules__" role="group">
+            <TreeRow level={1} label={gettext('Platform Modules')} expandable
+              expanded={modulesExpanded} isLast
+              icon={<Icon iconKey="tool.project-explorer" decorative />}
+              trailing={`${visibleModules.length}`}
+              onToggle={toggleModules} onOpen={toggleModules} />
+            {modulesExpanded && visibleModules.map((mod, mIdx) => (
+              <TreeRow level={2} key={mod.id} label={mod.label}
+                isLast={mIdx === visibleModules.length - 1}
+                icon={<Icon iconKey={mod.iconKey || 'command.default'} decorative />}
+                onSelect={() => mod.onOpen?.()}
+                onOpen={() => mod.onOpen?.()} />
+            ))}
+          </Box>;
+        })()}
         <ProgressOverlay message={loading ? gettext('Loading projects') : ''} />
       </Box>
     </ScratchScrollArea>
@@ -210,4 +237,5 @@ ProjectExplorer.propTypes = {
   onOpenAsset: PropTypes.func,
   onSelectAsset: PropTypes.func,
   onCreateProject: PropTypes.func,
+  modules: PropTypes.array,
 };

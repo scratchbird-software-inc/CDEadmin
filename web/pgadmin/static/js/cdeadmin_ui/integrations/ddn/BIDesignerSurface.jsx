@@ -9,8 +9,10 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box, Divider, Panel, ScrollArea, Stack} from '../../primitives/Layout';
 import {Badge, Banner} from '../../feedback/Indicators';
+import {EmptyState} from '../../feedback/EmptyState';
 import {Button} from '../../primitives/Button';
 import {NumberField, SecretField, TextField} from '../../primitives/Field';
 import {Checkbox, Select} from '../../primitives/Choice';
@@ -19,6 +21,7 @@ import {StatusBadge} from '../../status/StatusBadge';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import CodeEditor from '../../editors/CodeEditor';
 import FormReference from '../../navigation/FormReference';
+import {t_actions} from '../../actions/t_actions';
 import {
   useQueryExecutionController,
   QueryExecutionToolbarCluster,
@@ -26,13 +29,20 @@ import {
 } from '../../query';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
+  BI_OPEN_SQL_EVENT,
   DesignCheckpointHistoryDrawer,
+  DesignerElementNavigator,
   DesignerModalTabs,
+  DesignerShellStatusBar,
   DesignerTabbedMenu,
   FormGrid,
   KeyValuePairsEditor,
   TypedRowsEditor,
   WhereUsedDialog,
+  executeDesignerCommand,
+  formatSavePointStatusLabel,
+  useDesignerShellRegions,
+  useDesignerWorkbenchEvents,
 } from './DesignerChrome';
 import {
   DesignStoreClient,
@@ -265,7 +275,9 @@ export function BIDesignerSurface({
   client: suppliedClient,
   controller: suppliedController,
   readOnly = false,
+  commands = t_actions,
   executeCommand,
+  onOpenInSqlEditor,
   onStateChange,
   onExport,
   onError,
@@ -286,8 +298,26 @@ export function BIDesignerSurface({
     [suppliedController, client, projectId, designId, kind]
   );
 
-  const callbacks = useRef({executeCommand, onStateChange, onExport, onError});
-  callbacks.current = {executeCommand, onStateChange, onExport, onError};
+  const callbacks = useRef({
+    executeCommand,
+    onOpenInSqlEditor,
+    onStateChange,
+    onExport,
+    onError,
+  });
+  callbacks.current = {
+    executeCommand,
+    onOpenInSqlEditor,
+    onStateChange,
+    onExport,
+    onError,
+  };
+  const shellRegistryRef = useRef(null);
+  const openPropertiesDrawerRef = useRef(() => {});
+  const biUndoStackRef = useRef([]);
+  const biRedoStackRef = useRef([]);
+  const biClipboardRef = useRef(null);
+
   const biQueryController = useQueryExecutionController({
     engine: 'postgresql',
   });
@@ -302,6 +332,11 @@ export function BIDesignerSurface({
   const [activeView, setActiveView] = useState('');
   const [showAccessibleTable, setShowAccessibleTable] = useState(false);
   const [showCrossFilterBar, setShowCrossFilterBar] = useState(true);
+  const [canvasToolMode, setCanvasToolMode] = useState('pointer');
+  const [selectedBiElement, setSelectedBiElement] = useState({
+    kind: 'card',
+    id: '',
+  });
 
   // Dashboard interactive filter & cross-filter state
   const [activeDashFilters, setActiveDashFilters] = useState({});
@@ -459,12 +494,52 @@ export function BIDesignerSurface({
     driftResult: null,
   });
 
-  const runToolbarCommand = useCallback((id, fn) => {
-    if (callbacks.current.executeCommand) {
-      return callbacks.current.executeCommand(id, {enabled: true, invoke: fn});
+  const runToolbarCommand = useCallback(
+    async (id, fn) => {
+      setSurfaceError('');
+      try {
+        return await executeDesignerCommand({
+          commandId: id,
+          invoke: fn,
+          executeCommand: callbacks.current.executeCommand,
+          commands,
+          shellRegistry: shellRegistryRef.current,
+          enabled: true,
+        });
+      } catch (err) {
+        setSurfaceError(err?.message || String(err));
+        callbacks.current.onError?.(err);
+        return null;
+      }
+    },
+    [commands]
+  );
+
+  const pushBiUndoSnapshot = useCallback(() => {
+    if (!biPayload) return;
+    biUndoStackRef.current.push(JSON.parse(JSON.stringify(biPayload)));
+    biRedoStackRef.current = [];
+  }, [biPayload]);
+
+  const handleUndoBi = useCallback(() => {
+    if (readOnly || biUndoStackRef.current.length === 0) return;
+    const prev = biUndoStackRef.current.pop();
+    if (biPayload) {
+      biRedoStackRef.current.push(JSON.parse(JSON.stringify(biPayload)));
     }
-    return fn();
-  }, []);
+    setBiPayload(prev);
+    setBannerMessage(gettext('Reverted last BI edit.'));
+  }, [biPayload, readOnly]);
+
+  const handleRedoBi = useCallback(() => {
+    if (readOnly || biRedoStackRef.current.length === 0) return;
+    const next = biRedoStackRef.current.pop();
+    if (biPayload) {
+      biUndoStackRef.current.push(JSON.parse(JSON.stringify(biPayload)));
+    }
+    setBiPayload(next);
+    setBannerMessage(gettext('Restored BI edit.'));
+  }, [biPayload, readOnly]);
 
   const refreshAll = useCallback(
     async (version = null) => {
@@ -990,6 +1065,7 @@ export function BIDesignerSurface({
           questionModel?.visualization_format || formatDraft,
       };
 
+      pushBiUndoSnapshot();
       await controller.saveBiModel({
         question: nextQuestion,
         status: 'draft',
@@ -1021,6 +1097,7 @@ export function BIDesignerSurface({
           type: nextType,
         },
       };
+      pushBiUndoSnapshot();
       await controller.saveBiModel({
         question: nextQuestion,
         status: 'draft',
@@ -1050,6 +1127,7 @@ export function BIDesignerSurface({
         ),
       };
       if (biKind === 'question' && questionModel) {
+        pushBiUndoSnapshot();
         await controller.saveBiModel({
           question: {
             ...questionModel,
@@ -1128,12 +1206,21 @@ export function BIDesignerSurface({
       sql: sqlText || '-- Compiled BI query',
       dialect: sqlDraft.dialect || 'sqlite',
       parameters: params,
-      title: sessionState.title || questionModel?.name || 'BI Question',
+      title:
+        sessionState.design?.title ||
+        sessionState.title ||
+        questionModel?.name ||
+        dashboardModel?.name ||
+        gettext('BI Question'),
+      designId,
+      projectId,
     };
+    callbacks.current.onOpenInSqlEditor?.(detail);
+    window.dispatchEvent(new CustomEvent(BI_OPEN_SQL_EVENT, {detail}));
     window.dispatchEvent(
       new CustomEvent('cdeadmin:open-sql-in-editor', {detail})
     );
-    setBannerMessage('Sent parameterized SQL to SQL Editor.');
+    setBannerMessage(gettext('Sent parameterized SQL to SQL Editor.'));
   };
 
   const handleConvertSqlToQuestion = async () => {
@@ -1280,6 +1367,7 @@ export function BIDesignerSurface({
           click_behavior: row.click_behavior || 'inherit',
         };
       });
+      pushBiUndoSnapshot();
       await controller.saveBiModel({
         dashboard: {...dashboardModel, cards: updatedCards},
         status: 'draft',
@@ -1356,6 +1444,7 @@ export function BIDesignerSurface({
         }
         newCard = {...newCard, metric_panel: mp};
       }
+      pushBiUndoSnapshot();
       await controller.saveBiModel({
         dashboard: {
           ...dashboardModel,
@@ -1413,6 +1502,7 @@ export function BIDesignerSurface({
           }
           return item;
         });
+      pushBiUndoSnapshot();
       await controller.saveBiModel({
         dashboard: {
           ...dashboardModel,
@@ -1740,15 +1830,16 @@ export function BIDesignerSurface({
     return [
       {
         id: 'design',
-        label: 'Design',
+        label: gettext('Design'),
         groups: [
           {
             id: 'checkpoint',
-            label: 'Checkpoint & Advance Status',
+            label: gettext('Checkpoint & Advance Status'),
             items: [
               {
                 id: 'bi-save-draft',
-                label: 'Save Draft',
+                actionId: 'bi.designer.save',
+                label: gettext('Save Draft'),
                 intent: 'primary',
                 disabled: readOnly || busy,
                 onClick: () =>
@@ -1756,13 +1847,13 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-status-in-progress',
-                label: 'In Progress',
+                label: gettext('In Progress'),
                 disabled: readOnly || busy || status !== 'draft',
                 onClick: () => handleAdvanceStatus('in_progress'),
               },
               {
                 id: 'bi-status-in-review',
-                label: 'In Review',
+                label: gettext('In Review'),
                 disabled:
                   readOnly ||
                   busy ||
@@ -1771,7 +1862,8 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-accept',
-                label: 'Accept',
+                actionId: 'bi.designer.accept',
+                label: gettext('Accept'),
                 disabled: readOnly || busy || status === 'accepted',
                 onClick: () =>
                   runToolbarCommand('bi.designer.accept', () =>
@@ -1780,7 +1872,7 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-branch-draft',
-                label: 'Branch Draft',
+                label: gettext('Branch Draft'),
                 disabled: readOnly || busy || status !== 'accepted',
                 onClick: handleBranchDraft,
               },
@@ -1788,26 +1880,26 @@ export function BIDesignerSurface({
           },
           {
             id: 'provenance',
-            label: 'History & Provenance',
+            label: gettext('History & Provenance'),
             items: [
               {
                 id: 'bi-checkpoints',
-                label: 'Checkpoints & Diff…',
+                label: gettext('Checkpoints & Diff…'),
                 onClick: () => setCheckpointOpen(true),
               },
               {
                 id: 'bi-git-sync',
-                label: 'Git Sync…',
+                label: gettext('Git Sync…'),
                 onClick: () => setGitOpen(true),
               },
               {
                 id: 'bi-export-ddn',
-                label: 'Export DDN',
+                label: gettext('Export DDN'),
                 onClick: handleExportDdn,
               },
               {
                 id: 'bi-where-used',
-                label: 'Where Used…',
+                label: gettext('Where Used…'),
                 onClick: () => setWhereUsedOpen(true),
               },
             ],
@@ -1816,24 +1908,24 @@ export function BIDesignerSurface({
       },
       {
         id: 'query',
-        label: 'Query & Cards',
+        label: gettext('Query & Cards'),
         attention: fanoutWarnings.length > 0 || savedFilterFlags.length > 0,
         groups:
           biKind === 'question'
             ? [
               {
                 id: 'sbsql-builder',
-                label: 'Question Query',
+                label: gettext('Question Query'),
                 items: [
                   {
                     id: 'bi-structured-query',
-                    label: 'Structured Query Builder…',
+                    label: gettext('Structured Query Builder…'),
                     disabled: readOnly,
                     onClick: () => openQueryBuilder('joins'),
                   },
                   {
                     id: 'bi-params-flags',
-                    label: 'Parameters & Review Flags…',
+                    label: gettext('Parameters & Review Flags…'),
                     badge: savedFilterFlags.length || undefined,
                     disabled: readOnly,
                     onClick: () => openQueryBuilder('parameters'),
@@ -1844,30 +1936,30 @@ export function BIDesignerSurface({
             : [
               {
                 id: 'dashboard-cards',
-                label: 'Dashboard Composition',
+                label: gettext('Dashboard Composition'),
                 items: [
                   {
                     id: 'bi-cards-layout',
-                    label: 'Dashboard Cards & Layout…',
+                    label: gettext('Dashboard Cards & Layout…'),
                     badge: (dashboardModel?.cards || []).length,
                     disabled: readOnly,
                     onClick: openDashboardCardsModal,
                   },
                   {
                     id: 'bi-filters-pinning',
-                    label: 'Filters & Pinning…',
+                    label: gettext('Filters & Pinning…'),
                     disabled: readOnly,
                     onClick: openFiltersAndPinningModal,
                   },
                   {
                     id: 'bi-cross-filter-toggle',
-                    label: 'Cross-Filter Bar',
+                    label: gettext('Cross-Filter Bar'),
                     active: showCrossFilterBar,
                     onClick: () => setShowCrossFilterBar((v) => !v),
                   },
                   {
                     id: 'bi-writeback-buttons',
-                    label: 'Write-Back Action Buttons…',
+                    label: gettext('Write-Back Action Buttons…'),
                     badge: actionButtons.length || undefined,
                     disabled: readOnly,
                     onClick: () => openActionButtonsModal('configure'),
@@ -1878,18 +1970,18 @@ export function BIDesignerSurface({
       },
       {
         id: 'chart',
-        label: 'Chart & Accessibility',
+        label: gettext('Chart & Accessibility'),
         groups: [
           {
             id: 'chart-profile',
-            label: 'Visualization Profile',
+            label: gettext('Visualization Profile'),
             items: [
               {
                 id: 'bi-chart-profile-select',
                 render: () => (
                   <Box sx={{minWidth: 200}}>
                     <Select
-                      label="Chart profile"
+                      label={gettext('Chart profile')}
                       size="small"
                       disabled={readOnly || biKind !== 'question'}
                       value={questionModel?.visualization?.type || 'bar'}
@@ -1901,13 +1993,13 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-axis-formatters',
-                label: 'Axis & Number Formatters…',
+                label: gettext('Axis & Number Formatters…'),
                 disabled: readOnly,
                 onClick: () => setFormatOpen(true),
               },
               {
                 id: 'bi-accessible-table-toggle',
-                label: 'Accessible Data Table',
+                label: gettext('Accessible Data Table'),
                 active: showAccessibleTable,
                 onClick: () => setShowAccessibleTable((v) => !v),
               },
@@ -1917,11 +2009,11 @@ export function BIDesignerSurface({
             ? [
               {
                 id: 'collector-binding',
-                label: 'Monitoring Snapshot',
+                label: gettext('Monitoring Snapshot'),
                 items: [
                   {
                     id: 'bi-live-collector',
-                    label: 'Live Collector Binding…',
+                    label: gettext('Live Collector Binding…'),
                     badge: allMetricCards.length || undefined,
                     onClick: openCollectorInspector,
                   },
@@ -1933,15 +2025,16 @@ export function BIDesignerSurface({
       },
       {
         id: 'sql',
-        label: 'SQL & AI Draft',
+        label: gettext('SQL & AI Draft'),
         groups: [
           {
             id: 'sql-bridge-group',
-            label: 'Dialect SQL Handoff',
+            label: gettext('Dialect SQL Handoff'),
             items: [
               {
                 id: 'bi-compile-sql',
-                label: 'Compile Dialect SQL…',
+                actionId: 'bi.designer.sql_bridge',
+                label: gettext('Compile Dialect SQL…'),
                 onClick: () =>
                   runToolbarCommand('bi.designer.sql_bridge', () =>
                     openSqlModal('compile')
@@ -1949,12 +2042,12 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-open-sql-editor',
-                label: 'Open in SQL Editor',
+                label: gettext('Open in SQL Editor'),
                 onClick: handleOpenInSqlEditor,
               },
               {
                 id: 'bi-import-sql',
-                label: 'Import SQL into Question…',
+                label: gettext('Import SQL into Question…'),
                 disabled: readOnly || biKind !== 'question',
                 onClick: () => openSqlModal('import'),
               },
@@ -1962,11 +2055,11 @@ export function BIDesignerSurface({
           },
           {
             id: 'ai-draft-group',
-            label: 'Assisted Authoring',
+            label: gettext('Assisted Authoring'),
             items: [
               {
                 id: 'bi-byok-ai',
-                label: 'BYOK AI Draft…',
+                label: gettext('BYOK AI Draft…'),
                 disabled: readOnly,
                 onClick: () => setAiOpen(true),
               },
@@ -1976,15 +2069,16 @@ export function BIDesignerSurface({
       },
       {
         id: 'outward',
-        label: 'Outward & Kiosk',
+        label: gettext('Outward & Kiosk'),
         groups: [
           {
             id: 'outward-switches',
-            label: 'Reviewed Outward Exposure',
+            label: gettext('Reviewed Outward Exposure'),
             items: [
               {
                 id: 'bi-subscriptions',
-                label: 'Subscriptions & Alerts…',
+                actionId: 'bi.designer.outward_review',
+                label: gettext('Subscriptions & Alerts…'),
                 onClick: () =>
                   runToolbarCommand('bi.designer.outward_review', () =>
                     openOutwardModal('subscriptions')
@@ -1992,13 +2086,21 @@ export function BIDesignerSurface({
               },
               {
                 id: 'bi-embed-switch',
-                label: 'Embed Switch…',
-                onClick: () => openOutwardModal('embed'),
+                actionId: 'bi.designer.outward_review',
+                label: gettext('Embed Switch…'),
+                onClick: () =>
+                  runToolbarCommand('bi.designer.outward_review', () =>
+                    openOutwardModal('embed')
+                  ),
               },
               {
                 id: 'bi-kiosk-fleet',
-                label: 'Dashboard Server & Kiosk Fleet…',
-                onClick: () => openOutwardModal('kiosk'),
+                actionId: 'bi.designer.outward_review',
+                label: gettext('Dashboard Server & Kiosk Fleet…'),
+                onClick: () =>
+                  runToolbarCommand('bi.designer.outward_review', () =>
+                    openOutwardModal('kiosk')
+                  ),
               },
             ],
           },
@@ -2006,11 +2108,11 @@ export function BIDesignerSurface({
             ? [
               {
                 id: 'native-action-review',
-                label: 'OperationBus Gate',
+                label: gettext('OperationBus Gate'),
                 items: [
                   {
                     id: 'bi-test-action-review',
-                    label: 'Test Action Button Native Review…',
+                    label: gettext('Test Action Button Native Review…'),
                     badge: actionButtons.length || undefined,
                     onClick: () => openActionButtonsModal('review'),
                   },
@@ -2034,15 +2136,526 @@ export function BIDesignerSurface({
     questionModel,
     showAccessibleTable,
     allMetricCards.length,
+    runToolbarCommand,
   ]);
 
   const scopeIsPinned =
     dashboardModel?.interaction?.filter_state_scope === 'author_pinned';
 
+  const suspectBindingCount = useMemo(() => {
+    if (typeof sessionState.bindingSummary?.suspect === 'number') {
+      return sessionState.bindingSummary.suspect;
+    }
+    const bindings = sessionState.design?.bindings || [];
+    return bindings.filter((b) => b.state === 'suspect').length;
+  }, [sessionState.bindingSummary, sessionState.design?.bindings]);
+
+  const selectBiElement = useCallback((elementKind, id) => {
+    setSelectedBiElement({kind: elementKind, id});
+    openPropertiesDrawerRef.current?.();
+  }, []);
+
+  const biNavigatorCards = useMemo(() => {
+    if (biKind === 'dashboard') {
+      return (dashboardModel?.cards || []).map((c) => ({
+        id: c.id,
+        label: c.title || c.id,
+        sublabel: c.type || 'question',
+        raw: c,
+      }));
+    }
+    if (questionModel) {
+      const qId = questionModel.id || designId || 'question_chart';
+      return [
+        {
+          id: qId,
+          label:
+            questionModel.name ||
+            sessionState.title ||
+            gettext('Question Visualization'),
+          sublabel: questionModel.visualization?.type || 'bar',
+          raw: questionModel,
+        },
+      ];
+    }
+    return [];
+  }, [biKind, dashboardModel?.cards, designId, questionModel, sessionState.title]);
+
+  const biNavigatorFilters = useMemo(() => {
+    if (biKind === 'dashboard') {
+      return (dashboardModel?.filters || []).map((f) => ({
+        id: f.id,
+        label: f.name || f.id,
+        sublabel: f.pinned_by_author
+          ? gettext('Author-Pinned')
+          : gettext('Personal'),
+        raw: f,
+      }));
+    }
+    const sbsqlFilters = (questionModel?.query?.sbsql?.filters || []).map(
+      (f, idx) => {
+        const colName = Array.isArray(f.column)
+          ? f.column.join('.')
+          : String(f.column || `filter_${idx + 1}`);
+        return {
+          id: `filter_${idx + 1}`,
+          label: `${colName} ${f.operator || 'eq'}`,
+          sublabel: f.parameter ? `:${f.parameter}` : gettext('Literal'),
+          raw: f,
+        };
+      }
+    );
+    const paramFilters = (questionModel?.parameters || []).map((p) => ({
+      id: `param_${p.id}`,
+      label: p.name || p.id,
+      sublabel: `:${p.id} (${p.type || 'string'})`,
+      raw: p,
+    }));
+    return [...sbsqlFilters, ...paramFilters];
+  }, [biKind, dashboardModel?.filters, questionModel?.parameters, questionModel?.query?.sbsql?.filters]);
+
+  const biNavigatorJoins = useMemo(
+    () =>
+      (questionModel?.query?.sbsql?.joins || []).map((j, idx) => {
+        const relLabel = Array.isArray(j.relation)
+          ? j.relation.join('.')
+          : String(j.relation || j.alias || `join_${idx + 1}`);
+        const jId = j.alias || `join_${idx + 1}`;
+        return {
+          id: jId,
+          label: `${(j.type || 'left').toUpperCase()} ${relLabel}`,
+          sublabel: j.cardinality || 'many_to_one',
+          raw: j,
+        };
+      }),
+    [questionModel?.query?.sbsql?.joins]
+  );
+
+  const biNavigatorSections = useMemo(
+    () => [
+      {
+        id: 'cards',
+        label: gettext('Cards'),
+        emptyText: gettext('No cards defined.'),
+        items: biNavigatorCards.map((item) => ({
+          id: item.id,
+          label: item.label,
+          sublabel: item.sublabel,
+          active:
+            selectedBiElement.kind === 'card' &&
+            selectedBiElement.id === item.id,
+          onSelect: () => selectBiElement('card', item.id),
+        })),
+      },
+      {
+        id: 'filters',
+        label: gettext('Filters'),
+        emptyText: gettext('No filters defined.'),
+        items: biNavigatorFilters.map((item) => ({
+          id: item.id,
+          label: item.label,
+          sublabel: item.sublabel,
+          active:
+            selectedBiElement.kind === 'filter' &&
+            selectedBiElement.id === item.id,
+          onSelect: () => selectBiElement('filter', item.id),
+        })),
+      },
+      {
+        id: 'joins',
+        label: gettext('Joins'),
+        emptyText: gettext('No joins defined.'),
+        items: biNavigatorJoins.map((item) => ({
+          id: item.id,
+          label: item.label,
+          sublabel: item.sublabel,
+          active:
+            selectedBiElement.kind === 'join' &&
+            selectedBiElement.id === item.id,
+          onSelect: () => selectBiElement('join', item.id),
+        })),
+      },
+    ],
+    [biNavigatorCards, biNavigatorFilters, biNavigatorJoins, selectBiElement, selectedBiElement]
+  );
+
+  const biNavigatorNode = useMemo(
+    () => (
+      <DesignerElementNavigator
+        title={gettext('BI Model Navigator')}
+        sections={biNavigatorSections}
+      />
+    ),
+    [biNavigatorSections]
+  );
+
+  const selectedCardItem = useMemo(
+    () =>
+      selectedBiElement.kind === 'card'
+        ? biNavigatorCards.find((c) => c.id === selectedBiElement.id) || null
+        : null,
+    [biNavigatorCards, selectedBiElement]
+  );
+  const selectedFilterItem = useMemo(
+    () =>
+      selectedBiElement.kind === 'filter'
+        ? biNavigatorFilters.find((f) => f.id === selectedBiElement.id) || null
+        : null,
+    [biNavigatorFilters, selectedBiElement]
+  );
+  const selectedJoinItem = useMemo(
+    () =>
+      selectedBiElement.kind === 'join'
+        ? biNavigatorJoins.find((j) => j.id === selectedBiElement.id) || null
+        : null,
+    [biNavigatorJoins, selectedBiElement]
+  );
+
+  const biShellInspectorNode = (
+    <Box
+      component="section"
+      aria-label={gettext('BI element property inspector')}
+      data-testid="bi-property-inspector"
+      sx={{p: 1.25, display: 'flex', flexDirection: 'column', gap: 1.25}}
+    >
+      <Box sx={{fontWeight: 700, fontSize: '0.8125rem'}}>
+        {gettext('BI Element Inspector')}
+      </Box>
+      {selectedCardItem && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Card')}: ${selectedCardItem.label}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Card ID')}
+            disabled
+            value={selectedCardItem.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Type / Profile')}
+            disabled
+            value={selectedCardItem.sublabel}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() =>
+                biKind === 'dashboard'
+                  ? openDashboardCardsModal()
+                  : setFormatOpen(true)
+              }
+            >
+              {biKind === 'dashboard'
+                ? gettext('Edit Dashboard Cards…')
+                : gettext('Edit Chart Formatters…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedFilterItem && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Filter')}: ${selectedFilterItem.label}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Filter ID')}
+            disabled
+            value={selectedFilterItem.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Scope / Binding')}
+            disabled
+            value={selectedFilterItem.sublabel}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() =>
+                biKind === 'dashboard'
+                  ? openFiltersAndPinningModal()
+                  : openQueryBuilder('filters')
+              }
+            >
+              {gettext('Configure Filter…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedJoinItem && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Join')}: ${selectedJoinItem.label}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Join Alias')}
+            disabled
+            value={selectedJoinItem.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Cardinality')}
+            disabled
+            value={selectedJoinItem.sublabel}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => openQueryBuilder('joins')}
+            >
+              {gettext('Edit Joins…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {!selectedCardItem && !selectedFilterItem && !selectedJoinItem && (
+        <EmptyState
+          message={gettext(
+            'Select a Card, Filter, or Join in the navigator to inspect its properties.'
+          )}
+        />
+      )}
+    </Box>
+  );
+
+  const biTitle =
+    sessionState.design?.title ||
+    sessionState.title ||
+    questionModel?.name ||
+    dashboardModel?.name ||
+    designId ||
+    gettext('BI Designer');
+  const biEngineLabel = sqlDraft.dialect || 'sbsql@1';
+
+  const biStatusNode = useMemo(
+    () => (
+      <DesignerShellStatusBar
+        title={biTitle}
+        version={sessionState.currentVersion}
+        status={sessionState.status || 'draft'}
+        engine={biEngineLabel}
+        suspectCount={suspectBindingCount}
+        extra={
+          sessionState.activeVersion ? (
+            <Badge
+              status="success"
+              label={gettext('Active v%s', sessionState.activeVersion)}
+            />
+          ) : null
+        }
+      />
+    ),
+    [
+      biEngineLabel,
+      biTitle,
+      sessionState.activeVersion,
+      sessionState.currentVersion,
+      sessionState.status,
+      suspectBindingCount,
+    ]
+  );
+
+  const biStatusText = `${biTitle} · v${sessionState.currentVersion || 1} · ${formatSavePointStatusLabel(
+    sessionState.status || 'draft'
+  )} · ${biEngineLabel} · ${
+    suspectBindingCount > 0
+      ? `${suspectBindingCount} ${gettext('suspect')}`
+      : gettext('valid')
+  }`;
+
+  const {inShell, shell, instanceId, openPropertiesDrawer} =
+    useDesignerShellRegions({
+      title: biTitle,
+      statusNode: biStatusNode,
+      statusText: biStatusText,
+      leftDrawerNode: biNavigatorNode,
+      rightDrawerNode: biShellInspectorNode,
+      rightOpen: true,
+      quickActions: {
+        onNew: readOnly
+          ? undefined
+          : () => {
+            if (biKind === 'dashboard') {
+              setCardModalTab('add');
+              setCardOpen(true);
+            } else {
+              openQueryBuilder('joins');
+            }
+          },
+        onSave:
+          readOnly || busy
+            ? undefined
+            : () => runToolbarCommand('bi.designer.save', handleSaveDraft),
+        onUndo: readOnly ? undefined : handleUndoBi,
+        onRedo: readOnly ? undefined : handleRedoBi,
+      },
+    });
+  shellRegistryRef.current = shell?.actionsRegistry || null;
+  openPropertiesDrawerRef.current = openPropertiesDrawer;
+
+  useDesignerWorkbenchEvents({
+    appId: 'bi-designer',
+    instanceId,
+    inShell,
+    shell,
+    onToolAction: (tool) => {
+      if (tool === 'checkpoints') {
+        setCheckpointOpen(true);
+        return;
+      }
+      if (tool === 'layers') {
+        const vals = viewOptions.map((o) => o.value);
+        if (vals.length > 0) {
+          const cur =
+            activeView ||
+            (biKind === 'dashboard' ? 'dashboard_composed' : 'question_chart');
+          const idx = vals.indexOf(cur);
+          const nextView = vals[(idx + 1) % vals.length];
+          setActiveView(nextView);
+          setBannerMessage(gettext('Switched BI DDN view to %s.', nextView));
+        }
+        return;
+      }
+      if (tool === 'align') {
+        if (typeof client?.computeLayout === 'function') {
+          client
+            .computeLayout(projectId, designId, {
+              version: sessionState.currentVersion ?? null,
+              viewId: activeView || undefined,
+            })
+            .then(() => refreshAll())
+            .catch(() => {});
+        }
+        setBannerMessage(gettext('Recomputed BI layout.'));
+        return;
+      }
+      if (tool === 'pointer' || tool === 'marquee') {
+        setCanvasToolMode(tool);
+        setBannerMessage(gettext('Active canvas tool: %s.', tool));
+        return;
+      }
+      if (tool === 'copy' || tool === 'cut') {
+        const target =
+          selectedCardItem?.raw ||
+          selectedFilterItem?.raw ||
+          selectedJoinItem?.raw ||
+          dashboardModel?.cards?.[0] ||
+          questionModel;
+        if (target) {
+          biClipboardRef.current = JSON.parse(JSON.stringify(target));
+          setBannerMessage(
+            gettext(
+              tool === 'cut'
+                ? 'Cut "%s" to designer clipboard.'
+                : 'Copied "%s" to designer clipboard.',
+              target.title || target.name || target.id || 'element'
+            )
+          );
+        }
+        return;
+      }
+      if (tool === 'paste') {
+        if (readOnly) return;
+        const clip = biClipboardRef.current;
+        if (biKind === 'dashboard') {
+          if (clip) {
+            setCardDraft((cur) => ({
+              ...cur,
+              title: `${clip.title || clip.name || clip.id || 'Card'} Copy`,
+              type: clip.type || 'question',
+            }));
+          }
+          setCardModalTab('add');
+          setCardOpen(true);
+        } else {
+          openQueryBuilder('dimensions_metrics');
+        }
+      }
+    },
+    onPaletteSelect: (paletteKind, itemId) => {
+      if (paletteKind === 'stencil') {
+        if (readOnly) return;
+        if (itemId === 'filter-widget') {
+          if (biKind === 'dashboard') {
+            openFiltersAndPinningModal();
+          } else {
+            openQueryBuilder('filters');
+          }
+          return;
+        }
+        if (itemId === 'drill-link') {
+          if (biKind === 'dashboard') {
+            handleDrillThroughWithContext();
+          } else {
+            openQueryBuilder('joins');
+          }
+          return;
+        }
+        if (biKind === 'dashboard') {
+          setCardDraft((cur) => ({
+            ...cur,
+            type: 'question',
+            visType: itemId === 'kpi-tile' ? 'kpi' : 'bar',
+            title:
+              itemId === 'kpi-tile' ? gettext('New KPI Tile') : gettext('New Chart Card'),
+          }));
+          setCardModalTab('add');
+          setCardOpen(true);
+        } else {
+          handleChartProfileChange(itemId === 'kpi-tile' ? 'kpi' : 'bar');
+        }
+        return;
+      }
+      if (paletteKind === 'udt') {
+        if (itemId === 'type-map') {
+          runToolbarCommand('bi.designer.sql_bridge', () =>
+            openSqlModal('compile')
+          );
+          return;
+        }
+        if (readOnly) return;
+        setFormatDraft((cur) => ({
+          ...cur,
+          ...(itemId === 'money-dec'
+            ? {number_format: 'currency', decimals: 4}
+            : {}),
+          ...(itemId === 'utc-ts' ? {date_grain: 'day'} : {}),
+        }));
+        setFormatOpen(true);
+      }
+    },
+  });
+
+  const ddnViewSelectNode = (
+    <Box sx={{minWidth: 180}}>
+      <Select
+        label={gettext('DDN view')}
+        size="small"
+        value={
+          activeView ||
+          (biKind === 'dashboard' ? 'dashboard_composed' : 'question_chart')
+        }
+        options={viewOptions}
+        onChange={setActiveView}
+      />
+    </Box>
+  );
+
   return (
     <Box
       component="section"
-      aria-label="BI Designer Surface"
+      aria-label={gettext('BI Designer Surface')}
+      data-canvas-tool={canvasToolMode}
       sx={{
         position: 'relative',
         display: 'flex',
@@ -2055,14 +2668,16 @@ export function BIDesignerSurface({
       <FormReference formKey="bi-designer-workspace" />
 
       <DesignerTabbedMenu
-        label="BI designer menu"
+        label={gettext('BI designer menu')}
         tabs={ribbonTabs}
         activeTab={activeMenuTab}
         onTabChange={setActiveMenuTab}
+        commands={commands}
+        shellTrailing={ddnViewSelectNode}
         leading={
           <StatusBadge
             status={statusTone(sessionState.status)}
-            label={`${biKind === 'dashboard' ? 'Dashboard' : 'Question'} v${
+            label={`${biKind === 'dashboard' ? gettext('Dashboard') : gettext('Question')} v${
               sessionState.currentVersion || 1
             } · ${sessionState.status || 'draft'}`}
           />
@@ -2075,20 +2690,7 @@ export function BIDesignerSurface({
                 label={`Active v${sessionState.activeVersion}`}
               />
             )}
-            <Box sx={{minWidth: 180}}>
-              <Select
-                label="DDN view"
-                size="small"
-                value={
-                  activeView ||
-                  (biKind === 'dashboard'
-                    ? 'dashboard_composed'
-                    : 'question_chart')
-                }
-                options={viewOptions}
-                onChange={setActiveView}
-              />
-            </Box>
+            {ddnViewSelectNode}
           </Stack>
         }
       />
@@ -2387,20 +2989,20 @@ export function BIDesignerSurface({
         )}
       </Box>
 
-      <ProgressOverlay message={loading ? 'Loading BI design…' : ''} />
+      <ProgressOverlay message={loading ? gettext('Loading BI design…') : ''} />
 
       {/* 1. Structured Query Builder & Parameters Dialog (`bi-designer-query`) */}
       <Dialog
         open={queryOpen}
-        title="Structured SBsql Query & Parameters"
+        title={gettext('Structured SBsql Query & Parameters')}
         size="large"
         busy={busy}
         onClose={() => setQueryOpen(false)}
         actions={
           <>
-            <Button onClick={() => setQueryOpen(false)}>Cancel</Button>
+            <Button onClick={() => setQueryOpen(false)}>{gettext('Cancel')}</Button>
             <Button intent="primary" loading={busy} onClick={applyStructuredQuery}>
-              Save Query Checkpoint
+              {gettext('Save Query Checkpoint')}
             </Button>
           </>
         }
@@ -2762,19 +3364,19 @@ export function BIDesignerSurface({
       {/* 2. Axis & Number Formatters Dialog (`bi-designer-chart`) */}
       <Dialog
         open={formatOpen}
-        title="Axis, Number, Currency & Date Formatters"
+        title={gettext('Axis, Number, Currency & Date Formatters')}
         size="medium"
         busy={busy}
         onClose={() => setFormatOpen(false)}
         actions={
           <>
-            <Button onClick={() => setFormatOpen(false)}>Cancel</Button>
+            <Button onClick={() => setFormatOpen(false)}>{gettext('Cancel')}</Button>
             <Button
               intent="primary"
               loading={busy}
               onClick={applyVisualizationFormat}
             >
-              Apply Formatters
+              {gettext('Apply Formatters')}
             </Button>
           </>
         }
@@ -2851,14 +3453,14 @@ export function BIDesignerSurface({
       {/* 3. SQL Bridge Dialog (Compile Dialect SQL & Import SQL into Question) */}
       <Dialog
         open={sqlOpen}
-        title="BI Dialect SQL Bridge"
+        title={gettext('BI Dialect SQL Bridge')}
         size="large"
         busy={busy}
         onClose={() => setSqlOpen(false)}
         actions={
           <>
-            <Button onClick={handleOpenInSqlEditor}>Open in SQL Editor</Button>
-            <Button onClick={() => setSqlOpen(false)}>Close</Button>
+            <Button onClick={handleOpenInSqlEditor}>{gettext('Open in SQL Editor')}</Button>
+            <Button onClick={() => setSqlOpen(false)}>{gettext('Close')}</Button>
           </>
         }
       >
@@ -3604,15 +4206,15 @@ export function BIDesignerSurface({
       {/* 9. Accept BI Version Dialog */}
       <Dialog
         open={acceptOpen}
-        title="Accept BI Design Version"
+        title={gettext('Accept BI Design Version')}
         size="small"
         busy={busy}
         onClose={() => setAcceptOpen(false)}
         actions={
           <>
-            <Button onClick={() => setAcceptOpen(false)}>Cancel</Button>
+            <Button onClick={() => setAcceptOpen(false)}>{gettext('Cancel')}</Button>
             <Button intent="primary" onClick={handleAcceptConfirm}>
-              Accept Version
+              {gettext('Accept Version')}
             </Button>
           </>
         }
@@ -4034,7 +4636,9 @@ BIDesignerSurface.propTypes = {
   client: PropTypes.object,
   controller: PropTypes.object,
   readOnly: PropTypes.bool,
+  commands: PropTypes.object,
   executeCommand: PropTypes.func,
+  onOpenInSqlEditor: PropTypes.func,
   onStateChange: PropTypes.func,
   onExport: PropTypes.func,
   onError: PropTypes.func,

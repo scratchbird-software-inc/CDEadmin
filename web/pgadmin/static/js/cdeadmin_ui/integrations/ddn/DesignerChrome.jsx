@@ -7,8 +7,16 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useEffect, useMemo, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button, IconButton} from '../../primitives/Button';
 import {NumberField, TextField} from '../../primitives/Field';
@@ -21,31 +29,1124 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
 import {Icon, inferActionIconKey} from '../../icons';
-import {t_actions} from '../../actions/t_actions';
+import {
+  T_ACTION_STATUS,
+  T_ACTION_TARGET_KIND,
+  t_actions,
+} from '../../actions/t_actions';
 import {ensureScratchBaseStyles} from '../../base/ScratchBaseStyles';
 import {ScratchScrollArea} from '../../base/ScratchScrollArea';
+import {
+  useProjectInstanceScope,
+  useProjectShell,
+} from '../../shell/ProjectShell';
+
+export const DESIGNER_TOOL_ACTION_EVENT = 'scratchrobin:designer-tool-action';
+export const DESIGNER_PALETTE_SELECT_EVENT =
+  'scratchrobin:designer-palette-select';
+export const BI_OPEN_SQL_EVENT = 'scratchrobin:open-sql-from-bi';
+
+const CANONICAL_DESIGNER_RBAC_ACTIONS = Object.freeze([
+  {id: 'erd.designer.save', app: 'erd-designer', label: 'Save Checkpoint'},
+  {id: 'erd.designer.accept', app: 'erd-designer', label: 'Accept'},
+  {id: 'erd.designer.convert', app: 'erd-designer', label: 'Engine Conversion'},
+  {
+    id: 'erd.designer.alter_plan',
+    app: 'erd-designer',
+    label: 'Alter Plan & Migration',
+  },
+  {id: 'cube.designer.save', app: 'cube-designer', label: 'Save Draft'},
+  {id: 'cube.designer.accept', app: 'cube-designer', label: 'Accept Cube'},
+  {
+    id: 'cube.designer.materialization_plan',
+    app: 'cube-designer',
+    label: 'Materialization DDL Plan',
+  },
+  {id: 'bi.designer.save', app: 'bi-designer', label: 'Save Draft'},
+  {id: 'bi.designer.accept', app: 'bi-designer', label: 'Accept'},
+  {
+    id: 'bi.designer.sql_bridge',
+    app: 'bi-designer',
+    label: 'Compile Dialect SQL',
+  },
+  {
+    id: 'bi.designer.outward_review',
+    app: 'bi-designer',
+    label: 'Subscriptions & Alerts',
+  },
+  {
+    id: 'screen_mesh.designer.save',
+    app: 'screen-mesh-designer',
+    label: 'Save Draft',
+  },
+  {
+    id: 'screen_mesh.designer.accept',
+    app: 'screen-mesh-designer',
+    label: 'Accept',
+  },
+  {
+    id: 'screen_mesh.designer.redact',
+    app: 'screen-mesh-designer',
+    label: 'Redact Sensitive Regions',
+  },
+]);
+
+export function ensureDesignerRbacActions(registry = t_actions) {
+  if (
+    !registry ||
+    typeof registry.has !== 'function' ||
+    typeof registry.register !== 'function'
+  ) {
+    return;
+  }
+  CANONICAL_DESIGNER_RBAC_ACTIONS.forEach((spec) => {
+    if (!registry.has(spec.id)) {
+      try {
+        registry.register({
+          id: spec.id,
+          application: spec.app,
+          focusScoped: false,
+          defaultText: gettext(spec.label),
+          defaultHint: gettext(spec.label),
+          icon: inferActionIconKey({name: spec.id, label: spec.label}),
+          permission: [spec.id],
+          status: T_ACTION_STATUS.ENABLED,
+          target: {
+            kind: T_ACTION_TARGET_KIND.CLIENT,
+            invoke: (args) => args?.invoke?.(),
+          },
+        });
+      } catch {
+        // Ignore duplicate or custom-registry registration mismatches.
+      }
+    }
+  });
+}
+
+function resolveFromRegistry(actionId, registry) {
+  if (!actionId || !registry) return null;
+  if (
+    typeof registry.has === 'function' &&
+    typeof registry.resolve === 'function'
+  ) {
+    if (registry.has(actionId)) {
+      try {
+        return registry.resolve(actionId);
+      } catch {
+        return null;
+      }
+    }
+    const canonical = CANONICAL_DESIGNER_RBAC_ACTIONS.find(
+      (spec) => spec.id === actionId
+    );
+    if (!canonical) return null;
+    const currentUser = registry.getCurrentUser?.() || null;
+    let enabled = true;
+    if (
+      currentUser &&
+      !currentUser.is_admin &&
+      !currentUser.is_superuser
+    ) {
+      const perms = new Set(currentUser.permissions || []);
+      enabled = perms.has(canonical.id);
+    }
+    return {
+      id: canonical.id,
+      text: gettext(canonical.label),
+      hint: gettext(canonical.label),
+      icon: inferActionIconKey({name: canonical.id, label: canonical.label}),
+      permission: [canonical.id],
+      enabled,
+      visible: true,
+      status: enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+    };
+  }
+  if (typeof registry.get === 'function') {
+    const cmd = registry.get(actionId);
+    if (!cmd) return null;
+    const enabled = cmd.enabled !== false && cmd.status !== 'disabled';
+    const visible = cmd.visible !== false && cmd.status !== 'invisible';
+    return {
+      id: actionId,
+      text: cmd.title || cmd.label || '',
+      hint: cmd.description || cmd.hint || '',
+      icon: cmd.icon || '',
+      permission: cmd.permission || [],
+      enabled,
+      visible,
+      status: !visible
+        ? T_ACTION_STATUS.INVISIBLE
+        : enabled
+          ? T_ACTION_STATUS.ENABLED
+          : T_ACTION_STATUS.DISABLED,
+    };
+  }
+  return null;
+}
+
+export function isDesignerCommandEnabled(
+  commandId,
+  commands = t_actions,
+  shellRegistry = null
+) {
+  const primary = resolveFromRegistry(commandId, commands);
+  if (primary && (!primary.visible || !primary.enabled)) {
+    return false;
+  }
+  const secondary =
+    shellRegistry && shellRegistry !== commands
+      ? resolveFromRegistry(commandId, shellRegistry)
+      : null;
+  if (secondary && (!secondary.visible || !secondary.enabled)) {
+    return false;
+  }
+  return true;
+}
+
+export async function executeDesignerCommand({
+  commandId,
+  invoke,
+  executeCommand = null,
+  commands = t_actions,
+  shellRegistry = null,
+  enabled = true,
+}) {
+  if (typeof executeCommand === 'function') {
+    return await executeCommand(commandId, {enabled, invoke});
+  }
+  ensureDesignerRbacActions(commands);
+  if (shellRegistry && shellRegistry !== commands) {
+    ensureDesignerRbacActions(shellRegistry);
+  }
+  if (
+    !enabled ||
+    !isDesignerCommandEnabled(commandId, commands, shellRegistry)
+  ) {
+    const err = new Error(gettext('Action is disabled: %s', commandId));
+    err.code = 'action_disabled';
+    throw err;
+  }
+  return await invoke?.();
+}
+
+function useRegistryRevision(registry) {
+  const revRef = useRef(0);
+  const subscribe = useCallback(
+    (onStoreChange) => {
+      if (!registry || typeof registry.subscribe !== 'function') {
+        return () => {};
+      }
+      return registry.subscribe(() => {
+        revRef.current += 1;
+        onStoreChange();
+      });
+    },
+    [registry]
+  );
+  const getSnapshot = useCallback(() => revRef.current, []);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+function sanitizeActionSegment(raw, fallback = 'item') {
+  const cleaned = String(raw || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!cleaned) return fallback;
+  return /^[a-z]/.test(cleaned) ? cleaned : `n_${cleaned}`;
+}
+
+function createSlotChannel(initialValues = {}) {
+  let state = {...initialValues};
+  const listeners = new Set();
+  return {
+    getState: () => state,
+    publish(patch) {
+      let changed = false;
+      const next = {...state};
+      Object.entries(patch || {}).forEach(([k, v]) => {
+        if (next[k] !== v) {
+          next[k] = v;
+          changed = true;
+        }
+      });
+      if (changed) {
+        state = next;
+        listeners.forEach((fn) => fn());
+      }
+    },
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+  };
+}
+
+function ShellSlotOutlet({channel, slot}) {
+  const snapshot = useSyncExternalStore(
+    channel.subscribe,
+    channel.getState,
+    channel.getState
+  );
+  return snapshot?.[slot] ?? null;
+}
+
+ShellSlotOutlet.propTypes = {
+  channel: PropTypes.object.isRequired,
+  slot: PropTypes.string.isRequired,
+};
+
+function ShellLeftDrawerBridge({channel, getHostRender, instance}) {
+  const snapshot = useSyncExternalStore(
+    channel.subscribe,
+    channel.getState,
+    channel.getState
+  );
+  const [mode, setMode] = useState('elements');
+  const hostRender = getHostRender?.();
+  const elementNode = snapshot?.left ?? null;
+
+  if (!hostRender) {
+    return elementNode;
+  }
+  if (!elementNode) {
+    return hostRender(instance);
+  }
+
+  return (
+    <Box sx={{display: 'flex', flexDirection: 'column', minHeight: '100%'}}>
+      <Box
+        role="tablist"
+        aria-label={gettext('Left drawer mode')}
+        sx={{
+          display: 'flex',
+          gap: 0.25,
+          px: 0.75,
+          pt: 0.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Tab
+          label={gettext('Elements')}
+          active={mode === 'elements'}
+          onActivate={() => setMode('elements')}
+        />
+        <Tab
+          label={gettext('Designs')}
+          active={mode === 'designs'}
+          onActivate={() => setMode('designs')}
+        />
+      </Box>
+      <Box sx={{flex: 1, minHeight: 0}}>
+        {mode === 'designs' ? hostRender(instance) : elementNode}
+      </Box>
+    </Box>
+  );
+}
+
+ShellLeftDrawerBridge.propTypes = {
+  channel: PropTypes.object.isRequired,
+  getHostRender: PropTypes.func,
+  instance: PropTypes.object,
+};
+
+/**
+ * Formats canonical design save-point statuses for Area 3d Status Bar.
+ */
+export function formatSavePointStatusLabel(status) {
+  const norm = String(status || 'draft')
+    .trim()
+    .toLowerCase();
+  if (norm === 'accepted') return gettext('Accepted');
+  if (norm === 'in_review' || norm === 'in-review') return gettext('In-review');
+  if (norm === 'in_progress' || norm === 'in-progress') {
+    return gettext('In-progress');
+  }
+  return gettext('Draft');
+}
+
+/**
+ * Shared Area 3d Status Bar strip for DDN task designers inside ProjectShell.
+ */
+export function DesignerShellStatusBar({
+  title = '',
+  version = 1,
+  status = 'draft',
+  engine = '',
+  suspectCount = 0,
+  extra = null,
+}) {
+  const statusLabel = formatSavePointStatusLabel(status);
+  const norm = String(status || 'draft').toLowerCase();
+  const statusTone =
+    norm === 'accepted'
+      ? 'success'
+      : norm === 'in_review' || norm === 'in-review'
+        ? 'warning'
+        : 'info';
+  const hasSuspect = Number(suspectCount) > 0;
+
+  return (
+    <Box
+      data-cdeadmin-qa-key="designer-shell-status"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 1,
+        fontSize: '0.75rem',
+      }}
+    >
+      {title && <strong>{title}</strong>}
+      <Box component="span">v{version || 1}</Box>
+      <StatusBadge status={statusTone} label={statusLabel} />
+      {engine && (
+        <Box component="span">
+          {gettext('Engine')}: {engine}
+        </Box>
+      )}
+      <StatusBadge
+        status={hasSuspect ? 'warning' : 'success'}
+        label={
+          hasSuspect
+            ? `${suspectCount} ${gettext('suspect')}`
+            : gettext('valid')
+        }
+      />
+      {extra}
+    </Box>
+  );
+}
+
+DesignerShellStatusBar.propTypes = {
+  title: PropTypes.string,
+  version: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  status: PropTypes.string,
+  engine: PropTypes.string,
+  suspectCount: PropTypes.number,
+  extra: PropTypes.node,
+};
+
+/**
+ * Shared Area 3a Model / Element Navigator tree for ERD, Cube, BI and Screen Mesh.
+ */
+export function DesignerElementNavigator({
+  title,
+  sections = [],
+  emptyMessage = '',
+  footer = null,
+}) {
+  return (
+    <Box
+      role="navigation"
+      aria-label={title || gettext('Model Navigator')}
+      data-cdeadmin-qa-key="designer-element-navigator"
+      sx={{p: 1, display: 'flex', flexDirection: 'column', gap: 1}}
+    >
+      {title && (
+        <Box sx={{fontSize: '0.8125rem', fontWeight: 700}}>{title}</Box>
+      )}
+      {sections.map((section) => {
+        const items = section.items || [];
+        return (
+          <Box
+            key={section.id}
+            role="group"
+            aria-label={section.label}
+            sx={{display: 'flex', flexDirection: 'column', gap: 0.375}}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.03em',
+                color: 'text.secondary',
+              }}
+            >
+              <span>{section.label}</span>
+              <span>{items.length}</span>
+            </Box>
+            {items.length === 0 ? (
+              <Box sx={{fontSize: '0.75rem', color: 'text.secondary', pl: 0.5}}>
+                {section.emptyText ||
+                  emptyMessage ||
+                  gettext('No elements in this section.')}
+              </Box>
+            ) : (
+              <Stack gap="compact">
+                {items.map((item) => (
+                  <Button
+                    key={item.id}
+                    size="small"
+                    intent={item.active ? 'primary' : 'neutral'}
+                    onClick={() => item.onSelect?.(item)}
+                    data-cdeadmin-qa-key={`navigator-item.${item.id}`}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        gap: 0.5,
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {item.sublabel ? (
+                        <Box
+                          component="span"
+                          sx={{fontSize: '0.6875rem', opacity: 0.8}}
+                        >
+                          {item.sublabel}
+                        </Box>
+                      ) : null}
+                    </Box>
+                  </Button>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        );
+      })}
+      {footer}
+    </Box>
+  );
+}
+
+DesignerElementNavigator.propTypes = {
+  title: PropTypes.string,
+  sections: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      label: PropTypes.string.isRequired,
+      emptyText: PropTypes.string,
+      items: PropTypes.arrayOf(
+        PropTypes.shape({
+          id: PropTypes.string.isRequired,
+          label: PropTypes.string.isRequired,
+          sublabel: PropTypes.string,
+          active: PropTypes.bool,
+          onSelect: PropTypes.func,
+        })
+      ),
+    })
+  ),
+  emptyMessage: PropTypes.string,
+  footer: PropTypes.node,
+};
+
+/**
+ * Cooperative 6-Region Shell Anatomy bridge (`A2`) for DDN task designers.
+ * Publishes Area 3a (Model/Element Navigator), Area 3c (Properties Inspector),
+ * Area 3d (Status Bar), and Area 3b1 (`quickActions`) onto the active
+ * `ProjectShell` instance without render loops, restoring defaults on unmount.
+ */
+export function useDesignerShellRegions({
+  title = '',
+  statusNode = null,
+  statusText = '',
+  leftDrawerNode = null,
+  rightDrawerNode = null,
+  rightOpen = true,
+  quickActions = null,
+} = {}) {
+  const shell = useProjectShell();
+  const scope = useProjectInstanceScope();
+  const instanceId = scope?.instanceId || null;
+  const inShell = Boolean(shell && instanceId);
+  const updateInstance = shell?.updateInstance || null;
+
+  const channelRef = useRef(null);
+  if (!channelRef.current) {
+    channelRef.current = createSlotChannel({
+      left: leftDrawerNode,
+      right: rightDrawerNode,
+      status: statusNode,
+    });
+  }
+
+  const latestRef = useRef({
+    quickActions,
+    statusText,
+    title,
+  });
+  latestRef.current = {
+    quickActions,
+    statusText,
+    title,
+  };
+
+  useEffect(() => {
+    channelRef.current.publish({
+      left: leftDrawerNode,
+      right: rightDrawerNode,
+      status: statusNode,
+    });
+  }, [leftDrawerNode, rightDrawerNode, statusNode]);
+
+  const baselineRef = useRef(null);
+  const initialRightOpenRef = useRef(rightOpen);
+  initialRightOpenRef.current = rightOpen;
+
+  const buildQuickActionsProxy = useCallback(() => {
+    const qa = latestRef.current.quickActions || {};
+    return {
+      onNew:
+        typeof qa.onNew === 'function'
+          ? (...args) => latestRef.current.quickActions?.onNew?.(...args)
+          : undefined,
+      onSave:
+        typeof qa.onSave === 'function'
+          ? (...args) => latestRef.current.quickActions?.onSave?.(...args)
+          : undefined,
+      onUndo:
+        typeof qa.onUndo === 'function'
+          ? (...args) => latestRef.current.quickActions?.onUndo?.(...args)
+          : undefined,
+      onRedo:
+        typeof qa.onRedo === 'function'
+          ? (...args) => latestRef.current.quickActions?.onRedo?.(...args)
+          : undefined,
+    };
+  }, []);
+
+  const shellRef = useRef(shell);
+  shellRef.current = shell;
+
+  useEffect(() => {
+    if (!inShell || !updateInstance || !instanceId) return undefined;
+    const channel = channelRef.current;
+    baselineRef.current = null;
+
+    updateInstance(instanceId, (prev) => {
+      baselineRef.current = {
+        supportsLeftDrawer: prev.supportsLeftDrawer,
+        leftOpen: prev.leftOpen,
+        renderLeftDrawer: prev.renderLeftDrawer,
+        supportsRightDrawer: prev.supportsRightDrawer,
+        rightOpen: prev.rightOpen,
+        rightMode: prev.rightMode,
+        rightViews: prev.rightViews,
+        renderRightDrawer: prev.renderRightDrawer,
+        renderStatus: prev.renderStatus,
+        statusText: prev.statusText,
+        quickActions: prev.quickActions,
+      };
+      return {
+        supportsLeftDrawer: true,
+        renderLeftDrawer: (inst) => (
+          <ShellLeftDrawerBridge
+            channel={channel}
+            getHostRender={() => baselineRef.current?.renderLeftDrawer}
+            instance={inst}
+          />
+        ),
+        supportsRightDrawer: true,
+        rightOpen: Boolean(initialRightOpenRef.current),
+        rightMode: 'properties',
+        rightViews: [{id: 'properties', label: gettext('Properties')}],
+        renderRightDrawer: () => (
+          <ShellSlotOutlet channel={channel} slot="right" />
+        ),
+        renderStatus: () => <ShellSlotOutlet channel={channel} slot="status" />,
+        statusText: latestRef.current.statusText || prev.statusText || '',
+        quickActions: buildQuickActionsProxy(),
+      };
+    });
+
+    if (
+      shellRef.current?.focusedId === instanceId &&
+      !shellRef.current?.shellLeftDrawerOpen
+    ) {
+      updateInstance(instanceId, {supportsLeftDrawer: true, leftOpen: false});
+      shellRef.current.toggleLeftDrawer?.();
+    }
+
+    return () => {
+      const saved = baselineRef.current;
+      baselineRef.current = null;
+      if (saved) {
+        updateInstance(instanceId, () => ({...saved}));
+      }
+    };
+  }, [inShell, instanceId, updateInstance, buildQuickActionsProxy]);
+
+  const quickSig = [
+    typeof quickActions?.onNew === 'function' ? '1' : '0',
+    typeof quickActions?.onSave === 'function' ? '1' : '0',
+    typeof quickActions?.onUndo === 'function' ? '1' : '0',
+    typeof quickActions?.onRedo === 'function' ? '1' : '0',
+  ].join(':');
+  const scalarSig = `${title || ''}||${statusText || ''}||${quickSig}`;
+  const lastScalarSigRef = useRef('');
+
+  useEffect(() => {
+    if (!inShell || !updateInstance || !instanceId) return;
+    if (lastScalarSigRef.current === scalarSig) return;
+    lastScalarSigRef.current = scalarSig;
+    updateInstance(instanceId, (prev) => ({
+      ...(title ? {title} : {}),
+      statusText: statusText || prev.statusText || '',
+      quickActions: buildQuickActionsProxy(),
+    }));
+  }, [inShell, instanceId, updateInstance, scalarSig, title, statusText, buildQuickActionsProxy]);
+
+  const openPropertiesDrawer = useCallback(() => {
+    if (!inShell || !updateInstance || !instanceId) return;
+    updateInstance(instanceId, {
+      supportsRightDrawer: true,
+      rightOpen: true,
+      rightMode: 'properties',
+    });
+  }, [inShell, instanceId, updateInstance]);
+
+  return {
+    inShell,
+    shell,
+    instanceId,
+    openPropertiesDrawer,
+  };
+}
+
+/**
+ * Subscribes active designer surface to `scratchrobin:designer-tool-action`
+ * and `scratchrobin:designer-palette-select` workbench events.
+ */
+export function useDesignerWorkbenchEvents({
+  appId,
+  instanceId = null,
+  inShell = false,
+  shell = null,
+  onToolAction = null,
+  onPaletteSelect = null,
+}) {
+  const latestRef = useRef({
+    appId,
+    instanceId,
+    inShell,
+    focusedId: shell?.focusedId || null,
+    onToolAction,
+    onPaletteSelect,
+  });
+  latestRef.current = {
+    appId,
+    instanceId,
+    inShell,
+    focusedId: shell?.focusedId || null,
+    onToolAction,
+    onPaletteSelect,
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const matchesActiveInstance = (detail) => {
+      const cur = latestRef.current;
+      if (detail?.appId && cur.appId && detail.appId !== cur.appId) {
+        return false;
+      }
+      if (cur.inShell && cur.instanceId) {
+        if (detail?.instanceId && detail.instanceId !== cur.instanceId) {
+          return false;
+        }
+        if (
+          !detail?.instanceId &&
+          cur.focusedId &&
+          cur.focusedId !== cur.instanceId
+        ) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const handleTool = (event) => {
+      const detail = event?.detail || {};
+      if (!detail.tool || !matchesActiveInstance(detail)) return;
+      latestRef.current.onToolAction?.(detail.tool, detail);
+    };
+
+    const handlePalette = (event) => {
+      const detail = event?.detail || {};
+      if (!detail.kind || !detail.itemId || !matchesActiveInstance(detail)) {
+        return;
+      }
+      latestRef.current.onPaletteSelect?.(detail.kind, detail.itemId, detail);
+    };
+
+    window.addEventListener(DESIGNER_TOOL_ACTION_EVENT, handleTool);
+    window.addEventListener(DESIGNER_PALETTE_SELECT_EVENT, handlePalette);
+    return () => {
+      window.removeEventListener(DESIGNER_TOOL_ACTION_EVENT, handleTool);
+      window.removeEventListener(DESIGNER_PALETTE_SELECT_EVENT, handlePalette);
+    };
+  }, []);
+}
 
 /**
  * Grouped tabbed-menu ribbon for ScratchRobin's four DDN task designers.
- * Replaces flat wrapping button walls with structured category tabs,
- * semantic command icons, `t_actions` status awareness, and standard `[x]` close.
+ * When mounted inside `ProjectShell` (`inShell === true`), promotes all
+ * categories, groups, and button items onto Area `3b` (`shell.actionsRegistry`
+ * + `ribbonTabs` + `renderToolbarExtras`) and renders `null` inside Area `3e`.
+ * When rendered standalone (`!inShell`), renders the accessible DOM toolbar.
  */
 export function DesignerTabbedMenu({
-  label = 'Designer menu',
+  label = gettext('Designer menu'),
   tabs = [],
   activeTab: controlledTab,
   onTabChange,
   leading = null,
   trailing = null,
+  shellTrailing,
   onClose = null,
+  commands = t_actions,
 }) {
+  const shell = useProjectShell();
+  const scope = useProjectInstanceScope();
+  const instanceId = scope?.instanceId || null;
+  const inShell = Boolean(shell && instanceId);
+  const updateInstance = shell?.updateInstance || null;
+  const shellActions = shell?.actionsRegistry || null;
+
+  useEffect(() => {
+    ensureDesignerRbacActions(commands);
+    if (shellActions && shellActions !== commands) {
+      ensureDesignerRbacActions(shellActions);
+    }
+  }, [commands, shellActions]);
+
+  const cmdRev = useRegistryRevision(commands);
+  const shellRev = useRegistryRevision(shellActions);
+
   const [internalTab, setInternalTab] = useState(tabs[0]?.id || '');
   const currentId = controlledTab ?? internalTab;
   const active = tabs.find((tab) => tab.id === currentId) || tabs[0] || null;
-  const selectTab = (tabId) => {
-    if (controlledTab === undefined) setInternalTab(tabId);
-    onTabChange?.(tabId);
-  };
+  const selectTab = useCallback(
+    (tabId) => {
+      if (controlledTab === undefined) setInternalTab(tabId);
+      onTabChange?.(tabId);
+    },
+    [controlledTab, onTabChange]
+  );
+
+  const handlersRef = useRef(new Map());
+  const registeredActionIdsRef = useRef(new Set());
+  const hostBaselineRef = useRef(null);
+  const extrasChannelRef = useRef(null);
+  if (!extrasChannelRef.current) {
+    extrasChannelRef.current = createSlotChannel({extras: null});
+  }
+
+  const effectiveShellTrailing =
+    shellTrailing !== undefined ? shellTrailing : trailing;
+
+  const shellPromotion = useMemo(() => {
+    if (!inShell || !instanceId) return null;
+    const safeInst = sanitizeActionSegment(instanceId, 'inst');
+    const nextHandlers = new Map();
+    const actions = [];
+    const groups = [];
+    const customNodes = [];
+
+    if (tabs.length > 1) {
+      const catControls = [];
+      tabs.forEach((tab, tIdx) => {
+        const catActionId = `designer.cat.${safeInst}.${sanitizeActionSegment(
+          tab.id,
+          `t${tIdx}`
+        )}`;
+        const isSelected = tab.id === active?.id;
+        catControls.push(catActionId);
+        nextHandlers.set(catActionId, () => selectTab(tab.id));
+        actions.push({
+          id: catActionId,
+          focusScoped: true,
+          icon:
+            tab.icon ||
+            tab.iconKey ||
+            inferActionIconKey({name: tab.id, label: tab.label}) ||
+            'view.toolbar',
+          defaultText: tab.label,
+          defaultHint: `${label}: ${tab.label}`,
+          status: tab.disabled
+            ? T_ACTION_STATUS.DISABLED
+            : T_ACTION_STATUS.ENABLED,
+          checked: Boolean(isSelected),
+          target: {
+            kind: T_ACTION_TARGET_KIND.CLIENT,
+            invoke: () => handlersRef.current.get(catActionId)?.(),
+          },
+        });
+      });
+      groups.push({
+        id: 'designer-categories',
+        label: gettext('Categories'),
+        actions: catControls,
+        controls: catControls,
+      });
+    }
+
+    (active?.groups || []).forEach((group, gIdx) => {
+      const grpControls = [];
+      (group.items || []).forEach((item, iIdx) => {
+        if (typeof item.render === 'function') {
+          customNodes.push({
+            key: item.id || `custom_${gIdx}_${iIdx}`,
+            render: item.render,
+          });
+          return;
+        }
+        const rbacId =
+          item.actionId ||
+          (resolveFromRegistry(item.id, commands) ||
+          resolveFromRegistry(item.id, shellActions)
+            ? item.id
+            : null);
+        const resolvedCmd = rbacId
+          ? resolveFromRegistry(rbacId, commands)
+          : null;
+        const resolvedShell =
+          rbacId && shellActions && shellActions !== commands
+            ? resolveFromRegistry(rbacId, shellActions)
+            : null;
+        if (
+          (resolvedCmd && !resolvedCmd.visible) ||
+          (resolvedShell && !resolvedShell.visible)
+        ) {
+          return;
+        }
+        const baseLabel = item.label || resolvedCmd?.text || item.id;
+        const displayLabel =
+          item.badge !== undefined && item.badge !== null && item.badge !== ''
+            ? `${baseLabel} (${item.badge})`
+            : baseLabel;
+        const hint = resolvedCmd?.hint || item.hint || displayLabel;
+        const iconKey =
+          resolvedCmd?.icon ||
+          item.icon ||
+          item.iconKey ||
+          inferActionIconKey({name: rbacId || item.id, label: baseLabel}) ||
+          'command.default';
+        const isDisabled =
+          Boolean(item.disabled) ||
+          (resolvedCmd ? !resolvedCmd.enabled : false) ||
+          (resolvedShell ? !resolvedShell.enabled : false);
+        const itemActionId = `designer.cmd.${safeInst}.${sanitizeActionSegment(
+          active?.id || 'main',
+          'tab'
+        )}.${sanitizeActionSegment(
+          item.id || item.label,
+          `item_${gIdx}_${iIdx}`
+        )}`;
+
+        grpControls.push(itemActionId);
+        nextHandlers.set(itemActionId, () => {
+          if (item.onClick) {
+            return item.onClick();
+          }
+          if (resolvedCmd && typeof commands?.execute === 'function') {
+            return commands.execute(resolvedCmd.id);
+          }
+          return undefined;
+        });
+        actions.push({
+          id: itemActionId,
+          focusScoped: true,
+          icon: iconKey,
+          defaultText: displayLabel,
+          defaultHint: hint,
+          permission: item.permission || resolvedCmd?.permission || [],
+          status: isDisabled
+            ? T_ACTION_STATUS.DISABLED
+            : T_ACTION_STATUS.ENABLED,
+          ...(typeof item.active === 'boolean'
+            ? {checked: Boolean(item.active)}
+            : {}),
+          target: {
+            kind: T_ACTION_TARGET_KIND.CLIENT,
+            invoke: () => handlersRef.current.get(itemActionId)?.(),
+          },
+        });
+      });
+
+      if (grpControls.length > 0) {
+        groups.push({
+          id: sanitizeActionSegment(
+            group.id || group.label,
+            `grp_${gIdx}`
+          ),
+          label: group.label || active?.label || label,
+          actions: grpControls,
+          controls: grpControls,
+        });
+      }
+    });
+
+    const signature = [
+      label,
+      actions
+        .map(
+          (a) =>
+            `${a.id}:${a.defaultText}:${a.icon}:${a.status}:${
+              typeof a.checked === 'boolean' ? a.checked : ''
+            }`
+        )
+        .join('|'),
+      groups.map((g) => `${g.id}:${g.label}:${g.controls.join(',')}`).join(';'),
+    ].join('##');
+
+    return {
+      actions,
+      groups,
+      customNodes,
+      nextHandlers,
+      signature,
+    };
+  }, [
+    inShell,
+    instanceId,
+    tabs,
+    active,
+    label,
+    selectTab,
+    commands,
+    shellActions,
+    cmdRev,
+    shellRev,
+  ]);
+
+  if (shellPromotion) {
+    handlersRef.current = shellPromotion.nextHandlers;
+  }
+
+  useEffect(() => {
+    if (!inShell) return;
+    const customNodes = shellPromotion?.customNodes || [];
+    const hasExtras =
+      customNodes.length > 0 || Boolean(effectiveShellTrailing);
+    const extrasNode = hasExtras ? (
+      <Box
+        data-cdeadmin-qa-key="designer-3b-extras"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 1,
+        }}
+      >
+        {customNodes.map((entry) => (
+          <Box
+            key={entry.key}
+            sx={{display: 'inline-flex', alignItems: 'center'}}
+          >
+            {entry.render()}
+          </Box>
+        ))}
+        {effectiveShellTrailing}
+      </Box>
+    ) : null;
+    extrasChannelRef.current.publish({extras: extrasNode});
+  }, [inShell, shellPromotion, effectiveShellTrailing]);
+
+  const latestPromotionRef = useRef(shellPromotion);
+  latestPromotionRef.current = shellPromotion;
+  const promotionSig = shellPromotion?.signature || '';
+
+  useEffect(() => {
+    if (!inShell || !updateInstance || !instanceId) return undefined;
+    const promo = latestPromotionRef.current;
+    if (!promo) return undefined;
+
+    const prevRegistered = registeredActionIdsRef.current;
+    const nextRegistered = new Set(promo.actions.map((a) => a.id));
+    prevRegistered.forEach((oldId) => {
+      if (!nextRegistered.has(oldId)) {
+        shellActions?.unregister?.(oldId);
+      }
+    });
+    registeredActionIdsRef.current = nextRegistered;
+
+    const extrasChannel = extrasChannelRef.current;
+    updateInstance(instanceId, (prev) => {
+      if (!hostBaselineRef.current) {
+        hostBaselineRef.current = {
+          actions: [...(prev.actions || [])],
+          ribbonTabs: [...(prev.ribbonTabs || [])],
+          ribbonGroups: (prev.ribbonTabs || []).flatMap(
+            (rt) => rt.groups || []
+          ),
+          renderToolbarExtras: prev.renderToolbarExtras || null,
+        };
+      }
+      const hostActions = (hostBaselineRef.current.actions || []).filter(
+        (a) => a?.id && !nextRegistered.has(a.id)
+      );
+      const hostGroups = hostBaselineRef.current.ribbonGroups || [];
+      const hostExtras = hostBaselineRef.current.renderToolbarExtras;
+
+      return {
+        supportsTabbedIconBar: true,
+        actions: [...promo.actions, ...hostActions],
+        ribbonTabs: [
+          {
+            id: 'designer-commands',
+            label: prev.title || label,
+            groups: [...promo.groups, ...hostGroups],
+          },
+        ],
+        renderToolbarExtras: (inst, sh) => {
+          const baseNode =
+            typeof hostExtras === 'function' ? hostExtras(inst, sh) : null;
+          return (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1,
+                width: '100%',
+              }}
+            >
+              {baseNode}
+              <ShellSlotOutlet channel={extrasChannel} slot="extras" />
+            </Box>
+          );
+        },
+      };
+    });
+
+    return undefined;
+  }, [inShell, instanceId, updateInstance, shellActions, promotionSig, label]);
+
+  useEffect(() => {
+    if (!inShell || !updateInstance || !instanceId) return undefined;
+    return () => {
+      registeredActionIdsRef.current.forEach((id) => {
+        shellActions?.unregister?.(id);
+      });
+      registeredActionIdsRef.current = new Set();
+      const saved = hostBaselineRef.current;
+      hostBaselineRef.current = null;
+      if (saved) {
+        updateInstance(instanceId, () => ({
+          actions: saved.actions,
+          ribbonTabs: saved.ribbonTabs,
+          renderToolbarExtras: saved.renderToolbarExtras,
+        }));
+      }
+    };
+  }, [inShell, instanceId, updateInstance, shellActions]);
+
+  if (inShell) {
+    return null;
+  }
 
   return (
     <Box
@@ -78,7 +1179,7 @@ export function DesignerTabbedMenu({
         )}
         <Box
           role="tablist"
-          aria-label={`${label} categories`}
+          aria-label={`${label} ${gettext('categories')}`}
           sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.25}}
         >
           {tabs.map((tab) => (
@@ -107,7 +1208,7 @@ export function DesignerTabbedMenu({
             {trailing}
             {onClose && (
               <IconButton
-                label={`Close ${label}`}
+                label={gettext('Close %s', label)}
                 data-cdeadmin-qa-key="designer-tabbed-menu-close"
                 onClick={onClose}
               >
@@ -120,7 +1221,7 @@ export function DesignerTabbedMenu({
       {active && (
         <Box
           role="tabpanel"
-          aria-label={`${active.label} commands`}
+          aria-label={`${active.label} ${gettext('commands')}`}
           data-cdeadmin-qa-key={`designer-menu-panel.${active.id}`}
           sx={{
             display: 'flex',
@@ -175,25 +1276,34 @@ export function DesignerTabbedMenu({
                 {(group.items || []).map((item, itemIdx) => {
                   if (item.render) {
                     return (
-                      <Box key={item.id || itemIdx} sx={{display: 'inline-flex', alignItems: 'center'}}>
+                      <Box
+                        key={item.id || itemIdx}
+                        sx={{display: 'inline-flex', alignItems: 'center'}}
+                      >
                         {item.render()}
                       </Box>
                     );
                   }
-                  const resolvedAction =
-                    item.actionId && t_actions.has(item.actionId)
-                      ? t_actions.resolve(item.actionId)
-                      : null;
+                  const rbacId =
+                    item.actionId ||
+                    (resolveFromRegistry(item.id, commands) ? item.id : null);
+                  const resolvedAction = rbacId
+                    ? resolveFromRegistry(rbacId, commands)
+                    : null;
                   if (resolvedAction && !resolvedAction.visible) {
                     return null;
                   }
-                  const buttonLabel = resolvedAction?.text || item.label;
+                  const buttonLabel =
+                    item.label || resolvedAction?.text || item.id;
                   const buttonHint = resolvedAction?.hint || item.hint || '';
                   const iconKey =
                     resolvedAction?.icon ||
                     item.icon ||
                     item.iconKey ||
-                    inferActionIconKey({name: item.id, label: buttonLabel}) ||
+                    inferActionIconKey({
+                      name: rbacId || item.id,
+                      label: buttonLabel,
+                    }) ||
                     'command.default';
                   const isDisabled =
                     Boolean(item.disabled) ||
@@ -203,24 +1313,32 @@ export function DesignerTabbedMenu({
                       key={item.id || item.label || itemIdx}
                       size="small"
                       intent={
-                        item.intent ||
-                        (item.active ? 'primary' : 'neutral')
+                        item.intent || (item.active ? 'primary' : 'neutral')
                       }
                       title={buttonHint || undefined}
                       disabled={isDisabled}
                       onClick={
                         item.onClick ||
-                        (resolvedAction
-                          ? () => t_actions.execute(resolvedAction.id)
+                        (resolvedAction && typeof commands?.execute === 'function'
+                          ? () => commands.execute(resolvedAction.id)
                           : undefined)
                       }
                       data-cdeadmin-qa-key={item.qaKey || item.id || undefined}
                     >
-                      <Box component="span" sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                        }}
+                      >
                         <Icon iconKey={iconKey} decorative size="0.95em" />
                         <span>
                           {buttonLabel}
-                          {item.badge !== undefined && item.badge !== null && item.badge !== ''
+                          {item.badge !== undefined &&
+                          item.badge !== null &&
+                          item.badge !== ''
                             ? ` (${item.badge})`
                             : ''}
                         </span>
@@ -243,6 +1361,8 @@ DesignerTabbedMenu.propTypes = {
     PropTypes.shape({
       id: PropTypes.string.isRequired,
       label: PropTypes.string.isRequired,
+      icon: PropTypes.string,
+      iconKey: PropTypes.string,
       attention: PropTypes.bool,
       dirty: PropTypes.bool,
       disabled: PropTypes.bool,
@@ -259,7 +1379,9 @@ DesignerTabbedMenu.propTypes = {
   onTabChange: PropTypes.func,
   leading: PropTypes.node,
   trailing: PropTypes.node,
+  shellTrailing: PropTypes.node,
   onClose: PropTypes.func,
+  commands: PropTypes.object,
 };
 
 /**
@@ -289,7 +1411,7 @@ export function DesignerModalTabs({
       {tabs.length > 1 && (
         <Box
           role="tablist"
-          aria-label="Dialog sections"
+          aria-label={gettext('Dialog sections')}
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -382,8 +1504,8 @@ export function TypedRowsEditor({
   columns = [],
   rows = [],
   onChange,
-  addLabel = 'Add row',
-  emptyText = 'No entries configured.',
+  addLabel = gettext('Add row'),
+  emptyText = gettext('No entries configured.'),
   disabled = false,
   reorderable = false,
 }) {
@@ -545,14 +1667,14 @@ export function TypedRowsEditor({
                     {reorderable && (
                       <>
                         <IconButton
-                          label={`Move row ${idx + 1} up`}
+                          label={gettext('Move row %s up', idx + 1)}
                           disabled={disabled || idx === 0}
                           onClick={() => moveRow(idx, -1)}
                         >
                           ↑
                         </IconButton>
                         <IconButton
-                          label={`Move row ${idx + 1} down`}
+                          label={gettext('Move row %s down', idx + 1)}
                           disabled={disabled || idx === rows.length - 1}
                           onClick={() => moveRow(idx, 1)}
                         >
@@ -561,7 +1683,7 @@ export function TypedRowsEditor({
                       </>
                     )}
                     <IconButton
-                      label={`Remove row ${idx + 1}`}
+                      label={gettext('Remove row %s', idx + 1)}
                       disabled={disabled}
                       onClick={() => removeRow(idx)}
                     >
@@ -607,8 +1729,8 @@ export function KeyValuePairsEditor({
   label,
   value = {},
   onChange,
-  keyLabel = 'Key',
-  valueLabel = 'Value',
+  keyLabel = gettext('Key'),
+  valueLabel = gettext('Value'),
   keyPlaceholder = '',
   valuePlaceholder = '',
   disabled = false,
@@ -650,7 +1772,7 @@ export function KeyValuePairsEditor({
       label={label}
       rows={draftRows}
       disabled={disabled}
-      addLabel={`Add ${keyLabel.toLowerCase()}`}
+      addLabel={gettext('Add %s', keyLabel.toLowerCase())}
       columns={[
         {key: 'key', label: keyLabel, placeholder: keyPlaceholder, minWidth: 140},
         {key: 'value', label: valueLabel, placeholder: valuePlaceholder, minWidth: 180},
@@ -796,10 +1918,10 @@ export function DesignCheckpointHistoryDrawer({
     <Dialog
       open={Boolean(open)}
       onClose={onClose}
-      title="Checkpoints, Directed Save Points & Version Diff"
+      title={gettext('Checkpoints, Directed Save Points & Version Diff')}
       size="large"
       busy={busy}
-      actions={<Button onClick={onClose}>Close</Button>}
+      actions={<Button onClick={onClose}>{gettext('Close')}</Button>}
     >
       <DesignerModalTabs
         formKey="design-checkpoints-diff"
@@ -809,33 +1931,38 @@ export function DesignCheckpointHistoryDrawer({
         tabs={[
           {
             id: 'history',
-            label: `Checkpoints (${versions.length})`,
+            label: `${gettext('Checkpoints')} (${versions.length})`,
             render: () =>
               versions.length === 0 ? (
-                <EmptyState message="No checkpoints recorded yet." />
+                <EmptyState message={gettext('No checkpoints recorded yet.')} />
               ) : (
-                <ScrollArea label="Checkpoints list" sx={{maxHeight: 380}}>
+                <ScrollArea label={gettext('Checkpoints list')} sx={{maxHeight: 380}}>
                   <Box className="sr-bui-table-card">
                     <Box
                       component="table"
                       className="sr-bui-table"
-                      aria-label="Design checkpoints"
+                      aria-label={gettext('Design checkpoints')}
                       sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}
                     >
                       <Box component="thead">
                         <Box component="tr">
-                          {['Version', 'Status', 'Parent', 'Summary / Note', 'Created', 'Actions'].map(
-                            (h) => (
-                              <Box
-                                key={h}
-                                component="th"
-                                className="sr-bui-th"
-                                sx={{textAlign: 'left'}}
-                              >
-                                {h}
-                              </Box>
-                            )
-                          )}
+                          {[
+                            gettext('Version'),
+                            gettext('Status'),
+                            gettext('Parent'),
+                            gettext('Summary / Note'),
+                            gettext('Created'),
+                            gettext('Actions'),
+                          ].map((h) => (
+                            <Box
+                              key={h}
+                              component="th"
+                              className="sr-bui-th"
+                              sx={{textAlign: 'left'}}
+                            >
+                              {h}
+                            </Box>
+                          ))}
                         </Box>
                       </Box>
                       <Box component="tbody">
@@ -847,10 +1974,10 @@ export function DesignCheckpointHistoryDrawer({
                               <Box component="td" className="sr-bui-td">
                                 <strong>v{item.version}</strong>
                                 {Number(item.version) === Number(activeVersion)
-                                  ? ' (Active)'
+                                  ? ` (${gettext('Active')})`
                                   : ''}
                                 {Number(item.version) === Number(currentVersion)
-                                  ? ' · Loaded'
+                                  ? ` · ${gettext('Loaded')}`
                                   : ''}
                               </Box>
                               <Box component="td" className="sr-bui-td">
@@ -893,13 +2020,13 @@ export function DesignCheckpointHistoryDrawer({
                                       onClose?.();
                                     }}
                                   >
-                                    Inspect
+                                    {gettext('Inspect')}
                                   </Button>
                                   <Button
                                     size="small"
                                     onClick={() => restoreAsDraft(item.version)}
                                   >
-                                    Branch Draft
+                                    {gettext('Branch Draft')}
                                   </Button>
                                 </Stack>
                               </Box>
@@ -913,25 +2040,25 @@ export function DesignCheckpointHistoryDrawer({
           },
           {
             id: 'diff',
-            label: 'Compare Checkpoints (DDN Diff)',
+            label: gettext('Compare Checkpoints (DDN Diff)'),
             render: () => (
               <Stack gap="standard">
                 <FormGrid columns={3}>
                   <Select
-                    label="Base Checkpoint"
+                    label={gettext('Base Checkpoint')}
                     value={baseVer}
                     options={versionOptions}
                     onChange={setBaseVer}
                   />
                   <Select
-                    label="Target Checkpoint"
+                    label={gettext('Target Checkpoint')}
                     value={targetVer}
                     options={versionOptions}
                     onChange={setTargetVer}
                   />
                   <Box sx={{pt: 2.25}}>
                     <Button intent="primary" disabled={busy || !baseVer || !targetVer} onClick={runCompare}>
-                      Compare Versions
+                      {gettext('Compare Versions')}
                     </Button>
                   </Box>
                 </FormGrid>
@@ -940,20 +2067,20 @@ export function DesignCheckpointHistoryDrawer({
                     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap'}}>
                       <StatusBadge
                         status="success"
-                        label={`+${(diffResult.added_elements || []).length} added`}
+                        label={`+${(diffResult.added_elements || []).length} ${gettext('added')}`}
                       />
                       <StatusBadge
                         status="warning"
-                        label={`~${(diffResult.modified_elements || []).length} modified`}
+                        label={`~${(diffResult.modified_elements || []).length} ${gettext('modified')}`}
                       />
                       <StatusBadge
                         status="error"
-                        label={`-${(diffResult.removed_elements || []).length} removed`}
+                        label={`-${(diffResult.removed_elements || []).length} ${gettext('removed')}`}
                       />
                     </Box>
                     <Box sx={{minHeight: 220}}>
                       <CodeEditor
-                        label="Checkpoint DDN Diff"
+                        label={gettext('Checkpoint DDN Diff')}
                         value={diffResult.unified_diff || '-- No DDN differences.'}
                         readonly
                         language="sql"
@@ -1038,52 +2165,56 @@ export function WhereUsedDialog({
     <Dialog
       open={Boolean(open)}
       onClose={onClose}
-      title="Where Used Across Designs (ERD · Cubes · BI · Screen Meshes)"
+      title={gettext('Where Used Across Designs (ERD · Cubes · BI · Screen Meshes)')}
       size="large"
       busy={busy}
-      actions={<Button onClick={onClose}>Close</Button>}
+      actions={<Button onClick={onClose}>{gettext('Close')}</Button>}
     >
       <Stack gap="standard">
         <FormReference formKey="design-where-used" />
         {error && <Banner status="error">{error}</Banner>}
         <FormGrid columns={2}>
           <TextField
-            label="Filter by Catalog Table / Column / Cube / Design Ref"
+            label={gettext('Filter by Catalog Table / Column / Cube / Design Ref')}
             placeholder="e.g. main.work_orders or cube:operations"
             value={targetRef}
             onChange={(e) => setTargetRef(e.target.value)}
           />
           <Box sx={{pt: 2.25}}>
             <Button intent="primary" onClick={() => runSearch(targetRef)}>
-              Search Cross-Design References
+              {gettext('Search Cross-Design References')}
             </Button>
           </Box>
         </FormGrid>
         {results.length === 0 ? (
-          <EmptyState message="No cross-design references matched this filter." />
+          <EmptyState message={gettext('No cross-design references matched this filter.')} />
         ) : (
-          <ScrollArea label="Cross-design usage results" sx={{maxHeight: 340}}>
+          <ScrollArea label={gettext('Cross-design usage results')} sx={{maxHeight: 340}}>
             <Box className="sr-bui-table-card">
               <Box
                 component="table"
                 className="sr-bui-table"
-                aria-label="Where used results"
+                aria-label={gettext('Where used results')}
                 sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}
               >
                 <Box component="thead">
                   <Box component="tr">
-                    {['Design Kind', 'Design Title', 'Element', 'Target Reference', 'Validity'].map(
-                      (h) => (
-                        <Box
-                          key={h}
-                          component="th"
-                          className="sr-bui-th"
-                          sx={{textAlign: 'left'}}
-                        >
-                          {h}
-                        </Box>
-                      )
-                    )}
+                    {[
+                      gettext('Design Kind'),
+                      gettext('Design Title'),
+                      gettext('Element'),
+                      gettext('Target Reference'),
+                      gettext('Validity'),
+                    ].map((h) => (
+                      <Box
+                        key={h}
+                        component="th"
+                        className="sr-bui-th"
+                        sx={{textAlign: 'left'}}
+                      >
+                        {h}
+                      </Box>
+                    ))}
                   </Box>
                 </Box>
                 <Box component="tbody">

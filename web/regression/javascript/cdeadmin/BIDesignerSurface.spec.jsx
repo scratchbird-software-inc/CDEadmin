@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {useEffect, useRef} from 'react';
 import {
   act,
   fireEvent,
@@ -18,6 +19,12 @@ import {
 import {withTheme} from '../fake_theme';
 import {libraries, setupDDNDOM} from './ddnTestRuntime';
 import SQLConnections from 'sources/cdeadmin_ui/editors/SQLConnections';
+import {
+  ProjectShellProvider,
+  ProjectWorkbenchFrame,
+  useProjectShell,
+} from 'sources/cdeadmin_ui/shell/ProjectShell';
+import {TActionsRegistry} from 'sources/cdeadmin_ui/actions/t_actions';
 import {
   BIDesignerSurface,
   BIDesignsNavigator,
@@ -999,5 +1006,140 @@ describe('Task-specific BI Questions & Dashboards Designer (Phase 1 & Phase 2)',
         })
       );
     });
+  });
+
+  it('integrates cooperatively into ProjectShell 6-region anatomy and dispatches scratchrobin:open-sql-from-bi from Area 3b', async () => {
+    const session = makeQuestionSession();
+    const client = {
+      openSession: jest.fn().mockResolvedValue(session),
+      getBiModel: jest.fn().mockResolvedValue({
+        design: session.design,
+        bi_kind: 'question',
+        bi: {question: sampleQuestionModel(), question_notes: ''},
+        outward_effects: [],
+      }),
+      saveBiModel: jest.fn().mockResolvedValue({design: session.design}),
+      biSqlBridge: jest.fn().mockResolvedValue({
+        sql: 'SELECT "orders"."region" AS "region" FROM "main"."orders" AS "orders"',
+        parameters: ['paid'],
+      }),
+    };
+
+    const sqlEvents = [];
+    const onBiSqlEvent = (e) => sqlEvents.push(e.detail);
+    window.addEventListener('scratchrobin:open-sql-from-bi', onBiSqlEvent);
+
+    function AutoOpenBi() {
+      const shell = useProjectShell();
+      const openedRef = useRef(false);
+      useEffect(() => {
+        if (shell && !openedRef.current) {
+          openedRef.current = true;
+          shell.openInlineTab({
+            instanceId: 'bi-designer-1',
+            appId: 'bi-designer',
+            title: 'Orders by Region',
+            supportsLeftDrawer: true,
+            leftOpen: true,
+            supportsRightDrawer: true,
+            rightOpen: true,
+            supportsTabbedIconBar: true,
+            renderWorkArea: () => (
+              <BIDesignerSurface
+                projectId="analytics"
+                designId={session.design.id}
+                kind="question"
+                client={client}
+              />
+            ),
+          });
+        }
+      }, [shell]);
+      return null;
+    }
+
+    try {
+      const actionsRegistry = new TActionsRegistry();
+      const ShellHarness = withTheme(() => (
+        <ProjectShellProvider
+          actionsRegistry={actionsRegistry}
+          fetchImpl={jest.fn(async () => ({ok: false, status: 404, json: async () => ({})}))}
+        >
+          <AutoOpenBi />
+          <ProjectWorkbenchFrame />
+        </ProjectShellProvider>
+      ));
+
+      const {container} = render(<ShellHarness />);
+
+      await waitFor(() =>
+        expect(
+          container.querySelector('[data-area-part="3e"] [data-cde-surface="diagram.ddn.viewer"]')
+        ).not.toBeNull()
+      );
+
+      const area3e = container.querySelector('[data-area-part="3e"]');
+      const area3a = container.querySelector('[data-area-part="3a"]');
+      const area3bPanel = container.querySelector('.sr-island-3b .snb-panel');
+      const area3c = container.querySelector('[data-area-part="3c"]');
+      const area3d = container.querySelector('[data-area-part="3d"]');
+
+      expect(area3e).not.toBeNull();
+      expect(area3a).not.toBeNull();
+      expect(area3bPanel).not.toBeNull();
+      expect(area3c).not.toBeNull();
+      expect(area3d).not.toBeNull();
+
+      // Zero DesignerTabbedMenu inside Area 3e
+      expect(
+        area3e.querySelector('[data-cdeadmin-qa-key="designer-tabbed-menu"]')
+      ).toBeNull();
+
+      // Area 3b Save Draft button invokes saveBiModel
+      const saveBtn = await within(area3bPanel).findByRole('button', {
+        name: /Save Draft/i,
+      });
+      fireEvent.click(saveBtn);
+      await waitFor(() => expect(client.saveBiModel).toHaveBeenCalledTimes(1));
+
+      // Switch category on Area 3b to SQL & AI Draft and click Open in SQL Editor
+      const sqlCatBtn = within(area3bPanel).getByRole('button', {
+        name: /SQL & AI Draft/i,
+      });
+      fireEvent.click(sqlCatBtn);
+      const openSqlBtn = await within(area3bPanel).findByRole('button', {
+        name: /Open in SQL Editor/i,
+      });
+      fireEvent.click(openSqlBtn);
+
+      await waitFor(() => expect(sqlEvents.length).toBe(1));
+      expect(sqlEvents[0]).toMatchObject({
+        sql: 'SELECT "orders"."region" AS "region" FROM "main"."orders" AS "orders"',
+        dialect: 'sqlite',
+        title: 'Orders by Region',
+        designId: session.design.id,
+        projectId: 'analytics',
+      });
+
+      // Area 3a renders BI Model Navigator; clicking a join selects it into Area 3c
+      expect(
+        await within(area3a).findByRole('navigation', {name: /BI Model Navigator/i})
+      ).toBeInTheDocument();
+      fireEvent.click(
+        within(area3a).getByRole('button', {name: /main\.order_items/i})
+      );
+
+      const inspector3c = await within(area3c).findByTestId('bi-property-inspector');
+      expect(
+        within(inspector3c).getByText(/main\.order_items/i)
+      ).toBeInTheDocument();
+
+      // Area 3d renders status bar with title, status, and valid binding badge
+      expect(within(area3d).getByText('Orders by Region')).toBeInTheDocument();
+      expect(within(area3d).getByText('Draft')).toBeInTheDocument();
+      expect(within(area3d).getByText('valid')).toBeInTheDocument();
+    } finally {
+      window.removeEventListener('scratchrobin:open-sql-from-bi', onBiSqlEvent);
+    }
   });
 });

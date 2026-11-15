@@ -6581,6 +6581,10 @@
     "mysql-workload": {
       "reference": "SR-F-030088",
       "title": "MySQL workload analysis workspace"
+    },
+    "command-line-workspace": {
+      "reference": "SR-F-030089",
+      "title": "Interactive multi-engine command line and ISQL/PSQL launcher workspace"
     }
   }
 }

@@ -5,7 +5,6 @@ import CodeEditor from './CodeEditor';
 import {Button} from '../primitives/Button';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from './QueryToolControls';
 import {workbenchContextService} from '../platform/PlatformRegistry';
-import {requestBIDesignCreate} from '../integrations/ddn';
 let entries = [], selected = '';
 const listeners = new Set();
 // Every change bumps the version, so a component that subscribes after a
@@ -225,7 +224,7 @@ DisconnectedQueryTool.propTypes = {
   onSaveAsBiQuestion: PropTypes.func,
 };
 
-export default function SQLConnections() {
+export default function SQLConnections({instanceId = null}) {
   const state = useSQLConnections();
   const rootRef = useRef(null);
   const [draftSql, setDraftSql] = useState('');
@@ -265,7 +264,6 @@ export default function SQLConnections() {
       window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
         detail: {appId: 'bi-designer', payload: detail},
       }));
-      requestBIDesignCreate({kind: 'question', sql});
       window.pgAdmin?.Browser?.CDEadminCommandContext?.()?.showActivity?.('activity.bi-designs');
     }
   }, [readCurrentEditorSql]);
@@ -298,9 +296,53 @@ export default function SQLConnections() {
         }
       }
     };
+    const onSqlEditorAction = (event) => {
+      const targetInstanceId = event?.detail?.instanceId;
+      if (instanceId && targetInstanceId && targetInstanceId !== instanceId) return;
+      const action = event?.detail?.action;
+      if (!action) return;
+      if (action === 'save_bi_question') {
+        handleSaveAsBiQuestion();
+        return;
+      }
+      const activeBox = rootRef.current?.querySelector('[data-active-connection="true"]');
+      if (!activeBox) return;
+      const selectors = {
+        execute: ['button[aria-label="Run"]:not(:disabled)', 'button[title="Run"]:not(:disabled)'],
+        explain: ['button[aria-label*="Explain"]:not(:disabled)', 'button[title*="Explain"]:not(:disabled)'],
+        cancel: ['button[aria-label="Cancel request"]:not(:disabled)', 'button[title="Cancel request"]:not(:disabled)'],
+        commit: ['button[aria-label="commit"]:not(:disabled)', 'button[title="commit"]:not(:disabled)'],
+        rollback: ['button[aria-label="rollback"]:not(:disabled)', 'button[title="rollback"]:not(:disabled)'],
+        sql_builder: ['button:not(:disabled)'],
+      }[action];
+      if (!selectors) return;
+      for (const selector of selectors) {
+        if (action === 'sql_builder') {
+          const btn = Array.from(activeBox.querySelectorAll(selector)).find((el) =>
+            /build query/i.test(el.textContent || '')
+          );
+          if (btn) {
+            btn.click();
+            return;
+          }
+        } else {
+          const btn = activeBox.querySelector(selector);
+          if (btn) {
+            btn.click();
+            return;
+          }
+        }
+      }
+    };
     window.addEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
-    return () => window.removeEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
-  }, []);
+    window.addEventListener('scratchrobin:open-sql-from-bi', onOpenSqlInEditor);
+    window.addEventListener('scratchrobin:sql-editor-action', onSqlEditorAction);
+    return () => {
+      window.removeEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
+      window.removeEventListener('scratchrobin:open-sql-from-bi', onOpenSqlInEditor);
+      window.removeEventListener('scratchrobin:sql-editor-action', onSqlEditorAction);
+    };
+  }, [handleSaveAsBiQuestion, instanceId]);
 
   return <QueryToolFrame ref={rootRef} sx={{color: 'text.primary', bgcolor: 'background.default'}}>
     {state.selected && <QueryToolToolbar>
@@ -319,3 +361,7 @@ export default function SQLConnections() {
         flexDirection: 'column', flex: 1, minHeight: 0}}><SlotContext.Provider value={item.id}>{item.content}</SlotContext.Provider></Box>)}
   </QueryToolFrame>;
 }
+
+SQLConnections.propTypes = {
+  instanceId: PropTypes.string,
+};

@@ -9,6 +9,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Checkbox, Select} from '../../primitives/Choice';
@@ -20,6 +21,7 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import {t_actions} from '../../actions/t_actions';
 import {
   useQueryExecutionController,
   QueryExecutionToolbarCluster,
@@ -27,11 +29,17 @@ import {
 } from '../../query';
 import {
   DesignCheckpointHistoryDrawer,
+  DesignerElementNavigator,
   DesignerModalTabs,
+  DesignerShellStatusBar,
   DesignerTabbedMenu,
   FormGrid,
   TypedRowsEditor,
   WhereUsedDialog,
+  executeDesignerCommand,
+  formatSavePointStatusLabel,
+  useDesignerShellRegions,
+  useDesignerWorkbenchEvents,
 } from './DesignerChrome';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
@@ -39,20 +47,28 @@ import {
   SharedDDNTaskController,
 } from './sharedDesignLibrary';
 
-const CUBE_VIEW_OPTIONS = Object.freeze([
-  {
-    value: 'cube_star',
-    label: 'Dimensional Star (cube.dimensional@1)',
-  },
-  {
-    value: 'cube_usage_matrix',
-    label: 'Dimension Usage Matrix (matrix.relations@1)',
-  },
-  {
-    value: 'cube_aggregation_grid',
-    label: 'Aggregation Grid (table.records@1)',
-  },
+const CUBE_VIEW_CYCLE = Object.freeze([
+  'cube_star',
+  'cube_usage_matrix',
+  'cube_aggregation_grid',
 ]);
+
+function getCubeViewOptions() {
+  return [
+    {
+      value: 'cube_star',
+      label: gettext('Dimensional Star (cube.dimensional@1)'),
+    },
+    {
+      value: 'cube_usage_matrix',
+      label: gettext('Dimension Usage Matrix (matrix.relations@1)'),
+    },
+    {
+      value: 'cube_aggregation_grid',
+      label: gettext('Aggregation Grid (table.records@1)'),
+    },
+  ];
+}
 
 const ENGINE_OPTIONS = Object.freeze([
   {value: 'postgresql', label: 'PostgreSQL'},
@@ -263,6 +279,7 @@ export function CubeDesignerSurface({
   client: suppliedClient,
   controller: suppliedController,
   readOnly = false,
+  commands = t_actions,
   executeCommand,
   onStateChange,
   onExport,
@@ -286,6 +303,13 @@ export function CubeDesignerSurface({
 
   const callbacks = useRef({executeCommand, onStateChange, onError});
   callbacks.current = {executeCommand, onStateChange, onError};
+  const shellRegistryRef = useRef(null);
+  const openPropertiesDrawerRef = useRef(() => {});
+  const cubeUndoStackRef = useRef([]);
+  const cubeRedoStackRef = useRef([]);
+  const cubeClipboardRef = useRef(null);
+
+  const cubeViewOptions = useMemo(() => getCubeViewOptions(), []);
 
   const [sessionState, setSessionState] = useState(() => controller.state());
   const [cubePayload, setCubePayload] = useState(null);
@@ -293,11 +317,17 @@ export function CubeDesignerSurface({
   const [previewLocale, setPreviewLocale] = useState('');
   const [loading, setLoading] = useState(!sessionState.loaded);
   const [surfaceError, setSurfaceError] = useState('');
+  const [surfaceNotice, setSurfaceNotice] = useState('');
   const [cubeView, setCubeView] = useState('cube_star');
   const [activeRibbonTab, setActiveRibbonTab] = useState('cube');
   const [busyAction, setBusyAction] = useState(false);
   const [activeDrift, setActiveDrift] = useState(null);
   const [appliedInfo, setAppliedInfo] = useState(null);
+  const [canvasToolMode, setCanvasToolMode] = useState('pointer');
+  const [selectedCubeElement, setSelectedCubeElement] = useState({
+    kind: 'measure',
+    id: '',
+  });
 
   // Shared cross-designer dialogs
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
@@ -556,32 +586,63 @@ export function CubeDesignerSurface({
     };
   }, [controller, refreshCubeModel]);
 
-  const runToolbarCommand = useCallback(async (id, invoke) => {
-    setSurfaceError('');
-    try {
-      if (callbacks.current.executeCommand) {
-        return await callbacks.current.executeCommand(id, {
+  const runToolbarCommand = useCallback(
+    async (id, invoke) => {
+      setSurfaceError('');
+      try {
+        return await executeDesignerCommand({
+          commandId: id,
           invoke,
+          executeCommand: callbacks.current.executeCommand,
+          commands,
+          shellRegistry: shellRegistryRef.current,
           enabled: true,
         });
+      } catch (err) {
+        setSurfaceError(err.message);
+        callbacks.current.onError?.(err);
+        return null;
       }
-      return await invoke();
-    } catch (err) {
-      setSurfaceError(err.message);
-      callbacks.current.onError?.(err);
-      return null;
-    }
-  }, []);
+    },
+    [commands]
+  );
 
   const cubeModel = cubePayload?.model || null;
   const defaultSourceId = cubeModel?.sources?.[0]?.id || 'fact_rows';
   const currentDdnText =
     sessionState.workspace?.files?.[sessionState.workspace.entry] || '';
 
-  const persistUpdatedModel = async (nextModel, noteText, customNotes = null) => {
+  useEffect(() => {
+    if (!cubeModel) return;
+    setSelectedCubeElement((cur) => {
+      if (cur.id) return cur;
+      if (cubeModel.measures?.length) {
+        return {kind: 'measure', id: cubeModel.measures[0].id};
+      }
+      if (cubeModel.dimensions?.length) {
+        return {kind: 'dimension', id: cubeModel.dimensions[0].id};
+      }
+      const groups = ensureMeasureGroups(cubeModel);
+      if (groups.length) {
+        return {kind: 'measure_group', id: groups[0].id};
+      }
+      return cur;
+    });
+  }, [cubeModel]);
+
+  const persistUpdatedModel = async (
+    nextModel,
+    noteText,
+    customNotes = null,
+    {recordUndo = true} = {}
+  ) => {
     setBusyAction(true);
     setSurfaceError('');
     try {
+      if (recordUndo && cubeModel) {
+        cubeUndoStackRef.current.push(JSON.parse(JSON.stringify(cubeModel)));
+        cubeRedoStackRef.current = [];
+      }
       const saved = await controller.saveCubeModel({
         model: nextModel,
         cubeNotes: customNotes ?? cubePayload?.notes ?? [],
@@ -591,7 +652,11 @@ export function CubeDesignerSurface({
             : sessionState.status || 'draft',
         note: noteText,
       });
-      if (saved?.cube) setCubePayload(saved.cube);
+      if (saved?.cube) {
+        setCubePayload(saved.cube);
+      } else {
+        setCubePayload((cur) => ({...(cur || {}), model: nextModel}));
+      }
       if (saved?.active_drift?.has_active_changes) {
         setActiveDrift(saved.active_drift);
       } else {
@@ -608,6 +673,36 @@ export function CubeDesignerSurface({
       setBusyAction(false);
     }
   };
+
+  const handleUndoCube = useCallback(async () => {
+    if (readOnly || cubeUndoStackRef.current.length === 0) return;
+    const prevModel = cubeUndoStackRef.current.pop();
+    if (cubeModel) {
+      cubeRedoStackRef.current.push(JSON.parse(JSON.stringify(cubeModel)));
+    }
+    setCubePayload((cur) => ({...(cur || {}), model: prevModel}));
+    setSurfaceNotice(gettext('Reverted last Cube edit.'));
+    if (typeof client.saveCubeModel === 'function') {
+      await persistUpdatedModel(prevModel, 'Reverted Cube edit', null, {
+        recordUndo: false,
+      });
+    }
+  }, [client, cubeModel, readOnly]);
+
+  const handleRedoCube = useCallback(async () => {
+    if (readOnly || cubeRedoStackRef.current.length === 0) return;
+    const nextModel = cubeRedoStackRef.current.pop();
+    if (cubeModel) {
+      cubeUndoStackRef.current.push(JSON.parse(JSON.stringify(cubeModel)));
+    }
+    setCubePayload((cur) => ({...(cur || {}), model: nextModel}));
+    setSurfaceNotice(gettext('Restored Cube edit.'));
+    if (typeof client.saveCubeModel === 'function') {
+      await persistUpdatedModel(nextModel, 'Restored Cube edit', null, {
+        recordUndo: false,
+      });
+    }
+  }, [client, cubeModel, readOnly]);
 
   // --- Cube Properties ---
   const openPropertiesDialog = () => {
@@ -1721,7 +1816,7 @@ export function CubeDesignerSurface({
   const curStatus = sessionState.status || 'draft';
 
   const localeOptions = useMemo(() => {
-    const opts = [{value: '', label: 'Default authoring labels'}];
+    const opts = [{value: '', label: gettext('Default authoring labels')}];
     for (const tr of cubeModel?.translations || []) {
       opts.push({
         value: tr.locale,
@@ -1736,16 +1831,16 @@ export function CubeDesignerSurface({
     () => [
       {
         id: 'cube',
-        label: 'Cube',
+        label: gettext('Cube'),
         dirty: Boolean(activeDrift?.has_active_changes),
         groups: [
           {
             id: 'cube-save',
-            label: 'Checkpoints',
+            label: gettext('Checkpoints'),
             items: [
               {
                 id: 'cube.designer.save',
-                label: 'Save Draft',
+                label: gettext('Save Draft'),
                 intent: 'primary',
                 disabled: readOnly || busyAction || loading,
                 onClick: () =>
@@ -1753,7 +1848,7 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.checkpoints',
-                label: 'Checkpoints & Diff…',
+                label: gettext('Checkpoints & Diff…'),
                 disabled: busyAction || loading,
                 onClick: () => setCheckpointsOpen(true),
               },
@@ -1761,11 +1856,11 @@ export function CubeDesignerSurface({
           },
           {
             id: 'cube-lifecycle',
-            label: 'Advance Status',
+            label: gettext('Advance Status'),
             items: [
               {
                 id: 'cube.designer.in_progress',
-                label: 'In Progress',
+                label: gettext('In Progress'),
                 disabled:
                   readOnly ||
                   busyAction ||
@@ -1776,7 +1871,7 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.in_review',
-                label: 'In Review',
+                label: gettext('In Review'),
                 disabled:
                   readOnly ||
                   busyAction ||
@@ -1787,7 +1882,7 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.accept',
-                label: 'Accept Cube',
+                label: gettext('Accept Cube'),
                 intent: curStatus === 'accepted' ? 'neutral' : 'primary',
                 disabled:
                   readOnly || busyAction || loading || curStatus === 'accepted',
@@ -1798,7 +1893,7 @@ export function CubeDesignerSurface({
                 ? [
                   {
                     id: 'cube.designer.leave_accepted',
-                    label: 'Leave Accepted…',
+                    label: gettext('Leave Accepted…'),
                     disabled: readOnly || busyAction || loading,
                     onClick: () => setLeaveOpen(true),
                   },
@@ -1806,7 +1901,7 @@ export function CubeDesignerSurface({
                 : []),
               {
                 id: 'cube.designer.sync_active',
-                label: 'Sync Active',
+                label: gettext('Sync Active'),
                 disabled:
                   readOnly ||
                   busyAction ||
@@ -1819,11 +1914,11 @@ export function CubeDesignerSurface({
           },
           {
             id: 'cube-exchange',
-            label: 'Git & Lineage',
+            label: gettext('Git & Lineage'),
             items: [
               {
                 id: 'cube.designer.git',
-                label: 'Git Sync…',
+                label: gettext('Git Sync…'),
                 disabled: busyAction || loading,
                 onClick: () => {
                   setGitStatus(null);
@@ -1832,13 +1927,13 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.export_ddn',
-                label: 'Export DDN',
+                label: gettext('Export DDN'),
                 disabled: busyAction || loading,
                 onClick: handleExportDDN,
               },
               {
                 id: 'cube.designer.where_used',
-                label: 'Used By (Where Used)…',
+                label: gettext('Used By (Where Used)…'),
                 disabled: busyAction || loading,
                 onClick: () => setWhereUsedOpen(true),
               },
@@ -1848,28 +1943,28 @@ export function CubeDesignerSurface({
       },
       {
         id: 'model',
-        label: 'Dimensions & Measures',
+        label: gettext('Dimensions & Measures'),
         groups: [
           {
             id: 'model-elements',
-            label: 'Dimensional Model',
+            label: gettext('Dimensional Model'),
             items: [
               {
                 id: 'cube.designer.properties',
-                label: 'Cube Properties…',
+                label: gettext('Cube Properties…'),
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openPropertiesDialog,
               },
               {
                 id: 'cube.designer.measures',
-                label: '+ Measure / Edit Measures…',
+                label: gettext('+ Measure / Edit Measures…'),
                 badge: cubeModel?.measures?.length ?? 0,
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openMeasureDialog,
               },
               {
                 id: 'cube.designer.dimensions',
-                label: '+ Dimension / Hierarchies…',
+                label: gettext('+ Dimension / Hierarchies…'),
                 badge: cubeModel?.dimensions?.length ?? 0,
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openDimensionDialog,
@@ -1878,17 +1973,17 @@ export function CubeDesignerSurface({
           },
           {
             id: 'model-matrix-ai',
-            label: 'Bindings & Drafting',
+            label: gettext('Bindings & Drafting'),
             items: [
               {
                 id: 'cube.designer.usage_matrix',
-                label: 'Interactive Usage Matrix…',
+                label: gettext('Interactive Usage Matrix…'),
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openUsageMatrixDialog,
               },
               {
                 id: 'cube.designer.ai_draft',
-                label: 'AI Draft Proposal…',
+                label: gettext('AI Draft Proposal…'),
                 disabled: readOnly || busyAction || loading,
                 onClick: openAiDraftDialog,
               },
@@ -1898,20 +1993,20 @@ export function CubeDesignerSurface({
       },
       {
         id: 'views',
-        label: 'Views & Try Query',
+        label: gettext('Views & Try Query'),
         groups: [
           {
             id: 'views-switcher',
-            label: 'DDN Views',
+            label: gettext('DDN Views'),
             items: [
               {
                 id: 'cube.designer.view_select',
                 render: () => (
                   <Box sx={{minWidth: 250}}>
                     <Select
-                      label="Cube DDN view"
+                      label={gettext('Cube DDN view')}
                       value={cubeView}
-                      options={CUBE_VIEW_OPTIONS}
+                      options={cubeViewOptions}
                       onChange={setCubeView}
                     />
                   </Box>
@@ -1919,19 +2014,19 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.view_star',
-                label: 'Star Schema',
+                label: gettext('Star Schema'),
                 active: cubeView === 'cube_star',
                 onClick: () => setCubeView('cube_star'),
               },
               {
                 id: 'cube.designer.view_matrix',
-                label: 'Dimension Usage Matrix',
+                label: gettext('Dimension Usage Matrix'),
                 active: cubeView === 'cube_usage_matrix',
                 onClick: () => setCubeView('cube_usage_matrix'),
               },
               {
                 id: 'cube.designer.view_agg_grid',
-                label: 'Aggregation Grid',
+                label: gettext('Aggregation Grid'),
                 active: cubeView === 'cube_aggregation_grid',
                 onClick: () => setCubeView('cube_aggregation_grid'),
               },
@@ -1939,17 +2034,17 @@ export function CubeDesignerSurface({
           },
           {
             id: 'views-layout-query',
-            label: 'Layout & Slice',
+            label: gettext('Layout & Slice'),
             items: [
               {
                 id: 'cube.designer.recompute_layout',
-                label: 'Recompute Layout',
+                label: gettext('Recompute Layout'),
                 disabled: busyAction || loading,
                 onClick: handleRecomputeLayout,
               },
               {
                 id: 'cube.designer.try_query',
-                label: 'Try a Query…',
+                label: gettext('Try a Query…'),
                 intent: 'primary',
                 disabled: busyAction || loading || !cubeModel,
                 onClick: openTryQueryDialog,
@@ -1960,21 +2055,21 @@ export function CubeDesignerSurface({
       },
       {
         id: 'aggregations',
-        label: 'Aggregations & Check',
+        label: gettext('Aggregations & Check'),
         groups: [
           {
             id: 'agg-rules',
-            label: 'Aggregation Rules',
+            label: gettext('Aggregation Rules'),
             items: [
               {
                 id: 'cube.designer.reducer',
-                label: 'Combinatorial Rule Reducer…',
+                label: gettext('Combinatorial Rule Reducer…'),
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openReducerDialog,
               },
               {
                 id: 'cube.designer.agg_plans',
-                label: 'Edit Aggregation Plans…',
+                label: gettext('Edit Aggregation Plans…'),
                 badge: cubeModel?.materializations?.length ?? 0,
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openAggRuleDialog,
@@ -1983,17 +2078,17 @@ export function CubeDesignerSurface({
           },
           {
             id: 'agg-validation',
-            label: 'Connection & Native DDL',
+            label: gettext('Connection & Native DDL'),
             items: [
               {
                 id: 'cube.designer.check_connection',
-                label: 'Check Against Connection…',
+                label: gettext('Check Against Connection…'),
                 disabled: busyAction || loading || !cubeModel,
                 onClick: openCheckConnectionDialog,
               },
               {
                 id: 'cube.designer.materialization_plan',
-                label: 'Materialization DDL Plan…',
+                label: gettext('Materialization DDL Plan…'),
                 disabled: busyAction || loading,
                 onClick: () =>
                   runToolbarCommand(
@@ -2007,22 +2102,22 @@ export function CubeDesignerSurface({
       },
       {
         id: 'governance',
-        label: 'Governance & Export',
+        label: gettext('Governance & Export'),
         groups: [
           {
             id: 'gov-roles-locales',
-            label: 'Perspectives & Translations',
+            label: gettext('Perspectives & Translations'),
             items: [
               {
                 id: 'cube.designer.perspectives',
-                label: 'Perspectives & Role Visibility…',
+                label: gettext('Perspectives & Role Visibility…'),
                 badge: cubeModel?.perspectives?.length ?? 0,
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openPerspectiveDialog,
               },
               {
                 id: 'cube.designer.translations',
-                label: 'Locale Translations…',
+                label: gettext('Locale Translations…'),
                 badge: cubeModel?.translations?.length ?? 0,
                 disabled: readOnly || busyAction || loading || !cubeModel,
                 onClick: openTranslationDialog,
@@ -2031,14 +2126,14 @@ export function CubeDesignerSurface({
           },
           {
             id: 'gov-preview-export',
-            label: 'Locale Preview & Interchange',
+            label: gettext('Locale Preview & Interchange'),
             items: [
               {
                 id: 'cube.designer.preview_locale',
                 render: () => (
                   <Box sx={{minWidth: 190}}>
                     <Select
-                      label="Preview Locale"
+                      label={gettext('Preview Locale')}
                       value={previewLocale}
                       options={localeOptions}
                       onChange={handlePreviewLocaleChange}
@@ -2048,7 +2143,7 @@ export function CubeDesignerSurface({
               },
               {
                 id: 'cube.designer.export_interchange',
-                label: 'Export SML / Ossie…',
+                label: gettext('Export SML / Ossie…'),
                 disabled: busyAction || loading || !cubeModel,
                 onClick: openExportDialog,
               },
@@ -2062,6 +2157,7 @@ export function CubeDesignerSurface({
       busyAction,
       cubeModel,
       cubeView,
+      cubeViewOptions,
       curStatus,
       loading,
       localeOptions,
@@ -2073,10 +2169,433 @@ export function CubeDesignerSurface({
     ]
   );
 
+  const cubeMeasureGroups = useMemo(
+    () => (cubeModel ? ensureMeasureGroups(cubeModel) : []),
+    [cubeModel]
+  );
+  const suspectBindingCount = useMemo(() => {
+    if (typeof sessionState.bindingSummary?.suspect === 'number') {
+      return sessionState.bindingSummary.suspect;
+    }
+    const bindings = sessionState.design?.bindings || [];
+    return bindings.filter((b) => b.state === 'suspect').length;
+  }, [sessionState.bindingSummary, sessionState.design?.bindings]);
+
+  const selectCubeElement = useCallback((kind, id) => {
+    setSelectedCubeElement({kind, id});
+    openPropertiesDrawerRef.current?.();
+  }, []);
+
+  const cubeNavigatorSections = useMemo(
+    () => [
+      {
+        id: 'measure_groups',
+        label: gettext('Measure Groups'),
+        emptyText: gettext('No measure groups defined.'),
+        items: cubeMeasureGroups.map((grp) => ({
+          id: grp.id,
+          label: grp.name || grp.id,
+          sublabel: `${(grp.measures || []).length} ${gettext('measures')}`,
+          active:
+            selectedCubeElement.kind === 'measure_group' &&
+            selectedCubeElement.id === grp.id,
+          onSelect: () => selectCubeElement('measure_group', grp.id),
+        })),
+      },
+      {
+        id: 'measures',
+        label: gettext('Measures'),
+        emptyText: gettext('No measures defined.'),
+        items: (cubeModel?.measures || []).map((m) => ({
+          id: m.id,
+          label: m.name || m.id,
+          sublabel: (m.aggregation || 'sum').toUpperCase(),
+          active:
+            selectedCubeElement.kind === 'measure' &&
+            selectedCubeElement.id === m.id,
+          onSelect: () => selectCubeElement('measure', m.id),
+        })),
+      },
+      {
+        id: 'dimensions',
+        label: gettext('Dimensions'),
+        emptyText: gettext('No dimensions defined.'),
+        items: (cubeModel?.dimensions || []).map((d) => ({
+          id: d.id,
+          label: d.name || d.id,
+          sublabel:
+            d.active === false
+              ? gettext('Role-playing')
+              : d.is_time
+                ? gettext('Time')
+                : gettext('Dimension'),
+          active:
+            selectedCubeElement.kind === 'dimension' &&
+            selectedCubeElement.id === d.id,
+          onSelect: () => selectCubeElement('dimension', d.id),
+        })),
+      },
+    ],
+    [cubeMeasureGroups, cubeModel?.dimensions, cubeModel?.measures, selectCubeElement, selectedCubeElement]
+  );
+
+  const cubeNavigatorNode = useMemo(
+    () => (
+      <DesignerElementNavigator
+        title={gettext('Cube Model Navigator')}
+        sections={cubeNavigatorSections}
+      />
+    ),
+    [cubeNavigatorSections]
+  );
+
+  const selectedMeasureObj = useMemo(
+    () =>
+      selectedCubeElement.kind === 'measure'
+        ? (cubeModel?.measures || []).find(
+          (m) => m.id === selectedCubeElement.id
+        ) || null
+        : null,
+    [cubeModel?.measures, selectedCubeElement]
+  );
+  const selectedDimensionObj = useMemo(
+    () =>
+      selectedCubeElement.kind === 'dimension'
+        ? (cubeModel?.dimensions || []).find(
+          (d) => d.id === selectedCubeElement.id
+        ) || null
+        : null,
+    [cubeModel?.dimensions, selectedCubeElement]
+  );
+  const selectedMeasureGroupObj = useMemo(
+    () =>
+      selectedCubeElement.kind === 'measure_group'
+        ? cubeMeasureGroups.find((g) => g.id === selectedCubeElement.id) || null
+        : null,
+    [cubeMeasureGroups, selectedCubeElement]
+  );
+
+  const cubeShellInspectorNode = (
+    <Box
+      component="section"
+      aria-label={gettext('Cube element property inspector')}
+      data-testid="cube-property-inspector"
+      sx={{p: 1.25, display: 'flex', flexDirection: 'column', gap: 1.25}}
+    >
+      <Box sx={{fontWeight: 700, fontSize: '0.8125rem'}}>
+        {gettext('Cube Element Inspector')}
+      </Box>
+      {selectedMeasureObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Measure')}: ${selectedMeasureObj.name || selectedMeasureObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Measure ID')}
+            disabled
+            value={selectedMeasureObj.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Aggregation')}
+            disabled
+            value={(selectedMeasureObj.aggregation || 'sum').toUpperCase()}
+          />
+          <TextField
+            size="small"
+            label={gettext('Format')}
+            disabled
+            value={selectedMeasureObj.format || '#,##0.00'}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => {
+                loadMeasureIntoDraft(selectedMeasureObj);
+                setMeasureOpen(true);
+              }}
+            >
+              {gettext('Edit Measure…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedDimensionObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Dimension')}: ${selectedDimensionObj.name || selectedDimensionObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Dimension ID')}
+            disabled
+            value={selectedDimensionObj.id}
+          />
+          <TextField
+            size="small"
+            label={gettext('Key Column')}
+            disabled
+            value={
+              selectedDimensionObj.key_field?.field ||
+              selectedDimensionObj.field?.field ||
+              ''
+            }
+          />
+          <StatusBadge
+            status={selectedDimensionObj.active === false ? 'warning' : 'success'}
+            label={
+              selectedDimensionObj.active === false
+                ? gettext('Inactive / Role-playing')
+                : gettext('Active Relationship')
+            }
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={() => {
+                loadDimensionIntoDraft(selectedDimensionObj);
+                setDimOpen(true);
+              }}
+            >
+              {gettext('Edit Dimension…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {selectedMeasureGroupObj && (
+        <Stack gap="compact">
+          <StatusBadge
+            status="info"
+            label={`${gettext('Measure Group')}: ${selectedMeasureGroupObj.name || selectedMeasureGroupObj.id}`}
+          />
+          <TextField
+            size="small"
+            label={gettext('Fact Source')}
+            disabled
+            value={selectedMeasureGroupObj.fact_source || defaultSourceId}
+          />
+          <TextField
+            size="small"
+            label={gettext('Included Measures')}
+            disabled
+            value={(selectedMeasureGroupObj.measures || []).join(', ')}
+          />
+          {!readOnly && (
+            <Button
+              size="small"
+              intent="primary"
+              onClick={openUsageMatrixDialog}
+            >
+              {gettext('Interactive Usage Matrix…')}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {!selectedMeasureObj &&
+        !selectedDimensionObj &&
+        !selectedMeasureGroupObj && (
+          <EmptyState
+            message={gettext(
+              'Select a Measure Group, Measure, or Dimension in the navigator to inspect its properties.'
+            )}
+          />
+        )}
+      {!readOnly && cubeModel && (
+        <Button size="small" onClick={openPropertiesDialog}>
+          {gettext('Cube Properties…')}
+        </Button>
+      )}
+    </Box>
+  );
+
+  const cubeTitle =
+    localizedPreviewModel?.name ||
+    cubeModel?.name ||
+    sessionState.design?.title ||
+    designId ||
+    gettext('Cube Designer');
+
+  const cubeStatusNode = useMemo(
+    () => (
+      <DesignerShellStatusBar
+        title={cubeTitle}
+        version={sessionState.currentVersion}
+        status={curStatus}
+        engine={matEngine}
+        suspectCount={suspectBindingCount}
+        extra={
+          localizedPreviewModel && previewLocale ? (
+            <StatusBadge
+              status="info"
+              label={gettext('Locale: %s', previewLocale)}
+            />
+          ) : null
+        }
+      />
+    ),
+    [
+      cubeTitle,
+      curStatus,
+      localizedPreviewModel,
+      matEngine,
+      previewLocale,
+      sessionState.currentVersion,
+      suspectBindingCount,
+    ]
+  );
+
+  const cubeStatusText = `${cubeTitle} · v${sessionState.currentVersion || 1} · ${formatSavePointStatusLabel(
+    curStatus
+  )} · ${matEngine} · ${
+    suspectBindingCount > 0
+      ? `${suspectBindingCount} ${gettext('suspect')}`
+      : gettext('valid')
+  }`;
+
+  const {inShell, shell, instanceId, openPropertiesDrawer} =
+    useDesignerShellRegions({
+      title: cubeTitle,
+      statusNode: cubeStatusNode,
+      statusText: cubeStatusText,
+      leftDrawerNode: cubeNavigatorNode,
+      rightDrawerNode: cubeShellInspectorNode,
+      rightOpen: true,
+      quickActions: {
+        onNew: readOnly || !cubeModel ? undefined : openMeasureDialog,
+        onSave:
+          readOnly || busyAction || loading
+            ? undefined
+            : () => runToolbarCommand('cube.designer.save', openSaveDialog),
+        onUndo: readOnly ? undefined : handleUndoCube,
+        onRedo: readOnly ? undefined : handleRedoCube,
+      },
+    });
+  shellRegistryRef.current = shell?.actionsRegistry || null;
+  openPropertiesDrawerRef.current = openPropertiesDrawer;
+
+  useDesignerWorkbenchEvents({
+    appId: 'cube-designer',
+    instanceId,
+    inShell,
+    shell,
+    onToolAction: (tool) => {
+      if (tool === 'checkpoints') {
+        setCheckpointsOpen(true);
+        return;
+      }
+      if (tool === 'layers') {
+        const idx = CUBE_VIEW_CYCLE.indexOf(cubeView);
+        const nextView = CUBE_VIEW_CYCLE[(idx + 1) % CUBE_VIEW_CYCLE.length];
+        setCubeView(nextView);
+        setSurfaceNotice(gettext('Switched Cube DDN view to %s.', nextView));
+        return;
+      }
+      if (tool === 'align') {
+        handleRecomputeLayout();
+        setSurfaceNotice(gettext('Recomputed Cube layout.'));
+        return;
+      }
+      if (tool === 'pointer' || tool === 'marquee') {
+        setCanvasToolMode(tool);
+        setSurfaceNotice(gettext('Active canvas tool: %s.', tool));
+        return;
+      }
+      if (tool === 'copy' || tool === 'cut') {
+        const target = selectedMeasureObj || selectedDimensionObj;
+        if (target) {
+          cubeClipboardRef.current = {
+            kind: selectedMeasureObj ? 'measure' : 'dimension',
+            payload: JSON.parse(JSON.stringify(target)),
+          };
+          setSurfaceNotice(
+            gettext(
+              tool === 'cut'
+                ? 'Cut "%s" to designer clipboard.'
+                : 'Copied "%s" to designer clipboard.',
+              target.name || target.id
+            )
+          );
+        }
+        return;
+      }
+      if (tool === 'paste') {
+        if (readOnly) return;
+        const clip = cubeClipboardRef.current;
+        if (clip?.kind === 'dimension') {
+          loadDimensionIntoDraft({
+            ...clip.payload,
+            id: `${clip.payload.id}_copy`,
+            name: `${clip.payload.name || clip.payload.id} Copy`,
+          });
+          setDimOpen(true);
+        } else {
+          const base = clip?.payload;
+          loadMeasureIntoDraft(
+            base
+              ? {
+                ...base,
+                id: `${base.id}_copy`,
+                name: `${base.name || base.id} Copy`,
+              }
+              : null
+          );
+          setMeasureOpen(true);
+        }
+      }
+    },
+    onPaletteSelect: (kind, itemId) => {
+      if (kind === 'stencil') {
+        if (readOnly) return;
+        if (itemId === 'dimension') {
+          openDimensionDialog();
+          return;
+        }
+        if (itemId === 'role-play') {
+          loadDimensionIntoDraft(null);
+          setDimDraft((cur) => ({
+            ...cur,
+            roleOf: cubeModel?.dimensions?.[0]?.id || 'date_dim',
+            active: false,
+          }));
+          setDimOpen(true);
+          return;
+        }
+        if (itemId === 'mat-agg') {
+          openAggRuleDialog();
+          return;
+        }
+        openMeasureDialog();
+        return;
+      }
+      if (kind === 'udt') {
+        if (itemId === 'type-map') {
+          runToolbarCommand('cube.designer.materialization_plan', () =>
+            openMaterializationPlan(matEngine)
+          );
+          return;
+        }
+        if (readOnly) return;
+        loadMeasureIntoDraft(null);
+        setMeasureDraft((cur) => ({
+          ...cur,
+          format: itemId === 'money-dec' ? '$#,##0.0000' : cur.format,
+          aggregation: itemId === 'uuidv7' ? 'count_distinct' : cur.aggregation,
+        }));
+        setMeasureOpen(true);
+      }
+    },
+  });
+
   return (
     <Box
       role="region"
-      aria-label="Cube Designer"
+      aria-label={gettext('Cube Designer')}
+      data-canvas-tool={canvasToolMode}
       sx={{
         position: 'relative',
         height: '100%',
@@ -2087,10 +2606,12 @@ export function CubeDesignerSurface({
     >
       <FormReference formKey="cube-designer-workspace" />
       <DesignerTabbedMenu
-        label="Cube Designer"
+        label={gettext('Cube Designer')}
         tabs={ribbonTabs}
         activeTab={activeRibbonTab}
         onTabChange={setActiveRibbonTab}
+        commands={commands}
+        shellTrailing={null}
         leading={
           <StatusBadge
             status={curStatus === 'accepted' ? 'success' : 'info'}
@@ -2113,6 +2634,12 @@ export function CubeDesignerSurface({
         </Banner>
       )}
 
+      {surfaceNotice && (
+        <Banner status="info" onClose={() => setSurfaceNotice('')}>
+          {surfaceNotice}
+        </Banner>
+      )}
+
       {activeDrift?.has_active_changes && (
         <Banner status="warning">
           <Box
@@ -2124,16 +2651,17 @@ export function CubeDesignerSurface({
             }}
           >
             <span>
-              Another version was accepted while this draft was edited (
-              {activeDrift.active_changes?.length || 1} active change(s)). Merge
-              active changes via DDN diff before accepting.
+              {gettext(
+                'Another version was accepted while this draft was edited (%s active change(s)). Merge active changes via DDN diff before accepting.',
+                activeDrift.active_changes?.length || 1
+              )}
             </span>
             <Button
               size="small"
               disabled={busyAction}
               onClick={handleSyncWithActive}
             >
-              Sync active changes
+              {gettext('Sync active changes')}
             </Button>
           </Box>
         </Banner>
@@ -2141,8 +2669,11 @@ export function CubeDesignerSurface({
 
       {appliedInfo && (
         <Banner status="success" onClose={() => setAppliedInfo(null)}>
-          Accepted version applied to semantic-model store (
-          {appliedInfo.model_id} rev {appliedInfo.revision}).
+          {gettext(
+            'Accepted version applied to semantic-model store (%s rev %s).',
+            appliedInfo.model_id,
+            appliedInfo.revision
+          )}
         </Banner>
       )}
 
@@ -2154,17 +2685,21 @@ export function CubeDesignerSurface({
             title={
               localizedPreviewModel?.name ||
               sessionState.design?.title ||
-              'Cube Designer'
+              gettext('Cube Designer')
             }
             showViewSelector={false}
           />
         ) : (
           !loading && (
-            <EmptyState message="Load or create a Cube design to begin modelling." />
+            <EmptyState
+              message={gettext(
+                'Load or create a Cube design to begin modelling.'
+              )}
+            />
           )
         )}
         <ProgressOverlay
-          message={loading ? 'Loading Cube Designer' : ''}
+          message={loading ? gettext('Loading Cube Designer') : ''}
         />
       </Box>
 
@@ -2202,7 +2737,7 @@ export function CubeDesignerSurface({
       {/* Cube Properties Modal (cube-designer-star) */}
       <Dialog
         open={propsOpen}
-        title="Cube properties & design notes"
+        title={gettext('Cube properties & design notes')}
         size="large"
         onClose={() => !busyAction && setPropsOpen(false)}
         busy={busyAction}
@@ -2210,14 +2745,14 @@ export function CubeDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setPropsOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitProperties}
             >
-              Save properties
+              {gettext('Save properties')}
             </Button>
           </>
         }
@@ -4165,11 +4700,13 @@ export function CubeDesignerSurface({
       {/* External SML v1.8 / Apache Ossie v0.2.0 Export Modal (cube-designer-governance) */}
       <Dialog
         open={exportOpen}
-        title="Export cube to SML v1.8 or Apache Ossie"
+        title={gettext('Export cube to SML v1.8 or Apache Ossie')}
         size="large"
         onClose={() => !busyAction && setExportOpen(false)}
         busy={busyAction}
-        actions={<Button onClick={() => setExportOpen(false)}>Close</Button>}
+        actions={
+          <Button onClick={() => setExportOpen(false)}>{gettext('Close')}</Button>
+        }
       >
         <Stack gap="standard">
           <FormReference formKey="cube-designer-governance" />
@@ -4265,7 +4802,7 @@ export function CubeDesignerSurface({
       {/* Save Directed Checkpoint Modal */}
       <Dialog
         open={saveOpen}
-        title="Save cube checkpoint"
+        title={gettext('Save cube checkpoint')}
         size="large"
         onClose={() => !busyAction && setSaveOpen(false)}
         busy={busyAction}
@@ -4273,14 +4810,14 @@ export function CubeDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setSaveOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitSaveCheckpoint}
             >
-              Save checkpoint
+              {gettext('Save checkpoint')}
             </Button>
           </>
         }
@@ -4290,24 +4827,24 @@ export function CubeDesignerSurface({
           tabs={[
             {
               id: 'checkpoint',
-              label: 'Checkpoint & Notes',
+              label: gettext('Checkpoint & Notes'),
               render: () => (
                 <Stack gap="standard">
                   <FormGrid columns={2}>
                     <Select
-                      label="Save-point status"
+                      label={gettext('Save-point status')}
                       value={saveDraft.status}
                       options={[
-                        {value: 'draft', label: 'Draft'},
-                        {value: 'in_progress', label: 'In-progress'},
-                        {value: 'in_review', label: 'In-review'},
+                        {value: 'draft', label: gettext('Draft')},
+                        {value: 'in_progress', label: gettext('In-progress')},
+                        {value: 'in_review', label: gettext('In-review')},
                       ]}
                       onChange={(val) =>
                         setSaveDraft((cur) => ({...cur, status: val}))
                       }
                     />
                     <TextField
-                      label="Checkpoint note"
+                      label={gettext('Checkpoint note')}
                       value={saveDraft.note}
                       onChange={(e) =>
                         setSaveDraft((cur) => ({...cur, note: e.target.value}))
@@ -4315,14 +4852,14 @@ export function CubeDesignerSurface({
                     />
                   </FormGrid>
                   <TypedRowsEditor
-                    label="DDN Design Notes"
+                    label={gettext('DDN Design Notes')}
                     rows={saveDraft.noteRows}
-                    addLabel="Add note"
+                    addLabel={gettext('Add note')}
                     columns={[
                       {
                         key: 'note',
-                        label: 'Note',
-                        placeholder: 'Describe modelling checkpoint',
+                        label: gettext('Note'),
+                        placeholder: gettext('Describe modelling checkpoint'),
                         minWidth: 320,
                       },
                     ]}
@@ -4335,11 +4872,11 @@ export function CubeDesignerSurface({
             },
             {
               id: 'ddn_source',
-              label: 'Cube DDN Source',
+              label: gettext('Cube DDN Source'),
               render: () => (
                 <Box sx={{height: 260}}>
                   <CodeEditor
-                    label="Cube DDN Source"
+                    label={gettext('Cube DDN Source')}
                     value={saveDraft.ddnText}
                     onChange={(val) =>
                       setSaveDraft((cur) => ({
@@ -4359,7 +4896,7 @@ export function CubeDesignerSurface({
       {/* Accept & Apply to Semantic-Model Store Modal */}
       <Dialog
         open={acceptOpen}
-        title="Accept cube version & apply to semantic-model store"
+        title={gettext('Accept cube version & apply to semantic-model store')}
         size="medium"
         onClose={() => !busyAction && setAcceptOpen(false)}
         busy={busyAction}
@@ -4367,10 +4904,10 @@ export function CubeDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setAcceptOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button intent="primary" loading={busyAction} onClick={submitAccept}>
-              Accept & apply
+              {gettext('Accept & apply')}
             </Button>
           </>
         }
@@ -4378,13 +4915,13 @@ export function CubeDesignerSurface({
         <Stack gap="standard">
           <FormReference formKey="cube-designer-governance" />
           <Banner status="info">
-            Accepting makes this version the active cube in the ScratchRobin
-            semantic-model store. Materialized aggregate DDL is never executed
-            automatically and goes through native-operation review.
+            {gettext(
+              'Accepting makes this version the active cube in the ScratchRobin semantic-model store. Materialized aggregate DDL is never executed automatically and goes through native-operation review.'
+            )}
           </Banner>
           <FormGrid columns={2}>
             <TextField
-              label="Semantic-model store Endpoint ID"
+              label={gettext('Semantic-model store Endpoint ID')}
               value={acceptDraft.endpointId}
               onChange={(e) =>
                 setAcceptDraft((cur) => ({
@@ -4394,7 +4931,7 @@ export function CubeDesignerSurface({
               }
             />
             <Select
-              label="Target SQL engine for aggregate review"
+              label={gettext('Target SQL engine for aggregate review')}
               value={acceptDraft.targetEngine}
               options={ENGINE_OPTIONS}
               onChange={(val) =>
@@ -4403,7 +4940,7 @@ export function CubeDesignerSurface({
             />
             <Box sx={{gridColumn: '1 / -1'}}>
               <Checkbox
-                label="Require Git review reference"
+                label={gettext('Require Git review reference')}
                 checked={acceptDraft.requireGitReview}
                 onChange={(checked) =>
                   setAcceptDraft((cur) => ({
@@ -4415,7 +4952,7 @@ export function CubeDesignerSurface({
             </Box>
             {acceptDraft.requireGitReview && (
               <TextField
-                label="Git review / commit ref"
+                label={gettext('Git review / commit ref')}
                 required
                 value={acceptDraft.gitReviewRef}
                 onChange={(e) =>
@@ -4427,7 +4964,7 @@ export function CubeDesignerSurface({
               />
             )}
             <TextField
-              label="Approval comment"
+              label={gettext('Approval comment')}
               value={acceptDraft.comment}
               onChange={(e) =>
                 setAcceptDraft((cur) => ({...cur, comment: e.target.value}))
@@ -4440,7 +4977,7 @@ export function CubeDesignerSurface({
       {/* Leave Accepted Modal */}
       <Dialog
         open={leaveOpen}
-        title="Leave accepted cube version"
+        title={gettext('Leave accepted cube version')}
         size="medium"
         onClose={() => !busyAction && setLeaveOpen(false)}
         busy={busyAction}
@@ -4448,30 +4985,30 @@ export function CubeDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setLeaveOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitLeaveAccepted}
             >
-              Confirm
+              {gettext('Confirm')}
             </Button>
           </>
         }
       >
         <FormGrid columns={2}>
           <Select
-            label="Action"
+            label={gettext('Action')}
             value={leaveDraft.mode}
             options={[
               {
                 value: 'branch_minor_draft',
-                label: 'Force new draft version (minor version bump)',
+                label: gettext('Force new draft version (minor version bump)'),
               },
               {
                 value: 'rollback',
-                label: 'Roll back to an earlier accepted version',
+                label: gettext('Roll back to an earlier accepted version'),
               },
             ]}
             onChange={(val) =>
@@ -4480,7 +5017,7 @@ export function CubeDesignerSurface({
           />
           {leaveDraft.mode === 'rollback' && (
             <TextField
-              label="Target accepted version number"
+              label={gettext('Target accepted version number')}
               value={leaveDraft.targetVersion}
               onChange={(e) =>
                 setLeaveDraft((cur) => ({
@@ -4492,7 +5029,7 @@ export function CubeDesignerSurface({
           )}
           <Box sx={{gridColumn: '1 / -1'}}>
             <TextField
-              label="Reason / note"
+              label={gettext('Reason / note')}
               value={leaveDraft.note}
               onChange={(e) =>
                 setLeaveDraft((cur) => ({...cur, note: e.target.value}))
@@ -4505,7 +5042,7 @@ export function CubeDesignerSurface({
       {/* Git Save / Load Modal */}
       <Dialog
         open={gitOpen}
-        title="Git DDN synchronization"
+        title={gettext('Git DDN synchronization')}
         size="medium"
         onClose={() => !busyAction && setGitOpen(false)}
         busy={busyAction}
@@ -4513,14 +5050,16 @@ export function CubeDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setGitOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitGitOperation}
             >
-              {gitDraft.action === 'save' ? 'Save to Git' : 'Load from Git'}
+              {gitDraft.action === 'save'
+                ? gettext('Save to Git')
+                : gettext('Load from Git')}
             </Button>
           </>
         }
@@ -4529,25 +5068,25 @@ export function CubeDesignerSurface({
           {gitStatus && <Banner status="success">{gitStatus}</Banner>}
           <FormGrid columns={2}>
             <Select
-              label="Git operation"
+              label={gettext('Git operation')}
               value={gitDraft.action}
               options={[
-                {value: 'save', label: 'Save Cube DDN text to Git'},
-                {value: 'load', label: 'Load Cube DDN text from Git'},
+                {value: 'save', label: gettext('Save Cube DDN text to Git')},
+                {value: 'load', label: gettext('Load Cube DDN text from Git')},
               ]}
               onChange={(val) =>
                 setGitDraft((cur) => ({...cur, action: val}))
               }
             />
             <TextField
-              label="Branch"
+              label={gettext('Branch')}
               value={gitDraft.branch}
               onChange={(e) =>
                 setGitDraft((cur) => ({...cur, branch: e.target.value}))
               }
             />
             <TextField
-              label="Git repository directory"
+              label={gettext('Git repository directory')}
               required
               value={gitDraft.repository}
               onChange={(e) =>
@@ -4555,7 +5094,7 @@ export function CubeDesignerSurface({
               }
             />
             <TextField
-              label="Relative DDN file path (e.g. cubes/sales.ddn)"
+              label={gettext('Relative DDN file path (e.g. cubes/sales.ddn)')}
               required
               value={gitDraft.path}
               onChange={(e) =>
@@ -4565,7 +5104,7 @@ export function CubeDesignerSurface({
             {gitDraft.action === 'save' && (
               <Box sx={{gridColumn: '1 / -1'}}>
                 <Checkbox
-                  label="Create Git commit after writing DDN file"
+                  label={gettext('Create Git commit after writing DDN file')}
                   checked={gitDraft.commit}
                   onChange={(checked) =>
                     setGitDraft((cur) => ({...cur, commit: Boolean(checked)}))
@@ -4586,6 +5125,7 @@ CubeDesignerSurface.propTypes = {
   client: PropTypes.object,
   controller: PropTypes.object,
   readOnly: PropTypes.bool,
+  commands: PropTypes.object,
   executeCommand: PropTypes.func,
   onStateChange: PropTypes.func,
   onExport: PropTypes.func,
