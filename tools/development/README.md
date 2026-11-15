@@ -167,7 +167,7 @@ the whole workflow there instead.
 
 For the complete single-page onboarding reference — including the **full 29-image
 Docker catalog**, **Electron desktop setup**, and **processes for creating new
-test databases** — see [../../DEVELOPER_SETUP.md](../../DEVELOPER_SETUP.md).
+test databases** — see [../../docs/DEVELOPER_SETUP.md](../../docs/DEVELOPER_SETUP.md) and [../../docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md](../../docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md).
 
 In the Linux execution environment, clone **both** `CDEadmin` and the mandatory
 public `Diagram-Design-Notation` (`ddn-next-1`) sister repository side by side:

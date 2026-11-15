@@ -31,6 +31,20 @@ describe('provider endpoint verification', () => {
     node = {generate_url: jest.fn().mockReturnValue('/verify/1')};
   });
 
+  it('uses a declared principal default without an engine-specific rule', () => {
+    const profile = jest.spyOn(endpointProfiles, 'get').mockReturnValue({
+      profile_id: 'qualified-native', route_kind: 'network', requires_secret: true,
+      suggested_username: 'DECLARED_PRINCIPAL',
+    });
+    try {
+      showEndpointVerification('Verify', node, {
+        cde_profile_id: 'qualified-native', username: 'endpoint-profile', label: 'Server',
+      }, {}, {}, jest.fn(), jest.fn());
+      const form = pgAdmin.Browser.notifier.showModal.mock.calls[0][1](jest.fn());
+      expect(form.props.data.suggested_username).toBe('DECLARED_PRINCIPAL');
+    } finally {profile.mockRestore();}
+  });
+
   it('does not invent a password prompt for a passwordless provider',
     async () => {
       const onSuccess = jest.fn();
@@ -69,6 +83,20 @@ describe('provider endpoint verification', () => {
       );
       expect(pgAdmin.Browser.notifier.showModal).toHaveBeenCalledTimes(1);
       expect(api.post).not.toHaveBeenCalled();
+    });
+
+  it('verifies automatically without prompting when a saved password exists',
+    async () => {
+      const onSuccess = jest.fn();
+      showEndpointVerification(
+        'Verify Endpoint', node,
+        {cde_profile_id: 'qualified-native', label: 'Secured engine',
+          is_password_saved: true},
+        {}, {}, onSuccess, jest.fn()
+      );
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+      expect(pgAdmin.Browser.notifier.showModal).not.toHaveBeenCalled();
+      expect(onSuccess).toHaveBeenCalledTimes(1);
     });
 
   it('uses the selected registration principal for its password prompt', async () => {

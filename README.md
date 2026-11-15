@@ -1,373 +1,83 @@
 # ScratchRobin CDE Admin
 
-**ScratchRobin CDE Admin** is the project's formal name. The product is called
-**ScratchRobin**, **SR**, or **CDEadmin** where a shorter name is appropriate.
-It is an independent hard fork of pgAdmin 4 9.17 and is being developed as a
-multi-engine, multi-model administration and development environment for
-ScratchBird and independently operated database engines.
+**ScratchRobin** (short name **Robin**; repository and code namespace `CDEadmin`) is a multi-engine, multi-model **Convergent Data Engine (CDE) administrator** and visual design studio for ScratchBird and independently operated database engines. It unifies native database administration, SQL and non-SQL query workspaces, schema comparison, ETL/CDC, data lineage, replication topology, tracing, and Diagram-Design-Notation (`ddn-next-1`) designers for ERD/data modelling, dimensional cubes, BI questions/dashboards, and screen meshes.
 
-Owner direction, 2026-11-07: the product is named **ScratchRobin**, short name
-**Robin** (as ScratchBird's short name is Bird). A *CDE admin* is the class of
-product ScratchRobin belongs to. CDE stands for convergent data engine, a new
-approach to databases that works like a data hypervisor. A CDE admin
-administers many different types of engines and provides unified cross-engine
-tools, producing results that a single engine could not, or that would
-otherwise need several specialised tools. CDEadmin remains the repository name
-and the name of the application's directories and code namespaces. The naming
-in the paragraph above predates this direction.
+- **Current Version**: `0.325-alpha` ([web/version.py](web/version.py) · [product_identity.json](web/pgadmin/cdeadmin/product/product_identity.json)) — pre-release; **24 engine connector roots / 27 provider profiles** in active qualification ([Status Matrix](docs/en_US/implementation_status.rst)).
+- **Provenance & Licence**: ScratchRobin is an independent hard fork of pgAdmin 4 9.17, distributed under the PostgreSQL Licence ([LICENSE](LICENSE) · [NOTICE](NOTICE) · [Hard-Fork Policy](docs/en_US/cdeadmin_hard_fork.rst)). It is not affiliated with or endorsed by the pgAdmin Development Team.
+- **Links**: [User Wiki](wiki/Home.md) · [Open-Source Site Source](website/index.html) · [ScratchRobin Product Page](https://scratchbird.ca/robin)
 
-CDEadmin is not pgAdmin 4 and is not affiliated with or endorsed by the
-pgAdmin Development Team. The upstream copyright, PostgreSQL Licence, source
-history, and applicable notices are retained. See [NOTICE](NOTICE),
-[LICENSE](LICENSE), and [Hard-fork status](docs/en_US/cdeadmin_hard_fork.rst).
+---
 
-**Project links:** [implementation and qualification status](docs/en_US/implementation_status.rst)
-· [open-source site source](website/index.html) · [wiki source](wiki/Home.md)
-· [development setup](tools/development/README.md) ·
-[commercial ScratchRobin page](https://scratchbird.ca/robin).
-The site and wiki source are versioned here; their GitHub publishing endpoints
-are separate from the application release gate.
+## Quick Start & Setup
 
-## Developer setup
+- **AI-Agent Automated Setup (Linux, Windows PowerShell/WSL2, macOS):**
+  Point your AI coding agent at **[docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md](docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md)**. It contains OS/version detection rules (`apt`/`dnf`/`pacman`, `glibc` checks, Windows PowerShell 5.1 & 7+, WSL2 vs Native x64, macOS Apple Silicon & Intel), all **29 pinned Docker images**, the full **users, roles, and passwords** catalog, test-database seeding, and ready-to-generate `start_robin` (Electron + Web Browser) and per-engine (`start | stop | status`) launcher scripts.
+- **Step-by-Step Developer Guides:**
+  [docs/DEVELOPER_SETUP.md](docs/DEVELOPER_SETUP.md) · [Linux / WSL2 / VM Guide](tools/development/README.md) · [Native Windows & macOS Guide](tools/development/NATIVE.md)
 
-Start with the complete first-time developer guide:
-**[Developer Onboarding, Docker Estate & Test Database Guide](DEVELOPER_SETUP.md)**.
-It covers cloning both `CDEadmin` and the mandatory sibling
-`Diagram-Design-Notation` (`ddn-next-1`) repository, installing toolchains,
-building the backend/frontend/Electron desktop app, pre-pulling all **29 pinned
-Docker images** (`bash tools/development/dev.sh images` / `pull`), and creating,
-seeding, and registering both canonical (`cdeadmin_demo`) and isolated custom
-test databases (`bash tools/development/dev.sh create-db`).
+```bash
+# Minimal Linux / WSL2 (x86_64) build & check — clone both sibling repositories:
+git clone https://github.com/scratchbird-software-inc/CDEadmin.git
+git clone https://github.com/scratchbird-software-inc/Diagram-Design-Notation.git
+cd CDEadmin
+bash tools/development/dev.sh doctor
+bash tools/development/dev.sh python && bash tools/development/dev.sh frontend && bash tools/development/dev.sh clients
+make verify
+```
 
-For host-specific reference details, also see:
-- [Linux / WSL2 / VM development and demo setup guide](tools/development/README.md)
-- [Native Windows and macOS development setup](tools/development/NATIVE.md) (includes the GitHub qualification matrix)
+---
 
-The `dev.sh frontend` build sets an 8 GiB Node heap; set `CDEADMIN_NODE_HEAP_MB`
-to change it. (2026-11-05: raised from 3 GiB, which the bundle no longer fits.)
+## Supported Engines & Core Capabilities
 
-## Shared development branch
+- **Relational & Analytical SQL**: PostgreSQL, Firebird (network & embedded), MySQL, MariaDB, SQLite, DuckDB, ClickHouse, Dolt, XTDB, and ScratchBird (native roadmap; legacy-protocol interfaces run through their native engine providers).
+- **Distributed SQL**: CockroachDB, TiDB, Vitess, YugabyteDB (YSQL & YCQL).
+- **Key-Value, Wide-Column & Ledger**: Redis, Apache Cassandra, FoundationDB, TiKV, Apache Ignite, immudb.
+- **Document, Graph, Search, Vector & Time-Series**: MongoDB, Neo4j, OpenSearch (native & SQL/PPL), Milvus, InfluxDB.
+- **Unified Workspaces**: DDN-powered ERD & Data Modelling, Cube Designer, BI Questions & Dashboards, Screen Mesh Designer, Schema Comparison, Visual Administration, ETL & CDC Designers, Data Lineage, Data Quality, Replication Topology, Distributed Tracing, Data Discovery, and Governed AI Drafting.
 
-Use `master` for shared development. Temporary branches are integrated after
-review and verification, then synchronized to the same commit as `master`.
-Each contributor should keep their own clone and save local work before
-switching branches or pulling updates. Fetch the repository, switch to `master`,
-and use `git pull --ff-only` to receive the shared changes. The `gh-pages` branch
-contains published website output and stays separate from application source.
+---
 
-## Why this is a hard fork
+## Documentation Map
 
-The project is no longer a PostgreSQL-only administration tool with additional
-connection adapters. Its product architecture and administration model now
-diverge materially from upstream pgAdmin 4:
+| Topic | Documentation |
+| :--- | :--- |
+| **AI Test Environment, Docker Images & Engine Passwords** | [docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md](docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md) |
+| **Developer Onboarding & Test Database Creation** | [docs/DEVELOPER_SETUP.md](docs/DEVELOPER_SETUP.md) |
+| **Platform Setup (Linux/WSL2 vs Native Windows/macOS)** | [tools/development/README.md](tools/development/README.md) · [tools/development/NATIVE.md](tools/development/NATIVE.md) |
+| **Reference Demo Estate & Per-Engine Lifecycle** | [tools/reference_engine_demos/README.md](tools/reference_engine_demos/README.md) |
+| **Product, Provider & Security Architecture** | [docs/en_US/cdeadmin_architecture.rst](docs/en_US/cdeadmin_architecture.rst) |
+| **UI Shell, Themes & Component Standards** | [web/pgadmin/static/js/cdeadmin_ui/ARCHITECTURE.md](web/pgadmin/static/js/cdeadmin_ui/ARCHITECTURE.md) |
+| **DDN Integration & Native Schema Roundtrip** | [docs/en_US/ddn_adopted_runtime.rst](docs/en_US/ddn_adopted_runtime.rst) · [docs/en_US/ddn_database_roundtrip.rst](docs/en_US/ddn_database_roundtrip.rst) |
+| **Implementation & Qualification Status Matrix** | [docs/en_US/implementation_status.rst](docs/en_US/implementation_status.rst) |
+| **Python 3.14+ Runtime Policy** | [docs/en_US/python_runtime_policy.rst](docs/en_US/python_runtime_policy.rst) |
+| **Security & Vulnerability Reporting** | [SECURITY.md](SECURITY.md) |
+| **User Wiki & Building Sphinx HTML Docs (`make docs`)** | [wiki/Home.md](wiki/Home.md) · [docs/en_US/index.rst](docs/en_US/index.rst) |
 
-- A provider contract represents engine identity, capabilities, metadata,
-  object lifecycles, query languages, data editing, health, and operations.
-- ScratchBird is a native engine. Its legacy-protocol endpoints are handled by
-  the same provider as the corresponding native reference engine; there is no
-  special “emulation mode” in the UI.
-- Relational, document, graph, key-value, analytic, search, columnar, temporal,
-  and distributed/control-plane workloads can have purpose-built workspaces.
-- Visual administration is capability-driven instead of assuming a
-  PostgreSQL object hierarchy or SQL grammar.
-- Cross-model queries, semantic models, cubes, operational workflows, and
-  audit records are first-class product concepts.
-- CDEadmin uses separate state, package, cookie, desktop-store, update, and
-  signing namespaces so it can coexist with pgAdmin 4.
+---
 
-The repository is independently developed and does not merge from, track, or
-submit changes to pgAdmin. Its retained Git history records provenance and is
-not an integration promise. GitHub may continue to display a fork relationship
-until a repository administrator uses *Settings -> General -> Danger Zone ->
-Leave fork network*. That hosting metadata has no effect on the local remote or
-build. Detachment is permanent and can discard GitHub-hosted metadata such as
-issues, pull requests, wikis, stars, watchers and comments, so that separate
-hosting action must be backed up and reviewed before it is performed.
+## Repository Layout & Branch Policy
 
-## Current development status
+- `web/` — Python/Flask server, React frontend, and tests (`web/CDEadmin.py` is the canonical launcher).
+- `web/pgadmin/cdeadmin/` — ScratchRobin provider adapters, UI descriptors, workspaces, and identity contracts.
+- `runtime/` — Electron desktop application shell (`corepack yarn start`).
+- `docs/` — Developer onboarding, AI setup playbook, architecture specs, and Sphinx documentation.
+- `tools/` — Development launchers (`dev.sh`, `native.py`), DDN refresh (`refresh_ddn.py`), demo estate, and verification gates.
+- `pkg/` — Platform packaging inputs (not yet approved for release signing).
 
-CDEadmin is currently version **0.1.0-dev** and is not approved for production
-release. The project contains **24 engine connector roots** and **27 provider
-profiles**. A connector root is the top-level explorer grouping for an engine;
-a provider profile is an exact protocol/dialect implementation. YugabyteDB
-YSQL/YCQL, OpenSearch native/SQL-PPL, and Firebird network/embedded each have
-separate profiles under one engine root. These are inventory counts, not 24 or
-27 completed release gates.
+**Shared Branch & Build Gate**: `master` is the shared development branch (`gh-pages` is kept separate for static site output). Always refresh the public [Diagram-Design-Notation](https://github.com/scratchbird-software-inc/Diagram-Design-Notation) (`ddn-next-1`) capture before direct Webpack, pytest, or Jest runs via `bash tools/development/dev.sh ddn` (`dev.sh frontend` and `native.py` run this automatically).
 
-The provider portfolio covers PostgreSQL, MySQL, MariaDB, Firebird, DuckDB,
-SQLite, MongoDB, Neo4j, Cassandra, Redis, XTDB, ClickHouse, InfluxDB, Milvus,
-OpenSearch, Apache Ignite, CockroachDB, Dolt, FoundationDB, immudb, TiDB, TiKV,
-Vitess, and YugabyteDB. Native ScratchBird is intentionally deferred until the
-reference-engine browser audit is complete.
-
-The structural and live-operation gates are implementation checkpoints, not a
-claim of release readiness. The [dated status matrix](docs/en_US/implementation_status.rst)
-separates source implementation, local verification, GitHub CI and release
-approval for each profile. It also distinguishes the pushed baseline from
-uncommitted development work.
-
-The current implementation contains provider and administration work for
-multiple engine families. Feature availability is governed by provider
-capability and activation gates; a listed engine should not be interpreted as
-fully production-ready unless its gates pass.
+---
 
 ## Product identity and compatibility names
 
-All active user-facing product surfaces must say **CDEadmin** and use generic,
-engine-neutral artwork. Engine names such as PostgreSQL, MongoDB, Firebird, or
-ClickHouse remain where they describe an actual engine, its features, or its
-documentation.
-
-Some inherited identifiers remain temporarily for compatibility, including
-the Python package `pgadmin`, JavaScript object `pgAdmin`, compatibility
-launcher `web/pgAdmin4.py`, selected route/module IDs, migration names, and
-some
-`PGADMIN_` configuration variables. Renaming these without a migration layer
-would break imports, extensions, deployments, or user state. They are legacy
-implementation interfaces, not the product name. New project-owned code must
-use `CDEadmin`, `cdeadmin`, or `CDEADMIN_` as appropriate.
-
-Run the identity and attribution gate with:
+User-facing surfaces identify the product as **ScratchRobin** (**Robin**) or **CDEadmin** with engine-neutral artwork; engine names appear only where describing that specific engine. Legacy internal symbols (`pgadmin` Python/JS namespaces, `web/pgAdmin4.py`, and selected `PGADMIN_` runtime variables) remain temporarily for extension and state compatibility; new code uses `CDEadmin`, `cdeadmin`, or `CDEADMIN_`. Verify identity compliance after UI, runtime, packaging, or documentation edits with:
 
 ```bash
 python3 tools/cdeadmin_product_identity.py --source .
-python3 -m unittest tools.tests.test_cdeadmin_product_identity
 ```
 
-## Architecture
+---
 
-CDEadmin retains the proven Flask/Python server, React client, and Electron
-desktop runtime inherited from pgAdmin 4. The CDEadmin provider layer extends
-that foundation with:
+## Licence and Attribution
 
-- engine/provider registration and capability discovery;
-- connection-profile and driver contracts;
-- provider-defined object catalogs and safe operation descriptors;
-- form/workspace schemas for visual administration;
-- SQL and non-SQL query execution contracts;
-- data-grid editing and provider-specific mutation semantics;
-- semantic-model and analytic workspace contracts;
-- distributed control-plane operations, approvals, progress, cancellation,
-  redaction, persistence, and audit evidence.
-
-The application shell is governed by the CDEadmin module, service, capability,
-contribution, command, event, diagnostics, and surface registries. Its
-Zero-Grey design system supplies token-driven light/dark and accessibility
-profiles, semantic controls, standard dialogs, persistent layouts, keyboard
-commands, project assets, and detachable/restorable work surfaces. The bundled
-Interface Designer lets each account edit reviewed fonts, colours, relative
-geometry, density, motion, semantic artwork assignments, menu structure, and
-authorized command placement. (2026-11-05: fonts, colours, sizes and named
-presets have moved to View > Appearance and Accessibility; the designer's
-other pages are moving to their own dialogs. Later the same day: the
-interface designer is part of Preferences, with Appearance and accessibility
-beside it.) Portable validated profiles support personal,
-team, and organization baselines without embedding executable code or
-weakening command permissions. Product, engine, authentication, and command
-artwork is held in the canonical
-`web/pgadmin/static/assets/cdeadmin` catalog; new code uses semantic icon
-identities instead of physical asset paths.
-
-The bundled DDN runtime and unified Designer are consumed as a versioned
-third-party workspace through their documented public APIs. ScratchRobin
-discovers authorized native metadata and selected data, stores versioned design
-assets, and reviews/applies engine-specific schema changes. DDN owns diagram
-rendering and visual editing; editable DDN/DDNA/DDNN source remains the diagram
-authority. [The roundtrip contract](docs/en_US/ddn_database_roundtrip.rst)
-describes the boundary and the rules for native schema review.
-The first-party Schema Comparison, Data Lineage, Data Quality, Data Contract
-Manager, ETL Designer, CDC Designer, Replication Topology and Distributed
-Tracing modules use those same registries,
-project revisions, provider evidence envelopes, task lifecycle, permission
-checks, accessible workbench surfaces, and explicit unknown/unsupported
-states. ETL adds typed batch/stream ports, native-to-semantic mappings, bounded
-no-write preview, explicit pushdown planning, provider-bound deployment
-validation, checkpoint recovery, error routing and declared/observed lineage.
-CDC adds exact provider capture mechanisms, separate snapshot/stream
-checkpoints, proof-gated delivery guarantees, safe schema evolution, bounded
-and permission-redacted event inspection, lag alerts and independently
-confirmed replay. None of these modules infers behavior from protocol or
-engine-family similarity.
-Replication Topology preserves exact provider-native participant roles,
-states, positions, mechanisms and lag evidence beside its deliberately small
-normalized vocabulary. It provides layout-only topology interaction, bounded
-lag history and alerts, provider-mediated link control, immutable snapshots,
-and a failover workflow that requires quorum, candidate, position and
-data-loss evidence before arming an exact plan revision. A completed failover
-is accepted only after provider rediscovery matches the expected topology.
-Distributed Tracing preserves OpenTelemetry trace/span identity and unknown
-attributes, applies sensitivity policy before persistence, and keeps runtime
-telemetry separate from deterministic project definitions. It provides
-bounded trace search, hierarchical waterfalls, span inspection, observed-time
-service maps, evidenced query/resource correlation, source and sampling
-administration, and provenance-bearing OTLP export. Provider-native tracing is
-enabled only by an exact adapter contract; internal CDEadmin spans remain a
-valid independent source.
-
-The activated AI Interface uses dedicated connector identities and governed
-tool, data-egress, approval, budget, retention, query-review, result-handle and
-audit authorities. It cannot borrow a signed-in user's database session, expose
-raw credentials, approve its own consequential action, or advertise a
-connector class without an implementation. The activated Data Discovery and
-Intelligence module provides security-trimmed lexical, facet, semantic and
-graph discovery; deterministic ranking; project-backed business knowledge,
-saved work and administration assets; governed access, certification,
-profiling, curation and analytics; and all specified Discovery workbench
-surfaces. Provider index sources, provider grant execution, live curation,
-visibility diagnostics and AI enrichment remain capability-gated until their
-real authorities are registered. System-catalog-only resources are not
-presented as business discovery content.
-See [UI architecture](web/pgadmin/static/js/cdeadmin_ui/ARCHITECTURE.md).
-
-PostgreSQL support remains a core engine provider, but it does not define the
-global product identity or constrain other providers to PostgreSQL semantics.
-See [Product architecture](docs/en_US/cdeadmin_architecture.rst) for the
-provider, endpoint, object, workspace, command, and verification boundaries.
-
-## Source tree
-
-- `web/` — Flask application, React UI, provider implementations, tests.
-- `web/pgadmin/cdeadmin/` — CDEadmin-owned provider, administration,
-  workspace, and product-identity code.
-- `runtime/` — Electron desktop runtime.
-- `pkg/` — packaging inputs.
-- `docs/` — product and inherited engine documentation.
-- `tools/` — validation, activation-gate, and engineering utilities.
-
-The historical `pgadmin` directory name is part of the compatibility boundary
-described above.
-
-## Prerequisites
-
-For native Windows x64, Intel macOS and Apple Silicon setup, follow the
-[native development guide](tools/development/NATIVE.md). It provisions the
-required native clients, builds the frontend and runs the platform checks
-without WSL, Docker or Linux libraries. The GitHub **Native development
-environments** workflow tests each host separately.
-
-- Python 3.14 or later (the standard 3.14 build is the current installation baseline)
-- Node.js 22 LTS (tested 22.22.x) through Corepack
-- The Python and native drivers required by the providers being exercised
-- Live reference engines only for the relevant integration/activation tests
-
-The separate free-threaded Python build (`python3.14t` or newer) is a
-qualification target, not a supported full-product runtime yet. See the
-[Python runtime policy](docs/en_US/python_runtime_policy.rst) for the dependency
-and no-GIL gates. Python 3.15 has been released but needs its own qualification.
-
-Enable Yarn and install dependencies:
-
-```bash
-corepack enable
-```
-
-On Linux, do not create a manual environment here: the canonical path is
-[the development guide](tools/development/README.md), which drives
-`bash tools/development/dev.sh python` to build the repository-local `.venv`
-and install the application and demo requirements together. The regression
-requirements under `web/regression/requirements.txt` are a separate set used
-by the upstream test harness, not by the dev.sh path.
-
-Provider-specific drivers and reference-engine versions are documented by
-their activation plans and tests. Do not silently substitute an engine or
-driver version when collecting conformance evidence.
-
-## Building web assets
-
-On Linux, use `bash tools/development/dev.sh frontend` (it refreshes the
-consumed DDN snapshot first; see the DDN freshness protocol in `AGENTS.md`).
-On Windows and macOS, use the native guide's `frontend` stage to build with
-the required host tools and memory settings.
-
-## Development configuration and startup
-
-Local overrides belong in `web/config_local.py`. CDEadmin defaults should use
-separate paths and ports from pgAdmin 4. The product identity contract reserves
-port 5051 and `cdeadmin` state namespaces for this purpose.
-
-On Linux, `bash tools/development/dev.sh configure`, `init` and `run` create
-the configuration, initialize the database (`web/setup.py setup-db`) and start
-the launcher:
-
-```bash
-python3 web/setup.py setup-db
-python3 web/CDEadmin.py
-```
-
-`CDEadmin.py` is the canonical launcher. `pgAdmin4.py` remains as a temporary
-compatibility entry point for inherited imports and deployments.
-
-## Tests
-
-Run the narrow test suites associated with changed providers and UI modules,
-then the broader Python and JavaScript suites appropriate to the change. The
-identity gate is mandatory for changes to branding, packaging, About, runtime,
-or documentation.
-
-The portable [reference-engine demonstration estate](tools/reference_engine_demos/README.md)
-contains pinned lifecycle configuration, native sample-data adapters, rendered
-connection profiles, and verification for every reference product except the
-intentionally deferred native ScratchBird engine.
-
-Generated reports, workplans, and test evidence for this programme are kept
-outside the repository under `~/Sandbox/pgadmin4_work_area/`. Product code is
-changed in this repository. ScratchBird source and private specifications are
-read-only inputs and must never be modified by CDEadmin work.
-
-## Documentation
-
-The [wiki source](wiki/Home.md) is a task-oriented entry point for setup,
-engine workflows, schema review, dashboards, SQL history and troubleshooting.
-The [open-source website source](website/index.html) is a static GitHub Pages
-entry point. Both link to the detailed Sphinx and provider documentation;
-neither is a production-readiness claim.
-
-Build the documentation with:
-
-```bash
-python3 -m pip install Sphinx sphinxcontrib-youtube
-make docs
-```
-
-The output is written to `docs/en_US/_build/html/`. The documentation landing
-page, product architecture, connector model, interface, deployment, governance,
-and status pages describe CDEadmin. Retained pgAdmin release notes and
-PostgreSQL-object chapters are preserved for provenance and for the PostgreSQL
-provider; they are explicitly labelled and do not define CDEadmin globally.
-
-## Packaging status
-
-CDEadmin package identifiers and state namespaces have been reserved, but
-independent signing keys and update endpoints are unassigned. Packages are not
-approved for release until product, legal, security, and release-engineering
-gates have been completed. Never reuse pgAdmin signing identities, update
-feeds, package identifiers, or artwork.
-
-## Licence and attribution
-
-CDEadmin retains and modifies code from pgAdmin 4. pgAdmin 4 is Copyright (C)
-2013–2026, The pgAdmin Development Team, and is distributed under the
-PostgreSQL Licence. CDEadmin remains distributed under that licence.
-
-Do not remove upstream copyright headers from inherited files. New or
-substantially rewritten files should identify CDEadmin while retaining the
-upstream notice whenever they contain upstream-derived material. Consult
-[NOTICE](NOTICE) for the complete fork statement and compatibility policy.
-
-Upstream project: <https://www.pgadmin.org/>
-
-Upstream source: <https://github.com/pgadmin-org/pgadmin4>
-
-Questions, defects, and security reports about CDEadmin must be handled by the
-CDEadmin project’s own channels. Do not send CDEadmin issues to pgAdmin’s
-support or security contacts.
-
-The adopted diagram/dashboard foundation is standalone open DDN `ddn-next-1`
-from the authorized ScratchWeaver checkout. See
-[the integration contract](docs/en_US/ddn_adopted_runtime.rst). Publication of
-this standalone dependency is authorized. Builds require matching `ddn-next-1`
-source; the old DDN repository is incompatible.
-Updated 2026-11-03 (owner direction): that source is now the public
-[Diagram-Design-Notation](https://github.com/scratchbird-software-inc/Diagram-Design-Notation)
-repository, which carries `ddn-next-1`; ScratchWeaver's copy is diverging on
-purpose and is no longer a source.
+ScratchRobin retains and modifies code from pgAdmin 4 (Copyright (C) 2013–2026, The pgAdmin Development Team) under the **PostgreSQL Licence**, and consumes standalone open `ddn-next-1` from [Diagram-Design-Notation](https://github.com/scratchbird-software-inc/Diagram-Design-Notation). Keep upstream copyright headers in inherited files; see [LICENSE](LICENSE) and [NOTICE](NOTICE) for full attribution. Report all ScratchRobin issues and security findings through ScratchRobin's own channels ([SECURITY.md](SECURITY.md)), never to upstream pgAdmin contacts.

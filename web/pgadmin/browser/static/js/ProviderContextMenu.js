@@ -11,6 +11,7 @@ import _ from 'lodash';
 import gettext from 'sources/gettext';
 import pgAdmin from 'sources/pgadmin';
 import getApiInstance from 'sources/api_instance';
+import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {
   LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, providerEndpointUrl, reportServerEditorFailure,
   tryOpenFamilyEditor, tryOpenServerForm,
@@ -75,14 +76,87 @@ function selectedAction(commandId, itemData) {
 }
 
 function serverSelection(item) {
-  const tree = pgAdmin.Browser.tree;
+  const tree = pgAdmin.Browser?.tree;
+  if(!tree) return {item: null, data: null};
   let current = item;
   while(current) {
-    const data = tree.itemData(current);
+    const data = tree.itemData?.(current);
     if(data?._type === 'server') return {item: current, data};
-    current = tree.hasParent(current) ? tree.parent(current) : null;
+    current = tree.hasParent?.(current) ? tree.parent(current) : null;
   }
   return {item: null, data: null};
+}
+
+function openNodeServerProperties(itemData, item) {
+  const tree = pgAdmin.Browser?.tree;
+  const targetItem = item || tree?.selected?.();
+  const targetData = itemData || (targetItem ? tree?.itemData?.(targetItem) : null);
+  const serverNode = pgAdmin.Browser?.Nodes?.server;
+  if (
+    typeof document !== 'undefined' &&
+    typeof window !== 'undefined' &&
+    document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
+  ) {
+    if (targetItem) {
+      void tree?.select?.(targetItem);
+    }
+    window.dispatchEvent(
+      new CustomEvent('scratchrobin:navigator-select-tab', {
+        detail: {tab: 'properties', focusEditor: true},
+      })
+    );
+    return true;
+  }
+  if (targetData?._type === 'localhost_placeholder') {
+    return serverNode?.callbacks?.register_engine_server?.call(serverNode, {
+      item: targetItem,
+      engineId: targetData.engine_id,
+      panelTitle: gettext('Server Properties — %s', targetData.label || 'localhost'),
+      applyLabel: gettext('Apply Changes'),
+      registrationContext: {
+        host: 'localhost',
+        registration_intent: 'endpoint',
+      },
+    });
+  }
+  const endpoint = serverSelection(targetItem);
+  const engine = endpoint.data?.cde_engine_id;
+  if (endpoint.item && engine) {
+    return tryOpenServerForm({
+      item: endpoint.item,
+      mode: 'alter',
+      engine,
+      profileId: endpoint.data.cde_profile_id,
+      verifyNow: 'auto',
+      applyLabel: gettext('Apply Changes'),
+      panelTitle: gettext('Server Properties — %s', endpoint.data.label || endpoint.data._label),
+    });
+  }
+  return false;
+}
+
+function openNodeDatabaseProperties(itemData, item, fallbackMenu = null) {
+  const tree = pgAdmin.Browser?.tree;
+  const targetItem = item || tree?.selected?.();
+  if (
+    typeof document !== 'undefined' &&
+    typeof window !== 'undefined' &&
+    document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
+  ) {
+    if (targetItem) {
+      void tree?.select?.(targetItem);
+    }
+    window.dispatchEvent(
+      new CustomEvent('scratchrobin:navigator-select-tab', {
+        detail: {tab: 'properties', focusEditor: true},
+      })
+    );
+    return true;
+  }
+  if (fallbackMenu) {
+    return executeProviderAction(fallbackMenu, itemData, targetItem);
+  }
+  return false;
 }
 
 function showConnectorInformation(args, context) {
@@ -247,12 +321,31 @@ function dispatch(action, args, context) {
       .then(({addNodeToDiagram}) => addNodeToDiagram({args, endpointUrl: providerEndpointUrl(
         serverNode, endpoint.item, endpoint.data, args.database_target_id)}))
       .catch((error) => pgAdmin.Browser.notifier.error(error?.message || String(error)));
-  case 'open_workspace':
+  case 'open_workspace': {
+    const engine = endpoint.data?.cde_engine_id;
+    if (args?.server_mode === 'edit' && engine && LEGACY_REGISTRATION_RETIRED.has(engine)) {
+      return tryOpenServerForm({
+        item: endpoint.item,
+        mode: 'alter',
+        engine,
+        profileId: endpoint.data.cde_profile_id,
+        verifyNow: 'auto',
+        applyLabel: gettext('Apply Changes'),
+        panelTitle: gettext('Server Properties — %s', endpoint.data.label || endpoint.data._label),
+      });
+    }
+    if (args?.server_mode === 'remove' && endpoint.item && serverNode?.callbacks?.delete_obj) {
+      return serverNode.callbacks.delete_obj.call(serverNode, {
+        item: endpoint.item,
+        url: 'drop',
+      });
+    }
     return serverNode.callbacks.open_cde_workspace.call(
       serverNode, {item: endpoint.item}, args.tab || 'resources', {
         ...args, task_title: action.label.replace(/\.\.\.$/, ''),
       }
     );
+  }
   case 'edit_endpoint': {
     const legacy = () => pgAdmin.Browser.Node.callbacks.show_obj_properties.call(
       serverNode, {action: 'edit', item: endpoint.item}
@@ -264,7 +357,8 @@ function dispatch(action, args, context) {
     //   .then((opened) => opened || legacy()).catch(() => legacy());
     const retired = LEGACY_REGISTRATION_RETIRED.has(engine);
     return tryOpenServerForm({item: endpoint.item, mode: 'alter', engine, profileId: endpoint.data.cde_profile_id,
-      panelTitle: gettext('Edit %s', endpoint.data.label || endpoint.data._label)})
+      verifyNow: 'auto', applyLabel: gettext('Apply Changes'),
+      panelTitle: gettext('Server Properties — %s', endpoint.data.label || endpoint.data._label)})
       .then((opened) => {
         if(opened) return opened;
         if(retired) return reportServerEditorFailure(engine, gettext('server form unavailable'));
@@ -461,10 +555,97 @@ function toDiagramEntry(menu, itemData, item) {
   };
 }
 
+const SERVER_PROMOTED_SUFFIXES = new Set([
+  'verify',
+  'disconnect',
+  'create_database',
+  'register_database',
+  'forget',
+]);
+
+const DATABASE_PROMOTED_SUFFIXES = new Set([
+  'properties',
+  'studio',
+  'connect',
+  'edit',
+  'alter',
+  'drop',
+  'remove',
+]);
+
+const UNVERIFIED_ENDPOINT_REASONS = new Set([
+  'Verify this endpoint before using it.',
+  'Endpoint is not verified.',
+]);
+
+/**
+ * Server-level database registration and creation actions (`open_workspace`)
+ * automatically invoke `verify_cde_endpoint` first when the server session is
+ * unverified, so they remain directly selectable on `server` nodes.
+ */
+export function canLaunchServerMenu(menu, itemData, item) {
+  if (!menu) return false;
+  if (menu.enable?.(itemData, item)) return true;
+  if (
+    itemData?._type !== 'server' ||
+    menu.handler !== 'open_workspace' ||
+    !UNVERIFIED_ENDPOINT_REASONS.has(menu.disabledReason)
+  ) {
+    return false;
+  }
+  const suffix = String(menu.commandId).split('.').at(-1);
+  if (suffix !== 'register_database' && suffix !== 'create_database') {
+    return false;
+  }
+  if (suffix === 'create_database' && itemData?.cde_profile_id) {
+    const profile = endpointProfiles?.get?.(itemData.cde_profile_id);
+    if (profile?.form_contract?.database?.forms?.create?.supported === false) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function providerTreeContextActions(itemData, item=null) {
   const menus = providerContextMenuItems(itemData, item);
   if(menus === null) return null;
+  const nodeType = itemData?._type;
   const grouped = new Map();
+  const pushCommon = (entry) => {
+    if (!grouped.has('common')) grouped.set('common', []);
+    grouped.get('common').push(entry);
+  };
+
+  if (nodeType === 'localhost_placeholder') {
+    return [{
+      id: 'localhost-server-properties',
+      label: gettext('Properties...'),
+      description: gettext('Edit server connection settings, port, and credentials'),
+      iconKey: 'action.properties',
+      intent: 'default',
+      enabled: true,
+      requiresConfirmation: false,
+      execute: () => openNodeServerProperties(itemData, item),
+      providerId: itemData?.cde_provider_id || itemData?.engine_id || itemData?.cde_engine_id || '',
+      objectTypes: [nodeType],
+    }];
+  }
+
+  if (nodeType === 'server') {
+    pushCommon({
+      id: 'server-endpoint-properties',
+      label: gettext('Properties...'),
+      description: gettext('Edit server connection settings, port, and credentials'),
+      iconKey: 'action.properties',
+      intent: 'default',
+      enabled: true,
+      requiresConfirmation: false,
+      execute: () => openNodeServerProperties(itemData, item),
+      providerId: itemData?.cde_provider_id || itemData?.engine_id || itemData?.cde_engine_id || '',
+      objectTypes: [nodeType],
+    });
+  }
+
   // Descriptor-driven entries (family editor, create, tier 2/3 operations)
   // merge into the same categories; legacy entries with the same operation
   // id yield to them.
@@ -472,31 +653,102 @@ export function providerTreeContextActions(itemData, item=null) {
   const descriptorOperationIds = new Set(descriptorEntries.map((entry) => entry.id.replace(/^descriptor-op-/, '')));
   descriptorEntries.forEach((entry) => {
     if(!grouped.has(entry.category)) grouped.set(entry.category, []);
-    grouped.get(entry.category).push({providerId: itemData?.cde_provider_id || '', objectTypes: [itemData?._type || 'object'],
+    grouped.get(entry.category).push({providerId: itemData?.cde_provider_id || '', objectTypes: [nodeType || 'object'],
       ...entry});
   });
+
+  let hasServerRemove = false;
+  let hasDatabaseProperties = false;
+
   menus.forEach((menu)=>{
-    if(descriptorOperationIds.has(String(menu.commandId).split('.').at(-1))) return;
-    const category = menu.category || 'object';
+    const suffix = String(menu.commandId).split('.').at(-1);
+    if(descriptorOperationIds.has(suffix)) return;
+
+    if ((nodeType === 'server' || nodeType === 'cde_database_target') && menu.handler === 'register_endpoint') {
+      return;
+    }
+    if (nodeType === 'server' && suffix === 'properties') {
+      return;
+    }
+
+    let category = menu.category || 'object';
+    let label = menu.label;
+    let execute = () => executeProviderAction(menu, itemData, item);
+
+    if (nodeType === 'engine_type' && category === 'register') {
+      category = 'common';
+    } else if (nodeType === 'server' && SERVER_PROMOTED_SUFFIXES.has(suffix)) {
+      category = 'common';
+      if (suffix === 'forget') {
+        hasServerRemove = true;
+        label = gettext('Remove Server...');
+      }
+    } else if (nodeType === 'cde_database_target' && DATABASE_PROMOTED_SUFFIXES.has(suffix)) {
+      category = 'common';
+      if (suffix === 'properties') {
+        hasDatabaseProperties = true;
+        label = gettext('Properties...');
+        execute = () => openNodeDatabaseProperties(itemData, item, menu);
+      }
+    }
+
     if(!grouped.has(category)) grouped.set(category, []);
     if(menu.handler === 'add_to_diagram') {
       grouped.get(category).push(toDiagramEntry(menu, itemData, item));
       return;
     }
+    const launchable = canLaunchServerMenu(menu, itemData, item);
     grouped.get(category).push({
       id: menu.commandId,
-      label: menu.label,
+      label,
       description: menu.description,
       iconKey: menu.iconKey,
       intent: menu.intent === 'destructive' ? 'destructive' : 'default',
-      enabled: menu.enable(itemData, item),
-      disabledReason: menu.disabledReason,
+      enabled: launchable,
+      disabledReason: launchable ? '' : menu.disabledReason,
       requiresConfirmation: menu.requiresConfirmation,
-      execute: ()=>executeProviderAction(menu, itemData, item),
+      execute,
       providerId: itemData?.cde_provider_id || '',
-      objectTypes: [itemData?._type || 'object'],
+      objectTypes: [nodeType || 'object'],
     });
   });
+
+  if (nodeType === 'cde_database_target' && !hasDatabaseProperties) {
+    pushCommon({
+      id: 'database-target-properties',
+      label: gettext('Properties...'),
+      description: gettext('View and edit settings for this database'),
+      iconKey: 'action.properties',
+      intent: 'default',
+      enabled: true,
+      requiresConfirmation: false,
+      execute: () => openNodeDatabaseProperties(itemData, item),
+      providerId: itemData?.cde_provider_id || itemData?.cde_engine_id || '',
+      objectTypes: [nodeType],
+    });
+  }
+
+  if (nodeType === 'server' && !hasServerRemove) {
+    pushCommon({
+      id: 'server-endpoint-remove',
+      label: gettext('Remove Server...'),
+      description: gettext('Remove this server registration from ScratchRobin'),
+      iconKey: 'action.delete',
+      intent: 'destructive',
+      enabled: true,
+      requiresConfirmation: false,
+      execute: () => {
+        const serverNode = pgAdmin.Browser?.Nodes?.server;
+        return serverNode?.callbacks?.delete_obj?.call(serverNode, {
+          item,
+          url: 'drop',
+        });
+      },
+      providerId: itemData?.cde_provider_id || itemData?.cde_engine_id || '',
+      objectTypes: [nodeType],
+    });
+  }
+
   return [...grouped.entries()].sort(([left], [right])=>{
     if (left === 'common') return -1;
     if (right === 'common') return 1;

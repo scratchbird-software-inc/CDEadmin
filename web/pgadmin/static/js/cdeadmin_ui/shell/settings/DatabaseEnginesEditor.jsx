@@ -14,6 +14,7 @@ import usePreferences from '../../../../../preferences/static/js/store';
 import {Button} from '../../primitives/Button';
 import {Select, Switch} from '../../primitives/Choice';
 import {SearchField} from '../../primitives/AdvancedControls';
+import {Banner} from '../../feedback/Indicators';
 import {EngineIcon} from '../../icons';
 
 function resolveCsrfHeaders() {
@@ -110,6 +111,7 @@ export function DatabaseEnginesEditor({
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     if (!runFetch) return undefined;
@@ -129,7 +131,7 @@ export function DatabaseEnginesEditor({
                 Array.isArray(srv.interfaces) && srv.interfaces.length > 0
                   ? srv.interfaces.join(', ')
                   : fb?.interfaces || '',
-              local_detected: Boolean(srv.local_detected),
+              local_detected: Boolean(srv.local_available ?? srv.local_detected),
               enabled: Boolean(srv.enabled),
             };
           })
@@ -156,6 +158,12 @@ export function DatabaseEnginesEditor({
       setEnabledIds(clean);
       writeLocalEnabledEngines(clean);
       onChangeGlobal?.({enabled_engines: clean});
+      setFeedback(
+        gettext(
+          'Active database engines updated (%s enabled). Data Navigator Connectors refreshed.',
+          clean.length
+        )
+      );
 
       if (runFetch) {
         try {
@@ -169,13 +177,17 @@ export function DatabaseEnginesEditor({
             const data = await res.json();
             if (Array.isArray(data?.enabled_engine_ids)) {
               setEnabledIds(data.enabled_engine_ids);
+              writeLocalEnabledEngines(data.enabled_engine_ids);
             }
           }
           // Refresh preference cache & Data Navigator Connectors branch live
           await usePreferences.getState?.()?.cache?.();
-          if (typeof window !== 'undefined' && window.pgAdmin?.Browser) {
-            window.pgAdmin.Browser.tree?.destroy?.();
-            window.pgAdmin.Browser.Events?.trigger?.('pgadmin-browser:tree:destroyed');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('scratchrobin:connectors-changed', {
+                detail: {enabled_engines: clean},
+              })
+            );
           }
         } catch {
           // Offline / test harness safe.
@@ -199,64 +211,79 @@ export function DatabaseEnginesEditor({
       data-cdeadmin-qa-key="settings-engines-editor"
       style={{display: 'flex', flexDirection: 'column', gap: 12}}
     >
-      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap'}}>
-        <div>
-          <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
-            {gettext('Database Engines & Connectors On/Off (%s of %s Active)', enabledIds.length, engines.length)}
+      <div
+        style={{
+          border: '1px solid var(--sr-border-default)',
+          borderRadius: 6,
+          background: 'color-mix(in srgb, var(--sr-surface-subtle) 55%, var(--sr-surface-card))',
+          padding: '10px 14px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+          <div>
+            <div style={{fontWeight: 600, fontSize: '0.84rem', color: 'var(--sr-text-primary)'}}>
+              {gettext('Database Engines & Connectors On/Off (%s of %s Active)', enabledIds.length, engines.length)}
+            </div>
+            <div style={{fontSize: '0.75rem', color: 'var(--sr-text-secondary)'}}>
+              {gettext(
+                'Enabled engines appear under Data Navigator › Connectors and Server Registration.'
+              )}
+            </div>
           </div>
-          <div style={{fontSize: '0.78rem', color: 'var(--sr-text-secondary)'}}>
-            {gettext(
-              'Turn database engines ON or OFF. Enabled engines appear immediately under Data Navigator › Connectors and Server Registration.'
-            )}
+          <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="engines-enable-core"
+              onClick={() => void commitEnabledEngines([...CORE_SQL_ENGINE_IDS])}
+            >
+              {gettext('Core SQL Only')}
+            </Button>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="engines-enable-all"
+              onClick={() => void commitEnabledEngines(engines.map((e) => e.id))}
+            >
+              {gettext('Enable All')}
+            </Button>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="engines-disable-all"
+              onClick={() => void commitEnabledEngines([])}
+            >
+              {gettext('Disable All')}
+            </Button>
           </div>
         </div>
-        <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
-          <Button
-            intent="neutral"
-            data-cdeadmin-qa-key="engines-enable-core"
-            onClick={() => void commitEnabledEngines([...CORE_SQL_ENGINE_IDS])}
-          >
-            {gettext('Core SQL Only')}
-          </Button>
-          <Button
-            intent="neutral"
-            data-cdeadmin-qa-key="engines-enable-all"
-            onClick={() => void commitEnabledEngines(engines.map((e) => e.id))}
-          >
-            {gettext('Enable All')}
-          </Button>
-          <Button
-            intent="neutral"
-            data-cdeadmin-qa-key="engines-disable-all"
-            onClick={() => void commitEnabledEngines([])}
-          >
-            {gettext('Disable All')}
-          </Button>
+
+        <div style={{display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10, alignItems: 'end'}}>
+          <SearchField
+            aria-label={gettext('Filter engines')}
+            placeholder={gettext('Filter engines (PostgreSQL, Firebird, DuckDB, ScratchBird…)')}
+            value={searchQuery}
+            onChange={setSearchQuery}
+          />
+          <Select
+            aria-label={gettext('Engine Family')}
+            value={categoryFilter}
+            options={categories}
+            onChange={(val) => setCategoryFilter(val || 'all')}
+          />
         </div>
       </div>
 
-      <div style={{display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 10, alignItems: 'end'}}>
-        <SearchField
-          label={gettext('Filter engines')}
-          placeholder={gettext('Search PostgreSQL, Firebird, DuckDB, ScratchBird…')}
-          value={searchQuery}
-          onChange={setSearchQuery}
-        />
-        <Select
-          label={gettext('Engine Family')}
-          value={categoryFilter}
-          options={categories}
-          onChange={(val) => setCategoryFilter(val || 'all')}
-        />
-      </div>
+      {feedback && <Banner status="info">{feedback}</Banner>}
 
       <div
-        className="sr-bui-table-card"
         style={{
-          padding: 8,
+          border: '1px solid var(--sr-border-default)',
+          borderRadius: 6,
+          background: 'var(--sr-surface-card)',
+          overflow: 'hidden',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(265px, 1fr))',
-          gap: 8,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
         }}
       >
         {filteredEngines.map((eng) => {
@@ -270,23 +297,24 @@ export function DatabaseEnginesEditor({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 8,
-                padding: '8px 10px',
-                borderRadius: 8,
-                background: 'var(--sr-surface-card)',
-                border: isEnabled
-                  ? '1px solid var(--sr-accent)'
-                  : '1px solid var(--sr-border-subtle)',
+                padding: '6px 12px',
+                borderBottom: '1px solid var(--sr-border-subtle)',
+                borderRight: '1px solid var(--sr-border-subtle)',
+                background: isEnabled
+                  ? 'var(--sr-surface-card)'
+                  : 'color-mix(in srgb, var(--sr-surface-subtle) 60%, var(--sr-surface-card))',
+                opacity: isEnabled ? 1 : 0.78,
               }}
             >
               <div style={{display: 'flex', alignItems: 'center', gap: 8, minWidth: 0}}>
-                <EngineIcon engine={eng.id} decorative size="20px" />
+                <EngineIcon engine={eng.id} decorative size="18px" />
                 <div style={{minWidth: 0}}>
                   <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
-                    <span style={{fontWeight: 700, fontSize: '0.82rem'}}>{eng.label}</span>
+                    <span style={{fontWeight: 600, fontSize: '0.8rem'}}>{eng.label}</span>
                     {eng.local_detected && (
                       <span
                         style={{
-                          fontSize: '0.64rem',
+                          fontSize: '0.62rem',
                           fontWeight: 700,
                           padding: '1px 5px',
                           borderRadius: 999,
@@ -300,7 +328,7 @@ export function DatabaseEnginesEditor({
                   </div>
                   <div
                     style={{
-                      fontSize: '0.7rem',
+                      fontSize: '0.68rem',
                       color: 'var(--sr-text-secondary)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',

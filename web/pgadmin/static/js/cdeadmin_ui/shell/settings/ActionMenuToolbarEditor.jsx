@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Button} from '../../primitives/Button';
@@ -68,14 +68,26 @@ function cloneTabs(tabs = []) {
 
 export function ActionMenuToolbarEditor({
   subView = 'global-menus',
+  hideTabs = false,
   globalSettings = {},
   applicationSettings = {},
   applications = [],
   actionsRegistry = null,
   onChangeGlobal,
   onChangeApp,
+  onNavigateSubView,
 }) {
   const localInitial = useMemo(() => readLocalPlacements(), []);
+  const [activeSubView, setActiveSubView] = useState(subView);
+
+  useEffect(() => {
+    setActiveSubView(subView);
+  }, [subView]);
+
+  const switchSubView = (nextView) => {
+    setActiveSubView(nextView);
+    onNavigateSubView?.(nextView);
+  };
 
   const [menuPlacements, setMenuPlacements] = useState(
     () => globalSettings.menu_placements || localInitial.menu_placements || {}
@@ -200,10 +212,45 @@ export function ActionMenuToolbarEditor({
     onChangeApp?.(targetAppId, patch);
   };
 
+  const subViewTabsBar = hideTabs ? null : (
+    <div
+      role="tablist"
+      aria-label={gettext('Menus, Toolbars & Action Icons Sections')}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        paddingBottom: 8,
+        borderBottom: '1px solid var(--sr-border-subtle)',
+      }}
+    >
+      {[
+        ['global-menus', gettext('Global Top Menus')],
+        ['app-menus', gettext('Application Menus')],
+        ['iconbars', gettext('Tabbed-Notebook Iconbars')],
+        ['icons', gettext('Action Icons & Status')],
+      ].map(([key, label]) => {
+        const selected = activeSubView === key;
+        return (
+          <Button
+            key={key}
+            role="tab"
+            aria-selected={selected}
+            intent={selected ? 'primary' : 'neutral'}
+            data-cdeadmin-qa-key={`actions-tab-${key}`}
+            onClick={() => switchSubView(key)}
+          >
+            {label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+
   // -------------------------------------------------------------------------
   // Sub-view 1: Global Top Menu Bar (`Area 1`)
   // -------------------------------------------------------------------------
-  if (subView === 'global-menus') {
+  if (activeSubView === 'global-menus') {
     const customMenus = Array.isArray(menuPlacements.__custom_menus)
       ? menuPlacements.__custom_menus
       : [];
@@ -342,6 +389,7 @@ export function ActionMenuToolbarEditor({
         data-cdeadmin-qa-key="settings-global-menus-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 12}}
       >
+        {subViewTabsBar}
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
             {gettext('Global Top Menu Bar Editor (Area 1)')}
@@ -554,7 +602,7 @@ export function ActionMenuToolbarEditor({
   // -------------------------------------------------------------------------
   // Sub-view 2: Application Menus (`Area 1` Dynamic Focused Menus)
   // -------------------------------------------------------------------------
-  if (subView === 'app-menus') {
+  if (activeSubView === 'app-menus') {
     const surface =
       CANONICAL_APPLICATION_SURFACES[selectedAppId] ||
       CANONICAL_APPLICATION_SURFACES['data-navigator'];
@@ -583,6 +631,7 @@ export function ActionMenuToolbarEditor({
         data-cdeadmin-qa-key="settings-app-menus-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 12}}
       >
+        {subViewTabsBar}
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
             {gettext('Application Top Menus Editor (Area 1 Dynamic Menus)')}
@@ -701,7 +750,7 @@ export function ActionMenuToolbarEditor({
   // -------------------------------------------------------------------------
   // Sub-view 3: Tabbed-Notebook Iconbars (`Area 3b` & `3b1` Quick Strip)
   // -------------------------------------------------------------------------
-  if (subView === 'iconbars') {
+  if (activeSubView === 'iconbars') {
     const surface =
       CANONICAL_APPLICATION_SURFACES[selectedAppId] ||
       CANONICAL_APPLICATION_SURFACES['data-navigator'];
@@ -731,6 +780,7 @@ export function ActionMenuToolbarEditor({
         data-cdeadmin-qa-key="settings-iconbars-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 14}}
       >
+        {subViewTabsBar}
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
             {gettext('Tabbed-Notebook Iconbars Editor (Area 3b & 3b1 Quick Strip)')}
@@ -1058,6 +1108,7 @@ export function ActionMenuToolbarEditor({
       data-cdeadmin-qa-key="settings-action-icons-editor"
       style={{display: 'flex', flexDirection: 'column', gap: 12}}
     >
+      {subViewTabsBar}
       <div>
         <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
           {gettext('Action Semantic Icons & Tri-State Visibility')}
@@ -1145,10 +1196,12 @@ export function ActionMenuToolbarEditor({
 
 ActionMenuToolbarEditor.propTypes = {
   subView: PropTypes.oneOf(['global-menus', 'app-menus', 'iconbars', 'icons']),
+  hideTabs: PropTypes.bool,
   globalSettings: PropTypes.object,
   applicationSettings: PropTypes.object,
   applications: PropTypes.array,
   actionsRegistry: PropTypes.object,
   onChangeGlobal: PropTypes.func,
   onChangeApp: PropTypes.func,
+  onNavigateSubView: PropTypes.func,
 };

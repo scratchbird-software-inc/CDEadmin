@@ -82,6 +82,109 @@ describe('ServerRegistrationHost', () => {
     expect(request.data).toMatchObject({name: 'New'});
     expect(request.data).not.toHaveProperty('db');
   });
+
+  it('registers and edits Firebird server settings with custom port 53050 (inline without onClose)', async () => {
+    const bundle = loadEngineBundle('firebird');
+    const api = fakeApi(bundle, {
+      name: 'Firebird on localhost',
+      host: 'localhost',
+      port: 3050,
+      username: 'SYSDBA',
+      cde_profile_id: 'firebird-native',
+    });
+    const onSaved = jest.fn();
+    const {unmount} = render(
+      <Theme>
+        <ServerRegistrationHost
+          api={api}
+          engine="firebird"
+          mode="create"
+          urlFor={(isNew) => `/browser/server/obj/1/${isNew ? '' : '11'}`}
+          initialData={{
+            name: 'Firebird on localhost',
+            host: 'localhost',
+            port: 3050,
+            cde_profile_id: 'firebird-native',
+          }}
+          profileId="firebird-native"
+          displayName="Register Firebird server / instance"
+          onSaved={onSaved}
+        />
+      </Theme>
+    );
+    await screen.findByRole('dialog');
+    expect(screen.queryByRole('button', {name: 'Cancel'})).toBeNull();
+    fireEvent.change(screen.getByLabelText(/^Server port/), {target: {value: '53050'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Register'}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(api.mock.calls.at(-1)[0]).toMatchObject({
+      method: 'POST',
+      url: '/browser/server/obj/1/',
+      data: expect.objectContaining({
+        host: 'localhost',
+        port: 53050,
+        cde_profile_id: 'firebird-native',
+      }),
+    });
+    unmount();
+
+    render(
+      <Theme>
+        <ServerRegistrationHost
+          api={api}
+          engine="firebird"
+          mode="alter"
+          urlFor={(isNew) => `/browser/server/obj/1/${isNew ? '' : '11'}`}
+          profileId="firebird-native"
+          displayName="Server Settings — Firebird on localhost"
+          onSaved={onSaved}
+        />
+      </Theme>
+    );
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText(/^Server port/), {target: {value: '53050'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+    expect(api.mock.calls.at(-1)[0]).toMatchObject({
+      method: 'PUT',
+      url: '/browser/server/obj/1/11',
+      data: {port: 53050},
+    });
+  });
+
+  it('supports Apply Changes and auto-verification when editing localhost port without or with credentials', async () => {
+    const bundle = loadEngineBundle('firebird');
+    const api = fakeApi(bundle, {});
+    const onSaved = jest.fn();
+    render(
+      <Theme>
+        <ServerRegistrationHost
+          api={api}
+          engine="firebird"
+          mode="create"
+          urlFor={() => '/browser/server/obj/1/'}
+          initialData={{name: 'Firebird 5.0 on localhost', host: 'localhost', port: 3050, connect_now: false}}
+          profileId="firebird-native"
+          verifyNow="auto"
+          applyLabel="Apply Changes"
+          displayName="Server Properties — Firebird 5.0 on localhost"
+          onSaved={onSaved}
+        />
+      </Theme>
+    );
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText(/^Server port/), {target: {value: '53050'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Apply Changes'}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(api.mock.calls.at(-1)[0]).toMatchObject({
+      method: 'POST',
+      url: '/browser/server/obj/1/',
+      data: expect.objectContaining({
+        port: 53050,
+        cde_verify_now: false,
+      }),
+    });
+  });
 });
 
 describe('lifecycleProfileRequest (MySQL edits through the provider lifecycle, browser pass 2026-11-12)', () => {

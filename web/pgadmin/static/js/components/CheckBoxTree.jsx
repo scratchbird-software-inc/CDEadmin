@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import React, {useMemo, useState, useEffect} from 'react';
+import {useMemo, useState, useEffect} from 'react';
 import PropTypes from 'prop-types';
 import {ScratchBranchedTree} from 'sources/cdeadmin_ui/navigation/ScratchBranchedTree';
 

@@ -1286,38 +1286,91 @@ define('pgadmin.browser', [
     },
 
     onRefreshTreeNode: async function(nodeItem, opts) {
-      this.tree.toggleItemLoader(nodeItem, true);
+      if (!nodeItem || !this.tree) return;
 
-      const itemNodeData = nodeItem && this.tree.itemData(nodeItem);
-      let nodeObj = this.Nodes[itemNodeData?._type];
-
-      // If the node is a collection node, we can directly refresh it.
-      if(!nodeObj?.collection_node) {
-        // If the node is not a collection node, we need to fetch its data
-        // from the server and update the tree node.
-        try {
-          const url = nodeObj.generate_url(nodeItem, 'nodes', itemNodeData, true);
-          const api = getApiInstance();
-          const resp = await api.get(url);
-          // server response data comes in result
-          const respData = resp.data.data || resp.data.result;
-
-          if(respData) {
-            this.tree.update(nodeItem, {
-              ...itemNodeData, ...respData
-            });
-            this.tree.setLabel(nodeItem, {label: respData.label});
-            this.tree.addIcon(nodeItem, {icon: respData.icon});
-          }
-        } catch (error) {
-          console.error('Failed to refresh tree node:', error);
-          return;
-        }
+      // Leaf File items cannot reload children themselves; refresh their parent container.
+      let targetItem = nodeItem;
+      if (
+        targetItem.type === 1 &&
+        typeof this.tree.hasParent === 'function' &&
+        this.tree.hasParent(targetItem)
+      ) {
+        targetItem = this.tree.parent(targetItem);
       }
+      if (!targetItem) return;
 
-      await this.tree.refresh(nodeItem);
-      this.tree.toggleItemLoader(nodeItem, false);
-      opts?.success?.();
+      this.tree.toggleItemLoader?.(targetItem, true);
+
+      try {
+        const itemNodeData = this.tree.itemData(targetItem);
+        const nodeType = itemNodeData?._type;
+        const nodeObj = nodeType ? this.Nodes[nodeType] : null;
+        const skipNodeMetadataFetch =
+          !nodeObj ||
+          Boolean(nodeObj.collection_node) ||
+          typeof nodeObj.generate_url !== 'function' ||
+          [
+            'server_group',
+            'engine_type',
+            'localhost_placeholder',
+            'cde_database_target',
+            'cde_resource_group',
+            'cde_resource',
+          ].includes(nodeType);
+
+        if (!skipNodeMetadataFetch) {
+          try {
+            const url = nodeObj.generate_url(targetItem, 'nodes', itemNodeData, true);
+            const api = getApiInstance();
+            const resp = await api.get(url);
+            const respData = resp.data.data || resp.data.result;
+
+            if (respData && !Array.isArray(respData)) {
+              this.tree.update(targetItem, {
+                ...itemNodeData, ...respData
+              });
+              this.tree.setLabel(targetItem, {label: respData.label});
+              this.tree.addIcon(targetItem, {icon: respData.icon});
+            }
+          } catch (error) {
+            console.error('Failed to refresh tree node:', error);
+            return;
+          }
+        }
+
+        const wasOpen = Boolean(this.tree.isOpen?.(targetItem));
+        const expandedChildIds = new Set(
+          (this.tree.children?.(targetItem) || [])
+            .filter((child) => this.tree.isOpen?.(child))
+            .map((child) => this.tree.itemData?.(child)?.id)
+            .filter(Boolean)
+        );
+
+        await this.tree.refresh(targetItem);
+
+        if (opts?.openIfClosed && !this.tree.isOpen?.(targetItem)) {
+          await this.tree.open?.(targetItem);
+          const loadedChildren = this.tree.children?.(targetItem) || [];
+          if (targetItem._metadata?.data) {
+            targetItem._metadata.data.has_children = loadedChildren.length > 0;
+          }
+          if (loadedChildren.length === 0) {
+            await this.tree.close?.(targetItem);
+          }
+        } else if (wasOpen && expandedChildIds.size > 0) {
+          const reloadedChildren = this.tree.children?.(targetItem) || [];
+          for (const child of reloadedChildren) {
+            const cid = this.tree.itemData?.(child)?.id;
+            if (cid && expandedChildIds.has(cid) && !this.tree.isOpen?.(child)) {
+              await this.tree.open?.(child);
+            }
+          }
+        }
+
+        opts?.success?.();
+      } finally {
+        this.tree.toggleItemLoader?.(targetItem, false);
+      }
     },
 
     onLoadFailNode: function(_nodeData) {

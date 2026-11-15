@@ -25,14 +25,15 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
   const containerRef = useRef();
   const firstEleRef = useRef();
   const okBtnRef = useRef();
-  const [formData, setFormData] = useState({
+  const requiresUserInput = Boolean(data?.require_username_input);
+  const [formData, setFormData] = useState(() => ({
     tunnel_password: '',
     save_tunnel_password: false,
     password: '',
     save_password: false,
-    connect_as: '',
+    connect_as: data?.require_username_input ? (data?.suggested_username || '') : '',
     use_alternate_user: false,
-  });
+  }));
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [tunnelPasswordVisible, setTunnelPasswordVisible] = useState(false);
 
@@ -92,7 +93,16 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
           </Box>
         </>}
         {data.prompt_password && <>
-          {data.allow_user_override && <Box marginBottom='12px'>
+          {requiresUserInput && <Box marginBottom='12px'>
+            <Box marginBottom='4px' style={{fontWeight: 600}}>{gettext('User or principal')}</Box>
+            <InputText value={formData.connect_as}
+              controlProps={{maxLength: 255, autoComplete: 'username',
+                placeholder: data.suggested_username || 'e.g. SYSDBA',
+                'aria-label': gettext('User or principal')}}
+              onChange={(event) => onTextChange(event, 'connect_as')}
+              onKeyDown={(event) => onKeyDown(event)} />
+          </Box>}
+          {data.allow_user_override && !requiresUserInput && <Box marginBottom='12px'>
             <InputCheckbox controlProps={{label: gettext('Connect as a different user')}}
               value={formData.use_alternate_user} onChange={(event) => {
                 const checked = event.target.checked;
@@ -113,8 +123,8 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
           </Box>}
           <Box>
             <span style={{fontWeight: 'bold'}}>
-              {(formData.use_alternate_user ? formData.connect_as : data.username) ?
-                gettext('Please enter the password for the user \'%s\' to connect the server - "%s"', formData.use_alternate_user ? formData.connect_as : data.username, data.server_label)
+              {((requiresUserInput || formData.use_alternate_user) ? formData.connect_as.trim() : data.username) ?
+                gettext('Please enter the password for the user \'%s\' to connect the server - "%s"', (requiresUserInput || formData.use_alternate_user) ? formData.connect_as.trim() : data.username, data.server_label)
                 : gettext('Please enter the password for the user to connect the server - "%s"', data.server_label)
               }
             </span>
@@ -136,7 +146,7 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
           <Box marginTop='12px' visibility={hideSavePassword ? 'hidden' : 'unset'}>
             <InputCheckbox controlProps={{label: gettext('Save Password')}} value={formData['save_password']}
               onChange={(e)=>onTextChange(e.target.checked, 'save_password')}
-              disabled={!data.allow_save_password || formData.use_alternate_user} />
+              disabled={!data.allow_save_password || (formData.use_alternate_user && !requiresUserInput)} />
           </Box>
         </>}
         <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={_.escape(data.errmsg)} closable={false} style={{
@@ -149,7 +159,7 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
         }} >{gettext('Cancel')}</DefaultButton>
         {(data.prompt_password || data.prompt_tunnel_password) && <>
           <PrimaryButton ref={okBtnRef} data-test="save" startIcon={<CheckRoundedIcon />}
-            disabled={formData.use_alternate_user && (!formData.connect_as.trim() || !formData.password)} onClick={()=>{
+            disabled={(requiresUserInput || formData.use_alternate_user) && (!formData.connect_as.trim() || !formData.password)} onClick={()=>{
               let postFormData = new FormData();
               if(data.prompt_tunnel_password) {
                 postFormData.append('tunnel_password', formData.tunnel_password);
@@ -158,10 +168,10 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
               }
               if(data.prompt_password) {
                 postFormData.append('password', formData.password);
-                if(formData.use_alternate_user && formData.connect_as.trim()) {
+                if((requiresUserInput || formData.use_alternate_user) && formData.connect_as.trim()) {
                   postFormData.append('connect_as', formData.connect_as.trim());
                 }
-                formData.save_password && !formData.use_alternate_user &&
+                formData.save_password && (!formData.use_alternate_user || requiresUserInput) &&
                 postFormData.append('save_password', formData.save_password);
               }
               onOK?.(postFormData);

@@ -88,6 +88,10 @@ export function Box({
     ...(sx.p !== undefined ? {padding: typeof sx.p === 'number' ? `${sx.p * 8}px` : sx.p} : {}),
     ...(sx.px !== undefined ? {paddingInline: typeof sx.px === 'number' ? `${sx.px * 8}px` : sx.px} : {}),
     ...(sx.py !== undefined ? {paddingBlock: typeof sx.py === 'number' ? `${sx.py * 8}px` : sx.py} : {}),
+    ...(sx.pt !== undefined ? {paddingTop: typeof sx.pt === 'number' ? `${sx.pt * 8}px` : sx.pt} : {}),
+    ...(sx.pb !== undefined ? {paddingBottom: typeof sx.pb === 'number' ? `${sx.pb * 8}px` : sx.pb} : {}),
+    ...(sx.pl !== undefined ? {paddingLeft: typeof sx.pl === 'number' ? `${sx.pl * 8}px` : sx.pl} : {}),
+    ...(sx.pr !== undefined ? {paddingRight: typeof sx.pr === 'number' ? `${sx.pr * 8}px` : sx.pr} : {}),
     ...(sx.m !== undefined ? {margin: typeof sx.m === 'number' ? `${sx.m * 8}px` : sx.m} : {}),
     ...(sx.mt !== undefined ? {marginTop: typeof sx.mt === 'number' ? `${sx.mt * 8}px` : sx.mt} : {}),
     ...(sx.mb !== undefined ? {marginBottom: typeof sx.mb === 'number' ? `${sx.mb * 8}px` : sx.mb} : {}),
@@ -157,7 +161,7 @@ export function Panel({variant = 'flat', style, ...props}) {
   );
 }
 
-export function ScrollArea({label, orientation = 'both', sx, style, ...props}) {
+export function ScrollArea({label, orientation = 'both', sx, style, children, ...props}) {
   const sxStyle = sx && typeof sx === 'object' ? {
     ...(sx.flex !== undefined ? {flex: sx.flex} : {}),
     ...(sx.height !== undefined ? {height: sx.height} : {}),
@@ -165,15 +169,35 @@ export function ScrollArea({label, orientation = 'both', sx, style, ...props}) {
     ...(sx.minHeight !== undefined ? {minHeight: sx.minHeight} : {}),
     ...(sx.width !== undefined ? {width: sx.width} : {}),
   } : undefined;
+  const contentPadding = sx && typeof sx === 'object' ? {
+    ...(sx.p !== undefined ? {padding: typeof sx.p === 'number' ? `${sx.p * 8}px` : sx.p} : {}),
+    ...(sx.px !== undefined ? {paddingInline: typeof sx.px === 'number' ? `${sx.px * 8}px` : sx.px} : {}),
+    ...(sx.py !== undefined ? {paddingBlock: typeof sx.py === 'number' ? `${sx.py * 8}px` : sx.py} : {}),
+    ...(sx.pt !== undefined ? {paddingTop: typeof sx.pt === 'number' ? `${sx.pt * 8}px` : sx.pt} : {}),
+    ...(sx.pb !== undefined ? {paddingBottom: typeof sx.pb === 'number' ? `${sx.pb * 8}px` : sx.pb} : {}),
+    ...(sx.pl !== undefined ? {paddingLeft: typeof sx.pl === 'number' ? `${sx.pl * 8}px` : sx.pl} : {}),
+    ...(sx.pr !== undefined ? {paddingRight: typeof sx.pr === 'number' ? `${sx.pr * 8}px` : sx.pr} : {}),
+  } : null;
+  const hasContentPadding = contentPadding && Object.keys(contentPadding).length > 0;
   return (
     <ScratchScrollArea
       label={label}
       orientation={orientation}
       style={{...sxStyle, ...style}}
       {...props}
-    />
+    >
+      {hasContentPadding ? <div style={{boxSizing: 'border-box', ...contentPadding}}>{children}</div> : children}
+    </ScratchScrollArea>
   );
 }
+
+ScrollArea.propTypes = {
+  label: PropTypes.string,
+  orientation: PropTypes.oneOf(['vertical', 'horizontal', 'both']),
+  sx: PropTypes.object,
+  style: PropTypes.object,
+  children: PropTypes.node,
+};
 
 export function Divider({orientation = 'horizontal', style, ...props}) {
   return (

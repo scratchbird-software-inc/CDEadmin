@@ -85,18 +85,22 @@ class DeveloperOnboardingToolsTestCase(unittest.TestCase):
         self.assertTrue(compose_images.issubset(catalog_images))
 
     def test_developer_setup_guide_documents_every_pinned_docker_image(self):
-        guide_path = ROOT / "DEVELOPER_SETUP.md"
-        self.assertTrue(guide_path.is_file())
-        guide_text = guide_path.read_text(encoding="utf-8")
-        for entry in self.docker_images.DOCKER_IMAGE_CATALOG:
-            self.assertIn(
-                f"`{entry['image']}`",
-                guide_text,
-                f"DEVELOPER_SETUP.md missing Docker image {entry['image']}",
-            )
-        self.assertIn("Diagram-Design-Notation.git", guide_text)
-        self.assertIn("dev.sh create-db", guide_text)
-        self.assertIn("chrome-sandbox", guide_text)
+        for relative in (
+            "docs/DEVELOPER_SETUP.md",
+            "docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md",
+        ):
+            guide_path = ROOT / relative
+            self.assertTrue(guide_path.is_file(), relative)
+            guide_text = guide_path.read_text(encoding="utf-8")
+            for entry in self.docker_images.DOCKER_IMAGE_CATALOG:
+                self.assertIn(
+                    f"`{entry['image']}`",
+                    guide_text,
+                    f"{relative} missing Docker image {entry['image']}",
+                )
+            self.assertIn("Diagram-Design-Notation.git", guide_text)
+            self.assertIn("dev.sh create-db", guide_text)
+            self.assertIn("chrome-sandbox", guide_text)
 
     def test_manage_exposes_images_pull_and_create_db_actions(self):
         for action in ("images", "pull", "create-db"):

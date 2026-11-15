@@ -69,4 +69,33 @@ describe('provider connection credentials', () => {
     expect(submitted.has('connect_as')).toBe(false);
     expect(submitted.get('save_password')).toBe('true');
   });
+
+  it('prompts for and pre-fills User or principal when the server has no stored default user', () => {
+    const onOK = jest.fn();
+    render(<ConnectServerContent closeModal={jest.fn()} onOK={onOK}
+      data={{
+        prompt_password: true,
+        username: '',
+        suggested_username: 'SYSDBA',
+        require_username_input: true,
+        server_label: 'localhost:53050',
+        allow_save_password: true,
+        allow_user_override: true,
+      }} />);
+
+    const userField = screen.getByRole('textbox', {name: 'User or principal'});
+    expect(userField).toHaveValue('SYSDBA');
+    expect(screen.getByRole('button', {name: 'OK'})).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Password'), {target: {value: 'CDEadminDemo-2026!'}});
+    const saveCheckbox = screen.getByRole('checkbox', {name: 'Save Password'});
+    expect(saveCheckbox).not.toBeDisabled();
+    fireEvent.click(saveCheckbox);
+    fireEvent.click(screen.getByRole('button', {name: 'OK'}));
+
+    const submitted = onOK.mock.calls[0][0];
+    expect(submitted.get('connect_as')).toBe('SYSDBA');
+    expect(submitted.get('password')).toBe('CDEadminDemo-2026!');
+    expect(submitted.get('save_password')).toBe('true');
+  });
 });

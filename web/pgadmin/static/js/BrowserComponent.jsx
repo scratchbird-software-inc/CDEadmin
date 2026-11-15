@@ -69,8 +69,11 @@ import {
   ProjectShellProvider,
   ProjectWorkbenchFrame,
   useProjectShell,
+  T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
 } from 'sources/cdeadmin_ui';
+import {providerContextMenuItems} from '../../browser/static/js/ProviderContextMenu';
+import {openFamilyCreate} from '../../browser/static/js/ProviderObjectEditor';
 import {SchemaCompareWorkspace} from './cdeadmin_ui/modules/schema_compare/SchemaCompareWorkspace';
 import {
   DesignStoreClient,
@@ -109,24 +112,707 @@ export const defaultTabsData = [
   },
 ];
 
-function DataNavigatorWorkArea() {
-  const [view, setView] = useState('properties');
-  const pages = [
+function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null, selectedData = null) {
+  const addAction = `data-navigator.add_child.${instanceId}`;
+  const propertiesAction = `data-navigator.properties.${instanceId}`;
+  const removeAction = `data-navigator.remove.${instanceId}`;
+  const refreshAction = `data-navigator.refresh.${instanceId}`;
+  const enginesAction = `data-navigator.engines.${instanceId}`;
+
+  const nodeType = selectedData?._type || null;
+  const providerMenus = selectedData ? providerContextMenuItems(selectedData, selectedItem) || [] : [];
+  const findProviderSuffix = (suffix) =>
+    providerMenus.find((m) => String(m.commandId).split('.').at(-1) === suffix);
+  const runProviderMenu = (menu) =>
+    menu?.commandHandler?.(
+      menu.commandArguments({itemData: selectedData, item: selectedItem}),
+      {itemData: selectedData, item: selectedItem}
+    );
+
+  const selectPropertiesTab = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:navigator-select-tab', {
+          detail: {tab: 'properties', focusEditor: true},
+        })
+      );
+    }
+  };
+
+  let addSpec = {
+    enabled: false,
+    text: gettext('Add Child Object…'),
+    hint: gettext('Select an engine to add a server, or a server to add a database'),
+    icon: 'action.new',
+    invoke: () => {},
+  };
+  let propSpec = {
+    enabled: false,
+    text: gettext('Properties…'),
+    hint: gettext('Select a server, database, or catalog object to view or edit its properties'),
+    icon: 'action.properties',
+    invoke: () => {},
+  };
+  let removeSpec = {
+    enabled: false,
+    text: gettext('Remove…'),
+    hint: gettext('Select a server, database, or catalog object to remove it'),
+    icon: 'action.delete',
+    invoke: () => {},
+  };
+
+  if (nodeType === 'engine_type') {
+    const engineId = selectedData.engine_id || selectedData._id;
+    addSpec = {
+      enabled: true,
+      text: gettext('Register Server…'),
+      hint: gettext('Register a server or database file for this engine'),
+      icon: 'object.server',
+      invoke: () => {
+        const serverNode = pgAdmin?.Browser?.Nodes?.server;
+        serverNode?.callbacks?.register_engine_server?.call(serverNode, {
+          item: selectedItem,
+          engineId,
+        });
+      },
+    };
+  } else if (nodeType === 'localhost_placeholder') {
+    propSpec = {
+      enabled: true,
+      text: gettext('Properties…'),
+      hint: gettext('Configure port, credentials, and settings for this local server'),
+      icon: 'action.properties',
+      invoke: selectPropertiesTab,
+    };
+  } else if (nodeType === 'server') {
+    const createDb = findProviderSuffix('create_database') || findProviderSuffix('register_database');
+    const dbNode = pgAdmin?.Browser?.Nodes?.database;
+    const canLegacyCreateDb =
+      !selectedData?.cde_endpoint && Boolean(selectedData?.connected);
+    const canAddDb = createDb
+      ? Boolean(createDb.enable(selectedData, selectedItem))
+      : canLegacyCreateDb;
+    if (createDb || !selectedData?.cde_endpoint) {
+      addSpec = {
+        enabled: canAddDb,
+        text: gettext('Create Database…'),
+        hint: createDb?.disabledReason || gettext('Add or create a database on this server'),
+        icon: 'object.database',
+        invoke: () => {
+          if (createDb) {
+            runProviderMenu(createDb);
+          } else {
+            dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
+              action: 'create',
+              item: selectedItem,
+            });
+          }
+        },
+      };
+    }
+    propSpec = {
+      enabled: true,
+      text: gettext('Server Properties…'),
+      hint: gettext('Edit connection settings, port, and credentials for this server'),
+      icon: 'action.properties',
+      invoke: selectPropertiesTab,
+    };
+    const forgetMenu = findProviderSuffix('forget');
+    removeSpec = {
+      enabled: true,
+      text: gettext('Remove Server…'),
+      hint: gettext('Remove this server registration'),
+      icon: 'action.delete',
+      invoke: () => {
+        if (forgetMenu && forgetMenu.enable(selectedData, selectedItem)) {
+          runProviderMenu(forgetMenu);
+          return;
+        }
+        const serverNode = pgAdmin?.Browser?.Nodes?.server;
+        serverNode?.callbacks?.delete_obj?.call(serverNode, {
+          item: selectedItem,
+          url: 'drop',
+        });
+      },
+    };
+  } else if (nodeType === 'coll-database') {
+    const dbNode = pgAdmin?.Browser?.Nodes?.database;
+    addSpec = {
+      enabled: true,
+      text: gettext('Create Database…'),
+      hint: gettext('Create a new database on this server'),
+      icon: 'object.database',
+      invoke: () =>
+        dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
+          action: 'create',
+          item: selectedItem,
+        }),
+    };
+  } else if (nodeType === 'cde_database_target' || nodeType === 'database') {
+    propSpec = {
+      enabled: true,
+      text: gettext('Database Properties…'),
+      hint: gettext('View or edit properties for this database'),
+      icon: 'action.properties',
+      invoke: selectPropertiesTab,
+    };
+    const removeDb = findProviderSuffix('remove') || findProviderSuffix('drop');
+    const dbNode = pgAdmin?.Browser?.Nodes?.database;
+    removeSpec = {
+      enabled: removeDb ? Boolean(removeDb.enable(selectedData, selectedItem)) : nodeType === 'database',
+      text: removeDb && String(removeDb.commandId).endsWith('.remove')
+        ? gettext('Remove Database…')
+        : gettext('Drop Database…'),
+      hint: removeDb?.disabledReason || gettext('Remove or drop this database'),
+      icon: 'action.delete',
+      invoke: () => {
+        if (removeDb) {
+          runProviderMenu(removeDb);
+        } else {
+          dbNode?.callbacks?.delete_obj?.call(dbNode, {
+            item: selectedItem,
+            url: 'drop',
+          });
+        }
+      },
+    };
+  } else if (nodeType === 'cde_resource_group') {
+    const createMenu = findProviderSuffix('create');
+    const kind = selectedData?.cde_resource_kind;
+    addSpec = {
+      enabled: true,
+      text: createMenu?.label || gettext('New %s…', selectedData?.label || kind || 'Object'),
+      hint: gettext('Create a new object in this group'),
+      icon: 'action.new',
+      invoke: () => {
+        if (kind && openFamilyCreate(selectedData, selectedItem, kind)) return;
+        if (createMenu) runProviderMenu(createMenu);
+      },
+    };
+  } else if (nodeType && nodeType !== 'server_group') {
+    propSpec = {
+      enabled: true,
+      text: gettext('Properties…'),
+      hint: gettext('Inspect or edit properties for the selected object'),
+      icon: 'action.properties',
+      invoke: selectPropertiesTab,
+    };
+    const dropMenu = findProviderSuffix('drop');
+    const modNode = pgAdmin?.Browser?.Nodes?.[nodeType];
+    if (dropMenu || modNode?.canDrop) {
+      removeSpec = {
+        enabled: dropMenu ? Boolean(dropMenu.enable(selectedData, selectedItem)) : true,
+        text: gettext('Drop Object…'),
+        hint: gettext('Drop the selected object'),
+        icon: 'action.delete',
+        invoke: () => {
+          if (dropMenu) {
+            runProviderMenu(dropMenu);
+          } else {
+            modNode?.callbacks?.delete_obj?.call(modNode, {
+              item: selectedItem,
+              url: 'drop',
+            });
+          }
+        },
+      };
+    }
+  }
+
+  const actions = [
+    {
+      id: addAction,
+      icon: addSpec.icon,
+      application: 'data-navigator',
+      defaultText: addSpec.text,
+      defaultHint: addSpec.hint,
+      status: addSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+      focusScoped: true,
+      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: addSpec.invoke},
+    },
+    {
+      id: propertiesAction,
+      icon: propSpec.icon,
+      application: 'data-navigator',
+      defaultText: propSpec.text,
+      defaultHint: propSpec.hint,
+      status: propSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+      focusScoped: true,
+      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: propSpec.invoke},
+    },
+    {
+      id: removeAction,
+      icon: removeSpec.icon,
+      application: 'data-navigator',
+      defaultText: removeSpec.text,
+      defaultHint: removeSpec.hint,
+      status: removeSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+      focusScoped: true,
+      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: removeSpec.invoke},
+    },
+    {
+      id: refreshAction,
+      icon: 'action.refresh',
+      application: 'data-navigator',
+      defaultText: gettext('Refresh Catalog'),
+      defaultHint: gettext('Refresh selected database catalog branch'),
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () => pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:refresh'),
+      },
+    },
+    {
+      id: enginesAction,
+      icon: 'object.database',
+      application: 'data-navigator',
+      defaultText: gettext('Configure Database Engines…'),
+      defaultHint: gettext('Enable or disable database engine connectors'),
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () =>
+          window.dispatchEvent(
+            new CustomEvent('scratchrobin:open-preferences', {
+              detail: {mode: 'global', sectionId: 'engines:connectors'},
+            })
+          ),
+      },
+    },
+  ];
+
+  const menuItems = [];
+  if (addSpec.enabled) {
+    menuItems.push({
+      id: addAction,
+      actionId: addAction,
+      label: addSpec.text,
+      iconKey: addSpec.icon,
+      index: 5,
+    });
+  }
+  if (propSpec.enabled) {
+    menuItems.push({
+      id: propertiesAction,
+      actionId: propertiesAction,
+      label: propSpec.text,
+      iconKey: propSpec.icon,
+      index: 10,
+    });
+  }
+  if (removeSpec.enabled) {
+    menuItems.push({
+      id: removeAction,
+      actionId: removeAction,
+      label: removeSpec.text,
+      iconKey: removeSpec.icon,
+      index: 15,
+    });
+  }
+  if (!nodeType || nodeType === 'server_group') {
+    menuItems.push({
+      id: enginesAction,
+      actionId: enginesAction,
+      label: gettext('Configure Database Engines…'),
+      iconKey: 'object.database',
+      index: 18,
+    });
+  }
+  menuItems.push({
+    id: refreshAction,
+    actionId: refreshAction,
+    label: gettext('Refresh Catalog'),
+    i18nKey: 'menu.object.refresh_catalog.text',
+    hintKey: 'menu.object.refresh_catalog.hint',
+    iconKey: 'action.refresh',
+    index: 25,
+  });
+
+  return {
+    actions,
+    menus: [
+      {
+        name: 'object',
+        label: gettext('Object'),
+        i18nKey: 'menu.object.title',
+        index: 20,
+        items: menuItems,
+      },
+    ],
+    ribbonTabs: [
+      {
+        id: 'navigator-home',
+        label: gettext('Navigator'),
+        groups: [
+          {
+            id: 'navigator-object',
+            label: gettext('Selected Object'),
+            controls: [addAction, propertiesAction, removeAction],
+          },
+          {
+            id: 'navigator-catalog',
+            label: gettext('Catalog'),
+            controls: [refreshAction],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function navigatorTabIdsForNodeType(nodeType, pgAdmin = null) {
+  if (!nodeType || nodeType === 'server_group') {
+    return ['connectors'];
+  }
+  if (
+    nodeType === 'engine_type' ||
+    nodeType === 'localhost_placeholder' ||
+    nodeType === 'server' ||
+    nodeType === 'cde_database_target'
+  ) {
+    return ['properties', 'statistics'];
+  }
+  if (nodeType === 'cde_resource_group' || String(nodeType).startsWith('coll-')) {
+    return ['properties', 'statistics'];
+  }
+  if (nodeType === 'database') {
+    return ['properties', 'sql', 'statistics'];
+  }
+  if (nodeType === 'cde_resource') {
+    return ['properties', 'sql', 'statistics', 'dependencies', 'dependents'];
+  }
+  const nodeDef = pgAdmin?.Browser?.Nodes?.[nodeType];
+  if (nodeDef) {
+    const ids = ['properties'];
+    if (nodeDef.hasSQL !== false) ids.push('sql');
+    if (nodeDef.hasStatistics !== false) ids.push('statistics');
+    if (nodeDef.hasDependencies) ids.push('dependencies');
+    if (nodeDef.hasDependents) ids.push('dependents');
+    return ids;
+  }
+  return ['properties', 'sql', 'statistics', 'dependencies', 'dependents'];
+}
+
+function DataNavigatorWorkArea({instanceId}) {
+  const shell = useProjectShell();
+  const shellRef = useRef(shell);
+  shellRef.current = shell;
+  const lastSelectionKeyRef = useRef(null);
+  const pgAdmin = usePgAdmin();
+  const [selectedNodeType, setSelectedNodeType] = useState(() => {
+    const item = pgAdmin?.Browser?.tree?.selected?.();
+    const data = item ? pgAdmin?.Browser?.tree?.itemData?.(item) : null;
+    return data?._type || null;
+  });
+  const [view, setView] = useState('connectors');
+  const [engines, setEngines] = useState([]);
+  const [enginesLoading, setEnginesLoading] = useState(true);
+  const [, setLocaleRev] = useState(0);
+
+  const loadEnabledEngines = useCallback(() => {
+    if (typeof fetch !== 'function') {
+      setEnginesLoading(false);
+      return;
+    }
+    fetch('/cdeadmin/api/shell/engines', {credentials: 'same-origin'})
+      .then((res) => (res?.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.engines)) {
+          setEngines(data.engines.filter((eng) => Boolean(eng.enabled)));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setEnginesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadEnabledEngines();
+    if (typeof window === 'undefined') return undefined;
+    const onConnectorsChanged = () => loadEnabledEngines();
+    window.addEventListener('scratchrobin:connectors-changed', onConnectorsChanged);
+    return () => window.removeEventListener('scratchrobin:connectors-changed', onConnectorsChanged);
+  }, [loadEnabledEngines]);
+
+  useEffect(() => {
+    const events = pgAdmin?.Browser?.Events;
+    const syncSelectionActions = (item, data) => {
+      const currentShell = shellRef.current;
+      if (!instanceId || !currentShell?.updateInstance) return;
+      const selectionKey = data
+        ? `${data._type || ''}:${data._id ?? data.id ?? data.engine_id ?? data._label ?? ''}:${Boolean(data.connected)}`
+        : 'none';
+      if (lastSelectionKeyRef.current === selectionKey) return;
+      lastSelectionKeyRef.current = selectionKey;
+      const cfg = buildNavigatorSelectionConfig(pgAdmin, instanceId, item, data);
+      currentShell.updateInstance(instanceId, {
+        actions: cfg.actions,
+        menus: cfg.menus,
+        ribbonTabs: cfg.ribbonTabs,
+      });
+    };
+    const onTreeSelected = (item, data) => {
+      const nextType = data?._type || null;
+      setSelectedNodeType(nextType);
+      syncSelectionActions(item, data);
+      const allowed = navigatorTabIdsForNodeType(nextType, pgAdmin);
+      setView((prev) => (allowed.includes(prev) ? prev : allowed[0]));
+    };
+    const onNodeDeselected = () => {
+      setSelectedNodeType(null);
+      syncSelectionActions(null, null);
+    };
+    const onSelectTab = (ev) => {
+      const requested = ev?.detail?.tab;
+      if (requested) {
+        setView(requested);
+      }
+      if (ev?.detail?.focusEditor && typeof document !== 'undefined') {
+        setTimeout(() => {
+          const root = document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]');
+          const portInput =
+            root?.querySelector('input[type="number"]:not([disabled])') ||
+            root?.querySelector('[data-cdeadmin-qa-key^="object-editor."] input:not([disabled])');
+          portInput?.focus?.();
+          portInput?.select?.();
+        }, 60);
+      }
+    };
+    events?.on?.('pgadmin-browser:tree:selected', onTreeSelected);
+    events?.on?.('pgadmin-browser:node:deselected', onNodeDeselected);
+    const onLanguageChanged = (ev) => {
+      setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+      lastSelectionKeyRef.current = null;
+      const curItem = pgAdmin?.Browser?.tree?.selected?.();
+      const curData = curItem ? pgAdmin?.Browser?.tree?.itemData?.(curItem) : null;
+      syncSelectionActions(curItem, curData);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('scratchrobin:navigator-select-tab', onSelectTab);
+      window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
+    }
+    const currentItem = pgAdmin?.Browser?.tree?.selected?.();
+    const currentData = currentItem ? pgAdmin?.Browser?.tree?.itemData?.(currentItem) : null;
+    if (currentData) {
+      setSelectedNodeType(currentData._type || null);
+      syncSelectionActions(currentItem, currentData);
+    }
+    return () => {
+      events?.off?.('pgadmin-browser:tree:selected', onTreeSelected);
+      events?.off?.('pgadmin-browser:node:deselected', onNodeDeselected);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('scratchrobin:navigator-select-tab', onSelectTab);
+        window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
+      }
+    };
+  }, [instanceId, pgAdmin]);
+
+  const focusEngineInTree = useCallback(
+    async (engineId) => {
+      if (shell && !shell.shellLeftDrawerOpen) {
+        shell.toggleLeftDrawer?.();
+      }
+      const tree = pgAdmin?.Browser?.tree;
+      if (!tree) return;
+      try {
+        const rootChildren = tree.children?.() || [];
+        const serverGroup = rootChildren[0];
+        if (serverGroup) {
+          await tree.open?.(serverGroup);
+          const connectors = tree.children?.(serverGroup) || [];
+          const match = connectors.find(
+            (c) =>
+              c?._metadata?.data?.engine_id === engineId ||
+              c?._metadata?.data?._id === engineId ||
+              c?.fileName === `engine_type_${engineId}`
+          );
+          if (match) {
+            await tree.open?.(match);
+            await tree.select?.(match, true, 'center');
+          }
+        }
+      } catch {
+        // Ignore transient tree focus race while drawer mounts.
+      }
+    },
+    [pgAdmin, shell]
+  );
+
+  const renderConnectorsOverview = () => (
+    <Box
+      data-cdeadmin-qa-key="data-navigator-connectors-overview"
+      sx={{p: 2, display: 'flex', flexDirection: 'column', gap: 2}}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1.5,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box>
+          <Box sx={{fontWeight: 700, fontSize: '0.95rem'}}>
+            {gettext('Enabled Database Connectors (%s)', engines.length)}
+          </Box>
+          <Box sx={{fontSize: '0.8rem', color: 'text.secondary'}}>
+            {gettext(
+              'Click any enabled engine below or expand Connectors in the Left Side Drawer to inspect local endpoints and register servers.'
+            )}
+          </Box>
+        </Box>
+        <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap'}}>
+          {shell && !shell.shellLeftDrawerOpen && (
+            <Button
+              size="small"
+              intent="neutral"
+              data-cdeadmin-qa-key="navigator-open-left-drawer"
+              onClick={() => shell.toggleLeftDrawer?.()}
+            >
+              {gettext('Open Catalog Tree Drawer')}
+            </Button>
+          )}
+          <Button
+            size="small"
+            intent="primary"
+            data-cdeadmin-qa-key="navigator-configure-engines"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('scratchrobin:open-preferences', {
+                  detail: {mode: 'global', sectionId: 'engines:connectors'},
+                })
+              )
+            }
+          >
+            {gettext('Database Engines (On / Off)…')}
+          </Button>
+        </Box>
+      </Box>
+
+      {enginesLoading ? (
+        <Box sx={{py: 3, textAlign: 'center', fontSize: '0.82rem', color: 'text.secondary'}}>
+          {gettext('Loading enabled database connectors…')}
+        </Box>
+      ) : engines.length === 0 ? (
+        <EmptyState
+          message={gettext('No database engines are currently enabled')}
+          description={gettext(
+            'Enable one or more database engines in Settings › Database Engines to populate the Data Navigator catalog tree.'
+          )}
+          actionLabel={gettext('Enable Database Engines…')}
+          onAction={() =>
+            window.dispatchEvent(
+              new CustomEvent('scratchrobin:open-preferences', {
+                detail: {mode: 'global', sectionId: 'engines:connectors'},
+              })
+            )
+          }
+        />
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: 10,
+          }}
+        >
+          {engines.map((eng) => {
+            const localUp = Boolean(eng.local_available ?? eng.local_detected);
+            return (
+              <div
+                key={eng.id}
+                data-cdeadmin-qa-key={`navigator-engine-card-${eng.id}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--sr-border-default)',
+                  background: 'var(--sr-surface-subtle)',
+                  color: 'var(--sr-text-primary)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => void focusEngineInTree(eng.id)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Icon iconKey={eng.icon || `engine.${eng.id}`} decorative size={20} />
+                  <span style={{flex: 1, minWidth: 0}}>
+                    <span style={{display: 'block', fontWeight: 600, fontSize: '0.84rem'}}>
+                      {eng.label}
+                    </span>
+                    <span
+                      style={{
+                        display: 'block',
+                        fontSize: '0.72rem',
+                        color: localUp ? 'var(--sr-success, #16a34a)' : 'var(--sr-text-secondary)',
+                      }}
+                    >
+                      {localUp ? gettext('Local listener detected') : eng.category || gettext('Enabled')}
+                    </span>
+                  </span>
+                </button>
+                <Button
+                  size="small"
+                  intent="neutral"
+                  data-cdeadmin-qa-key={`navigator-register-engine-${eng.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const serverNode = pgAdmin?.Browser?.Nodes?.server;
+                    serverNode?.callbacks?.register_engine_server?.call(serverNode, {
+                      engineId: eng.id,
+                    });
+                  }}
+                >
+                  {gettext('Register…')}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Box>
+  );
+
+  const allPages = [
+    {id: 'connectors', label: gettext('Connectors'), render: renderConnectorsOverview},
     {id: 'properties', label: gettext('Properties'), render: () => <Properties />},
     {id: 'sql', label: gettext('SQL'), render: () => <SQL />},
     {id: 'statistics', label: gettext('Statistics'), render: () => <Statistics />},
     {id: 'dependencies', label: gettext('Dependencies'), render: () => <Dependencies />},
     {id: 'dependents', label: gettext('Dependents'), render: () => <Dependents />},
   ];
+  const allowedTabIds = navigatorTabIdsForNodeType(selectedNodeType, pgAdmin);
+  const pages = allPages.filter((p) => allowedTabIds.includes(p.id));
   const current = pages.find((p) => p.id === view) || pages[0];
   return (
-    <Box sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
+    <Box
+      data-cdeadmin-qa-key="data-navigator-work-area"
+      sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}
+    >
       <Box
         role="tablist"
         aria-label={gettext('Catalog Object Views')}
         sx={{
           display: 'flex',
           alignItems: 'center',
+          px: 2.5,
           borderBottom: '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
@@ -142,12 +828,22 @@ function DataNavigatorWorkArea() {
           />
         ))}
       </Box>
-      <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
-        {current.render()}
-      </ScratchScrollArea>
+      {current.id === 'connectors' ? (
+        <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
+          {current.render()}
+        </ScratchScrollArea>
+      ) : (
+        <Box sx={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+          {current.render()}
+        </Box>
+      )}
     </Box>
   );
 }
+
+DataNavigatorWorkArea.propTypes = {
+  instanceId: PropTypes.string,
+};
 
 const DESIGNER_STENCIL_ITEMS = Object.freeze({
   'erd-designer': [
@@ -726,67 +1422,33 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
     );
 
     if (appId === 'data-navigator') {
-      const refreshAction = `data-navigator.refresh.${instanceId}`;
+      const selectedItem = pgAdmin?.Browser?.tree?.selected?.() || null;
+      const selectedData = selectedItem
+        ? pgAdmin?.Browser?.tree?.itemData?.(selectedItem) || null
+        : null;
+      const navConfig = buildNavigatorSelectionConfig(
+        pgAdmin,
+        instanceId,
+        selectedItem,
+        selectedData
+      );
       return {
         title: sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label,
         supportsLeftDrawer: true,
         supportsRightDrawer: true,
         supportsTabbedIconBar: true,
-        actions: [
-          {
-            id: refreshAction,
-            icon: 'action.refresh',
-            application: 'data-navigator',
-            defaultText: gettext('Refresh Catalog'),
-            defaultHint: gettext('Refresh selected database catalog branch'),
-            focusScoped: true,
-            target: {
-              kind: T_ACTION_TARGET_KIND.CLIENT,
-              invoke: () => pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:refresh'),
-            },
-          },
-        ],
-        menus: [
-          {
-            name: 'object',
-            label: gettext('Object'),
-            i18nKey: 'menu.object.title',
-            index: 20,
-            items: [
-              {
-                id: refreshAction,
-                actionId: refreshAction,
-                label: gettext('Refresh Catalog'),
-                i18nKey: 'menu.object.refresh_catalog.text',
-                hintKey: 'menu.object.refresh_catalog.hint',
-                iconKey: 'action.refresh',
-                index: 10,
-              },
-            ],
-          },
-        ],
-        ribbonTabs: [
-          {
-            id: 'navigator-home',
-            label: gettext('Navigator'),
-            groups: [
-              {
-                id: 'navigator-catalog',
-                label: gettext('Catalog'),
-                controls: [refreshAction],
-              },
-            ],
-          },
-        ],
+        actions: navConfig.actions,
+        menus: navConfig.menus,
+        ribbonTabs: navConfig.ribbonTabs,
         renderLeftDrawer: () => (
-          <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
+          <div style={{height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
             <ObjectExplorerToolbar />
-            <div style={{flex: 1, minHeight: 0}}>
+            <div style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
               <ObjectExplorer />
             </div>
           </div>
         ),
-        renderWorkArea: () => <DataNavigatorWorkArea />,
+        renderWorkArea: () => <DataNavigatorWorkArea instanceId={instanceId} />,
         renderRightDrawer: inspectorRightDrawer,
       };
     }
@@ -1420,6 +2082,7 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
     </ApplicationStateProvider>
   );
 }
+
 Layouts.propTypes = {
   browser: PropTypes.string,
   platform: PropTypes.object.isRequired,

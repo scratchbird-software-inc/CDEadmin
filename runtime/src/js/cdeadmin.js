@@ -415,21 +415,32 @@ function launchCDEadminWindow() {
     cdeadminMainScreen.setMenuBarVisibility(false);
   }
 
-  splashWindow.close();
-  cdeadminMainScreen.webContents.session.clearCache();
-
   setupMenu(cdeadminMainScreen, configStore, menuCallbacks);
   
   setupDownloader();
-  
-  cdeadminMainScreen.loadURL(startPageUrl);
 
   const bounds = configStore.get('bounds');
 
   (bounds && isWithinDisplayBounds({x: bounds.x, y: bounds.y})) ? cdeadminMainScreen.setBounds(bounds) :
     cdeadminMainScreen.setBounds({x: 0, y: 0, width: 1024, height: 768});
 
-  cdeadminMainScreen.show();
+  cdeadminMainScreen.webContents.on('console-message', (event) => {
+    const level = event?.level;
+    const msg = event?.message;
+    if (msg && (level === 'error' || level === 3)) {
+      misc.writeServerLog(`[Renderer Error]: ${msg} (${event.sourceId || ''}:${event.lineNumber ?? ''})`);
+    }
+  });
+
+  cdeadminMainScreen.webContents.session.clearCache().finally(() => {
+    if (cdeadminMainScreen && !cdeadminMainScreen.isDestroyed()) {
+      cdeadminMainScreen.loadURL(startPageUrl);
+      cdeadminMainScreen.show();
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+    }
+  });
 
   setupAutoUpdater({
     cdeadminMainScreen,

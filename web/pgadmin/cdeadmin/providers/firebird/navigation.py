@@ -22,17 +22,12 @@ def children(resources, prepared, state):
             n['node_type'] != 'group' and not n.get('section'),
             n['label'].casefold(), n.get('resource_id', '')))
 
-    def group(label, kind, branch=None):
-        return {'node_type': 'group', 'label': label, 'resource_kind': kind,
-                'parent_path': state.get('parent_path', []), 'has_children': True,
-                'virtual_branch': branch or state.get('virtual_branch')}
-
     def resource(item, section=None):
         return {'node_type': 'resource', 'label': section or item['display_name'],
                 'resource_kind': item['resource_kind'], 'resource_id': item['resource_id'],
                 'display_path': item['_navigator_path'], 'resource': item['_source'],
                 'has_children': False if section else item['resource_kind'] in
-                {'table', 'view', 'column', 'package'} or any(
+                {'table', 'view', 'column'} or any(
                     p['_navigator_path'][:-1] == item['_navigator_path'] and
                     resource_native(p['_source']).get('navigator_parent_resource_id') == item['resource_id']
                     for p in prepared),
@@ -64,6 +59,37 @@ def children(resources, prepared, state):
 
     top = [p for p in prepared if (len(p['_navigator_path']) == 1 or p['resource_kind'] == 'metric') and
            not resource_native(p['_source']).get('navigator_parent_resource_id')]
+    top_ids = {id(p) for p in top}
+
+    def group_has_children(kind, branch_override=None):
+        effective_branch = branch_override or state.get('virtual_branch')
+        if kind == 'firebird-folder':
+            if effective_branch in {'programming', 'security', 'system'}:
+                return True
+            return any(category(p) == effective_branch for p in top)
+        if state.get('scope') == 'resource':
+            parent_id = state.get('resource_id')
+            parent_path = state.get('parent_path', [])
+            for p in prepared:
+                if p['resource_kind'] != kind:
+                    continue
+                native_parent = resource_native(p['_source']).get('navigator_parent_resource_id')
+                if native_parent and native_parent != parent_id:
+                    continue
+                if p['_navigator_path'][:-1] != parent_path:
+                    continue
+                return True
+            return False
+        return any(
+            p['resource_kind'] == kind and id(p) in top_ids and category(p) == effective_branch
+            for p in prepared
+        )
+
+    def group(label, kind, branch=None):
+        return {'node_type': 'group', 'label': label, 'resource_kind': kind,
+                'parent_path': state.get('parent_path', []),
+                'has_children': group_has_children(kind, branch),
+                'virtual_branch': branch or state.get('virtual_branch')}
     scope, branch = state['scope'], state.get('virtual_branch')
     if scope == 'database':
         return ordered([group(name, 'firebird-folder', name) for name in ROOTS] +

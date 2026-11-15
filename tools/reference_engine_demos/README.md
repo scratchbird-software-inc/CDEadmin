@@ -1,7 +1,8 @@
 # CDEadmin reference-engine demonstration estate
 
 For a fresh developer machine, start with
-[../../DEVELOPER_SETUP.md](../../DEVELOPER_SETUP.md) and the
+[../../docs/DEVELOPER_SETUP.md](../../docs/DEVELOPER_SETUP.md),
+[../../docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md](../../docs/AI_AGENT_TEST_ENVIRONMENT_SETUP.md), and the
 [Windows/macOS/Linux development setup guide](../development/README.md).
 They cover cloning `CDEadmin` + `Diagram-Design-Notation`, installing native
 clients, pre-pulling all **29 pinned Docker images** (`docker_images.py` /

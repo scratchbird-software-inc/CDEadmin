@@ -57,7 +57,8 @@ define('pgadmin.node.engine_type', [
       canDrop: false,
       hasProperties: false,
       hasSQL: false,
-      hasStatistics: false,
+      hasStatistics: true,
+      hasCollectiveStatistics: true,
       hasDependencies: false,
       hasDependents: false,
       hasScriptTypes: [],
@@ -115,6 +116,8 @@ define('pgadmin.node.engine_type', [
       canDrop: false,
       hasProperties: false,
       hasSQL: false,
+      hasStatistics: true,
+      hasCollectiveStatistics: true,
       hasScriptTypes: [],
       can_expand: false,
     });

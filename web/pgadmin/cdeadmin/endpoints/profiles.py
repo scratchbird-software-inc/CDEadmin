@@ -465,6 +465,18 @@ def _load_profiles():
             'default': registration.get('default') is True,
             'available': True,
         }
+        # Connection prompts reuse the canonical registration form's principal
+        # default; the shared UI must not guess one from an engine name.
+        form_path = (Path(__file__).resolve().parents[1] /
+                     'ui_descriptors' / profile['engine_id'] /
+                     'forms' / 'server.form.json')
+        if route_kind == 'network' and form_path.is_file():
+            fields = json.loads(form_path.read_text())['fields']
+            for field in fields:
+                if ((field.get('backend_field_id') or field['field_id']) == 'username'
+                        and isinstance(field.get('default'), str)):
+                    profile['suggested_username'] = field['default']
+                    break
         profile['form_contract'] = provider_form_contract(profile)
         profiles.append(profile)
     profile_ids = [item['profile_id'] for item in profiles]

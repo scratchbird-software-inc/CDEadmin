@@ -9,16 +9,18 @@
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {
+  EmptyState,
+  Icon,
   QueryExecutionToolbarCluster,
   QueryStepStatusFooter,
   ScratchBranchedTree,
   ScratchDiffTable,
   ScratchFilterTable,
-  ScratchRecordsTable,
   ScratchScrollArea,
   resolveQueryEngineCapabilities,
   sliceRowsForStep,
 } from 'sources/cdeadmin_ui';
+import {withTheme} from '../fake_theme';
 
 const DEEP_CATALOG_TREE = [
   {
@@ -248,5 +250,30 @@ describe('Standardized Phase 1 UI Kit', () => {
       />
     );
     expect(screen.getByRole('button', {name: 'Cancel query'})).toBeDisabled();
+  });
+
+  it('EmptyState never spreads React 19 action prop onto a non-form DOM element', () => {
+    const Themed = withTheme(() => (
+      <EmptyState
+        title="No database engines enabled"
+        description="Enable engines in settings."
+        action={<button type="button">Enable Engines</button>}
+      />
+    ));
+    render(<Themed />);
+    expect(screen.getByText('No database engines enabled')).toBeTruthy();
+    expect(screen.getByText('Enable engines in settings.')).toBeTruthy();
+    expect(screen.getByRole('button', {name: 'Enable Engines'})).toBeTruthy();
+  });
+
+  it('exports Icon from sources/cdeadmin_ui for application toolbars and connector cards', () => {
+    expect(typeof Icon).toBe('function');
+    const {container} = render(
+      <div>
+        <Icon iconKey="engine.postgresql" decorative />
+        <Icon iconKey="action.palette_entities" decorative />
+      </div>
+    );
+    expect(container.querySelectorAll('[data-icon-key]').length).toBe(2);
   });
 });

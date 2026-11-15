@@ -45,3 +45,13 @@ def test_workspace_tabs_follow_declarations_without_cross_engine_tool_leakage():
     for endpoint in [None,{}, {'identity':{'profile_id':'unregistered'}},{'identity':{'profile_id':'sqlite-native'}}]:
         tabs=database_workspace_tool_tabs(endpoint)
         assert 'postgresql-test-data'not in tabs and 'postgresql-large-object-files'not in tabs
+
+
+def test_connection_prompt_principal_default_comes_from_canonical_descriptor():
+    from pgadmin.cdeadmin.endpoints.profiles import registration_profiles
+    service=UIDescriptorService()
+    field=next(f for tab in service.engine('firebird')['forms']['server']['tabs']
+               for f in tab['fields'] if f['field_id']=='username')
+    profiles={p['profile_id']:p for p in registration_profiles()}
+    assert profiles['firebird-native']['suggested_username']==field['default']=='SYSDBA'
+    assert not profiles['sqlite-native'].get('suggested_username')

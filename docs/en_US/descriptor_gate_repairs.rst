@@ -88,3 +88,23 @@ new Select test is included in the immutable verification input. The first
 post-application run passed the existing 168 JavaScript tests but could not
 load that omitted new file; correcting the capture and rerunning all five
 suites produced the clean 171-test result.
+
+Publication integration
+-----------------------
+
+The published navigator, Firebird authentication and registration changes were
+merged without removing their commits or UX. Overlapping Select changes were
+reconciled into one inputProps binding, one helper identity and one composed
+accessible description, retaining the incoming checkbox and placeholder fixes.
+The new connection-prompt principal suggestion reads the canonical server
+form's username default through registration profile metadata rather than an
+engine-specific UI comparison. Declared principal and private-registration
+credential checks pass.
+
+Firebird embedded source bindings changed with the published navigation code.
+Fresh Engine13 qualification passed against an owned runtime copy with source
+runtime unchanged, and both embedded contracts were regenerated from that real
+receipt. Final integration checks pass: 1,136 backend regression tests (65
+skipped), 189 affected integration tests (23 skipped), the descriptor gate
+(137 passed, 66 skipped), and 247 JavaScript tests. Native Windows/macOS and
+owner-deferred ScratchBird history qualification are not claimed.

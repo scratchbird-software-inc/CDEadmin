@@ -52,10 +52,22 @@ function createBlankDraftScheme(seedScheme = BUILTIN_COLOR_SCHEMES[1]) {
 
 export function ColorSchemesAndFontsEditor({
   subView = 'schemes',
+  hideTabs = false,
   globalSettings = {},
   onChangeGlobal,
+  onNavigateSubView,
 }) {
   const initialStored = useMemo(() => readStoredSchemeAndFontState(), []);
+  const [activeSubView, setActiveSubView] = useState(subView);
+
+  useEffect(() => {
+    setActiveSubView(subView);
+  }, [subView]);
+
+  const switchSubView = (nextView) => {
+    setActiveSubView(nextView);
+    onNavigateSubView?.(nextView);
+  };
 
   const [activeSchemeId, setActiveSchemeId] = useState(
     () => globalSettings.active_color_scheme || initialStored.activeSchemeId || 'light'
@@ -168,7 +180,40 @@ export function ColorSchemesAndFontsEditor({
     });
   };
 
-  if (subView === 'fonts') {
+  const subViewTabsBar = hideTabs ? null : (
+    <div
+      role="tablist"
+      aria-label={gettext('Colour Schemes & Typography Sections')}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        paddingBottom: 8,
+        borderBottom: '1px solid var(--sr-border-subtle)',
+      }}
+    >
+      {[
+        ['schemes', gettext('Colour Schemes')],
+        ['fonts', gettext('Fonts & Typography')],
+      ].map(([key, label]) => {
+        const selected = activeSubView === key;
+        return (
+          <Button
+            key={key}
+            role="tab"
+            aria-selected={selected}
+            intent={selected ? 'primary' : 'neutral'}
+            data-cdeadmin-qa-key={`appearance-tab-${key}`}
+            onClick={() => switchSubView(key)}
+          >
+            {label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+
+  if (activeSubView === 'fonts') {
     const uiPresetMatch =
       UI_FONT_PRESETS.find((p) => p.value === typography.ui_font_family)?.value || '__custom__';
     const monoPresetMatch =
@@ -182,6 +227,7 @@ export function ColorSchemesAndFontsEditor({
         data-cdeadmin-qa-key="settings-fonts-editor"
         style={{display: 'flex', flexDirection: 'column', gap: 14}}
       >
+        {subViewTabsBar}
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
           <div>
             <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
@@ -397,7 +443,7 @@ export function ColorSchemesAndFontsEditor({
               overflowX: 'auto',
             }}
           >
-            {`SELECT c.customer_id, c.total_balance >= 1000.00 AS is_vip -- 0O 1lI != >= ->\nFROM sales.customers c WHERE c.status <> 'ARCHIVED' ROWS 1 TO 250;`}
+            {'SELECT c.customer_id, c.total_balance >= 1000.00 AS is_vip -- 0O 1lI != >= ->\nFROM sales.customers c WHERE c.status <> \'ARCHIVED\' ROWS 1 TO 250;'}
           </pre>
         </div>
       </div>
@@ -409,6 +455,7 @@ export function ColorSchemesAndFontsEditor({
       data-cdeadmin-qa-key="settings-schemes-editor"
       style={{display: 'flex', flexDirection: 'column', gap: 14}}
     >
+      {subViewTabsBar}
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8}}>
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
@@ -735,6 +782,8 @@ export function ColorSchemesAndFontsEditor({
 
 ColorSchemesAndFontsEditor.propTypes = {
   subView: PropTypes.oneOf(['schemes', 'fonts']),
+  hideTabs: PropTypes.bool,
   globalSettings: PropTypes.object,
   onChangeGlobal: PropTypes.func,
+  onNavigateSubView: PropTypes.func,
 };

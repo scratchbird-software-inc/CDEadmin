@@ -190,6 +190,36 @@
       "8192",
       "16384",
       "32768"
+    ],
+    "connection_charsets": [
+      "UTF8",
+      "ISO8859_1",
+      "WIN1252",
+      "WIN1250",
+      "WIN1251",
+      "ASCII",
+      "UNICODE_FSS",
+      "OCTETS",
+      "NONE",
+      "DOS437",
+      "DOS850",
+      "LATIN2",
+      "KOI8R"
+    ],
+    "auth_plugin_lists": [
+      "Srp256,Srp,Legacy_Auth",
+      "Srp256,Srp",
+      "Srp256",
+      "Srp",
+      "Legacy_Auth",
+      "Win_Sspi"
+    ],
+    "wire_crypt_plugin_lists": [
+      "ChaCha64,ChaCha",
+      "ChaCha64,ChaCha,Arc4",
+      "ChaCha64",
+      "ChaCha",
+      "Arc4"
     ]
   },
   "catalog": {

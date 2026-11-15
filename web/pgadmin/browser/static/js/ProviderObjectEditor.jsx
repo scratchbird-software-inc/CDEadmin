@@ -74,12 +74,13 @@ export function reportServerEditorFailure(engine, reason) {
 }
 
 function serverFor(item) {
-  const tree = pgAdmin.Browser.tree;
+  const tree = pgAdmin.Browser?.tree;
+  if(!tree) return {item: null, data: null};
   let current = item;
   while(current) {
-    const data = tree.itemData(current);
+    const data = tree.itemData?.(current);
     if(data?._type === 'server') return {item: current, data};
-    current = tree.hasParent(current) ? tree.parent(current) : null;
+    current = tree.hasParent?.(current) ? tree.parent(current) : null;
   }
   return {item: null, data: null};
 }
@@ -99,11 +100,18 @@ function treeContext(itemData, item) {
     versionSupport: endpoint.data.version_support, api: getApiInstance()};
 }
 
-function refreshNode(item, {parent=false}={}) {
-  const tree = pgAdmin.Browser.tree;
-  const target = parent && tree.hasParent(item) ? tree.parent(item) : item;
-  const node = target ? pgAdmin.Browser.Nodes[tree.itemData(target)?._type] : null;
-  node?.callbacks?.refresh?.call(node, null, target);
+function refreshNode(item, {parent=false, openIfClosed=false}={}) {
+  const tree = pgAdmin?.Browser?.tree;
+  if (!tree || !item) return;
+  let target = item;
+  if (parent && tree.hasParent?.(item)) {
+    target = tree.parent(item);
+  } else if (tree.itemData?.(item)?._type === 'cde_resource' && tree.hasParent?.(item)) {
+    // Leaf SQL objects refresh their owning cde_resource_group / database target.
+    target = tree.parent(item);
+  }
+  if (!target) return;
+  pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:tree:refresh', target, {openIfClosed});
 }
 
 function hasProjectShellMounted() {
@@ -156,7 +164,7 @@ function openEditorPanel({context, itemData, item, resourceKind, resourceId, mod
     <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
       version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
       databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
-      onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter'})}
+      onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter', openIfClosed: mode === 'create'})}
       onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
         database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
         display_name: displayName, task_title: gettext('Data')})} />
@@ -225,7 +233,7 @@ export function openDescriptorOperation(itemData, item, operation) {
       (itemData.cde_database || itemData.label || itemData._label) : (itemData.label || itemData._label);
     root.render(<Theme><OperationDialog open operation={operation} targetName={targetName}
       context={operationContext(bundle, resources, target)} plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
-      onClose={close} onApplied={() => refreshNode(item)} /></Theme>);
+      onClose={close} onApplied={() => refreshNode(item, {parent: itemData._type === 'cde_resource' || operation.operation_id === 'drop'})} /></Theme>);
   };
   run();
   return true;
@@ -283,7 +291,8 @@ export function familyEditorContextActions(itemData, item) {
   // Create entries: a group node creates its own kind; a database creates any top-level kind.
   // A database node also creates the engine-object kinds the server flags as
   // natively creatable (owner decision 2026-11-11, option 1).
-  const nativeKinds = Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [];
+  const nativeKinds = (Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [])
+    .filter((kind) => !['database', 'server'].includes(kind));
   const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
     itemData._type === 'cde_database_target' ?
       [...new Set([...Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
@@ -332,8 +341,50 @@ export function familyEditorContextActions(itemData, item) {
  */
 export const LIFECYCLE_EDIT_ENGINES = new Set(['mysql']);
 
+/**
+ * Reload the engine_type connector branch under a server_group after a server is registered so
+ * localhost_placeholder is replaced and the new server appears immediately under Connectors › <Engine>.
+ */
+export async function refreshConnectorAfterServerSave(engine, serverGroupItem, createdServerId) {
+  const tree = pgAdmin.Browser.tree;
+  if (!tree || !serverGroupItem || !engine) return false;
+  const navEngineId = engine === 'opensearch_sql_ppl' ? 'opensearch' : engine;
+  if (typeof tree.isOpen === 'function' && !tree.isOpen(serverGroupItem)) {
+    await tree.open?.(serverGroupItem);
+  }
+  const connectors = tree.children?.(serverGroupItem) || [];
+  const engineItem = connectors.find(
+    (c) =>
+      c?._metadata?.data?.engine_id === navEngineId ||
+      c?._metadata?.data?._id === navEngineId ||
+      c?.fileName === `engine_type_${navEngineId}`
+  );
+  if (!engineItem) return false;
+  try {
+    await tree.unload?.(engineItem);
+    engineItem._children = null;
+    await tree.open?.(engineItem);
+    if (createdServerId != null) {
+      const serverChildren = tree.children?.(engineItem) || [];
+      const createdChild = serverChildren.find(
+        (s) => String(s?._metadata?.data?._id ?? s?._metadata?.data?.id) === String(createdServerId)
+      );
+      if (createdChild) {
+        await tree.select?.(createdChild, true, 'center');
+        if (createdChild._metadata?.data?.has_children) {
+          await tree.open?.(createdChild);
+        }
+      }
+    }
+    return true;
+  } catch {
+    pgAdmin.Browser.Events?.trigger?.('pgadmin:browser:tree:refresh', engineItem, {openIfClosed: true});
+    return true;
+  }
+}
+
 export async function tryOpenServerForm({item, mode='create', engine, profileId, initialData={}, intent='endpoint',
-  verifyNow=true, panelTitle}) {
+  verifyNow='auto', panelTitle, applyLabel}) {
   if(!engine || !item) return false;
   const api = getApiInstance();
   let bundle;
@@ -365,7 +416,12 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
       return;
     }
     if(mode === 'create') {
-      pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
+      const createdId = response?.node?._id ?? response?.node?.id;
+      void refreshConnectorAfterServerSave(engine, item, createdId).then((refreshed) => {
+        if (!refreshed && response?.node) {
+          pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:add', {...response.node}, {...treeNodeInfo});
+        }
+      });
     } else {
       pgAdmin.Browser.Events.trigger('pgadmin:browser:tree:update', nodeData, response.node, treeNodeInfo, {
         success: (updated, next, previous) => {
@@ -381,7 +437,8 @@ export async function tryOpenServerForm({item, mode='create', engine, profileId,
     <ServerRegistrationHost api={api} engine={engine} version={nodeData.verified_runtime_version}
       versionSupport={nodeData.version_support}
       mode={mode === 'create' ? 'create' : 'alter'} urlFor={urlFor} initialData={initialData} profileId={profileId}
-      intent={intent} verifyNow={verifyNow} displayName={panelTitle} onClose={onClose} onSaved={onSaved}
+      intent={intent} verifyNow={verifyNow} displayName={panelTitle} applyLabel={applyLabel}
+      onClose={onClose} onSaved={onSaved}
       lifecycleUrl={lifecycleUrl} />
   </ErrorBoundary>;
   openInlineOrWorkspaceTab(panelId, title, content, workspace);

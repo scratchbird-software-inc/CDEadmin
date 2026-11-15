@@ -14,6 +14,7 @@ import { QueryToolIcon, ViewDataIcon } from '../../components/ExternalIcon';
 import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import FilterAltRoundedIcon from '@mui/icons-material/FilterAltRounded';
+import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
 import { PgIconButton } from '../../components/Buttons';
 import _ from 'lodash';
 import PropTypes from 'prop-types';
@@ -44,7 +45,15 @@ export default function ObjectExplorerToolbar() {
   });
   const browserPref = usePreferences().getPreferencesForModule('browser');
   const [hasFilters, setHasFilters] = useState(false);
+  const [, setLocaleRev] = useState(0);
   const pgAdmin = usePgAdmin();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
+    window.addEventListener('scratchrobin:language-changed', onLang);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLang);
+  }, []);
 
   const checkMenuState = ()=>{
     // Owner direction 2026-11-06: View/Edit Data (All Rows, Filtered Rows)
@@ -97,6 +106,24 @@ export default function ObjectExplorerToolbar() {
       shortcut={browserPref?.sub_menu_view_data} />
       <ToolbarButton icon={<SearchOutlinedIcon style={{height: '1.4rem'}} />} menuItem={menus['search_objects']} shortcut={browserPref?.sub_menu_search_objects} />
       {!_.isUndefined(menus['psql']) && <ToolbarButton icon={<TerminalRoundedIcon style={{height: '1.4rem'}}/>} menuItem={menus['psql']} />}
+      <ToolbarButton
+        icon={<StorageRoundedIcon style={{height: '1.35rem'}} />}
+        id="configure-database-engines"
+        data-cdeadmin-qa-key="object-explorer-toolbar-engines"
+        menuItem={{
+          label: gettext('Database Engines (On / Off)'),
+          isDisabled: false,
+          callback: () => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('scratchrobin:open-preferences', {
+                  detail: {mode: 'global', sectionId: 'engines:connectors'},
+                })
+              );
+            }
+          },
+        }}
+      />
     </Box>
   );
 }

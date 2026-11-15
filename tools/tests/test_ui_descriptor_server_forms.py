@@ -177,6 +177,16 @@ def test_firebird_embedded_server_form_maps_to_its_contract(tmp_path):
     assert route['attachment_mode'] == 'embedded' and route['user'] == 'SYSDBA' and route['database'].endswith('rt.fdb')
 
 
+def test_firebird_network_server_form_accepts_remote_database_path():
+    """Native Firebird server registration accepts an optional server-side database path/alias."""
+    draft = {'profile': 'firebird-native', 'name': 'firebird demo', 'host': 'localhost', 'port': 53050,
+             'database': '/var/lib/firebird/data/cdeadmin_demo.fdb', 'username': 'SYSDBA',
+             'auth_plugin_list': 'Srp256,Srp,Legacy_Auth', 'connect_now': False}
+    _form, _profile, route = roundtrip('firebird', 'firebird-native', draft)
+    assert route['database'] == '/var/lib/firebird/data/cdeadmin_demo.fdb'
+    assert route['port'] == 53050
+
+
 # Parity engines (owner direction 2026-10-30): each server form maps a draft onto its own
 # registration contract, and, when its CDEADMIN_ROUNDTRIP_<ENGINE> settings are present (the
 # same object its family round trip reads), the persisted route opens a live session.

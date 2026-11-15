@@ -246,22 +246,26 @@ def extract_foundationdb_client():
 
 
 def extract_firebird_client():
-    """Extract the exact Firebird 5 client required by service dialogs."""
+    """Extract the exact Firebird 5 client, plugins, and crypto libraries."""
     require_program("docker")
-    library = RUNTIME / "firebird/lib/libfbclient.so.5.0.4"
-    link = RUNTIME / "firebird/lib/libfbclient.so.2"
-    if library.exists() and link.is_symlink() and os.readlink(
-            link) == library.name:
+    fb_root = RUNTIME / "firebird"
+    library = fb_root / "lib/libfbclient.so.5.0.4"
+    link = fb_root / "lib/libfbclient.so.2"
+    srp_plugin = fb_root / "plugins/libSrp.so"
+    if (
+        library.exists()
+        and srp_plugin.exists()
+        and link.is_symlink()
+        and os.readlink(link) == library.name
+    ):
         print(f"Firebird client already bootstrapped: {library}")
         return
     name = f"cdeadmin-demo-firebird-client-{os.getpid()}"
     run(["docker", "create", "--name", name, FIREBIRD_IMAGE, "true"])
     try:
-        library.parent.mkdir(parents=True, exist_ok=True)
-        run([
-            "docker", "cp",
-            f"{name}:/opt/firebird/lib/libfbclient.so.5.0.4", library,
-        ])
+        fb_root.mkdir(parents=True, exist_ok=True)
+        for subpath in ("lib", "plugins", "plugins.conf", "firebird.msg"):
+            run(["docker", "cp", f"{name}:/opt/firebird/{subpath}", fb_root / subpath])
         library.chmod(0o755)
         link.unlink(missing_ok=True)
         link.symlink_to(library.name)

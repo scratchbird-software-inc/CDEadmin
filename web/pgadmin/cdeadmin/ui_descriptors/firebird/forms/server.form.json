@@ -20,11 +20,11 @@
       "options": [
         {
           "value": "firebird-native",
-          "label": "Native"
+          "label": "Native (Server)"
         },
         {
           "value": "firebird-embedded",
-          "label": "Embedded"
+          "label": "Embedded (Local file on this computer)"
         }
       ]
     },
@@ -34,7 +34,9 @@
       "tab": "Connection",
       "control": "text",
       "backend_field_id": "name",
-      "required": true
+      "required": true,
+      "placeholder": "e.g. Firebird 5.0 on localhost",
+      "help": "Display name shown for this Firebird server under Connectors in Data Navigator."
     },
     {
       "field_id": "host",
@@ -43,6 +45,8 @@
       "control": "text",
       "backend_field_id": "host",
       "required": true,
+      "placeholder": "e.g. localhost or 10.0.0.15",
+      "help": "Hostname, IPv4 address, or IPv6 address of the Firebird server.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -57,6 +61,8 @@
       "required": true,
       "min": 1,
       "max": 65535,
+      "placeholder": "e.g. 3050",
+      "help": "TCP port of the Firebird listener (standard default is 3050).",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -69,6 +75,7 @@
       "control": "text",
       "backend_field_id": "cde_route_database_create_root",
       "required": false,
+      "placeholder": "e.g. /var/lib/firebird/data",
       "help": "Optional for registering a server or opening an existing database. Set the approved absolute directory on the Firebird server before creating a database from a server-only connection.",
       "visible_when": {
         "field": "profile",
@@ -82,6 +89,7 @@
       "control": "text",
       "backend_field_id": "cde_route_service_expected_database",
       "required": false,
+      "placeholder": "e.g. employee",
       "help": "Optional ordinary database path or alias whose server-configured SecurityDatabase and mappings should authenticate Services API requests. Do not enter the security store filename here. This does not change server configuration, the database being opened, or an operation target. Leave empty for the server default; ScratchRobin prevents FB_EXPECTED_DB in its process environment from overriding that choice.",
       "visible_when": {
         "field": "profile",
@@ -124,14 +132,11 @@
       "field_id": "database",
       "tab": "Connection",
       "backend_field_id": "db",
-      "label": "Database file",
-      "control": "file",
-      "required": true,
-      "help": "Database the profile connects to first; leave empty for the engine default.",
-      "visible_when": {
-        "field": "profile",
-        "equals": "firebird-embedded"
-      }
+      "label": "Database path or alias",
+      "control": "text",
+      "required": false,
+      "placeholder": "e.g. /var/lib/firebird/data/cdeadmin_demo.fdb or employee",
+      "help": "For Native (Server) connections, enter an optional database path or alias on the Firebird server (evaluated on the server host/container, not the local machine; you can also attach databases anytime via Register Database…). For Embedded connections, enter an absolute .fdb file path on this computer."
     },
     {
       "field_id": "connect_now",
@@ -156,6 +161,9 @@
       "control": "text",
       "backend_field_id": "username",
       "required": false,
+      "default": "SYSDBA",
+      "placeholder": "e.g. SYSDBA",
+      "help": "Default Firebird login user for database attachments and Services API calls.",
       "visible_when": {
         "field": "profile",
         "equals": "firebird-native"
@@ -169,6 +177,11 @@
       "backend_field_id": "cde_route_auth_plugin_list",
       "required": true,
       "default": "Srp256,Srp,Legacy_Auth",
+      "option_values_path": [
+        "dialect",
+        "auth_plugin_lists"
+      ],
+      "placeholder": "e.g. Srp256,Srp,Legacy_Auth",
       "help": "Ordered native AuthClient list for database creation, attachment and Services API. Separate case-sensitive plugin names with commas, spaces, tabs or semicolons. Native negotiation selects a compatible installed plugin; this does not install plugins or change AuthServer. An unavailable-only or nonmatching list fails; ScratchRobin never retries with a broader list. Legacy_Auth cannot satisfy Required wire encryption. Win_Sspi requires Windows. Do not leave an explicit list empty.",
       "visible_when": {
         "field": "profile",
@@ -195,7 +208,9 @@
       "tab": "Authentication",
       "control": "text",
       "backend_field_id": "cde_route_role",
-      "required": false
+      "required": false,
+      "placeholder": "e.g. RDB$ADMIN",
+      "help": "Optional SQL role activated when opening a session."
     },
     {
       "field_id": "password",
@@ -272,6 +287,11 @@
       "control": "text",
       "backend_field_id": "cde_route_wire_crypt_plugins",
       "required": false,
+      "option_values_path": [
+        "dialect",
+        "wire_crypt_plugin_lists"
+      ],
+      "placeholder": "e.g. ChaCha64,ChaCha",
       "help": "Optional ordered native WireCryptPlugin list, for example ChaCha64,ChaCha. Separate case-sensitive names with commas, spaces, tabs or semicolons. Uses installed client/server plugins; does not install them. Omit for native defaults. Arc4 is a legacy compatibility choice, not the preferred default. Required needs a compatible encryption plugin and authentication key. Windows/macOS native qualification is separate.",
       "visible_when": {
         "field": "profile",
@@ -314,7 +334,13 @@
       "backend_field_id": "cde_route_charset",
       "group": "Attachment",
       "required": false,
-      "default": "UTF8"
+      "default": "UTF8",
+      "option_values_path": [
+        "dialect",
+        "connection_charsets"
+      ],
+      "placeholder": "e.g. UTF8",
+      "help": "Client character set sent when attaching to a database (default UTF8)."
     },
     {
       "field_id": "session_time_zone",
@@ -323,7 +349,8 @@
       "control": "text",
       "backend_field_id": "cde_route_session_time_zone",
       "group": "Attachment",
-      "required": false
+      "required": false,
+      "help": "Initial session IANA time zone or UTC offset. Defaults to your local OS time zone; choose another zone from the dropdown or enter a custom offset such as +00:00."
     },
     {
       "field_id": "decfloat_traps_policy",

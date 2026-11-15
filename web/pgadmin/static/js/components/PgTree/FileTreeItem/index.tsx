@@ -20,7 +20,33 @@ import {
   treeNodeAriaLabel,
 } from 'sources/cdeadmin_ui/navigation/TreeNode';
 import {ObjectIcon} from 'sources/cdeadmin_ui/icons';
+import gettext from 'sources/gettext';
 import {TreeBranchGuides} from './TreeBranchGuides';
+
+function formatLocalizedNodeLabel(rawData: Record<string, any>): string {
+  const rawLabel = _.unescape(rawData?._label ?? rawData?.label ?? '');
+  if (!rawLabel) return '';
+  const nodeType = String(rawData?._type || '');
+  if (
+    nodeType === 'server_group' ||
+    nodeType === 'cde_resource_group' ||
+    nodeType.startsWith('coll-')
+  ) {
+    const countMatch = rawLabel.match(/^(.*?)\s*\((\d+)\)$/);
+    if (countMatch) {
+      const base = countMatch[1].trim();
+      const count = countMatch[2];
+      const templateKey = `${base} (%s)`;
+      const translatedTemplate = gettext(templateKey, count);
+      if (translatedTemplate !== `${base} (${count})`) {
+        return translatedTemplate;
+      }
+      return `${gettext(base)} (${count})`;
+    }
+    return gettext(rawLabel);
+  }
+  return rawLabel;
+}
 interface IItemRendererXProps {
     /**
      * In this implementation, decoration are null when item is `PromptHandle`
@@ -89,9 +115,27 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
     const itemChildren = item.children && item.children.length > 0 && item._metadata.data._type.indexOf('coll-') !== -1 ? '(' + item.children.length + ')' : '';
     const extraClasses = item._metadata.data.extraClasses ? item._metadata.data.extraClasses.join(' ') : '';
 
-    const tags = item._metadata.data?.tags ?? [];
+    const rawData = item._metadata?.data ?? {};
+    const hasLoadedChildren = Array.isArray(item.children) && item.children.length > 0;
+    const loadedEmptyDirectory =
+      isDirExpanded && Array.isArray(item.children) && item.children.length === 0;
+    const explicitlyNoChildren =
+      rawData.has_children === false || rawData.inode === false;
+    const showDirectoryToggle =
+      !isNewPrompt &&
+      fileOrDir === 'directory' &&
+      !loadedEmptyDirectory &&
+      (!explicitlyNoChildren || hasLoadedChildren);
+    const stepW = Math.max(18, Math.min(28, Number(this.props.branchStepX) || 20));
+    const slotCenterX = Math.round(stepW / 2);
+    const showExpandedStem =
+      showDirectoryToggle &&
+      isDirExpanded &&
+      (!Array.isArray(item.children) || item.children.length > 0);
+
+    const tags = rawData?.tags ?? [];
     const descriptor = descriptorFromTreeMetadata(
-      item._metadata.data,
+      rawData,
       item.children?.length ?? 0
     );
     const isSelected = decorations?.classlist?.includes('active') ?? false;
@@ -108,7 +152,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
             prompt: isRenamePrompt || isNewPrompt,
             new: isNewPrompt,
             disabled: !descriptor.capabilities.enabled,
-          }, fileOrDir, decorations ? decorations.classlist : null, `depth-${item.depth}`, extraClasses)}
+          }, showDirectoryToggle ? 'directory' : 'file', decorations ? decorations.classlist : null, `depth-${item.depth}`, extraClasses)}
           data-depth={item.depth}
           onContextMenu={this.handleContextMenu}
           onDragStart={this.handleDragStartItem}
@@ -117,7 +161,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
           onKeyDown={()=>{/* taken care by parent */}}
           role="treeitem"
           aria-label={treeNodeAriaLabel(descriptor)}
-          aria-expanded={fileOrDir === 'directory' ? isDirExpanded : undefined}
+          aria-expanded={showDirectoryToggle ? isDirExpanded : undefined}
           aria-selected={isSelected}
           aria-disabled={!descriptor.capabilities.enabled}
           aria-level={Math.max(1, Number(item.depth ?? 1))}
@@ -135,21 +179,46 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
           <TreeBranchGuides
             item={item as FileOrDir}
             activeItem={this.props.activeItem}
-            stepX={this.props.branchStepX}
+            stepX={stepW}
             radius={this.props.branchRadius}
+            hasToggle={showDirectoryToggle}
           />
 
-          {!isNewPrompt && fileOrDir === 'directory' ?
-            <button
-              type="button"
-              tabIndex={-1}
-              className={cn('directory-toggle', isDirExpanded ? 'open' : '')}
-              onClick={this.handleToggleClick}
-              aria-label={`${isDirExpanded ? 'Collapse' : 'Expand'} ${descriptor.label}`}
-              aria-expanded={isDirExpanded}
-              title={`${isDirExpanded ? 'Collapse' : 'Expand'} ${descriptor.label}`}
-            /> : <span className="tree-node-terminal leaf" aria-hidden="true" />
-          }
+          {showDirectoryToggle ? (
+            <span
+              className={cn('directory-toggle-slot', showExpandedStem ? 'expanded-stem' : '')}
+              style={{width: stepW, height: FileTreeItem.renderHeight}}
+            >
+              {showExpandedStem ? (
+                <svg
+                  className="directory-toggle-stem"
+                  width={stepW}
+                  height={FileTreeItem.renderHeight}
+                  viewBox={`0 0 ${stepW} ${FileTreeItem.renderHeight}`}
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d={`M ${slotCenterX} 21 V ${FileTreeItem.renderHeight}`}
+                    stroke="var(--sr-tree-guide, rgba(71, 85, 105, 0.78))"
+                    strokeWidth="2.2"
+                    strokeLinecap="butt"
+                  />
+                </svg>
+              ) : null}
+              <button
+                type="button"
+                tabIndex={-1}
+                className={cn('directory-toggle', isDirExpanded ? 'open' : '')}
+                onClick={this.handleToggleClick}
+                aria-label={`${isDirExpanded ? 'Collapse' : 'Expand'} ${descriptor.label}`}
+                aria-expanded={isDirExpanded}
+                title={`${isDirExpanded ? 'Collapse' : 'Expand'} ${descriptor.label}`}
+              />
+            </span>
+          ) : (
+            <span className="tree-node-terminal leaf" aria-hidden="true" />
+          )}
 
           {descriptor.check.type !== 'none' ? <input
             className="tree-node-check"
@@ -177,7 +246,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
               /> : null
           }
           <span className='file-name'>
-            { _.unescape(this.props.item.getMetadata('data')._label)}
+            { formatLocalizedNodeLabel(rawData)}
           </span>
           <span className="text-muted" style={{fontSize: '0.9em', whiteSpace: 'nowrap'}}>
             {_.unescape(this.props.item.getMetadata('data').info_label)}

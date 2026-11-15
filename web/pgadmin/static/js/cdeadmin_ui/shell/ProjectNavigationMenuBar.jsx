@@ -410,10 +410,10 @@ export function ProjectNavigationMenuBar({shell}) {
           ? 'light'
           : 'dark'
         : (() => {
-            const idx = toggleableSchemes.findIndex((s) => s.id === activeScheme.id);
-            const next = toggleableSchemes[(idx + 1) % toggleableSchemes.length];
-            return next?.id || (isDark ? 'light' : 'dark');
-          })();
+          const idx = toggleableSchemes.findIndex((s) => s.id === activeScheme.id);
+          const next = toggleableSchemes[(idx + 1) % toggleableSchemes.length];
+          return next?.id || (isDark ? 'light' : 'dark');
+        })();
     await handleSelectScheme(nextSchemeId);
   }, [activeScheme.id, isDark, toggleableSchemes, handleSelectScheme]);
 
@@ -803,6 +803,28 @@ export function ProjectNavigationMenuBar({shell}) {
             </NavigationMenu.Positioner>
           </NavigationMenu.Portal>
         </NavigationMenu.Root>
+
+        <button
+          type="button"
+          className="sr-nav-tone-btn"
+          aria-label="Configure ScratchRobin"
+          title="Configure ScratchRobin"
+          data-cdeadmin-qa-key="top-menu-settings"
+          onClick={() => {
+            if (typeof shell?.openSettingsDialog === 'function') {
+              shell.openSettingsDialog('global', null, null);
+            } else if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('scratchrobin:open-preferences', {
+                  detail: {mode: 'global'},
+                })
+              );
+            }
+          }}
+        >
+          <Icon iconKey="action.settings" decorative size="0.95em" />
+          <span>Settings</span>
+        </button>
 
         <button
           type="button"

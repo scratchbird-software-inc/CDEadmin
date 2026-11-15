@@ -32,6 +32,8 @@ export function Checkbox({
   }, []);
 
   const ariaLabel = props['aria-label'] || inputProps?.['aria-label'] || undefined;
+  const ariaDescribedBy = props['aria-describedby'] || inputProps?.['aria-describedby'] || undefined;
+  const qaKey = props['data-cdeadmin-qa-key'] || inputProps?.['data-cdeadmin-qa-key'] || undefined;
 
   return (
     <label
@@ -41,12 +43,17 @@ export function Checkbox({
       onClick={(e) => e.stopPropagation()}
     >
       <BaseCheckbox.Root
+        ref={(el) => {
+          if (el) el.checked = Boolean(checked);
+        }}
         nativeButton
         render={<button type="button" />}
         checked={Boolean(checked)}
         indeterminate={Boolean(indeterminate)}
         disabled={Boolean(disabled)}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        data-cdeadmin-qa-key={qaKey}
         onCheckedChange={(nextChecked, details) => {
           onChange?.(nextChecked, details?.event);
         }}
@@ -150,13 +157,13 @@ export function Select({
   error = false,
   helperText,
   placeholder = '',
+  inputProps,
   className = '',
   style,
   sx,
   // Strip legacy MUI-only props
   // eslint-disable-next-line no-unused-vars
   InputLabelProps,
-  inputProps,
   // eslint-disable-next-line no-unused-vars
   size,
   // eslint-disable-next-line no-unused-vars
@@ -219,7 +226,11 @@ export function Select({
           }}
         >
           <BaseSelect.Value>
-            {currentOption ? currentOption.label : (placeholder || '')}
+            {currentOption ? (
+              currentOption.label
+            ) : (
+              <span style={{color: 'var(--sr-text-muted)', opacity: 0.72}}>{placeholder || ''}</span>
+            )}
           </BaseSelect.Value>
           <BaseSelect.Icon style={{display: 'inline-flex', opacity: 0.65}}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
@@ -269,6 +280,7 @@ Select.propTypes = {
   disabled: PropTypes.bool,
   required: PropTypes.bool,
   placeholder: PropTypes.string,
+  inputProps: PropTypes.object,
   validationMessage: PropTypes.node,
   error: PropTypes.bool,
   helperText: PropTypes.node,
@@ -280,7 +292,6 @@ Select.propTypes = {
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onChange: PropTypes.func,
   InputLabelProps: PropTypes.object,
-  inputProps: PropTypes.object,
   size: PropTypes.string,
   fullWidth: PropTypes.bool,
   sx: PropTypes.object,
