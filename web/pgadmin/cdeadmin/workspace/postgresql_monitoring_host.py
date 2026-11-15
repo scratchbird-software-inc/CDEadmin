@@ -84,8 +84,12 @@ class PostgreSQLMonitoringHost(MonitoringHost):
         oid = database_oid(target)
         manager = DriverRegistry.get('psycopg3').connection_manager(sid)
         connection = manager.connection(did=oid) if oid is not None else manager.connection()
-        if not connection.connected() or manager.version != 180003:
-            raise ValueError('Connect the selected PostgreSQL 18.3 database first')
+        if not connection.connected():
+            raise ValueError('Connect the selected PostgreSQL database first')
+        from ..providers.postgresql.support_policy import admission_error
+        reason = admission_error(manager.version)
+        if reason:
+            raise ValueError(reason)
         if not connection.db:
             raise ValueError('Monitoring requires an explicit database')
         route = {'host': server.host, 'port': server.port,

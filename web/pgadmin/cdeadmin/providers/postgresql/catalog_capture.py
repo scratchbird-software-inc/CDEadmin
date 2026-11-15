@@ -222,6 +222,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                 if catalog == 'pg_class':
                     # Owner, tablespace and access method by name (owner direction 2026-11-11: the table editor diffs them).
                     native += " || jsonb_build_object('partition_bound_sql', pg_catalog.pg_get_expr(c.relpartbound,c.oid,false), 'partition_key_sql', CASE WHEN c.relkind='p' THEN pg_catalog.pg_get_partkeydef(c.oid) END, 'owner_name', pg_catalog.pg_get_userbyid(c.relowner), 'tablespace_name', (SELECT t.spcname FROM pg_catalog.pg_tablespace t WHERE t.oid=c.reltablespace), 'access_method_name', (SELECT a.amname FROM pg_catalog.pg_am a WHERE a.oid=c.relam))"
+                    native += " || jsonb_build_object('toast_reloptions', (SELECT t.reloptions FROM pg_catalog.pg_class t WHERE t.oid=c.reltoastrelid))"
                 if catalog == 'pg_policy':
                     native += " || jsonb_build_object('using_sql', pg_catalog.pg_get_expr(c.polqual,c.polrelid,false), 'check_sql', pg_catalog.pg_get_expr(c.polwithcheck,c.polrelid,false), 'roles_sql', (SELECT COALESCE(array_agg(CASE WHEN r = 0 THEN 'public' ELSE pg_catalog.pg_get_userbyid(r) END ORDER BY r), ARRAY[]::text[]) FROM unnest(c.polroles) r))"
                 if catalog == 'pg_foreign_server':

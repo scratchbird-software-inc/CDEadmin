@@ -3582,6 +3582,7 @@ def _sequence_state(cursor, name):
 
 def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
                    administration=ADMINISTRATION):
+    from .local_services import arguments as local_service_arguments
     module = load_optional_module('firebird.driver')
     core = (load_optional_module('firebird.driver.core')
             if module is not None else None)
@@ -3627,7 +3628,9 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         administration=administration,
         server_route=_server_route,
         server_connector_name='connect_server',
-        server_connect_arguments=lambda route: {
+        server_connect_arguments=lambda route: local_service_arguments(
+            require_attachment_mode(route, attachment_mode), permissions, module)
+        if attachment_mode == 'embedded' else {
             **_server_arguments(
                 require_attachment_mode(route, attachment_mode), module),
             'connect_timeout': route.get('timeout'),

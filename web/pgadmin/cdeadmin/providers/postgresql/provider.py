@@ -557,7 +557,7 @@ class PostgreSQLProvider:
             'read_only': compiled['read_only'],
             **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance') if key in compiled},
         }
-        return {
+        planned = {
             'command_preview': {
                 'language': 'postgresql-sql',
                 'statement': compiled['statement'],
@@ -572,6 +572,37 @@ class PostgreSQLProvider:
                 'common_transaction_finality_inference': False,
             },
         }
+        from . import destructive_identity
+        if destructive_identity.applies(request):
+            self.permissions.require('administer')
+            self.permissions.require('execute')
+            try:
+                expected = destructive_identity.target(request)
+            except destructive_identity.IdentityConflict as error:
+                raise PostgreSQLStatementRejected(str(error)) from None
+            planned['warnings'].append(
+                'DROP rechecks the native server, principal, schema and table identity under '
+                'an exclusive native table lock held through dispatch and commit. Native LOCK '
+                'privileges are required; a busy or changed target needs a new review. '
+                'Schema ownership alone may not grant LOCK privileges. No unguarded fallback is used.')
+            session = self.open_session({'route': payload['route']})
+            state = self._sessions[session['session_id']]
+            try:
+                self._ensure_native_connection(state)
+                connection = state.connection
+                if connection.transaction_status() != 0:
+                    raise PostgreSQLProviderError('DROP identity review requires an idle owned connection')
+                status, _ = native_control(connection.conn, 'BEGIN READ ONLY')
+                if not status:
+                    raise PostgreSQLProviderError('DROP identity review transaction could not start')
+                binding = destructive_identity.observe(connection.conn, expected, payload['route'].get('database_id'))
+                payload['destructive_identity'] = binding
+                planned['command_preview']['native_target_identity'] = copy.deepcopy(binding)
+            except destructive_identity.IdentityConflict as error:
+                raise PostgreSQLStatementRejected(str(error)) from None
+            finally:
+                self.close_session(session)
+        return planned
 
     @_provider_serialized
     def apply_admin_operation(self, request):
@@ -620,6 +651,17 @@ class PostgreSQLProvider:
             if not status or (database_id is not None and
                               identity.get('rows') != [{'oid': database_id}]):
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
+            from . import destructive_identity
+            if destructive_identity.applies(payload):
+                try:
+                    destructive_identity.lock_and_revalidate(
+                        connection.conn, payload, payload.get('destructive_identity'), database_id)
+                except destructive_identity.IdentityConflict as error:
+                    raise PostgreSQLStatementRejected(str(error)) from None
+                except Exception as error:
+                    if getattr(error, 'sqlstate', None):
+                        raise _rejection(error) from None
+                    raise
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
             returns_rows = (compiled['read_only'] or
                             compiled.get('returns_rows'))

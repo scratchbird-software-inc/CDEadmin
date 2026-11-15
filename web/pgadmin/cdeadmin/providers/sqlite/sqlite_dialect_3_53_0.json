@@ -81,6 +81,29 @@
     "runtime_version": "3.53.0",
     "sha256": "f416054fc12a6ab8d743ed1d98ba18ebdf9a3839653da3b2885097265578933e"
   },
+  "connection_scope_qualification": {
+    "native_versions": [
+      "3.35.0",
+      "3.45.1",
+      "3.53.0"
+    ],
+    "scope": "database.alter file task excludes connection-local synchronous; original main connection policy is a separate retained callback",
+    "source_sha256": {
+      "tools/cdeadmin_relational_provider_live_verify.py": "cd990765a828e19e1ba6a336fac8c073a1470ff6ffe4b2a926a172216cf6121c",
+      "tools/tests/test_sqlite_connection_settings.py": "6950941af559751f07966685a6a762ececc0cbdc2930b48b0f062c68e0569bd2",
+      "web/pgadmin/browser/server_groups/servers/__init__.py": "469c17d755969961e2a69f4fb11486e09c36371b5be6e8fa9892bcea933b479a",
+      "web/pgadmin/cdeadmin/data_studio/scripts.py": "bacd5f3ed92b4c3c2005554e5f8b66b8d0aa0862566c6c2027dc41f32637db3d",
+      "web/pgadmin/cdeadmin/data_studio/studio.py": "54d5b724cc84d74bea6a3a8eba6ddc30d8872ce8338319f512e4971d9c7fd2dd",
+      "web/pgadmin/cdeadmin/providers/sqlite/connection_settings.py": "6ae2ec5ca478cd203b5694b1763d7584e97d540ac9a580395e88567db57cfc01",
+      "web/pgadmin/cdeadmin/providers/sqlite/provider.py": "6fb7f0c224de3261a0b1dc0bd2c05d59f379f86f0ef27392b2fee3c4e238e270",
+      "web/pgadmin/cdeadmin/ui_descriptors/sqlite/operations.json": "5b7a93c955119ad35c8327b1b11f5e5b170daba8460fdb0759d9fd927105963d",
+      "web/pgadmin/cdeadmin/workspace/service.py": "ac29708bcac971d4008e922f5125a436ccef1491af23af7eb9b203c17d163c90"
+    },
+    "statements": [
+      "PRAGMA journal_mode = DELETE",
+      "PRAGMA user_version = 53"
+    ]
+  },
   "contract_id": "sqlite.dialect.3.53.0.v1",
   "coverage": {
     "authoritative_inventory_counts": {
@@ -11110,7 +11133,8 @@
     "sqlite-sql"
   ],
   "live_evidence_ids": [
-    "sqlite-3.53.0-task-live-execution"
+    "sqlite-3.53.0-task-live-execution",
+    "sqlite-connection-scope-live_execution"
   ],
   "profile_id": "sqlite-native",
   "proof_records": [
@@ -11158,6 +11182,24 @@
       "format": "CPython extension module dynamically linked to SQLite 3.53.0",
       "license_id": "PSF-2.0",
       "sha256": "2aba6eeb59707b665575fd21811fed844e2b2e9044c8f79b3dc58437b950a5ed"
+    },
+    {
+      "artifact": "embedded connection_scope_qualification",
+      "authority": "Owned native three-runtime file-setting apply/read-back and retained-setting scope tests",
+      "evidence_id": "sqlite-connection-scope-parser_acceptance",
+      "evidence_kind": "parser_acceptance",
+      "format": "scoped native qualification manifest",
+      "license_id": "PostgreSQL",
+      "sha256": "8cb2b57137485e2414615c65516056e5712da7f8026af2136e62bfd13f9e046a"
+    },
+    {
+      "artifact": "embedded connection_scope_qualification",
+      "authority": "Owned native three-runtime file-setting apply/read-back and retained-setting scope tests",
+      "evidence_id": "sqlite-connection-scope-live_execution",
+      "evidence_kind": "live_execution",
+      "format": "scoped native qualification manifest",
+      "license_id": "PostgreSQL",
+      "sha256": "8cb2b57137485e2414615c65516056e5712da7f8026af2136e62bfd13f9e046a"
     }
   ],
   "provider_id": "org.cdeadmin.sqlite",
@@ -11253,15 +11295,14 @@
     {
       "binding_style": "positional_question_mark",
       "proof_ids": [
-        "sqlite-3.53.0-task-parser-acceptance",
-        "sqlite-3.53.0-task-live-execution"
+        "sqlite-connection-scope-parser_acceptance",
+        "sqlite-connection-scope-live_execution"
       ],
       "required_bindings": [],
-      "source": "PRAGMA journal_mode = DELETE\n;\nPRAGMA synchronous = FULL\n;\nPRAGMA user_version = 53",
+      "source": "PRAGMA journal_mode = DELETE\n;\nPRAGMA user_version = 53",
       "source_format": "ordered_native_statements",
       "statements": [
         "PRAGMA journal_mode = DELETE",
-        "PRAGMA synchronous = FULL",
         "PRAGMA user_version = 53"
       ],
       "task_id": "visual_admin.database.alter"

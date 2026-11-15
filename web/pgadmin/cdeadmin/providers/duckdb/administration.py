@@ -8,6 +8,18 @@ from ...sdk.relational import RelationalClientError
 
 
 class DuckDBAdministration(RelationalAdministration):
+    def _row_cursor(self, client, connection):
+        from .grid_values import RowCursor
+        return RowCursor(connection)
+
+    def _public_row_values(self, values):
+        from .grid_values import public_values
+        return public_values(values)
+
+    def _identity_predicate(self, identity):
+        from .grid_values import identity_predicate
+        return identity_predicate(self._quote, identity)
+
     def _duckdb_secret(self, name, options):
         from .secret_values import compile_secret
         return compile_secret(self, name, options)
@@ -161,10 +173,27 @@ class DuckDBAdministration(RelationalAdministration):
             return self._definition_replacement(request)
         return super()._compile(request)
 
+    def _compile_create(self, request):
+        if request['resource_kind'] == 'index' and any(
+                key in (request['draft'].get('options') or {})
+                for key in ('terms', 'method', 'index_options')):
+            from .indexes import compile_create
+            return compile_create(self, request)
+        return super()._compile_create(request)
+
     def _normalize_draft(self, kind, operation, draft):
         if kind == 'secret' and operation in {'create', 'drop'}:
             return deepcopy(draft)
-        return super()._normalize_draft(kind, operation, draft)
+        result = super()._normalize_draft(kind, operation, draft)
+        if kind == 'index' and operation == 'create':
+            for key in ('terms', 'method', 'index_options'):
+                if key in result:
+                    value = result.pop(key)
+                    options = result.setdefault('options', {})
+                    if key in options and options[key] != value:
+                        raise RelationalClientError('Conflicting native index controls')
+                    options[key] = value
+        return result
 
     def plan(self, request):
         result = super().plan(request)
@@ -172,6 +201,11 @@ class DuckDBAdministration(RelationalAdministration):
                 request.get('resource_kind') == 'macro'):
             result['command_preview']['provider_constructed'] = False
             result['command_preview']['source_origin'] = 'operator-reviewed-native-statement'
+        if request.get('resource_kind') == 'index' and request.get('operation_id') == 'create':
+            result['command_preview']['native_index_capabilities'] = {
+                'admitted_methods': ['ART'], 'admitted_art_creation_options': [],
+                'authority': 'qualified DuckDB 1.5.2 built-in ART registration',
+                'extension_method_registry_enumerated': False}
         return result
 
     @staticmethod

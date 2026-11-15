@@ -722,6 +722,32 @@ class DataStudioService:
         except (ValueError,OSError) as error:raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_connection_settings_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_connection_settings_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_connection_limits_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_connection_limits_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def sqlite_native_array_action(self, context, session_id, request):
         session,binding=self._operational_session(context,session_id)
         if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':

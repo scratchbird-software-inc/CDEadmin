@@ -209,6 +209,12 @@ class Execution:
 
 
 class DuckDBClient(RelationalDBAPIClient):
+    def admin_operation_field_contract(self, request):
+        if (request['resource_kind'], request['operation_id']) == ('index', 'create'):
+            from ...ui_descriptors.field_contract import descriptor_field_contract
+            return descriptor_field_contract('duckdb', request)
+        return None
+
     def __init__(self, config, module=None):
         super().__init__(config, module)
         load_optional_module('pyarrow')

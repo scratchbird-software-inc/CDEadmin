@@ -27,7 +27,12 @@ class Native(Mock):
 def factory():
     def connection(**options):
         native = Native(connection_id=7, server_status=0, _cmysql=None)
-        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
+        cursor = native.cursor.return_value
+        def execute(sql, *args):
+            cursor.fetchone.return_value = (
+                ('server-one', 'owner@localhost', '12.2.2', 7)
+                if 'CURRENT_USER()' in sql else ('server-one', 7))
+        cursor.execute.side_effect = execute
         return native
     return SimpleNamespace(connect=Mock(side_effect=connection))
 

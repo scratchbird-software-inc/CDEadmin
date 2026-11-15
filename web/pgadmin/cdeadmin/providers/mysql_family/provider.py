@@ -207,6 +207,8 @@ def _administration(profile):
         common['server'] = common['server'] | frozenset(instance_operations)
         from .mysql_page_tracking import OPERATIONS as page_tracking_operations
         common['server'] = common['server'] | frozenset(page_tracking_operations)
+        from .mysql_engine_diagnostics import OPERATIONS as engine_diagnostic_operations
+        common['server'] = common['server'] | frozenset(engine_diagnostic_operations)
         from .mysql_rewriter import OPERATIONS as rewriter_operations
         common['server'] = common['server'] | frozenset(rewriter_operations)
         from .mysql_key_cache_lifecycle import OPERATIONS as cache_lifecycle_operations
@@ -352,6 +354,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         from .mariadb_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
+        self._completion_identities = {}
         self._backup_stage_reviews = {}
         self._backup_stage_handles = set()
         self._tool_runner = tool_runner or ProviderToolRunner({
@@ -374,7 +377,10 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             connection = super().open_session(request)
             try:
                 self._executions.sessions.register(connection)
+                from .mariadb_completion import admit
+                admit(self, connection)
             except BaseException:
+                self._executions.sessions.forget(connection)
                 self._discard_failed_session(connection)
                 raise
             self._session_requests[id(connection)] = copy.deepcopy(dict(request))
@@ -395,6 +401,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     def _discard_failed_session(self, connection):
         from .mariadb_connections import discard
         self._backup_stage_handles.discard(id(connection))
+        self._completion_identities.pop(id(connection), None)
         self._forget_connection(connection)
         discard(connection)
 
@@ -461,6 +468,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         with self._executions.lock:
             self._executions.require_idle(handle)
             self._session_requests.pop(id(handle), None)
+            self._completion_identities.pop(id(handle), None)
             self._executions.sessions.forget(handle)
             return self._close_idle_session(handle)
 
@@ -500,6 +508,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             super().close()
         finally:
             self._mariadb_connector.close()
+            self._completion_identities.clear()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
             self._executions.sessions.entries.clear()
@@ -1001,6 +1010,14 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def admin_operation_field_contract(self, request):
         kind, operation = request['resource_kind'], request['operation_id']
+        if kind == 'server' and operation in {
+                'show_engine_status', 'show_engine_logs', 'show_engine_mutex'}:
+            fields = copy.deepcopy(request['legacy_fields'])
+            if (request.get('draft') or {}).get('engine_scope') == 'ALL':
+                for field in fields:
+                    if field['field_id'] == 'engine':
+                        field.pop('default', None)
+            return {'fields': fields, 'authority': 'ui_descriptors/mysql/operations.json'}
         if kind == 'table' and operation == 'create':
             from .descriptor_contracts import document, field_contract
             fields = copy.deepcopy(request['legacy_fields'])
@@ -1052,7 +1069,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         if position(compiled):
             return bind_relay(self, planned)
         for suffix in ('failover privilege_change account_change trigger_create routine_create index_create server_control xa '
-                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache').split():
+                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache engine_diagnostics').split():
             key = 'mysql_'+suffix
             if key in compiled:return HANDLERS[key].bind_review(self, planned)
         if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':

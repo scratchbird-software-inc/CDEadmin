@@ -959,8 +959,9 @@
         {
           "field_id": "description",
           "label": "Comment",
-          "control": "multiline",
-          "required": false
+          "control": "code",
+          "required": false,
+          "language": "text"
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server."
@@ -1145,8 +1146,9 @@
         {
           "field_id": "description",
           "label": "Comment",
-          "control": "multiline",
-          "required": false
+          "control": "code",
+          "required": false,
+          "language": "text"
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it."

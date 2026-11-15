@@ -74,9 +74,11 @@ def facts(native):
     fillfactor = options.get('fillfactor')
     autovacuum = {key: value for key, value in options.items()
                   if key in table_editor.AUTOVACUUM}
-    toast = {key[6:]: value for key, value in options.items()
-             if key.startswith('toast.')
-             and key[6:] in table_editor.AUTOVACUUM}
+    toast = _options(row.get('toast_reloptions')) if (
+        'toast_reloptions' in row) else {
+            key[6:]: value for key, value in options.items()
+            if key.startswith('toast.')
+            and key[6:] in table_editor.AUTOVACUUM}
 
     def number(key):
         value = options.get(key)

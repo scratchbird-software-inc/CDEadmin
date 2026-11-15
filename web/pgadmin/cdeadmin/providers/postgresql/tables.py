@@ -9,7 +9,8 @@ grants and comments; alter emits one statement per changed table-level
 fact; drop is ``DROP TABLE`` with optional CASCADE and a typed name.
 
 Columns and constraints of an existing table are edited on their own
-nodes (the column and constraint editors), so alter ignores those grids.
+nodes (the column and constraint editors); table alter refuses those grids
+rather than acknowledging only the other requested changes.
 Column clauses and constraint bodies come from those editors' compilers,
 so one table create and a later column or constraint create render the
 same text. Every value is a literal, a validated identifier, or a type or
@@ -71,6 +72,10 @@ def facts(native, partitions=None):
     options = _options(row.get('reloptions'))
     autovacuum = {key: value for key, value in options.items()
                   if key in AUTOVACUUM}
+    toast = _options(row.get('toast_reloptions')) if (
+        'toast_reloptions' in row) else {
+            key[6:]: value for key, value in options.items()
+            if key.startswith('toast.') and key[6:] in AUTOVACUUM}
 
     def number(key):
         value = options.get(key)
@@ -90,6 +95,11 @@ def facts(native, partitions=None):
             str(options.get('autovacuum_enabled', '')).lower(), 'x'),
         'autovacuum_custom': bool(autovacuum),
         'vacuum_settings': autovacuum,
+        'toast_autovacuum_enabled': {'true': 't', 'false': 'f'}.get(
+            str(toast.get('autovacuum_enabled', '')).lower(), 'x'),
+        'toast_autovacuum': bool(toast),
+        'toast_vacuum_settings': toast,
+        'toast_options_observed': 'toast_reloptions' in row or bool(toast),
         'rlspolicy': bool(row.get('relrowsecurity')),
         'forcerlspolicy': bool(row.get('relforcerowsecurity')),
         'replica_identity': REPLICA_IDENTITY.get(row.get('relreplident'),
@@ -433,6 +443,12 @@ def _create(draft):
 # -- alter ------------------------------------------------------------------
 
 def _alter(native, draft):
+    for field in ('columns', 'primary_key', 'foreign_key', 'check_constraint',
+                  'unique_constraint', 'exclude_constraint'):
+        if draft.get(field):
+            _refuse(f'{field}: edit existing columns and constraints on their '
+                    'own provider nodes; table-level changes cannot ignore '
+                    'a requested grid edit')
     current = facts(native)
     schema = _name(current['schema'], 'schema')
     name = _name(current['name'], 'name')
@@ -498,13 +514,36 @@ def _alter(native, draft):
                                              else 'false'))
     elif enabled == 'x' and current['autovacuum_enabled'] != 'x':
         resets.append('autovacuum_enabled')
-    if 'autovacuum_custom' in draft:
-        if _flag(draft, 'autovacuum_custom'):
+    if 'autovacuum_custom' in draft or 'vacuum_table' in draft:
+        if ('autovacuum_custom' not in draft or
+                _flag(draft, 'autovacuum_custom')):
             for param, value in _autovacuum_rows(draft, 'vacuum_table'):
                 if current['vacuum_settings'].get(param) != value:
                     sets.append(f'{param}={value}')
         elif current['autovacuum_custom']:
             resets.extend(param for param in current['vacuum_settings']
+                          if param != 'autovacuum_enabled')
+    toast_enabled = draft.get('toast_autovacuum_enabled')
+    if toast_enabled in ('t', 'f') and (
+            toast_enabled != current['toast_autovacuum_enabled'] or
+            not current['toast_options_observed']):
+        sets.append('toast.autovacuum_enabled=' + (
+            'true' if toast_enabled == 't' else 'false'))
+    elif toast_enabled == 'x' and (
+            current['toast_autovacuum_enabled'] != 'x' or
+            not current['toast_options_observed']):
+        resets.append('toast.autovacuum_enabled')
+    if 'toast_autovacuum' in draft or 'vacuum_toast' in draft:
+        if ('toast_autovacuum' not in draft or
+                _flag(draft, 'toast_autovacuum')):
+            for param, value in _autovacuum_rows(draft, 'vacuum_toast'):
+                if current['toast_vacuum_settings'].get(param) != value:
+                    sets.append(f'toast.{param}={value}')
+        else:
+            if not current['toast_options_observed']:
+                _refuse('refresh native TOAST options before resetting them')
+            resets.extend('toast.' + param
+                          for param in current['toast_vacuum_settings']
                           if param != 'autovacuum_enabled')
     if sets:
         statements.append(f'{alter} SET (' + ', '.join(sets) + ')')

@@ -156,6 +156,7 @@ export function Select({
   // Strip legacy MUI-only props
   // eslint-disable-next-line no-unused-vars
   InputLabelProps,
+  inputProps,
   // eslint-disable-next-line no-unused-vars
   size,
   // eslint-disable-next-line no-unused-vars
@@ -170,6 +171,9 @@ export function Select({
   const labelId = useId();
   const isInvalid = Boolean(validationMessage) || Boolean(error);
   const effectiveHelp = validationMessage || helperText;
+  const helpId = useId();
+  const describedBy = [inputProps?.['aria-describedby'] || props['aria-describedby'],
+    effectiveHelp ? helpId : null].filter(Boolean).join(' ') || undefined;
   const currentOption = options.find((opt) => opt.value === value);
   const wrapperStyle = {
     ...(sx?.minWidth ? {minWidth: sx.minWidth} : {}),
@@ -200,11 +204,13 @@ export function Select({
         }}
       >
         <BaseSelect.Trigger
+          {...inputProps}
           render={<div />}
           nativeButton={false}
           aria-labelledby={label ? labelId : props['aria-labelledby']}
           aria-label={!label ? props['aria-label'] : undefined}
           aria-invalid={isInvalid ? 'true' : undefined}
+          aria-describedby={describedBy}
           className="sr-select-trigger"
           onMouseDown={(event) => {
             if (!disabled && !open && event.button === 0) {
@@ -250,7 +256,7 @@ export function Select({
         </BaseSelect.Portal>
       </BaseSelect.Root>
       {effectiveHelp && (
-        <div className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
+        <div id={helpId} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>
           {effectiveHelp}
         </div>
       )}
@@ -274,6 +280,7 @@ Select.propTypes = {
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onChange: PropTypes.func,
   InputLabelProps: PropTypes.object,
+  inputProps: PropTypes.object,
   size: PropTypes.string,
   fullWidth: PropTypes.bool,
   sx: PropTypes.object,

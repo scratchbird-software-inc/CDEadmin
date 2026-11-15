@@ -24,6 +24,7 @@ from . import mysql_page_tracking
 from . import mysql_rewriter
 from . import mysql_server_control
 from . import mysql_key_cache_lifecycle as cache_lifecycle
+from . import mysql_engine_diagnostics
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
@@ -31,6 +32,7 @@ HANDLERS = dict(zip(('mysql_'+key for key in (
     'rewriter server_control xa key_cache_lifecycle instance key_cache column_masking foreign_server spatial_reference').split()),
     (mysql_session_catalog,mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
+HANDLERS['mysql_engine_diagnostics'] = mysql_engine_diagnostics
 
 
 TABLE_ALTER_OPTIONS = frozenset({'mysql_table_options', 'mysql_connection'})
@@ -43,6 +45,7 @@ class MySQLAdministration(RelationalAdministration):
         for resource in value['objects']:
             if resource['resource_kind']=='server':
                 policies = (
+                    (mysql_engine_diagnostics, set(), set()),
                     (mysql_page_tracking, mysql_page_tracking.READS, {'set_page_tracking_backup_id','purge_page_tracking'}),
                     (mysql_rewriter, {'inspect_rewrite_rules'}, {'drop_rewrite_rule'}),
                     (mysql_server_control, set(), set(mysql_server_control.OPERATIONS)),
@@ -160,6 +163,7 @@ class MySQLAdministration(RelationalAdministration):
             ('replication-channel',mysql_failover,'invalid_mysql_failover'),
             ('server',mysql_user_keys,'invalid_user_key'),
             ('server',mysql_page_tracking,'invalid_mysql_page_tracking'),
+            ('server',mysql_engine_diagnostics,'invalid_mysql_engine_diagnostic'),
             ('server',mysql_rewriter,'invalid_mysql_rewriter'),
             ('server',mysql_server_control,'invalid_mysql_server_control'),
             ('server',mysql_xa,'invalid_mysql_xa'),

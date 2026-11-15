@@ -205,6 +205,52 @@ class Execution:
 
 
 class SQLiteClient(RelationalDBAPIClient):
+    def admin_operation_field_contract(self, request):
+        if (request['resource_kind'], request['operation_id']) in {('index', 'create'), ('virtual-table', 'create'), ('fts-table', 'create'), ('trigger', 'create')}:
+            from ...ui_descriptors.field_contract import descriptor_field_contract
+            return descriptor_field_contract('sqlite', request)
+        if (request['resource_kind'], request['operation_id']) != (
+                'table', 'create'):
+            return None
+        from ...ui_descriptors.field_contract import descriptor_field_contract
+        declared = descriptor_field_contract('sqlite', request)
+        fields = copy.deepcopy(request['legacy_fields'])
+        column = next(f for f in declared['fields'] if f['field_id'] == 'columns')
+        fields = [column if f['field_id'] == 'columns' else f for f in fields]
+        known = {field['field_id'] for field in fields}
+        for field in declared['fields']:
+            if field['field_id'] in {'strict', 'without_rowid'} - known:
+                fields.append(field)
+        return {'fields': fields,
+                'authority': 'ui_descriptors/sqlite/forms/table.form.json'}
+
+    def plan_admin_operation(self, request):
+        from .virtual_inputs import runtime_gate
+        runtime_gate(request, self.module.sqlite_version)
+        return super().plan_admin_operation(request)
+
+    def validate_admin_operation(self, request):
+        from .virtual_inputs import runtime_gate
+        try:
+            runtime_gate(request, self.module.sqlite_version)
+        except RelationalClientError as error:
+            return {'errors':[{'field_id':None, 'code':'unsupported_sqlite_constructor', 'message':str(error)}]}
+        result = super().validate_admin_operation(request)
+        if (request.get('resource_kind'), request.get('operation_id')) == (
+                'table', 'create') and request.get('draft', {}).get('strict'):
+            from ...ui_descriptors import version_gate_state
+            declared = self.admin_operation_field_contract({
+                **request, 'legacy_fields': []})
+            strict = next(field for field in declared['fields']
+                          if field['field_id'] == 'strict')
+            available, reason = version_gate_state(
+                strict.get('version'), self.module.sqlite_version)
+            if not available:
+                result['errors'].append({
+                    'field_id': 'strict', 'code': 'unsupported_version',
+                    'message': reason})
+        return result
+
     def __init__(self, config, module=None):
         super().__init__(config, module)
         if getattr(self.module, 'threadsafety', 0) == 0:

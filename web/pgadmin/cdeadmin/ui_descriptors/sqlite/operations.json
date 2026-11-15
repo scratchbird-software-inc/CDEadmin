@@ -395,6 +395,416 @@
           "default": 30
         }
       ]
+    },
+    {
+      "operation_id": "set_connection_synchronous",
+      "resource_kind": "database",
+      "title": "Set original connection synchronous policy",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Synchronous policy",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "NORMAL",
+              "label": "NORMAL"
+            },
+            {
+              "value": "FULL",
+              "label": "FULL"
+            },
+            {
+              "value": "EXTRA",
+              "label": "EXTRA"
+            }
+          ]
+        },
+        {
+          "field_id": "expected_code",
+          "label": "Observed original mode code",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original-connection policy change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_settings; request.operation=set_connection_synchronous, plus owner-bound session_id. Not a generic independent visual-admin operation. Scope main on the original connection only; no file persistence or future defaults."
+    },
+    {
+      "operation_id": "set_connection_limit_length",
+      "resource_kind": "database",
+      "title": "Set original connection value and row byte limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Value and row byte limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=length; apply with request.operation=set_connection_limit, request.limit=length and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_LENGTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_sql_length",
+      "resource_kind": "database",
+      "title": "Set original connection sql source byte limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "SQL source byte limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=sql_length; apply with request.operation=set_connection_limit, request.limit=sql_length and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_SQL_LENGTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_column",
+      "resource_kind": "database",
+      "title": "Set original connection column count limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Column count limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=column; apply with request.operation=set_connection_limit, request.limit=column and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_COLUMN required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_expr_depth",
+      "resource_kind": "database",
+      "title": "Set original connection expression depth limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Expression depth limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=expr_depth; apply with request.operation=set_connection_limit, request.limit=expr_depth and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_EXPR_DEPTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_compound_select",
+      "resource_kind": "database",
+      "title": "Set original connection compound select term limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Compound SELECT term limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=compound_select; apply with request.operation=set_connection_limit, request.limit=compound_select and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_COMPOUND_SELECT required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_function_arg",
+      "resource_kind": "database",
+      "title": "Set original connection function argument count",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Function argument count",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=function_arg; apply with request.operation=set_connection_limit, request.limit=function_arg and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_FUNCTION_ARG required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_attached",
+      "resource_kind": "database",
+      "title": "Set original connection attached database count",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Attached database count",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=attached; apply with request.operation=set_connection_limit, request.limit=attached and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_ATTACHED required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_like_pattern_length",
+      "resource_kind": "database",
+      "title": "Set original connection like/glob pattern length",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "LIKE/GLOB pattern length",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=like_pattern_length; apply with request.operation=set_connection_limit, request.limit=like_pattern_length and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_LIKE_PATTERN_LENGTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_variable_number",
+      "resource_kind": "database",
+      "title": "Set original connection sql parameter number",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "SQL parameter number",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=variable_number; apply with request.operation=set_connection_limit, request.limit=variable_number and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_VARIABLE_NUMBER required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_trigger_depth",
+      "resource_kind": "database",
+      "title": "Set original connection trigger depth",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Trigger depth",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=trigger_depth; apply with request.operation=set_connection_limit, request.limit=trigger_depth and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_TRIGGER_DEPTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry. Native trigger-depth errors may leave preceding trigger/statement writes pending. Inspect and explicitly choose savepoint rollback or transaction finality; do not claim an automatic statement rollback."
     }
   ]
 }

@@ -255,7 +255,8 @@
           }
         ],
         "default": "FULL"
-      }
+      },
+      "help": "Connection-local policy, not a persisted file setting. Use sqlite_connection_settings with the original session; generic file alteration refuses this field."
     },
     {
       "field_id": "run_vacuum",

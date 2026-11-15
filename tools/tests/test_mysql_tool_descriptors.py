@@ -59,7 +59,16 @@ def test_database_tools_keep_exact_selected_scope_and_viewer_collector_editor_se
 
 def test_tools_are_openers_with_unique_ids_and_do_not_duplicate_native_operation_descriptors():
     rows = DOCUMENT['tools']; ids = [row['command_id'] for row in rows]
-    assert len(rows) == len(set(ids)) == 25
+    assert len(rows) == len(set(ids)) == 31
+    # Six shared design/BI openers augment the 25 engine-specific tools.
+    assert {row['command_id'] for row in rows if '{engine_id}' in row['command_id']} == {
+        'endpoint.{engine_id}.bi_questions',
+        'database.{engine_id}.design_erd',
+        'resource.{engine_id}.table.design_cube',
+        'resource.{engine_id}.table.design_bi_question',
+        'resource.{engine_id}.table.design_screen_mesh',
+        'resource.{engine_id}.table.where_used_designs',
+    }
     assert all('operation_id' not in row.get('arguments', {}) for row in rows)
     assert all('MySQL' not in row['label'] for row in rows)
     for engine in ['mysql', 'mariadb']:

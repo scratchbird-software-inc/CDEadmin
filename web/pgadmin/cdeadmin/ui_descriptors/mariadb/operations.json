@@ -1528,6 +1528,14 @@
             {
               "value": "DEFAULT",
               "label": "Compiled default"
+            },
+            {
+              "value": "BITMASK",
+              "label": "FLAGSET numeric mask"
+            },
+            {
+              "value": "FLAGS",
+              "label": "FLAGSET flag choices"
             }
           ]
         },
@@ -1540,6 +1548,66 @@
             "field": "value_mode",
             "equals": "VALUE"
           }
+        },
+        {
+          "field_id": "bitmask",
+          "label": "Unsigned decimal FLAGSET mask",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "BITMASK"
+          }
+        },
+        {
+          "field_id": "reset_defaults",
+          "label": "Reset all flags to native defaults first",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          }
+        },
+        {
+          "field_id": "flags",
+          "label": "Native flag assignments",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          },
+          "columns": [
+            {
+              "field_id": "flag",
+              "label": "Native flag name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "state",
+              "label": "State",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "on",
+                  "label": "on"
+                },
+                {
+                  "value": "off",
+                  "label": "off"
+                },
+                {
+                  "value": "default",
+                  "label": "default"
+                }
+              ]
+            }
+          ]
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."

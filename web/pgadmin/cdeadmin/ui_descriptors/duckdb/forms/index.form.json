@@ -49,8 +49,9 @@
           "reference_kind": "column"
         }
       ],
-      "required": true,
-      "item_kind": "string"
+      "required": false,
+      "item_kind": "string",
+      "help": "Legacy ordered columns; leave empty when using typed index terms."
     },
     {
       "field_id": "unique",
@@ -59,7 +60,52 @@
       "control": "boolean",
       "required": false,
       "default": false
+    },
+    {
+      "field_id": "terms",
+      "label": "Ordered column and expression terms",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "columns": [
+        {
+          "field_id": "kind",
+          "label": "Term kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "column",
+              "label": "Column"
+            },
+            {
+              "value": "expression",
+              "label": "Native expression"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Column name or native expression",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "method",
+      "label": "Qualified index method",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "options": [
+        {
+          "value": "ART",
+          "label": "ART"
+        }
+      ],
+      "help": "Native core ART only. Extension-specific methods require their own qualified adapters. ART WITH options are not admitted."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (schema); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (schema); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams. Ordered native expression terms and ART method contract qualified on 1.5.2; see six_engine_audit_implementation.rst. No extension-index or migration preservation claim."
 }

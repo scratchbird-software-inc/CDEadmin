@@ -148,6 +148,11 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             return super().open_session(request)
 
     def _connect_server(self, request):
+        route = request.get('route') or {}
+        if (getattr(getattr(self.config, 'profile', None), 'protocol_id', None) == 'firebird_embedded' or
+                isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded'):
+            from .local_services import route_for_service
+            route_for_service(route)
         with self._connecting():
             handle = super()._connect_server(request)
             self._server_handles.add(id(handle))
@@ -1123,6 +1128,11 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         return database
 
     def run_server_operation(self, request, operation_id, database, options):
+        route = request.get('route') or {}
+        if (getattr(getattr(self.config, 'profile', None), 'protocol_id', None) == 'firebird_embedded' or
+                isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded'):
+            from .local_services import validate_operation
+            validate_operation(route, operation_id, database, options)
         with self._temporary_operation():
             scoped_request, scoped_options = self._service_role_scope(
                 request, options)
@@ -1300,6 +1310,14 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 self._release_attachment(connection)
             if payload.get('compiled', {}).get('driver_operation') == (
                     'firebird-service'):
+                if payload['route'].get('attachment_mode') == 'embedded':
+                    from . import local_services
+                    compiled = payload['compiled']
+                    route = local_services.validate_operation(payload['route'],
+                        compiled['operation_id'], compiled['database'], compiled.get('options', {}))
+                    compiled['database'] = route['database']
+                    compiled['local_service_identity'] = local_services.file_identity(route)
+                    compiled['execution_host'] = 'application-local'
                 # Services credentials may differ from a database attachment.
                 # Obtain them before the visual layer retains the one-shot
                 # plan. A credential refresh can replace the provider binding
@@ -1337,13 +1355,37 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             failure.service_release = receipt
 
     def apply_admin_operation(self, request):
+        payload = request.get('provider_payload') or {}
+        compiled = payload.get('compiled') or {}
+        local_service = (compiled.get('driver_operation') == 'firebird-service' and
+                         payload.get('route', {}).get('attachment_mode') == 'embedded')
+        if local_service:
+            from . import local_services
+            try:
+                local_services.validate_operation(payload['route'], compiled['operation_id'],
+                    compiled['database'], compiled.get('options', {}))
+                if compiled.get('local_service_identity') != local_services.file_identity(payload['route']):
+                    raise RelationalClientError('Local database file changed since review; refresh and review again')
+            except RelationalClientError as error:
+                error.rejected = error.nothing_changed = True
+                error.native_dispatched = error.automatic_retry = False
+                raise
+        def result_scope(result):
+            if local_service:
+                result['driver_observation'].update(execution_host='application-local',
+                    native_provider='Engine13', network_authentication=False,
+                    reviewed_file_identity=compiled['local_service_identity'],
+                    file_identity_race_fenced=False,
+                    native_utility_exit_code=None,
+                    native_utility_exit_code_observed=False)
+            return result
         handle = request.get('_provider_session_handle')
         if handle is None:
             with self._temporary_operation():
-                return super().apply_admin_operation(request)
+                return result_scope(super().apply_admin_operation(request))
         with self._exclusive(handle) as state:
             try:
-                return super().apply_admin_operation(request)
+                return result_scope(super().apply_admin_operation(request))
             except Exception as error:
                 if diagnostic_flag(error, 'task_rollback_unconfirmed'):
                     state.visual_task_state_unknown = True

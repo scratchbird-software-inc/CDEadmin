@@ -786,6 +786,12 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "database_statistics",
+          "tier": 3,
+          "mutation_class": "read",
+          "support_state": "implemented"
         }
       ]
     },
