@@ -16,6 +16,9 @@
 
 import {useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../actions/t_actions';
+import {Icon} from '../icons';
 import {Box, Stack} from '../primitives/Layout';
 import {Button, IconButton} from '../primitives/Button';
 import {ValidationMessage} from '../feedback/Indicators';
@@ -62,6 +65,7 @@ export function gridColumns(columns, rows, draft={}) {
 
 export default function RecordGrid({field, rows, onChange, draft={}, context={}, resourceKind,
   disabled=false, error, cellErrors={}, help, mode='create'}) {
+  useLocaleRevision();
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState(() => new Set());
   const columns = field.columns || [];
@@ -140,11 +144,11 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
       </Box>
       <Button size="small" intent="neutral" disabled={disabled} onClick={add}
         data-cdeadmin-qa-key={`object-editor.grid.${field.field_id}.add`}>
-        Add {singular(label)}
+        {gettext('Add %s', singular(label))}
       </Button>
     </Stack>
     {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.5, py: 1}}>
-      No {label.toLowerCase()} yet.
+      {gettext('No %s yet.', label.toLowerCase())}
     </Box>}
     {rows.length > 0 && <ScratchScrollArea orientation="both" style={{width: '100%'}}>
       <Box component="table" className="sr-bui-table" sx={{borderCollapse: 'collapse', width: '100%'}}
@@ -156,7 +160,7 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
               sx={{...headerSx, minWidth: CELL_MIN_WIDTH[column.control] || 140}}>
               {column.label}{column.required ? ' *' : ''}
             </Box>)}
-            <Box component="th" scope="col" className="sr-bui-th" sx={{...headerSx, ...stickySx}}>Actions</Box>
+            <Box component="th" scope="col" className="sr-bui-th" sx={{...headerSx, ...stickySx}}>{gettext('Actions')}</Box>
           </Box>
         </Box>
         <Box component="tbody">
@@ -183,18 +187,18 @@ export default function RecordGrid({field, rows, onChange, draft={}, context={},
                     inspectRowInDrawer(index, row, rowDetail);
                   }}
                   data-cdeadmin-qa-key={`object-editor.grid.${field.field_id}.details.${index}`}>
-                  {open ? 'Hide details' : `Details (${rowDetail.length})`}
+                  {open ? gettext('Hide details') : gettext('Details (%s)', rowDetail.length)}
                 </Button>}
-                {reorderable && <IconButton label={`Move row ${index + 1} up`} disabled={disabled || index === 0}
-                  onClick={() => move(index, -1)}>↑</IconButton>}
-                {reorderable && <IconButton label={`Move row ${index + 1} down`}
-                  disabled={disabled || index === rows.length - 1} onClick={() => move(index, 1)}>↓</IconButton>}
-                <IconButton label={`Remove row ${index + 1}`} disabled={disabled}
-                  onClick={() => remove(index)}>×</IconButton>
+                {reorderable && <IconButton label={gettext('Move row %s up', index + 1)} disabled={disabled || index === 0}
+                  onClick={() => move(index, -1)}><Icon iconKey="action.move_up" decorative /></IconButton>}
+                {reorderable && <IconButton label={gettext('Move row %s down', index + 1)}
+                  disabled={disabled || index === rows.length - 1} onClick={() => move(index, 1)}><Icon iconKey="action.move_down" decorative /></IconButton>}
+                <IconButton label={gettext('Remove row %s', index + 1)} disabled={disabled}
+                  onClick={() => remove(index)}><Icon iconKey="action.close" decorative /></IconButton>
               </Box>
             </Box>, open && rowDetail.length > 0 && <Box component="tr" key={`${index}-detail`}>
               <Box component="td" colSpan={inline.length + (reorderable ? 2 : 1)}
-                sx={{...cellSx, bgcolor: 'var(--sr-surface-subtle)'}} aria-label={`Row ${index + 1} details`}>
+                sx={{...cellSx, bgcolor: 'var(--sr-surface-subtle)'}} aria-label={gettext('Row %s details', index + 1)}>
                 <Box sx={{display: 'grid', gap: 1, p: 1, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))'}}>
                   {rowDetail.map((column) => <Box key={column.field_id}>{cell(row, index, column)}</Box>)}
                 </Box>

@@ -4,6 +4,8 @@
 
 import React, {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../../actions/t_actions';
 import {Box} from '../../primitives/Layout';
 import {ScratchScrollArea} from '../../base/ScratchScrollArea';
 import {Button} from '../../primitives/Button';
@@ -62,17 +64,17 @@ function StateBoundary({session, children}) {
 StateBoundary.propTypes = {session: PropTypes.object.isRequired, children: PropTypes.node};
 
 function SourceCard({side, reference, onChooseResource, onChooseAsset, disabled}) {
-  return <Box component="section" aria-label={`${side} comparison source`}
+  return <Box component="section" aria-label={gettext('%s comparison source', side)}
     sx={{border: '1px solid', borderColor: 'divider', p: 2, minWidth: 280, flex: 1}}>
-    <Box component="h3" sx={{m: 0, mb: 1}}>{side} source</Box>
+    <Box component="h3" sx={{m: 0, mb: 1}}>{gettext('%s source', side)}</Box>
     {reference ? <Box component="dl" sx={{m: 0}}>
-      <dt>Type</dt><dd>{reference.schema ?? reference.assetType}</dd>
-      <dt>Identity</dt><dd>{reference.canonical ??
+      <dt>{gettext('Type')}</dt><dd>{reference.schema ?? reference.assetType}</dd>
+      <dt>{gettext('Identity')}</dt><dd>{reference.canonical ??
         `${reference.projectId}/${reference.assetId}`}</dd>
-    </Box> : <EmptyState message={`Choose the ${side.toLowerCase()} source.`} />}
+    </Box> : <EmptyState message={gettext('Choose the %s source.', side.toLowerCase())} />}
     <Box sx={{display: 'flex', gap: 1, mt: 2}}>
-      <Button disabled={disabled} onClick={onChooseResource}>Choose live resource</Button>
-      <Button disabled={disabled} onClick={onChooseAsset}>Choose project asset</Button>
+      <Button disabled={disabled} onClick={onChooseResource}>{gettext('Choose live resource')}</Button>
+      <Button disabled={disabled} onClick={onChooseAsset}>{gettext('Choose project asset')}</Button>
     </Box>
   </Box>;
 }
@@ -103,7 +105,7 @@ function CompareSetup({session, invoke, resources, assets, requestedPickerSide, 
   const busy = session.state === 'background_task_active';
   return <ScratchScrollArea orientation="both" style={{height: '100%'}}>
     <Box sx={{p: 2}}>
-      <Box component="h2" sx={{mt: 0}}>Compare Setup</Box>
+      <Box component="h2" sx={{mt: 0}}>{gettext('Compare Setup')}</Box>
       <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 2}}>
         {['Left', 'Right'].map((side) => <SourceCard key={side} side={side}
           reference={side === 'Left' ? session.content.leftRef : session.content.rightRef}
@@ -112,13 +114,13 @@ function CompareSetup({session, invoke, resources, assets, requestedPickerSide, 
           onChooseAsset={() => setPicker({side, kind: 'asset'})} />)}
       </Box>
       <Box component="fieldset" sx={{mt: 2, border: '1px solid', borderColor: 'divider'}}>
-        <legend>Comparison scope and normalization options</legend>
-        <TextArea rows={6} fullWidth label="Options (JSON)" readOnly
+        <legend>{gettext('Comparison scope and normalization options')}</legend>
+        <TextArea rows={6} fullWidth label={gettext('Options (JSON)')} readOnly
           value={JSON.stringify(session.content.options, null, 2)} />
       </Box>
       <Box sx={{mt: 2}}><Button intent="primary" disabled={busy ||
         !session.content.leftRef || !session.content.rightRef}
-      onClick={() => invoke('schema_compare.run')}>Run comparison</Button></Box>
+      onClick={() => invoke('schema_compare.run')}>{gettext('Run comparison')}</Button></Box>
       <ResourcePicker open={picker?.kind === 'resource'} items={resources}
         selected={[]} onClose={() => setPicker(null)} onConfirm={choose} />
       <AssetPicker open={picker?.kind === 'asset'} items={assets}
@@ -247,15 +249,15 @@ function ChangePlan({session, invoke}) {
   const targetRef = [session.content.leftRef, session.content.rightRef]
     .find((item) => item?.canonical === target);
   return <Box sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
-    <Toolbar label="Change plan commands">
-      <Select size="small" label="Explicit live target" value={target} options={options}
+    <Toolbar label={gettext('Change plan commands')}>
+      <Select size="small" label={gettext('Explicit live target')} value={target} options={options}
         onChange={setTarget} sx={{minWidth: 360}} />
       <Button disabled={!session.result || !targetRef}
         onClick={() => invoke('schema_compare.plan.generate', {targetRef})}>
-        Generate plan
+        {gettext('Generate plan')}
       </Button>
       <Button disabled={!session.plan}
-        onClick={() => invoke('schema_compare.plan.validate')}>Validate exact plan</Button>
+        onClick={() => invoke('schema_compare.plan.validate')}>{gettext('Validate exact plan')}</Button>
     </Toolbar>
     {!session.plan ? <EmptyState
       message="Select an explicit live target and generate a provider-native plan." /> :
@@ -292,13 +294,13 @@ function ApplyExportReview({session, invoke, onExport}) {
       value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />}
     <Box sx={{display: 'flex', gap: 1, my: 2}}>
       <Button onClick={() => invoke('schema_compare.plan.export').then(onExport)}>
-        Export versioned plan
+        {gettext('Export versioned plan')}
       </Button>
       <Button intent={session.plan.destructive ? 'destructive' : 'primary'}
         disabled={!session.validation?.applyReady || (session.plan.destructive &&
           confirmation !== session.plan.id)}
         onClick={() => invoke('schema_compare.plan.apply', {confirmation})}>
-        Apply validated plan
+        {gettext('Apply validated plan')}
       </Button>
     </Box>
     <Box component="h3">Generated provider-native operations</Box>
@@ -321,6 +323,7 @@ const VIEWS = Object.freeze({
 
 export function SchemaCompareWorkspace({service, sessionId, surface='compare_setup',
   executeCommand, resources=[], assets=[], onExport=() => {}, onStateChange}) {
+  useLocaleRevision();
   const session = useSession(service, sessionId);
   const [active, setActive] = useState(surface);
   const [requestedPickerSide, setRequestedPickerSide] = useState(null);
@@ -364,7 +367,7 @@ export function SchemaCompareWorkspace({service, sessionId, surface='compare_set
     <Box role="tablist" aria-label="Schema Comparison surfaces"
       sx={{display: 'flex', overflowX: 'auto', borderBottom: '1px solid',
         borderColor: 'divider'}}>
-      {SCHEMA_COMPARE_SURFACES.map((item) => <Tab key={item.id} label={item.title}
+      {SCHEMA_COMPARE_SURFACES.map((item) => <Tab key={item.id} label={gettext(item.title)}
         active={active === item.id} attention={item.id === 'mapping_review' &&
           Boolean(session.result?.renameCandidates.length)}
         onActivate={() => setActive(item.id)} />)}

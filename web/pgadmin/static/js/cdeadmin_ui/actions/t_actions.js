@@ -99,6 +99,15 @@ function normalizeTarget(id, input = {}) {
   throw new TypeError(`t_action "${id}" target.kind must be "client" or "server".`);
 }
 
+function stringList(value) {
+  if (value === undefined || value === null || value === '') return Object.freeze([]);
+  return Object.freeze(
+    (Array.isArray(value) ? value : [value])
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+  );
+}
+
 export function createTAction(input = {}) {
   const id = normalizeActionId(input.id);
   const application = String(input.application || 'project').trim().toLowerCase() || 'project';
@@ -107,11 +116,12 @@ export function createTAction(input = {}) {
   const icon = String(
     input.icon ||
     input.iconKey ||
-    inferActionIconKey({name: id, label: defaultText}) ||
+    inferActionIconKey({id, name: id, label: defaultText, description: defaultHint}) ||
     'command.default'
   ).trim();
   const baseStatus = normalizeStatus(input.status, T_ACTION_STATUS.ENABLED);
   const target = normalizeTarget(id, input);
+  const requiresConfirmation = Boolean(input.requiresConfirmation);
 
   return Object.freeze({
     schema: T_ACTION_SCHEMA,
@@ -121,10 +131,21 @@ export function createTAction(input = {}) {
     status: baseStatus,
     baseStatus,
     focusScoped: Boolean(input.focusScoped),
+    delegated: Boolean(input.delegated),
     checked: typeof input.checked === 'boolean' ? input.checked : undefined,
     shortcut: input.shortcut ? String(input.shortcut) : '',
     toolbarSize: input.toolbarSize === 'large' ? 'large' : 'small',
     paletteItems: Array.isArray(input.paletteItems) ? Object.freeze([...input.paletteItems]) : undefined,
+    permission: stringList(input.permission),
+    capability: input.capability ? String(input.capability).trim() : '',
+    allowedSecurityGroups: stringList(input.allowedSecurityGroups),
+    deniedSecurityGroups: stringList(input.deniedSecurityGroups),
+    requiresConfirmation,
+    confirmationIntent: String(
+      input.confirmationIntent ?? (requiresConfirmation ? 'explicit' : 'none')
+    ),
+    aiExposure: String(input.aiExposure ?? 'hidden'),
+    aiRiskClass: input.aiRiskClass == null ? null : String(input.aiRiskClass),
     defaultText,
     defaultHint,
     target,
@@ -152,9 +173,105 @@ export class TActionsRegistry {
     this._runtimeStatuses = new Map();
     this._checkedStates = new Map();
     this._authzOverrides = new Map();
+    this._currentUser = null;
+    this._activeInstanceId = null;
+    this._instanceBindings = new Map();
+    this._commandRegistryDetach = null;
     this._i18nCatalog = new Map();
     this._locale = 'en';
     this._listeners = new Set();
+  }
+
+  setCurrentUser(user = null) {
+    this._currentUser = user && typeof user === 'object' ? {...user} : null;
+    this._notify();
+  }
+
+  getCurrentUser() {
+    return this._currentUser;
+  }
+
+  setActiveInstance(instanceId = null) {
+    const next = instanceId ? String(instanceId).trim() : null;
+    if (this._activeInstanceId !== next) {
+      this._activeInstanceId = next;
+      this._notify();
+    }
+  }
+
+  getActiveInstance() {
+    return this._activeInstanceId;
+  }
+
+  bindInstanceActions(instanceId, bindings = {}) {
+    const inst = String(instanceId || '').trim();
+    if (!inst) return () => {};
+    const map = new Map();
+    Object.entries(bindings || {}).forEach(([rawId, spec]) => {
+      if (!spec || !ACTION_ID_PATTERN.test(String(rawId || '').trim())) return;
+      const id = String(rawId).trim();
+      if (typeof spec === 'function') {
+        map.set(id, {invoke: spec, status: T_ACTION_STATUS.ENABLED});
+      } else if (typeof spec === 'string') {
+        map.set(id, {targetActionId: spec});
+      } else if (typeof spec === 'object') {
+        map.set(id, {...spec});
+      }
+    });
+    this._instanceBindings.set(inst, map);
+    if (this._activeInstanceId === inst) {
+      this._notify();
+    }
+    return () => this.unbindInstanceActions(inst);
+  }
+
+  unbindInstanceActions(instanceId) {
+    const inst = String(instanceId || '').trim();
+    if (!inst) return false;
+    const existed = this._instanceBindings.delete(inst);
+    if (existed && this._activeInstanceId === inst) {
+      this._notify();
+    }
+    return existed;
+  }
+
+  _resolveInstanceDelegation(id) {
+    const activeInst = this._activeInstanceId;
+    if (!activeInst) return null;
+    const explicit = this._instanceBindings.get(activeInst)?.get(id);
+    if (explicit) {
+      if (explicit.targetActionId && this._actions.has(explicit.targetActionId)) {
+        return {type: 'action', actionId: explicit.targetActionId, spec: explicit};
+      }
+      return {type: 'inline', spec: explicit};
+    }
+    const suffixedId = `${id}.${activeInst}`;
+    if (this._actions.has(suffixedId)) {
+      return {type: 'action', actionId: suffixedId, spec: null};
+    }
+    return null;
+  }
+
+  _evaluateUserPolicy(base) {
+    if (!this._currentUser) return null;
+    if (this._currentUser.is_admin || this._currentUser.is_superuser) return null;
+    const groups = new Set(this._currentUser.security_groups || []);
+    if (base.deniedSecurityGroups?.some((g) => groups.has(g))) {
+      return T_ACTION_STATUS.INVISIBLE;
+    }
+    if (
+      base.allowedSecurityGroups?.length > 0 &&
+      !base.allowedSecurityGroups.some((g) => groups.has(g))
+    ) {
+      return T_ACTION_STATUS.INVISIBLE;
+    }
+    if (base.permission?.length > 0) {
+      const perms = new Set(this._currentUser.permissions || []);
+      if (!base.permission.every((p) => perms.has(p))) {
+        return T_ACTION_STATUS.DISABLED;
+      }
+    }
+    return null;
   }
 
   subscribe(listener) {
@@ -249,6 +366,17 @@ export class TActionsRegistry {
     }
   }
 
+  _translateText(text) {
+    if (!text || typeof text !== 'string') return text;
+    if (typeof this._translate?.retranslate === 'function') {
+      return this._translate.retranslate(text);
+    }
+    if (typeof this._translate === 'function') {
+      return this._translate(text);
+    }
+    return text;
+  }
+
   _lookupI18n(id, suffix, fallback) {
     const key = `${id}.${suffix}`;
     const localeMap = this._i18nCatalog.get(this._locale);
@@ -268,7 +396,7 @@ export class TActionsRegistry {
         return translated;
       }
       if (fallback) {
-        const direct = this._translate(fallback);
+        const direct = this._translateText(fallback);
         if (direct) return direct;
       }
     }
@@ -281,13 +409,39 @@ export class TActionsRegistry {
     if (!base) {
       throw new Error(`Unknown t_action: ${normalized}`);
     }
-    const runtimeStatus = this._runtimeStatuses.get(normalized) ?? base.status;
+    const delegation = this._resolveInstanceDelegation(normalized);
+    let delegatedResolved = null;
+    if (delegation?.type === 'action' && delegation.actionId !== normalized) {
+      delegatedResolved = this.resolve(delegation.actionId);
+    }
+
+    let runtimeStatus = this._runtimeStatuses.get(normalized) ?? base.status;
+    if (delegatedResolved) {
+      runtimeStatus = delegatedResolved.status;
+    } else if (delegation?.type === 'inline') {
+      const spec = delegation.spec;
+      if (spec.status && VALID_STATUSES.has(String(spec.status).toLowerCase())) {
+        runtimeStatus = String(spec.status).toLowerCase();
+      } else if (typeof spec.enabled === 'boolean') {
+        runtimeStatus = spec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED;
+      } else {
+        runtimeStatus = T_ACTION_STATUS.ENABLED;
+      }
+    } else if (base.delegated && runtimeStatus === T_ACTION_STATUS.ENABLED) {
+      runtimeStatus = T_ACTION_STATUS.DISABLED;
+    }
+
+    const userPolicyStatus = this._evaluateUserPolicy(base);
     const authzOverride = this._authzOverrides.get(normalized);
     let effectiveStatus = runtimeStatus;
-    if (authzOverride === T_ACTION_STATUS.INVISIBLE) {
+    if (
+      authzOverride === T_ACTION_STATUS.INVISIBLE ||
+      userPolicyStatus === T_ACTION_STATUS.INVISIBLE
+    ) {
       effectiveStatus = T_ACTION_STATUS.INVISIBLE;
     } else if (
-      authzOverride === T_ACTION_STATUS.DISABLED &&
+      (authzOverride === T_ACTION_STATUS.DISABLED ||
+        userPolicyStatus === T_ACTION_STATUS.DISABLED) &&
       effectiveStatus === T_ACTION_STATUS.ENABLED
     ) {
       effectiveStatus = T_ACTION_STATUS.DISABLED;
@@ -295,12 +449,21 @@ export class TActionsRegistry {
 
     const text = this._lookupI18n(normalized, 'text', base.defaultText);
     const hint = this._lookupI18n(normalized, 'hint', base.defaultHint);
-    const checked = this._checkedStates.has(normalized)
-      ? this._checkedStates.get(normalized)
-      : base.checked;
+    const checked = delegatedResolved && typeof delegatedResolved.checked === 'boolean'
+      ? delegatedResolved.checked
+      : delegation?.type === 'inline' && typeof delegation.spec.checked === 'boolean'
+        ? delegation.spec.checked
+        : this._checkedStates.has(normalized)
+          ? this._checkedStates.get(normalized)
+          : base.checked;
+    const paletteItems =
+      delegatedResolved?.paletteItems ||
+      (Array.isArray(delegation?.spec?.paletteItems) ? delegation.spec.paletteItems : undefined) ||
+      base.paletteItems;
 
     return Object.freeze({
       ...base,
+      ...(paletteItems ? {paletteItems} : {}),
       status: effectiveStatus,
       enabled: effectiveStatus === T_ACTION_STATUS.ENABLED,
       visible: effectiveStatus !== T_ACTION_STATUS.INVISIBLE,
@@ -426,6 +589,17 @@ export class TActionsRegistry {
       throw err;
     }
 
+    const delegation = this._resolveInstanceDelegation(resolved.id);
+    if (delegation?.type === 'action' && delegation.actionId !== resolved.id) {
+      return await this.execute(delegation.actionId, args, context);
+    }
+    if (delegation?.type === 'inline') {
+      const fn = delegation.spec?.invoke || delegation.spec?.handler || delegation.spec?.execute;
+      if (typeof fn === 'function') {
+        return await fn(args, context);
+      }
+    }
+
     if (resolved.target.kind === T_ACTION_TARGET_KIND.CLIENT) {
       return await resolved.target.invoke(args, context);
     }
@@ -485,14 +659,17 @@ export class TActionsRegistry {
       const mappedMenuItems = rawPaletteItems
         ? rawPaletteItems.map((entry, idx) => {
           if (entry.type === 'separator') return {type: 'separator'};
+          const translatedLabel = this._translateText(
+            entry.label || entry.id || `${action.id}.${idx}`
+          );
           return {
             id: entry.id || `${action.id}.item.${idx}`,
-            label: entry.label || entry.id || `${action.id}.${idx}`,
+            label: translatedLabel,
             command: entry.command || action.id,
             checked: entry.checked,
             disabled: Boolean(entry.disabled),
             icon: entry.icon
-              ? (size) => renderIcon({icon: entry.icon, text: entry.label}, size)
+              ? (size) => renderIcon({icon: entry.icon, text: translatedLabel}, size)
               : undefined,
           };
         })
@@ -535,19 +712,26 @@ export class TActionsRegistry {
 
     const tabs = (tabsSpec || []).map((tab) => ({
       id: tab.id,
-      label: tab.label,
+      label: this._translateText(tab.label),
       ...(tab.allowEmpty ? {allowEmpty: true} : {}),
       ...(tab.closable !== undefined ? {closable: Boolean(tab.closable)} : {}),
       ...(tab.draggable !== undefined ? {draggable: Boolean(tab.draggable)} : {}),
       ...(tab.context ? {context: tab.context} : {}),
       ...(tab.selectOnContext ? {selectOnContext: true} : {}),
-      groups: (tab.groups || []).map((group, idx) => ({
-        id: group.id || `${tab.id}.g${idx}`,
-        label: group.label ?? '',
-        title: group.title || group.label || group.id || `${tab.id}.g${idx}`,
-        priority: Number.isFinite(group.priority) ? group.priority : (100 - idx),
-        controls: (group.controls || []).map(mapControl).filter(Boolean),
-      })).filter((group) => group.controls.length > 0),
+      groups: (tab.groups || []).map((group, idx) => {
+        const groupLabel = this._translateText(group.label ?? '');
+        const groupTitle = this._translateText(
+          group.title || group.label || group.id || `${tab.id}.g${idx}`
+        );
+        const rawItems = group.controls || group.actions || [];
+        return {
+          id: group.id || `${tab.id}.g${idx}`,
+          label: groupLabel,
+          title: groupTitle,
+          priority: Number.isFinite(group.priority) ? group.priority : (100 - idx),
+          controls: rawItems.map(mapControl).filter(Boolean),
+        };
+      }).filter((group) => group.controls.length > 0),
     })).filter((tab) => tab.allowEmpty || tab.groups.length > 0);
 
     const quickAccess = (quickAccessSpec || []).map(mapControl).filter(Boolean);
@@ -560,32 +744,91 @@ export class TActionsRegistry {
     };
   }
 
+  _syncSingleCommand(cmd, sourceRegistry = commandRegistry) {
+    if (!cmd || !ACTION_ID_PATTERN.test(String(cmd.id || '').trim())) return;
+    if (this.has(cmd.id)) return;
+    const appPrefix = cmd.id.split('.')[0] || 'project';
+    this.upsert({
+      id: cmd.id,
+      icon: cmd.iconKey && cmd.iconKey !== 'command.default' ? cmd.iconKey : undefined,
+      application: appPrefix,
+      defaultText: cmd.label || cmd.id,
+      defaultHint: cmd.description || '',
+      permission: cmd.permission,
+      allowedSecurityGroups: cmd.allowedSecurityGroups,
+      deniedSecurityGroups: cmd.deniedSecurityGroups,
+      requiresConfirmation: cmd.requiresConfirmation,
+      confirmationIntent: cmd.confirmationIntent,
+      aiExposure: cmd.aiExposure,
+      aiRiskClass: cmd.aiRiskClass,
+      status: cmd.defaultVisible === false
+        ? T_ACTION_STATUS.INVISIBLE
+        : cmd.defaultEnabled === false
+          ? T_ACTION_STATUS.DISABLED
+          : T_ACTION_STATUS.ENABLED,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: (args, ctx) =>
+          sourceRegistry.execute(cmd.id, args, {
+            currentUser: this._currentUser || undefined,
+            ...ctx,
+          }),
+      },
+    });
+  }
+
   syncFromCommandRegistry(sourceRegistry = commandRegistry) {
     if (!sourceRegistry?.list) return;
     for (const cmd of sourceRegistry.list()) {
-      if (this.has(cmd.id)) continue;
-      const appPrefix = cmd.id.split('.')[0] || 'project';
-      this.upsert({
-        id: cmd.id,
-        icon: cmd.iconKey || 'command.default',
-        application: appPrefix,
-        defaultText: cmd.label || cmd.id,
-        defaultHint: cmd.description || '',
-        status: cmd.defaultVisible === false
-          ? T_ACTION_STATUS.INVISIBLE
-          : cmd.defaultEnabled === false
-            ? T_ACTION_STATUS.DISABLED
-            : T_ACTION_STATUS.ENABLED,
-        target: {
-          kind: T_ACTION_TARGET_KIND.CLIENT,
-          invoke: (args, ctx) => sourceRegistry.execute(cmd.id, args, ctx),
-        },
+      this._syncSingleCommand(cmd, sourceRegistry);
+    }
+  }
+
+  attachCommandRegistry(sourceRegistry = commandRegistry) {
+    if (this._commandRegistryDetach) {
+      this._commandRegistryDetach();
+      this._commandRegistryDetach = null;
+    }
+    if (!sourceRegistry) return () => {};
+    this.syncFromCommandRegistry(sourceRegistry);
+    if (typeof sourceRegistry.onRegister === 'function') {
+      this._commandRegistryDetach = sourceRegistry.onRegister((cmd, eventType) => {
+        if (eventType === 'register') {
+          this._syncSingleCommand(cmd, sourceRegistry);
+        }
       });
     }
+    return () => {
+      if (this._commandRegistryDetach) {
+        this._commandRegistryDetach();
+        this._commandRegistryDetach = null;
+      }
+    };
   }
 }
 
 export const t_actions = new TActionsRegistry();
+t_actions.attachCommandRegistry(commandRegistry);
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('scratchrobin:language-changed', (ev) => {
+    const nextLoc = ev?.detail?.locale || gettext?.getLocale?.() || 'en';
+    t_actions.setLocale(nextLoc);
+  });
+}
+
+export function useLocaleRevision() {
+  const [revision, bump] = useReducer((n) => n + 1, 0);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+      return undefined;
+    }
+    const handler = () => bump();
+    window.addEventListener('scratchrobin:language-changed', handler);
+    return () => window.removeEventListener('scratchrobin:language-changed', handler);
+  }, []);
+  return revision;
+}
 
 export function useTActions(registry = t_actions, application = null) {
   const [, bump] = useReducer((n) => n + 1, 0);

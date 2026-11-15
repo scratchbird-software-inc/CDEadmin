@@ -422,11 +422,15 @@ export function resolveInstanceNotebookBarSpec(instance, settings = {}) {
       label: tab.label || 'Commands',
       groups: (tab.groups || [])
         .filter((g) => g && g.hidden !== true)
-        .map((grp) => ({
-          id: grp.id || 'group',
-          label: grp.label || 'Actions',
-          actions: (grp.actions || []).map(mapToLiveActionId),
-        })),
+        .map((grp) => {
+          const mapped = (grp.actions || grp.controls || []).map(mapToLiveActionId);
+          return {
+            id: grp.id || 'group',
+            label: grp.label || 'Actions',
+            actions: mapped,
+            controls: mapped,
+          };
+        }),
     }));
 
   return {

@@ -9,6 +9,8 @@
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../actions/t_actions';
 import {Box} from '../primitives/Layout';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {Icon} from '../icons';
@@ -33,6 +35,7 @@ function assetIcon(assetType) {
 
 export function ProjectExplorer({client: suppliedClient, onOpenAsset,
   onSelectAsset, onCreateProject}) {
+  useLocaleRevision();
   const client = useMemo(
     () => suppliedClient ?? new ProjectAssetClient(), [suppliedClient]
   );
@@ -129,22 +132,22 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
     )
   );
 
-  return <Box component="section" aria-label="Project Explorer"
+  return <Box component="section" aria-label={gettext('Project Explorer')}
     sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
-    <Toolbar label="Project Explorer commands" trailing={<FormReference formKey="project-explorer" />}>
-      <Button onClick={beginCreate}>New project</Button>
-      <Button onClick={refresh}>Refresh</Button>
+    <Toolbar label={gettext('Project Explorer commands')} trailing={<FormReference formKey="project-explorer" />}>
+      <Button onClick={beginCreate}>{gettext('New project')}</Button>
+      <Button onClick={refresh}>{gettext('Refresh')}</Button>
     </Toolbar>
-    <Box sx={{p: 0.5}}><SearchField label="Filter projects and assets"
+    <Box sx={{p: 0.5}}><SearchField label={gettext('Filter projects and assets')}
       value={query} onChange={setQuery} resultCount={visibleProjects.length} /></Box>
     <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
-      <Box role="tree" aria-label="Projects and authored assets"
+      <Box role="tree" aria-label={gettext('Projects and authored assets')}
         sx={{position: 'relative', minHeight: 120, p: 0.5}}>
-        {error && <EmptyState role="alert" message={error} actionLabel="Retry"
+        {error && <EmptyState role="alert" message={error} actionLabel={gettext('Retry')}
           onAction={refresh} />}
         {!error && !loading && !visibleProjects.length && <EmptyState
-          message="No projects match this view. Create a project to store queries, diagrams, models, and other authored assets."
-          actionLabel="New project" onAction={beginCreate} />}
+          message={gettext('No projects match this view. Create a project to store queries, diagrams, models, and other authored assets.')}
+          actionLabel={gettext('New project')} onAction={beginCreate} />}
         {!error && visibleProjects.map((project, pIdx) => {
           const isExpanded = expanded.has(project.project_id);
           const state = states[project.project_id];
@@ -155,45 +158,45 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
               isLast={pIdx === visibleProjects.length - 1}
               loading={state?.loading} warning={state?.error ?? ''}
               icon={<Icon iconKey="object.schema" decorative />}
-              trailing={project.access === 'owner' ? 'Owner' : project.access}
+              trailing={project.access === 'owner' ? gettext('Owner') : project.access}
               onToggle={() => toggle(project)} onOpen={() => toggle(project)} />
             {isExpanded && state?.error && <Box role="alert" sx={{pl: 4, py: 1}}>
               {state.error} <Button onClick={() => loadProject(project)}>
-                Retry
+                {gettext('Retry')}
               </Button>
             </Box>}
             {isExpanded && !state?.loading && !state?.error && !assets.length &&
-              <Box sx={{pl: 5, py: 1}}>This project has no matching assets.</Box>}
+              <Box sx={{pl: 5, py: 1}}>{gettext('This project has no matching assets.')}</Box>}
             {isExpanded && assets.map((asset, aIdx) => <TreeRow level={2}
               key={asset.asset_id} label={asset.name}
               isLast={aIdx === assets.length - 1}
               icon={<Icon iconKey={assetIcon(asset.asset_type)} decorative />}
-              warning={asset.validation_state === 'invalid' ? 'Validation failed' : ''}
+              warning={asset.validation_state === 'invalid' ? gettext('Validation failed') : ''}
               trailing={`v${asset.version}`}
               onSelect={() => onSelectAsset?.(project, asset)}
               onOpen={() => onOpenAsset?.(project, asset)} />)}
           </Box>;
         })}
-        <ProgressOverlay message={loading ? 'Loading projects' : ''} />
+        <ProgressOverlay message={loading ? gettext('Loading projects') : ''} />
       </Box>
     </ScratchScrollArea>
-    <Dialog open={createOpen} title="New project" size="medium" formKey="project-explorer"
+    <Dialog open={createOpen} title={gettext('New project')} size="medium" formKey="project-explorer"
       onClose={() => !saving && setCreateOpen(false)} busy={saving}
       validationError={createError} defaultAction={createProject}
       actions={<><Button disabled={saving}
-        onClick={() => setCreateOpen(false)}>Cancel</Button>
+        onClick={() => setCreateOpen(false)}>{gettext('Cancel')}</Button>
       <Button intent="primary" loading={saving}
-        onClick={createProject}>Create project</Button></>}>
+        onClick={createProject}>{gettext('Create project')}</Button></>}>
       <Box sx={{display: 'grid', gap: 2}}>
-        <TextField autoFocus required label="Project ID" value={createDraft.id}
+        <TextField autoFocus required label={gettext('Project ID')} value={createDraft.id}
           onChange={(event) => setCreateDraft((current) => ({
             ...current, id: event.target.value,
-          }))} helperText="Stable identity used by assets and source control." />
-        <TextField label="Project name" value={createDraft.name}
+          }))} helperText={gettext('Stable identity used by assets and source control.')} />
+        <TextField label={gettext('Project name')} value={createDraft.name}
           onChange={(event) => setCreateDraft((current) => ({
             ...current, name: event.target.value,
           }))} />
-        <TextArea label="Description" value={createDraft.description}
+        <TextArea label={gettext('Description')} value={createDraft.description}
           onChange={(event) => setCreateDraft((current) => ({
             ...current, description: event.target.value,
           }))} />

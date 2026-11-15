@@ -173,6 +173,25 @@ export class CommandRegistry {
   constructor() {
     this.commands = new Map();
     this.listeners = new Set();
+    this.registrationListeners = new Set();
+  }
+
+  onRegister(listener) {
+    if(typeof listener !== 'function') {
+      throw new TypeError('Command registration listener must be a function.');
+    }
+    this.registrationListeners.add(listener);
+    return ()=>this.registrationListeners.delete(listener);
+  }
+
+  _notifyRegistration(command, eventType) {
+    this.registrationListeners.forEach((listener)=>{
+      try {
+        listener(command, eventType);
+      } catch {
+        // Keep other registration subscribers healthy.
+      }
+    });
   }
 
   register(input) {
@@ -181,7 +200,12 @@ export class CommandRegistry {
       throw new Error(`Command is already registered: ${command.id}`);
     }
     this.commands.set(command.id, command);
-    return ()=>this.commands.delete(command.id);
+    this._notifyRegistration(command, 'register');
+    return ()=>{
+      const deleted = this.commands.delete(command.id);
+      if(deleted) this._notifyRegistration(command, 'unregister');
+      return deleted;
+    };
   }
 
   ensure(input) {
