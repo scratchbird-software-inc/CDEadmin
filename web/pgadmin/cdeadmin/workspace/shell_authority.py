@@ -2062,6 +2062,34 @@ SCRATCHROBIN_UI_TRANSLATIONS: dict[str, dict[str, str]] = {
 }
 
 
+def _load_shared_ui_catalogs() -> dict[str, dict[str, str]]:
+    catalog_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            '..',
+            '..',
+            'static',
+            'js',
+            'cdeadmin_ui',
+            'i18n',
+            'ui_catalogs.json',
+        )
+    )
+    try:
+        with open(catalog_path, encoding='utf-8') as fh:
+            payload = json.load(fh)
+        gt = payload.get('gettext')
+        if isinstance(gt, dict):
+            return {
+                str(loc): {str(k): str(v) for k, v in table.items() if isinstance(v, str)}
+                for loc, table in gt.items()
+                if isinstance(table, dict)
+            }
+    except Exception:
+        pass
+    return {}
+
+
 def _load_locale_catalog(locale_code: str) -> dict[str, str]:
     code = str(locale_code or 'en').strip()
     if not code or code == 'en':
@@ -2092,6 +2120,9 @@ def _load_locale_catalog(locale_code: str) -> dict[str, str]:
         pass
     overlay = SCRATCHROBIN_UI_TRANSLATIONS.get(code) or SCRATCHROBIN_UI_TRANSLATIONS.get(code.split('_')[0]) or {}
     merged.update(overlay)
+    shared = _load_shared_ui_catalogs()
+    shared_overlay = shared.get(code) or shared.get(code.split('_')[0]) or {}
+    merged.update(shared_overlay)
     if merged:
         _LOCALE_CATALOG_CACHE[code] = merged
     return merged

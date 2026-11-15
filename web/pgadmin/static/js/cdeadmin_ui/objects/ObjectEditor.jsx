@@ -20,6 +20,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Tab} from '../navigation/TabsAndBreadcrumbs';
@@ -27,6 +28,8 @@ import FormReference from '../navigation/FormReference';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
+import {resolveSectionIconKey} from '../icons/registry';
+import {useProjectInstanceScope} from '../shell/ProjectShell';
 import FieldControl from './FieldControl';
 import {activeFields, fieldOptions, initialDraft, toBackendDraft, validateDraft} from './descriptors';
 import {computeCellGridLayout} from './formCellLayout';
@@ -192,47 +195,51 @@ AdaptiveFieldGroupGrid.propTypes = {
 };
 
 function FieldsTab({tab, form, draft, errors, shownError, mode, context, resourceKind, disabled, fixedFields=[],
-  onFieldChange}) {
+  suppressSubTabs=false, onFieldChange}) {
   // A hidden field (registration envelope: profile, intent, verification, server group) stays in
   // the record and the draft but is never shown; the host supplies its value.
   const fields = activeFields(tab.fields, {mode, draft}).filter((field) => !field.hidden);
   const groups = groupFields(fields);
   // A tab whose family declares sections (Constraints: primary key, unique, ...) shows
   // one section at a time when the engine fills more than one, instead of stacking grids.
-  const useSubTabs = Array.isArray(tab.nested) && tab.nested.length > 1 && groups.length > 1;
+  const useSubTabs = !suppressSubTabs && Array.isArray(tab.nested) && tab.nested.length > 1 && groups.length > 1;
   const [activeGroup, setActiveGroup] = useState(groups[0]?.name || '');
+  const tabTitle = gettext(tab.title);
   if(!fields.length) {
-    return <EmptyState message={`Nothing to set on ${tab.title} for this ${form.family_title.toLowerCase()}.`} />;
+    return <EmptyState message={gettext('Nothing to set on %s for this %s.', tabTitle, gettext(form.family_title).toLowerCase())} />;
   }
   const shownGroup = groups.some((group) => group.name === activeGroup) ? activeGroup : groups[0]?.name;
   const visibleGroups = useSubTabs ? groups.filter((group) => group.name === shownGroup) : groups;
   return <Stack gap="comfortable">
-    {useSubTabs && <Box role="tablist" aria-label={`${tab.title} sections`}
+    {useSubTabs && <Box role="tablist" aria-label={`${tabTitle} sections`}
       sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5, borderBottom: '1px solid', borderColor: 'divider'}}>
-      {groups.map((group) => <Tab key={group.name || '_'} label={group.name || tab.title}
+      {groups.map((group) => <Tab key={group.name || '_'} label={gettext(group.name || tab.title)}
         active={group.name === shownGroup}
         attention={group.fields.some((field) => shownError(field.field_id) &&
           Object.keys(errors).some((key) => key === field.field_id || key.startsWith(`${field.field_id}[`)))}
         onActivate={() => setActiveGroup(group.name)} />)}
     </Box>}
-    {visibleGroups.map((group) => <Box key={group.name || '_'} component="section"
-      aria-label={group.name || tab.title}>
-      {group.name && !useSubTabs && <Box component="h4" sx={{m: 0, mb: 1.25, pb: 0.5, fontSize: '0.73rem',
-        fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: 'text.secondary',
-        borderBottom: '1px solid', borderColor: 'divider'}}>{group.name}</Box>}
-      <AdaptiveFieldGroupGrid
-        fields={group.fields}
-        draft={draft}
-        errors={errors}
-        shownError={shownError}
-        mode={mode}
-        context={context}
-        resourceKind={resourceKind}
-        disabled={disabled}
-        fixedFields={fixedFields}
-        onFieldChange={onFieldChange}
-      />
-    </Box>)}
+    {visibleGroups.map((group) => {
+      const groupTitle = group.name ? gettext(group.name) : '';
+      return <Box key={group.name || '_'} component="section"
+        aria-label={groupTitle || tabTitle}>
+        {groupTitle && !useSubTabs && <Box component="h4" sx={{m: 0, mb: 1.25, pb: 0.5, fontSize: '0.73rem',
+          fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: 'text.secondary',
+          borderBottom: '1px solid', borderColor: 'divider'}}>{groupTitle}</Box>}
+        <AdaptiveFieldGroupGrid
+          fields={group.fields}
+          draft={draft}
+          errors={errors}
+          shownError={shownError}
+          mode={mode}
+          context={context}
+          resourceKind={resourceKind}
+          disabled={disabled}
+          fixedFields={fixedFields}
+          onFieldChange={onFieldChange}
+        />
+      </Box>;
+    })}
   </Stack>;
 }
 
@@ -241,12 +248,22 @@ FieldsTab.propTypes = {
   errors: PropTypes.object.isRequired, shownError: PropTypes.func.isRequired, mode: PropTypes.string.isRequired,
   context: PropTypes.object, resourceKind: PropTypes.string, disabled: PropTypes.bool,
   fixedFields: PropTypes.arrayOf(PropTypes.string),
+  suppressSubTabs: PropTypes.bool,
   onFieldChange: PropTypes.func.isRequired,
 };
 
 export default function ObjectEditor({form, mode='create', resourceKind, record={}, context={},
   plan, apply, tabRenderers={}, onClose, onApplied, title, readOnly=false, autoPlan=true, directApply=false, applyLabel,
   fixedFields=[]}) {
+  const instanceScope = useProjectInstanceScope();
+  const [localeRev, setLocaleRev] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLanguageChanged = () => setLocaleRev((n) => n + 1);
+    window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
+  }, []);
+
   const [draft, setDraft] = useState(() => initialDraft(form, {mode, record}));
   const [baseline] = useState(() => initialDraft(form, {mode, record}));
   const [activeTab, setActiveTab] = useState(form.tabs[0]?.tab);
@@ -349,10 +366,46 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
   }, [form.tabs, errors, mode, draft]);
 
   const current = form.tabs.find((tab) => tab.tab === activeTab) || form.tabs[0];
-  const heading = title || `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()}` +
-    (record?.name || record?.display_name ? ` — ${record.name || record.display_name}` : '');
+  const retranslateText = (val) =>
+    typeof gettext.retranslate === 'function' ? gettext.retranslate(val) : gettext(val);
+  const heading = title
+    ? retranslateText(title)
+    : `${mode === 'create' ? gettext('Create') : gettext('Edit')} ${gettext(form.family_title).toLowerCase()}` +
+      (record?.name || record?.display_name ? ` — ${record.name || record.display_name}` : '');
   const planBlocked = planState.plan && planState.plan.state === 'blocked';
-  const confirmLabel = planState.plan?.confirmation_required ? 'Confirm and apply' : 'Apply';
+  const confirmLabel = planState.plan?.confirmation_required
+    ? gettext('Confirm and apply')
+    : gettext('Apply');
+  const resolvedApplyLabel = applyLabel ? retranslateText(applyLabel) : gettext('Apply');
+  const currentTabTitle = current ? gettext(current.title) : '';
+  const hostedOnTabbedIconBar = Boolean(instanceScope);
+
+  useEffect(() => {
+    if (!instanceScope) return undefined;
+    const items = form.tabs.map((tab) => {
+      const label = gettext(tab.title);
+      return {
+        id: tab.tab,
+        label,
+        hint: label,
+        icon: resolveSectionIconKey(tab.tab, form.engine || tab.title),
+        checked: tab.tab === current?.tab,
+      };
+    });
+    instanceScope.setSubsections({
+      items,
+      onSelect: (nextTab) => {
+        setActiveTab(nextTab);
+      },
+    });
+  }, [current?.tab, form.engine, form.tabs, instanceScope, localeRev]);
+
+  useEffect(() => {
+    if (!instanceScope) return undefined;
+    return () => {
+      instanceScope.setSubsections(null);
+    };
+  }, [instanceScope]);
 
   return <Box role="dialog" aria-label={heading} data-cdeadmin-qa-key={`object-editor.${form.family}`}
     sx={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
@@ -364,18 +417,19 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
       {form.form_reference && <FormReference reference={form.form_reference} />}
     </Box>
     {form.status !== 'complete' && <Banner status="info">
-      {form.status === 'draft' ? `This ${form.family_title.toLowerCase()} form is a draft: fields are listed, round-trip verification is pending.` :
-        'This form is a skeleton; the engine descriptor has no fields yet.'}
+      {form.status === 'draft'
+        ? gettext('This %s form is a draft: fields are listed, round-trip verification is pending.', gettext(form.family_title).toLowerCase())
+        : gettext('This form is a skeleton; the engine descriptor has no fields yet.')}
     </Banner>}
-    <Box role="tablist" aria-label={`${form.family_title} tabs`}
+    {!hostedOnTabbedIconBar && <Box role="tablist" aria-label={`${form.family_title} tabs`}
       sx={{display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider', px: 2.5}}>
-      {form.tabs.map((tab) => <Tab key={tab.tab} label={tab.title} active={tab.tab === current?.tab}
+      {form.tabs.map((tab) => <Tab key={tab.tab} label={gettext(tab.title)} active={tab.tab === current?.tab}
         attention={Boolean(tabErrors[tab.tab]) && (submitAttempted || touched)}
         dirty={tab.tab === 'SQL' && planState.status === 'ready'}
         onActivate={() => setActiveTab(tab.tab)} />)}
-    </Box>
-    <ScrollArea label={`${current?.title || ''} tab content`} sx={{flex: 1, minHeight: 0, px: 3, pt: 2, pb: 9}}>
-      {current && <Box role="tabpanel" aria-label={current.title} data-cdeadmin-qa-key={`object-editor.tab.${current.tab}`}>
+    </Box>}
+    <ScrollArea label={`${currentTabTitle} tab content`} sx={{flex: 1, minHeight: 0, px: 3, pt: 2, pb: 9}}>
+      {current && <Box role="tabpanel" aria-label={currentTabTitle} data-cdeadmin-qa-key={`object-editor.tab.${current.tab}`}>
         {current.primitive === 'sql_preview' && <SqlTab planState={planState} canPlan={canPlan} errors={errors}
           onRefresh={refreshPlan} mode={mode} dirty={dirty} />}
         {current.primitive !== 'sql_preview' && (tabRenderers[current.tab] ?
@@ -384,31 +438,31 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
             <FieldsTab tab={current} form={form} draft={draft} errors={errors} shownError={shownError}
               mode={mode} context={context}
               resourceKind={resourceKind} disabled={readOnly || applyState.status === 'loading'}
-              fixedFields={fixedFields} onFieldChange={onFieldChange} /> :
-            <EmptyState message={`${current.title} is shown once the object exists.`} />))}
+              fixedFields={fixedFields} suppressSubTabs={hostedOnTabbedIconBar} onFieldChange={onFieldChange} /> :
+            <EmptyState message={gettext('%s is shown once the object exists.', currentTabTitle)} />))}
       </Box>}
     </ScrollArea>
     <Box sx={{display: 'flex', gap: 1, alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid',
       borderColor: 'divider'}}>
       <Box sx={{flex: 1, fontSize: '0.75rem', color: 'text.secondary'}}>
-        {applyState.status === 'done' && <ValidationMessage status="success">Applied.</ValidationMessage>}
+        {applyState.status === 'done' && <ValidationMessage status="success">{gettext('Applied.')}</ValidationMessage>}
         {applyState.status === 'error' && <ValidationMessage status="error">{applyState.error}</ValidationMessage>}
         {applyState.status === 'idle' && Object.keys(errors).length > 0 && submitAttempted &&
-          <ValidationMessage status="error">{Object.keys(errors).length} field(s) need attention.</ValidationMessage>}
+          <ValidationMessage status="error">{gettext('%s field(s) need attention.', String(Object.keys(errors).length))}</ValidationMessage>}
         {applyState.status === 'idle' && planBlocked &&
-          <ValidationMessage status="warning">Plan blocked: {(planState.plan.blockers || []).join(', ') || 'see SQL tab'}.</ValidationMessage>}
+          <ValidationMessage status="warning">{gettext('Plan blocked: %s.', (planState.plan.blockers || []).join(', ') || gettext('see SQL tab'))}</ValidationMessage>}
       </Box>
       {!readOnly && dirty && applyState.status !== 'done' && <Button intent="neutral"
         disabled={applyState.status === 'loading'} onClick={reset}
-        data-cdeadmin-qa-key="object-editor.reset">Reset</Button>}
-      {onClose && <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>}
+        data-cdeadmin-qa-key="object-editor.reset">{gettext('Reset')}</Button>}
+      {onClose && <Button intent="neutral" onClick={onClose}>{applyState.status === 'done' ? gettext('Close') : gettext('Cancel')}</Button>}
       {!readOnly && !directApply && <Button intent="neutral" disabled={!canPlan || planState.status === 'loading'}
-        onClick={() => { setActiveTab('SQL'); refreshPlan(); }}>Preview SQL</Button>}
+        onClick={() => { setActiveTab('SQL'); refreshPlan(); }}>{gettext('Preview SQL')}</Button>}
       {!readOnly && <Button intent="primary" loading={applyState.status === 'loading'}
         disabled={!canSubmit || applyState.status === 'done' || planState.status === 'loading' ||
           (planState.plan && (planBlocked || planState.plan.execution_available === false))}
         onClick={doApply}>
-        {directApply ? (applyLabel || 'Apply') : (planState.plan ? confirmLabel : 'Apply')}
+        {directApply ? resolvedApplyLabel : (planState.plan ? confirmLabel : gettext('Apply'))}
       </Button>}
     </Box>
   </Box>;
@@ -416,17 +470,17 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
 
 function SqlTab({planState, canPlan, errors, onRefresh, mode, dirty}) {
   if(!canPlan) {
-    const reason = Object.keys(errors).length ? 'Complete the required fields to preview the SQL.' :
-      (mode === 'alter' && !dirty ? 'No changes yet; the SQL tab shows the ALTER set once you edit a field.' :
-        'Nothing to preview.');
+    const reason = Object.keys(errors).length ? gettext('Complete the required fields to preview the SQL.') :
+      (mode === 'alter' && !dirty ? gettext('No changes yet; the SQL tab shows the ALTER set once you edit a field.') :
+        gettext('Nothing to preview.'));
     return <EmptyState message={reason} />;
   }
-  if(planState.status === 'loading') return <EmptyState message="Asking the provider for its plan..." />;
+  if(planState.status === 'loading') return <EmptyState message={gettext('Asking the provider for its plan...')} />;
   if(planState.status === 'error') return <Stack>
     <ValidationMessage status="error">{planState.error}</ValidationMessage>
-    <Box><Button intent="neutral" onClick={onRefresh}>Retry</Button></Box>
+    <Box><Button intent="neutral" onClick={onRefresh}>{gettext('Retry')}</Button></Box>
   </Stack>;
-  if(planState.status === 'idle') return <Box><Button intent="neutral" onClick={onRefresh}>Preview SQL</Button></Box>;
+  if(planState.status === 'idle') return <Box><Button intent="neutral" onClick={onRefresh}>{gettext('Preview SQL')}</Button></Box>;
   const plan = planState.plan;
   const sql = planSqlText(plan);
   return <Stack gap="standard">

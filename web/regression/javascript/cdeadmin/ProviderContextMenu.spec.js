@@ -274,13 +274,15 @@ describe('provider-owned Object Explorer menus', () => {
       cde_context_actions: [
         action({command_id: 'endpoint.firebird.register_again', handler: 'register_endpoint', label: 'Register server...', menu_group: 'register'}),
         action({command_id: 'database.firebird.studio', handler: 'open_workspace', label: 'Open Firebird SQL editor...', menu_group: 'database', arguments: {tab: 'studio'}}),
+        action({command_id: 'database.firebird.drop', handler: 'open_workspace', label: 'Drop Firebird database...', menu_group: 'database-lifecycle', mutation_class: 'destructive'}),
         action({command_id: 'database.firebird.remove', handler: 'open_workspace', label: 'Remove database registration...', menu_group: 'database-lifecycle', mutation_class: 'destructive'}),
       ],
     }, {id: 'db-1'});
     const dbLabels = dbMenu.map((m) => m.label);
     expect(dbLabels).toContain('Properties...');
     expect(dbLabels).toContain('Open Firebird SQL editor...');
-    expect(dbLabels).toContain('Remove database registration...');
+    expect(dbLabels).toContain('Drop Firebird database...');
+    expect(dbLabels).not.toContain('Remove database registration...');
     expect(dbLabels).not.toContain('Register server...');
   });
 

@@ -16,14 +16,15 @@ import {NOTEBOOK_TYPE} from './cdeadmin_ui/projects/SQLNotebookModel';
 import {createCloseGuardRegistry, ModalCloseGuardContext} from './helpers/ModalCloseGuard';
 import ObjectBreadcrumbs from './components/ObjectBreadcrumbs';
 import {
-  getDefaultGroup,
   WORKSPACE_EVENTS as LAYOUT_EVENTS,
-  Workspace as Layout,
-  WorkspaceController as LayoutDocker,
+  dockTabIconKey,
 } from 'sources/cdeadmin_ui/workspace/Workspace';
+import EventBus from './helpers/EventBus';
+import SQLConnections from './cdeadmin_ui/editors/SQLConnections';
+import {translateShell} from './cdeadmin_ui/shell/shellMenuI18n';
 import gettext from 'sources/gettext';
 import ObjectExplorer from './tree/ObjectExplorer';
-import Properties from '../../misc/properties/Properties';
+import Properties, {resolveConnectorModeSelection} from '../../misc/properties/Properties';
 import SQL from '../../misc/sql/static/js/SQL';
 import Statistics from '../../misc/statistics/static/js/Statistics';
 import {
@@ -34,7 +35,6 @@ import Dependents from '../../misc/dependents/static/js/Dependents';
 import ModalProvider from './helpers/ModalProvider';
 import { NotifierProvider } from './helpers/Notifier';
 import ObjectExplorerToolbar from './tree/ObjectExplorer/ObjectExplorerToolbar';
-import MainMoreToolbar from './helpers/MainMoreToolbar';
 import Dashboard from '../../dashboard/static/js/Dashboard';
 import usePreferences from '../../preferences/static/js/store';
 import { getBrowser } from './utils';
@@ -56,7 +56,6 @@ import {
   Icon,
   ScratchPopoverPalette,
   ScratchScrollArea,
-  Tab,
   initializeCDEadminPlatform,
   ProjectExplorer,
   SurfaceHost,
@@ -72,7 +71,10 @@ import {
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
 } from 'sources/cdeadmin_ui';
-import {providerContextMenuItems} from '../../browser/static/js/ProviderContextMenu';
+import {
+  canLaunchServerMenu,
+  providerContextMenuItems,
+} from '../../browser/static/js/ProviderContextMenu';
 import {openFamilyCreate} from '../../browser/static/js/ProviderObjectEditor';
 import {SchemaCompareWorkspace} from './cdeadmin_ui/modules/schema_compare/SchemaCompareWorkspace';
 import {
@@ -112,15 +114,100 @@ export const defaultTabsData = [
   },
 ];
 
-function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null, selectedData = null) {
-  const addAction = `data-navigator.add_child.${instanceId}`;
-  const propertiesAction = `data-navigator.properties.${instanceId}`;
-  const removeAction = `data-navigator.remove.${instanceId}`;
-  const refreshAction = `data-navigator.refresh.${instanceId}`;
-  const enginesAction = `data-navigator.engines.${instanceId}`;
+export function formatCatalogPageTitle(nodeData) {
+  if (!nodeData || !nodeData._type || nodeData._type === 'server_group') {
+    return gettext('Data Navigator');
+  }
+  const rawLabel = String(
+    nodeData.label || nodeData._label || nodeData.cde_database || nodeData.engine_id || nodeData._id || ''
+  ).trim();
+  const nodeType = String(nodeData._type);
+  if (nodeType === 'cde_database_target' || nodeType === 'database') {
+    return gettext('database: %s', rawLabel);
+  }
+  if (nodeType === 'server' || nodeType === 'localhost_placeholder') {
+    return gettext('server: %s', rawLabel);
+  }
+  if (nodeType === 'engine_type') {
+    return gettext('connector: %s', rawLabel);
+  }
+  if (nodeType === 'cde_resource') {
+    const kind = String(nodeData.cde_resource_kind || 'object')
+      .replace(/_/g, ' ')
+      .toLowerCase();
+    return `${gettext(kind)}: ${rawLabel}`;
+  }
+  if (nodeType === 'cde_resource_group' || nodeType.startsWith('coll-')) {
+    const stripped = rawLabel.replace(/\s*\(\d+\)\s*$/, '').trim() || rawLabel;
+    return gettext(stripped);
+  }
+  const cleanType = nodeType.replace(/^coll-/, '').replace(/_/g, ' ').toLowerCase();
+  return `${gettext(cleanType)}: ${rawLabel}`;
+}
 
+export function catalogNodeIdentityKey(nodeData) {
+  if (!nodeData || !nodeData._type || nodeData._type === 'server_group') {
+    return null;
+  }
+  const type = String(nodeData._type);
+  const idPart =
+    nodeData.cde_database_target_id ??
+    nodeData.cde_resource_id ??
+    nodeData._id ??
+    nodeData.id ??
+    nodeData.engine_id ??
+    nodeData.cde_database ??
+    nodeData.label ??
+    nodeData._label ??
+    '';
+  const parentPart =
+    nodeData.cde_endpoint_id ??
+    nodeData.server_id ??
+    nodeData.cde_profile_id ??
+    '';
+  return `${type}:${parentPart}:${idPart}`;
+}
+
+const VIEW_ACTION_META = Object.freeze({
+  properties: {
+    icon: 'action.properties',
+    label: () => gettext('Properties'),
+  },
+  statistics: {
+    icon: 'action.statistics',
+    label: () => gettext('Statistics'),
+  },
+  sql: {
+    icon: 'action.sql_preview',
+    label: () => gettext('SQL'),
+  },
+  dependencies: {
+    icon: 'action.dependencies',
+    label: () => gettext('Dependencies'),
+  },
+  dependents: {
+    icon: 'action.dependents',
+    label: () => gettext('Dependents'),
+  },
+});
+
+export function buildNavigatorSelectionConfig(
+  pgAdmin,
+  instanceId,
+  selectedItem = null,
+  selectedData = null,
+  activeView = null,
+  options = {}
+) {
   const nodeType = selectedData?._type || null;
-  const providerMenus = selectedData ? providerContextMenuItems(selectedData, selectedItem) || [] : [];
+  const pageTitle = formatCatalogPageTitle(selectedData);
+  const allowedViews = navigatorTabIdsForNodeType(nodeType, pgAdmin);
+  const resolvedView =
+    activeView && allowedViews.includes(activeView) ? activeView : allowedViews[0];
+
+  const providerMenus = selectedData
+    ? providerContextMenuItems(selectedData, selectedItem) || []
+    : [];
   const findProviderSuffix = (suffix) =>
     providerMenus.find((m) => String(m.commandId).split('.').at(-1) === suffix);
   const runProviderMenu = (menu) =>
@@ -129,145 +216,172 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
       {itemData: selectedData, item: selectedItem}
     );
 
-  const selectPropertiesTab = () => {
+  const dispatchViewSelect = (viewId, focusEditor = false) => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('scratchrobin:navigator-select-tab', {
-          detail: {tab: 'properties', focusEditor: true},
+          detail: {instanceId, tab: viewId, focusEditor},
         })
       );
     }
   };
 
-  let addSpec = {
-    enabled: false,
-    text: gettext('Add Child Object…'),
-    hint: gettext('Select an engine to add a server, or a server to add a database'),
-    icon: 'action.new',
-    invoke: () => {},
-  };
-  let propSpec = {
-    enabled: false,
-    text: gettext('Properties…'),
-    hint: gettext('Select a server, database, or catalog object to view or edit its properties'),
-    icon: 'action.properties',
-    invoke: () => {},
-  };
-  let removeSpec = {
-    enabled: false,
-    text: gettext('Remove…'),
-    hint: gettext('Select a server, database, or catalog object to remove it'),
-    icon: 'action.delete',
-    invoke: () => {},
+  const actions = [];
+  const viewControlIds = [];
+  const connectorModeControlIds = [];
+  const pageControlIds = [];
+  const catalogControlIds = [];
+  const menuItems = [];
+  let menuIndex = 5;
+
+  const safeInstId =
+    String(instanceId || 'inst')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'inst';
+
+  // 1. View Switch Icons (Properties, Statistics, SQL, Dependencies, Dependents) — NO tabs in work area
+  const objectViews = allowedViews.filter((v) => v !== 'connectors' && VIEW_ACTION_META[v]);
+  objectViews.forEach((viewId) => {
+    const meta = VIEW_ACTION_META[viewId];
+    const actId = `data-navigator.view_${viewId}.${safeInstId}`;
+    const labelText = meta.label();
+    actions.push({
+      id: actId,
+      icon: meta.icon,
+      application: 'data-navigator',
+      defaultText: labelText,
+      defaultHint: labelText,
+      checked: resolvedView === viewId,
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () => dispatchViewSelect(viewId, viewId === 'properties'),
+      },
+    });
+    viewControlIds.push(actId);
+    menuItems.push({
+      id: actId,
+      actionId: actId,
+      label: labelText,
+      iconKey: meta.icon,
+      checked: resolvedView === viewId,
+      index: menuIndex,
+    });
+    menuIndex += 5;
+  });
+
+  if (viewControlIds.length > 0) {
+    menuItems.push({id: `sep_views_${instanceId}`, type: 'separator', index: menuIndex});
+    menuIndex += 5;
+  }
+
+  const pushPageAction = ({key, icon, text, hint, enabled = true, invoke}) => {
+    const actId = `data-navigator.${key}.${safeInstId}`;
+    actions.push({
+      id: actId,
+      icon,
+      application: 'data-navigator',
+      defaultText: text,
+      defaultHint: hint || text,
+      status: enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+      focusScoped: true,
+      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke},
+    });
+    pageControlIds.push(actId);
+    menuItems.push({
+      id: actId,
+      actionId: actId,
+      label: text,
+      iconKey: icon,
+      disabled: !enabled,
+      index: menuIndex,
+    });
+    menuIndex += 5;
   };
 
-  if (nodeType === 'engine_type') {
-    const engineId = selectedData.engine_id || selectedData._id;
-    addSpec = {
-      enabled: true,
-      text: gettext('Register Server…'),
-      hint: gettext('Register a server or database file for this engine'),
-      icon: 'object.server',
-      invoke: () => {
-        const serverNode = pgAdmin?.Browser?.Nodes?.server;
-        serverNode?.callbacks?.register_engine_server?.call(serverNode, {
-          item: selectedItem,
-          engineId,
-        });
-      },
-    };
-  } else if (nodeType === 'localhost_placeholder') {
-    propSpec = {
-      enabled: true,
-      text: gettext('Properties…'),
-      hint: gettext('Configure port, credentials, and settings for this local server'),
-      icon: 'action.properties',
-      invoke: selectPropertiesTab,
-    };
-  } else if (nodeType === 'server') {
-    const createDb = findProviderSuffix('create_database') || findProviderSuffix('register_database');
+  // 2. Active Page Action Icons (specific to the open catalog object page)
+  if (nodeType === 'cde_database_target' || nodeType === 'database') {
+    const connectMenu = findProviderSuffix('connect');
+    const studioMenu = findProviderSuffix('studio');
+    const editMenu = findProviderSuffix('edit') || findProviderSuffix('alter');
+    const dropMenu = findProviderSuffix('drop');
     const dbNode = pgAdmin?.Browser?.Nodes?.database;
-    const canLegacyCreateDb =
-      !selectedData?.cde_endpoint && Boolean(selectedData?.connected);
-    const canAddDb = createDb
-      ? Boolean(createDb.enable(selectedData, selectedItem))
-      : canLegacyCreateDb;
-    if (createDb || !selectedData?.cde_endpoint) {
-      addSpec = {
-        enabled: canAddDb,
-        text: gettext('Create Database…'),
-        hint: createDb?.disabledReason || gettext('Add or create a database on this server'),
-        icon: 'object.database',
+
+    if (connectMenu || nodeType === 'database') {
+      const canConnect = connectMenu
+        ? Boolean(connectMenu.enable(selectedData, selectedItem))
+        : !selectedData?.connected;
+      const connectLabel = gettext('Connect');
+      pushPageAction({
+        key: 'db_connect',
+        icon: 'action.connect',
+        text: connectLabel,
+        hint: (!canConnect && connectMenu?.disabledReason) || connectLabel,
+        enabled: canConnect,
         invoke: () => {
-          if (createDb) {
-            runProviderMenu(createDb);
+          if (connectMenu) {
+            runProviderMenu(connectMenu);
           } else {
-            dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
-              action: 'create',
-              item: selectedItem,
-            });
+            dbNode?.callbacks?.connect_database?.call(dbNode, {item: selectedItem});
           }
         },
-      };
+      });
     }
-    propSpec = {
-      enabled: true,
-      text: gettext('Server Properties…'),
-      hint: gettext('Edit connection settings, port, and credentials for this server'),
-      icon: 'action.properties',
-      invoke: selectPropertiesTab,
-    };
-    const forgetMenu = findProviderSuffix('forget');
-    removeSpec = {
-      enabled: true,
-      text: gettext('Remove Server…'),
-      hint: gettext('Remove this server registration'),
-      icon: 'action.delete',
+
+    const canSql = studioMenu ? Boolean(studioMenu.enable(selectedData, selectedItem)) : true;
+    const sqlLabel = gettext('Open SQL Editor');
+    pushPageAction({
+      key: 'db_open_sql',
+      icon: 'action.script',
+      text: sqlLabel,
+      hint: (!canSql && studioMenu?.disabledReason) || sqlLabel,
+      enabled: canSql,
       invoke: () => {
-        if (forgetMenu && forgetMenu.enable(selectedData, selectedItem)) {
-          runProviderMenu(forgetMenu);
-          return;
+        if (studioMenu) {
+          runProviderMenu(studioMenu);
+        } else {
+          pgAdmin?.DataGrid?.show_query_tool?.('', selectedItem);
         }
-        const serverNode = pgAdmin?.Browser?.Nodes?.server;
-        serverNode?.callbacks?.delete_obj?.call(serverNode, {
-          item: selectedItem,
-          url: 'drop',
-        });
       },
-    };
-  } else if (nodeType === 'coll-database') {
-    const dbNode = pgAdmin?.Browser?.Nodes?.database;
-    addSpec = {
-      enabled: true,
-      text: gettext('Create Database…'),
-      hint: gettext('Create a new database on this server'),
-      icon: 'object.database',
-      invoke: () =>
-        dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
-          action: 'create',
-          item: selectedItem,
-        }),
-    };
-  } else if (nodeType === 'cde_database_target' || nodeType === 'database') {
-    propSpec = {
-      enabled: true,
-      text: gettext('Database Properties…'),
-      hint: gettext('View or edit properties for this database'),
-      icon: 'action.properties',
-      invoke: selectPropertiesTab,
-    };
-    const removeDb = findProviderSuffix('remove') || findProviderSuffix('drop');
-    const dbNode = pgAdmin?.Browser?.Nodes?.database;
-    removeSpec = {
-      enabled: removeDb ? Boolean(removeDb.enable(selectedData, selectedItem)) : nodeType === 'database',
-      text: removeDb && String(removeDb.commandId).endsWith('.remove')
-        ? gettext('Remove Database…')
-        : gettext('Drop Database…'),
-      hint: removeDb?.disabledReason || gettext('Remove or drop this database'),
-      icon: 'action.delete',
+    });
+
+    const canEdit = editMenu
+      ? Boolean(editMenu.enable(selectedData, selectedItem))
+      : Boolean(dbNode);
+    const editLabel = gettext('Edit Connection / Settings');
+    pushPageAction({
+      key: 'db_edit_settings',
+      icon: 'action.settings',
+      text: editLabel,
+      hint: (!canEdit && editMenu?.disabledReason) || editLabel,
+      enabled: canEdit,
       invoke: () => {
-        if (removeDb) {
-          runProviderMenu(removeDb);
+        if (editMenu) {
+          runProviderMenu(editMenu);
+        } else {
+          dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
+            action: 'edit',
+            item: selectedItem,
+          });
+        }
+      },
+    });
+
+    const canDrop = dropMenu
+      ? Boolean(dropMenu.enable(selectedData, selectedItem))
+      : Boolean(dbNode);
+    const dropLabel = gettext('Drop Database');
+    pushPageAction({
+      key: 'db_drop',
+      icon: 'action.drop',
+      text: dropLabel,
+      hint: (!canDrop && dropMenu?.disabledReason) || dropLabel,
+      enabled: canDrop,
+      invoke: () => {
+        if (dropMenu) {
+          runProviderMenu(dropMenu);
         } else {
           dbNode?.callbacks?.delete_obj?.call(dbNode, {
             item: selectedItem,
@@ -275,36 +389,274 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
           });
         }
       },
+    });
+  } else if (nodeType === 'server') {
+    const serverNode = pgAdmin?.Browser?.Nodes?.server;
+    const dbNode = pgAdmin?.Browser?.Nodes?.database;
+    const createDbMenu = findProviderSuffix('create_database');
+    const registerDbMenu = findProviderSuffix('register_database');
+    const forgetMenu = findProviderSuffix('forget');
+
+    const verifyLabel = gettext('Verify / Connect');
+    pushPageAction({
+      key: 'srv_connect',
+      icon: 'action.connect',
+      text: verifyLabel,
+      hint: verifyLabel,
+      enabled: true,
+      invoke: () => serverNode?.callbacks?.connect_server?.call(serverNode, {item: selectedItem}),
+    });
+
+    if (createDbMenu || !selectedData?.cde_endpoint) {
+      const canCreate = createDbMenu
+        ? canLaunchServerMenu(createDbMenu, selectedData, selectedItem)
+        : Boolean(selectedData?.connected);
+      const createLabel = gettext('Create Database');
+      pushPageAction({
+        key: 'srv_create_db',
+        icon: 'action.create_database',
+        text: createLabel,
+        hint: (!canCreate && createDbMenu?.disabledReason) || createLabel,
+        enabled: canCreate,
+        invoke: () => {
+          if (createDbMenu) {
+            runProviderMenu(createDbMenu);
+          } else {
+            dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
+              action: 'create',
+              item: selectedItem,
+            });
+          }
+        },
+      });
+    }
+
+    if (registerDbMenu) {
+      const canRegister = canLaunchServerMenu(registerDbMenu, selectedData, selectedItem);
+      const registerLabel = gettext('Register Database');
+      pushPageAction({
+        key: 'srv_register_db',
+        icon: 'action.attach',
+        text: registerLabel,
+        hint: (!canRegister && registerDbMenu?.disabledReason) || registerLabel,
+        enabled: canRegister,
+        invoke: () => runProviderMenu(registerDbMenu),
+      });
+    }
+
+    const removeSrvLabel = gettext('Remove Server');
+    pushPageAction({
+      key: 'srv_remove',
+      icon: 'action.delete',
+      text: removeSrvLabel,
+      hint: removeSrvLabel,
+      enabled: true,
+      invoke: () => {
+        if (forgetMenu && forgetMenu.enable(selectedData, selectedItem)) {
+          runProviderMenu(forgetMenu);
+          return;
+        }
+        serverNode?.callbacks?.delete_obj?.call(serverNode, {
+          item: selectedItem,
+          url: 'drop',
+        });
+      },
+    });
+  } else if (nodeType === 'engine_type') {
+    const rawEngineId = selectedData.engine_id || selectedData._id || '';
+    const engineId = rawEngineId === 'opensearch_sql_ppl' ? 'opensearch' : rawEngineId;
+    const {
+      profiles,
+      profile,
+      activeIntent,
+      networkSupportsDatabaseIntent,
+      networkSupportsCreateIntent,
+    } = resolveConnectorModeSelection(
+      engineId,
+      options.connectorProfileId ?? null,
+      options.connectorIntent ?? 'endpoint'
+    );
+
+    const pushConnectorModeToggle = ({key, icon, text, checked, detail}) => {
+      const actId = `data-navigator.${key}.${safeInstId}`;
+      actions.push({
+        id: actId,
+        icon,
+        application: 'data-navigator',
+        defaultText: text,
+        defaultHint: text,
+        checked: Boolean(checked),
+        status: T_ACTION_STATUS.ENABLED,
+        focusScoped: true,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('scratchrobin:connector-select-mode', {
+                  detail: {instanceId, ...detail},
+                })
+              );
+            }
+          },
+        },
+      });
+      connectorModeControlIds.push(actId);
+      menuItems.push({
+        id: actId,
+        actionId: actId,
+        label: text,
+        iconKey: icon,
+        checked: Boolean(checked),
+        index: menuIndex,
+      });
+      menuIndex += 5;
     };
+
+    if (profiles.length > 1 && profile) {
+      profiles.forEach((candidate, idx) => {
+        const isEmbedded = candidate.route_kind === 'embedded_file';
+        const baseLabel = candidate.display_name || candidate.engine_display_name || engineId;
+        const label = isEmbedded
+          ? gettext('%s (This computer)', baseLabel)
+          : gettext('%s (Server)', baseLabel);
+        const safeKey =
+          String(candidate.profile_id || idx)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '') || `p${idx}`;
+        pushConnectorModeToggle({
+          key: `eng_profile_${safeKey}`,
+          icon: isEmbedded ? 'action.embedded_host' : 'action.server_host',
+          text: label,
+          checked: candidate.profile_id === profile.profile_id,
+          detail: {profileId: candidate.profile_id},
+        });
+      });
+    }
+
+    if (profile?.route_kind === 'embedded_file') {
+      pushConnectorModeToggle({
+        key: 'eng_intent_open_file',
+        icon: 'action.attach',
+        text: gettext('Open Existing File'),
+        checked: activeIntent === 'register_existing',
+        detail: {intent: 'register_existing'},
+      });
+      pushConnectorModeToggle({
+        key: 'eng_intent_create_file',
+        icon: 'action.create_database',
+        text: gettext('Create New File'),
+        checked: activeIntent === 'create_database',
+        detail: {intent: 'create_database'},
+      });
+    } else if (networkSupportsDatabaseIntent) {
+      pushConnectorModeToggle({
+        key: 'eng_intent_register_server',
+        icon: 'action.connect',
+        text: gettext('Register Server'),
+        checked: activeIntent === 'endpoint',
+        detail: {intent: 'endpoint'},
+      });
+      pushConnectorModeToggle({
+        key: 'eng_intent_register_existing_db',
+        icon: 'action.attach',
+        text: gettext('Register Existing Database'),
+        checked: activeIntent === 'register_existing',
+        detail: {intent: 'register_existing'},
+      });
+      if (networkSupportsCreateIntent) {
+        pushConnectorModeToggle({
+          key: 'eng_intent_create_db',
+          icon: 'action.create_database',
+          text: gettext('Create Database'),
+          checked: activeIntent === 'create_database',
+          detail: {intent: 'create_database'},
+        });
+      }
+    }
+  } else if (nodeType === 'coll-database') {
+    const dbNode = pgAdmin?.Browser?.Nodes?.database;
+    const createLabel = gettext('Create Database');
+    pushPageAction({
+      key: 'coll_create_db',
+      icon: 'action.create_database',
+      text: createLabel,
+      hint: createLabel,
+      enabled: true,
+      invoke: () =>
+        dbNode?.callbacks?.show_obj_properties?.call(dbNode, {
+          action: 'create',
+          item: selectedItem,
+        }),
+    });
   } else if (nodeType === 'cde_resource_group') {
     const createMenu = findProviderSuffix('create');
     const kind = selectedData?.cde_resource_kind;
-    addSpec = {
-      enabled: true,
-      text: createMenu?.label || gettext('New %s…', selectedData?.label || kind || 'Object'),
-      hint: gettext('Create a new object in this group'),
-      icon: 'action.new',
-      invoke: () => {
-        if (kind && openFamilyCreate(selectedData, selectedItem, kind)) return;
-        if (createMenu) runProviderMenu(createMenu);
-      },
-    };
-  } else if (nodeType && nodeType !== 'server_group') {
-    propSpec = {
-      enabled: true,
-      text: gettext('Properties…'),
-      hint: gettext('Inspect or edit properties for the selected object'),
-      icon: 'action.properties',
-      invoke: selectPropertiesTab,
-    };
+    if (createMenu || kind) {
+      const newLabel =
+        createMenu?.label?.replace(/\.{3}|…$/, '') ||
+        gettext('New %s', selectedData?.label || kind || 'Object');
+      pushPageAction({
+        key: 'grp_create',
+        icon: 'action.create',
+        text: newLabel,
+        hint: newLabel,
+        enabled: true,
+        invoke: () => {
+          if (kind && openFamilyCreate(selectedData, selectedItem, kind)) return;
+          if (createMenu) runProviderMenu(createMenu);
+        },
+      });
+    }
+  } else if (nodeType && nodeType !== 'server_group' && nodeType !== 'localhost_placeholder') {
+    const queryMenu = findProviderSuffix('query') || findProviderSuffix('studio');
+    const alterMenu = findProviderSuffix('alter') || findProviderSuffix('edit');
     const dropMenu = findProviderSuffix('drop');
     const modNode = pgAdmin?.Browser?.Nodes?.[nodeType];
+
+    if (queryMenu) {
+      const canQuery = Boolean(queryMenu.enable(selectedData, selectedItem));
+      const sqlLabel = gettext('Open SQL Editor');
+      pushPageAction({
+        key: 'obj_open_sql',
+        icon: 'action.script',
+        text: sqlLabel,
+        hint: (!canQuery && queryMenu.disabledReason) || sqlLabel,
+        enabled: canQuery,
+        invoke: () => runProviderMenu(queryMenu),
+      });
+    }
+    if (alterMenu || modNode) {
+      const canAlter = alterMenu ? Boolean(alterMenu.enable(selectedData, selectedItem)) : true;
+      const editLabel = gettext('Edit / Alter');
+      pushPageAction({
+        key: 'obj_edit',
+        icon: 'action.edit',
+        text: editLabel,
+        hint: (!canAlter && alterMenu?.disabledReason) || editLabel,
+        enabled: canAlter,
+        invoke: () => {
+          if (alterMenu) {
+            runProviderMenu(alterMenu);
+          } else {
+            modNode?.callbacks?.show_obj_properties?.call(modNode, {
+              action: 'edit',
+              item: selectedItem,
+            });
+          }
+        },
+      });
+    }
     if (dropMenu || modNode?.canDrop) {
-      removeSpec = {
-        enabled: dropMenu ? Boolean(dropMenu.enable(selectedData, selectedItem)) : true,
-        text: gettext('Drop Object…'),
-        hint: gettext('Drop the selected object'),
-        icon: 'action.delete',
+      const canDrop = dropMenu ? Boolean(dropMenu.enable(selectedData, selectedItem)) : true;
+      const dropLabel = gettext('Drop');
+      pushPageAction({
+        key: 'obj_drop',
+        icon: 'action.drop',
+        text: dropLabel,
+        hint: (!canDrop && dropMenu?.disabledReason) || dropLabel,
+        enabled: canDrop,
         invoke: () => {
           if (dropMenu) {
             runProviderMenu(dropMenu);
@@ -315,60 +667,20 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
             });
           }
         },
-      };
+      });
     }
   }
 
-  const actions = [
-    {
-      id: addAction,
-      icon: addSpec.icon,
-      application: 'data-navigator',
-      defaultText: addSpec.text,
-      defaultHint: addSpec.hint,
-      status: addSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
-      focusScoped: true,
-      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: addSpec.invoke},
-    },
-    {
-      id: propertiesAction,
-      icon: propSpec.icon,
-      application: 'data-navigator',
-      defaultText: propSpec.text,
-      defaultHint: propSpec.hint,
-      status: propSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
-      focusScoped: true,
-      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: propSpec.invoke},
-    },
-    {
-      id: removeAction,
-      icon: removeSpec.icon,
-      application: 'data-navigator',
-      defaultText: removeSpec.text,
-      defaultHint: removeSpec.hint,
-      status: removeSpec.enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
-      focusScoped: true,
-      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: removeSpec.invoke},
-    },
-    {
-      id: refreshAction,
-      icon: 'action.refresh',
-      application: 'data-navigator',
-      defaultText: gettext('Refresh Catalog'),
-      defaultHint: gettext('Refresh selected database catalog branch'),
-      status: T_ACTION_STATUS.ENABLED,
-      focusScoped: true,
-      target: {
-        kind: T_ACTION_TARGET_KIND.CLIENT,
-        invoke: () => pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:refresh'),
-      },
-    },
-    {
+  // 3. Unbound Connectors page action + Catalog Refresh
+  if (!nodeType || nodeType === 'server_group') {
+    const enginesAction = `data-navigator.engines.${safeInstId}`;
+    const enginesLabel = gettext('Configure Database Engines');
+    actions.push({
       id: enginesAction,
-      icon: 'object.database',
+      icon: 'action.settings',
       application: 'data-navigator',
-      defaultText: gettext('Configure Database Engines…'),
-      defaultHint: gettext('Enable or disable database engine connectors'),
+      defaultText: enginesLabel,
+      defaultHint: enginesLabel,
       status: T_ACTION_STATUS.ENABLED,
       focusScoped: true,
       target: {
@@ -380,46 +692,40 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
             })
           ),
       },
-    },
-  ];
-
-  const menuItems = [];
-  if (addSpec.enabled) {
-    menuItems.push({
-      id: addAction,
-      actionId: addAction,
-      label: addSpec.text,
-      iconKey: addSpec.icon,
-      index: 5,
     });
-  }
-  if (propSpec.enabled) {
-    menuItems.push({
-      id: propertiesAction,
-      actionId: propertiesAction,
-      label: propSpec.text,
-      iconKey: propSpec.icon,
-      index: 10,
-    });
-  }
-  if (removeSpec.enabled) {
-    menuItems.push({
-      id: removeAction,
-      actionId: removeAction,
-      label: removeSpec.text,
-      iconKey: removeSpec.icon,
-      index: 15,
-    });
-  }
-  if (!nodeType || nodeType === 'server_group') {
+    catalogControlIds.push(enginesAction);
     menuItems.push({
       id: enginesAction,
       actionId: enginesAction,
-      label: gettext('Configure Database Engines…'),
-      iconKey: 'object.database',
-      index: 18,
+      label: enginesLabel,
+      iconKey: 'action.settings',
+      index: menuIndex,
     });
+    menuIndex += 5;
   }
+
+  const refreshAction = `data-navigator.refresh.${safeInstId}`;
+  const refreshLabel = gettext('Refresh');
+  actions.push({
+    id: refreshAction,
+    icon: 'action.refresh',
+    application: 'data-navigator',
+    defaultText: refreshLabel,
+    defaultHint: refreshLabel,
+    status: T_ACTION_STATUS.ENABLED,
+    focusScoped: true,
+    target: {
+      kind: T_ACTION_TARGET_KIND.CLIENT,
+      invoke: () => {
+        if (selectedItem && pgAdmin?.Browser?.tree?.refresh) {
+          pgAdmin.Browser.tree.refresh(selectedItem);
+        } else {
+          pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:refresh');
+        }
+      },
+    },
+  });
+  catalogControlIds.push(refreshAction);
   menuItems.push({
     id: refreshAction,
     actionId: refreshAction,
@@ -427,10 +733,42 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
     i18nKey: 'menu.object.refresh_catalog.text',
     hintKey: 'menu.object.refresh_catalog.hint',
     iconKey: 'action.refresh',
-    index: 25,
+    index: menuIndex + 10,
   });
 
+  const groups = [];
+  if (viewControlIds.length > 0) {
+    groups.push({
+      id: 'page-views',
+      label: gettext('Views'),
+      controls: viewControlIds,
+    });
+  }
+  if (connectorModeControlIds.length > 0) {
+    groups.push({
+      id: 'page-connector-modes',
+      label: gettext('Registration Mode'),
+      controls: connectorModeControlIds,
+    });
+  }
+  if (pageControlIds.length > 0) {
+    groups.push({
+      id: 'page-actions',
+      label: gettext('Actions'),
+      controls: pageControlIds,
+    });
+  }
+  if (catalogControlIds.length > 0) {
+    groups.push({
+      id: 'page-catalog',
+      label: gettext('Catalog'),
+      controls: catalogControlIds,
+    });
+  }
+
   return {
+    title: pageTitle,
+    activeView: resolvedView,
     actions,
     menus: [
       {
@@ -443,20 +781,10 @@ function buildNavigatorSelectionConfig(pgAdmin, instanceId, selectedItem = null,
     ],
     ribbonTabs: [
       {
-        id: 'navigator-home',
-        label: gettext('Navigator'),
-        groups: [
-          {
-            id: 'navigator-object',
-            label: gettext('Selected Object'),
-            controls: [addAction, propertiesAction, removeAction],
-          },
-          {
-            id: 'navigator-catalog',
-            label: gettext('Catalog'),
-            controls: [refreshAction],
-          },
-        ],
+        id: `page-${instanceId}`,
+        label: pageTitle,
+        allowEmpty: true,
+        groups,
       },
     ],
   };
@@ -474,7 +802,10 @@ export function navigatorTabIdsForNodeType(nodeType, pgAdmin = null) {
   ) {
     return ['properties', 'statistics'];
   }
-  if (nodeType === 'cde_resource_group' || String(nodeType).startsWith('coll-')) {
+  if (nodeType === 'cde_resource_group') {
+    return ['properties'];
+  }
+  if (String(nodeType).startsWith('coll-')) {
     return ['properties', 'statistics'];
   }
   if (nodeType === 'database') {
@@ -495,21 +826,315 @@ export function navigatorTabIdsForNodeType(nodeType, pgAdmin = null) {
   return ['properties', 'sql', 'statistics', 'dependencies', 'dependents'];
 }
 
-function DataNavigatorWorkArea({instanceId}) {
+export function CatalogPageCoordinator() {
   const shell = useProjectShell();
   const shellRef = useRef(shell);
   shellRef.current = shell;
-  const lastSelectionKeyRef = useRef(null);
   const pgAdmin = usePgAdmin();
-  const [selectedNodeType, setSelectedNodeType] = useState(() => {
-    const item = pgAdmin?.Browser?.tree?.selected?.();
-    const data = item ? pgAdmin?.Browser?.tree?.itemData?.(item) : null;
-    return data?._type || null;
-  });
-  const [view, setView] = useState('connectors');
+  const syncingTreeRef = useRef(false);
+
+  const refreshOpenCatalogInstances = useCallback(() => {
+    const currentShell = shellRef.current;
+    if (!currentShell?.updateInstance) return;
+    (currentShell.instances || []).forEach((inst) => {
+      if (inst.appId !== 'data-navigator' || inst.meta?.isCustomInlineTab) return;
+      const isUnbound = Boolean(inst.meta?.isUnboundNavigator);
+      const item = isUnbound ? null : inst.meta?.boundNodeItem || null;
+      const liveData = isUnbound
+        ? null
+        : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || inst.meta?.boundNodeData || null;
+      const cfg = buildNavigatorSelectionConfig(
+        pgAdmin,
+        inst.instanceId,
+        item,
+        liveData,
+        inst.meta?.activeView || null,
+        {
+          connectorProfileId: inst.meta?.connectorProfileId,
+          connectorIntent: inst.meta?.connectorIntent,
+        }
+      );
+      let nextTitle = cfg.title;
+      if (isUnbound) {
+        const suffixMatch = String(inst.title || '').match(/\s+(#\d+)$/);
+        const baseTitle = translateShell(
+          currentShell.locale,
+          'app.data-navigator.label',
+          gettext('Data Navigator')
+        );
+        nextTitle = suffixMatch ? `${baseTitle} ${suffixMatch[1]}` : baseTitle;
+      }
+      currentShell.updateInstance(inst.instanceId, {
+        title: nextTitle,
+        statusText: `${nextTitle} — ${gettext('Ready')}`,
+        actions: cfg.actions,
+        menus: cfg.menus,
+        ribbonTabs: cfg.ribbonTabs,
+        meta: {
+          ...inst.meta,
+          boundNodeData: liveData,
+          activeView: cfg.activeView,
+        },
+      });
+    });
+  }, [pgAdmin]);
+
+  useEffect(() => {
+    const events = pgAdmin?.Browser?.Events;
+    if (!events?.on) return undefined;
+
+    const onTreeSelected = (rawItem, rawData) => {
+      if (syncingTreeRef.current) return;
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const item = rawItem || pgAdmin?.Browser?.tree?.selected?.() || null;
+      const data = rawData || (item ? pgAdmin?.Browser?.tree?.itemData?.(item) : null);
+      if (!data || !data._type || data._type === 'server_group') {
+        return;
+      }
+
+      const nodeKey = catalogNodeIdentityKey(data);
+      if (!nodeKey) return;
+
+      const existing = (currentShell.instances || []).find(
+        (inst) => inst.appId === 'data-navigator' && inst.meta?.catalogNodeKey === nodeKey
+      );
+      if (existing) {
+        const cfg = buildNavigatorSelectionConfig(
+          pgAdmin,
+          existing.instanceId,
+          item,
+          data,
+          existing.meta?.activeView || null,
+          {
+            connectorProfileId: existing.meta?.connectorProfileId,
+            connectorIntent: existing.meta?.connectorIntent,
+          }
+        );
+        currentShell.updateInstance(existing.instanceId, {
+          title: cfg.title,
+          statusText: `${cfg.title} — ${gettext('Ready')}`,
+          actions: cfg.actions,
+          menus: cfg.menus,
+          ribbonTabs: cfg.ribbonTabs,
+          meta: {
+            ...existing.meta,
+            isUnboundNavigator: false,
+            catalogNodeKey: nodeKey,
+            boundNodeItem: item,
+            boundNodeData: data,
+            activeView: cfg.activeView,
+          },
+        });
+        currentShell.focusInstance(existing.instanceId);
+        return;
+      }
+
+      const unbound = (currentShell.instances || []).find(
+        (inst) => inst.appId === 'data-navigator' && inst.meta?.isUnboundNavigator === true
+      );
+      if (unbound) {
+        const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
+        const initialView = allowed.includes('properties') ? 'properties' : allowed[0];
+        const cfg = buildNavigatorSelectionConfig(
+          pgAdmin,
+          unbound.instanceId,
+          item,
+          data,
+          initialView
+        );
+        currentShell.updateInstance(unbound.instanceId, {
+          title: cfg.title,
+          statusText: `${cfg.title} — ${gettext('Ready')}`,
+          actions: cfg.actions,
+          menus: cfg.menus,
+          ribbonTabs: cfg.ribbonTabs,
+          meta: {
+            ...unbound.meta,
+            isUnboundNavigator: false,
+            catalogNodeKey: nodeKey,
+            boundNodeItem: item,
+            boundNodeData: data,
+            activeView: cfg.activeView,
+            connectorProfileId: null,
+            connectorIntent: 'endpoint',
+          },
+        });
+        currentShell.focusInstance(unbound.instanceId);
+        return;
+      }
+
+      const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
+      const initialView = allowed.includes('properties') ? 'properties' : allowed[0];
+      currentShell.openApplication('data-navigator', {
+        title: formatCatalogPageTitle(data),
+        isUnboundNavigator: false,
+        catalogNodeKey: nodeKey,
+        boundNodeItem: item,
+        boundNodeData: data,
+        activeView: initialView,
+        connectorProfileId: null,
+        connectorIntent: 'endpoint',
+        leftOpen:
+          currentShell.focusedInstance?.supportsLeftDrawer
+            ? Boolean(currentShell.shellLeftDrawerOpen)
+            : true,
+      });
+    };
+
+    const onCatalogNodeChanged = () => {
+      refreshOpenCatalogInstances();
+    };
+
+    const onSelectViewEvent = (ev) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const requestedView = ev?.detail?.tab;
+      const targetId = ev?.detail?.instanceId || currentShell.focusedId;
+      const target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      if (target && target.appId === 'data-navigator' && requestedView) {
+        const isUnbound = Boolean(target.meta?.isUnboundNavigator);
+        const item = isUnbound ? null : target.meta?.boundNodeItem || null;
+        const data = isUnbound
+          ? null
+          : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null;
+        const cfg = buildNavigatorSelectionConfig(
+          pgAdmin,
+          target.instanceId,
+          item,
+          data,
+          requestedView,
+          {
+            connectorProfileId: target.meta?.connectorProfileId,
+            connectorIntent: target.meta?.connectorIntent,
+          }
+        );
+        currentShell.updateInstance(target.instanceId, {
+          actions: cfg.actions,
+          menus: cfg.menus,
+          ribbonTabs: cfg.ribbonTabs,
+          meta: {
+            ...target.meta,
+            activeView: cfg.activeView,
+          },
+        });
+      }
+      if (ev?.detail?.focusEditor && typeof document !== 'undefined') {
+        setTimeout(() => {
+          const root = document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]');
+          const portInput =
+            root?.querySelector('input[type="number"]:not([disabled])') ||
+            root?.querySelector('[data-cdeadmin-qa-key^="object-editor."] input:not([disabled])');
+          portInput?.focus?.();
+          portInput?.select?.();
+        }, 60);
+      }
+    };
+
+    const onConnectorModeEvent = (ev) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const targetId = ev?.detail?.instanceId || currentShell.focusedId;
+      const target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      if (!target || target.appId !== 'data-navigator') return;
+      const nextProfileId =
+        ev?.detail?.profileId !== undefined
+          ? ev.detail.profileId
+          : target.meta?.connectorProfileId ?? null;
+      const nextIntent =
+        ev?.detail?.intent !== undefined
+          ? ev.detail.intent
+          : target.meta?.connectorIntent || 'endpoint';
+      const item = target.meta?.boundNodeItem || null;
+      const data =
+        (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null;
+      const cfg = buildNavigatorSelectionConfig(
+        pgAdmin,
+        target.instanceId,
+        item,
+        data,
+        'properties',
+        {
+          connectorProfileId: nextProfileId,
+          connectorIntent: nextIntent,
+        }
+      );
+      currentShell.updateInstance(target.instanceId, {
+        actions: cfg.actions,
+        menus: cfg.menus,
+        ribbonTabs: cfg.ribbonTabs,
+        meta: {
+          ...target.meta,
+          activeView: cfg.activeView,
+          connectorProfileId: nextProfileId,
+          connectorIntent: nextIntent,
+        },
+      });
+    };
+
+    events.on('pgadmin-browser:tree:selected', onTreeSelected);
+    events.on('pgadmin:browser:node:updated', onCatalogNodeChanged);
+    events.on('pgadmin-browser:tree:updated', onCatalogNodeChanged);
+    events.on('pgadmin:database:connected', onCatalogNodeChanged);
+    events.on('pgadmin:server:connected', onCatalogNodeChanged);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
+      window.addEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+      window.addEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
+    }
+
+    return () => {
+      events.off?.('pgadmin-browser:tree:selected', onTreeSelected);
+      events.off?.('pgadmin:browser:node:updated', onCatalogNodeChanged);
+      events.off?.('pgadmin-browser:tree:updated', onCatalogNodeChanged);
+      events.off?.('pgadmin:database:connected', onCatalogNodeChanged);
+      events.off?.('pgadmin:server:connected', onCatalogNodeChanged);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
+        window.removeEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+        window.removeEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
+      }
+    };
+  }, [pgAdmin, refreshOpenCatalogInstances]);
+
+  // Keep the tree highlight synchronized when switching between open catalog page tabs
+  useEffect(() => {
+    const focused = shell?.focusedInstance;
+    if (!focused || focused.appId !== 'data-navigator') return;
+    const boundItem = focused.meta?.boundNodeItem;
+    const tree = pgAdmin?.Browser?.tree;
+    if (!boundItem || !tree?.select) return;
+    const currentSelected = tree.selected?.();
+    if (currentSelected === boundItem) return;
+    syncingTreeRef.current = true;
+    Promise.resolve(tree.select(boundItem))
+      .catch(() => {})
+      .finally(() => {
+        syncingTreeRef.current = false;
+      });
+  }, [pgAdmin, shell?.focusedId, shell?.focusedInstance]);
+
+  return null;
+}
+
+export function DataNavigatorWorkArea({instanceId}) {
+  const shell = useProjectShell();
+  const pgAdmin = usePgAdmin();
   const [engines, setEngines] = useState([]);
   const [enginesLoading, setEnginesLoading] = useState(true);
   const [, setLocaleRev] = useState(0);
+
+  const instance =
+    shell?.instances?.find((inst) => inst.instanceId === instanceId) || shell?.focusedInstance || null;
+  const isUnboundNavigator = instance?.meta?.isUnboundNavigator !== false;
+  const boundNodeItem = isUnboundNavigator ? null : instance?.meta?.boundNodeItem || null;
+  const boundNodeData = isUnboundNavigator
+    ? null
+    : (boundNodeItem && pgAdmin?.Browser?.tree?.itemData?.(boundNodeItem)) ||
+      instance?.meta?.boundNodeData ||
+      null;
+  const selectedNodeType = boundNodeData?._type || null;
+  const activeView = instance?.meta?.activeView || (selectedNodeType ? 'properties' : 'connectors');
 
   const loadEnabledEngines = useCallback(() => {
     if (typeof fetch !== 'function') {
@@ -531,82 +1156,14 @@ function DataNavigatorWorkArea({instanceId}) {
     loadEnabledEngines();
     if (typeof window === 'undefined') return undefined;
     const onConnectorsChanged = () => loadEnabledEngines();
+    const onLang = (ev) => setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
     window.addEventListener('scratchrobin:connectors-changed', onConnectorsChanged);
-    return () => window.removeEventListener('scratchrobin:connectors-changed', onConnectorsChanged);
-  }, [loadEnabledEngines]);
-
-  useEffect(() => {
-    const events = pgAdmin?.Browser?.Events;
-    const syncSelectionActions = (item, data) => {
-      const currentShell = shellRef.current;
-      if (!instanceId || !currentShell?.updateInstance) return;
-      const selectionKey = data
-        ? `${data._type || ''}:${data._id ?? data.id ?? data.engine_id ?? data._label ?? ''}:${Boolean(data.connected)}`
-        : 'none';
-      if (lastSelectionKeyRef.current === selectionKey) return;
-      lastSelectionKeyRef.current = selectionKey;
-      const cfg = buildNavigatorSelectionConfig(pgAdmin, instanceId, item, data);
-      currentShell.updateInstance(instanceId, {
-        actions: cfg.actions,
-        menus: cfg.menus,
-        ribbonTabs: cfg.ribbonTabs,
-      });
-    };
-    const onTreeSelected = (item, data) => {
-      const nextType = data?._type || null;
-      setSelectedNodeType(nextType);
-      syncSelectionActions(item, data);
-      const allowed = navigatorTabIdsForNodeType(nextType, pgAdmin);
-      setView((prev) => (allowed.includes(prev) ? prev : allowed[0]));
-    };
-    const onNodeDeselected = () => {
-      setSelectedNodeType(null);
-      syncSelectionActions(null, null);
-    };
-    const onSelectTab = (ev) => {
-      const requested = ev?.detail?.tab;
-      if (requested) {
-        setView(requested);
-      }
-      if (ev?.detail?.focusEditor && typeof document !== 'undefined') {
-        setTimeout(() => {
-          const root = document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]');
-          const portInput =
-            root?.querySelector('input[type="number"]:not([disabled])') ||
-            root?.querySelector('[data-cdeadmin-qa-key^="object-editor."] input:not([disabled])');
-          portInput?.focus?.();
-          portInput?.select?.();
-        }, 60);
-      }
-    };
-    events?.on?.('pgadmin-browser:tree:selected', onTreeSelected);
-    events?.on?.('pgadmin-browser:node:deselected', onNodeDeselected);
-    const onLanguageChanged = (ev) => {
-      setLocaleRev((prev) => ev?.detail?.revision ?? prev + 1);
-      lastSelectionKeyRef.current = null;
-      const curItem = pgAdmin?.Browser?.tree?.selected?.();
-      const curData = curItem ? pgAdmin?.Browser?.tree?.itemData?.(curItem) : null;
-      syncSelectionActions(curItem, curData);
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('scratchrobin:navigator-select-tab', onSelectTab);
-      window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
-    }
-    const currentItem = pgAdmin?.Browser?.tree?.selected?.();
-    const currentData = currentItem ? pgAdmin?.Browser?.tree?.itemData?.(currentItem) : null;
-    if (currentData) {
-      setSelectedNodeType(currentData._type || null);
-      syncSelectionActions(currentItem, currentData);
-    }
+    window.addEventListener('scratchrobin:language-changed', onLang);
     return () => {
-      events?.off?.('pgadmin-browser:tree:selected', onTreeSelected);
-      events?.off?.('pgadmin-browser:node:deselected', onNodeDeselected);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('scratchrobin:navigator-select-tab', onSelectTab);
-        window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
-      }
+      window.removeEventListener('scratchrobin:connectors-changed', onConnectorsChanged);
+      window.removeEventListener('scratchrobin:language-changed', onLang);
     };
-  }, [instanceId, pgAdmin]);
+  }, [loadEnabledEngines]);
 
   const focusEngineInTree = useCallback(
     async (engineId) => {
@@ -791,43 +1348,45 @@ function DataNavigatorWorkArea({instanceId}) {
   );
 
   const allPages = [
-    {id: 'connectors', label: gettext('Connectors'), render: renderConnectorsOverview},
-    {id: 'properties', label: gettext('Properties'), render: () => <Properties />},
-    {id: 'sql', label: gettext('SQL'), render: () => <SQL />},
-    {id: 'statistics', label: gettext('Statistics'), render: () => <Statistics />},
-    {id: 'dependencies', label: gettext('Dependencies'), render: () => <Dependencies />},
-    {id: 'dependents', label: gettext('Dependents'), render: () => <Dependents />},
+    {id: 'connectors', render: renderConnectorsOverview},
+    {
+      id: 'properties',
+      render: () => (
+        <Properties boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+      ),
+    },
+    {
+      id: 'sql',
+      render: () => <SQL boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />,
+    },
+    {
+      id: 'statistics',
+      render: () => (
+        <Statistics boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+      ),
+    },
+    {
+      id: 'dependencies',
+      render: () => (
+        <Dependencies boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+      ),
+    },
+    {
+      id: 'dependents',
+      render: () => (
+        <Dependents boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+      ),
+    },
   ];
   const allowedTabIds = navigatorTabIdsForNodeType(selectedNodeType, pgAdmin);
   const pages = allPages.filter((p) => allowedTabIds.includes(p.id));
-  const current = pages.find((p) => p.id === view) || pages[0];
+  const current = pages.find((p) => p.id === activeView) || pages[0];
   return (
     <Box
       data-cdeadmin-qa-key="data-navigator-work-area"
+      data-active-view={current.id}
       sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}
     >
-      <Box
-        role="tablist"
-        aria-label={gettext('Catalog Object Views')}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          px: 2.5,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          flexShrink: 0,
-        }}
-      >
-        {pages.map((p) => (
-          <Tab
-            key={p.id}
-            label={p.label}
-            active={p.id === current.id}
-            onActivate={() => setView(p.id)}
-          />
-        ))}
-      </Box>
       {current.id === 'connectors' ? (
         <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 0}}>
           {current.render()}
@@ -1108,35 +1667,255 @@ export function bindDesignerOpenEvents(
   return () => removers.forEach((remove) => remove());
 }
 
-const getMorePanelGroup = (tabsData) => {
-  return {
-    ...getDefaultGroup(),
-    panelExtra: () => <MainMoreToolbar tabsData={tabsData}/>
-  };
+export function ProjectShellDockerBridge({config = [], enabled = false}) {
+  const shell = useProjectShell();
+  const pgAdmin = usePgAdmin();
+  const shellRef = useRef(shell);
+  shellRef.current = shell;
+  const panelMetaRef = useRef(new Map());
+
+  const adapter = useMemo(() => {
+    const eventBus = new EventBus();
+    const metaMap = panelMetaRef.current;
+
+    const find = (panelId) => {
+      if (panelId === BROWSER_PANELS.MAIN) {
+        return {
+          id: BROWSER_PANELS.MAIN,
+          internal: {title: gettext('Properties'), closable: false},
+        };
+      }
+      const inst = (shellRef.current?.instances || []).find((i) => i.instanceId === panelId);
+      if (!inst) return null;
+      const stored = metaMap.get(panelId) || {};
+      const tabs = (shellRef.current?.instances || []).map((t) => ({
+        id: t.instanceId,
+        internal: metaMap.get(t.instanceId) || {
+          title: t.title,
+          iconKey: t.iconKey,
+          closable: t.closable !== false,
+        },
+      }));
+      return {
+        id: inst.instanceId,
+        beforeClose: inst.onBeforeClose,
+        metaData: stored.metaData,
+        internal: {
+          title: inst.title,
+          iconKey: inst.iconKey,
+          closable: inst.closable !== false,
+          ...stored,
+        },
+        parent: {
+          id: BROWSER_PANELS.MAIN,
+          activeId: shellRef.current?.focusedId || null,
+          tabs,
+        },
+      };
+    };
+
+    const focus = (panelId) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return false;
+      if (panelId === BROWSER_PANELS.SQL) {
+        const exists = (currentShell.instances || []).some(
+          (i) => i.instanceId === BROWSER_PANELS.SQL
+        );
+        if (!exists) {
+          const sqlTitle = gettext('SQL Editor');
+          metaMap.set(BROWSER_PANELS.SQL, {
+            title: sqlTitle,
+            iconKey: 'tool.query',
+            closable: true,
+          });
+          currentShell.openInlineTab({
+            instanceId: BROWSER_PANELS.SQL,
+            appId: 'data-navigator',
+            title: sqlTitle,
+            iconKey: 'tool.query',
+            closable: true,
+            supportsLeftDrawer: true,
+            supportsRightDrawer: true,
+            supportsTabbedIconBar: true,
+            renderWorkArea: () => <SQLConnections />,
+          });
+        } else {
+          currentShell.focusInstance(BROWSER_PANELS.SQL);
+        }
+        eventBus.fireEvent(LAYOUT_EVENTS.ACTIVE, BROWSER_PANELS.SQL);
+        return true;
+      }
+      const ok = currentShell.focusInstance(panelId);
+      if (ok) {
+        eventBus.fireEvent(LAYOUT_EVENTS.ACTIVE, panelId);
+      }
+      return ok;
+    };
+
+    const openTab = (panelData, _refTabId, _direction = 'middle', forceRerender = false) => {
+      const currentShell = shellRef.current;
+      if (!currentShell || !panelData?.id) return false;
+      const existing = (currentShell.instances || []).find((i) => i.instanceId === panelData.id);
+      if (existing && !forceRerender) {
+        return focus(panelData.id);
+      }
+      const resolvedTitle = gettext.retranslate(panelData.title || '');
+      const resolvedIconKey = dockTabIconKey({
+        id: panelData.id,
+        title: resolvedTitle,
+        icon: panelData.icon,
+        iconKey: panelData.iconKey,
+      });
+      metaMap.set(panelData.id, {
+        title: resolvedTitle,
+        tooltip: panelData.tooltip ?? resolvedTitle,
+        icon: panelData.icon,
+        iconKey: resolvedIconKey,
+        closable: panelData.closable !== false,
+        manualClose: Boolean(panelData.manualClose),
+        floatable: panelData.floatable !== false,
+        detachable: Boolean(panelData.detachable),
+        metaData: panelData.metaData,
+      });
+      currentShell.openInlineTab({
+        instanceId: panelData.id,
+        appId: 'data-navigator',
+        title: resolvedTitle,
+        iconKey: resolvedIconKey,
+        closable: panelData.closable !== false,
+        supportsLeftDrawer: true,
+        supportsRightDrawer: true,
+        supportsTabbedIconBar: true,
+        onBeforeClose: panelData.beforeClose || null,
+        renderWorkArea: () => panelData.content,
+      });
+      eventBus.fireEvent(LAYOUT_EVENTS.ACTIVE, panelData.id);
+      return true;
+    };
+
+    const openDialog = (panelData) =>
+      openTab({...panelData, closable: true}, BROWSER_PANELS.MAIN, 'middle', true);
+
+    const close = (panelId, force = false) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return false;
+      const inst = (currentShell.instances || []).find((i) => i.instanceId === panelId);
+      if (!inst) return false;
+      const stored = metaMap.get(panelId);
+      if (stored?.manualClose && !force) {
+        eventBus.fireEvent(LAYOUT_EVENTS.CLOSING, panelId);
+        return true;
+      }
+      const res = currentShell.closeInstance(panelId, {force: Boolean(force)});
+      const finalize = (closed) => {
+        if (closed === false) return false;
+        metaMap.delete(panelId);
+        eventBus.fireEvent(LAYOUT_EVENTS.CLOSING, panelId);
+        eventBus.fireEvent(LAYOUT_EVENTS.REMOVE, panelId);
+        if (shellRef.current?.focusedId) {
+          eventBus.fireEvent(LAYOUT_EVENTS.ACTIVE, shellRef.current.focusedId);
+        }
+        return true;
+      };
+      if (res && typeof res.then === 'function') {
+        return res.then(finalize);
+      }
+      return finalize(res);
+    };
+
+    const closeAll = (panelId, exceptCurrent = false) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      (currentShell.instances || []).forEach((inst) => {
+        if (inst.closable === false) return;
+        if (exceptCurrent && inst.instanceId === panelId) return;
+        close(inst.instanceId);
+      });
+    };
+
+    const setTitle = (panelId, title, icon, tooltip) => {
+      const stored = metaMap.get(panelId) || {};
+      const nextTitle = title ? gettext.retranslate(title) : stored.title;
+      const nextIconKey = icon
+        ? dockTabIconKey({id: panelId, title: nextTitle, icon})
+        : stored.iconKey;
+      metaMap.set(panelId, {
+        ...stored,
+        ...(nextTitle ? {title: nextTitle} : {}),
+        ...(icon ? {icon, iconKey: nextIconKey} : {}),
+        ...(tooltip ? {tooltip} : {}),
+      });
+      shellRef.current?.updateInstance?.(panelId, {
+        ...(nextTitle ? {title: nextTitle, statusText: `${nextTitle} — ${gettext('Ready')}`} : {}),
+        ...(nextIconKey ? {iconKey: nextIconKey} : {}),
+      });
+      eventBus.fireEvent(LAYOUT_EVENTS.REFRESH_TITLE, panelId);
+    };
+
+    const setInternalAttrs = (panelId, attrs) => {
+      const stored = metaMap.get(panelId) || {};
+      metaMap.set(panelId, {...stored, ...attrs});
+    };
+
+    const getInternalAttrs = (panelId) => metaMap.get(panelId) || find(panelId)?.internal || {};
+
+    return {
+      eventBus,
+      find,
+      findPanels: () =>
+        (shellRef.current?.instances || []).map((i) => find(i.instanceId)).filter(Boolean),
+      focus,
+      openTab,
+      openDialog,
+      close,
+      closeAll,
+      isTabOpen: (panelId) => Boolean(find(panelId)),
+      isTabVisible: (panelId) => shellRef.current?.focusedId === panelId,
+      setTitle,
+      setInternalAttrs,
+      getInternalAttrs,
+      place: () => false,
+      moveAdjacent: () => false,
+      navigatePanel: () => {},
+      resetLayout: () => eventBus.fireEvent(LAYOUT_EVENTS.RESET),
+      saveLayout: () => {},
+      loadLayout: () => {},
+    };
+  }, []);
+
+  if (pgAdmin?.Browser?.docker && pgAdmin.Browser.docker.default_workspace !== adapter) {
+    pgAdmin.Browser.docker.default_workspace = adapter;
+  }
+
+  useEffect(() => {
+    if (!pgAdmin?.Browser?.docker) return undefined;
+    pgAdmin.Browser.docker.default_workspace = adapter;
+    if (enabled && Array.isArray(config)) {
+      config.forEach((item) => {
+        if (item?.docker) {
+          pgAdmin.Browser.docker[item.docker] = adapter;
+          adapter.eventBus.fireEvent(LAYOUT_EVENTS.INIT);
+        }
+      });
+    }
+    return undefined;
+  }, [adapter, config, enabled, pgAdmin]);
+
+  return null;
+}
+
+ProjectShellDockerBridge.propTypes = {
+  config: PropTypes.array,
+  enabled: PropTypes.bool,
 };
 
-let defaultLayout = {
-  dockbox: {
-    mode: 'horizontal',
-    children: [
-      {
-        size: 100,
-        id: BROWSER_PANELS.MAIN,
-        group: 'playground',
-        tabs: defaultTabsData.map((t)=>LayoutDocker.getPanel(t)),
-        panelLock: {panelStyle: 'playground'},
-      },
-    ]
-  },
-};
-
-function Layouts({browser, platform, topBarMode = 'menu'}) {
+function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
   const pgAdmin = usePgAdmin();
   const surfaceHost = useRef(null);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const designStoreClient = useMemo(() => new DesignStoreClient(), []);
   const {
-    config, enabled, currentWorkspace,
+    config, enabled,
     setObjectExplorerVisible, changeWorkspace,
   } = useWorkspace();
 
@@ -1409,7 +2188,7 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
 
   useEffect(() => () => surfaceHost.current?.dispose(), []);
 
-  const buildShellApplication = useCallback(({appId, appMeta, instanceId, sequence}) => {
+  const buildShellApplication = useCallback(({appId, appMeta, instanceId, sequence, options = {}}) => {
     const inspectorRightDrawer = () => (
       <InspectorHost
         corePages={[
@@ -1422,24 +2201,42 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
     );
 
     if (appId === 'data-navigator') {
-      const selectedItem = pgAdmin?.Browser?.tree?.selected?.() || null;
-      const selectedData = selectedItem
-        ? pgAdmin?.Browser?.tree?.itemData?.(selectedItem) || null
-        : null;
+      const hasBoundNode = Boolean(options.boundNodeData && options.boundNodeData._type);
+      const isUnboundNavigator =
+        options.isUnboundNavigator !== undefined
+          ? Boolean(options.isUnboundNavigator)
+          : !hasBoundNode;
+      const boundItem = isUnboundNavigator ? null : options.boundNodeItem || null;
+      const boundData = isUnboundNavigator ? null : options.boundNodeData || null;
       const navConfig = buildNavigatorSelectionConfig(
         pgAdmin,
         instanceId,
-        selectedItem,
-        selectedData
+        boundItem,
+        boundData,
+        options.activeView || null
       );
+      const resolvedTitle = isUnboundNavigator
+        ? (sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label)
+        : options.title || navConfig.title;
       return {
-        title: sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label,
+        title: resolvedTitle,
+        leftDrawerTitle: appMeta.label,
+        leftDrawerSharedKey: 'data-navigator:shared-left-tree',
         supportsLeftDrawer: true,
         supportsRightDrawer: true,
         supportsTabbedIconBar: true,
         actions: navConfig.actions,
         menus: navConfig.menus,
         ribbonTabs: navConfig.ribbonTabs,
+        meta: {
+          isUnboundNavigator,
+          catalogNodeKey: isUnboundNavigator
+            ? null
+            : options.catalogNodeKey || catalogNodeIdentityKey(boundData),
+          boundNodeItem: boundItem,
+          boundNodeData: boundData,
+          activeView: navConfig.activeView,
+        },
         renderLeftDrawer: () => (
           <div style={{height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
             <ObjectExplorerToolbar />
@@ -2015,6 +2812,8 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
         username={currentUser?.username || currentUser?.email || ''}
         applicationFactory={buildShellApplication}
       >
+        <ProjectShellDockerBridge config={config} enabled={enabled} />
+        <CatalogPageCoordinator />
         {topBarMode === 'notebook' ? <AppNotebookBar /> : <AppMenuBar />}
         <div
           style={{
@@ -2022,46 +2821,7 @@ function Layouts({browser, platform, topBarMode = 'menu'}) {
               'calc(100% - var(--cde-actual-menu-height, var(--cde-menu-row-height, 32px)))',
           }}
         >
-          <ProjectWorkbenchFrame
-            fallbackArea3={
-              <div style={{height: '100%', width: '100%'}}>
-                <Layout
-                  getLayoutInstance={(obj) => {
-                    pgAdmin.Browser.docker.default_workspace = obj;
-                  }}
-                  defaultLayout={defaultLayout}
-                  layoutId="CDEadmin/Workbench/Main"
-                  savedLayout={null}
-                  groups={{
-                    playground: getMorePanelGroup(defaultTabsData),
-                  }}
-                  resetToTabPanel={BROWSER_PANELS.MAIN}
-                  enableToolEvents
-                  isLayoutVisible={!enabled || currentWorkspace == WORKSPACES.DEFAULT}
-                />
-                {enabled &&
-                  config.map((item) => (
-                    <Layout
-                      key={item.docker}
-                      getLayoutInstance={(obj) => {
-                        pgAdmin.Browser.docker[item.docker] = obj;
-                        obj.eventBus.fireEvent(LAYOUT_EVENTS.INIT);
-                      }}
-                      defaultLayout={item.layout}
-                      layoutId={`Workspace/Layout-${item.workspace}`}
-                      savedLayout={pgAdmin.Browser.utils.layout[`Workspace/Layout-${item.workspace}`]}
-                      groups={{
-                        playground: item?.tabsData
-                          ? getMorePanelGroup(item?.tabsData)
-                          : {...getDefaultGroup()},
-                      }}
-                      resetToTabPanel={BROWSER_PANELS.MAIN}
-                      isLayoutVisible={currentWorkspace == item.workspace}
-                    />
-                  ))}
-              </div>
-            }
-          />
+          <ProjectWorkbenchFrame />
         </div>
         <Dialog
           open={preferencesOpen}

@@ -712,8 +712,8 @@ describe('ProviderWorkspaceContent (resources, navigation and tasks)', () => {
     expect(await screen.findByRole('heading', {
       name: /Inspect MySQL database/,
     })).toBeInTheDocument();
-    const tables = await screen.findAllByRole('table', {name: 'Native provider properties'});
-    expect(tables.some((table) => table.textContent.includes('character set'))).toBe(true);
+    const groups = await screen.findAllByRole('group', {name: 'Native provider properties'});
+    expect(groups.some((grp) => grp.textContent.includes('character set'))).toBe(true);
   });
 
   it('surfaces unique native tasks but omits unsupported tasks', async () => {

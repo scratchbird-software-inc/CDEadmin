@@ -8,84 +8,42 @@
 //////////////////////////////////////////////////////////////////////////
 
 import translations from 'translations';
+import uiCatalogs from '../../pgadmin/static/js/cdeadmin_ui/i18n/ui_catalogs.json';
 
-const BUILTIN_UI_CATALOGS = {
-  fr: {
-    'Data Navigator': 'Navigateur de données',
-    'Navigator': 'Navigateur',
-    'Connectors': 'Connecteurs',
-    'Connectors (%s)': 'Connecteurs (%s)',
-    'Enabled Database Connectors (%s)': 'Connecteurs de bases de données activés (%s)',
-    'Database Engines (On / Off)': 'Moteurs de base de données (Marche / Arrêt)',
-    'Database Engines (On / Off)…': 'Moteurs de base de données (Marche / Arrêt)…',
-    'Local listener detected': 'Écoute locale détectée',
-    'Register…': 'Enregistrer…',
-    'Register Server…': 'Enregistrer un serveur…',
-    'Verify / Connect…': 'Vérifier / Connecter…',
-    'Verify Endpoint': 'Vérifier le point de terminaison',
-    'Create Database…': 'Créer une base de données…',
-    'Register Database…': 'Enregistrer une base…',
-    'Open in Separate Tab…': 'Ouvrir dans un onglet séparé…',
-    'Remove Server…': 'Supprimer le serveur…',
-    'Properties': 'Propriétés',
-    'Statistics': 'Statistiques',
-    'Dependencies': 'Dépendances',
-    'Dependents': 'Dépendants',
-    'Apply Changes': 'Appliquer les modifications',
-    'Save Settings': 'Enregistrer les paramètres',
-    'ScratchRobin Preferences & Workspace Settings': 'Préférences et paramètres ScratchRobin',
-    'User or principal': 'Utilisateur ou principal',
-    'Save Password': 'Enregistrer le mot de passe',
-    'Hide password': 'Masquer le mot de passe',
-    'Show password': 'Afficher le mot de passe',
-    'Cancel': 'Annuler',
-    'Close': 'Fermer',
-    'Apply': 'Appliquer',
-    'Help': 'Aide',
-    'Settings': 'Paramètres',
-    'New': 'Nouveau',
-    'Save': 'Enregistrer',
-    'Undo': 'Annuler',
-    'Redo': 'Rétablir',
-  },
-  de: {
-    'Data Navigator': 'Daten-Navigator',
-    'Navigator': 'Navigator',
-    'Connectors': 'Konnektoren',
-    'Connectors (%s)': 'Konnektoren (%s)',
-    'Verify Endpoint': 'Endpunkt überprüfen',
-    'Properties': 'Eigenschaften',
-    'Statistics': 'Statistiken',
-    'Apply Changes': 'Änderungen anwenden',
-    'Save Settings': 'Einstellungen speichern',
-    'User or principal': 'Benutzer oder Prinzipal',
-    'Cancel': 'Abbrechen',
-    'Close': 'Schließen',
-    'Apply': 'Anwenden',
-    'Help': 'Hilfe',
-    'Settings': 'Einstellungen',
-  },
-  ja: {
-    'Data Navigator': 'データナビゲーター',
-    'Navigator': 'ナビゲーター',
-    'Connectors': 'コネクター',
-    'Connectors (%s)': 'コネクター (%s)',
-    'Verify Endpoint': 'エンドポイントの検証',
-    'Properties': 'プロパティ',
-    'Statistics': '統計情報',
-    'Apply Changes': '変更を適用',
-    'Save Settings': '設定を保存',
-    'Cancel': 'キャンセル',
-    'Close': '閉じる',
-    'Apply': '適用',
-    'Help': 'ヘルプ',
-    'Settings': '設定',
-  },
-};
+const BUILTIN_UI_CATALOGS = uiCatalogs?.gettext || {};
 
 let currentLocale = 'en';
 let catalogRevision = 0;
 const reverseLookup = new Map();
+
+Object.keys(BUILTIN_UI_CATALOGS).forEach((loc) => {
+  const cat = BUILTIN_UI_CATALOGS[loc];
+  if (!cat || typeof cat !== 'object') return;
+  Object.keys(cat).forEach((msgid) => {
+    const val = cat[msgid];
+    if (typeof val === 'string' && val && val !== msgid) {
+      reverseLookup.set(val, msgid);
+    }
+  });
+});
+
+function resolveBuiltinCatalog(normalizedLocale) {
+  if (!normalizedLocale || normalizedLocale === 'en') return null;
+  const underscored = normalizedLocale.replace(/-/g, '_');
+  if (BUILTIN_UI_CATALOGS[underscored]) return BUILTIN_UI_CATALOGS[underscored];
+  const lower = underscored.toLowerCase();
+  if (lower.startsWith('zh_hans') || lower === 'zh_cn' || lower === 'zh') {
+    return BUILTIN_UI_CATALOGS.zh_Hans_CN || null;
+  }
+  if (lower.startsWith('zh_hant') || lower === 'zh_tw' || lower === 'zh_hk') {
+    return BUILTIN_UI_CATALOGS.zh_Hant_TW || null;
+  }
+  if (lower.startsWith('pt')) {
+    return BUILTIN_UI_CATALOGS.pt_BR || null;
+  }
+  const baseLang = underscored.split('_')[0].toLowerCase();
+  return BUILTIN_UI_CATALOGS[baseLang] || null;
+}
 
 function lookupRawTranslation(text) {
   if (typeof text !== 'string' || !text) return text;
@@ -132,17 +90,18 @@ export default function gettext(text, ...replaceArgs) {
 
 gettext.setCatalog = function(nextCatalog, localeCode) {
   const normalizedLocale = String(localeCode || 'en').trim() || 'en';
-  const baseLang = normalizedLocale.split(/[-_]/)[0];
   Object.keys(translations).forEach((k) => {
     delete translations[k];
   });
   if (normalizedLocale !== 'en') {
-    const builtin = BUILTIN_UI_CATALOGS[normalizedLocale] || BUILTIN_UI_CATALOGS[baseLang] || null;
+    const builtin = resolveBuiltinCatalog(normalizedLocale);
     if (builtin) {
       Object.keys(builtin).forEach((msgid) => {
         const val = builtin[msgid];
         translations[msgid] = val;
-        reverseLookup.set(val, msgid);
+        if (val !== msgid) {
+          reverseLookup.set(val, msgid);
+        }
       });
     }
     if (nextCatalog && typeof nextCatalog === 'object') {

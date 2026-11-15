@@ -81,6 +81,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
     const { height, model, disableCache } = this.props;
     const { decorations } = model;
     const { branchPrefs } = this.state;
+    const effectiveRowHeight = Math.max(24, Math.round(Number(this.props.itemHeight) || FileTreeItem.renderHeight));
     const stickyAncestors = branchPrefs.stickyAncestors && this.activeFile && ((this.activeFile as any).depth ?? 0) >= 4
       ? collectActiveAncestors(this.activeFile, model?.root)
       : [];
@@ -145,7 +146,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
                 height={height}
                 width={width}
                 model={model}
-                itemHeight={this.props.itemHeight || FileTreeItem.renderHeight}
+                itemHeight={effectiveRowHeight}
                 onReady={this.handleTreeReady}
                 disableCache={disableCache || false}
               >
@@ -156,6 +157,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
                   activeItem={this.activeFile}
                   branchStepX={branchPrefs.stepX}
                   branchRadius={branchPrefs.radius}
+                  rowHeight={effectiveRowHeight}
                   onClick={this.handleItemClicked}
                   onDoubleClick={this.handleItemDoubleClicked}
                   onContextMenu={this.handleItemCtxMenu}
@@ -725,6 +727,7 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
     if (type === ItemType.Directory &&
         target.closest?.('.directory-toggle')) {
       await this.toggleDirectory(item as Directory);
+      return;
     }
     await this.setActiveFile(item as FileEntry);
 

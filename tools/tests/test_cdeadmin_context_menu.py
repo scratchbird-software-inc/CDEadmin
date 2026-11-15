@@ -467,6 +467,8 @@ class ContextMenuTests(unittest.TestCase):
         self.assertEqual('properties', properties['arguments']['tab'])
         self.assertEqual('open_workspace', properties['handler'])
         edit = by_id['database.firebird.edit']
+        self.assertIn('database.firebird.drop', by_id)
+        self.assertNotIn('database.firebird.remove', by_id)
         recreate = by_id['database.firebird.recreate_empty']
         self.assertEqual('recreate_empty', recreate['arguments']['database_mode'])
         self.assertEqual('database-one', recreate['arguments']['resource_id'])
@@ -581,6 +583,7 @@ class ContextMenuTests(unittest.TestCase):
             'destructive',
             by_id['database.sqlite.drop']['mutation_class'],
         )
+        self.assertNotIn('database.sqlite.remove', by_id)
         # Database tasks are served from ui_descriptors/sqlite/operations.json
         # through the OperationDialog; the legacy menu list is gone.
         declared = declared_database_operations('sqlite')
@@ -602,6 +605,8 @@ class ContextMenuTests(unittest.TestCase):
         })
         by_id = {item['command_id']: item for item in actions}
         catalog = by_id['database.duckdb.catalog_ddn']
+        self.assertIn('database.duckdb.drop', by_id)
+        self.assertNotIn('database.duckdb.remove', by_id)
         self.assertEqual('export', catalog['arguments']['tab'])
         self.assertEqual('duckdb-one', catalog['arguments']['database_target_id'])
         declared = declared_database_operations('duckdb')

@@ -10,6 +10,7 @@
 import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {NavigationMenu} from '@base-ui/react/navigation-menu';
+import gettext from 'sources/gettext';
 import usePreferences from '../../../../preferences/static/js/store';
 import {Icon, inferActionIconKey} from '../icons';
 import {useTActions} from '../actions/t_actions';
@@ -308,11 +309,14 @@ export function ProjectNavigationMenuBar({shell}) {
       }
     };
     const onPlacementsChanged = () => bumpMenu((n) => n + 1);
+    const onLanguageChanged = () => bumpMenu((n) => n + 1);
     window.addEventListener(COLOR_SCHEME_CHANGED_EVENT, onSchemeChanged);
     window.addEventListener(ACTION_PLACEMENTS_CHANGED_EVENT, onPlacementsChanged);
+    window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
     return () => {
       window.removeEventListener(COLOR_SCHEME_CHANGED_EVENT, onSchemeChanged);
       window.removeEventListener(ACTION_PLACEMENTS_CHANGED_EVENT, onPlacementsChanged);
+      window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
     };
   }, []);
 
@@ -461,10 +465,39 @@ export function ProjectNavigationMenuBar({shell}) {
       ? translateShell(locale, 'shell.tone.light', 'Light')
       : activeScheme.id === 'dark'
         ? translateShell(locale, 'shell.tone.dark', 'Dark')
-        : activeScheme.label;
+        : gettext(activeScheme.label);
   const toneSwitchHint = isDark
     ? translateShell(locale, 'shell.tone.switch_to_light', 'Switch to light theme')
     : translateShell(locale, 'shell.tone.switch_to_dark', 'Switch to dark theme');
+  const schemeSelectAria = translateShell(
+    locale,
+    'shell.scheme.select_aria',
+    'Select colour scheme'
+  );
+  const schemeSelectHint = translateShell(
+    locale,
+    'shell.scheme.select_hint',
+    'Choose colour scheme or manage custom palettes'
+  );
+  const schemeHeading = translateShell(locale, 'shell.scheme.heading', 'Colour Schemes');
+  const schemeManageLabel = translateShell(
+    locale,
+    'shell.scheme.customize',
+    'Customize Schemes & Fonts…'
+  );
+  const schemeManageAria = translateShell(
+    locale,
+    'shell.scheme.customize_aria',
+    'Customize Colour Schemes & Fonts'
+  );
+  const settingsBtnLabel = translateShell(locale, 'shell.settings.button', 'Settings');
+  const settingsBtnHint = translateShell(
+    locale,
+    'shell.settings.configure_hint',
+    'Configure ScratchRobin'
+  );
+  const darkBadge = translateShell(locale, 'shell.tone.dark', 'Dark').toUpperCase();
+  const lightBadge = translateShell(locale, 'shell.tone.light', 'Light').toUpperCase();
 
   return (
     <header
@@ -637,8 +670,8 @@ export function ProjectNavigationMenuBar({shell}) {
             <NavigationMenu.Item value="scheme" className="sr-nav-item">
               <NavigationMenu.Trigger
                 className="sr-nav-trigger sr-nav-trigger--utility"
-                aria-label="Select colour scheme"
-                title="Choose colour scheme or manage custom palettes"
+                aria-label={schemeSelectAria}
+                title={schemeSelectHint}
                 data-cdeadmin-qa-key="top-menu-scheme-menu"
               >
                 <span
@@ -674,10 +707,11 @@ export function ProjectNavigationMenuBar({shell}) {
               </NavigationMenu.Trigger>
 
               <NavigationMenu.Content className="sr-nav-content sr-nav-content--compact">
-                <div className="sr-nav-heading">Colour Schemes</div>
-                <ul className="sr-nav-section-list" role="menu" aria-label="Colour Schemes">
+                <div className="sr-nav-heading">{schemeHeading}</div>
+                <ul className="sr-nav-section-list" role="menu" aria-label={schemeHeading}>
                   {toggleableSchemes.map((scheme) => {
                     const selected = scheme.id === activeScheme.id;
+                    const translatedSchemeLabel = gettext(scheme.label);
                     return (
                       <li key={scheme.id} className="sr-nav-list-entry">
                         <NavigationMenu.Link
@@ -691,7 +725,7 @@ export function ProjectNavigationMenuBar({shell}) {
                             <button
                               type="button"
                               role="menuitemradio"
-                              aria-label={scheme.label}
+                              aria-label={translatedSchemeLabel}
                               aria-checked={selected}
                             />
                           }
@@ -737,11 +771,11 @@ export function ProjectNavigationMenuBar({shell}) {
                             />
                           </span>
                           <span className="sr-nav-card-body">
-                            <span className="sr-nav-card-title">{scheme.label}</span>
+                            <span className="sr-nav-card-title">{translatedSchemeLabel}</span>
                           </span>
                           <span className="sr-nav-card-meta" aria-hidden="true">
                             <span className="sr-nav-shortcut">
-                              {scheme.baseTone === 'dark' ? 'DARK' : 'LIGHT'}
+                              {scheme.baseTone === 'dark' ? darkBadge : lightBadge}
                             </span>
                             <span className="sr-nav-check-badge">{selected ? '✓' : ''}</span>
                           </span>
@@ -758,7 +792,7 @@ export function ProjectNavigationMenuBar({shell}) {
                         <button
                           type="button"
                           role="menuitem"
-                          aria-label="Customize Colour Schemes & Fonts"
+                          aria-label={schemeManageAria}
                         />
                       }
                       onClick={() => {
@@ -774,7 +808,7 @@ export function ProjectNavigationMenuBar({shell}) {
                       }}
                     >
                       <span className="sr-nav-card-body">
-                        <span className="sr-nav-card-title">Customize Schemes &amp; Fonts…</span>
+                        <span className="sr-nav-card-title">{schemeManageLabel}</span>
                       </span>
                     </NavigationMenu.Link>
                   </li>
@@ -807,8 +841,8 @@ export function ProjectNavigationMenuBar({shell}) {
         <button
           type="button"
           className="sr-nav-tone-btn"
-          aria-label="Configure ScratchRobin"
-          title="Configure ScratchRobin"
+          aria-label={settingsBtnHint}
+          title={settingsBtnHint}
           data-cdeadmin-qa-key="top-menu-settings"
           onClick={() => {
             if (typeof shell?.openSettingsDialog === 'function') {
@@ -823,7 +857,7 @@ export function ProjectNavigationMenuBar({shell}) {
           }}
         >
           <Icon iconKey="action.settings" decorative size="0.95em" />
-          <span>Settings</span>
+          <span>{settingsBtnLabel}</span>
         </button>
 
         <button

@@ -304,14 +304,15 @@ describe('ProviderWorkspaceContent (properties, forms and catalogs)', () => {
     expect(screen.queryByRole('list')).toBeNull();
   });
 
-  it('keeps one object\'s statistics as a name and value grid', () => {
+  it('renders one object\'s statistics as auto-placing fields rather than a table', () => {
     render(<ObjectInspectorSection initialSection="statistics" resource={{
       display_name: 'assets', resource_kind: 'table',
       extensions: {postgresql: {native: {
         property_sections: ['properties', 'statistics'],
         statistics: {'Table size': '16 kB', 'Live tuples': 3}}}}}} />);
     expect(screen.queryByRole('table', {name: 'Statistics rows'})).toBeNull();
-    expect(screen.getByRole('table', {name: 'Native provider properties'}))
+    expect(screen.queryByRole('table', {name: 'Native provider properties'})).toBeNull();
+    expect(screen.getByRole('group', {name: 'Native provider properties'}))
       .toHaveTextContent('Live tuples');
   });
 
@@ -325,22 +326,18 @@ describe('ProviderWorkspaceContent (properties, forms and catalogs)', () => {
       maxHeight: containedScroll ? '320px' : 'none'});
   });
 
-  it.each([false, true])('lays out nested column metadata for its host (%s)', (containedScroll) => {
+  it.each([false, true])('lays out nested column metadata as auto-placing fields (%s)', (containedScroll) => {
     render(<ObjectInspectorSection containedScroll={containedScroll}
       resource={{display_name: 'T', resource_kind: 'table',
         extensions: {firebird: {native: {property_sections: ['columns'],
           columns: [{name: 'CUSTOMER_ID', details: {nullable: false,
             description: 'A long column description'}}]}}}}} />);
-    const tables = screen.getAllByRole('table');
-    expect(tables).toHaveLength(2);
-    tables.forEach((table, index) => {
-      const columns = getComputedStyle(table).gridTemplateColumns;
-      expect(columns).toBe(containedScroll ?
-        (index === 0 ? 'minmax(160px, 0.7fr) minmax(220px, 1fr)' :
-          'minmax(100px, 0.7fr) minmax(140px, 1fr)') : 'minmax(0, 1fr)');
-    });
+    expect(screen.queryByRole('table')).toBeNull();
+    const groups = screen.getAllByRole('group', {name: 'Native provider properties'});
+    expect(groups.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('CUSTOMER_ID')).toBeVisible();
     expect(screen.getByText('No')).toBeVisible();
+    expect(screen.getByText('A long column description')).toBeVisible();
   });
 
   it('surfaces provider catalog warnings without interpreting markup', () => {

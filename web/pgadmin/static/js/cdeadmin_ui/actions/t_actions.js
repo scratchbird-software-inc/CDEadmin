@@ -232,7 +232,8 @@ export class TActionsRegistry {
   }
 
   unregister(id) {
-    const normalized = normalizeActionId(id);
+    const normalized = String(id || '').trim();
+    if (!normalized) return false;
     const existed = this._actions.delete(normalized);
     this._runtimeStatuses.delete(normalized);
     this._checkedStates.delete(normalized);
@@ -504,11 +505,18 @@ export class TActionsRegistry {
           : typeof action.checked === 'boolean'
             ? 'toggle'
             : 'button';
+      const rawHint = String(action.hint || '').trim();
+      const rawText = String(action.text || '').trim();
+      const resolvedTooltip = !rawHint || rawHint === rawText
+        ? rawText
+        : rawHint.toLowerCase().startsWith(rawText.toLowerCase())
+          ? rawHint
+          : `${rawText} — ${rawHint}`;
       const control = {
         id: (typeof itemSpec === 'object' && itemSpec.controlId) || action.id,
         command: action.id,
         label: action.text,
-        tooltip: action.hint || action.text,
+        tooltip: resolvedTooltip,
         shortcut: action.shortcut || undefined,
         type: controlType,
         size: (typeof itemSpec === 'object' && itemSpec.size) || 'small',
@@ -528,6 +536,9 @@ export class TActionsRegistry {
     const tabs = (tabsSpec || []).map((tab) => ({
       id: tab.id,
       label: tab.label,
+      ...(tab.allowEmpty ? {allowEmpty: true} : {}),
+      ...(tab.closable !== undefined ? {closable: Boolean(tab.closable)} : {}),
+      ...(tab.draggable !== undefined ? {draggable: Boolean(tab.draggable)} : {}),
       ...(tab.context ? {context: tab.context} : {}),
       ...(tab.selectOnContext ? {selectOnContext: true} : {}),
       groups: (tab.groups || []).map((group, idx) => ({
@@ -537,7 +548,7 @@ export class TActionsRegistry {
         priority: Number.isFinite(group.priority) ? group.priority : (100 - idx),
         controls: (group.controls || []).map(mapControl).filter(Boolean),
       })).filter((group) => group.controls.length > 0),
-    })).filter((tab) => tab.groups.length > 0);
+    })).filter((tab) => tab.allowEmpty || tab.groups.length > 0);
 
     const quickAccess = (quickAccessSpec || []).map(mapControl).filter(Boolean);
 

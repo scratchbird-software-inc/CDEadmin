@@ -16,6 +16,7 @@
 
 import {useId} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {NumberField, SecretField, TextArea, TextField} from '../primitives/Field';
 import {Checkbox, Select} from '../primitives/Choice';
 import {ComboBox, MultiSelect, Radio} from '../primitives/AdvancedControls';
@@ -56,8 +57,15 @@ function HelpLine({id, error, help}) {
 HelpLine.propTypes = {id: PropTypes.string, error: PropTypes.string, help: PropTypes.string};
 
 export function fieldHelpText(field) {
-  if(field.available === false) return field.unavailable_reason || 'Not available on this version';
-  return [field.help, field.native_keyword ? `Native: ${field.native_keyword}` : null].filter(Boolean).join(' ');
+  if(field.available === false) {
+    return field.unavailable_reason
+      ? gettext(field.unavailable_reason)
+      : gettext('Not available on this version');
+  }
+  return [
+    field.help ? gettext(field.help) : null,
+    field.native_keyword ? `Native: ${field.native_keyword}` : null,
+  ].filter(Boolean).join(' ');
 }
 
 export default function FieldControl({field, value, onChange, draft={}, context={}, resourceKind,
@@ -68,16 +76,19 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   const help = fieldHelpText(field);
   const qaKey = `object-editor.field.${field.field_id}`;
   const placeholder = resolveSmartPlaceholder(field);
+  const fieldLabel = field.label ? gettext(field.label) : field.label;
   const common = {
-    label: field.label, required: field.required, disabled: isDisabled, fullWidth: true,
+    label: fieldLabel, required: field.required, disabled: isDisabled, fullWidth: true,
     size: dense ? 'small' : 'medium', validationMessage: error || undefined,
     helperText: help || undefined,
     inputProps: {'aria-describedby': error || help ? helpId : undefined, 'data-cdeadmin-qa-key': qaKey},
   };
   const rawOptions = fieldOptions(field, {context, draft, resourceKind});
-  const options = resolveSmartOptions(field, rawOptions);
+  const options = resolveSmartOptions(field, rawOptions).map((opt) =>
+    opt && typeof opt.label === 'string' ? {...opt, label: gettext(opt.label)} : opt
+  );
   const control = field.control;
-  const picker = {label: field.label, required: Boolean(field.required), disabled: isDisabled, fullWidth: true,
+  const picker = {label: fieldLabel, required: Boolean(field.required), disabled: isDisabled, fullWidth: true,
     size: dense ? 'small' : 'medium', validationMessage: error || undefined, helperText: help || undefined,
     placeholder};
 
@@ -111,7 +122,7 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   if(control === 'boolean') {
     return <div className="sr-field" data-cdeadmin-qa-key={qaKey}
       style={{justifyContent: 'center', paddingTop: inGrid ? 0 : 18}}>
-      <Checkbox label={field.label} checked={Boolean(value)} disabled={isDisabled}
+      <Checkbox label={fieldLabel} checked={Boolean(value)} disabled={isDisabled}
         inputProps={{'aria-describedby': error || help ? helpId : undefined}}
         onChange={(checked) => onChange(checked)} />
       <HelpLine id={helpId} error={error} help={help} />
@@ -124,7 +135,7 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   }
   if(control === 'radio') {
     return <div className="sr-field" data-cdeadmin-qa-key={qaKey}>
-      <Radio label={field.label} value={value ?? ''} options={options} disabled={isDisabled}
+      <Radio label={fieldLabel} value={value ?? ''} options={options} disabled={isDisabled}
         onChange={(next) => onChange(next)} />
       <HelpLine id={helpId} error={error} help={help} />
     </div>;
@@ -143,7 +154,7 @@ export default function FieldControl({field, value, onChange, draft={}, context=
       style={{margin: 0, padding: 0, border: 0, minWidth: 0, gridColumn: '1 / -1'}}>
       <legend className="sr-field-label" style={{padding: 0, marginBottom: 4,
         color: error ? 'var(--sr-danger)' : undefined}}>
-        {field.label}{field.required ? ' *' : ''}
+        {fieldLabel}{field.required ? ' *' : ''}
       </legend>
       <Box sx={{display: 'grid', columnGap: 1,
         gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 14rem), 1fr))'}}>
@@ -178,9 +189,9 @@ export default function FieldControl({field, value, onChange, draft={}, context=
   if(control === 'code') {
     return <div className="sr-field" data-cdeadmin-qa-key={qaKey}>
       <label className="sr-field-label" style={{color: error ? 'var(--sr-danger)' : undefined}}>
-        {field.label}{field.required ? ' *' : ''}
+        {fieldLabel}{field.required ? ' *' : ''}
       </label>
-      <CodeEditor label={field.label} value={value ?? ''} language={field.language || 'sql'}
+      <CodeEditor label={fieldLabel} value={value ?? ''} language={field.language || 'sql'}
         readonly={isDisabled} onChange={(next) => onChange(next)} />
       <HelpLine id={helpId} error={error} help={help} />
     </div>;

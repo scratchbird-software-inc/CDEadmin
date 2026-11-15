@@ -15,7 +15,7 @@ export function Tree(props: IFileTreeXProps) {
   const theme = useTheme();
   return <FileTreeX
     {...props}
-    itemHeight={theme.cdeadminPresentation?.treeRowHeight}
+    itemHeight={props.itemHeight ?? theme.cdeadminPresentation?.treeRowHeight}
   />;
 }
 

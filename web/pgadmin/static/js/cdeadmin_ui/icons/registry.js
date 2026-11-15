@@ -170,6 +170,41 @@ function SendReviewIcon(props) {
   );
 }
 
+function StatisticsBarChartIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M3 20h18" />
+      <rect x="5" y="11" width="3.5" height="9" rx="0.8" />
+      <rect x="10.25" y="6" width="3.5" height="14" rx="0.8" />
+      <rect x="15.5" y="8.5" width="3.5" height="11.5" rx="0.8" />
+    </svg>
+  );
+}
+
+function DependenciesGraphIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="18" cy="18" r="3" />
+      <path d="M8.7 10.7L15.3 7.3" />
+      <path d="M8.7 13.3L15.3 16.7" />
+    </svg>
+  );
+}
+
+function DependentsGraphIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="12" r="3" />
+      <path d="M8.7 7.3L15.3 10.7" />
+      <path d="M8.7 16.7L15.3 13.3" />
+    </svg>
+  );
+}
+
 function QueryPauseIcon(props) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -197,6 +232,86 @@ function InspectorDrawerIcon(props) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
       <rect x="3" y="4" width="18" height="16" rx="2.5" />
       <line x1="15" y1="4" x2="15" y2="20" />
+    </svg>
+  );
+}
+
+function ServerHostIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="3" width="18" height="7" rx="2" />
+      <rect x="3" y="14" width="18" height="7" rx="2" />
+      <circle cx="7" cy="6.5" r="1" fill="currentColor" />
+      <circle cx="7" cy="17.5" r="1" fill="currentColor" />
+      <line x1="11" y1="6.5" x2="17" y2="6.5" />
+      <line x1="11" y1="17.5" x2="17" y2="17.5" />
+    </svg>
+  );
+}
+
+function EmbeddedHostIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <line x1="8" y1="20" x2="16" y2="20" />
+      <line x1="12" y1="16" x2="12" y2="20" />
+    </svg>
+  );
+}
+
+function SectionTagIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <circle cx="7" cy="7" r="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SectionColumnsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="9" y1="3" x2="9" y2="21" />
+      <line x1="15" y1="3" x2="15" y2="21" />
+    </svg>
+  );
+}
+
+function SectionConstraintsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <polyline points="9 12 11 14 15 10" />
+    </svg>
+  );
+}
+
+function SectionIndexesIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <polyline points="3 6 4.5 7.5 6.5 5" />
+      <polyline points="3 12 4.5 13.5 6.5 11" />
+      <polyline points="3 18 4.5 19.5 6.5 17" />
+    </svg>
+  );
+}
+
+function SectionCommentsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function SectionOperationsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }
@@ -310,12 +425,15 @@ const ACTION_COMPONENTS = Object.freeze({
   create_database: DatabaseAddIcon,
   cut: CutIcon,
   delete: DeleteIcon,
+  dependencies: DependenciesGraphIcon,
+  dependents: DependentsGraphIcon,
   detach: UnlinkIcon,
   disconnect: UnlinkIcon,
   documentation: HelpCircleIcon,
   drop: DeleteIcon,
   duplicate: CopyIcon,
   edit: EditIcon,
+  embedded_host: EmbeddedHostIcon,
   endpoint_source: EndpointSourceIcon,
   endpoint_target: EndpointTargetIcon,
   execute: PlayCircleIcon,
@@ -346,13 +464,21 @@ const ACTION_COMPONENTS = Object.freeze({
   schedule: CalendarClockIcon,
   script: CodeIcon,
   search: SearchIcon,
+  section_columns: SectionColumnsIcon,
+  section_comments: SectionCommentsIcon,
+  section_constraints: SectionConstraintsIcon,
+  section_indexes: SectionIndexesIcon,
+  section_operations: SectionOperationsIcon,
+  section_tags: SectionTagIcon,
   security: ShieldUserIcon,
   select_marquee: SelectMarqueeIcon,
   select_pointer: SelectPointerIcon,
   send_review: SendReviewIcon,
+  server_host: ServerHostIcon,
   settings: SettingsIcon,
   sort: SortIcon,
   sql_preview: CodeIcon,
+  statistics: StatisticsBarChartIcon,
   terminal: CommandLineIcon,
   transaction: TransactionIcon,
   undo: UndoIcon,
@@ -766,4 +892,48 @@ export function inferActionIconKey(action={}) {
     .filter(Boolean).join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
   const match = ACTION_INFERENCE.find(([, pattern])=>pattern.test(source));
   return match ? `action.${match[0]}` : '';
+}
+
+export function resolveSectionIconKey(sectionKey, titleOrEngine='') {
+  const raw = String(sectionKey ?? '').trim().toLowerCase();
+  const extra = String(titleOrEngine ?? '').trim().toLowerCase();
+  if (raw === 'connection') return 'action.connect';
+  if (raw === 'authentication' || raw === 'auth') return 'action.security';
+  if (raw === 'ssl/tls' || raw === 'ssl' || raw === 'tls') return 'action.lock';
+  if (raw === 'advanced' || raw === 'options') return 'action.settings';
+  if (raw === 'tags') return 'action.section_tags';
+  if (raw === 'engine') {
+    const engMatch = ENGINE_IDS.find(
+      (id) => extra === id || extra.replace(/[^a-z0-9]+/g, '_') === id || extra.startsWith(id)
+    );
+    return engMatch ? `engine.${engMatch}` : 'action.layers';
+  }
+  const directEngine = ENGINE_IDS.find((id) => raw === id);
+  if (directEngine) return `engine.${directEngine}`;
+  if (raw === 'general' || raw === 'properties' || raw === 'summary' || raw === 'state') {
+    return 'action.properties';
+  }
+  if (raw === 'columns' || raw === 'fields') return 'action.section_columns';
+  if (raw === 'constraints' || raw === 'checks') return 'action.section_constraints';
+  if (raw === 'indexes' || raw === 'keys') return 'action.section_indexes';
+  if (raw === 'triggers' || raw === 'events') return 'action.send_review';
+  if (raw === 'grants' || raw === 'privileges' || raw === 'security') return 'action.security';
+  if (raw === 'comments' || raw === 'notes') return 'action.section_comments';
+  if (
+    raw === 'sql' ||
+    raw === 'ddl' ||
+    raw === 'definition' ||
+    raw === 'calculations' ||
+    raw === 'code'
+  ) {
+    return 'action.sql_preview';
+  }
+  if (raw === 'dependencies') return 'action.dependencies';
+  if (raw === 'dependents') return 'action.dependents';
+  if (raw === 'statistics') return 'action.statistics';
+  if (raw === 'operations') return 'action.section_operations';
+  if (raw === 'data') return 'action.open';
+  if (raw === 'parameters') return 'action.fetch_limits';
+  if (raw === 'files') return 'action.save';
+  return 'action.layers';
 }

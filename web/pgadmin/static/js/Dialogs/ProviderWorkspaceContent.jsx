@@ -63,6 +63,8 @@ import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
 import {labelSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {resolveSectionIconKey} from '../cdeadmin_ui/icons/registry';
+import {useProjectInstanceScope} from '../cdeadmin_ui/shell/ProjectShell';
 import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
@@ -578,28 +580,33 @@ function sectionPayload(section, resource, descriptor) {
   return {};
 }
 
-const INSPECTOR_SECTION_TITLES = {
-  comments: gettext('Comments'),
-  calculations: gettext('Calculations'),
-  grants: gettext('Grants'),
-  properties: gettext('Summary'),
-  definition: gettext('Native definition/source'),
-  ddl: gettext('Creation statement (DDL)'),
-  dependencies: gettext('Depends on'),
-  dependents: gettext('Depended on by'),
-  privileges: gettext('Privileges and grants'),
-  security: gettext('Security'),
-  constraints: gettext('Constraints'),
-  indexes: gettext('Indexes'),
-  triggers: gettext('Triggers'),
-  columns: gettext('Columns'),
-  parameters: gettext('Parameters'),
-  files: gettext('Storage files'),
-  statistics: gettext('Statistics'),
-  state: gettext('State'),
-  data: gettext('Data'),
-  operations: gettext('Operations'),
+const INSPECTOR_SECTION_MSGIDS = {
+  comments: 'Comments',
+  calculations: 'Calculations',
+  grants: 'Grants',
+  properties: 'Summary',
+  definition: 'Native definition/source',
+  ddl: 'Creation statement (DDL)',
+  dependencies: 'Depends on',
+  dependents: 'Depended on by',
+  privileges: 'Privileges and grants',
+  security: 'Security',
+  constraints: 'Constraints',
+  indexes: 'Indexes',
+  triggers: 'Triggers',
+  columns: 'Columns',
+  parameters: 'Parameters',
+  files: 'Storage files',
+  statistics: 'Statistics',
+  state: 'State',
+  data: 'Data',
+  operations: 'Operations',
 };
+
+function getInspectorSectionTitle(section) {
+  const msgid = INSPECTOR_SECTION_MSGIDS[section];
+  return msgid ? gettext(msgid) : gettext(String(section || '').replaceAll('-', ' '));
+}
 
 const INFERRED_PROPERTY_KEYS = {
   comments: ['description', 'comments'],
@@ -628,7 +635,7 @@ export function inspectorSections(resource, descriptor) {
     const aliases = Object.entries(INFERRED_PROPERTY_KEYS).filter(([section, keys]) =>
       ['comments', 'calculations', 'grants'].includes(section) && keys.some(key => Object.hasOwn(native, key))).map(([section]) => section);
     return [...native.property_sections, ...aliases].filter((section, index, values) =>
-      Object.hasOwn(INSPECTOR_SECTION_TITLES, section) &&
+      Object.hasOwn(INSPECTOR_SECTION_MSGIDS, section) &&
       values.indexOf(section) === index
     );
   }
@@ -644,6 +651,14 @@ export function inspectorSections(resource, descriptor) {
   return sections;
 }
 
+function isScalarPropertyItem(val) {
+  return val === null || val === undefined || typeof val !== 'object';
+}
+
+function isScalarArrayProperty(val) {
+  return Array.isArray(val) && val.every(isScalarPropertyItem);
+}
+
 function NativePropertyValue({value, depth=0, compact=false}) {
   if (value === null || value === undefined) {
     return <Box component="span" sx={{color: 'text.secondary'}}>
@@ -656,10 +671,20 @@ function NativePropertyValue({value, depth=0, compact=false}) {
         {gettext('None')}
       </Box>;
     }
-    return <Box component="ol" sx={{m: 0, pl: 2.5}}>
-      {value.map((item, index) => <li key={index}>
+    if (isScalarArrayProperty(value)) {
+      return <Box component="span" sx={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
+        {value.map((item) => (item === null || item === undefined ? gettext('Not set') :
+          typeof item === 'boolean' ? (item ? gettext('Yes') : gettext('No')) : String(item))).join(' / ')}
+      </Box>;
+    }
+    return <Box sx={{display: 'flex', flexDirection: 'column', gap: 1.5}}>
+      {value.map((item, index) => <Box key={index} sx={
+        item && typeof item === 'object' && !Array.isArray(item) && value.length > 1
+          ? {p: 1.5, borderRadius: 1, border: '1px solid', borderColor: 'divider'}
+          : undefined
+      }>
         <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
-      </li>)}
+      </Box>)}
     </Box>;
   }
   if (typeof value === 'object') {
@@ -669,21 +694,77 @@ function NativePropertyValue({value, depth=0, compact=false}) {
         {gettext('None')}
       </Box>;
     }
-    return <Box role="table" aria-label={gettext('Native provider properties')}
-      sx={{display: 'grid', minWidth: 0,
-        gridTemplateColumns: compact ? 'minmax(0, 1fr)' : depth > 1 ?
-          'minmax(100px, 0.7fr) minmax(140px, 1fr)' :
-          'minmax(160px, 0.7fr) minmax(220px, 1fr)',
-        borderTop: 1, borderLeft: 1, borderColor: 'divider'}}>
-      {entries.map(([name, item]) => <Fragment key={name}>
-        <Box role="rowheader" sx={{p: 0.75, fontWeight: 600,
-          overflowWrap: 'anywhere', borderRight: 1, borderBottom: 1,
-          borderColor: 'divider'}}>{name.replaceAll('_', ' ')}</Box>
-        <Box role="cell" sx={{p: 0.75, overflowWrap: 'anywhere',
-          borderRight: 1, borderBottom: 1, borderColor: 'divider'}}>
+    const scalarEntries = entries.filter(([, item]) => isScalarPropertyItem(item) || isScalarArrayProperty(item));
+    const nestedEntries = entries.filter(([, item]) => !(isScalarPropertyItem(item) || isScalarArrayProperty(item)));
+    return <Box
+      role="group"
+      data-cdeadmin-qa-key="auto-placing-properties-grid"
+      aria-label={gettext('Native provider properties')}
+      sx={{display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0}}
+    >
+      {scalarEntries.length > 0 && <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+        columnGap: 2,
+        rowGap: 1.5,
+        alignItems: 'start',
+        minWidth: 0,
+      }}>
+        {scalarEntries.map(([name, item]) => {
+          const rawLabel = name.replaceAll('_', ' ');
+          const label = gettext(rawLabel);
+          const isWideText = typeof item === 'string' && (item.length > 72 || item.includes('\n'));
+          return <Box key={name} data-cdeadmin-qa-key={`property-field-${name}`}
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.4,
+              minWidth: 0,
+              gridColumn: isWideText ? '1 / -1' : undefined,
+            }}>
+            <Box sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: 'text.secondary',
+              lineHeight: 1.25,
+            }}>{label}</Box>
+            <Box sx={{
+              px: 1.25,
+              py: 0.65,
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              fontSize: '0.8125rem',
+              minHeight: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              overflowWrap: 'anywhere',
+            }}>
+              <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
+            </Box>
+          </Box>;
+        })}
+      </Box>}
+      {nestedEntries.map(([name, item]) => {
+        const rawLabel = name.replaceAll('_', ' ');
+        const label = gettext(rawLabel);
+        return <Box key={name} component="section" aria-label={label} sx={{minWidth: 0}}>
+          <Box component="h4" sx={{
+            m: 0,
+            mb: 1.25,
+            pb: 0.5,
+            fontSize: '0.73rem',
+            fontWeight: 700,
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            color: 'text.secondary',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}>{label}</Box>
           <NativePropertyValue value={item} depth={depth + 1} compact={compact} />
-        </Box>
-      </Fragment>)}
+        </Box>;
+      })}
     </Box>;
   }
   return <Box component="span" sx={{whiteSpace: 'pre-wrap',
@@ -735,6 +816,15 @@ RowsTable.propTypes = {
 
 export function ObjectInspectorSection({resource, descriptor, loading,
   tabbed=false, containedScroll=true, onRefresh, onOperation, initialSection, selectedMember}) {
+  const instanceScope = useProjectInstanceScope();
+  const [localeRev, setLocaleRev] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onLanguageChanged = () => setLocaleRev((n) => n + 1);
+    window.addEventListener('scratchrobin:language-changed', onLanguageChanged);
+    return () => window.removeEventListener('scratchrobin:language-changed', onLanguageChanged);
+  }, []);
+
   const sections = inspectorSections(resource, descriptor);
   const coverage = providerNative(resource)?.catalog_coverage;
   const [section, setSection] = useState(initialSection || sections[0]);
@@ -742,9 +832,62 @@ export function ObjectInspectorSection({resource, descriptor, loading,
   useEffect(() => {
     if (!sections.includes(section)) setSection(sections[0]);
   }, [section, sections]);
+
+  const hostedOnTabbedIconBar = Boolean(instanceScope && !containedScroll);
+  const sectionsKey = sections.join('|');
+
+  useEffect(() => {
+    if (!hostedOnTabbedIconBar || !instanceScope || !resource) return undefined;
+    const items = sections.map((sec) => {
+      const label = getInspectorSectionTitle(sec);
+      return {
+        id: sec,
+        label,
+        hint: label,
+        icon: resolveSectionIconKey(sec, label),
+        checked: sec === section,
+      };
+    });
+    instanceScope.setSubsections({
+      items,
+      onSelect: (nextSec) => {
+        setSection(nextSec);
+      },
+    });
+  }, [hostedOnTabbedIconBar, instanceScope, localeRev, resource, section, sections, sectionsKey]);
+
+  useEffect(() => {
+    if (!hostedOnTabbedIconBar || !instanceScope) return undefined;
+    return () => {
+      instanceScope.setSubsections(null);
+    };
+  }, [hostedOnTabbedIconBar, instanceScope]);
+
   if (!resource) return null;
-  return <Box sx={{mb: 2, border: 1, borderColor: 'divider'}}>
-    <FormReference formKey="inspector" />
+  const kindTitle = descriptor?.title ? gettext(descriptor.title) : gettext(String(resource.resource_kind || ''));
+  return <Box sx={hostedOnTabbedIconBar
+    ? {height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}
+    : {mb: 2, border: 1, borderColor: 'divider'}}>
+    <Box sx={{
+      px: hostedOnTabbedIconBar ? 3 : 1.5,
+      py: 0.75,
+      borderBottom: '1px solid',
+      borderColor: 'divider',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 1.5,
+      flexWrap: 'wrap',
+    }}>
+      <Box sx={{fontSize: '0.85rem', color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1}}>
+        <Box component="strong" sx={{color: 'text.primary'}}>{resource.display_name}</Box>
+        {kindTitle ? ` · ${kindTitle}` : ''}
+        {loading && <CircularProgress size={16} sx={{ml: 0.5}} />}
+        {onRefresh && <Button size="small" disabled={loading}
+          onClick={onRefresh}>{gettext('Refresh object properties')}</Button>}
+      </Box>
+      <FormReference formKey="inspector" />
+    </Box>
     {initialSection && !sections.includes(initialSection) && !loading && <MissingForm
       title={initialSection + ' section'} context={{resource_id: resource.resource_id, section: initialSection}} />}
     {selectedMember && <Alert severity="info">{selectedMember}</Alert>}
@@ -756,18 +899,11 @@ export function ObjectInspectorSection({resource, descriptor, loading,
       {gettext('Catalog visibility is incomplete. Missing objects may reflect denied access or failed catalog queries, not an empty database.')}
       <NativePropertyValue value={coverage} compact={!containedScroll} />
     </Alert>}
-    <Box sx={{p: 1}}>
-      <Box component="strong">{resource.display_name}</Box>
-      {' · '}{descriptor?.title || resource.resource_kind}
-      {loading && <CircularProgress size={16} sx={{ml: 1}} />}
-      {onRefresh && <Button size="small" disabled={loading}
-        onClick={onRefresh}>{gettext('Refresh object properties')}</Button>}
-    </Box>
-    {tabbed ? <Tabs value={section || false} variant="scrollable"
+    {!hostedOnTabbedIconBar && (tabbed ? <Tabs value={section || false} variant="scrollable"
       scrollButtons="auto" aria-label={gettext('Object properties sections')}
       onChange={(_event, value) => setSection(value)}>
       {sections.map((item) => <Tab key={item} value={item}
-        label={INSPECTOR_SECTION_TITLES[item]} />)}
+        label={getInspectorSectionTitle(item)} />)}
     </Tabs> : <TextField select fullWidth size="small" value={section}
       label={gettext('Object properties task')}
       slotProps={{select: {SelectDisplayProps: {style: {
@@ -775,17 +911,19 @@ export function ObjectInspectorSection({resource, descriptor, loading,
       }}}}}
       onChange={(event) => setSection(event.target.value)}>
       {sections.map((item) => <MenuItem key={item} value={item}>
-        {INSPECTOR_SECTION_TITLES[item] || item.replaceAll('-', ' ')}
+        {getInspectorSectionTitle(item)}
       </MenuItem>)}
-    </TextField>}
+    </TextField>)}
     <Box role="tabpanel" tabIndex={0}
       aria-label={`${section} ${gettext('object section')}`}
-      sx={{m: 0, p: 1, overflow: containedScroll ? 'auto' : 'visible',
+      sx={{m: 0, p: hostedOnTabbedIconBar ? 2.5 : 1,
+        flex: hostedOnTabbedIconBar ? 1 : undefined,
+        overflow: containedScroll ? 'auto' : (hostedOnTabbedIconBar ? 'auto' : 'visible'),
         maxHeight: containedScroll ? 320 : 'none',
         bgcolor: 'background.default'}}>
       {onOperation && ['privileges', 'security'].includes(section) &&
         <Box role="group" aria-label={gettext('Object permission tasks')}
-          sx={{display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1}}>
+          sx={{display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5}}>
           {(descriptor?.operations || []).filter((item) =>
             ['grant', 'revoke'].includes(item.operation_id) &&
             item.native_supported !== false).map((item) =>
@@ -793,7 +931,7 @@ export function ObjectInspectorSection({resource, descriptor, loading,
               item.execution_available !== true}
             title={(item.blockers || []).join(', ')}
             onClick={() => onOperation(item.operation_id)}>
-              {item.title}
+              {gettext(item.title)}
             </Button>)}
         </Box>}
       {(() => {
