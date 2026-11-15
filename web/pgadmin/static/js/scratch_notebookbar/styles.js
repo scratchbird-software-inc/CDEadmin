@@ -58,10 +58,23 @@ export const NOTEBOOKBAR_CSS = `
 .snb-quick { display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
   padding-inline-end: ${S.gap}; border-inline-end: 1px solid ${C.border}; }
 .snb-tabs { display: flex; align-items: stretch; min-width: 0; flex: 0 1 auto;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.snb-tabs::-webkit-scrollbar { display: none; }
+.snb-tab-nav { display: flex; align-items: center; gap: 2px; flex: 0 0 auto;
+  padding: 0 2px; }
+.snb-tab-scroll, .snb-tab-overflow-btn { min-width: 24px; padding: 0 4px;
+  justify-content: center; }
 .snb-tab { border: 0; background: transparent; padding: 0 calc(${S.gap} * 3);
   min-height: ${S.tab}; cursor: pointer; white-space: nowrap; position: relative;
+  display: inline-flex; align-items: center; gap: ${S.gap};
   border-radius: ${S.radius} ${S.radius} 0 0; }
+.snb-tab-title { max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.snb-tab-close { border: 0; background: transparent; padding: 0 2px;
+  min-width: 18px; min-height: 18px; display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer; border-radius: ${S.radius};
+  color: ${C.muted}; }
+.snb-tab-close:hover { background: ${C.hover}; color: ${C.text}; }
 .snb-tab:hover { background: ${C.hover}; }
 .snb-tab[aria-selected="true"] { background: ${C.panel}; font-weight: 600;
   box-shadow: inset 0 -3px 0 ${C.accent}; }

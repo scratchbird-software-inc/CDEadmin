@@ -140,13 +140,32 @@ CANONICAL_APPLICATIONS: tuple[dict[str, Any], ...] = (
         'order': 90,
         'supports_left_drawer': False,
         'supports_right_drawer': False,
-        'supports_tabbed_icon_bar': False,
+        'supports_tabbed_icon_bar': True,
         'supports_status_area': True,
         'default_left_width': 240,
         'default_right_width': 280,
         'required_permission': 'tools_psql_tool',
     },
 )
+
+DEFAULT_USER_PREFERENCES: dict[str, Any] = {
+    'tree_prefs': {
+        'show_system_objects': False,
+        'show_empty_collections': True,
+        'confirm_on_refresh_close': True,
+        'auto_expand_sole_children': True,
+    },
+    'query_limits': 1000,
+    'confirm_destructive': True,
+    'auto_commit': True,
+    'csv_delimiter': ',',
+    'ddn_dialect': 'ddn-next-1',
+    'git_review_gate': False,
+    'ai_drafting_enabled': False,
+    'ai_model_endpoint': '',
+    'pg_bin_path': '/usr/bin',
+    'fb_bin_path': '/usr/bin',
+}
 
 VALID_ACTION_STATUSES = frozenset({'enabled', 'disabled', 'invisible'})
 
@@ -1233,7 +1252,79 @@ class ShellAuthorityStore:
             ],
             'action_overrides': action_overrides,
             'global_settings': global_cfg,
+            'user_preferences': self.get_user_preferences(user_key),
         }
+
+    def get_user_preferences(self, username: str) -> dict[str, Any]:
+        user_key = str(username or 'anonymous')
+        stored = self._get_json('user_preferences', user_key, {})
+        if not isinstance(stored, dict):
+            stored = {}
+        default_tree = dict(DEFAULT_USER_PREFERENCES['tree_prefs'])
+        stored_tree = stored.get('tree_prefs')
+        if isinstance(stored_tree, dict):
+            for key in default_tree:
+                if key in stored_tree:
+                    default_tree[key] = bool(stored_tree[key])
+        try:
+            query_limits = max(10, min(100000, int(stored.get('query_limits', DEFAULT_USER_PREFERENCES['query_limits']))))
+        except (TypeError, ValueError):
+            query_limits = DEFAULT_USER_PREFERENCES['query_limits']
+        csv_delim = str(stored.get('csv_delimiter', DEFAULT_USER_PREFERENCES['csv_delimiter']) or ',')
+        if csv_delim not in {',', ';', '\t', '|'}:
+            csv_delim = ','
+        result: dict[str, Any] = {
+            'tree_prefs': default_tree,
+            'query_limits': query_limits,
+            'confirm_destructive': bool(stored.get('confirm_destructive', DEFAULT_USER_PREFERENCES['confirm_destructive'])),
+            'auto_commit': bool(stored.get('auto_commit', DEFAULT_USER_PREFERENCES['auto_commit'])),
+            'csv_delimiter': csv_delim,
+            'ddn_dialect': 'ddn-next-1',
+            'git_review_gate': bool(stored.get('git_review_gate', DEFAULT_USER_PREFERENCES['git_review_gate'])),
+            'ai_drafting_enabled': bool(stored.get('ai_drafting_enabled', DEFAULT_USER_PREFERENCES['ai_drafting_enabled'])),
+            'ai_model_endpoint': str(stored.get('ai_model_endpoint', DEFAULT_USER_PREFERENCES['ai_model_endpoint']) or '').strip(),
+            'pg_bin_path': str(stored.get('pg_bin_path', DEFAULT_USER_PREFERENCES['pg_bin_path']) or '/usr/bin').strip(),
+            'fb_bin_path': str(stored.get('fb_bin_path', DEFAULT_USER_PREFERENCES['fb_bin_path']) or '/usr/bin').strip(),
+        }
+        # Optional personal appearance overrides
+        for opt_key in ('color_scheme', 'density', 'font_scale', 'font_family_ui', 'font_family_mono', 'shortcut_overrides'):
+            if opt_key in stored and stored[opt_key] is not None:
+                result[opt_key] = stored[opt_key]
+        return result
+
+    def update_user_preferences(
+        self, username: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        user_key = str(username or 'anonymous')
+        current = self.get_user_preferences(user_key)
+        if not isinstance(patch, dict):
+            return current
+        merged = dict(current)
+        if isinstance(patch.get('tree_prefs'), dict):
+            next_tree = dict(merged['tree_prefs'])
+            for key in next_tree:
+                if key in patch['tree_prefs']:
+                    next_tree[key] = bool(patch['tree_prefs'][key])
+            merged['tree_prefs'] = next_tree
+        if 'query_limits' in patch:
+            try:
+                merged['query_limits'] = max(10, min(100000, int(patch['query_limits'])))
+            except (TypeError, ValueError):
+                pass
+        for bool_key in ('confirm_destructive', 'auto_commit', 'git_review_gate', 'ai_drafting_enabled'):
+            if bool_key in patch:
+                merged[bool_key] = bool(patch[bool_key])
+        if 'csv_delimiter' in patch and str(patch['csv_delimiter']) in {',', ';', '\t', '|'}:
+            merged['csv_delimiter'] = str(patch['csv_delimiter'])
+        for str_key in ('ai_model_endpoint', 'pg_bin_path', 'fb_bin_path'):
+            if str_key in patch and patch[str_key] is not None:
+                merged[str_key] = str(patch[str_key]).strip()
+        for opt_key in ('color_scheme', 'density', 'font_scale', 'font_family_ui', 'font_family_mono', 'shortcut_overrides'):
+            if opt_key in patch:
+                merged[opt_key] = patch[opt_key]
+        merged['ddn_dialect'] = 'ddn-next-1'
+        self._put_json('user_preferences', user_key, merged)
+        return self.get_user_preferences(user_key)
 
     def update_user_authorization(
         self, username: str, rules: dict[str, Any]
@@ -1349,12 +1440,46 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
         updated = store.update_user_authorization(target_user, body)
         return jsonify(updated)
 
+    @bp.route('/preferences', methods=['GET'])
+    @csrf_exempt
+    def get_preferences_route():
+        denied = _require_auth()
+        if denied is not None:
+            return denied
+        actor = _actor_username()
+        return jsonify({
+            'scope': 'user',
+            'username': actor,
+            'preferences': store.get_user_preferences(actor),
+        })
+
+    @bp.route('/preferences', methods=['PUT'])
+    def put_preferences_route():
+        denied = _require_auth()
+        if denied is not None:
+            return denied
+        actor = _actor_username()
+        body = request.get_json(silent=True) or {}
+        patch = body.get('preferences') if isinstance(body.get('preferences'), dict) else body
+        return jsonify({
+            'scope': 'user',
+            'username': actor,
+            'preferences': store.update_user_preferences(actor, patch),
+        })
+
     @bp.route('/settings', methods=['GET'])
     @csrf_exempt
     def get_settings_route():
         denied = _require_auth()
         if denied is not None:
             return denied
+        if request.args.get('scope') == 'user':
+            actor = _actor_username()
+            return jsonify({
+                'scope': 'user',
+                'username': actor,
+                'preferences': store.get_user_preferences(actor),
+            })
         app_id = request.args.get('application')
         if app_id:
             return jsonify({
@@ -1364,6 +1489,7 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
         return jsonify({
             'scope': 'global',
             'settings': store.get_global_settings(),
+            'user_preferences': store.get_user_preferences(_actor_username()),
             'applications': {
                 item['id']: store.get_application_settings(item['id'])
                 for item in CANONICAL_APPLICATIONS
@@ -1376,6 +1502,14 @@ def init_app(app: Any, db_path: str | None = None) -> ShellAuthorityStore:
         if denied is not None:
             return denied
         body = request.get_json(silent=True) or {}
+        if body.get('scope') == 'user' or (isinstance(body.get('user'), dict) and not body.get('global') and not body.get('applications')):
+            actor = _actor_username()
+            user_patch = body.get('user') if isinstance(body.get('user'), dict) else body
+            return jsonify({
+                'scope': 'user',
+                'username': actor,
+                'preferences': store.update_user_preferences(actor, user_patch),
+            })
         app_id = body.get('application_id') or request.args.get('application')
         if app_id:
             patch = body.get('applications', {}).get(str(app_id)) if isinstance(body.get('applications'), dict) else None

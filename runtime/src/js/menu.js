@@ -202,18 +202,24 @@ export function refreshMenus(cdeadminMainScreen, configStore, callbacks={}) {
 }
 
 export function setupMenu(cdeadminMainScreen, configStore, callbacks={}) {
+  ipcMain.removeAllListeners('setMenus');
+  ipcMain.removeAllListeners('enable-disable-menu-items');
+
   ipcMain.on('setMenus', (event, menus)=>{
     // this is important because the shortcuts are registered multiple times
     // when the menu is set multiple times using accelerators.
     globalShortcut.unregisterAll();
     cachedMenus = menus; //It will be used later for refreshing the menus
     buildAndSetMenus(menus, cdeadminMainScreen, configStore, callbacks);
+  });
 
-    ipcMain.on('enable-disable-menu-items', (event, menu, menuItem)=>{
-      const menuItemObj = mainMenu.getMenuItemById(menuItem?.id);
-      if(menuItemObj) {
-        menuItemObj.enabled = menuItem.isDisabled;
-      }
-    });
+  ipcMain.on('enable-disable-menu-items', (event, menu, menuItem)=>{
+    if (!mainMenu || !menuItem?.id) return;
+    const menuItemObj = mainMenu.getMenuItemById(menuItem.id);
+    if(menuItemObj) {
+      menuItemObj.enabled = typeof menuItem.enabled === 'boolean'
+        ? menuItem.enabled
+        : !menuItem.isDisabled;
+    }
   });
 }

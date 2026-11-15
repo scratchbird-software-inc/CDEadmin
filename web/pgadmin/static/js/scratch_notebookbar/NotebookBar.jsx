@@ -109,7 +109,7 @@ OverflowMenu.propTypes = {
 };
 
 export function NotebookBar({model, state={}, context, onCommand, selectedTab,
-  onSelectTab, onCloseTab, closeTabLabel, getTabProps, collapsed,
+  onSelectTab, onCloseTab, onReorderTab, closeTabLabel, closeTabIcon='×', getTabProps, collapsed,
   onCollapsedChange, start, end, contributions,
   customization, catalog, label='Commands', dir, injectStyles=true,
   accessKeyTrigger='Alt', messages}) {
@@ -117,8 +117,10 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   const id = useId();
   const barRef = useRef(null);
   const stripRef = useRef(null);
+  const tabMenuBtnRef = useRef(null);
   const panelRef = useRef(null);
   const quickRef = useRef(null);
+  const draggedTabIdRef = useRef(null);
   const resolved = useMemo(() => {
     let value = normalizeModel(model);
     if(contributions?.length) value = mergeContributions(value, contributions);
@@ -131,6 +133,10 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   const [isCollapsed, setCollapsed] = useControlled(collapsed, false);
   const [peek, setPeek] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const [layer, setLayer] = useState(0); // access-key hints: 0 off, 1 tabs, 2 panel
   const [typed, setTyped] = useState('');
   const previousTab = useRef(null);
@@ -176,14 +182,56 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       setMeasured((value) => value + 1);
     }
   }, []);
+  // Measure horizontal tab-strip overflow and panel group-folding width with a single ResizeObserver.
+  const updateStripOverflow = useCallback(() => {
+    const strip = stripRef.current;
+    if(!strip) return;
+    const overflow = strip.scrollWidth > strip.clientWidth + 2;
+    setTabsOverflow(overflow);
+    setCanScrollLeft(strip.scrollLeft > 1);
+    setCanScrollRight(strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1);
+  }, []);
   useLayoutEffect(() => {
+    updateStripOverflow();
+    const strip = stripRef.current;
     const panel = panelRef.current;
-    if(!panel || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(([entry]) =>
-      setPanelWidth(entry.contentRect.width));
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, [isCollapsed, peek]);
+    const onScroll = () => updateStripOverflow();
+    strip?.addEventListener('scroll', onScroll, {passive: true});
+    let observer = null;
+    if(typeof ResizeObserver !== 'undefined' && (panel || strip)) {
+      observer = new ResizeObserver((entries) => {
+        for(const entry of entries || []) {
+          if(panel && (!entry.target || entry.target === panel) && entry.contentRect) {
+            setPanelWidth(entry.contentRect.width);
+          }
+        }
+        updateStripOverflow();
+      });
+      if(panel) observer.observe(panel);
+      if(strip) observer.observe(strip);
+    }
+    return () => {
+      strip?.removeEventListener('scroll', onScroll);
+      observer?.disconnect();
+    };
+  }, [isCollapsed, peek, shownIds, updateStripOverflow]);
+  useEffect(() => {
+    if(!current?.id) return;
+    const activeEl = stripRef.current?.querySelector(
+      byAttribute('data-snb-tab', current.id));
+    activeEl?.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
+  }, [current?.id]);
+  const scrollTabsBy = (delta) => {
+    const strip = stripRef.current;
+    if(!strip) return;
+    if(typeof strip.scrollBy === 'function') {
+      strip.scrollBy({left: delta, behavior: 'smooth'});
+    } else {
+      strip.scrollLeft = Math.max(0, strip.scrollLeft + delta);
+    }
+    updateStripOverflow();
+  };
+  const showTabOverflowControls = tabsOverflow || tabs.length > 8;
   const visibleGroups = (current?.groups ?? []).filter((group) =>
     isGroupVisible(group, state));
   const folded = useMemo(() => {
@@ -428,6 +476,34 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
           const isSelected = tab.id === current?.id;
           const extraTabProps = getTabProps ? (getTabProps(tab, isSelected) || {}) : {};
           const canCloseTab = Boolean(onCloseTab && isSelected && tab.closable !== false);
+          const mergedDragProps = onReorderTab ? {
+            draggable: extraTabProps.draggable ?? true,
+            onDragStart: (event) => {
+              draggedTabIdRef.current = tab.id;
+              extraTabProps.onDragStart?.(event);
+            },
+            onDragOver: (event) => {
+              if (draggedTabIdRef.current && draggedTabIdRef.current !== tab.id) {
+                event.preventDefault();
+              }
+              extraTabProps.onDragOver?.(event);
+            },
+            onDrop: (event) => {
+              const sourceId = draggedTabIdRef.current ||
+                event.dataTransfer?.getData?.('application/x-scratchrobin-tab') || '';
+              if (sourceId && sourceId !== tab.id) {
+                event.preventDefault();
+                event.stopPropagation();
+                onReorderTab(sourceId, tab.id);
+              }
+              draggedTabIdRef.current = null;
+              extraTabProps.onDrop?.(event);
+            },
+            onDragEnd: (event) => {
+              draggedTabIdRef.current = null;
+              extraTabProps.onDragEnd?.(event);
+            },
+          } : {};
           if (onCloseTab) {
             return <div key={tab.id} role="tab"
               id={`${id}-tab-${tab.id}`} data-snb-tab={tab.id}
@@ -438,6 +514,7 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
               aria-expanded={isCollapsed ? Boolean(peek && isSelected) : undefined}
               tabIndex={isSelected ? 0 : -1}
               {...extraTabProps}
+              {...mergedDragProps}
               onClick={(event) => {
                 extraTabProps.onClick?.(event);
                 if (event.defaultPrevented) return;
@@ -459,7 +536,7 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
                 onClick={(event) => {
                   event.stopPropagation();
                   onCloseTab(tab.id, tab);
-                }}>×</button>}
+                }}>{closeTabIcon}</button>}
               {layer === 1 && hints[`tab:${tab.id}`] && <span className="snb-hint"
                 aria-hidden="true">{hints[`tab:${tab.id}`]}</span>}
             </div>;
@@ -472,6 +549,7 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
             aria-expanded={isCollapsed ? Boolean(peek && isSelected) : undefined}
             tabIndex={isSelected ? 0 : -1}
             {...extraTabProps}
+            {...mergedDragProps}
             onClick={() => {
               if(isCollapsed) setPeek(!(peek && isSelected));
               select(tab.id);
@@ -484,6 +562,48 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
           </button>;
         })}
       </div>
+      {showTabOverflowControls && <div className="snb-tab-nav"
+        data-cdeadmin-qa-key="tab-strip-overflow-controls">
+        {tabsOverflow && <>
+          <button type="button" className="snb-control snb-tab-scroll"
+            data-cdeadmin-qa-key="tab-strip-scroll-left"
+            aria-label={message(messages, 'scrollTabsLeft')}
+            aria-disabled={!canScrollLeft}
+            onClick={() => canScrollLeft && scrollTabsBy(-160)}>‹</button>
+          <button type="button" className="snb-control snb-tab-scroll"
+            data-cdeadmin-qa-key="tab-strip-scroll-right"
+            aria-label={message(messages, 'scrollTabsRight')}
+            aria-disabled={!canScrollRight}
+            onClick={() => canScrollRight && scrollTabsBy(160)}>›</button>
+        </>}
+        <button ref={tabMenuBtnRef} type="button"
+          className="snb-control snb-tab-overflow-btn"
+          data-cdeadmin-qa-key="tab-strip-overflow-menu"
+          aria-label={message(messages, 'openTabsMenu')}
+          aria-haspopup="menu" aria-expanded={tabMenuOpen}
+          onClick={() => setTabMenuOpen(!tabMenuOpen)}>
+          <span className="snb-arrow" aria-hidden="true" />
+        </button>
+        {tabMenuOpen && <Popup anchor={tabMenuBtnRef.current}
+          label={message(messages, 'openTabsMenu')} role="menu"
+          onClose={(restore) => {
+            setTabMenuOpen(false);
+            if(restore) tabMenuBtnRef.current?.focus();
+          }}>
+          {tabs.map((tab) => {
+            const isSelected = tab.id === current?.id;
+            return <button key={tab.id} type="button" className="snb-popup-item"
+              role="menuitemradio" aria-checked={isSelected}
+              onClick={() => {
+                setTabMenuOpen(false);
+                if(isCollapsed) setPeek(true);
+                select(tab.id);
+              }}>
+              <span>{isSelected ? '✓ ' : ''}{tab.label}</span>
+            </button>;
+          })}
+        </Popup>}
+      </div>}
       {end && <div className="snb-end">{end}</div>}
     </div>
     {showPanel && <div ref={panelRef} id={panelId} className="snb-panel"
@@ -507,7 +627,9 @@ NotebookBar.propTypes = {
   selectedTab: PropTypes.string,
   onSelectTab: PropTypes.func,
   onCloseTab: PropTypes.func,
+  onReorderTab: PropTypes.func,
   closeTabLabel: PropTypes.func,
+  closeTabIcon: PropTypes.node,
   getTabProps: PropTypes.func,
   collapsed: PropTypes.bool,
   onCollapsedChange: PropTypes.func,

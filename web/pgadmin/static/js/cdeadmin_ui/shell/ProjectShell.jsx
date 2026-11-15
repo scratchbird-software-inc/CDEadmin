@@ -49,6 +49,7 @@ import {
   ProjectSessionLogoutDialog,
   ProjectSettingsDialog,
 } from './ProjectShellDialogs';
+import {CommandPalette} from '../navigation/AdvancedNavigation';
 import {
   applySchemeAndTypographyToDOM,
   hasStoredSchemeOrTypography,
@@ -171,7 +172,7 @@ export const DEFAULT_PROJECT_APPLICATIONS = Object.freeze([
     iconKey: 'action.terminal',
     supportsLeftDrawer: false,
     supportsRightDrawer: false,
-    supportsTabbedIconBar: false,
+    supportsTabbedIconBar: true,
     defaultLeftOpen: false,
   }),
 ]);
@@ -588,6 +589,7 @@ export function ProjectShellProvider({
           ...(localLayout.global?.area_zoom || {}),
         },
       },
+      user: {},
       applications: appsMap,
     };
   });
@@ -603,6 +605,7 @@ export function ProjectShellProvider({
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState('');
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [settingsDialog, setSettingsDialog] = useState({
     open: false,
     mode: 'global',
@@ -610,6 +613,18 @@ export function ProjectShellProvider({
     initialSection: null,
   });
   const [helpTopic, setHelpTopic] = useState('');
+  const [instanceNotifications, setInstanceNotifications] = useState([]);
+  const [activeStatusToast, setActiveStatusToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasStoredSchemeOrTypography()) return;
@@ -625,7 +640,7 @@ export function ProjectShellProvider({
   const [focusedId, setFocusedId] = useState(null);
   const [dashboardTabbed, setDashboardTabbed] = useState(false);
   const [showStatusBar, setShowStatusBar] = useState(true);
-  const [toolbarRibbonOverride, setToolbarRibbonOverride] = useState(null);
+  const [toolbarRibbonOverrides, setToolbarRibbonOverrides] = useState({});
 
   // Explicit observable shell states governed by Teardown-Before-Activate:
   const [shellLeftDrawerOpen, setShellLeftDrawerOpen] = useState(false);
@@ -786,9 +801,25 @@ export function ProjectShellProvider({
           ? nextInstancesList.find((i) => i.instanceId === nextTargetId) || null
           : null;
 
-      setFocusedId(incoming ? incoming.instanceId : nextTargetId === USER_DASHBOARD_ID ? USER_DASHBOARD_ID : null);
+      const resolvedFocusedId = incoming
+        ? incoming.instanceId
+        : nextTargetId === USER_DASHBOARD_ID
+          ? USER_DASHBOARD_ID
+          : null;
+      setFocusedId(resolvedFocusedId);
+      actionsRegistry.setActiveInstance?.(incoming ? incoming.instanceId : null);
 
       if (incoming) {
+        setInstanceNotifications((prev) =>
+          prev.some((n) => n.instanceId === incoming.instanceId && n.unread)
+            ? prev.map((n) =>
+              n.instanceId === incoming.instanceId ? {...n, unread: false} : n
+            )
+            : prev
+        );
+        setActiveStatusToast((prev) =>
+          prev && prev.instanceId === incoming.instanceId ? null : prev
+        );
         if (Array.isArray(incoming.actions)) {
           incoming.actions.forEach((act) => {
             const desiredStatus =
@@ -1023,7 +1054,6 @@ export function ProjectShellProvider({
       const nextList = [...instancesRef.current, newInstance];
       instancesRef.current = nextList;
       setInstances(nextList);
-      setToolbarRibbonOverride(null);
       executeFocusTransition(instanceId, nextList);
       return newInstance;
     },
@@ -1075,6 +1105,47 @@ export function ProjectShellProvider({
         }
       }
       const resolvedTitle = tabSpec.title || gettext('Object Editor');
+      const supportsBar = tabSpec.supportsTabbedIconBar !== false;
+      const inspectActionId = `${instanceId}.inspect`;
+      const resolvedActions =
+        Array.isArray(tabSpec.actions) && tabSpec.actions.length > 0
+          ? tabSpec.actions
+          : supportsBar
+            ? [
+              {
+                id: inspectActionId,
+                icon: 'action.properties',
+                application: targetAppId,
+                defaultText: gettext('Properties'),
+                defaultHint: gettext('Toggle Properties in Right Side Drawer'),
+                focusScoped: true,
+                target: {
+                  kind: T_ACTION_TARGET_KIND.CLIENT,
+                  invoke: () => {
+                    toggleInstanceRightDrawerRef.current?.(instanceId, 'properties');
+                  },
+                },
+              },
+            ]
+            : [];
+      const resolvedRibbonTabs =
+        Array.isArray(tabSpec.ribbonTabs) && tabSpec.ribbonTabs.length > 0
+          ? tabSpec.ribbonTabs
+          : supportsBar
+            ? [
+              {
+                id: `${instanceId}-home`,
+                label: resolvedTitle,
+                groups: [
+                  {
+                    id: 'inline-fallback-inspect',
+                    label: gettext('Inspect'),
+                    controls: resolvedActions.map((a) => a.id).filter(Boolean),
+                  },
+                ],
+              },
+            ]
+            : [];
       const newTab = {
         instanceId,
         appId: targetAppId,
@@ -1092,7 +1163,7 @@ export function ProjectShellProvider({
         iconKey: tabSpec.iconKey || 'object.table',
         supportsLeftDrawer: supportsLeft,
         supportsRightDrawer: tabSpec.supportsRightDrawer !== false,
-        supportsTabbedIconBar: tabSpec.supportsTabbedIconBar !== false,
+        supportsTabbedIconBar: supportsBar,
         leftOpen:
           typeof tabSpec.leftOpen === 'boolean'
             ? tabSpec.leftOpen
@@ -1105,9 +1176,9 @@ export function ProjectShellProvider({
         detached: false,
         popupWindow: null,
         popupContainer: null,
-        actions: tabSpec.actions || [],
+        actions: resolvedActions,
         menus: tabSpec.menus || [],
-        ribbonTabs: tabSpec.ribbonTabs || [],
+        ribbonTabs: resolvedRibbonTabs,
         quickAccess: tabSpec.quickAccess || DEFAULT_QUICK_ACCESS_IDS,
         quickActions: tabSpec.quickActions || null,
         statusText: tabSpec.statusText || `${resolvedTitle} — ${gettext('Ready')}`,
@@ -1137,7 +1208,6 @@ export function ProjectShellProvider({
       const nextList = [...instancesRef.current, newTab];
       instancesRef.current = nextList;
       setInstances(nextList);
-      setToolbarRibbonOverride(null);
       executeFocusTransition(instanceId, nextList);
       return newTab;
     },
@@ -1216,6 +1286,14 @@ export function ProjectShellProvider({
         if (act?.id) actionsRegistry.unregister?.(act.id);
       });
       setInstanceSubsections(targetId, null);
+      setInstanceNotifications((prev) => prev.filter((n) => n.instanceId !== targetId));
+      setActiveStatusToast((prev) => (prev?.instanceId === targetId ? null : prev));
+      setToolbarRibbonOverrides((prev) => {
+        if (!(targetId in prev)) return prev;
+        const next = {...prev};
+        delete next[targetId];
+        return next;
+      });
 
       const nextList = instancesRef.current.filter((i) => i.instanceId !== targetId);
       instancesRef.current = nextList;
@@ -1441,6 +1519,62 @@ export function ProjectShellProvider({
     [executeFocusTransition]
   );
 
+  const reorderInstances = useCallback((sourceId, targetId) => {
+    if (!sourceId || !targetId || sourceId === targetId) return false;
+    const list = [...instancesRef.current];
+    const fromIdx = list.findIndex((i) => i.instanceId === sourceId);
+    const toIdx = list.findIndex((i) => i.instanceId === targetId);
+    if (fromIdx < 0 || toIdx < 0) return false;
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+    instancesRef.current = list;
+    setInstances(list);
+    return true;
+  }, []);
+
+  const notifyInstanceEvent = useCallback((payload = {}) => {
+    const inst =
+      (payload.instanceId &&
+        instancesRef.current.find((i) => i.instanceId === payload.instanceId)) ||
+      (payload.appId &&
+        instancesRef.current.find((i) => i.appId === payload.appId)) ||
+      null;
+    const targetId = inst?.instanceId || payload.instanceId;
+    if (!targetId) return null;
+    const isBackground = targetId !== focusedIdRef.current;
+    const entry = {
+      id: payload.id || `${targetId}:${Date.now()}`,
+      instanceId: targetId,
+      title: payload.title || inst?.title || gettext('Background Task'),
+      message: payload.message || gettext('Task completed'),
+      status: payload.status || 'info',
+      unread: payload.unread !== undefined ? Boolean(payload.unread) : isBackground,
+      timestamp: Date.now(),
+    };
+    setInstanceNotifications((prev) => {
+      const filtered = prev.filter((item) => item.instanceId !== targetId);
+      return [...filtered, entry];
+    });
+    if (isBackground || payload.alwaysToast) {
+      setActiveStatusToast(entry);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => {
+        setActiveStatusToast((curr) => (curr?.id === entry.id ? null : curr));
+        toastTimerRef.current = null;
+      }, 6000);
+    }
+    return entry;
+  }, []);
+
+  const dismissInstanceNotification = useCallback((idOrInstanceId) => {
+    setInstanceNotifications((prev) =>
+      prev.filter((n) => n.id !== idOrInstanceId && n.instanceId !== idOrInstanceId)
+    );
+    setActiveStatusToast((prev) =>
+      prev && (prev.id === idOrInstanceId || prev.instanceId === idOrInstanceId) ? null : prev
+    );
+  }, []);
+
   // Drawer resizing + persistence + reset
   const setDrawerWidth = useCallback(
     (side, width) => {
@@ -1520,7 +1654,23 @@ export function ProjectShellProvider({
 
   const saveShellSettings = useCallback(
     async ({scope, appId, values, permittedApps}) => {
-      if (scope === 'application' && appId) {
+      if (scope === 'user') {
+        setSettings((prev) => ({
+          ...prev,
+          user: {
+            ...(prev.user || {}),
+            ...(values || {}),
+          },
+        }));
+        if (runFetch) {
+          await runFetch('/cdeadmin/api/shell/preferences', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json', ...csrfHeaders()},
+            body: JSON.stringify({preferences: values || {}}),
+          }).catch(() => {});
+        }
+      } else if (scope === 'application' && appId) {
         setSettings((prev) => ({
           ...prev,
           applications: {
@@ -1775,9 +1925,26 @@ export function ProjectShellProvider({
           })
         );
       }
+      if (data.username || username) {
+        actionsRegistry.setCurrentUser?.({
+          username: data.username || username,
+          authenticated: true,
+          roles: Array.isArray(data.roles) ? data.roles : [],
+          permissions: Array.isArray(data.permissions) ? data.permissions : null,
+        });
+      }
       const overrides = data.action_statuses || data.action_overrides;
       if (overrides) {
         actionsRegistry.setAuthorizationOverrides(overrides);
+      }
+      if (data.user_preferences && typeof data.user_preferences === 'object') {
+        setSettings((prev) => ({
+          ...prev,
+          user: {
+            ...(prev.user || {}),
+            ...data.user_preferences,
+          },
+        }));
       }
       if (data.settings || data.global_settings || Array.isArray(data.applications)) {
         const localWidths = loadLocalDrawerWidths();
@@ -2033,8 +2200,43 @@ export function ProjectShellProvider({
         kind: T_ACTION_TARGET_KIND.CLIENT,
         invoke: () => {
           if (onOpenPreferences) return onOpenPreferences();
-          setSettingsDialog({open: true, mode: 'global', appId: null});
+          setSettingsDialog({open: true, mode: 'user', appId: null});
           return true;
+        },
+      },
+    });
+    actionsRegistry.upsert({
+      id: 'shell.command_palette',
+      icon: 'action.command_palette',
+      application: 'project',
+      defaultText: gettext('Command Palette…'),
+      defaultHint: gettext('Search and run actions, open tabs, and settings (Ctrl+K)'),
+      shortcut: 'Ctrl+K',
+      status: T_ACTION_STATUS.ENABLED,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () => {
+          setCommandPaletteOpen(true);
+          return true;
+        },
+      },
+    });
+    actionsRegistry.upsert({
+      id: 'shell.window.detach_active',
+      icon: 'action.external_link',
+      application: 'project',
+      defaultText: focusedInstance?.detached
+        ? gettext('Re-dock Floating Tab')
+        : gettext('Detach Active Tab'),
+      defaultHint: gettext('Pop out the active tab into its own window or re-dock it'),
+      status: focusedInstance ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () => {
+          if (!focusedInstance) return false;
+          return focusedInstance.detached
+            ? redockInstance(focusedInstance.instanceId)
+            : detachInstance(focusedInstance.instanceId);
         },
       },
     });
@@ -2263,13 +2465,14 @@ export function ProjectShellProvider({
     // User Dashboard NEVER displays a Tabbed-Icon-Bar.
     if (!focusedInstance || focusedId === USER_DASHBOARD_ID) return false;
     if (!focusedInstance.supportsTabbedIconBar) return false;
-    if (toolbarRibbonOverride !== null) return toolbarRibbonOverride;
+    const perInstanceOverride = toolbarRibbonOverrides[focusedInstance.instanceId];
+    if (typeof perInstanceOverride === 'boolean') return perInstanceOverride;
     const appCfg = settings?.applications?.[focusedInstance.appId];
     if (typeof appCfg?.show_tabbed_icon_bar === 'boolean') {
       return appCfg.show_tabbed_icon_bar;
     }
     return settings?.global?.default_tabbed_icon_bar !== false;
-  }, [focusedId, focusedInstance, settings, toolbarRibbonOverride]);
+  }, [focusedId, focusedInstance, settings, toolbarRibbonOverrides]);
 
   // Synchronize baseline Top Menus (0 System, 60 Applications, 70 Window, 80 Help)
   useEffect(() => {
@@ -2298,13 +2501,22 @@ export function ProjectShellProvider({
         label: translateShell(
           locale,
           'menu.applications.preferences.text',
-          'Configure ScratchRobin…'
+          'Preferences…'
         ),
         i18nKey: 'menu.applications.preferences.text',
         hintKey: 'menu.applications.preferences.hint',
-        iconKey: 'action.settings',
+        iconKey: 'action.preferences',
         index: 20,
         callback: () => actionsRegistry.execute('shell.preferences.open'),
+      },
+      {
+        id: 'shell.command_palette',
+        actionId: 'shell.command_palette',
+        label: gettext('Command Palette…'),
+        shortcut: 'Ctrl+K',
+        iconKey: 'action.command_palette',
+        index: 25,
+        callback: () => actionsRegistry.execute('shell.command_palette'),
       },
       {id: 'sep_apps', type: 'separator', index: 30},
       ...authorizedApps.map((app, idx) => {
@@ -2342,7 +2554,13 @@ export function ProjectShellProvider({
         index: 10,
         checked: Boolean(showTabbedIconBar),
         disabled: !focusedInstance || !focusedInstance.supportsTabbedIconBar,
-        callback: () => setToolbarRibbonOverride((prev) => !(prev ?? showTabbedIconBar)),
+        callback: () => {
+          if (!focusedInstance) return;
+          setToolbarRibbonOverrides((prev) => ({
+            ...prev,
+            [focusedInstance.instanceId]: !(prev[focusedInstance.instanceId] ?? showTabbedIconBar),
+          }));
+        },
       },
       {
         id: 'window.toolbar.right_drawer',
@@ -2378,6 +2596,17 @@ export function ProjectShellProvider({
           focusedId === USER_DASHBOARD_ID ||
           (!focusedInstance && dockedInstances.length === 0),
         callback: () => openUserDashboardTab(),
+      },
+      {
+        id: 'shell.window.detach_active',
+        actionId: 'shell.window.detach_active',
+        label: focusedInstance?.detached
+          ? gettext('Re-dock Floating Tab')
+          : gettext('Detach Active Tab'),
+        iconKey: 'action.external_link',
+        index: 42,
+        disabled: !focusedInstance,
+        callback: () => actionsRegistry.execute('shell.window.detach_active'),
       },
       {
         id: 'shell.window.close',
@@ -2556,17 +2785,68 @@ export function ProjectShellProvider({
         initialSection: detail.sectionId || detail.initialSection || null,
       });
     };
+    const handleInstanceNotification = (e) => {
+      if (e?.detail) notifyInstanceEvent(e.detail);
+    };
+    const handleGlobalKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key?.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
     window.addEventListener('scratchrobin:open-inline-tab', handleOpenInline);
     window.addEventListener('scratchrobin:close-inline-tab', handleCloseInline);
     window.addEventListener('scratchrobin:inspect-right-drawer', handleInspectRight);
     window.addEventListener('scratchrobin:open-preferences', handleOpenPreferences);
+    window.addEventListener('scratchrobin:instance-notification', handleInstanceNotification);
+    window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('scratchrobin:open-inline-tab', handleOpenInline);
       window.removeEventListener('scratchrobin:close-inline-tab', handleCloseInline);
       window.removeEventListener('scratchrobin:inspect-right-drawer', handleInspectRight);
       window.removeEventListener('scratchrobin:open-preferences', handleOpenPreferences);
+      window.removeEventListener('scratchrobin:instance-notification', handleInstanceNotification);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [closeInstance, openInlineTab, updateInstance]);
+  }, [closeInstance, notifyInstanceEvent, openInlineTab, updateInstance]);
+
+  // Synchronize Electron native OS menus when running inside the Electron shell
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.electronUI?.setMenus !== 'function') {
+      return undefined;
+    }
+    const syncElectronMenus = () => {
+      try {
+        const menus = (menuRegistry.getMergedMenus?.() || [])
+          .filter((m) => !m.isSystemIcon && Array.isArray(m.items) && m.items.length > 0)
+          .map((m) => ({
+            name: m.name || m.id,
+            id: m.id || m.name,
+            label: m.label || m.name,
+            submenu: (m.items || []).map((item) =>
+              item.type === 'separator'
+                ? {type: 'separator'}
+                : {
+                  name: item.id,
+                  id: item.id,
+                  label: item.label,
+                  enabled: !item.disabled,
+                }
+            ),
+          }));
+        if (menus.length >= 2) {
+          window.electronUI.setMenus(menus);
+        }
+      } catch {
+        // Ignore Electron IPC serialization errors in detached/test contexts.
+      }
+    };
+    syncElectronMenus();
+    const unsub = menuRegistry.subscribe?.(syncElectronMenus);
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [menuRegistry, locale]);
 
   const contextValue = useMemo(
     () => ({
@@ -2596,7 +2876,12 @@ export function ProjectShellProvider({
       closeInstance,
       detachInstance,
       redockInstance,
+      reorderInstances,
       updateInstance,
+      instanceNotifications,
+      activeStatusToast,
+      notifyInstanceEvent,
+      dismissInstanceNotification,
       subsectionsByInstance,
       setInstanceSubsections,
       openUserDashboardTab,
@@ -2612,6 +2897,7 @@ export function ProjectShellProvider({
       lockSession,
       unlockSession,
       changeLanguage,
+      openCommandPalette: () => setCommandPaletteOpen(true),
       openSessionDialog: () => setSessionDialogOpen(true),
       openSettingsDialog: (mode, appId = activeSettingsAppId, initialSection = null) =>
         setSettingsDialog({open: true, mode, appId, initialSection}),
@@ -2619,27 +2905,32 @@ export function ProjectShellProvider({
     [
       actionsRegistry,
       activeSettingsAppId,
+      activeStatusToast,
       authorizedApps,
       catalogApps,
       changeLanguage,
       closeInstance,
       dashboardTabbed,
       detachInstance,
+      dismissInstanceNotification,
       dockedInstances,
       focusInstance,
       focusedId,
       focusedInstance,
+      instanceNotifications,
       instances,
       languages,
       locale,
       lockSession,
       locked,
       menuRegistry,
+      notifyInstanceEvent,
       openApplication,
       openInlineTab,
       openUserDashboardTab,
       redockInstance,
       refreshAuthorization,
+      reorderInstances,
       resetDrawerWidths,
       resolveAreaZoom,
       resolvePanelGap,
@@ -2727,6 +3018,81 @@ export function ProjectShellProvider({
             fetchImpl={runFetch}
             onClose={() => setHelpTopic('')}
           />
+          {commandPaletteOpen && (
+            <CommandPalette
+              open={commandPaletteOpen}
+              onClose={() => setCommandPaletteOpen(false)}
+              commands={actionsRegistry
+                .list()
+                .filter((a) => a.status !== T_ACTION_STATUS.INVISIBLE)
+                .map((a) => ({
+                  id: a.id,
+                  label: a.text || a.defaultText || a.id,
+                  description: a.hint || a.defaultHint || '',
+                  shortcut: a.shortcut || '',
+                  disabled: a.status === T_ACTION_STATUS.DISABLED,
+                  kind: 'action',
+                }))}
+              resources={instances.map((inst) => ({
+                id: inst.instanceId,
+                label: inst.title,
+                description: inst.detached ? gettext('Floating window') : gettext('Open tab'),
+                kind: 'instance',
+              }))}
+              settings={[
+                {
+                  id: 'pref:user',
+                  label: gettext('Preferences — Personal User Preferences'),
+                  kind: 'settings',
+                  mode: 'user',
+                  sectionId: 'appearance',
+                },
+                {
+                  id: 'cfg:themes',
+                  label: gettext('Preferences — Colour Themes'),
+                  kind: 'settings',
+                  mode: 'user',
+                  sectionId: 'themes',
+                },
+                {
+                  id: 'cfg:queries',
+                  label: gettext('Preferences — Queries & Execution'),
+                  kind: 'settings',
+                  mode: 'user',
+                  sectionId: 'queries',
+                },
+                {
+                  id: 'cfg:engines',
+                  label: gettext('Global Settings — Database Engines (On / Off)'),
+                  kind: 'settings',
+                  mode: 'global',
+                  sectionId: 'engines',
+                },
+                {
+                  id: 'cfg:security',
+                  label: gettext('Global Settings — Security, Users & Groups'),
+                  kind: 'settings',
+                  mode: 'global',
+                  sectionId: 'security',
+                },
+              ]}
+              onInvoke={(item) => {
+                if (!item) return;
+                if (item.kind === 'instance') {
+                  focusInstance(item.id);
+                } else if (item.kind === 'settings') {
+                  setSettingsDialog({
+                    open: true,
+                    mode: item.mode || 'global',
+                    appId: null,
+                    initialSection: item.sectionId || null,
+                  });
+                } else {
+                  actionsRegistry.execute(item.id);
+                }
+              }}
+            />
+          )}
         </>
       )}
     </ProjectShellContext.Provider>
@@ -2880,7 +3246,10 @@ export function ProjectApplicationNotebookBar() {
         .map((item) => dedupeControlSpec(item.actionId))
         .filter(Boolean)
       : [];
-  const activeGroups = [...baseActiveGroups];
+  const activeGroups =
+    subsectionControls.length > 0
+      ? baseActiveGroups.filter((g) => g.rawGroupId !== 'inline-fallback-inspect')
+      : [...baseActiveGroups];
   if (activeInstance && subsectionControls.length > 0) {
     const subGroup = {
       id: toNotebookSafeId('grp', `${activeInstance.instanceId}.subsections`, 998),
@@ -2993,6 +3362,23 @@ export function ProjectApplicationNotebookBar() {
     });
   };
 
+  const handleBar3bDragOver = (e) => {
+    const types = Array.from(e.dataTransfer?.types || []);
+    if (types.includes(INSTANCE_DRAG_MIME) || shell.draggedFloatingRef.current) {
+      e.preventDefault();
+    }
+  };
+
+  const handleBar3bDrop = (e) => {
+    const droppedId =
+      e.dataTransfer?.getData(INSTANCE_DRAG_MIME) ||
+      shell.draggedFloatingRef.current;
+    if (droppedId) {
+      e.preventDefault();
+      shell.redockInstance(droppedId);
+    }
+  };
+
   return (
     <div
       className="sr-island sr-island-3b"
@@ -3000,6 +3386,8 @@ export function ProjectApplicationNotebookBar() {
       data-cdeadmin-qa-key="project-application-notebookbar"
       data-dashboard-tab-active={isDashboardActive ? 'true' : 'false'}
       style={barStyle}
+      onDragOver={handleBar3bDragOver}
+      onDrop={handleBar3bDrop}
       onMouseOver={(e) => showControlHint(e.target)}
       onMouseLeave={() => setHoverHint(null)}
       onFocus={(e) => showControlHint(e.target)}
@@ -3021,7 +3409,14 @@ export function ProjectApplicationNotebookBar() {
           const instId = instanceIdByTabId.get(tabId) || tabId;
           shell.closeInstance(instId);
         }}
+        onReorderTab={(sourceTabId, targetTabId) => {
+          draggedTabOutsideRef.current = false;
+          const srcInstId = instanceIdByTabId.get(sourceTabId) || sourceTabId;
+          const dstInstId = instanceIdByTabId.get(targetTabId) || targetTabId;
+          shell.reorderInstances?.(srcInstId, dstInstId);
+        }}
         closeTabLabel={(tab) => gettext('Close %s', tab.label)}
+        closeTabIcon={<Icon iconKey="action.close" decorative size="12px" />}
         getTabProps={(tab, isSelected) => {
           const instId = instanceIdByTabId.get(tab.id) || tab.id;
           return {
@@ -3032,6 +3427,7 @@ export function ProjectApplicationNotebookBar() {
               if (!tab.draggable) return;
               draggedTabOutsideRef.current = false;
               e.dataTransfer?.setData('text/plain', instId);
+              e.dataTransfer?.setData('application/x-scratchrobin-tab', tab.id);
             },
             onDragLeave: () => {
               if (!tab.draggable) return;
@@ -3043,15 +3439,34 @@ export function ProjectApplicationNotebookBar() {
                 typeof document !== 'undefined'
                   ? document.querySelector('[data-cdeadmin-qa-key="project-area-3"]')
                   : null;
-              const rect = area3El?.getBoundingClientRect?.();
+              const bar3bEl =
+                typeof document !== 'undefined'
+                  ? document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]')
+                  : null;
+              const r3e = area3El?.getBoundingClientRect?.();
+              const r3b = bar3bEl?.getBoundingClientRect?.();
+              const validRects = [r3e, r3b].filter(
+                (r) => r && (r.right > r.left || r.bottom > r.top)
+              );
+              const unionRect =
+                validRects.length > 0
+                  ? {
+                    left: Math.min(...validRects.map((r) => r.left)),
+                    top: Math.min(...validRects.map((r) => r.top)),
+                    right: Math.max(...validRects.map((r) => r.right)),
+                    bottom: Math.max(...validRects.map((r) => r.bottom)),
+                  }
+                  : null;
               const hasCoords = Number.isFinite(e.clientX) && Number.isFinite(e.clientY);
+              const isZeroOrigin = hasCoords && e.clientX === 0 && e.clientY === 0;
               const outsideCoords =
-                rect &&
+                unionRect &&
                 hasCoords &&
-                (e.clientX < rect.left ||
-                  e.clientX > rect.right ||
-                  e.clientY < rect.top ||
-                  e.clientY > rect.bottom);
+                (!isZeroOrigin || draggedTabOutsideRef.current) &&
+                (e.clientX < unionRect.left ||
+                  e.clientX > unionRect.right ||
+                  e.clientY < unionRect.top ||
+                  e.clientY > unionRect.bottom);
               if (outsideCoords || (!hasCoords && draggedTabOutsideRef.current)) {
                 shell.detachInstance(instId);
               }
@@ -3089,7 +3504,7 @@ export function ProjectApplicationNotebookBar() {
                 )
               }
             >
-              ×
+              <Icon iconKey="action.close" decorative size="14px" />
             </IconButton>
           </span>
         }
@@ -3205,7 +3620,8 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
     const root = document.documentElement;
     if (!root) return undefined;
     const obs = new MutationObserver(() => {
-      setDomTone(resolveCurrentTone(prefStore));
+      const nextTone = resolveCurrentTone(prefStore);
+      setDomTone((prev) => (prev === nextTone ? prev : nextTone));
     });
     obs.observe(root, {attributes: true, attributeFilter: ['data-cde-theme', 'data-theme']});
     return () => obs.disconnect();
@@ -3340,7 +3756,7 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                       label={gettext('Close Left Side Drawer')}
                       onClick={() => shell.toggleLeftDrawer()}
                     >
-                      ×
+                      <Icon iconKey="action.drawer_close" decorative size="14px" />
                     </IconButton>
                   }
                 >
@@ -3511,7 +3927,7 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                           label={gettext('Close Right Side Drawer')}
                           onClick={() => shell.toggleInstanceRightDrawer()}
                         >
-                          ×
+                          <Icon iconKey="action.drawer_close" decorative size="14px" />
                         </IconButton>
                       }
                     >
@@ -3543,17 +3959,135 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
               )}
             </div>
 
-            {/* Area 3d — Optional Status Bar Island (spans underneath 3e + 3c) */}
-            {statusVisible && (
+            {/* Area 3d — Optional Status Bar Island + Background Instance Notifications & Quick-Jump Badges */}
+            {(statusVisible ||
+              (shell.instanceNotifications || []).some((n) => n.unread) ||
+              Boolean(shell.activeStatusToast)) && (
               <div
                 className="sr-island sr-island-3d"
                 data-area-part="3d"
                 data-cdeadmin-qa-key="project-status-bar"
+                style={{position: 'relative'}}
               >
-                <StatusBar label={`${activeDockedItem.title} status`}>
-                  {typeof activeDockedItem.renderStatus === 'function'
-                    ? activeDockedItem.renderStatus(activeDockedItem)
-                    : activeDockedItem.statusText}
+                {shell.activeStatusToast && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-cdeadmin-qa-key="status-bar-notification-popup"
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      bottom: 'calc(100% + 6px)',
+                      zIndex: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      background: 'var(--sr-surface-card, var(--sr-island-bg))',
+                      color: 'var(--sr-text-primary, var(--sr-island-fg))',
+                      border: '1px solid var(--sr-border-default, var(--sr-island-border))',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.16)',
+                      fontSize: '0.78rem',
+                      maxWidth: 420,
+                    }}
+                  >
+                    <Icon
+                      iconKey={
+                        shell.activeStatusToast.status === 'error'
+                          ? 'status.error'
+                          : shell.activeStatusToast.status === 'success'
+                            ? 'status.healthy'
+                            : 'action.info'
+                      }
+                      decorative
+                      size="14px"
+                    />
+                    <button
+                      type="button"
+                      data-cdeadmin-qa-key="status-bar-notification-popup-jump"
+                      onClick={() => shell.focusInstance(shell.activeStatusToast.instanceId)}
+                      style={{
+                        border: 0,
+                        background: 'transparent',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        padding: 0,
+                        textAlign: 'left',
+                        font: 'inherit',
+                      }}
+                    >
+                      <strong>{shell.activeStatusToast.title}</strong>
+                      {' — '}
+                      <span>{shell.activeStatusToast.message}</span>
+                    </button>
+                    <IconButton
+                      label={gettext('Dismiss Notification')}
+                      onClick={() => shell.dismissInstanceNotification?.(shell.activeStatusToast.id)}
+                    >
+                      <Icon iconKey="action.close" decorative size="12px" />
+                    </IconButton>
+                  </div>
+                )}
+                <StatusBar
+                  label={
+                    activeDockedItem && !activeDockedItem.isDashboard
+                      ? `${activeDockedItem.title} status`
+                      : gettext('ScratchRobin status')
+                  }
+                  meta={
+                    (shell.instanceNotifications || []).some((n) => n.unread) ? (
+                      <span
+                        data-cdeadmin-qa-key="status-bar-jump-badges"
+                        style={{display: 'inline-flex', alignItems: 'center', gap: 6}}
+                      >
+                        {(shell.instanceNotifications || [])
+                          .filter((n) => n.unread)
+                          .map((notif) => (
+                            <button
+                              key={notif.id}
+                              type="button"
+                              data-cdeadmin-qa-key={`status-jump-badge-${notif.instanceId}`}
+                              title={`${notif.title}: ${notif.message}`}
+                              onClick={() => shell.focusInstance(notif.instanceId)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '1px 8px',
+                                borderRadius: 999,
+                                border: '1px solid var(--sr-border-default, var(--sr-island-border))',
+                                background: 'var(--sr-surface-subtle, transparent)',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <Icon
+                                iconKey={
+                                  notif.status === 'error'
+                                    ? 'status.error'
+                                    : notif.status === 'success'
+                                      ? 'status.healthy'
+                                      : 'action.info'
+                                }
+                                decorative
+                                size="12px"
+                              />
+                              <span>{notif.title}</span>
+                              <span>· {notif.message}</span>
+                            </button>
+                          ))}
+                      </span>
+                    ) : null
+                  }
+                >
+                  {statusVisible
+                    ? typeof activeDockedItem.renderStatus === 'function'
+                      ? activeDockedItem.renderStatus(activeDockedItem)
+                      : activeDockedItem.statusText
+                    : gettext('Background activity ready')}
                 </StatusBar>
               </div>
             )}

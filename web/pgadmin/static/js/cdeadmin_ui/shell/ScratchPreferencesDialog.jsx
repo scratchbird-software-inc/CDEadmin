@@ -71,12 +71,42 @@ function writeExtraDomainPrefs(next) {
   }
 }
 
+export function readDomainPreferences(serverUserPrefs = null) {
+  const local = readExtraDomainPrefs();
+  const srv = serverUserPrefs && typeof serverUserPrefs === 'object' ? serverUserPrefs : {};
+  return {
+    treePrefs: srv.tree_prefs || readBranchedTreePreferences(),
+    queryLimits: srv.query_limits ?? readDefaultQueryLimits(),
+    confirmDestructive: srv.confirm_destructive ?? (local.confirmDestructive !== false),
+    autoCommit: srv.auto_commit ?? (local.autoCommit !== false),
+    csvDelimiter: srv.csv_delimiter || local.csvDelimiter || ',',
+    ddnDialect: srv.ddn_dialect || local.ddnDialect || 'ddn-next-1',
+    gitReviewGate: srv.git_review_gate ?? Boolean(local.gitReviewGate),
+    aiDraftingEnabled: srv.ai_drafting_enabled ?? Boolean(local.aiDraftingEnabled),
+    aiModelEndpoint: srv.ai_model_endpoint ?? local.aiModelEndpoint ?? '',
+    pgBinPath: srv.pg_bin_path ?? local.pgBinPath ?? '',
+    fbBinPath: srv.fb_bin_path ?? local.fbBinPath ?? '',
+  };
+}
+
 /**
  * Maps legacy or programmatic `sectionId` strings (e.g. `appearance:schemes`,
  * `actions:iconbars`, `security:users`, `engines:connectors`, `chrome:sql-editor`)
  * onto `{pageId, tabId}` in the unified branch-menu + top-tabs layout.
  */
 function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
+  const restrictUser = (target) => {
+    if (mode !== 'user') return target;
+    if (
+      target.pageId === 'menus' ||
+      target.pageId === 'engines' ||
+      target.pageId === 'security' ||
+      target.pageId.startsWith('chrome:')
+    ) {
+      return {pageId: 'appearance', tabId: 'general'};
+    }
+    return target;
+  };
   if (!sectionId) {
     if (mode === 'application' && appId) {
       return {pageId: `chrome:${appId}`, tabId: 'layout'};
@@ -84,10 +114,10 @@ function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
     return {pageId: 'appearance', tabId: 'general'};
   }
   if (sectionId === 'chrome') {
-    return {pageId: `chrome:${appId || fallbackAppId}`, tabId: 'layout'};
+    return restrictUser({pageId: `chrome:${appId || fallbackAppId}`, tabId: 'layout'});
   }
   if (sectionId.startsWith('chrome:')) {
-    return {pageId: sectionId, tabId: 'layout'};
+    return restrictUser({pageId: sectionId, tabId: 'layout'});
   }
   switch (sectionId) {
   case 'appearance':
@@ -105,20 +135,20 @@ function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
   case 'menus':
   case 'actions':
   case 'actions:global-menus':
-    return {pageId: 'menus', tabId: 'global-menus'};
+    return restrictUser({pageId: 'menus', tabId: 'global-menus'});
   case 'actions:app-menus':
-    return {pageId: 'menus', tabId: 'app-menus'};
+    return restrictUser({pageId: 'menus', tabId: 'app-menus'});
   case 'actions:iconbars':
-    return {pageId: 'menus', tabId: 'iconbars'};
+    return restrictUser({pageId: 'menus', tabId: 'iconbars'});
   case 'actions:icons':
-    return {pageId: 'menus', tabId: 'icons'};
+    return restrictUser({pageId: 'menus', tabId: 'icons'});
   case 'shortcuts':
     return {pageId: 'shortcuts', tabId: 'keymap'};
   case 'engines':
   case 'engines:connectors':
-    return {pageId: 'engines', tabId: 'connectors'};
+    return restrictUser({pageId: 'engines', tabId: 'connectors'});
   case 'engines:paths':
-    return {pageId: 'engines', tabId: 'paths'};
+    return restrictUser({pageId: 'engines', tabId: 'paths'});
   case 'queries':
   case 'workspace':
     return {pageId: 'queries', tabId: 'execution'};
@@ -130,13 +160,13 @@ function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
     return {pageId: 'ddn', tabId: 'ai'};
   case 'security':
   case 'security:apps':
-    return {pageId: 'security', tabId: 'apps'};
+    return restrictUser({pageId: 'security', tabId: 'apps'});
   case 'security:users':
-    return {pageId: 'security', tabId: 'users'};
+    return restrictUser({pageId: 'security', tabId: 'users'});
   case 'security:groups':
-    return {pageId: 'security', tabId: 'groups'};
+    return restrictUser({pageId: 'security', tabId: 'groups'});
   case 'security:session':
-    return {pageId: 'security', tabId: 'session'};
+    return restrictUser({pageId: 'security', tabId: 'session'});
   default:
     return {pageId: 'appearance', tabId: 'general'};
   }
@@ -344,20 +374,19 @@ export function ScratchPreferencesDialog({
     setSelectedPageId(next.pageId);
     setActiveTabByPage((prev) => ({...prev, [next.pageId]: next.tabId}));
 
-    setTreePrefs(readBranchedTreePreferences());
-    setQueryLimits(readDefaultQueryLimits());
-
-    const extras = readExtraDomainPrefs();
-    setConfirmDestructive(extras.confirmDestructive !== false);
-    setAutoCommit(extras.autoCommit !== false);
-    setCsvDelimiter(extras.csvDelimiter || ',');
-    setDdnDialect(extras.ddnDialect || 'ddn-next-1');
-    setGitReviewGate(Boolean(extras.gitReviewGate));
-    setAiDraftingEnabled(Boolean(extras.aiDraftingEnabled));
-    setAiModelEndpoint(extras.aiModelEndpoint || '');
-    setPgBinPath(extras.pgBinPath || '');
-    setFbBinPath(extras.fbBinPath || '');
-  }, [open, mode, appId, initialSection, fallbackAppId]);
+    const hydrated = readDomainPreferences(settings?.user);
+    setTreePrefs(hydrated.treePrefs || readBranchedTreePreferences());
+    setQueryLimits(hydrated.queryLimits ?? readDefaultQueryLimits());
+    setConfirmDestructive(hydrated.confirmDestructive !== false);
+    setAutoCommit(hydrated.autoCommit !== false);
+    setCsvDelimiter(hydrated.csvDelimiter || ',');
+    setDdnDialect(hydrated.ddnDialect || 'ddn-next-1');
+    setGitReviewGate(Boolean(hydrated.gitReviewGate));
+    setAiDraftingEnabled(Boolean(hydrated.aiDraftingEnabled));
+    setAiModelEndpoint(hydrated.aiModelEndpoint || '');
+    setPgBinPath(hydrated.pgBinPath || '');
+    setFbBinPath(hydrated.fbBinPath || '');
+  }, [open, mode, appId, initialSection, fallbackAppId, settings?.user]);
 
   useEffect(() => {
     if (!open) return;
@@ -411,6 +440,7 @@ export function ScratchPreferencesDialog({
       keywords: `${app.label} ${app.id} application drawer width zoom ribbon spacing sql`,
     }));
 
+    const isUserMode = mode === 'user';
     const branches = [
       {
         id: 'branch:workbench',
@@ -437,12 +467,16 @@ export function ScratchPreferencesDialog({
             iconKey: 'object.type',
             keywords: 'fonts typography family size monospace ligatures line height ui sql diagram',
           },
-          {
-            id: 'menus',
-            label: gettext('Menus & Toolbars'),
-            iconKey: 'action.customize',
-            keywords: 'actions menus toolbars iconbar notebookbar ribbon quick access icons',
-          },
+          ...(!isUserMode
+            ? [
+              {
+                id: 'menus',
+                label: gettext('Menus & Toolbars'),
+                iconKey: 'action.customize',
+                keywords: 'actions menus toolbars iconbar notebookbar ribbon quick access icons',
+              },
+            ]
+            : []),
           {
             id: 'shortcuts',
             label: gettext('Keyboard Shortcuts'),
@@ -453,17 +487,21 @@ export function ScratchPreferencesDialog({
       },
       {
         id: 'branch:databases',
-        label: gettext('Databases & DDN'),
+        label: isUserMode ? gettext('Queries & DDN') : gettext('Databases & DDN'),
         iconKey: 'object.database',
-        defaultPageId: 'engines',
+        defaultPageId: isUserMode ? 'queries' : 'engines',
         keywords: 'databases engines connectors queries ddn designers ai',
         children: [
-          {
-            id: 'engines',
-            label: gettext('Database Engines'),
-            iconKey: 'object.database',
-            keywords: 'database engines connectors postgresql firebird duckdb sqlite mariadb scratchbird binary path gbak isql',
-          },
+          ...(!isUserMode
+            ? [
+              {
+                id: 'engines',
+                label: gettext('Database Engines'),
+                iconKey: 'object.database',
+                keywords: 'database engines connectors postgresql firebird duckdb sqlite mariadb scratchbird binary path gbak isql',
+              },
+            ]
+            : []),
           {
             id: 'queries',
             label: gettext('Queries & Execution'),
@@ -478,29 +516,33 @@ export function ScratchPreferencesDialog({
           },
         ],
       },
-      {
-        id: 'branch:security',
-        label: gettext('Security'),
-        iconKey: 'object.role',
-        defaultPageId: 'security',
-        keywords: 'security users groups roles permissions applications session lock timeout',
-        children: [
+      ...(!isUserMode
+        ? [
           {
-            id: 'security',
-            label: gettext('Users, Groups & Access'),
+            id: 'branch:security',
+            label: gettext('Security'),
             iconKey: 'object.role',
-            keywords: 'security users groups roles grant revoke applications permissions lock screen timeout',
+            defaultPageId: 'security',
+            keywords: 'security users groups roles permissions applications session lock timeout',
+            children: [
+              {
+                id: 'security',
+                label: gettext('Users, Groups & Access'),
+                iconKey: 'object.role',
+                keywords: 'security users groups roles grant revoke applications permissions lock screen timeout',
+              },
+            ],
           },
-        ],
-      },
-      {
-        id: 'branch:applications',
-        label: gettext('Applications'),
-        iconKey: 'object.extension',
-        defaultPageId: appChildren[0]?.id || `chrome:${activeChromeAppId}`,
-        keywords: 'applications chrome drawer width zoom ribbon',
-        children: appChildren,
-      },
+          {
+            id: 'branch:applications',
+            label: gettext('Applications'),
+            iconKey: 'object.extension',
+            defaultPageId: appChildren[0]?.id || `chrome:${activeChromeAppId}`,
+            keywords: 'applications chrome drawer width zoom ribbon',
+            children: appChildren,
+          },
+        ]
+        : []),
     ];
 
     const q = searchQuery.trim().toLowerCase();
@@ -518,7 +560,7 @@ export function ScratchPreferencesDialog({
         return selfMatch ? branch : null;
       })
       .filter(Boolean);
-  }, [applications, activeChromeAppId, activeChromeAppLabel, searchQuery, localeRev]);
+  }, [applications, activeChromeAppId, activeChromeAppLabel, searchQuery, localeRev, mode]);
 
   const pageSpec = useMemo(() => {
     if (selectedPageId.startsWith('chrome:')) {
@@ -662,7 +704,7 @@ export function ScratchPreferencesDialog({
   const persistAllSettings = async () => {
     writeBranchedTreePreferences(treePrefs);
     writeDefaultQueryLimits(queryLimits);
-    writeExtraDomainPrefs({
+    const localExtraPayload = {
       confirmDestructive,
       autoCommit,
       csvDelimiter,
@@ -672,7 +714,35 @@ export function ScratchPreferencesDialog({
       aiModelEndpoint,
       pgBinPath,
       fbBinPath,
-    });
+    };
+    writeExtraDomainPrefs(localExtraPayload);
+    const serverUserPrefs = {
+      tree_prefs: treePrefs,
+      query_limits: typeof queryLimits === 'number' ? queryLimits : Number(queryLimits?.maxRows || 1000),
+      confirm_destructive: Boolean(confirmDestructive),
+      auto_commit: Boolean(autoCommit),
+      csv_delimiter: csvDelimiter || ',',
+      ddn_dialect: ddnDialect || 'ddn-next-1',
+      git_review_gate: Boolean(gitReviewGate),
+      ai_drafting_enabled: Boolean(aiDraftingEnabled),
+      ai_model_endpoint: aiModelEndpoint || '',
+      pg_bin_path: pgBinPath || '/usr/bin',
+      fb_bin_path: fbBinPath || '/usr/bin',
+    };
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:domain-preferences-changed', {
+          detail: {...localExtraPayload, treePrefs, queryLimits},
+        })
+      );
+    }
+
+    const saveUserValues = async () => {
+      await onSaveSettings?.({
+        scope: 'user',
+        values: serverUserPrefs,
+      });
+    };
 
     const saveAppValues = async () => {
       const parsedAppZoom = {};
@@ -745,14 +815,25 @@ export function ScratchPreferencesDialog({
       });
     };
 
-    if (isAppPage || (isInitialAppMode && !editedGlobalScope)) {
+    if (mode === 'user') {
+      await saveUserValues();
+      if (editedGlobalScope || Object.keys(pendingGlobalPatch).length > 0) {
+        await saveGlobalValues();
+      }
+    } else if (isAppPage || (isInitialAppMode && !editedGlobalScope)) {
       await saveAppValues();
       await saveExtraPatchedApps(activeChromeAppId);
+      if (dirtyExtras) {
+        await saveUserValues();
+      }
       if (editedGlobalScope || Object.keys(pendingGlobalPatch).length > 0) {
         await saveGlobalValues();
       }
     } else {
       await saveGlobalValues();
+      if (dirtyExtras) {
+        await saveUserValues();
+      }
       if (editedAppScope) {
         await saveAppValues();
         await saveExtraPatchedApps(activeChromeAppId);
@@ -784,9 +865,11 @@ export function ScratchPreferencesDialog({
       size="xlarge"
       formKey="scratch-preferences"
       title={
-        isAppPage
-          ? gettext('Configure — %s', activeChromeAppLabel)
-          : gettext('Configure — ScratchRobin')
+        mode === 'user'
+          ? gettext('Preferences — ScratchRobin')
+          : isAppPage
+            ? gettext('Configure — %s', activeChromeAppLabel)
+            : gettext('Configure — ScratchRobin')
       }
       actions={
         <div style={{display: 'flex', gap: 8, justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1442,7 +1525,7 @@ export function ScratchPreferencesDialog({
 
 ScratchPreferencesDialog.propTypes = {
   open: PropTypes.bool,
-  mode: PropTypes.oneOf(['application', 'global']),
+  mode: PropTypes.oneOf(['user', 'application', 'global']),
   appId: PropTypes.string,
   appLabel: PropTypes.string,
   initialSection: PropTypes.string,

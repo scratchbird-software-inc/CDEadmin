@@ -945,4 +945,103 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
       expect(backdrop.style.getPropertyValue('--sr-zoom-3b')).toBe('1.1');
     });
   });
+
+  it('surfaces background tab notifications + clickable jump badges in Area 3d, opens Ctrl+K CommandPalette, prevents horizontal drag detach, and splits User Preferences from Global Settings', async () => {
+    const savedBodies = [];
+    const fetchMock = jest.fn(async (url, init) => {
+      if (String(url).endsWith('/preferences') && init?.method === 'PUT') {
+        const body = JSON.parse(init.body || '{}');
+        savedBodies.push({url: String(url), body});
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({scope: 'user', preferences: body.preferences || body}),
+        };
+      }
+      return {ok: false, status: 404, json: async () => ({})};
+    });
+
+    const popups = [];
+    const openPopupWindow = jest.fn(() => {
+      const win = createMockPopupWindow();
+      popups.push(win);
+      return win;
+    });
+
+    const Component = withTheme(ShellHarness);
+    render(<Component fetchImpl={fetchMock} openPopupWindow={openPopupWindow} />);
+
+    // Open two instances: Data Navigator (inst-1) and SQL Editor (inst-2, currently active)
+    fireEvent.click(screen.getByRole('button', {name: 'Open Data Navigator'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
+
+    // Switch focus to Data Navigator so SQL Editor is in the background
+    const tabList = screen.getByRole('tablist', {name: 'Open Pages'});
+    const navTab = within(tabList).getByRole('tab', {name: /Data Navigator/});
+    const sqlTab = within(tabList).getByRole('tab', {name: /SQL Editor \(Firebird 5\)/});
+    fireEvent.click(navTab);
+    expect(navTab).toHaveAttribute('aria-selected', 'true');
+
+    // 1. Horizontal drag inside Area 3b does NOT detach the tab into a pop-out window
+    const nbEl = document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]');
+    const area3 = document.querySelector('[data-cdeadmin-qa-key="project-area-3"]');
+    nbEl.getBoundingClientRect = () => ({left: 100, top: 40, right: 900, bottom: 120});
+    area3.getBoundingClientRect = () => ({left: 100, top: 120, right: 900, bottom: 600});
+    fireEvent.dragStart(navTab);
+    fireEvent.dragEnd(navTab, {clientX: 350, clientY: 65});
+    expect(openPopupWindow).not.toHaveBeenCalled();
+
+    // 2. Background SQL Editor finishes a query -> Area 3d shows pop-up toast + clickable quick-jump badge!
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:instance-notification', {
+          detail: {
+            appId: 'sql-editor',
+            title: 'Query finished (42 rows)',
+            message: 'SELECT * FROM MON$ATTACHMENTS completed in 18 ms',
+            status: 'success',
+          },
+        })
+      );
+    });
+
+    // Wait: verify popup toast and clickable badge appear in Area 3d
+    const popupToast = document.querySelector('[data-cdeadmin-qa-key="status-bar-notification-popup"]');
+    expect(popupToast).toBeInTheDocument();
+    expect(popupToast.textContent).toContain('Query finished (42 rows)');
+
+    const jumpBadge = document.querySelector('[data-cdeadmin-qa-key^="status-jump-badge-"]');
+    expect(jumpBadge).toBeInTheDocument();
+
+    // Clicking the jump badge focuses SQL Editor and auto-clears the notification badge!
+    fireEvent.click(jumpBadge);
+    expect(
+      within(screen.getByRole('tablist', {name: 'Open Pages'})).getByRole('tab', {
+        name: /SQL Editor \(Firebird 5\)/,
+      })
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(document.querySelector('[data-cdeadmin-qa-key^="status-jump-badge-"]')).toBeNull();
+
+    // 3. Ctrl+K opens CommandPalette wired to t_actions (stamped with SR-F-030061)
+    fireEvent.keyDown(window, {key: 'k', ctrlKey: true});
+    const paletteDialog = await screen.findByRole('dialog');
+    expect(within(paletteDialog).getByRole('heading', {name: /Command palette/i})).toBeInTheDocument();
+    expect(paletteDialog.querySelector('[data-form-reference="SR-F-030061"]')).toBeInTheDocument();
+    fireEvent.keyDown(paletteDialog, {key: 'Escape'});
+
+    // 4. Applications > Preferences… opens personal User Preferences (no Security / Database Engines system sections)
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Applications'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /Preferences/i}));
+    const prefsDialog = await screen.findByRole('dialog');
+    expect(prefsDialog.querySelector('[data-cdeadmin-qa-key="scratch-preferences-dialog"]')).toBeInTheDocument();
+    expect(within(prefsDialog).getByRole('heading', {name: /Preferences — ScratchRobin/i})).toBeInTheDocument();
+    expect(within(prefsDialog).queryByText(/Database Engines/i)).not.toBeInTheDocument();
+    expect(within(prefsDialog).queryByText(/Security & Access/i)).not.toBeInTheDocument();
+
+    fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="settings-save"]'));
+    await waitFor(() => {
+      expect(savedBodies.length).toBeGreaterThanOrEqual(1);
+    });
+    expect(savedBodies[0].url).toContain('/preferences');
+  });
 });

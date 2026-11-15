@@ -11,6 +11,7 @@ import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Popover as BasePopover} from '@base-ui/react/popover';
 import {Tooltip as BaseTooltip} from '@base-ui/react/tooltip';
+import gettext from 'sources/gettext';
 import {ensureScratchBaseStyles} from '../base/ScratchBaseStyles';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {readBranchedTreePreferences} from './ScratchBranchedTree';
@@ -676,11 +677,11 @@ export function CommandPalette({
   const groups = useMemo(
     () =>
       [
-        ['Commands', commands],
-        ['Resources', resources],
-        ['Project Assets', assets],
-        ['Recent', recent],
-        ['Settings', settings],
+        [gettext('Commands'), commands],
+        [gettext('Resources'), resources],
+        [gettext('Project Assets'), assets],
+        [gettext('Recent'), recent],
+        [gettext('Settings'), settings],
       ]
         .map(([name, values]) => [
           name,
@@ -700,7 +701,7 @@ export function CommandPalette({
     }
   };
   return (
-    <Dialog open={open} title="Command palette" size="medium" formKey="command-palette" onClose={onClose}>
+    <Dialog open={open} title={gettext('Command palette')} size="medium" formKey="command-palette" onClose={onClose}>
       <div
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
@@ -720,12 +721,12 @@ export function CommandPalette({
       >
         <SearchField
           autoFocus
-          label="Search commands, resources, assets, and settings"
+          label={gettext('Search commands, resources, assets, and settings')}
           value={query}
           onChange={setQuery}
           loading={loading}
         />
-        {!loading && !flat.length && <EmptyState message="No matching commands or items" />}
+        {!loading && !flat.length && <EmptyState message={gettext('No matching commands or items')} />}
         <ScratchScrollArea style={{maxHeight: 420}}>
           <div role="listbox">
             {groups.map(([group, values]) => (
@@ -751,7 +752,7 @@ export function CommandPalette({
             ))}
           </div>
         </ScratchScrollArea>
-        <ProgressOverlay message={loading ? 'Searching' : ''} />
+        <ProgressOverlay message={loading ? gettext('Searching') : ''} />
       </div>
     </Dialog>
   );

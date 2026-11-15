@@ -699,6 +699,36 @@ export function buildNavigatorSelectionConfig(
     menuIndex += 5;
   }
 
+  if (selectedData && nodeType && nodeType !== 'server_group') {
+    const separateTabAction = `data-navigator.open_separate_tab.${safeInstId}`;
+    const separateTabLabel = gettext('Open in Separate Tab…');
+    actions.push({
+      id: separateTabAction,
+      icon: 'action.external_link',
+      application: 'data-navigator',
+      defaultText: separateTabLabel,
+      defaultHint: separateTabLabel,
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () =>
+          window.dispatchEvent(
+            new CustomEvent('scratchrobin:open-catalog-tab', {
+              detail: {item: selectedItem, data: selectedData, activeView: resolvedView},
+            })
+          ),
+      },
+    });
+    menuItems.push({
+      id: separateTabAction,
+      actionId: separateTabAction,
+      label: separateTabLabel,
+      iconKey: 'action.external_link',
+      index: menuIndex + 5,
+    });
+  }
+
   const refreshAction = `data-navigator.refresh.${safeInstId}`;
   const refreshLabel = gettext('Refresh');
   actions.push({
@@ -891,8 +921,16 @@ export function CatalogPageCoordinator() {
       const nodeKey = catalogNodeIdentityKey(data);
       if (!nodeKey) return;
 
+      const focused = currentShell.focusedInstance;
+      const shouldFocusBrowse =
+        !focused ||
+        (focused.appId === 'data-navigator' && !focused.meta?.isCustomInlineTab);
+
       const existing = (currentShell.instances || []).find(
-        (inst) => inst.appId === 'data-navigator' && inst.meta?.catalogNodeKey === nodeKey
+        (inst) =>
+          inst.appId === 'data-navigator' &&
+          !inst.meta?.isCustomInlineTab &&
+          inst.meta?.catalogNodeKey === nodeKey
       );
       if (existing) {
         const cfg = buildNavigatorSelectionConfig(
@@ -921,32 +959,50 @@ export function CatalogPageCoordinator() {
             activeView: cfg.activeView,
           },
         });
-        currentShell.focusInstance(existing.instanceId);
+        if (shouldFocusBrowse) {
+          currentShell.focusInstance(existing.instanceId);
+        }
         return;
       }
 
-      const unbound = (currentShell.instances || []).find(
-        (inst) => inst.appId === 'data-navigator' && inst.meta?.isUnboundNavigator === true
-      );
-      if (unbound) {
+      const isReplaceableCandidate = (inst) =>
+        inst &&
+        inst.appId === 'data-navigator' &&
+        !inst.meta?.isCustomInlineTab &&
+        !inst.meta?.pinnedCatalogTab;
+
+      const replaceable =
+        (isReplaceableCandidate(focused) ? focused : null) ||
+        [...(currentShell.instances || [])].reverse().find(isReplaceableCandidate);
+
+      if (replaceable) {
         const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
-        const initialView = allowed.includes('properties') ? 'properties' : allowed[0];
+        const sameType = replaceable.meta?.boundNodeData?._type === data._type;
+        const preservedView = sameType ? replaceable.meta?.activeView : null;
+        const initialView =
+          preservedView && allowed.includes(preservedView)
+            ? preservedView
+            : allowed.includes('properties')
+              ? 'properties'
+              : allowed[0];
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
-          unbound.instanceId,
+          replaceable.instanceId,
           item,
           data,
           initialView
         );
-        currentShell.updateInstance(unbound.instanceId, {
+        currentShell.updateInstance(replaceable.instanceId, {
           title: cfg.title,
           statusText: `${cfg.title} — ${gettext('Ready')}`,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
           meta: {
-            ...unbound.meta,
+            ...replaceable.meta,
             isUnboundNavigator: false,
+            isReplaceableBrowse: !replaceable.meta?.pinnedWhenBound,
+            pinnedCatalogTab: Boolean(replaceable.meta?.pinnedWhenBound),
             catalogNodeKey: nodeKey,
             boundNodeItem: item,
             boundNodeData: data,
@@ -955,7 +1011,9 @@ export function CatalogPageCoordinator() {
             connectorIntent: 'endpoint',
           },
         });
-        currentShell.focusInstance(unbound.instanceId);
+        if (shouldFocusBrowse) {
+          currentShell.focusInstance(replaceable.instanceId);
+        }
         return;
       }
 
@@ -964,6 +1022,40 @@ export function CatalogPageCoordinator() {
       currentShell.openApplication('data-navigator', {
         title: formatCatalogPageTitle(data),
         isUnboundNavigator: false,
+        isReplaceableBrowse: true,
+        catalogNodeKey: nodeKey,
+        boundNodeItem: item,
+        boundNodeData: data,
+        activeView: initialView,
+        connectorProfileId: null,
+        connectorIntent: 'endpoint',
+        leftOpen:
+          currentShell.focusedInstance?.supportsLeftDrawer
+            ? Boolean(currentShell.shellLeftDrawerOpen)
+            : true,
+      });
+    };
+
+    const onOpenCatalogTabEvent = (ev) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const item = ev?.detail?.item || pgAdmin?.Browser?.tree?.selected?.() || null;
+      const data = ev?.detail?.data || (item ? pgAdmin?.Browser?.tree?.itemData?.(item) : null);
+      if (!data || !data._type || data._type === 'server_group') return;
+      const nodeKey = catalogNodeIdentityKey(data);
+      const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
+      const requestedView = ev?.detail?.activeView;
+      const initialView =
+        requestedView && allowed.includes(requestedView)
+          ? requestedView
+          : allowed.includes('properties')
+            ? 'properties'
+            : allowed[0];
+      currentShell.openApplication('data-navigator', {
+        title: formatCatalogPageTitle(data),
+        isUnboundNavigator: false,
+        pinnedCatalogTab: true,
+        isReplaceableBrowse: false,
         catalogNodeKey: nodeKey,
         boundNodeItem: item,
         boundNodeData: data,
@@ -1075,6 +1167,7 @@ export function CatalogPageCoordinator() {
     if (typeof window !== 'undefined') {
       window.addEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
       window.addEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+      window.addEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
       window.addEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
     }
 
@@ -1087,6 +1180,7 @@ export function CatalogPageCoordinator() {
       if (typeof window !== 'undefined') {
         window.removeEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
         window.removeEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+        window.removeEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
         window.removeEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
       }
     };
@@ -2221,6 +2315,9 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ribbonTabs: navConfig.ribbonTabs,
         meta: {
           isUnboundNavigator,
+          pinnedCatalogTab: Boolean(options.pinnedCatalogTab),
+          pinnedWhenBound: Boolean(sequence > 1 && isUnboundNavigator && !options.pinnedCatalogTab),
+          isReplaceableBrowse: options.pinnedCatalogTab ? false : options.isReplaceableBrowse !== false,
           catalogNodeKey: isUnboundNavigator
             ? null
             : options.catalogNodeKey || catalogNodeIdentityKey(boundData),

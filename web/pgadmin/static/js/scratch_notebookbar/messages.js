@@ -38,6 +38,9 @@ export const DEFAULT_MESSAGES = Object.freeze({
   newGroup: 'New group',
   noCustomGroup: 'Choose one of your own groups to add commands to it.',
   emptyGroup: 'No commands yet.',
+  scrollTabsLeft: 'Scroll tabs left',
+  scrollTabsRight: 'Scroll tabs right',
+  openTabsMenu: 'Open tabs',
 });
 
 export function message(messages, key, values={}) {
