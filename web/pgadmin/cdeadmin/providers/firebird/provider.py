@@ -216,6 +216,16 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         super().__init__(context, permissions, client, profile)
         self._catalog_pool = {}
         self._catalog_pool_lock = threading.RLock()
+        self._pooled_catalog_local = threading.local()
+
+    def _visual_admin_session_context(self, payload):
+        ctx = super()._visual_admin_session_context(payload)
+        if ctx is not None:
+            return ctx
+        pooled = getattr(self._pooled_catalog_local, 'handle', None)
+        if pooled is not None:
+            return {'session_id': None, 'session_handle': pooled}
+        return None
 
     @staticmethod
     def _catalog_pool_key(request):
@@ -282,17 +292,14 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         conn = None
             if conn is None:
                 conn = self.client._connect({'route': request['route']})
-            else:
-                with self.client._admission:
-                    if not any(item is conn for item in self.client._connections):
-                        self.client._connections.append(conn)
+            with self.client._admission:
+                if not any(item is conn for item in self.client._connections):
+                    self.client._connections.append(conn)
             keep_pooled = False
+            prev_handle = getattr(self._pooled_catalog_local, 'handle', None)
+            self._pooled_catalog_local.handle = conn
             try:
-                scoped_request = {
-                    **dict(request),
-                    '_provider_session_handle': conn,
-                }
-                result = callback(scoped_request)
+                result = callback(request)
                 try:
                     tx = getattr(conn, 'main_transaction', None)
                     if tx is not None and tx.is_active() is True:
@@ -302,6 +309,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 keep_pooled = not self.client._closed
                 return result, reused
             finally:
+                self._pooled_catalog_local.handle = prev_handle
                 with self.client._admission:
                     self.client._forget_connection(conn)
                     self.client._attachment_states.pop(id(conn), None)
@@ -405,9 +413,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
 
     def read_visual_admin_rows(self, request):
         with self._grid_session_guard(request):
-            return self._run_with_pooled_catalog(
-                request, super().read_visual_admin_rows
-            )
+            return super().read_visual_admin_rows(request)
 
     def plan_visual_admin(self, request):
         with self._grid_session_guard(request):

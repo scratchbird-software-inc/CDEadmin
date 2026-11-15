@@ -2798,28 +2798,29 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
   }, [openPlatformModule]);
 
   useEffect(() => {
-    const removers = PLATFORM_MODULE_DEFINITIONS.map((def) => {
+    const actionIds = PLATFORM_MODULE_DEFINITIONS.map((def) => {
       const actionId = `module.open.${def.slug}`;
-      return t_actions.register({
+      t_actions.upsert({
         id: actionId,
         icon: def.iconKey,
         application: 'project',
         defaultText: def.label(),
         defaultHint: gettext('Open %s workspace', def.label()),
-        requiredPermission: def.requiredPermission || '',
+        permission: def.requiredPermission || '',
         status:
           def.aiGated &&
           typeof window !== 'undefined' &&
           window.__scratchrobinShellSettings?.global?.ai_drafting_enabled === false
-            ? T_ACTION_STATUS.HIDDEN
+            ? T_ACTION_STATUS.INVISIBLE
             : T_ACTION_STATUS.ENABLED,
         target: {
           kind: T_ACTION_TARGET_KIND.CLIENT,
           invoke: () => openPlatformModule(def.slug),
         },
       });
+      return actionId;
     });
-    return () => removers.forEach((fn) => fn?.());
+    return () => actionIds.forEach((id) => t_actions.unregister(id));
   }, [openPlatformModule]);
 
   useEffect(()=>{

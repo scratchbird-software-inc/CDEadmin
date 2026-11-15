@@ -1177,6 +1177,7 @@ const ACTION_COMPONENTS = Object.freeze({
   checkpoints: HistoryIcon,
   close: CancelCircleIcon,
   collector_snapshot: CollectorSnapshotIcon,
+  command_palette: CommandLineIcon,
   commit: SaveIcon,
   compare: GitCompareIcon,
   compare_run: RefreshIcon,
@@ -1207,6 +1208,7 @@ const ACTION_COMPONENTS = Object.freeze({
   engines: EnginesToggleIcon,
   env_matrix: EnvMatrixIcon,
   execute: PlayCircleIcon,
+  explain: StatisticsBarChartIcon,
   export: DownloadIcon,
   export_csv: ExportCsvIcon,
   export_json: ExportJsonIcon,
@@ -1220,6 +1222,7 @@ const ACTION_COMPONENTS = Object.freeze({
   help: HelpCircleIcon,
   history: HistoryIcon,
   import: UploadIcon,
+  insert: AddCircleIcon,
   inspector_drawer: InspectorDrawerIcon,
   kiosk_device: KioskDeviceIcon,
   lattice_reducer: LatticeReducerIcon,
@@ -1230,8 +1233,10 @@ const ACTION_COMPONENTS = Object.freeze({
   level_physical: LevelPhysicalIcon,
   locale_translation: LocaleTranslationIcon,
   lock: LockIcon,
+  maintenance: CustomizeSlidersIcon,
   manage_routes: ManageRoutesIcon,
   menu: MenuCircleIcon,
+  monitor: StatisticsBarChartIcon,
   move: ArrowAllDirectionIcon,
   move_down: MoveDownIcon,
   move_up: MoveUpIcon,
@@ -1480,6 +1485,27 @@ const BUILTIN_DEFINITIONS = [
   ),
   componentDefinition(
     'object.folder', ICON_CATEGORIES.OBJECT, FolderObjectIcon, 'Folder'
+  ),
+  componentDefinition(
+    'object.notebook', ICON_CATEGORIES.OBJECT, FileAddIcon, 'SQL Notebook'
+  ),
+  componentDefinition(
+    'object.setting', ICON_CATEGORIES.OBJECT, SettingsIcon, 'Configuration Setting'
+  ),
+  componentDefinition(
+    'object.session', ICON_CATEGORIES.OBJECT, ConnectAsUserIcon, 'Active Session'
+  ),
+  componentDefinition(
+    'folder.monitoring', ICON_CATEGORIES.OBJECT, StatisticsBarChartIcon, 'Monitoring Folder'
+  ),
+  componentDefinition(
+    'folder.programming', ICON_CATEGORIES.OBJECT, CodeIcon, 'Programming Folder'
+  ),
+  componentDefinition(
+    'folder.security', ICON_CATEGORIES.OBJECT, ShieldUserIcon, 'Security Folder'
+  ),
+  componentDefinition(
+    'folder.system', ICON_CATEGORIES.OBJECT, ServerHostIcon, 'System Folder'
   ),
   componentDefinition(
     'object.dimension', ICON_CATEGORIES.OBJECT, DimensionObjectIcon, 'Dimension'

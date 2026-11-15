@@ -213,7 +213,11 @@ describe('Phase 1 — Unified t_actions, 71+ Semantic Icons, 15-Locale i18n & RB
 
     expect(actReg.has('erd.designer.accept')).toBe(true);
     expect(actReg.resolve('erd.designer.accept').icon).toBe('action.accept_version');
+    expect(actReg.hasPermission('design_accept')).toBe(true);
+    actReg.setCurrentUser({permissions: ['sql_execute']});
+    expect(actReg.hasPermission('design_accept')).toBe(false);
     actReg.setCurrentUser({permissions: ['design_accept']});
+    expect(actReg.hasPermission('design_accept')).toBe(true);
     await expect(actReg.execute('erd.designer.accept')).resolves.toBe('accepted');
 
     const nb = actReg.toNotebookBar([

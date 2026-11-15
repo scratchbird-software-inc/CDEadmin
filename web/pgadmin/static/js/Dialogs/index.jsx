@@ -384,9 +384,10 @@ export function showProviderWorkspace(
   const resolvedTitle = isDedicatedBrowseData
     ? `data: ${
       initialContext.display_name ||
+      initialContext.resource_label ||
+      String(initialContext.resource_id).split(':').pop() ||
       nodeData?.label ||
-      nodeData?._label ||
-      String(initialContext.resource_id).split(':').pop()
+      nodeData?._label
     }`
     : title;
   const panel = {

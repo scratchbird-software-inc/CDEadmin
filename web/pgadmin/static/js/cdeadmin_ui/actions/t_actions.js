@@ -136,7 +136,7 @@ export function createTAction(input = {}) {
     shortcut: input.shortcut ? String(input.shortcut) : '',
     toolbarSize: input.toolbarSize === 'large' ? 'large' : 'small',
     paletteItems: Array.isArray(input.paletteItems) ? Object.freeze([...input.paletteItems]) : undefined,
-    permission: stringList(input.permission),
+    permission: stringList(input.permission ?? input.requiredPermission),
     capability: input.capability ? String(input.capability).trim() : '',
     allowedSecurityGroups: stringList(input.allowedSecurityGroups),
     deniedSecurityGroups: stringList(input.deniedSecurityGroups),
@@ -250,6 +250,15 @@ export class TActionsRegistry {
       return {type: 'action', actionId: suffixedId, spec: null};
     }
     return null;
+  }
+
+  hasPermission(permission) {
+    const required = stringList(permission);
+    if (required.length === 0) return true;
+    if (!this._currentUser) return true;
+    if (this._currentUser.is_admin || this._currentUser.is_superuser) return true;
+    const perms = new Set(this._currentUser.permissions || []);
+    return required.every((p) => perms.has(p));
   }
 
   _evaluateUserPolicy(base) {

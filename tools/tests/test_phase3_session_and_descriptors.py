@@ -81,6 +81,9 @@ class _FakeFirebirdConn:
         self._closed = True
         self._att = None
 
+    def __deepcopy__(self, _memo):
+        raise ValueError('ctypes objects containing pointers cannot be pickled')
+
 
 def test_demo_estate_sets_restart_unless_stopped():
     demo_source = (
@@ -296,51 +299,66 @@ def test_workspace_reconnect_session_routes_to_original_database_target():
     assert endpoint_calls == ['db-target-2']
 
 
-def test_firebird_pooled_catalog_reuses_healthy_handle_and_replaces_stale():
+def test_firebird_pooled_catalog_reuses_healthy_handle_and_replaces_stale(
+    monkeypatch,
+):
     created = []
+    observed_handles = []
 
-    def make_conn(_request):
+    def connector(**_kwargs):
         idx = len(created) + 1
         conn = _FakeFirebirdConn(name=f'pooled-{idx}', healthy=True)
         created.append(conn)
         return conn
 
-    fake_client = Mock(spec=FirebirdQueryClient)
-    fake_client._admission = threading.RLock()
-    fake_client._connections = []
-    fake_client._attachment_states = {}
-    fake_client._closed = False
-    fake_client._uses_server_scope.return_value = False
-    fake_client._connect.side_effect = make_conn
-    fake_client._forget_connection.side_effect = (
-        lambda c: fake_client._connections.remove(c)
-        if c in fake_client._connections else None
+    monkeypatch.setitem(
+        sys.modules,
+        'fake_fb_pooled_catalog_driver',
+        SimpleNamespace(connect=connector),
     )
 
-    provider = object.__new__(FirebirdProvider)
-    provider.client = fake_client
-    provider._catalog_pool = {}
-    provider._catalog_pool_lock = threading.RLock()
+    def metadata_reader(conn, _request):
+        observed_handles.append(conn)
+        return [{
+            'resource_id': 'table:T1',
+            'resource_kind': 'table',
+            'display_name': 'T1',
+            'authority_path': ['firebird', 'table', 'T1'],
+            'generation': '5.0.4',
+            'native': {},
+        }]
+
+    config = RelationalClientConfig(
+        profile=FIREBIRD_PILOT_PROFILE,
+        module_name='fake_fb_pooled_catalog_driver',
+        version_query='SELECT 1',
+        connect_arguments=lambda r: dict(r),
+        metadata_reader=metadata_reader,
+        transaction_observer=observe_transaction,
+        failed_session_releaser=lambda conn: conn.close(),
+    )
+    client = FirebirdQueryClient(config)
+    ctx = SimpleNamespace(
+        target_adapter_id='firebird-client',
+        endpoint_id='ep-1',
+    )
+    perms = SimpleNamespace(has=lambda *_: True, require=lambda *_: None)
+    provider = FirebirdProvider(ctx, perms, client)
 
     req = {'route': {'host': '127.0.0.1', 'port': 53050, 'database': 'demo.fdb'}}
-    observed_handles = []
-
-    def fake_list(scoped_req):
-        observed_handles.append(scoped_req['_provider_session_handle'])
-        return [{'resource_id': 'table:T1'}]
-
-    assert provider._run_with_pooled_catalog(req, fake_list) == [{'resource_id': 'table:T1'}]
-    assert provider._run_with_pooled_catalog(req, fake_list) == [{'resource_id': 'table:T1'}]
+    assert len(provider.list_resources(req)) == 1
+    assert len(provider.list_resources(req)) == 1
     assert len(created) == 1
     assert observed_handles[0] is observed_handles[1]
     assert created[0].ping_calls == 1
 
     # Simulate idle disconnect on pooled handle -> transparently opens pooled-2.
     created[0].healthy = False
-    assert provider._run_with_pooled_catalog(req, fake_list) == [{'resource_id': 'table:T1'}]
+    assert len(provider.list_resources(req)) == 1
     assert len(created) == 2
     assert created[0].close_calls >= 1
     assert observed_handles[2] is created[1]
+    provider.close()
 
 
 def test_firebird_session_autocommit_reconnect_vs_uncommitted_transaction_guard(
