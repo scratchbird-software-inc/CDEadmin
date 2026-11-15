@@ -805,6 +805,2993 @@
         }
       ],
       "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=trigger_depth; apply with request.operation=set_connection_limit, request.limit=trigger_depth and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_TRIGGER_DEPTH required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry. Native trigger-depth errors may leave preceding trigger/statement writes pending. Inspect and explicitly choose savepoint rollback or transaction finality; do not claim an automatic statement rollback."
+    },
+    {
+      "operation_id": "set_connection_pragma_foreign_keys",
+      "resource_kind": "database",
+      "title": "Set original connection foreign key enforcement",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Foreign key enforcement",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=foreign_keys; apply with request.operation=set_connection_pragma and fixed request.pragma=foreign_keys. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_query_only",
+      "resource_kind": "database",
+      "title": "Set original connection query-only mode",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Query-only mode",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=query_only; apply with request.operation=set_connection_pragma and fixed request.pragma=query_only. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_recursive_triggers",
+      "resource_kind": "database",
+      "title": "Set original connection recursive triggers",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=recursive_triggers; apply with request.operation=set_connection_pragma and fixed request.pragma=recursive_triggers. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_read_uncommitted",
+      "resource_kind": "database",
+      "title": "Set original connection read uncommitted",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Read uncommitted",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=read_uncommitted; apply with request.operation=set_connection_pragma and fixed request.pragma=read_uncommitted. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_reverse_unordered_selects",
+      "resource_kind": "database",
+      "title": "Set original connection reverse unordered scans",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Reverse unordered scans",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=reverse_unordered_selects; apply with request.operation=set_connection_pragma and fixed request.pragma=reverse_unordered_selects. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_automatic_index",
+      "resource_kind": "database",
+      "title": "Set original connection automatic indexes",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Automatic indexes",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=automatic_index; apply with request.operation=set_connection_pragma and fixed request.pragma=automatic_index. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_ignore_check_constraints",
+      "resource_kind": "database",
+      "title": "Set original connection ignore check constraints",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Ignore CHECK constraints",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=ignore_check_constraints; apply with request.operation=set_connection_pragma and fixed request.pragma=ignore_check_constraints. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_trusted_schema",
+      "resource_kind": "database",
+      "title": "Set original connection trusted schema",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Trusted schema",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=trusted_schema; apply with request.operation=set_connection_pragma and fixed request.pragma=trusted_schema. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_legacy_alter_table",
+      "resource_kind": "database",
+      "title": "Set original connection legacy alter table",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Legacy ALTER TABLE",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=legacy_alter_table; apply with request.operation=set_connection_pragma and fixed request.pragma=legacy_alter_table. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_pragma_cell_size_check",
+      "resource_kind": "database",
+      "title": "Set original connection cell size checks",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Cell size checks",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_pragmas. Inspect/review with request.pragma=cell_size_check; apply with request.operation=set_connection_pragma and fixed request.pragma=cell_size_check. Keep owner-bound session_id and database_target_id in the envelope. Requires execute; review/set require administer. Show native_statement in review and preserve expected_value. Values are booleans; runtime getter/readback must return native0/1. Unknown or omitted native PRAGMAs are unavailable, not a false default. foreign_keys changes require no open transaction. Flags are original-connection state, not file properties or defaults for future connections; rollback does not restore them. No automatic retry."
+    },
+    {
+      "operation_id": "set_connection_limit_vdbe_op",
+      "resource_kind": "database",
+      "title": "Set original connection virtual-machine opcode budget",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Virtual-machine opcode budget",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=vdbe_op; apply with request.operation=set_connection_limit, request.limit=vdbe_op and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_VDBE_OP required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry. SQLite returns SQLITE_NOMEM for an exceeded VM opcode allocation budget; CPython reports MemoryError. Restore with the native limit API, which needs no SQL."
+    },
+    {
+      "operation_id": "set_connection_limit_worker_threads",
+      "resource_kind": "database",
+      "title": "Set original connection auxiliary worker thread budget",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Auxiliary worker thread budget",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original limit",
+          "control": "number",
+          "required": true,
+          "min": 0,
+          "max": 2147483647
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection limit change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport: sqlite_connection_limits. Inspect/review with request.limit=worker_threads; apply with request.operation=set_connection_limit, request.limit=worker_threads and these fields. Owner-bound session_id and database_target_id stay in the envelope. Requires execute; review/apply require administer. Interpreter getlimit/setlimit and SQLITE_LIMIT_WORKER_THREADS required; no SQL fallback. Native hard caps may clamp values; display effective_value/outcome, never claim the request was met without read-back. Limit state is not transactional, not file-persisted, and does not change future connections. No automatic retry. This is an upper budget, not a guarantee that native worker threads will be used. Show the effective budget after native compile-time clamping."
+    },
+    {
+      "operation_id": "set_connection_pragma_busy_timeout",
+      "resource_kind": "database",
+      "title": "Set original connection busy timeout (milliseconds)",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Busy timeout (milliseconds)",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "replace_callback_confirmed",
+          "label": "Replace the current native callback policy",
+          "control": "boolean",
+          "required": true,
+          "help": "The previous callback identity is not observable and cannot be restored by rolling back."
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport sqlite_connection_pragmas; fixed request.pragma=busy_timeout. Operations inspect/review/set_connection_pragma. Use owner-bound session_id/database_target_id; show review native_statement and preserve integer expected_value. Setter requires confirmed:true; callback settings also require replace_callback_confirmed:true. Native getter/readback, exact nonnegative31-bit integers and no automatic replay. No file-persistence, future-connection-default or transaction-finalization claim."
+    },
+    {
+      "operation_id": "set_connection_pragma_wal_autocheckpoint",
+      "resource_kind": "database",
+      "title": "Set original connection automatic wal checkpoint threshold (pages)",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Automatic WAL checkpoint threshold (pages)",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "replace_callback_confirmed",
+          "label": "Replace the current native callback policy",
+          "control": "boolean",
+          "required": true,
+          "help": "The previous callback identity is not observable and cannot be restored by rolling back."
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport sqlite_connection_pragmas; fixed request.pragma=wal_autocheckpoint. Operations inspect/review/set_connection_pragma. Use owner-bound session_id/database_target_id; show review native_statement and preserve integer expected_value. Setter requires confirmed:true; callback settings also require replace_callback_confirmed:true. Native getter/readback, exact nonnegative31-bit integers and no automatic replay. No file-persistence, future-connection-default or transaction-finalization claim."
+    },
+    {
+      "operation_id": "set_connection_pragma_analysis_limit",
+      "resource_kind": "database",
+      "title": "Set original connection analyze sampling limit (rows per index)",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "ANALYZE sampling limit (rows per index)",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "min": 0,
+          "max": 2147483647,
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task transport sqlite_connection_pragmas; fixed request.pragma=analysis_limit. Operations inspect/review/set_connection_pragma. Use owner-bound session_id/database_target_id; show review native_statement and preserve integer expected_value. Setter requires confirmed:true; callback settings also require replace_callback_confirmed:true. Native getter/readback, exact nonnegative31-bit integers and no automatic replay. No file-persistence, future-connection-default or transaction-finalization claim."
+    },
+    {
+      "operation_id": "set_connection_config_enable_fkey",
+      "resource_kind": "database",
+      "title": "Set original connection enable fkey",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_fkey. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_enable_trigger",
+      "resource_kind": "database",
+      "title": "Set original connection enable trigger",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_trigger. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_enable_fts3_tokenizer",
+      "resource_kind": "database",
+      "title": "Set original connection enable fts3 tokenizer",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_fts3_tokenizer. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_enable_load_extension",
+      "resource_kind": "database",
+      "title": "Set original connection enable load extension",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "dangerous_change_confirmed",
+          "label": "Confirm native destructive or loading authority",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_load_extension. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_no_ckpt_on_close",
+      "resource_kind": "database",
+      "title": "Set original connection no ckpt on close",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=no_ckpt_on_close. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_enable_qpsg",
+      "resource_kind": "database",
+      "title": "Set original connection enable qpsg",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_qpsg. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_trigger_eqp",
+      "resource_kind": "database",
+      "title": "Set original connection trigger eqp",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=trigger_eqp. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_reset_database",
+      "resource_kind": "database",
+      "title": "Set original connection reset database",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "dangerous_change_confirmed",
+          "label": "Confirm native destructive or loading authority",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=reset_database. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_defensive",
+      "resource_kind": "database",
+      "title": "Set original connection defensive",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=defensive. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_writable_schema",
+      "resource_kind": "database",
+      "title": "Set original connection writable schema",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "dangerous_change_confirmed",
+          "label": "Confirm native destructive or loading authority",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=writable_schema. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_legacy_alter_table",
+      "resource_kind": "database",
+      "title": "Set original connection legacy alter table",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=legacy_alter_table. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_dqs_dml",
+      "resource_kind": "database",
+      "title": "Set original connection dqs dml",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=dqs_dml. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_dqs_ddl",
+      "resource_kind": "database",
+      "title": "Set original connection dqs ddl",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=dqs_ddl. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_enable_view",
+      "resource_kind": "database",
+      "title": "Set original connection enable view",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=enable_view. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_legacy_file_format",
+      "resource_kind": "database",
+      "title": "Set original connection legacy file format",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=legacy_file_format. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_config_trusted_schema",
+      "resource_kind": "database",
+      "title": "Set original connection trusted schema",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enable native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native policy",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session transport sqlite_connection_config; fixed request.config=trusted_schema. Operations inspect/review/set_connection_config. Runtime getter/setter and interpreter constant must exist; native refusal never falls back to SQL. Carry boolean expected_value and confirmed:true. For reset_database/writable_schema/enable_load_extension, enabling requires dangerous_change_confirmed:true. RESET_DATABASE arms a later VACUUM to erase data; no VACUUM is executed here. Preserve caller transaction and hook ownership; rollback does not restore policy. No automatic replay."
+    },
+    {
+      "operation_id": "rebuild",
+      "resource_kind": "table",
+      "title": "Rebuild table",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "columns",
+          "label": "Columns",
+          "tab": "Columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Column name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "type",
+              "label": "Native data type",
+              "control": "text",
+              "required": true,
+              "record_key": "data_type"
+            },
+            {
+              "field_id": "nullable",
+              "label": "Nullable",
+              "control": "boolean",
+              "required": false,
+              "default": true
+            },
+            {
+              "field_id": "default",
+              "label": "Default expression",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "unique",
+              "label": "Unique",
+              "control": "boolean",
+              "required": false,
+              "default": false
+            },
+            {
+              "field_id": "primary_key",
+              "label": "Primary key",
+              "control": "boolean",
+              "required": false,
+              "default": false,
+              "record_key": "primary_key_position",
+              "record_truthy": true
+            },
+            {
+              "field_id": "collation",
+              "label": "Collation",
+              "control": "text",
+              "editable_after_create": false
+            },
+            {
+              "field_id": "generated_expression",
+              "label": "Generated expression",
+              "control": "code",
+              "editable_after_create": false,
+              "language": "sql"
+            },
+            {
+              "field_id": "autoincrement",
+              "label": "Autoincrement",
+              "control": "boolean",
+              "editable_after_create": false
+            },
+            {
+              "field_id": "check_expression",
+              "label": "CHECK expression",
+              "control": "code",
+              "editable_after_create": false,
+              "language": "sql"
+            },
+            {
+              "field_id": "generated_storage",
+              "label": "Generated storage",
+              "control": "select",
+              "options": [
+                {
+                  "value": "NONE",
+                  "label": "NONE"
+                },
+                {
+                  "value": "VIRTUAL",
+                  "label": "VIRTUAL"
+                },
+                {
+                  "value": "STORED",
+                  "label": "STORED"
+                }
+              ],
+              "editable_after_create": false
+            },
+            {
+              "field_id": "not_null_conflict",
+              "label": "not_null conflict",
+              "control": "select",
+              "options": [
+                {
+                  "value": "DEFAULT",
+                  "label": "DEFAULT"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                }
+              ],
+              "editable_after_create": false
+            },
+            {
+              "field_id": "primary_key_conflict",
+              "label": "primary_key conflict",
+              "control": "select",
+              "options": [
+                {
+                  "value": "DEFAULT",
+                  "label": "DEFAULT"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                }
+              ],
+              "editable_after_create": false
+            },
+            {
+              "field_id": "unique_conflict",
+              "label": "unique conflict",
+              "control": "select",
+              "options": [
+                {
+                  "value": "DEFAULT",
+                  "label": "DEFAULT"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                }
+              ],
+              "editable_after_create": false
+            }
+          ],
+          "required": true,
+          "help": "Array of name, type, nullable, default, unique and primary_key properties.",
+          "visible_when": {
+            "field": "variant",
+            "equals": "default"
+          }
+        }
+      ],
+      "notes": "Typed design transport sqlite_schema_object_design: database_target_id, baseline DDN, resource_id, fixed operation=rebuild, fields from this form. This generates desired DDN without file mutation; it is not generic operation apply. Show the complete sqlite_schema_plan SQL and dependencies; pass returned rebuilds for tables. Use sqlite_schema_review with execution_sha256 and then sqlite_schema_apply with review_id/review_digest/confirmed:true. One-use durable receipt, original file identity, live three-way conflict check, atomic native rollback and rediscovery remain mandatory. Independent main-file workflow excludes pending user sessions, temp/attached tables and virtual-table rebuilds. Table-level constraints, modes, indexes, triggers and view projections are retained; column removals/conversions require reviewed data-loss warning. No automatic replay."
+    },
+    {
+      "operation_id": "replace",
+      "resource_kind": "view",
+      "title": "Replace view",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "query",
+          "label": "View query",
+          "tab": "Definition",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "help": "One SELECT or WITH query; do not include the CREATE command."
+        },
+        {
+          "field_id": "column_names",
+          "label": "Column aliases",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Alias",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "Typed design transport sqlite_schema_object_design: database_target_id, baseline DDN, resource_id, fixed operation=replace, fields from this form. This generates desired DDN without file mutation; it is not generic operation apply. Show the complete sqlite_schema_plan SQL and dependencies; pass returned rebuilds for tables. Use sqlite_schema_review with execution_sha256 and then sqlite_schema_apply with review_id/review_digest/confirmed:true. One-use durable receipt, original file identity, live three-way conflict check, atomic native rollback and rediscovery remain mandatory. Independent main-file workflow excludes pending user sessions, temp/attached tables and virtual-table rebuilds. Table-level constraints, modes, indexes, triggers and view projections are retained; column removals/conversions require reviewed data-loss warning. No automatic replay."
+    },
+    {
+      "operation_id": "set_connection_pragma_full_column_names",
+      "resource_kind": "database",
+      "title": "Set original connection full column names",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=full_column_names. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_short_column_names",
+      "resource_kind": "database",
+      "title": "Set original connection short column names",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=short_column_names. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_count_changes",
+      "resource_kind": "database",
+      "title": "Set original connection count changes",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=count_changes. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_empty_result_callbacks",
+      "resource_kind": "database",
+      "title": "Set original connection empty result callbacks",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=empty_result_callbacks. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_fullfsync",
+      "resource_kind": "database",
+      "title": "Set original connection fullfsync",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=fullfsync. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_checkpoint_fullfsync",
+      "resource_kind": "database",
+      "title": "Set original connection checkpoint fullfsync",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=checkpoint_fullfsync. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Native connection state is not restored by rollback. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "set_connection_pragma_defer_foreign_keys",
+      "resource_kind": "database",
+      "title": "Set original connection defer foreign keys",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Recursive triggers",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original value",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm this connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task sqlite_connection_pragmas; fixed request.pragma=defer_foreign_keys. Native boolean inspect/review/set_connection_pragma with exact expected_value, value and confirmed:true. No independent-file or future-default change. Automatically resets on full COMMIT/ROLLBACK; failed COMMIT can retain it and its pending transaction. Column naming/count/empty-result settings are legacy flags; empty_result_callbacks pertains to callback APIs and does not promise a Python DB-API callback. Full-sync flags reflect policy, not verified platform/filesystem/hardware sync guarantees."
+    },
+    {
+      "operation_id": "inspect_value",
+      "resource_kind": "pragma",
+      "title": "Inspect native value",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "default": "main",
+          "required": true
+        },
+        {
+          "field_id": "object_name",
+          "label": "Table or index name",
+          "control": "text",
+          "required": false,
+          "help": "Required for table/index metadata getters; omit for scalar settings."
+        }
+      ],
+      "notes": "Original-session sqlite_connection_pragmas task. Read pragma_inspection_capabilities first to distinguish known getter forms from non-getter actions. inspect_pragma_value takes fixed pragma=selected resource display_name plus schema (validated against original attachments) and object_name only where admitted. Result is a bounded native rowset with columns, exact values and per-cell native_storage_classes, truncated flag and observed/unavailable outcome. Empty metadata is not an inferred setting default or object-existence proof. Native name presence is not mutation admission: management_transport/management_declared only identify a separate implemented workflow. Inspect never dispatches a setter, checkpoint, optimize, shrink or integrity action. Heap/directory observations additionally require administer. No original-session transaction finalization or automatic replay."
+    },
+    {
+      "operation_id": "set_connection_pragma_case_sensitive_like",
+      "resource_kind": "database",
+      "title": "Set original connection LIKE policy",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Case-sensitive ASCII LIKE",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "review_id",
+          "label": "Original session policy review",
+          "control": "text",
+          "required": true,
+          "hidden": true,
+          "readonly": true
+        },
+        {
+          "field_id": "replace_callback_confirmed",
+          "label": "Replace existing LIKE and GLOB callbacks",
+          "control": "boolean",
+          "required": true,
+          "help": "Previous callbacks and policy cannot be observed or restored by rollback. Schema expressions using LIKE may need REINDEX under the intended policy."
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original connection change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas with fixed pragma=case_sensitive_like. Review accepts value only and returns one-use review_id, native statement, unknown previous value/identity and a server-owned work revision. Setter set_connection_pragma requires unchanged value, review_id and both confirmations. The server binds its private source revision; caller-supplied revisions are not trusted. Native getter does not exist: postcondition is native ASCII LIKE/GLOB probes, not an invented previous flag. No prior callback restoration, transaction finalization, file/default persistence or automatic replay. Original-session REINDEX is available through sqlite_connection_maintenance and the retained native-script review/advance flow."
+    },
+    {
+      "operation_id": "reindex_original_session",
+      "resource_kind": "database",
+      "title": "Reindex original session",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [],
+      "notes": "Task sqlite_connection_maintenance with fixed maintenance=reindex. Returns a retained native-script plan and generated_source for its SQL tab; preparing does not execute the action. Use native_script_advance with returned plan_id/revision, then poll/advance as declared by that existing workflow; discard completed plans. Original native work changes before start stop the prepared operation. No caller SQL is accepted by this typed generator; no automatic resubmission. REINDEX/ANALYZE follow native current-session scope and transaction rules; existing user work is not committed or rolled back by the application. Memory release does not guarantee a measured byte reduction."
+    },
+    {
+      "operation_id": "analyze_original_session",
+      "resource_kind": "database",
+      "title": "Analyze original session",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [],
+      "notes": "Task sqlite_connection_maintenance with fixed maintenance=analyze. Returns a retained native-script plan and generated_source for its SQL tab; preparing does not execute the action. Use native_script_advance with returned plan_id/revision, then poll/advance as declared by that existing workflow; discard completed plans. Original native work changes before start stop the prepared operation. No caller SQL is accepted by this typed generator; no automatic resubmission. REINDEX/ANALYZE follow native current-session scope and transaction rules; existing user work is not committed or rolled back by the application. Memory release does not guarantee a measured byte reduction."
+    },
+    {
+      "operation_id": "shrink_memory_original_session",
+      "resource_kind": "database",
+      "title": "Release original session cache memory",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [],
+      "notes": "Task sqlite_connection_maintenance with fixed maintenance=shrink_memory. Returns a retained native-script plan and generated_source for its SQL tab; preparing does not execute the action. Use native_script_advance with returned plan_id/revision, then poll/advance as declared by that existing workflow; discard completed plans. Original native work changes before start stop the prepared operation. No caller SQL is accepted by this typed generator; no automatic resubmission. REINDEX/ANALYZE follow native current-session scope and transaction rules; existing user work is not committed or rolled back by the application. Memory release does not guarantee a measured byte reduction."
+    },
+    {
+      "operation_id": "set_connection_pragma_cache_size",
+      "resource_kind": "database",
+      "title": "Set original native cache_size",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native cache_size",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=cache_size. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_cache_spill",
+      "resource_kind": "database",
+      "title": "Set original native cache_spill",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native cache_spill",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=cache_spill. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_max_page_count",
+      "resource_kind": "database",
+      "title": "Set original native max_page_count",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native max_page_count",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=max_page_count. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_default_cache_size",
+      "resource_kind": "database",
+      "title": "Set original native default_cache_size",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native default_cache_size",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=default_cache_size. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Header persistence follows native transaction state; registration defaults are unchanged. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_schema_version",
+      "resource_kind": "database",
+      "title": "Set original native schema_version",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native schema_version",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "direct_header_change_confirmed",
+          "label": "Confirm direct schema-cookie manipulation",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=schema_version. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Header persistence follows native transaction state; registration defaults are unchanged. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_journal_size_limit",
+      "resource_kind": "database",
+      "title": "Set original native journal_size_limit",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native journal_size_limit",
+          "control": "text",
+          "required": true,
+          "help": "Canonical exact decimal integer text; do not convert through a JavaScript number."
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "text",
+          "required": true,
+          "help": "Canonical exact decimal integer text; do not convert through a JavaScript number.",
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=journal_size_limit. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_mmap_size",
+      "resource_kind": "database",
+      "title": "Set original native mmap_size",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native mmap_size",
+          "control": "text",
+          "required": true,
+          "help": "Canonical exact decimal integer text; do not convert through a JavaScript number."
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "text",
+          "required": true,
+          "help": "Canonical exact decimal integer text; do not convert through a JavaScript number.",
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=mmap_size. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_secure_delete",
+      "resource_kind": "database",
+      "title": "Set original native secure_delete",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native secure_delete",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "ON",
+              "label": "ON"
+            },
+            {
+              "value": "FAST",
+              "label": "FAST"
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "ON",
+              "label": "ON"
+            },
+            {
+              "value": "FAST",
+              "label": "FAST"
+            }
+          ],
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=secure_delete. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_locking_mode",
+      "resource_kind": "database",
+      "title": "Set original native locking_mode",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Original attached schema",
+          "control": "text",
+          "required": true,
+          "default": "main"
+        },
+        {
+          "field_id": "value",
+          "label": "Native locking_mode",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "NORMAL",
+              "label": "NORMAL"
+            },
+            {
+              "value": "EXCLUSIVE",
+              "label": "EXCLUSIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "NORMAL",
+              "label": "NORMAL"
+            },
+            {
+              "value": "EXCLUSIVE",
+              "label": "EXCLUSIVE"
+            }
+          ],
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=locking_mode. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_temp_store",
+      "resource_kind": "database",
+      "title": "Set original native temp_store",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Native temp_store",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "FILE",
+              "label": "FILE"
+            },
+            {
+              "value": "MEMORY",
+              "label": "MEMORY"
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native value",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "FILE",
+              "label": "FILE"
+            },
+            {
+              "value": "MEMORY",
+              "label": "MEMORY"
+            }
+          ],
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native setting change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "review_id",
+          "label": "TEMP policy review",
+          "control": "text",
+          "required": true,
+          "hidden": true,
+          "readonly": true
+        },
+        {
+          "field_id": "temp_objects_drop_confirmed",
+          "label": "Delete all current TEMP objects when changing policy",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=temp_store. Inspect and review on the original handle; set_connection_pragma requires returned expected_value and confirmation. Native readback distinguishes applied from native_adjusted; do not infer physical allocation, lock ownership, durability or peer isolation. No transaction finalization, reconnect or automatic replay. temp_store requires a one-use review_id bound to server-owned native work revision, no pending transaction, and explicit deletion confirmation; review lists bounded TEMP object name previews. Show the setting-specific backend warning and exact returned scope/outcome."
+    },
+    {
+      "operation_id": "set_connection_pragma_soft_heap_limit",
+      "resource_kind": "database",
+      "title": "Set process soft_heap_limit",
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Heap limit (bytes)",
+          "control": "text",
+          "required": true,
+          "help": "Nonnegative signed-64-bit decimal text; never convert through JavaScript number."
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed process/runtime limit",
+          "control": "text",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "process_wide_change_confirmed",
+          "label": "Affect all connections sharing this process SQLite runtime",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native process policy change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=soft_heap_limit. Despite historical transport/set_connection_pragma naming this policy is PROCESS/RUNTIME WIDE, never connection-local. Show the backend warning before explicit apply. Inspect/review returns decimal text; setter requires exact expected_value and confirmations. Native readback can be native_adjusted. No OS memory cap, peer isolation, transaction rollback restoration, automatic replay or file persistence is promised. Hard limits can only be lowered through this native SQL API."
+    },
+    {
+      "operation_id": "set_connection_pragma_hard_heap_limit",
+      "resource_kind": "database",
+      "title": "Set process hard_heap_limit",
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Heap limit (bytes)",
+          "control": "text",
+          "required": true,
+          "help": "Nonnegative signed-64-bit decimal text; never convert through JavaScript number."
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed process/runtime limit",
+          "control": "text",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "process_wide_change_confirmed",
+          "label": "Affect all connections sharing this process SQLite runtime",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native process policy change",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "irreversible_lowering_confirmed",
+          "label": "SQL cannot raise a lowered hard limit; process restart may be required",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=hard_heap_limit. Despite historical transport/set_connection_pragma naming this policy is PROCESS/RUNTIME WIDE, never connection-local. Show the backend warning before explicit apply. Inspect/review returns decimal text; setter requires exact expected_value and confirmations. Native readback can be native_adjusted. No OS memory cap, peer isolation, transaction rollback restoration, automatic replay or file persistence is promised. Hard limits can only be lowered through this native SQL API."
+    },
+    {
+      "operation_id": "set_connection_config_stmt_scanstatus",
+      "resource_kind": "database",
+      "title": "Configure stmt scanstatus",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Policy enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=stmt_scanstatus. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Exact boolean expected_value is required. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_reverse_scanorder",
+      "resource_kind": "database",
+      "title": "Configure reverse scanorder",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Policy enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=reverse_scanorder. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Exact boolean expected_value is required. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_enable_attach_create",
+      "resource_kind": "database",
+      "title": "Configure enable attach create",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Policy enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=enable_attach_create. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Exact boolean expected_value is required. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_enable_attach_write",
+      "resource_kind": "database",
+      "title": "Configure enable attach write",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Policy enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=enable_attach_write. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Exact boolean expected_value is required. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_enable_comments",
+      "resource_kind": "database",
+      "title": "Configure enable comments",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Policy enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=enable_comments. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Exact boolean expected_value is required. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_main_dbname",
+      "resource_kind": "database",
+      "title": "Configure main dbname",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Main schema alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current value",
+          "control": "text",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "review_id",
+          "label": "Original handle review",
+          "control": "text",
+          "required": true,
+          "hidden": true,
+          "readonly": true
+        },
+        {
+          "field_id": "schema_alias_change_confirmed",
+          "label": "Invalidate schema references and cached SQL",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=main_dbname. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Review returns a one-use review_id bound to the server-owned work revision; setter consumes it. Value is1\u20131024 UTF-8 bytes, with no NUL or attached/temp alias collision. Refresh all catalog references after success; existing prepared SQL may retain old bindings. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_lookaside",
+      "resource_kind": "database",
+      "title": "Configure lookaside",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Lookaside allocation",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "slot_size",
+              "label": "Slot bytes (multiple of 8)",
+              "control": "number",
+              "required": true
+            },
+            {
+              "field_id": "slot_count",
+              "label": "Slot count",
+              "control": "number",
+              "required": true
+            }
+          ],
+          "help": "Exactly one row; at most16MiB requested. Native geometry has no getter."
+        },
+        {
+          "field_id": "review_id",
+          "label": "Original handle review",
+          "control": "text",
+          "required": true,
+          "hidden": true,
+          "readonly": true
+        },
+        {
+          "field_id": "native_allocation_change_confirmed",
+          "label": "Acknowledge unobservable allocation geometry and native refusal",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle configuration",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config, fixed config=lookaside. Native helper must have captured this handle at its original open; availability is an actual native result, not a header declaration. Inspect/review/set_connection_config use the private source binding. No reconnect/replay, commit, rollback or future-default changes. Review returns a one-use review_id bound to the server-owned work revision; setter consumes it. value is exactly one typed grid row (or equivalent API object) with slot_size/slot_count. No geometry getter exists: expected_value is omitted/null. Show native usage separately from requested geometry, native refusal/BUSY and successful acknowledgement with geometry unobserved. Unknown outcomes require closing the original session; do not retry automatically."
+    },
+    {
+      "operation_id": "set_connection_config_fp_digits",
+      "resource_kind": "database",
+      "title": "Floating-point text digits",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Significant digits (3\u201323)",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed current digits",
+          "control": "number",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle policy",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_config with fixed config=fp_digits. Named integer signature, never boolean or unrestricted numeric op. Native getter/setter availability is required. Inspect/review/set_connection_config with exact expected_value; readback distinguishes native adjustment/refusal. Changes floating-point text conversion only, not stored binary values. No rollback restoration, transaction finalization, reconnect or automatic retry. Unknown outcomes require closing the original handle."
+    },
+    {
+      "operation_id": "configuration_capabilities",
+      "resource_kind": "database",
+      "title": "Connection configuration capabilities",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [],
+      "notes": "Task sqlite_connection_config, fixed operation=capabilities. Reports per-name native boolean/integer getter availability and current values, plus separate admitted non-getter signatures. It sends no SQL and does not consume lookaside slots. Main-alias setter availability and lookaside geometry are never inferred from signature admission. Native helper identity/absence is explicit. Use before selecting individual configuration forms; configure lookaside before any SQL/metadata preparation if its native used-slot count must be zero."
+    },
+    {
+      "operation_id": "set_connection_pragma_temp_store_directory",
+      "resource_kind": "database",
+      "title": "Stage host startup temp store directory",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value_mode",
+          "label": "Startup policy",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Native default"
+            },
+            {
+              "value": "DIRECTORY",
+              "label": "Directory"
+            }
+          ],
+          "required": true
+        },
+        {
+          "field_id": "directory",
+          "label": "Application-host directory within registration filesystem root",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "review_id",
+          "label": "One-use host review",
+          "control": "text",
+          "hidden": true,
+          "readonly": true,
+          "required": true
+        },
+        {
+          "field_id": "expected_policy_revision",
+          "label": "Reviewed host policy revision",
+          "control": "text",
+          "hidden": true,
+          "readonly": true,
+          "required": true
+        },
+        {
+          "field_id": "process_startup_change_confirmed",
+          "label": "Confirm persistent application-host policy for the next process startup",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm publication",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=temp_store_directory. Inspect/review/set_connection_pragma. Requires authenticated application-host Administrator, filesystem/administer/execute authority and the original-session native configuration component. This publishes future process startup policy; it never changes a live process or its TEMP data. Show configured and applied startup revisions separately, and restart_required. Native pragma_list gates build/platform availability. Restart is a separate host action; admission checks uninitialized SQLite, one OS thread and accepted directory identities before opening application databases. Failure aborts startup and preserves a receipt. No automatic restart, live fallback, or replay. Native VFS may ignore physical storage placement. Unknown publication requires inspection and a new review."
+    },
+    {
+      "operation_id": "set_connection_pragma_data_store_directory",
+      "resource_kind": "database",
+      "title": "Stage host startup data store directory",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value_mode",
+          "label": "Startup policy",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Native default"
+            },
+            {
+              "value": "DIRECTORY",
+              "label": "Directory"
+            }
+          ],
+          "required": true
+        },
+        {
+          "field_id": "directory",
+          "label": "Application-host directory within registration filesystem root",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "review_id",
+          "label": "One-use host review",
+          "control": "text",
+          "hidden": true,
+          "readonly": true,
+          "required": true
+        },
+        {
+          "field_id": "expected_policy_revision",
+          "label": "Reviewed host policy revision",
+          "control": "text",
+          "hidden": true,
+          "readonly": true,
+          "required": true
+        },
+        {
+          "field_id": "process_startup_change_confirmed",
+          "label": "Confirm persistent application-host policy for the next process startup",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm publication",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=data_store_directory. Inspect/review/set_connection_pragma. Requires authenticated application-host Administrator, filesystem/administer/execute authority and the original-session native configuration component. This publishes future process startup policy; it never changes a live process or its TEMP data. Show configured and applied startup revisions separately, and restart_required. Native pragma_list gates build/platform availability. Restart is a separate host action; admission checks uninitialized SQLite, one OS thread and accepted directory identities before opening application databases. Failure aborts startup and preserves a receipt. No automatic restart, live fallback, or replay. Native VFS may ignore physical storage placement. Unknown publication requires inspection and a new review."
+    },
+    {
+      "operation_id": "set_connection_pragma_sql_trace",
+      "resource_kind": "database",
+      "title": "Set native debug sql trace",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=sql_trace. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_vdbe_listing",
+      "resource_kind": "database",
+      "title": "Set native debug vdbe listing",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=vdbe_listing. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_vdbe_trace",
+      "resource_kind": "database",
+      "title": "Set native debug vdbe trace",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=vdbe_trace. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_vdbe_addoptrace",
+      "resource_kind": "database",
+      "title": "Set native debug vdbe addoptrace",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=vdbe_addoptrace. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_vdbe_debug",
+      "resource_kind": "database",
+      "title": "Set native debug vdbe debug",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=vdbe_debug. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_vdbe_eqp",
+      "resource_kind": "database",
+      "title": "Set native debug vdbe eqp",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=vdbe_eqp. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_parser_trace",
+      "resource_kind": "database",
+      "title": "Set native debug parser trace",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "value",
+          "label": "Enabled",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native state",
+          "control": "boolean",
+          "required": true,
+          "readonly": true
+        },
+        {
+          "field_id": "sensitive_output_confirmed",
+          "label": "Confirm potentially sensitive SQL and values in application-host diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original handle change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas; fixed pragma=parser_trace. Inspect/review/set_connection_pragma on the original handle. Requires actual DEBUG compile option and pragma_list name; release builds refuse. No callback replacement, transaction finalization or rollback restoration. vdbe_debug changes multiple VDBE flags together. Enabling native output requires sensitive_output_confirmed=true; output is native host diagnostics, not a returned query result."
+    },
+    {
+      "operation_id": "set_connection_pragma_lock_proxy_file",
+      "resource_kind": "database",
+      "title": "Configure native VFS lock proxy",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "maintenance"
+      },
+      "fields": [
+        {
+          "field_id": "schema",
+          "label": "Attached file schema",
+          "control": "text",
+          "default": "main",
+          "required": true
+        },
+        {
+          "field_id": "value_mode",
+          "label": "Proxy path selection",
+          "control": "select",
+          "options": [
+            {
+              "value": "AUTO",
+              "label": "Native automatic path"
+            },
+            {
+              "value": "PATH",
+              "label": "Explicit path"
+            }
+          ],
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Native lock-proxy file path",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed native proxy path (may be null)",
+          "control": "text",
+          "readonly": true,
+          "required": false
+        },
+        {
+          "field_id": "review_id",
+          "label": "One-use original-handle review",
+          "control": "text",
+          "hidden": true,
+          "readonly": true,
+          "required": true
+        },
+        {
+          "field_id": "native_locking_change_confirmed",
+          "label": "Confirm native VFS locking changes, not restored by rollback",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm locking change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Task sqlite_connection_pragmas, fixed pragma=lock_proxy_file; inspect/review/set_connection_pragma on original handle with registered filesystem authority and filesystem/administer/execute permissions. Requires actual ENABLE_LOCKING_STYLE=1 and native pragma_list entry; unavailable on standard Linux builds. Getter may acquire a VFS conch lock. Review is bound to original source work and file schema; no caller transaction at apply. AUTO requests :auto:, whose observed path is native-selected. Native VFS does not generally allow disabling proxy mode; no OFF workflow offered. Unknown outcome requires closing original session, no automatic replay. macOS native qualification belongs to platform team."
     }
   ]
 }

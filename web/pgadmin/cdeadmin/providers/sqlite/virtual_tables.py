@@ -194,6 +194,10 @@ def apply_creation(client, request, connection=None):
     try:
         if not owned:
             client._require_idle(connection)
+        from .virtual_inputs import runtime_gate
+        version = connection.execute('SELECT sqlite_version()').fetchone()[0]
+        runtime_gate({'resource_kind':'virtual-table','operation_id':'create',
+            'draft':{'module':target['module'],'module_options':target.get('module_options',{})}}, version)
         if owned:
             connection.execute('BEGIN IMMEDIATE')
             started = True

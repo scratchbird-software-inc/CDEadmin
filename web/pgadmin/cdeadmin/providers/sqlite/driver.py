@@ -39,7 +39,16 @@ class SQLiteConnection(sqlite3.Connection):
     """Retain authorization policy so editor compilation can compose it."""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        from .config_bridge import before_open,finish_open,cancel_open
+        staged=before_open()
+        try:
+            super().__init__(*args, **kwargs)
+            self._cdeadmin_config_api=finish_open(staged,self)
+        except BaseException:
+            cancel_open(staged)
+            try:super().close()
+            except Exception:pass
+            raise
         self._cdeadmin_authorizer = None
         self._cdeadmin_progress_handler = (None, 0)
         self._cdeadmin_extension_directories = []
@@ -48,6 +57,7 @@ class SQLiteConnection(sqlite3.Connection):
         self._cdeadmin_array_api = None
         self._cdeadmin_preupdate_api = None
         self._cdeadmin_trace_callback = None
+        self._cdeadmin_pragma_policy_reviews = {}
 
     def close(self):
         if self._cdeadmin_preupdate_api is not None:
@@ -57,12 +67,22 @@ class SQLiteConnection(sqlite3.Connection):
         if self._cdeadmin_session_api is not None:
             self._cdeadmin_session_api.close_all()
         super().close()
+        bridge=getattr(self,'_cdeadmin_config_api',None)
+        if bridge is not None:bridge.release(self)
+        self._cdeadmin_config_api=None
+        self._cdeadmin_pragma_policy_reviews.clear()
         self._cdeadmin_session_api = None
         self._cdeadmin_array_api = None
         self._cdeadmin_preupdate_api = None
         for directory in self._cdeadmin_extension_directories:
             shutil.rmtree(directory, ignore_errors=True)
         self._cdeadmin_extension_directories.clear()
+
+    def __del__(self):
+        bridge=getattr(self,'_cdeadmin_config_api',None)
+        if bridge is not None and not bridge.closed:
+            try:self.close()
+            except Exception:pass  # Never claim release if a native owner refused cleanup.
 
     def set_trace_callback(self, callback):
         if callback is not None and not callable(callback):
@@ -272,7 +292,10 @@ class SQLiteClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     f'SQLite native runtime {observed} is outside the '
                     f'supported {profile.version_requirement} range')
-            return super()._connect(request)
+            handle=super()._connect(request)
+            route=self._route(request)
+            handle._cdeadmin_filesystem_root=route.get('filesystem_root')
+            return handle
 
     def _require_idle(self, handle):
         if handle not in self._connections:

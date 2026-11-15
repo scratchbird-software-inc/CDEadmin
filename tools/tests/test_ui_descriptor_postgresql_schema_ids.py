@@ -21,6 +21,8 @@ SHELL_IDS = {'variant'}
 # parameter resets and foreign option grids. They are sent to the provider,
 # never to a pgAdmin template, so they are not ui.js ids.
 PROVIDER_TREE_IDS = {
+    # Native pg_attribute.attgenerated storage kind (s/v), absent from the inherited editor.
+    'generated_kind',
     'revoke', 'reset_fillfactor', 'reset_toast_tuple_target',
     'reset_parallel_workers', 'add_options', 'set_options', 'drop_options',
     'revoke_membership', 'revoke_members', 'reset_variables', 'admin_only',

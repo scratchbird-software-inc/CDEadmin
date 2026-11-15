@@ -5,8 +5,8 @@ and holds that lock through DROP and COMMIT. A name/SQL comparison alone is
 not a relation identity check. No caller-owned transaction is used here.
 """
 from collections.abc import Mapping
-from psycopg import sql
-from psycopg.rows import dict_row
+from psycopg import sql, Cursor
+from psycopg.rows import dict_row, tuple_row
 
 from .native_admin import _native_target
 
@@ -50,7 +50,7 @@ RELATION = '''SELECT c.oid,n.oid AS schema_oid,n.nspname AS schema,c.relname AS 
 
 
 def observe(connection, expected, database_id=None):
-    with connection.cursor(row_factory=dict_row) as cursor:
+    with Cursor(connection, row_factory=dict_row) as cursor:
         cursor.execute(CONTEXT); context = cursor.fetchone()
         if context is None or database_id is not None and context['database_oid'] != database_id:
             raise IdentityConflict('The reviewed native database identity changed; refresh and review again')
@@ -65,12 +65,25 @@ def lock_and_revalidate(connection, request, binding, database_id=None):
     expected = target(request)
     if not isinstance(binding, Mapping) or binding.get('target') != expected:
         raise IdentityConflict('The retained DROP identity is unavailable or changed; create a new review')
-    # NOWAIT avoids waiting indefinitely behind another transaction. Native
-    # LOCK privileges still apply; schema ownership alone may not grant them.
-    # A native lock refusal must never fall back to an unguarded DROP.
-    with connection.cursor() as cursor:
-        cursor.execute(sql.SQL('LOCK TABLE ONLY {}.{} IN ACCESS EXCLUSIVE MODE NOWAIT').format(
-            sql.Identifier(expected['schema']), sql.Identifier(expected['name'])))
+    # Reject an already stale target before any transient guard-view DDL.
+    if observe(connection, expected, database_id) != binding:
+        raise IdentityConflict('The native server, principal or table changed since review; refresh and review DROP again')
+    from .namespace_guard import lock as lock_namespace
+    lock_namespace(connection, expected['oid'], binding['relation']['schema_oid'], expected['schema'])
+    with Cursor(connection, row_factory=tuple_row) as cursor:
+        cursor.execute("SELECT pg_catalog.has_table_privilege(%s, 'UPDATE,DELETE,TRUNCATE')", (expected['oid'],))
+        lock_privilege = cursor.fetchone()[0]
+        if lock_privilege:
+            cursor.execute(sql.SQL('LOCK TABLE ONLY {}.{} IN ACCESS EXCLUSIVE MODE NOWAIT').format(
+                sql.Identifier(expected['schema']), sql.Identifier(expected['name'])))
+        else:
+            # Native owners can DROP even after revoking their own table
+            # ACLs, and a table owner need not have CREATE on the namespace.
+            # The helper has retained both namespace and relation catalog
+            # tuples: competing rename/drop cannot commit a replacement.
+            # DROP acquires the native relation lock itself, with bounded
+            # waiting. No transient DDL or extra namespace rights are needed.
+            cursor.execute("SET LOCAL lock_timeout = '1ms'")
     current = observe(connection, expected, database_id)
     if current != binding:
         raise IdentityConflict('The native server, principal or table changed since review; refresh and review DROP again')

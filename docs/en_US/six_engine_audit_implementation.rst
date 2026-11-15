@@ -842,3 +842,819 @@ failures exactly match the previous batch's error/case sets. No new failures
 were added. Lint counts before/after: JSON controls 301/301, MUI imports 212/212,
 UI engine branches 113/113, engine panels 113/113. This is backend/native
 qualification with explicit shared-render limitations, not a full UI gate pass.
+
+Five original-connection PRAGMA controls under SQ-AUD-03
+------------------------------------------------------
+
+Implemented in order from the existing pragma-decisions audit: foreign_keys,
+query_only, recursive_triggers, read_uncommitted and reverse_unordered_selects.
+SQ-AUD-03 remains partially implemented for other native PRAGMAs and action
+categories; this batch does not close five whole top-level audit records.
+
+The authenticated workspace action is sqlite_connection_pragmas. Keep the public
+owner-bound session_id and registered database_target_id in the envelope; send
+request with operation inspect/review/set_connection_pragma and one fixed pragma
+name from the five above. Inspect accepts only that name. Review additionally
+accepts boolean value and returns native_statement, expected_value and
+ready_to_apply. Apply additionally requires the exact boolean expected_value
+and confirmed:true. Nonboolean aliases such as 0, 1 or ON are not this typed
+transport. Each control has its own operations.json entry named
+set_connection_pragma_<name>, with boolean value, expected_value and confirmed
+controls. Display the actual review SQL through the native-task review flow;
+do not send these operations to independent-file visual administration.
+
+Execute permission is required for inspect, administer also for review/set.
+The studio resolves public sessions to private native bindings and replaces
+request-supplied session/language identities. Busy, uncertain and closed native
+connections are refused; no replacement connection is opened. Review and inspect
+do not advance the native work revision; a setter attempt does, invalidating
+earlier retained-work reviews. The provider serializes observation, comparison,
+native dispatch and read-back under the original client's lock.
+
+Runtime/build admission is an actual native getter returning integer 0 or 1.
+An unknown or omitted PRAGMA is unavailable, not a guessed false default. The
+canonical names are whitelisted, with no raw SQL/action selector or numeric ABI
+dispatch. Stale expected values refuse mutation. Native setter errors or a
+missing/mismatched postcondition never return an applied receipt and never
+trigger an automatic replay. Native getter/authorizer refusal before dispatch
+is distinguished from an unconfirmed setter outcome. Existing native authorizer
+ownership is retained; it can still deny the requested operation.
+
+These are connection flags, not file properties or defaults for later
+connections. Generic database alter refuses them rather than acknowledging a
+setting on a disposable connection. No commit or rollback is requested; rolling
+back caller data does not restore these flags. SQL outcomes after a flag change
+remain the native engine's outcomes.
+
+Native distinctions and acceptance:
+
+* Foreign keys: actual violating inserts are refused when enabled and permitted
+  when disabled. Setters are refused while the caller has an open transaction,
+  avoiding SQLite's ignored in-transaction assignment; review reports not ready.
+* Query-only: native writes return SQLITE_READONLY while existing pending rows
+  remain readable. The flag can be cleared on the original connection so the
+  caller can continue and explicitly roll back its own savepoint. It is not a
+  replacement for filesystem permissions, an immutable route or native extension
+  policies.
+* Recursive triggers: a bounded same-trigger chain produces different native
+  results with the switch off and on; recursion is not simulated by application
+  callbacks. Existing prepared-statement and depth-limit semantics remain native.
+* Read-uncommitted: native private-cache readers still do not see another
+  connection's pending rows. A separately qualified pair of actual shared-cache
+  connections demonstrates native lock refusal with the flag off, pending-row
+  visibility with it on, and disappearance after the writer's rollback.
+  No cache mode is silently changed or source connection reopened.
+* Reverse unordered scans: a supported native table scan reverses on the tested
+  plan while explicit ORDER BY stays authoritative. This is a diagnostic flag,
+  not a guarantee that every possible SQLite query plan reverses.
+
+The three-runtime matrix uses actual 3.35.0, 3.45.1 and required reference
+3.53.0 binaries/libraries. It includes descriptor round trips, native effects,
+connection isolation, stale/type/permission/busy/closed refusals, caller
+savepoints, rollback persistence, authorizer refusal and fault-injected missing
+getters/read-backs. sqlite-pragma-batch-native.json records scope, source hashes
+and per-version receipts. Human presentation, authenticated HTTP acceptance and
+native Windows/macOS qualification remain separate.
+
+Native behaviour references: SQLite's PRAGMA documentation
+(https://sqlite.org/pragma.html) and shared-cache locking documentation
+(https://sqlite.org/sharedcache.html). Existing native limitations are retained.
+
+Current PRAGMA batch qualification: 66 tests pass on each native SQLite 3.35.0,
+3.45.1 and 3.53.0 runtime. The broader regression suite passes 1,177 tests
+(65 skipped, plus 26 passing subtests), make ui-descriptors-check passes
+142 tests (66 skipped), and all 160 selected JavaScript checks pass. The
+descriptor validator reports zero errors. JSON controls remain 301, MUI imports
+212, UI engine branches 111 and engine panels 113; none of these counts grew.
+SQ-AUD-03 stays partial, with its other PRAGMA/action categories explicitly open.
+
+Second set of five PRAGMA controls under SQ-AUD-03
+------------------------------------------------
+
+Implemented sequentially from the existing audited decisions: automatic_index,
+ignore_check_constraints, trusted_schema, legacy_alter_table and
+cell_size_check. Together with the preceding set, ten audited native connection
+flags have typed management. SQ-AUD-03 still remains partial for the other
+native PRAGMAs and action categories.
+
+All five use the existing sqlite_connection_pragmas workspace action, original
+public session and registered database target envelope, and inspect/review/
+set_connection_pragma request operations. The fixed request.pragma values are
+the five names above. Individual operation descriptors are
+set_connection_pragma_<name>, with boolean value, observed expected_value and
+confirmed:true. Review returns the exact native_statement without preparing or
+executing that setter. Show it in native-task review; these operations are not
+independent-file visual-admin assignments.
+
+The same existing guards apply: execute/administer permissions, private session
+binding, idle/uncertain/closed connection checks, serialized native observation
+and compare-and-set, actual 0/1 runtime getter/build admission and read-back,
+explicit missing/denied/unknown outcomes, and no automatic retry. These flags
+predate the supported 3.35.0 floor. Prepared-statement invalidation and native
+behaviour remain SQLite's; application callbacks do not emulate the features.
+Values are connection state, not file properties, future defaults or transaction
+state. Database alter rejects them before normalizing mixed file/connection
+changes, so another requested file setting is not silently applied on its own.
+
+Native distinctions and acceptance:
+
+* automatic_index changes the planner's ability to build transient indexes.
+  The native join-plan test observes an automatic index when enabled, its
+  absence when disabled, and identical native query results. This is not a
+  persistent CREATE INDEX or an index-advisor workflow.
+* ignore_check_constraints permits native writes which otherwise violate CHECK.
+  Turning it off does not delete or repair already-invalid rows; later violating
+  writes are refused. Tests retain the caller transaction until its explicit
+  rollback. This does not disable foreign-key, UNIQUE or NOT NULL constraints.
+* trusted_schema controls trust in schema-origin execution. A native view using
+  an application-defined deterministic function is accepted with trust enabled
+  and refused with trust disabled; direct invocation remains allowed. Native
+  innocuous/direct-only classifications remain authoritative, not guessed from
+  a function name. Turning trust back on restores the tested view's use.
+* legacy_alter_table changes native rename propagation. The modern-mode test
+  observes a view being rebound to a renamed table; legacy mode leaves the
+  reference pointing at the previous name and the native view fails to bind.
+  Changing the flag alone does not repair that view. The owned fixture is
+  repaired explicitly by renaming the table back under the appropriate native
+  mode. Native foreign-key/version interactions are not replaced with a generic
+  rename policy.
+* cell_size_check enables additional native checks on pages read by SQLite.
+  Native valid-page reads and corruption refusal are tested against a separate
+  owned copy with a malformed table-leaf cell pointer. The original fixture's
+  bytes and data are verified unchanged. The check does not repair the file,
+  certify an entire database, or replace integrity_check; the test does not
+  claim that disabling checks makes the damaged page valid.
+
+Each new flag also participates in the original-session per-handle/default
+isolation, stale-value, savepoint/rollback persistence and mixed-file refusal
+matrix. Native evidence is recorded in sqlite-second-pragma-batch-native.json,
+with source hashes and separate version receipts for SQLite 3.35.0, 3.45.1 and
+reference 3.53.0. Human presentation, authenticated HTTP acceptance and native
+Windows/macOS qualification remain separate.
+
+The corruption fixture follows the native format's table-leaf header and
+cell-pointer layout documented at https://sqlite.org/fileformat.html; behaviour
+is qualified natively, not inferred from a header or catalog name. Native flag
+semantics are documented at https://sqlite.org/pragma.html.
+
+Current second-PRAGMA qualification: all 96 tests pass on each native SQLite
+3.35.0, 3.45.1 and 3.53.0 runtime. The wider regression suite passes 1,207 tests
+(65 skipped, plus 26 passing subtests), make ui-descriptors-check passes
+147 tests (66 skipped), and all 32 selected operation/descriptor JavaScript
+checks pass. Descriptor validation reports zero errors. Lint counts remain
+JSON controls 301/301, MUI imports 212/212, UI engine branches 111/111 and engine
+panels 113/113. This batch remains uncommitted; other SQ-AUD-03 work stays open.
+
+SQLite remaining native limits and numeric connection controls
+-------------------------------------------------------------
+
+Five further audited subfeatures are implemented: VDBE_OP, WORKER_THREADS,
+busy_timeout, wal_autocheckpoint and analysis_limit. SQ-AUD-03 and SQ-AUD-04
+remain partial parent records; this does not close five top-level audit records.
+All twelve interpreter-exposed sqlite3_limit categories now have typed controls;
+broader sqlite3_db_config and other PRAGMA workflows remain outstanding.
+
+UI handoff: database operations set_connection_limit_vdbe_op and
+set_connection_limit_worker_threads use the existing sqlite_connection_limits
+original-session transport, with integer value, integer expected_value and
+confirmed=true. Native getlimit/setlimit readback determines applied versus
+clamped results. The opcode budget can cause native SQLITE_NOMEM (Python
+MemoryError) during preparation. Recovery uses the same handle's native limit
+API, without preparing SQL. Worker threads is a budget; native compile-time
+limits may clamp it and no worker creation is promised.
+
+Database operations set_connection_pragma_busy_timeout,
+set_connection_pragma_wal_autocheckpoint and
+set_connection_pragma_analysis_limit use sqlite_connection_pragmas, with integer
+value and expected_value in 0..2147483647 and confirmed=true. Inspect and review
+observe the bound original session; setters compare that observation and read
+back native state. Busy timeout is milliseconds (zero disables waiting), WAL
+autocheckpoint is pages (zero disables automatic checkpoints), and analysis
+limit is approximate rows per index (zero requests unrestricted analysis).
+Setters neither enable WAL nor execute ANALYZE or manually checkpoint.
+
+Busy timeout replaces the native busy-handler policy; WAL autocheckpoint
+replaces the native WAL hook. Their forms require a separate
+replace_callback_confirmed=true acknowledgement. The prior callback identity
+is unobservable through these PRAGMAs, and restoring its previous numeric value
+does not restore an unknown application callback. Result fields report
+callback_policy, previous_callback_identity=unobservable,
+callback_replacement_requested and callback_restoration_claimed=false.
+
+These are per-handle settings with execute/administer authorization and the
+existing private-session, idle/uncertain/closed and serialized dispatch guards.
+They preserve caller transactions, are not restored by rollback and do not
+change peer handles, file settings or future connection defaults. Missing native
+getters mean not_dispatched; refused or mismatching post-dispatch observations
+mean unknown_outcome, with no automatic retry or success claim. Generic database
+alter rejects both direct and mixed file/connection settings before dispatch.
+
+Native tests demonstrate opcode preparation failure and no-SQL recovery, worker
+budget readback and sort correctness, actual SQLITE_BUSY waiting, automatic
+checkpoint progress into the main file after committed WAL writes, and reduced
+ANALYZE work with sampling. Uncheckpointed WAL content is not described as
+uncommitted. Receipts: sqlite-tuning-batch-native.json and separate native
+3.35.0, 3.45.1 and 3.53.0 XML reports in the designated work area. Human form,
+authenticated HTTP and Windows/macOS acceptance remain separate; ScratchBird
+history qualification remains deferred by owner direction.
+
+Opcode recovery evidence above uses a direct native execution on the retained
+handle. Managed query execution treats Python MemoryError without a native error
+code as uncertain: its existing close/reconnect requirement remains authoritative
+and is not bypassed by these controls. Do not promise in-place recovery through
+the Query Tool after it has blocked that session. Native timeout granularity
+also depends on the SQLite build; the lock-wait fixture uses 1100 milliseconds
+so older builds with second-granularity sleep support are exercised honestly.
+
+Current five-control qualification: 192 tests pass on each native SQLite
+3.35.0, 3.45.1 and 3.53.0 runtime. The wider backend suite passes 1,248 tests
+(65 skipped, plus 26 passing subtests); make ui-descriptors-check passes
+152 tests (66 skipped). All 32 selected JavaScript operation/descriptor checks
+pass and descriptor validation has zero errors. Lint counts are unchanged:
+JSON controls 301/301, MUI imports 212/212, UI engine branches 111/111 and engine
+panels 113/113. Changes remain uncommitted.
+
+Seven partial-record implementation stream
+------------------------------------------
+
+The next requested scope is the seven original records PG-AUDIT-IDENTITY-01,
+MA-AUDIT-FLAGSET, MA-AUDIT-TYPE-COMPLETION, FB-EMB-database_statistics,
+SQ-AUD-03, SQ-AUD-04 and SQ-AUD-17. This section records the new backend
+contracts; it does not declare the seven records finished or replace their
+remaining acceptance requirements.
+
+PostgreSQL schema-owner DROP admission
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The existing ordinary/partitioned-table identity guard now admits a schema
+owner who has native DROP authority but no table LOCK privilege. When the
+native UPDATE/DELETE/TRUNCATE privilege check permits LOCK, the existing
+ACCESS EXCLUSIVE NOWAIT route remains. Otherwise the transaction creates and
+drops a uniquely named zero-column guard view in the owned schema. Native
+CREATE VIEW retains an AccessShareLock on the exact referenced table, even
+after guard-view cleanup. The code then revalidates the full retained
+server/principal/database/schema/table generation and dispatches DROP in the
+same transaction. DROP upgrades the retained lock with lock_timeout=1ms on
+that route. Busy/stale/native privilege failures never fall back to an
+unguarded DROP. No table data is read or privileges granted.
+
+The review warning discloses guard DDL: native event triggers can observe its
+CREATE/DROP VIEW. Native 18.3 tests cover schema-owner execution, no leftover
+guard view, and a competing native DROP blocked after guard cleanup. Existing
+cross-cluster OID collision, replacement, namespace movement and table-owner
+checks remain. Other destructive object families and additional runtime/HTTP
+qualification remain separate outstanding scope.
+
+MariaDB session FLAGSET and explicit source-context hooks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Database-variable operations set_session_optimizer_switch_flags and
+set_session_optimizer_trace_flags declare task mariadb_session_flagsets with
+fixed variable=optimizer_switch or optimizer_trace. These operate on the
+bound original Data Studio session, not a disposable connection. Every
+inspect/review/set_session_flags request requires
+diagnostics_change_confirmed=true: explicit native observation changes the
+session's diagnostic and row-count state. Passive completion retains its
+zero-original-command policy.
+
+Review/set use value_mode=VALUE/FLAGS/BITMASK/DEFAULT, the existing typed flag
+rows and reset_defaults, or exact decimal bitmask text as applicable. Setter
+requires exact string expected_value from review and confirmed=true. Native
+SYSTEM_VARIABLES must expose a writable SESSION/SESSION ONLY FLAGSET and its
+actual option metadata. Numeric masks retain the native 64-bit bound; an
+oversized option inventory is refused for numeric mode rather than truncated.
+Textual flag assignment is not truncated to a fabricated bit position.
+
+Successful set returns outcome=native_acknowledged_with_readback and expanded
+native before_value/effective_value, not an echo of partial/default input.
+Native warnings are captured before readback as bounded level/code records;
+warning text is not published. No global/default change, commit, rollback,
+reconnect or automatic retry is requested. An unconfirmed setter/readback
+blocks source-session reuse. The Data Studio hook returns accepted=false,
+outcome=unknown_outcome, effective_value_observed=false and
+close_session_required=true; it does not return an applied result.
+
+Routine-local SQL type declarations now have a separate
+context.routine_type_candidates contract. SYS_REFCURSOR has Oracle and
+non-Oracle declaration examples; ASSOCIATIVE_ARRAY supplies an Oracle TYPE
+... IS TABLE OF ... INDEX BY ... declaration, never an invented column type
+named ASSOCIATIVE_ARRAY. Native active-plugin and qualified-version gates
+apply. Each template declares required_sql_mode, scope, completion_text and
+example_sql. Ordinary column types retain their separate parameter profiles.
+
+Operation refresh_editor_context declares task mariadb_editor_context with
+operation=refresh_completion and diagnostics_change_confirmed=true. It reads
+one fixed original-session context query, validates the admitted native
+identity, and applies its observed database, SQL mode, role and character-set
+context to a separately owned catalog peer. Source inspection and peer capture
+are serialized against source commands. Returned editor_context exposes the
+observed original context and routine-template available flags for that mode.
+It does not claim to observe temporary objects or uncommitted schema on the
+peer. The snapshot is not a guarantee after later source commands; the UI must
+invalidate source-context hints then. Do not silently substitute this explicit
+refresh for passive autocomplete or replay a lost request.
+
+Unavailable source inspection returns accepted=false,
+outcome=context_refresh_unavailable, close_session_required=true and unknown
+sent/diagnostic-preservation observations (original_session_commands_attempted=1). A failure
+on the private peer after successful inspection reports one source command,
+original_diagnostics_preserved=false and close_session_required=false. Original work
+is never committed or rolled back by the refresh.
+
+Embedded Firebird statistics target fencing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Linux statistics now hold an open descriptor and a verified private hardlink
+to the reviewed inode until native service completion and release. The
+hardlink is created in a private directory beside the approved database and
+verified against the reviewed device/inode after creation. A replacement
+between open and link is refused. The native service reads the stable alias,
+not a later same-name replacement. This alias is used only for read-only
+statistics, never as an alternative SQL database attachment or lock alias.
+The approved directory must permit temporary directory/hardlink creation;
+failure is a known pre-dispatch refusal. Alias cleanup runs on errors too.
+
+Native Linux qualification unlinks the original pathname and creates a
+same-name database during actual dispatch; statistics still report the
+original table. Descriptor symlinks were experimentally insufficient because
+native canonicalization can lose the deleted target; they are not the
+implemented fence. Non-Linux behaviour is preserved and its receipt explicitly
+keeps file_identity_race_fenced=false pending the platform teams' adapter and
+qualification. This is not a cross-platform completion claim.
+
+Seven current native statistics sections are exercised individually.
+DB_LOG is omitted and rejected before service attachment: it is an obsolete
+log-page option from Firebird1.0/1.5, not a Firebird5 capability. Native5.0.4
+rejected the attempted legacy service option with codes335544562/335545037.
+The current owning reference is
+https://firebirdsql.org/file/documentation/html/en/firebirddocs/gstat/firebird-gstat.html.
+Service completion, service release and utility exit-code observation remain
+distinct; no utility exit code is invented from returned text.
+
+SQLite typed configuration, getter inspection and object designs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Task sqlite_connection_config operates on the bound original query handle
+with inspect/review/set_connection_config and a fixed named config. Sixteen
+interpreter-bound boolean sqlite3_db_config controls have individual database
+operation entries. Fields are boolean value/expected_value and confirmed=true.
+Enabling reset_database, writable_schema or enable_load_extension additionally
+requires dangerous_change_confirmed=true. RESET_DATABASE immediately changes
+native database interpretation and arms a later VACUUM to erase its contents;
+this setter never executes VACUUM. Native getter/setter availability and exact
+readback are required; no unrestricted numeric db_config call is admitted.
+Permissions, source-idle/uncertain/closed checks, hook ownership and the native
+work revision use the existing original-session route. Settings are not
+transaction rollback state. Non-boolean/unbound native configuration APIs are
+not claimed by these sixteen controls.
+
+SQ-AUD-03 now has twenty typed original-session PRAGMA controls: seventeen
+booleans and the three numeric controls described above. The seven additional
+booleans are full_column_names, short_column_names, count_changes,
+empty_result_callbacks, fullfsync, checkpoint_fullfsync and defer_foreign_keys.
+The last resets on full COMMIT/ROLLBACK; failed COMMIT can retain both the flag
+and pending writes. Legacy callback flags do not promise a Python DB-API
+callback, and full-sync flags do not prove platform/filesystem/hardware
+barriers. Native tests observe column naming, affected-row result sets and
+actual deferred-FK failure/reset behaviour.
+
+Task sqlite_connection_pragmas also exposes pragma_inspection_capabilities and
+inspect_pragma_value (pragma, schema, object_name where required). The former
+lists declared getter signatures and separate non-getter workflows, without
+claiming runtime availability. The latter validates the original attachment,
+checks native pragma_list presence and returns at most1000 rows/4MiB with
+columns, exact values, native_storage_classes and a truncated flag. Empty
+metadata is neither a setting default nor proof of object existence. Getter
+presence is not mutation admission: management_declared/management_transport
+only identify a separate implemented workflow. Heap/directory observations
+require administer. Checkpoint, optimize, shrink and integrity actions are
+never silently run as getters. Further mutable settings/actions remain open.
+
+Operations table.rebuild and view.replace declare
+sqlite_schema_object_design. Requests carry database_target_id, exact baseline
+DDN, resource_id, operation=rebuild/replace and typed fields from the descriptor.
+A rebuild takes the complete desired column grid and preserves table-level
+constraints, native table modes, indexes and triggers. View replacement takes
+a native SELECT/WITH query and optional column_names grid; it retains INSTEAD
+OF triggers. Generation reproduces schema only in an empty private prototype,
+returns desired DDN and explicit rebuild identities, and leaves the file and
+original sessions unchanged. It excludes temp/attached targets and virtual
+rebuilds; their existing dedicated workflows are not relabelled.
+
+The UI then calls sqlite_schema_plan, displays its complete SQL/dependencies,
+passes the unchanged execution_sha256 to sqlite_schema_review, and applies
+only review_id/review_digest/confirmed through sqlite_schema_apply. Existing
+one-use receipts, exact file identity, three-way conflicts, atomic rollback,
+row conversion and independent rediscovery remain mandatory. Removed columns
+or changed affinity can lose/convert values and require the actual plan warning.
+A view is drop/recreate under review, never an invented ALTER VIEW.
+
+Table rebuild previews now validate derived view column facts against a native
+empty desired schema. Affinity changes may change projections without changing
+a view's SQL. Forged/stale projection facts block review; atomic apply checks
+the final native projections before commit. Pre3.37 runtimes use native empty
+module-constructor authorizer events to classify storage and native
+index_info(table-name) to observe WITHOUT ROWID; source-name suffix guesses
+are not used. An unreproducible schema remains explicitly unobserved. The
+index_info behaviour is documented at https://sqlite.org/pragma.html#pragma_index_info.
+
+Additional original-session and process policy contracts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The typed PRAGMA route additionally admits ten schema/pager settings:
+cache_size, cache_spill, max_page_count, default_cache_size, schema_version,
+journal_size_limit, mmap_size, secure_delete, locking_mode and temp_store.
+Each has its own operation descriptor and typed value, native getter, expected
+value comparison and native readback. journal_size_limit/mmap_size use canonical
+signed-64-bit decimal text, avoiding JavaScript integer rounding. Enum choices
+are explicit. A native clamp/ignored request returns native_adjusted; configured
+state never proves allocated bytes, physical erasure or lock ownership.
+
+Schema identifiers must be attached to the original session. temp_store has
+connection scope and rejects a schema argument. Changing it requires no open
+caller transaction, explicit TEMP-object deletion confirmation, and a one-use
+review_id bound to the server-owned native work revision. Review returns at
+most500 TEMP object name previews of256 characters, with truncation flags;
+the deletion scope is all TEMP objects, not only the displayed previews.
+Native compile-time TEMP_STORE options are returned separately from the
+configured policy. schema_version additionally requires explicit direct-header
+confirmation. default_cache_size/schema_version header persistence follows
+native transaction state; no setter receipt claims a durable commit. In
+particular, rolling back default_cache_size's header change need not restore
+its connection-cache change. Native defensive schema_version protection differs
+across versions: SQLite added that protection in3.40.0; the minimum3.35.0
+runtime does not have it. Reference:
+https://sqlite.org/releaselog/3_40_0.html.
+
+Setter-only case_sensitive_like has no native getter. Review never evaluates
+unknown application callbacks and returns before_value=null with an explicit
+unobserved flag. Apply requires a one-use review_id, the unchanged server-owned
+native work revision, explicit value, confirmed=true and
+replace_callback_confirmed=true. Native ASCII LIKE/GLOB probes establish only
+the resulting policy. Unknown readback consumes the review; callbacks are
+never restored or replayed automatically, and rollback does not restore them.
+Schema expressions involving LIKE may need REINDEX under the intended policy.
+
+sqlite_connection_maintenance reviews fixed REINDEX, ANALYZE and
+PRAGMA shrink_memory recipes on the original connection. It creates an existing
+retained native-script plan; the UI uses that plan's advance/poll/discard
+contract. Review suppresses prepare-time PRAGMA effects and never runs the
+action. Advance refuses intervening original native work before its first
+statement. One native execution remains caller-transaction-owned; no byte
+reclamation amount, implicit commit or automatic resubmission is promised.
+
+soft_heap_limit/hard_heap_limit are explicitly process/loaded-runtime policies,
+not connection-local controls, despite the historical sqlite_connection_pragmas
+transport name. Separate operation descriptors require exact decimal-text
+bytes and process_wide_change_confirmed=true. Hard-limit changes additionally
+require irreversible_lowering_confirmed=true: native SQL can only lower a
+hard limit, and a small limit can prevent SQL/cleanup until process restart.
+The response observes both soft/hard limits before and after, including native
+adjustment, and does not claim an OS memory cap, peer isolation or rollback
+restoration. Application-managed policy writes serialize, but unrelated native
+changes are not claimed to be excluded. Tests change these limits only inside
+disposable owned worker processes.
+
+Direct native virtual-table creation now repeats the FTS-option version gate
+against the actual dispatch connection before starting its DDL transaction.
+The driver/planning gate remains in place; direct administration calls cannot
+bypass it. Older runtimes refuse unsupported options without creating a table.
+
+The authenticated inherited PostgreSQL driver exposed an additional row-format
+integration defect in DROP review: its DictCursor.fetchone returns tuples even
+when a caller supplies dict_row. The identity guard now constructs a public
+psycopg Cursor with its own explicit dict/tuple row contract, rather than
+inheriting that cursor factory. A native regression uses the actual inherited
+DictCursor; this does not substitute a mock driver for the integration boundary.
+
+Native configuration and parent-identity follow-up (2026-11-15)
+============================================================
+
+This section supersedes the earlier implementation descriptions for the seven
+partially implemented records. Qualification is recorded separately in the
+current work-area ledger; this text is an API handoff, not a cross-platform
+acceptance certificate. No frontend presentation was implemented here.
+
+PostgreSQL parent namespace continuity
+-------------------------------------
+
+``PG-AUDIT-IDENTITY-01`` binds ordinary and partitioned table DROP to the
+observed cluster/server startup, effective/authenticated principal, database,
+namespace OID, relation OID and catalog generation. Apply rejects an already
+stale observation before temporary guard DDL. It retains both native
+``pg_namespace`` and ``pg_class`` tuple locks through the final observation,
+DROP and commit. This includes older server minors whose schema rename does not
+respect namespace object locks. A relation lock alone is insufficient.
+
+A database superuser can take the tuple lock directly. Other native table/schema
+owners require the fixed SQL helper
+``pg_catalog.scratchrobin_lock_drop_namespace_v1(oid,oid,text)`` in that database.
+The database operation ``install-drop-namespace-guard`` installs it through the
+normal provider plan/apply workflow, requiring the exact draft confirmation
+``INSTALL DROP NAMESPACE GUARD`` and native superuser authority. It performs
+CREATE only, never replaces an existing function, and does not grant catalog
+update privileges. The SECURITY DEFINER helper checks the invoking session or
+SET ROLE identity against native table/schema ownership. Apply verifies its
+body, signature, native SQL language, return type, volatility, strictness,
+search path, superuser ownership and execute privilege before invocation.
+Missing, altered or inaccessible helpers cause refusal and a new-review message;
+installation is never automatic. The reviewed installation explicitly grants
+PUBLIC EXECUTE on this ownership-restricted helper. An existing name collision requires inspection
+rather than automatic replacement.
+
+The namespace catalog-row lock also prevents a concurrent schema rename from redirecting the
+name-based DROP after final identity validation. Native table/schema owners can DROP even without table ACLs or schema CREATE
+rights. Where native table ACLs allow, apply additionally locks the relation
+before dispatch. Otherwise native DROP acquires its own relation lock under a
+1ms timeout while retained catalog-row locks prevent competing rename/drop
+from committing a replacement. No temporary guard-view DDL, namespace CREATE
+right or table ACL grant is needed. Busy targets are refused rather than retried.
+These table
+contracts do not certify unrelated destructive object families.
+
+SQLite configuration component and contracts
+-------------------------------------------
+
+``SQ-AUD-04`` now provides the complete 24-signature configuration vocabulary in
+the reference SQLite 3.53.0 header: sixteen interpreter-bound booleans, five
+additional booleans, MAINDBNAME, LOOKASIDE and FP_DIGITS. Native limit controls
+remain the twelve individually typed operations documented earlier. Actual
+runtime/build admission applies on every supported version; a declaration in a
+new header is not evidence that an older runtime implements that opcode.
+
+The public-API component in ``tools/native/sqlite_config`` captures a database
+only during its driver's staged original native open. It does not read private
+CPython connection layouts, accept pointers/opcode numbers from API clients,
+replace source SQL callbacks, reconnect, or reopen an existing query session.
+The module and interpreter must use the same native SQLite library instance.
+Each operation validates the original connection's live public owner. Retained
+MAINDBNAME strings remain allocated until native close; the handle permits at
+most 32 alias changes, stated as an application resource budget. Lookaside uses
+the native allocator, requires no slots in use, and has a disclosed 16 MiB
+application allocation budget. Native SQLITE_BUSY is a refusal; statements are
+not silently finalized to make a setter succeed. Slot geometry has no native
+getter: requested geometry must never be labelled an observed current value.
+
+Use ``sqlite_connection_config`` with ``capabilities`` to obtain the typed
+vocabulary and actual availability distinctions without sending original SQL.
+The descriptor operation is ``configuration_capabilities``. Additional setter
+operation IDs are ``set_connection_config_`` plus ``stmt_scanstatus``,
+``reverse_scanorder``, ``enable_attach_create``, ``enable_attach_write``,
+``enable_comments``, ``main_dbname``, ``lookaside`` and ``fp_digits``. Transport
+operations remain ``inspect``, ``review`` and ``set_connection_config``.
+Booleans and FP_DIGITS use exact typed current-value comparisons. MAINDBNAME
+and LOOKASIDE require a one-use ``review_id`` bound to the server-owned original
+work revision, plus their explicit effect acknowledgements. The descriptors
+specify every draft field. Report native readback/adjustment and refusal as
+returned; an unconfirmed setter outcome requires closing the original session,
+with no automatic replay or rollback-restoration claim.
+
+Linux developers install with ``bash tools/development/dev.sh sqlite-config``.
+This performs the DDN refresh, builds an isolated source capture, probes an
+actual target-interpreter connection and records source/core/interpreter/ABI and
+binary provenance. ``SCRATCHROBIN_NATIVE_CONFIG_WORK`` selects disposable build
+storage and ``SCRATCHROBIN_NATIVE_CONFIG_PREFIX`` selects the installation
+library directory. Existing unknown or changed installations are preserved;
+select a fresh prefix after stopping applications. An identical, hash-verified
+installation is reusable. ``CDEADMIN_SQLITE_CONFIG_LIBRARY`` selects an explicit
+component; otherwise the interpreter's lib/bin/DLLs directories are searched.
+Windows/macOS asset integration exists but native qualification remains owned
+by those platform teams.
+
+SQLite PRAGMA and startup workflows
+----------------------------------
+
+``SQ-AUD-03`` additionally surfaces seven DEBUG flags: ``sql_trace``,
+``vdbe_listing``, ``vdbe_trace``, ``vdbe_addoptrace``, ``vdbe_debug``,
+``vdbe_eqp`` and ``parser_trace``. Each has its own
+``set_connection_pragma_<name>`` descriptor on the original-session
+``sqlite_connection_pragmas`` transport. Admission requires both the actual
+DEBUG compile option and native pragma-list entry. Enabling requires
+``sensitive_output_confirmed=true`` because native host diagnostics may contain
+SQL and values. The native ``vdbe_debug`` flag changes multiple VDBE flags;
+rollback does not restore them. No source callback is replaced or restored.
+
+``lock_proxy_file`` has its own typed descriptor and original-session transport.
+Admission requires actual ``ENABLE_LOCKING_STYLE=1`` and native pragma-list
+presence. ``schema`` must identify an attached file inside registered filesystem
+authority. Review selects ``AUTO`` (native ``:auto:``) or ``PATH`` and records
+current native value, original work revision and a one-use review identity.
+Apply requires ``native_locking_change_confirmed``, exact reviewed state and no
+caller transaction. The getter can acquire a native VFS conch lock; do not label
+it a physically inert observation. Return the actual native path, including
+native automatic-path results. Native proxy mode generally cannot be disabled,
+so no invented OFF operation is offered. Linux release builds refuse this
+unavailable workflow; macOS qualification belongs to the platform team. An
+unconfirmed native setter requires closing the source session.
+
+``temp_store_directory`` and ``data_store_directory`` are process-global native
+settings. A live setter would be unsafe even with one application thread if
+another SQLite connection exists. Their typed descriptors therefore publish a
+future host-startup policy through ``sqlite_connection_pragmas``; they never
+execute a live global setter. ``inspect`` distinguishes configured policy and
+revision from current-process startup revision, native name availability and
+``restart_required``. Review requires native component/name availability,
+registered filesystem authority, original work revision and a trusted
+application-host Administrator principal. The server overwrites caller-supplied
+host-authorization fields. ``value_mode`` is ``DEFAULT`` or ``DIRECTORY``;
+DIRECTORY is bound to canonical directory/root device and inode identities.
+Apply consumes ``review_id``, compares ``expected_policy_revision`` and requires
+``confirmed`` and ``process_startup_change_confirmed``. Publication is locked,
+durable and bounded. Unknown publication is a distinct configuration outcome:
+inspect the store and obtain a new review rather than retrying automatically.
+No live transaction/TEMP state is finalized or destroyed.
+
+The accepted policy is ``DATA_DIR/sqlite-startup-policy.json``, overridable by
+absolute ``CDEADMIN_SQLITE_STARTUP_POLICY``. Canonical startup applies it before
+importing SQLite or opening application databases. The native component checks
+that exactly one OS thread exists and SQLite accepts a pre-initialization
+configuration query, then opens its sole private bootstrap database. Both native
+PRAGMA names are checked before any requested write, each native value is read
+back, the bootstrap database closes, and a separate interpreter probe verifies
+the same native library instance. Failure aborts startup and writes
+``<policy>.receipt.json``; it never silently falls back to unsafe live mutation.
+The original failure is retained without an in-process retry. No physical
+VFS temporary-file placement is inferred from a successful setting.
+
+For startup recovery, run ``tools/sqlite_startup_policy.py inspect --policy
+/absolute/policy.json`` as the application OS identity. The explicit ``clear``
+action requires both ``--expected-revision`` from that inspection and
+``--confirm-clear``. It clears future overrides under the same publication lock,
+without importing SQLite, changing a running process or restarting the host.
+
+``activate_extensions`` is the sole licensed-extension PRAGMA in the pinned
+reference inventory. Source inspection of the hash-pinned public 3.53.0
+amalgamation found only the guarded CEROD declaration and activation call, not
+its implementation. SQLite's CEROD distribution documentation requires separate
+licensed source appended to the amalgamation. CEROD activation therefore remains
+a post-beta native dependency under the owner source-scope rule; no application
+emulation or community execution support is claimed. The inspection capability
+response records that dependency separately from beta workflows.
+
+Five PostgreSQL backend audit closures (2026-11-15)
+=================================================
+
+This batch implements, in order, ``PG-AUDIT-GENERATED-01``,
+``PG-AUDIT-STATS-01``, ``PG-AUDIT-ACL-01``,
+``PG-AUDIT-DEFAULTACL-01`` and ``PG-AUDIT-CHECKPOINT-01``. The current
+work-area ledger records exact executed checks and versions. These feature
+closures do not close the separate cross-family retained-administration,
+version-matrix, platform or human presentation records. Descriptor ``draft``
+status for the new operation dialogs denotes outstanding presentation/family
+acceptance, not stub backend code. UI implementation remains with the UI team.
+
+Generated columns
+-----------------
+
+Column facts now retain ``generated_kind`` (native ``s`` or ``v``) and exact
+``genexpr`` separately from ``defval``. Capture reads the generated expression
+from ``pg_attrdef``; the provider column node supplies both facts for form
+initialization. Column ``create``/``alter`` have individual typed operation
+entries; the table creation grid also has ``generated_kind``. Creation defaults
+to stored for compatibility. Virtual creation requires PostgreSQL 18. The
+kind is fixed on an existing column; an in-place stored/virtual conversion is
+refused rather than relabelled.
+
+On column alter, ``generated_action`` is ``KEEP``, ``SET`` or ``DROP``. SET
+requires a nonempty expression, PostgreSQL 17 for stored columns and 18 for
+virtual columns. DROP is stored-only (13+) and preserves existing values while
+removing future generation. Explicit KEEP with a changed expression is refused;
+a legacy API draft containing a changed ``genexpr`` without the new action
+emits SET instead of silently ignoring it beside another change. Ordinary
+columns cannot acquire generation in place. Every emitted feature carries its
+minimum native server version, checked on the actual private connection at
+review and again at apply. Client-supplied version assertions are not used.
+SET can rewrite stored values and remove their statistics; no implicit ANALYZE
+is performed. Native DDL transactions, errors and rediscovery remain authoritative.
+
+Extended statistics
+-------------------
+
+``extended-statistics`` now has provider-native ``create``, ``alter``, ``drop``
+and ``inspect`` dialogs. Creation takes ``schema``, ``name``, ``table_schema``,
+``table`` and an ``elements`` grid of ``kind=column|expression`` plus ``value``.
+``kinds`` is a distinct grid containing ``ndistinct``, ``dependencies`` or
+``mcv``. A single element must be an expression with no multivariate kinds.
+Expression statistics require native 14+. The application limits a request to
+32 elements; PostgreSQL still enforces its own dimensional/eligibility limits.
+Virtual generated operands are native refusals, not a claimed statistics feature.
+
+``target`` is an integer from -1 to 10000; -1 resets the target. Inspect returns
+the native value, including PostgreSQL 18's NULL for a reset/default target.
+Alter supports target, owner, name, schema and comment; operands and kinds
+require reviewed drop/create. Compound alters perform ownership transfer last.
+Inspect uses the exact native OID and returns source relation OID, owner OID,
+keys, kinds and native definition; it does not expose collected data values.
+Drop requires the exact statistics name and has explicit CASCADE intent.
+
+The existing DDN native catalog already captured this kind. New
+``postgresql:new:<uuid>`` creation drafts now accept the same typed operands
+and kinds, with explicit source relation dependencies. The retained
+capture/plan/review/apply path guards/revalidates dependencies and checks the
+rediscovered statistics OID, source relation OID and statistics namespace before
+commit. Schema namespace collision checks remain separate from source-table
+identity; statistics names are schema-scoped, not table-scoped. This adds native
+DDN creation, not an ANALYZE or statistics-data import service. Ordinary
+administration retains its existing review lifecycle; the separately recorded
+cross-family retained-administration audit is not waived by these tests.
+
+Parameter ACLs
+--------------
+
+``parameter-acl`` is a server-level operation resource with ``grant``, ``revoke``
+and ``inspect`` dialogs. Native PostgreSQL 15+ is required at review and apply.
+The target is the native parameter name; a supplied draft parameter must agree
+with a selected native target. A group invocation may explicitly supply
+``parameter`` without an existing ACL row. Typed ``privileges`` rows select SET
+and/or ALTER SYSTEM; typed ``roles`` rows select exact role names or PUBLIC.
+Grant supports ``with_grant``; revoke supports ``grant_option_only`` and
+explicit ``cascade`` (otherwise RESTRICT). Illegal combinations are refused.
+This grants parameter authority and never assigns a configuration value.
+
+Server inventory reads ``pg_parameter_acl`` OIDs, names and ACLs without
+configuration values. Inspect and mutation readback return native explicit
+ACL entries with grantor/grantee OIDs, privilege and grantability, plus native
+current-principal SET/ALTER SYSTEM privilege observations. A missing explicit
+ACL row does not prove effective access or denial. Native grant warnings and
+role inheritance can affect effective rights: a successful command is not
+presented as evidence that every requested direct grant was newly installed.
+Application administer/execute permission does not replace native grant authority.
+The retained transaction performs readback before COMMIT and releases its own
+attachment. No automatic replay is introduced.
+
+Default privileges
+------------------
+
+``default-privileges`` has dedicated selected-database ``grant``, ``revoke`` and
+``inspect`` operations, preserving the existing schema/database family grids.
+The new selectors cover TABLES, SEQUENCES, FUNCTIONS/ROUTINES, TYPES, SCHEMAS and
+LARGE OBJECTS. Large-object defaults require native 18+; explicit MAINTAIN
+requires 17+. The selected database OID is mandatory, so the adapter cannot
+silently apply a database template in a maintenance database.
+
+``owner_mode`` selects CURRENT_ROLE (empty ``owners`` grid) or NAMED_ROLES
+(explicit owner ``role`` rows). ``owner_kind`` selects the native FOR ROLE or
+FOR USER synonym. ``scope`` selects GLOBAL (empty ``schemas`` grid) or SCHEMAS
+(explicit ``schema`` rows). SCHEMAS and LARGE OBJECTS reject IN SCHEMA. These
+are explicit operation selectors, not guesses from a selected ACL row's label.
+Typed ``privileges`` must match the object family, or contain ALL alone;
+``grantees`` identifies native role names or PUBLIC. Grant supports grant
+option; revoke supports grant-option-only and CASCADE/RESTRICT. Inspect and
+precommit mutation readback preserve native default-ACL OIDs, owner and schema
+OIDs, object-family code, ACLs and structured explicit grants.
+
+Defaults affect future objects created for those owners; membership does not
+merge every role's default templates, and existing object ACLs are unchanged.
+An absent template row leaves native built-in defaults in effect, including
+native PUBLIC defaults where applicable. It never means all access is denied.
+Native role membership/authority and schema restrictions remain engine enforced;
+revocation is not implemented as an application rewrite of existing object ACLs.
+
+Standalone checkpoint
+---------------------
+
+Server ``checkpoint`` has its own typed descriptor, review and explicit
+confirmation. Review binds the native server address/port/startup, database,
+effective/authenticated principal names and OIDs, active role, and optional
+native system identifier. Apply reobserves the same peer and refuses a changed
+binding before dispatch. The command uses a private autocommit connection;
+caller transactions and savepoints are neither committed nor rolled back.
+Native superuser or native checkpoint-role authority is still required.
+
+``wait_timeout_ms`` is an integer from 1 to 600000, default 30000, applied as a
+native statement timeout on this private connection. The command must return
+the actual native ``CHECKPOINT`` tag. ``transaction_outcome`` is explicitly
+``not_applicable``. ``checkpoint_receipt`` records native completion/peer,
+nontransactional scope, wait bound and connection-release outcome separately.
+It does not claim independent physical durability or that SQL rollback undoes
+a checkpoint. Known native permission/transaction-block refusals remain known
+refusals. Cancellation, timeout, acknowledgement loss or an unrecognized command
+tag after dispatch are unknown effects: native checkpoint work can continue
+after the caller stops waiting. Do not replay automatically. This is a bounded
+synchronous operation; no progress stream or manual cancellation endpoint is
+advertised. Qualification includes actual native CHECKPOINT plus injected lost
+acknowledgement/cancellation responses after completion; those injections do
+not claim that a physical network outage was induced.
+
+Native syntax/eligibility references: PostgreSQL documentation for
+`ALTER TABLE <https://www.postgresql.org/docs/18/sql-altertable.html>`_,
+`CREATE STATISTICS <https://www.postgresql.org/docs/18/sql-createstatistics.html>`_,
+`GRANT <https://www.postgresql.org/docs/15/sql-grant.html>`_, and
+`ALTER DEFAULT PRIVILEGES <https://www.postgresql.org/docs/18/sql-alterdefaultprivileges.html>`_.
+All native checks in this batch use owned PostgreSQL 18.3 fixtures. Native
+qualification of other supported majors and Windows/macOS remains separate.
+No ScratchBird history tests were run.
+
+Parameter-name qualification additionally covers native ASCII case folding,
+legacy GUC aliases (including the version-dependent SSL alias) and qualified
+custom names longer than one SQL identifier. Readback reports the canonical
+native ACL name without reading configuration values. Each qualified name
+component is quoted independently. The inherited UI-schema-ID guard explicitly
+recognizes ``generated_kind`` as a provider-native field; it is not sent to an
+inherited pgAdmin template.
+
+The descriptor/lint boundary has no new UI implementation: JSON controls remain
+301, MUI imports 212, engine branches 111, engine panels 113, and context-menu
+engine branches 14 (before and after). The combined native/validation suite and
+affected PostgreSQL consumers are recorded separately from human form and
+platform acceptance in the work-area receipts.

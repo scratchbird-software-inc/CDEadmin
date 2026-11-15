@@ -35,7 +35,7 @@ def test_facts_read_the_captured_attribute():
         'cltype': 'numeric(10,2)', 'attnotnull': False, 'defval': '0',
         'description': 'gross', 'colconstype': 'n', 'attidentity': '',
         'attstattarget': -1, 'attstorage': 'm', 'attcompression': '',
-        'attacl': [], 'attoptions': [], 'seclabels': []}
+        'attacl': [], 'attoptions': [], 'seclabels': [], 'generated_kind': '', 'genexpr': ''}
     identity = dict(COLUMN, catalog_row=dict(COLUMN['catalog_row'],
                                              attidentity='a'))
     assert facts(identity)['colconstype'] == 'i'

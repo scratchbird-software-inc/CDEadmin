@@ -95,6 +95,12 @@ PROFILE = PilotProfile(
 
 class SQLiteAdministration(RelationalAdministration):
     def _compile_alter(self, request):
+        from .connection_pragmas import CONTROL_NAMES
+        from .connection_config import CONFIGS
+        from .extended_config import NAMES as EXTENDED_CONFIGS
+        CONTROL_NAMES = (*CONTROL_NAMES, *CONFIGS, *EXTENDED_CONFIGS)
+        if request['resource_kind'] == 'database' and set(request['draft'].get('changes', {})).intersection(CONTROL_NAMES):
+            raise RelationalClientError('These are connection-local or host-runtime controls; use their typed original-session or host-startup action')
         if request['resource_kind'] == 'database' and 'synchronous' in request['draft'].get('changes', {}):
             raise RelationalClientError('synchronous is connection-local; use the original-session connection setting')
         return super()._compile_alter(request)
@@ -128,6 +134,15 @@ class SQLiteAdministration(RelationalAdministration):
         return super()._programmable_create(kind, name, draft, options)
 
     def _normalize_draft(self, kind, operation, draft):
+        from .connection_pragmas import CONTROL_NAMES
+        from .connection_config import CONFIGS
+        from .extended_config import NAMES as EXTENDED_CONFIGS
+        CONTROL_NAMES = (*CONTROL_NAMES, *CONFIGS, *EXTENDED_CONFIGS)
+        if kind == 'database' and operation == 'alter' and isinstance(draft, Mapping):
+            changes = draft.get('changes', {})
+            if set(draft).intersection(CONTROL_NAMES) or (
+                    isinstance(changes, Mapping) and set(changes).intersection(CONTROL_NAMES)):
+                raise RelationalClientError('These are connection-local or host-runtime controls; use their typed original-session or host-startup action')
         if kind == 'trigger' and operation == 'create':
             value = super()._normalize_draft(kind, operation, draft)
             if 'when' in value:
@@ -211,6 +226,7 @@ class SQLiteAdministration(RelationalAdministration):
             result['sqlite_virtual_constructor'] = {
                 'schema': self._path_value(parent)[0], 'name': request['draft']['name'],
                 'module': options['module'],
+                'module_options': dict(options.get('module_options') or {}),
             }
             result['warnings'] = [
                 'SQLite checks installed modules, tokenizer availability and native constructor constraints at execution.',
@@ -378,6 +394,26 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
         finally:
             with self.client._lock:self.client._busy.discard(id(handle))
 
+    def native_connection_config_action(self, request):
+        from .connection_config import action
+        if not isinstance(request,Mapping) or not isinstance(request.get('operation'),str):
+            raise RelationalClientError('Select a typed native configuration operation')
+        self._require('execute')
+        if request.get('operation') not in {'inspect','capabilities'}:
+            self._require('administer')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            try:
+                return action(handle, self.client.module, {
+                    key: value for key, value in request.items()
+                    if key not in {'session_id', 'language_profile','_native_work_revision'}},
+                    native_work_revision=request.get('_native_work_revision'))
+            except RelationalClientError as error:
+                if getattr(error,'native_outcome',None)=='unknown_outcome':
+                    self.client._uncertain.add(id(handle))
+                raise
+
     def native_connection_limits_action(self, request):
         from .connection_limits import action
         self._require('execute')
@@ -400,6 +436,34 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
             self.client._require_idle(handle)
             return action(handle, {key: value for key, value in request.items()
                 if key not in {'session_id', 'language_profile'}})
+
+    def native_connection_pragmas_action(self, request):
+        from .connection_pragmas import action
+        if not isinstance(request,Mapping) or not isinstance(request.get('operation'),str):
+            raise RelationalClientError('Select a typed native PRAGMA operation')
+        self._require('execute')
+        from .pragma_inspection import GLOBAL
+        if request.get('operation') not in {'inspect','inspect_pragma_value','pragma_inspection_capabilities'} or (isinstance(request.get('pragma'),str) and request['pragma'] in GLOBAL):
+            self._require('administer')
+        from .startup_policy import NAMES as STARTUP_NAMES
+        startup_policy=request.get('pragma') in STARTUP_NAMES and request.get('operation') in {'inspect','review','set_connection_pragma'}
+        if startup_policy or request.get('pragma')=='lock_proxy_file':self._require('filesystem')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            return action(handle, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile','_native_work_revision','_host_authorized','_host_principal'}},
+                native_work_revision=request.get('_native_work_revision'),
+                host_authorized=request.get('_host_authorized') is True,
+                startup_policy_file=self._startup_policy_file() if startup_policy else None,
+                filesystem_root=getattr(handle,'_cdeadmin_filesystem_root',None),
+                principal=request.get('_host_principal'),endpoint_id=getattr(self.context,'endpoint_id',None) if hasattr(self,'context') else None)
+
+    @staticmethod
+    def _startup_policy_file():
+        import config
+        from sqlite_startup import policy_path
+        return str(policy_path(config))
 
     def native_array_action(self, request, library, max_bytes=None):
         from .array_actions import action
@@ -1014,7 +1078,11 @@ def _resources(connection, request):
                     'scalar PRAGMA returned no row'
                 ),
             })
-        return list(resources.values())
+        result=list(resources.values())
+        if sqlite3.sqlite_version_info < (3,37,0):
+            from .legacy_table_metadata import observe
+            observe(result)
+        return result
     finally:
         cursor.close()
 

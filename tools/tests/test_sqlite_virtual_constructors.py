@@ -56,9 +56,17 @@ def test_structured_native_creation_real_queries_and_catalog(tmp_path, module, c
     wanted = request(tmp_path, module, columns, options)
     assert ADMINISTRATION.validate(wanted)['errors'] == []
     planned = ADMINISTRATION.plan(wanted); client = _create_client()
+    from pgadmin.cdeadmin.providers.sqlite.virtual_inputs import MINIMUM
+    unsupported=any(key in options and sqlite3.sqlite_version_info<minimum for key,minimum in MINIMUM.items())
     try:
         with closing(sqlite3.connect(path)) as observer:
             assert observer.execute("SELECT count(*) FROM sqlite_schema WHERE name='created:雪'").fetchone() == (0,)
+        if unsupported:
+            with pytest.raises(RelationalClientError,match='requires SQLite'):
+                ADMINISTRATION.apply(client, planned)
+            with closing(sqlite3.connect(path)) as observer:
+                assert observer.execute("SELECT count(*) FROM sqlite_schema WHERE name='created:雪'").fetchone()==(0,)
+            return
         result = ADMINISTRATION.apply(client, planned)
         assert result['native_outcome'] == 'committed' and result['native_virtual_table']['columns']
         assert ADMINISTRATION.validate_operation_post_state(client, {**planned, 'provider_result': result})['confirmed']
@@ -93,7 +101,13 @@ def test_structured_native_creation_real_queries_and_catalog(tmp_path, module, c
 def test_external_and_contentless_native_constructors(tmp_path, module, options):
     path = tmp_path / 'live.sqlite'; seed(path); client = _create_client()
     try:
-        result = ADMINISTRATION.apply(client, ADMINISTRATION.plan(request(tmp_path, module, ['body'], options)))
+        from pgadmin.cdeadmin.providers.sqlite.virtual_inputs import MINIMUM
+        planned=ADMINISTRATION.plan(request(tmp_path, module, ['body'], options))
+        if any(key in options and sqlite3.sqlite_version_info<minimum for key,minimum in MINIMUM.items()):
+            with pytest.raises(RelationalClientError,match='requires SQLite'):
+                ADMINISTRATION.apply(client,planned)
+            return
+        result = ADMINISTRATION.apply(client, planned)
         assert result['native_outcome'] == 'committed'
         with closing(sqlite3.connect(path)) as observer:
             if options['content']:

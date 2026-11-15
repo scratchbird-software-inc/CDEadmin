@@ -218,7 +218,7 @@ def _column_clause(row):
         if _blank(row.get('genexpr')):
             _refuse('a generated column needs genexpr')
         clause += (' GENERATED ALWAYS AS ('
-                   + expression(row['genexpr'], 'genexpr') + ') STORED')
+                   + expression(row['genexpr'], 'genexpr') + ') ' + column_editor.generated_storage(row))
     return clause
 
 
@@ -616,7 +616,10 @@ def compile_operation(operation, native, draft):
         statements = _drop(native, draft)
     else:
         _refuse('table inspection stays with the provider tree')
-    return {'statement': ';\n'.join(statements), 'read_only': False}
+    result = {'statement': ';\n'.join(statements), 'read_only': False}
+    if operation == 'create' and any(row.get('colconstype') == 'g' and row.get('generated_kind') == 'v' for row in draft.get('columns', [])):
+        result['minimum_server_version'] = 180000
+    return result
 
 
 # -- form -------------------------------------------------------------------

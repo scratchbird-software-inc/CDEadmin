@@ -14,6 +14,8 @@ MAX_BYTES = 8 * 1024 * 1024
 # Deliberate projections: never select pg_authid password hashes, rolconfig
 # values, tablespace options or arbitrary role/database-setting values.
 SECTIONS = (
+    ('parameter-acls','parameter-acl','pg_parameter_acl',
+     'SELECT oid::text,parname,to_jsonb(p)::text FROM pg_catalog.pg_parameter_acl p ORDER BY oid'),
     ('roles', 'role', 'pg_authid', '''SELECT oid::text, rolname,
         jsonb_build_object('oid',oid,'rolname',rolname,'rolsuper',rolsuper,
           'rolinherit',rolinherit,'rolcreaterole',rolcreaterole,'rolcreatedb',rolcreatedb,

@@ -2082,6 +2082,11 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_schema_object_design(self,server,request):
+        from .sqlite_catalog_service import object_design
+        try:return object_design(self,server,request)
+        except (ValueError,TypeError,KeyError) as error:raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_schema_column_design(self,server,request):
         from .sqlite_catalog_service import column_design
         try:return column_design(self,server,request)
@@ -4259,6 +4264,40 @@ class ProviderWorkspaceService:
                 if not isinstance(data.get('request'), dict):
                     raise ProviderWorkspaceError('Select a typed original-connection setting')
                 return self.studio_service.sqlite_connection_settings_action(
+                    context, data.get('session_id'), data['request'])
+            if action == 'sqlite_connection_maintenance':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-connection setting')
+                return self.studio_service.sqlite_connection_maintenance_review(
+                    context, data.get('session_id'), data['request'])
+            if action == 'sqlite_connection_pragmas':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-connection setting')
+                host_authorized=False;host_principal=None
+                if data['request'].get('pragma') in ('temp_store_directory','data_store_directory'):
+                    from flask import has_request_context
+                    if has_request_context():
+                        import config
+                        from flask_security import current_user
+                        host_authorized=bool(current_user.is_authenticated and (
+                            not config.SERVER_MODE or current_user.has_role('Administrator')))
+                        if host_authorized:host_principal=str(current_user.id)
+                return self.studio_service.sqlite_connection_pragmas_action(
+                    context, data.get('session_id'), data['request'],host_authorized=host_authorized,host_principal=host_principal)
+            if action == 'mariadb_editor_context':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-session editor context')
+                return self.studio_service.mariadb_editor_context_action(
+                    context, data.get('session_id'), data['request'])
+            if action == 'mariadb_session_flagsets':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-session FLAGSET')
+                return self.studio_service.mariadb_session_flagsets_action(
+                    context, data.get('session_id'), data['request'])
+            if action == 'sqlite_connection_config':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-connection configuration')
+                return self.studio_service.sqlite_connection_config_action(
                     context, data.get('session_id'), data['request'])
             if action == 'sqlite_connection_limits':
                 if not isinstance(data.get('request'), dict):

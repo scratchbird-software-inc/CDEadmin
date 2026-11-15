@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sys
 import subprocess
 import tarfile
 import tempfile
@@ -155,6 +156,12 @@ def paths(env):
                   'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
     preupdate_library = STATE / 'sqlite' / preupdate_name
     if preupdate_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_PREUPDATE_LIBRARY', str(preupdate_library))
+    config_marker=STATE/'sqlite/config-build.json'
+    if config_marker.is_file():
+        config_name=json.loads(config_marker.read_text(encoding='utf8')).get('filename','')
+        if Path(config_name).name==config_name and config_name.startswith('_cdeadmin_dbconfig'):
+            config_library=STATE/'sqlite'/config_name
+            if config_library.is_file():selected.setdefault('CDEADMIN_SQLITE_CONFIG_LIBRARY',str(config_library))
     sqlite_shell = STATE / 'sqlite' / ('sqlite3' + extension)
     if sqlite_shell.is_file(): selected.setdefault('CDEADMIN_SQLITE_BINARY', str(sqlite_shell))
     candidates=[STATE/'mysql-shell/bin'/('mysqlbinlog'+extension),
@@ -268,6 +275,7 @@ def clients(evidence, env):
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
         build_macos_python(evidence, env)
+    build_sqlite_config(evidence, env)
 
 
 def build_sqlite(evidence, env):
@@ -489,6 +497,38 @@ def build_sqlite_preupdate(evidence, env):
     shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
         'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_config(evidence, env):
+    """Public configuration bridge uses the selected interpreter's native ABI."""
+    sqlite=STATE/'sqlite'
+    interpreter=STATE/'python/bin/python3.14' if platform.system()=='Darwin' else Path(sys.executable)
+    abi=json.loads(subprocess.check_output([str(interpreter),'-c',
+        'import sysconfig,json,sys;print(json.dumps(dict(suffix=sysconfig.get_config_var("EXT_SUFFIX"),soabi=sysconfig.get_config_var("SOABI"),version=sys.version)))'],env=env,text=True))
+    name='_cdeadmin_dbconfig'+abi['suffix'];target=sqlite/name;marker=sqlite/'config-build.json'
+    project=ROOT/'tools/native/sqlite_config';provenance=ROOT/'tools/native/sqlite_recovery/provenance.cmake'
+    library=sqlite/('sqlite3.lib' if os.name=='nt' else 'libsqlite3.0.dylib')
+    core=sqlite/('sqlite3.dll' if os.name=='nt' else 'libsqlite3.0.dylib')
+    sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs={'core':sha(core),'cmake':sha(project/'CMakeLists.txt'),'adapter':sha(project/'api.c'),
+        'provenance':sha(provenance),'interpreter':abi,'system':platform.system(),'machine':platform.machine()}
+    if marker.is_file():
+        previous=json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs')==inputs and target.is_file() and previous.get('sha256')==sha(target)
+                and Path(str(target)+'.json').is_file() and previous.get('provenance_sha256')==sha(Path(str(target)+'.json'))):return
+        raise RuntimeError('Native configuration bridge changed; stop apps and use a fresh owned runtime')
+    if target.exists():raise RuntimeError('Preserved an unknown native configuration bridge')
+    build=STATE/'sqlite-config-build'
+    command(['cmake','-S',project,'-B',build,'-DCMAKE_BUILD_TYPE=Release',
+        '-DPython3_EXECUTABLE='+str(interpreter),'-DSQLite3_INCLUDE_DIR='+str(sqlite),
+        '-DSQLite3_LIBRARY='+str(library),*(['-A','x64']if os.name=='nt'else[])],
+        env=env,log=evidence/'sqlite-config-configure.log')
+    command(['cmake','--build',build,'--config','Release','--parallel','3'],env=env,log=evidence/'sqlite-config-build.log')
+    built=next((path for path in (build/name,build/'Release'/name)if path.is_file()),None)
+    if built is None:raise RuntimeError('Native configuration build did not produce its interpreter module')
+    shutil.copy2(built,target);shutil.copy2(str(built)+'.json',str(target)+'.json')
+    marker.write_text(json.dumps({'inputs':inputs,'filename':name,'sha256':sha(target),
+        'provenance_sha256':sha(Path(str(target)+'.json'))},indent=2),encoding='utf8')
 
 
 def build_macos_python(evidence, env):

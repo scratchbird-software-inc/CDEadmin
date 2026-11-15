@@ -1896,6 +1896,48 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def native_editor_context_action(self, request):
+        from .mariadb_editor_context import observe
+        from .mariadb_completion import complete
+        from ..native_editor import session_access
+        self._require('execute')
+        handle=self._editor_session(request)
+        values={key:value for key,value in request.items() if key not in {'session_id','language_profile'}}
+        if (request.get('language_profile')!='mariadb-sql' or set(values)!={'operation','diagnostics_change_confirmed'}
+                or values['operation']!='refresh_completion' or values['diagnostics_change_confirmed'] is not True):
+            raise RelationalClientError('Explicit original-session diagnostics acknowledgement is required')
+        with session_access(self.client,handle,'mariadb'):
+            try:context=observe(self.client,handle)
+            except Exception:
+                self.client._uncertain_sessions.add(id(handle))
+                return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':True,
+                    'original_session_commands_attempted':1,'original_session_commands_sent':None,
+                    'original_diagnostics_preserved':None,'automatic_retry':False}
+            try:return {'editor_context':complete(self.client,handle,source_context=context)}
+            except Exception:
+                return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':False,
+                    'original_session_commands_sent':1,'original_diagnostics_preserved':False,'automatic_retry':False}
+
+    def native_session_flagsets_action(self, request):
+        from .mariadb_flagsets import action
+        from ..native_editor import session_access
+        self._require('execute')
+        self._require('administer')
+        if request.get('language_profile') != 'mariadb-sql':
+            raise RelationalClientError('Native MariaDB session required')
+        handle=self._editor_session(request)
+        with session_access(self.client,handle,'mariadb'):
+            try:
+                return action(handle,{key:value for key,value in request.items()
+                    if key not in {'session_id','language_profile'}})
+            except RelationalClientError as error:
+                if getattr(error, 'native_outcome', None) == 'unknown_outcome':
+                    self.client._uncertain_sessions.add(id(handle))
+                raise
+            except Exception as error:
+                self.client._uncertain_sessions.add(id(handle))
+                raise RelationalClientError('Native session FLAGSET observation failed; close this session') from None
+
     def backup_stage_action(self, request):
         from .mariadb_backup_stages import action
         self._require('execute')

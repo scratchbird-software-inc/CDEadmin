@@ -26,6 +26,7 @@ from functools import wraps
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from psycopg import Cursor as NativeCursor
 from flask import render_template
 
 from pgadmin.utils.compile_template_name import compile_template_path
@@ -481,8 +482,8 @@ class PostgreSQLProvider:
         # (M4): the attachment is the maintenance database, so no database
         # id.
         kind = request.get('resource_kind')
-        optional = kind in {'database', 'role', 'tablespace', 'server',
-                            'pgagent-job'}
+        optional = (kind in {'database', 'role', 'tablespace', 'server', 'pgagent-job', 'parameter-acl'}
+                    and request.get('operation_id') != 'install-drop-namespace-guard')
         if kind == 'database' and request.get('operation_id') == 'drop':
             # DROP DATABASE cannot run on a connection to that database
             # (M6): it always runs from the server scope attachment.
@@ -532,6 +533,12 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(str(exc)) from exc
 
     @staticmethod
+    def _check_admin_version(connection, compiled):
+        minimum = compiled.get('minimum_server_version')
+        if minimum and connection.info.server_version < minimum:
+            raise PostgreSQLStatementRejected(f'This native operation requires PostgreSQL {minimum // 10000} or later')
+
+    @staticmethod
     def _admin_warnings(request, compiled):
         warnings = []
         if compiled.get('autocommit'):
@@ -555,8 +562,20 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
-            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance') if key in compiled},
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement') if key in compiled},
         }
+        from . import checkpoint
+        checkpoint_peer = None
+        if compiled.get('minimum_server_version') or checkpoint.applies(request):
+            session = self.open_session({'route': payload['route']})
+            try:
+                state = self._sessions[session['session_id']]
+                self._ensure_native_connection(state)
+                self._check_admin_version(state.connection.conn, compiled)
+                if checkpoint.applies(request):
+                    checkpoint_peer = checkpoint.peer(state.connection.conn)
+            finally:
+                self.close_session(session)
         planned = {
             'command_preview': {
                 'language': 'postgresql-sql',
@@ -572,6 +591,10 @@ class PostgreSQLProvider:
                 'common_transaction_finality_inference': False,
             },
         }
+        if checkpoint_peer is not None:
+            payload['checkpoint_peer_identity'] = checkpoint_peer
+            planned['command_preview']['native_peer_identity'] = copy.deepcopy(checkpoint_peer)
+            planned['warnings'].append('CHECKPOINT runs outside a SQL transaction. Native timeout or cancellation can stop waiting while checkpoint work continues. A lost acknowledgement is unknown, never a rollback or permission to replay. No physical durability beyond the native acknowledgement is inferred.')
         from . import destructive_identity
         if destructive_identity.applies(request):
             self.permissions.require('administer')
@@ -582,9 +605,12 @@ class PostgreSQLProvider:
                 raise PostgreSQLStatementRejected(str(error)) from None
             planned['warnings'].append(
                 'DROP rechecks the native server, principal, schema and table identity under '
-                'an exclusive native table lock held through dispatch and commit. Native LOCK '
-                'privileges are required; a busy or changed target needs a new review. '
-                'Schema ownership alone may not grant LOCK privileges. No unguarded fallback is used.')
+                'native namespace/relation catalog-row locks held through dispatch and commit. Ordinary owners '
+                'need the database superuser-installed DROP namespace guard. Where native table '
+                'ACLs permit, an additional relation lock is acquired before dispatch; other native '
+                'owners use DROP itself to acquire that lock with a 1ms timeout. No extra schema '
+                'CREATE rights, temporary guard DDL or table ACL grants are required. '
+                'A busy or changed target needs a new review. No unguarded fallback is used.')
             session = self.open_session({'route': payload['route']})
             state = self._sessions[session['session_id']]
             try:
@@ -613,7 +639,7 @@ class PostgreSQLProvider:
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
         expected = {'statement': statement, 'read_only': payload.get('read_only')}
-        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance'):
+        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement'):
             if key in compiled:
                 expected[key] = payload.get(key)
         if compiled != expected:
@@ -626,11 +652,16 @@ class PostgreSQLProvider:
         session = self.open_session({'route': route})
         state = self._sessions[session['session_id']]
         response = None
+        observation = None
         committing = False
         file_export_dispatched = False
+        checkpoint_dispatched = False
+        from . import checkpoint
+        is_checkpoint = checkpoint.applies(payload)
         try:
             self._ensure_native_connection(state)
             connection = state.connection
+            self._check_admin_version(connection.conn, compiled)
             if connection.transaction_status() != 0:
                 raise PostgreSQLProviderError('Administrative connection must be idle')
             autocommit = compiled.get('autocommit') is True
@@ -651,6 +682,11 @@ class PostgreSQLProvider:
             if not status or (database_id is not None and
                               identity.get('rows') != [{'oid': database_id}]):
                 raise PostgreSQLProviderError('Selected administrative database identity changed')
+            if payload.get('operation_id') == 'install-drop-namespace-guard':
+                with NativeCursor(connection.conn) as installer_cursor:
+                    installer_cursor.execute('SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=CURRENT_USER')
+                    if installer_cursor.fetchone() != (True,):
+                        raise PostgreSQLStatementRejected('Installing the native namespace DROP guard requires the database superuser')
             from . import destructive_identity
             if destructive_identity.applies(payload):
                 try:
@@ -662,18 +698,29 @@ class PostgreSQLProvider:
                     if getattr(error, 'sqlstate', None):
                         raise _rejection(error) from None
                     raise
+            if is_checkpoint:
+                if not payload.get('checkpoint_peer_identity') or checkpoint.peer(connection.conn) != payload['checkpoint_peer_identity']:
+                    raise PostgreSQLStatementRejected('Native checkpoint peer/principal changed; review again')
+                timeout = compiled['maintenance']['wait_timeout_ms']
+                status, _ = native_control(connection.conn, f"SET statement_timeout = '{timeout}ms'")
+                if not status: raise PostgreSQLStatementRejected('Native checkpoint wait policy could not be established')
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
             returns_rows = (compiled['read_only'] or
                             compiled.get('returns_rows'))
             try:
                 # The inherited connection puts the SQLSTATE in the formatted
                 # message; a clean rejection reports it.
-                status, result = (
-                    connection.execute_dict(statement,
-                                            formatted_exception_msg=True)
-                    if returns_rows else
-                    connection.execute_void(statement,
-                                            formatted_exception_msg=True))
+                if is_checkpoint:
+                    checkpoint_dispatched = True
+                    with NativeCursor(connection.conn) as checkpoint_cursor:
+                        checkpoint_cursor.execute(statement)
+                        tag = checkpoint_cursor.statusmessage
+                    status, result = tag == 'CHECKPOINT', {'command_tag': tag}
+                else:
+                    status, result = (
+                        connection.execute_dict(statement, formatted_exception_msg=True)
+                        if returns_rows else
+                        connection.execute_void(statement, formatted_exception_msg=True))
             except Exception as exc:
                 # A driver that raises on a server error (the harness does)
                 # reports the same clean rejection as one that returns it.
@@ -697,6 +744,10 @@ class PostgreSQLProvider:
                 if (not status or len(result.get('rows', [])) != 1 or
                         result['rows'][0].get('observed_sha256') != compiled['expected_sha256']):
                     raise PostgreSQLProviderError('PostgreSQL large-object write verification failed before commit')
+            if compiled.get('observation_statement'):
+                observed, observation = connection.execute_dict(compiled['observation_statement'])
+                if not observed:
+                    raise PostgreSQLProviderError('Native administrative readback failed before commit')
             if autocommit:
                 # The server committed the statement when it returned; there is no COMMIT to confirm.
                 status = True
@@ -711,6 +762,16 @@ class PostgreSQLProvider:
                 'result': copy.deepcopy(result), 'automatic_retry_performed': False,
                 'common_finality_inference': False,
             }
+            if is_checkpoint:
+                response['transaction_outcome'] = 'not_applicable'
+                response['checkpoint_receipt'] = {'native_command_tag':result['command_tag'],
+                    'native_peer_identity':copy.deepcopy(payload['checkpoint_peer_identity']),
+                    'sql_transaction_applies':False,'rollback_undoes_checkpoint':False,
+                    'completion':'native_command_returned','automatic_replay':False,
+                    'wait_timeout_ms':compiled['maintenance']['wait_timeout_ms'],
+                    'physical_durability_independently_observed':False}
+            if observation is not None:
+                response['native_observation'] = copy.deepcopy(observation)
             if compiled.get('maintenance'):
                 response['maintenance_receipt'] = dict(
                     compiled['maintenance'], statement=statement, executed=True,
@@ -719,7 +780,10 @@ class PostgreSQLProvider:
                 response['file_effects'] = {'host':'database-server','operation':compiled['server_file_operation'],
                     'native_function_acknowledged':True,'independent_file_verification':False,
                     'filesystem_write_rolled_back_by_sql':False}
-        except Exception:
+        except Exception as error:
+            if checkpoint_dispatched and not (isinstance(error, PostgreSQLStatementRejected) and error.sqlstate in {'42501','25001'}):
+                state.uncertain = True
+                raise PostgreSQLProviderError('Native CHECKPOINT outcome is unknown; cancellation or lost acknowledgement does not undo server checkpoint work. Inspect the server before a new explicit decision; do not replay.') from None
             if committing:
                 state.uncertain = True
                 raise PostgreSQLProviderError(
@@ -731,8 +795,12 @@ class PostgreSQLProvider:
             raise
         finally:
             try:
-                self.close_session(session)
+                closed = self.close_session(session)
+                if is_checkpoint and response is not None:
+                    response['checkpoint_receipt']['connection_release'] = copy.deepcopy(closed['provider_payload'])
             except Exception:
+                if is_checkpoint and response is not None:
+                    response['checkpoint_receipt']['connection_release'] = {'connection_released':False,'cleanup_outcome':'unknown'}
                 if response is None:
                     if file_export_dispatched:
                         raise PostgreSQLProviderError('PostgreSQL server-file export outcome and connection release remain unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying') from None
@@ -1499,6 +1567,7 @@ class PostgreSQLProvider:
                 'not_null': row.get('attnotnull'),
                 'comment': row.get('comment'),
                 'default_expression': row.get('default_expression'),
+                'generated_expression': row.get('generated_expression'),
                 'navigator_parent_resource_id': relation['resource_id'],
                 # Security labels of this column (owner direction
                 # 2026-11-11): the relation's labels with its attnum.

@@ -85,8 +85,8 @@ def candidates(version, sql_mode, plugins):
         definitions.append((name, 'none', '', name, 'installed-plugin'))
     routine = sorted(installed & ROUTINE_PLUGINS)
     if routine:
-        observations.append({'section': 'native-routine-type-contexts', 'available': False,
-            'reason': 'routine-local-type-completion-unimplemented', 'plugins': routine})
+        observations.append({'section': 'native-routine-type-contexts', 'available': True,
+            'reason': 'separate-mode-gated-routine-declarations', 'plugins': routine})
     unknown = sorted(installed - KNOWN_PLUGINS - ROUTINE_PLUGINS)
     if unknown:
         observations.append({'section': 'native-type-plugin-parameters', 'available': False,
@@ -101,3 +101,36 @@ def candidates(version, sql_mode, plugins):
             'semantics_authority': 'native-type-handler-and-sql-mode'},
             'detail': 'MariaDB column type' + (' ' + parameters if parameters else '')})
     return rows, observations
+
+
+def routine_candidates(version, plugins):
+    """Native routine declarations with explicit mode and installed-plugin gates.
+
+    These are declaration templates, never column type keywords. Callers must
+    apply the required sql_mode to an observed session context; peer context
+    does not certify the caller's active mode.
+    """
+    if not isinstance(version,str) or not re.match(r'^12\.2\.2(?:-|$)',version):
+        return []
+    installed={name.upper() for name,status in plugins
+               if isinstance(name,str) and str(status).upper()=='ACTIVE'}
+    rows=[]
+    if 'SYS_REFCURSOR' in installed:
+        for mode,example in [
+            ('non-oracle','BEGIN NOT ATOMIC DECLARE c SYS_REFCURSOR; END'),
+            ('oracle','DECLARE c SYS_REFCURSOR; BEGIN NULL; END')]:
+            rows.append(dict(name='SYS_REFCURSOR',completion_text='SYS_REFCURSOR',
+                scope='routine-local-variable',column_type=False,
+                plugin='SYS_REFCURSOR',required_sql_mode=mode,
+                declaration='c SYS_REFCURSOR',example_sql=example,
+                native_runtime_profile='mariadb.sql-types@12.2.2'))
+    if 'ASSOCIATIVE_ARRAY' in installed:
+        rows.append(dict(name='associative-array-declaration',
+            completion_text='TYPE array_type IS TABLE OF INT INDEX BY INT',
+            scope='routine-local-type-declaration',column_type=False,
+            plugin='ASSOCIATIVE_ARRAY',required_sql_mode='oracle',
+            declaration='TYPE array_type IS TABLE OF value_type INDEX BY index_type',
+            parameters=['array_type','value_type','index_type'],
+            example_sql='DECLARE TYPE arr IS TABLE OF INT INDEX BY INT; a arr; BEGIN a(1):=7; END',
+            native_runtime_profile='mariadb.sql-types@12.2.2'))
+    return rows

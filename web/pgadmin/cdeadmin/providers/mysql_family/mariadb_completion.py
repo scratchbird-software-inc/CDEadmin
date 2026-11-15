@@ -30,7 +30,7 @@ def admit(client, handle):
     client._completion_identities[id(handle)] = (handle, observed)
 
 
-def complete(client, handle):
+def complete(client, handle, *, source_context=None):
     from ..native_editor import metadata
     from .mariadb_connections import POOL_ARGUMENTS
 
@@ -45,6 +45,12 @@ def complete(client, handle):
         for key in POOL_ARGUMENTS:
             request['route'].pop(key, None)
         request['route']['reconnect'] = False
+        if source_context is not None:
+            if tuple(source_context.get(key) for key in ('server_uid','principal','version','connection_id')) != entry[1]:
+                raise RelationalClientError('Original context identity is unavailable')
+            request['route'].pop('database',None)
+            if source_context.get('default_schema') is not None:
+                request['route']['database']=source_context['default_schema']
         peer = client._connect(request)
         if peer is handle or peer.connection_id == entry[1][3]:
             peer = None  # Never release a source handle returned by a broken connector.
@@ -52,6 +58,9 @@ def complete(client, handle):
         observed = identity(peer)
         if observed[:3] != entry[1][:3] or observed[3] == entry[1][3]:
             raise RelationalClientError('MariaDB private catalog identity changed')
+        if source_context is not None:
+            from .mariadb_editor_context import apply_to_peer
+            apply_to_peer(peer,source_context)
         result = metadata(peer, 'mariadb')
         context = result['context']
         if context.get('version') != observed[2]:
@@ -61,6 +70,9 @@ def complete(client, handle):
             'default_schema', 'sql_mode', 'character_set_client', 'active_role')
             if key in context}
         context['original_session_context_observed'] = False
+        for row in context.get('routine_type_candidates', []):
+            row['original_session_mode_observed'] = False
+            row['availability'] = 'requires-original-session-mode-check'
         result['observations'].append({
             'section': 'retained-session-overlays', 'available': False,
             'reason': 'source-role-settings-temporary-and-uncommitted-catalog-unobserved'})
@@ -70,6 +82,20 @@ def complete(client, handle):
             original_active_roles_observed=False, original_temporary_objects_observed=False,
             coverage='Committed catalog on a separate same-server authenticated connection. '
                      'Source role, settings, temporary objects and uncommitted DDL are unobserved.')
+        if source_context is not None:
+            for key in ('default_schema','sql_mode','character_set_client','active_role',
+                        'character_set_connection','character_set_results','collation_connection'):
+                context[key]=source_context[key]
+            context['original_session_context_observed']=True
+            oracle='ORACLE' in str(source_context['sql_mode']).split(',')
+            for row in context.get('routine_type_candidates',[]):
+                row['original_session_mode_observed']=True
+                row['available']=(row['required_sql_mode']=='oracle')==oracle
+                row['availability']='observed-original-session-mode' if row['available'] else 'requires-other-native-mode'
+            result.update(original_session_commands_sent=1,original_diagnostics_preserved=False,
+                original_active_roles_observed=True,
+                coverage='Explicit original-session language/role/default-schema observation and same-context private committed catalog. Temporary objects and uncommitted schema remain unobserved.')
+            result['observations'][-1]['reason']='source-language-and-role-observed;temporary-and-uncommitted-catalog-unobserved'
         context.pop('context_revision', None)
         context['context_revision'] = hashlib.sha256(json.dumps({
             'context': context, 'resources': result['resources'],
@@ -80,8 +106,8 @@ def complete(client, handle):
     except Exception:
         error = RelationalClientError('Private MariaDB completion is unavailable; '
             'no original-session metadata command was substituted')
-        error.original_session_commands_sent = 0
-        error.original_diagnostics_preserved = True
+        error.original_session_commands_sent = 1 if source_context is not None else 0
+        error.original_diagnostics_preserved = source_context is None
         raise error from None
     finally:
         if peer is not None:
@@ -92,6 +118,6 @@ def complete(client, handle):
             except Exception:
                 error = RelationalClientError('Private MariaDB completion release is unconfirmed; '
                     'the original session was not used for metadata')
-                error.original_session_commands_sent = 0
-                error.original_diagnostics_preserved = True
+                error.original_session_commands_sent = 1 if source_context is not None else 0
+                error.original_diagnostics_preserved = source_context is None
                 raise error from None

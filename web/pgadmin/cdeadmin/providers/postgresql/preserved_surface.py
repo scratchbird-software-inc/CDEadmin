@@ -406,10 +406,13 @@ def administration_operations():
         result[kind] = frozenset(result.get(kind, frozenset()) | operations)
     # Text search kinds have no preserved-surface concept of their own; the
     # provider tree edits them natively (M5, 2026-11-11).
-    for kind in TEXT_SEARCH_KINDS + ('pgagent-job', 'partitioned-table'):
+    for kind in TEXT_SEARCH_KINDS + ('pgagent-job', 'partitioned-table', 'extended-statistics'):
         # pgAgent jobs (M6) and partitioned tables (M7) likewise.
         result[kind] = frozenset(result.get(kind, frozenset())
                                  | {'create', 'alter', 'drop', 'inspect'})
+    result['default-privileges'] = frozenset({'inspect','grant','revoke'})
+    result['parameter-acl'] = frozenset({'inspect','grant','revoke'})
+    result['database'] = frozenset(result['database'] | {'install-drop-namespace-guard'})
     return result
 
 
@@ -431,7 +434,7 @@ def adapt_catalog(catalog):
         'insert': 'write', 'update': 'write',
         'grant': 'admin', 'revoke': 'admin',
         'delete': 'destructive', 'drop': 'destructive',
-        'refresh': 'admin',
+        'refresh': 'admin', 'install-drop-namespace-guard': 'admin',
         'read': 'read', 'write': 'write', 'truncate': 'destructive',
         'import-server-file': 'admin', 'export-server-file': 'destructive',
         **MUTATION_CLASSES,
@@ -447,7 +450,7 @@ def adapt_catalog(catalog):
         'publication', 'subscription', 'text-search-configuration',
         'text-search-dictionary', 'text-search-parser',
         'text-search-template', 'pgagent-job', 'column', 'constraint',
-        'table', 'partitioned-table', 'foreign-table',
+        'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -459,6 +462,15 @@ def adapt_catalog(catalog):
     def native_form(kind, operation_id, title):
         field = native_field
 
+        if kind == 'default-privileges':
+            from .default_privileges import form
+            return form(operation_id,field)
+        if kind == 'parameter-acl':
+            from .parameter_acl import form
+            return form(operation_id,field)
+        if kind == 'extended-statistics':
+            from .statistics import form
+            return form(operation_id,field)
         if kind == 'large-object':
             from .large_objects import form
             return form(operation_id, field)
@@ -474,6 +486,10 @@ def adapt_catalog(catalog):
         if kind == 'schema':
             from .schemas import form as schema_form
             return schema_form(operation_id, field)
+        if kind == 'database' and operation_id == 'install-drop-namespace-guard':
+            return {'form_key':'native:postgresql:database:drop-namespace-guard',
+                'title':'Install native DROP namespace guard',
+                'fields':[field('confirmation','Type INSTALL DROP NAMESPACE GUARD',required=True)]}
         if kind == 'database':
             from .databases import form as database_form
             return database_form(operation_id, field)
@@ -650,11 +666,12 @@ def adapt_catalog(catalog):
                 'title': operation_id.replace('-', ' ').title(),
                 'mutation_class': mutation_classes[operation_id],
                 'form_id': 'postgresql-preserved-route',
-                'target_required': operation_id not in {'create', 'import-server-file'},
+                'target_required': operation_id not in {'create', 'import-server-file', 'install-drop-namespace-guard'},
                 'confirmation_required': operation_id in {
                     'delete', 'drop', 'truncate', 'export-server-file',
                 },
             })
+            if kind in {'parameter-acl','default-privileges'}:operation['target_required']=False
             if operation_id in maintenance.get(kind, ()):
                 operation['form'] = maintenance_form(
                     kind, operation_id, lambda *a, **k: native_field(*a, **k))

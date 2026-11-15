@@ -22,7 +22,7 @@ TEST_PYTEST = 'pytest==9.2.0'
 PYTHON_OPTIMIZATIONS = ('--enable-optimizations', '--with-lto')
 SQLITE_OPTIONS = ('ENABLE_SESSION', 'ENABLE_PREUPDATE_HOOK', 'ENABLE_CARRAY',
                   'ENABLE_DBPAGE_VTAB', 'ENABLE_DBSTAT_VTAB')
-ACTIONS = ('doctor', 'interpreter', 'python', 'configure', 'frontend', 'ddn', 'clients',
+ACTIONS = ('doctor', 'interpreter', 'python', 'configure', 'frontend', 'ddn', 'sqlite-config', 'clients',
            'images', 'pull', 'create-db',
            'init', 'run', 'register', 'list', 'status', 'start', 'stop',
            'seed', 'verify', 'prepare')
@@ -274,6 +274,12 @@ def main(argv=None):
         run(['corepack', 'yarn', 'webpacker'], ROOT / 'web', environment)
     elif args.action == 'ddn':
         ddn()
+    elif args.action == 'sqlite-config':
+        ddn()
+        from sqlite_config import build
+        work = Path(os.environ.get('SCRATCHROBIN_NATIVE_CONFIG_WORK', ROOT.parent/'codex-work-area/sqlite-config'))
+        prefix = Path(os.environ.get('SCRATCHROBIN_NATIVE_CONFIG_PREFIX', ROOT/'.venv/lib'))
+        print(build(ROOT, PYTHON, TRACKED_SQLITE, work, prefix))
     elif args.action in ('images', 'pull'):
         interpreter_bin = PYTHON if PYTHON.exists() else sys.executable
         run([interpreter_bin, DEMO / 'docker_images.py',

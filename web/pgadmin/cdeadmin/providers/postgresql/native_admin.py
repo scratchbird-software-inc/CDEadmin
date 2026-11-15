@@ -29,7 +29,7 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'pgagent-job',
     # M7 (2026-11-11): the table family: columns, constraints, tables,
     # partitioned tables and foreign tables.
-    'column', 'constraint', 'table', 'partitioned-table', 'foreign-table',
+    'column', 'constraint', 'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges',
     # M5 (2026-11-11).
     'cast', 'collation', 'language', 'foreign-data-wrapper',
     'foreign-server', 'user-mapping', 'publication', 'subscription',
@@ -360,6 +360,15 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if maintenance:
         from .maintenance import compile_operation as compile_maintenance
         return compile_maintenance(kind, operation, native, draft)
+    if kind == 'default-privileges':
+        from .default_privileges import compile_operation
+        return compile_operation(operation,native,draft)
+    if kind == 'parameter-acl':
+        from .parameter_acl import compile_operation
+        return compile_operation(operation,native,draft)
+    if kind == 'extended-statistics':
+        from .statistics import compile_operation
+        return compile_operation(operation,native,draft)
     if kind == 'large-object':
         from .large_objects import compile_operation
         return compile_operation(operation, native, draft)
@@ -375,6 +384,11 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind == 'schema':
         from .schemas import compile_operation as compile_schema
         return compile_schema(operation, native, draft)
+    if kind == 'database' and operation == 'install-drop-namespace-guard':
+        if draft != {'confirmation': 'INSTALL DROP NAMESPACE GUARD'}:
+            raise PostgreSQLNativeAdminError('Confirm INSTALL DROP NAMESPACE GUARD')
+        from .namespace_guard import INSTALL
+        return {'statement': INSTALL, 'read_only': False}
     if kind == 'database':
         from .databases import compile_operation as compile_database
         return compile_database(operation, native, draft)

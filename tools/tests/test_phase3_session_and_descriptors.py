@@ -556,7 +556,7 @@ def test_all_14_firebird_engine_object_forms_and_promoted_operations_complete():
         assert form_doc['status'] == 'complete', kind_id
         assert len(form_doc['fields']) >= 1, kind_id
 
-    for engine_id in ('mysql', 'sqlite', 'duckdb'):
+    for engine_id in ('mysql', 'duckdb'):
         ops_doc = json.loads(
             (DESCRIPTORS_DIR / engine_id / 'operations.json').read_text(encoding='utf-8')
         )
@@ -566,6 +566,31 @@ def test_all_14_firebird_engine_object_forms_and_promoted_operations_complete():
             if op.get('status') == 'draft'
         ]
         assert drafts == [], f'{engine_id} still has draft operations: {drafts}'
+
+    sqlite_ops_doc = json.loads(
+        (DESCRIPTORS_DIR / 'sqlite' / 'operations.json').read_text(encoding='utf-8')
+    )
+    allowed_sqlite_gated_drafts = {
+        'set_connection_pragma_temp_store_directory',
+        'set_connection_pragma_data_store_directory',
+        'set_connection_pragma_sql_trace',
+        'set_connection_pragma_vdbe_listing',
+        'set_connection_pragma_vdbe_trace',
+        'set_connection_pragma_vdbe_addoptrace',
+        'set_connection_pragma_vdbe_debug',
+        'set_connection_pragma_vdbe_eqp',
+        'set_connection_pragma_parser_trace',
+        'set_connection_pragma_lock_proxy_file',
+    }
+    sqlite_unexpected_drafts = [
+        op['operation_id']
+        for op in sqlite_ops_doc['operations']
+        if op.get('status') == 'draft'
+        and op['operation_id'] not in allowed_sqlite_gated_drafts
+    ]
+    assert sqlite_unexpected_drafts == [], (
+        f'sqlite has unexpected draft operations: {sqlite_unexpected_drafts}'
+    )
 
     duck_ops = json.loads(
         (DESCRIPTORS_DIR / 'duckdb' / 'operations.json').read_text(encoding='utf-8')
