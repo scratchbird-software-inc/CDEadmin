@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const initial={connection:{host:'',port:22,username:'',host_key:'',authentication:'password',platform:'posix',python:'python3'},
@@ -45,6 +46,7 @@ export default function MySQLRouters({post}) {
   const isBootstrap=receipt?.options?.operation===undefined || receipt?.options?.operation==='bootstrap';
   const decode=value=>{try{return new TextDecoder().decode(Uint8Array.from(atob(value || ''),character=>character.charCodeAt(0)));}catch{return 'Inspect the original encoded native output.';}};
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
+    <FormReference formKey="mysql-routers" />
     <Alert severity="info">Bootstrap native MySQL Router on a separate Linux SSH host, then install and control its systemd service. Bootstrap requires a live Cluster, ClusterSet or ReplicaSet metadata seed. Original deployment and service receipts remain accessible when SQL is offline. Router startup and routed SQL readiness are separate observations.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',alignItems:'flex-start',my:1}}>

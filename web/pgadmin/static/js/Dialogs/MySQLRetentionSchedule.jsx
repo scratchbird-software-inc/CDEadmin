@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLRetentionSchedule({post,prefix,sourceArchive,days,keep,onOccurrence}) {
   const [interval,setIntervalMinutes]=useState(60),[lifetime,setLifetime]=useState(30);
@@ -31,7 +32,8 @@ export default function MySQLRetentionSchedule({post,prefix,sourceArchive,days,k
   },[post,prefix,receipt?.job_id,receipt?.state]);
   const retained=sourceArchive?.source?.server_uuid && ['completed','artifact_verified'].includes(sourceArchive.state) && !sourceArchive.artifact_removed && !sourceArchive.artifact_removal;
   const load=offset => run('list',{offset,limit:25},setPage);
-  return <Box component="details" sx={{my:1}}><summary>Scheduled archive retention</summary>
+  return <Box component="details" sx={{my:1}}>
+    <FormReference formKey="mysql-retention-schedule" /><summary>Scheduled archive retention</summary>
     <Alert severity="warning">A confirmed policy authorizes future scans and removal of eligible archives from its exact source, principal and role, including archives created later. Protect all files needed for recovery. Backup dependencies and recoverability are not inferred.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     {retained ? <Alert severity="info">Schedule source: {sourceArchive.source.server_uuid} / {sourceArchive.source.authenticated_principal} / {sourceArchive.source.active_role}. Archive kind: {prefix==='mysql_raw_binlog_' ? 'Raw' : 'MySQL Shell'}.</Alert> : <Alert severity="info">Inspect a retained verified archive to select the native source for a new policy.</Alert>}

@@ -120,7 +120,13 @@ export default function OperationDialog({open, operation, targetName, context={}
   const receipt = applyState.result?.provider_result ?? applyState.result;
   const sql = planSqlText(planState.plan);
 
+  const resolvedFormRef = operation.form_reference || undefined;
+  const resolvedFormKey = !resolvedFormRef
+    ? (operation.form?.form_key || (operation.form_id ? `operation:${operation.form_id}` : 'operation:execute'))
+    : undefined;
+
   return <Dialog open={open} title={targetName ? `${operation.title} — ${targetName}` : operation.title}
+    formReference={resolvedFormRef} formKey={resolvedFormKey}
     size={operation.tier === 3 || visible.some((field) => ['grid', 'code'].includes(field.control)) ? 'large' : 'medium'}
     busy={busy} onClose={busy ? undefined : onClose}
     actions={<>

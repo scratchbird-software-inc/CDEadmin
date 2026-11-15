@@ -700,7 +700,7 @@ export function CommandPalette({
     }
   };
   return (
-    <Dialog open={open} title="Command palette" size="medium" onClose={onClose}>
+    <Dialog open={open} title="Command palette" size="medium" formKey="command-palette" onClose={onClose}>
       <div
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {

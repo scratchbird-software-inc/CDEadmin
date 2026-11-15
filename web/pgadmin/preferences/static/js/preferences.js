@@ -8,8 +8,6 @@
 //////////////////////////////////////////////////////////////
 
 import gettext from 'sources/gettext';
-import { BROWSER_PANELS } from '../../../browser/static/js/constants';
-import { preferencesPanelData } from '../../../static/js/BrowserComponent';
 
 export default class Preferences {
   static instance;
@@ -44,18 +42,14 @@ export default class Preferences {
     this.pgBrowser.add_menus(menus);
   }
 
-  // This is a callback function to show preferences.
+  // Open Personal User Preferences via ProjectShell.
   show() {
-    if (typeof window !== 'undefined' && document?.querySelector?.('[data-cdeadmin-qa-key="project-workbench-frame"]')) {
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('scratchrobin:open-preferences', {
-          detail: {mode: 'global'},
+          detail: {mode: 'user'},
         })
       );
-      return;
     }
-    let handler = this.pgBrowser.getDockerHandler?.(BROWSER_PANELS.USER_MANAGEMENT, this.pgBrowser.docker.default_workspace);
-    handler.focus();
-    handler.docker.openTab(preferencesPanelData, BROWSER_PANELS.MAIN, 'middle', true);
   }
 }

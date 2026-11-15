@@ -782,6 +782,7 @@ export function ScratchPreferencesDialog({
       open={Boolean(open)}
       onClose={onClose}
       size="xlarge"
+      formKey="scratch-preferences"
       title={
         isAppPage
           ? gettext('Configure — %s', activeChromeAppLabel)

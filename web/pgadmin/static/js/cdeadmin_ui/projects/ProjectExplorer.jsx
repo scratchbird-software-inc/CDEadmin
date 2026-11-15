@@ -21,6 +21,7 @@ import {TreeRow} from '../navigation/AdvancedNavigation';
 import {Dialog} from '../overlays/Dialog';
 import {EmptyState} from '../feedback/EmptyState';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
+import FormReference from '../navigation/FormReference';
 
 function assetIcon(assetType) {
   if(assetType === 'ddn-workspace') return 'tool.erd';
@@ -130,7 +131,7 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
 
   return <Box component="section" aria-label="Project Explorer"
     sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
-    <Toolbar label="Project Explorer commands">
+    <Toolbar label="Project Explorer commands" trailing={<FormReference formKey="project-explorer" />}>
       <Button onClick={beginCreate}>New project</Button>
       <Button onClick={refresh}>Refresh</Button>
     </Toolbar>
@@ -176,7 +177,7 @@ export function ProjectExplorer({client: suppliedClient, onOpenAsset,
         <ProgressOverlay message={loading ? 'Loading projects' : ''} />
       </Box>
     </ScratchScrollArea>
-    <Dialog open={createOpen} title="New project" size="medium"
+    <Dialog open={createOpen} title="New project" size="medium" formKey="project-explorer"
       onClose={() => !saving && setCreateOpen(false)} busy={saving}
       validationError={createError} defaultAction={createProject}
       actions={<><Button disabled={saving}

@@ -4,6 +4,7 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Typ
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {loadDDNGeoLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {mysqlSpatialFiles} from '../cdeadmin_ui/integrations/ddn/mysqlSpatial';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 function Map({report, selected}) {
   const [ready,setReady]=useState(false),[error,setError]=useState('');
@@ -55,6 +56,7 @@ export default function MySQLSpatial({post,databaseTargetId=null}) {
     document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
   };
   return <Box aria-label="MySQL spatial data inspection" sx={{p:1,height:'100%',overflow:'auto'}}>
+    <FormReference formKey="mysql-spatial" />
     <Typography component="h3">MySQL spatial data inspection</Typography>
     <Alert severity="info">Read a bounded private page on a separate native connection. Geometry bytes remain exact; map positions are approximate.
       Native X/Y preserves source coordinate meaning. WGS84 uses native ST_Transform and longitude/latitude.

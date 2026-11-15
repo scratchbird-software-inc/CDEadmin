@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 function example(operation,member) {
@@ -84,6 +85,7 @@ export default function MySQLTopologies({post:basePost}) {
   const loadMembers=offset=>run('members',{offset,limit:25},setMembers);
   const invalidate=()=>{inputVersion.current++;setReview(null);};
   return <Box sx={{p:2}}>
+    <FormReference formKey="mysql-topologies" />
     <Alert severity="info">Manage native MySQL instance configuration, InnoDB Cluster, ReplicaSet, ClusterSet, Router metadata and routing guidelines. Native utility replies and current topology observations are separate from workload readiness. Closing this view does not cancel a job.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     {execution && <Alert severity="info">Native execution registration: {execution.name} (ID {execution.server_id}). Reviews and original job controls use this registration.

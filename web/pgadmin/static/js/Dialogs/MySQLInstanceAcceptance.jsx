@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId,targetUuid,targetConfirmation}) {
@@ -30,6 +31,7 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
   },[receipt?.job_id,receipt?.state,post]);
   const load=offset=>run('list',{offset,limit:25},setPage);
   return <Box component="details" sx={{my:2}}>
+    <FormReference formKey="mysql-instance-acceptance" />
     <summary>Independent dump acceptance</summary>
     <Alert severity="warning">Full row counts, native checksums and native definition re-export run under a server-wide read lock and instance backup lock. Writes can pause for the entire check. Select the source backup and confirm the target UUID above. Closing this view does not cancel a job.</Alert>
     <Alert severity="info">Each exported surface has a separate result. Acceptance reads the target and creates private verification files; it issues no data, DDL, account or GTID restore. Managed physical targets retain their original recovery reference. Select the expected backup checkpoint explicitly; unexported state and production cutover remain separate.</Alert>

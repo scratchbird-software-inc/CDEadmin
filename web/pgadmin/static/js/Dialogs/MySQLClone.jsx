@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLClone({post}) {
@@ -39,6 +40,7 @@ export default function MySQLClone({post}) {
     window.setTimeout(() => URL.revokeObjectURL(url),1000);
   };
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
+    <FormReference formKey="mysql-clone" />
     <Alert severity="info">Native clone copies supported InnoDB data to a new directory on the recipient database-server host. Other storage engines, configuration, binary logs and encryption-key provisioning need their applicable workflows.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

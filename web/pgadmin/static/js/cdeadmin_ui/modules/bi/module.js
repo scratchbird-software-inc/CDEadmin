@@ -29,9 +29,8 @@ async function restoreQuestionsTool(descriptor, context) {
     return createElement(EmptyState, {message: gettext(
       'Open BI questions again from the endpoint in the object tree to reconnect this tool.')});
   }
-  // Loaded on first use so the chart and editor libraries stay out of the start-up bundle.
-  const {default: BIQuestionsTool} = await import('./BIQuestionsTool');
-  return createElement(BIQuestionsTool, {
+  const {BIDesignerSurface} = await import('../../integrations/ddn/BIDesignerSurface');
+  return createElement(BIDesignerSurface, {
     api: context.api, endpointUrl: context.endpointUrl,
     onDirtyChange: (dirty) => context.setSurfaceState?.({
       dirty, persistence: dirty ? 'dirty' : 'clean'}),

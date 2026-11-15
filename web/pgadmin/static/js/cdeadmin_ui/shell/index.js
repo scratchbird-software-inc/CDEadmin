@@ -1,4 +1,3 @@
-export * from './WorkbenchShell';
 export * from './ActivityThemeToggle';
 export * from './ContributionHosts';
 export * from './ProjectShell';

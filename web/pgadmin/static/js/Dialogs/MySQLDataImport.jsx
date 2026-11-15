@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLDataImport({post, databaseTargetId, engine='mysql'}) {
   const label = engine === 'mariadb' ? 'MariaDB' : 'MySQL';
@@ -45,6 +46,7 @@ export default function MySQLDataImport({post, databaseTargetId, engine='mysql'}
     finally {if(token === serial.current) setBusy(false);}
   };
   return <Box component="details" sx={{my: 1}}>
+    <FormReference formKey="mysql-data-import" />
     <summary>Import native {label} data DDN</summary>
     <Alert severity="info">Read a native relation data capture, review its exact destination and explicitly import and commit.
       Constraints and triggers remain active. This inserts rows; it never replaces or clears a table. Unknown outcomes cannot be retried.</Alert>

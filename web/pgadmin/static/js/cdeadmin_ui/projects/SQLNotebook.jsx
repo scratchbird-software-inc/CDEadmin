@@ -21,6 +21,7 @@ import {
   QueryStepStatusFooter,
 } from '../query';
 import {ProjectAssetClient} from './ProjectAssetClient';
+import FormReference from '../navigation/FormReference';
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {
   NOTEBOOK_TYPE,
@@ -298,6 +299,7 @@ export default function SQLNotebook({
   return (
     <ScratchScrollArea orientation="both" style={{height: '100%', minHeight: 150}}>
       <Box component="section" aria-label="SQL notebook" sx={{p: 1.5}}>
+        <FormReference formKey="sql-notebook" />
         <Stack gap="compact">
           <Banner status="info">
             Notes, SQL and explicitly retained result pages. Opening, importing and sharing never execute SQL.

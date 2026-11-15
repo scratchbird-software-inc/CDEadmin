@@ -45,7 +45,6 @@ import { useBeforeUnload } from './custom_hooks';
 import pgWindow from 'sources/window';
 import { useWorkspace, WorkspaceProvider } from '../../misc/workspaces/static/js/WorkspaceProvider';
 import { PgAdminProvider, usePgAdmin } from './PgAdminProvider';
-import PreferencesComponent from '../../preferences/static/js/components/PreferencesComponent';
 import { ApplicationStateProvider } from '../../settings/static/ApplicationStateProvider';
 import { appAutoUpdateNotifier } from './helpers/appAutoUpdateNotifier';
 import {
@@ -99,10 +98,6 @@ import {
 
 export const processesPanelData = {
   id: BROWSER_PANELS.PROCESSES, title: gettext('Processes'), content: <Processes />, closable: true, group: 'playground'
-};
-
-export const preferencesPanelData = {
-  id: BROWSER_PANELS.PREFERENCES, title: gettext('Preferences'), content: <PreferencesComponent panelId={BROWSER_PANELS.PREFERENCES} />, closable: true, manualClose: true, group: 'playground'
 };
 
 // Startup shows ONLY the User Dashboard placeholder (no preloaded SQL tab).
@@ -1912,7 +1907,6 @@ ProjectShellDockerBridge.propTypes = {
 function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
   const pgAdmin = usePgAdmin();
   const surfaceHost = useRef(null);
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const designStoreClient = useMemo(() => new DesignStoreClient(), []);
   const {
     config, enabled,
@@ -1980,14 +1974,11 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
 
   const openPreferences = useCallback((sectionId) => {
     changeWorkspace(WORKSPACES.DEFAULT);
-    if(sectionId) requestPreferencesSection(sectionId);
-    if (typeof document !== 'undefined' && document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]')) {
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('scratchrobin:open-preferences', {
-        detail: {mode: 'global', sectionId: sectionId || null},
+        detail: {mode: 'user', sectionId: sectionId || null},
       }));
-      return true;
     }
-    setPreferencesOpen(true);
     return true;
   }, [changeWorkspace]);
   const openInterfaceDesigner = useCallback(
@@ -2823,21 +2814,6 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         >
           <ProjectWorkbenchFrame />
         </div>
-        <Dialog
-          open={preferencesOpen}
-          onClose={() => setPreferencesOpen(false)}
-          title={gettext('User Preferences')}
-          size="large"
-          actions={
-            <Button onClick={() => setPreferencesOpen(false)}>
-              {gettext('Close')}
-            </Button>
-          }
-        >
-          <Box sx={{height: '65vh', minHeight: 360}}>
-            <PreferencesComponent panelId={BROWSER_PANELS.PREFERENCES} />
-          </Box>
-        </Dialog>
       </ProjectShellProvider>
     </ApplicationStateProvider>
   );

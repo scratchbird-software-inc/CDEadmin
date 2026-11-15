@@ -3567,3 +3567,10 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
 ProjectWorkbenchFrame.propTypes = {
   fallbackArea3: PropTypes.node,
 };
+
+export const WORKBENCH_INSPECT_EVENT = 'cdeadmin:workbench-inspect';
+
+export function requestWorkbenchInspection(visible = true, target = typeof window !== 'undefined' ? window : null) {
+  if (!target?.dispatchEvent) return;
+  target.dispatchEvent(new CustomEvent(WORKBENCH_INSPECT_EVENT, {detail: {visible: Boolean(visible)}}));
+}

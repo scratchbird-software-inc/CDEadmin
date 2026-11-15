@@ -18,8 +18,9 @@ import {SurfaceRegistry} from 'sources/cdeadmin_ui/platform/SurfaceRegistry';
 import {ToolFactoryRegistry} from 'sources/cdeadmin_ui/workspace/ToolRegistry';
 import {EmptyState} from 'sources/cdeadmin_ui/feedback/EmptyState';
 import {
-  BI_MODELS_SURFACE_ID, BI_MODULE_ID, BI_QUESTIONS_SURFACE_ID, BIModelsTool, BIQuestionsTool, registerBIModule,
+  BI_MODELS_SURFACE_ID, BI_MODULE_ID, BI_QUESTIONS_SURFACE_ID, BIModelsTool, registerBIModule,
 } from 'sources/cdeadmin_ui/modules/bi';
+import {BIDesignerSurface} from 'sources/cdeadmin_ui/integrations/ddn/BIDesignerSurface';
 import {openRegisteredTool} from 'pgbrowser/ProviderContextMenu';
 
 function architecture() {
@@ -56,7 +57,7 @@ describe('BI module registration', () => {
     const setSurfaceState = jest.fn();
     const element = await host.surfaces.restore(descriptorFor(host), {
       api, endpointUrl: '/browser/server/cde_workspace/1/2', setSurfaceState});
-    expect(element.type).toBe(BIQuestionsTool);
+    expect(element.type).toBe(BIDesignerSurface);
     expect(element.props).toMatchObject({api, endpointUrl: '/browser/server/cde_workspace/1/2'});
     element.props.onDirtyChange(true);
     expect(setSurfaceState).toHaveBeenCalledWith({dirty: true, persistence: 'dirty'});

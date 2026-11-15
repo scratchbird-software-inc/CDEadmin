@@ -1,6 +1,7 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TextField,Typography} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const defaults={consistency:'innodb_snapshot',replica:false,channel:'',seconds:300,disk_mib:256,examples:50};
 
@@ -58,6 +59,7 @@ export default function MySQLDataDrift({post,databaseTargetId=null}) {
     const link=document.createElement('a');link.href=url;link.download='mysql-data-comparison.json';link.click();URL.revokeObjectURL(url);
   };
   return <Box aria-label="MySQL full-table data comparison" sx={{p:1,height:'100%',overflow:'auto'}}>
+    <FormReference formKey="mysql-data-drift" />
     <Typography component="h3">MySQL full-table data comparison</Typography>
     <Alert severity="warning">This operation takes server-wide native read locks on both endpoints. InnoDB snapshot mode releases them after pinning all selected tables;
       server-locked mode holds them through the scans. Writes and DDL may wait. Long read-only snapshots can retain undo versions.

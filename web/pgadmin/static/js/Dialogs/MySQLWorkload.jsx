@@ -4,6 +4,7 @@ import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBo
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {dashboardPanelFiles} from '../cdeadmin_ui/integrations/ddn/dashboardPanels';
 import MySQLQueryPlan from './MySQLQueryPlan';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const rankings = {total_latency: 'Total latency', mean_latency: 'Mean latency', executions: 'Execution count',
   rows_examined: 'Rows examined', temporary_tables: 'Temporary tables', disk_temporary_tables: 'Disk temporary tables'};
@@ -73,6 +74,7 @@ export default function MySQLWorkload({post, databaseTargetId=null}) {
   const selectedRequest = selected ? {schema_name: selected.schema_name, digest: selected.digest} : {};
   const slowRequest = {confirmed: true, start_utc: start, end_utc: end};
   return <Box sx={{p: 1, height: '100%', overflow: 'auto'}} aria-label="MySQL workload analysis">
+    <FormReference formKey="mysql-workload" />
     <Typography component="h3">MySQL workload analysis</Typography>
     <Alert severity="info">Observations use separate connections. Native summaries are cumulative and permission filtered. Timers are exact picoseconds.
       Reset detection cannot prove uninterrupted coverage. Collection policy continues separately from this workspace.</Alert>

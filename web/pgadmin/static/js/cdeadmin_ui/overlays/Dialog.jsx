@@ -12,6 +12,7 @@ import PropTypes from 'prop-types';
 import {Dialog as BaseDialog} from '@base-ui/react/dialog';
 import {ensureScratchBaseStyles} from '../base/ScratchBaseStyles';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
+import FormReference from '../navigation/FormReference';
 
 const WIDTHS = Object.freeze({
   small: 420,
@@ -31,6 +32,8 @@ export function Dialog({
   validationError = '',
   defaultAction,
   onKeyDown,
+  formKey,
+  formReference,
   ...props
 }) {
   const titleId = useId();
@@ -70,16 +73,21 @@ export function Dialog({
             <BaseDialog.Title id={titleId} style={{margin: 0, fontSize: 'inherit', fontWeight: 600}}>
               {title}
             </BaseDialog.Title>
-            {onClose && (
-              <BaseDialog.Close
-                aria-label="Close dialog"
-                disabled={busy}
-                className="sr-icon-btn"
-                style={{width: 26, height: 26, minWidth: 26, minHeight: 26}}
-              >
-                ×
-              </BaseDialog.Close>
-            )}
+            <div style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+              {(formKey || formReference) && (
+                <FormReference formKey={formKey} reference={formReference} />
+              )}
+              {onClose && (
+                <BaseDialog.Close
+                  aria-label="Close dialog"
+                  disabled={busy}
+                  className="sr-icon-btn"
+                  style={{width: 26, height: 26, minWidth: 26, minHeight: 26}}
+                >
+                  ×
+                </BaseDialog.Close>
+              )}
+            </div>
           </div>
           <ScratchScrollArea className="sr-dialog-body" style={{padding: 0}}>
             <div style={{padding: 16}}>
@@ -120,6 +128,8 @@ Dialog.propTypes = {
   validationError: PropTypes.node,
   defaultAction: PropTypes.func,
   onKeyDown: PropTypes.func,
+  formKey: PropTypes.string,
+  formReference: PropTypes.string,
   className: PropTypes.string,
   style: PropTypes.object,
 };

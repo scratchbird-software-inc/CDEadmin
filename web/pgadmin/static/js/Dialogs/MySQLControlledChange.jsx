@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField, Typography} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export function MySQLAlterPolicy({value, onChange, disabled, post, databaseTargetId}) {
   const [replicas,setReplicas]=useState([]),[next,setNext]=useState(null),[error,setError]=useState('');
@@ -83,6 +84,7 @@ export default function MySQLControlledChange({post,databaseTargetId,review,conf
   };
   if(!review?.plan?.operations?.some(op => op.execution))return null;
   return <Box aria-label="Controlled MySQL DDN change" sx={{my:1}}>
+    <FormReference formKey="mysql-controlled-change" />
     <Alert severity="warning">Prevent external DDL during this operation. The cooperating application lock does not fence other tools.
       Native ALGORITHM/LOCK governs DML concurrency; brief metadata locks can still block it. There is no fallback to a different algorithm.
       Cancellation or a stopped application does not establish rollback. Closing this workspace leaves the admitted job running.</Alert>

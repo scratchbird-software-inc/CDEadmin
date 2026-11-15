@@ -16,6 +16,7 @@ import {Checkbox, Select, Switch} from '../../primitives/Choice';
 import {Banner} from '../../feedback/Indicators';
 import {Icon} from '../../icons';
 import {ScratchBranchedTree} from '../../navigation/ScratchBranchedTree';
+import FormReference from '../../navigation/FormReference';
 
 function resolveCsrfHeaders() {
   if (typeof window === 'undefined') return {};
@@ -703,6 +704,7 @@ export function SecurityAccessEditor({
       data-cdeadmin-qa-key="settings-security-groups-editor"
       style={{display: 'flex', flexDirection: 'column', gap: 12}}
     >
+      <FormReference formKey="security-access" />
       {subViewTabsBar}
       <div>
         <div style={{fontWeight: 700, fontSize: '0.92rem'}}>

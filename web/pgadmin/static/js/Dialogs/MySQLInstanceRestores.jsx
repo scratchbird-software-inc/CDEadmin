@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import MySQLInstanceAcceptance from './MySQLInstanceAcceptance';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({load_users:false,checksum:true,threads:4,update_gtid_set:'off',timeout_seconds:3600},null,2);
@@ -36,6 +37,7 @@ export default function MySQLInstanceRestores({post}) {
   const loadBackups=offset=>run('backups',{source_server_id:source.server_id,offset,limit:25},setBackups);
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
   return <Box sx={{p:2}}>
+    <FormReference formKey="mysql-instance-restores" />
     <Alert severity="warning">Restore a managed full-instance backup onto a separate confirmed MySQL instance during an exclusive maintenance window. Native DDL, data, accounts and GTIDs can change independently; cancellation does not undo earlier effects. Configure trusted local_infile on the target before loading. Closing this view does not cancel a job.</Alert>
     <Alert severity="info">Native utility return, current target observations, recovered data/definitions and production cutover have separate acceptance. Account loading is optional. An uncertain restore is never automatically repeated.</Alert>
     {error && <Alert severity="error">{error}</Alert>}

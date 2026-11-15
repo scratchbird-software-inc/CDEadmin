@@ -16,6 +16,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Banner, Badge, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import FormReference from '../../navigation/FormReference';
 
 export const SCHEMA_COMPARE_SURFACES = Object.freeze([
   {id: 'compare_setup', title: 'Compare Setup'},
@@ -369,6 +370,7 @@ export function SchemaCompareWorkspace({service, sessionId, surface='compare_set
         onActivate={() => setActive(item.id)} />)}
     </Box>
     <Box sx={{px: 1, py: 0.5, display: 'flex', gap: 1, alignItems: 'center'}}>
+      <FormReference formKey="schema-compare-workspace" />
       <Badge status={statusColor(session.state)} label={session.state.replaceAll('_', ' ')} />
       {session.result && <Box>{session.result.differences.length} differences</Box>}
       {session.dirty && <Badge status="warning" label="Unsaved" />}

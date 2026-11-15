@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLRecoveryChains({post}) {
   const [backups,setBackups]=useState(null),[archives,setArchives]=useState(null),[chains,setChains]=useState(null);
@@ -26,7 +27,8 @@ export default function MySQLRecoveryChains({post}) {
   const loadBackups=offset=>run('backup_protection_list',{offset,limit:25},setBackups);
   const loadArchives=offset=>run('list',{offset,limit:25},setArchives);
   const loadChains=offset=>run('recovery_chain_list',{offset,limit:25},setChains);
-  return <Box component="details" sx={{my:1}}><summary>Recovery chain dependencies</summary>
+  return <Box component="details" sx={{my:1}}>
+    <FormReference formKey="mysql-recovery-chains" /><summary>Recovery chain dependencies</summary>
     <Alert severity="info">Choose a consistent managed logical dump and ordered completed Shell archives. MySQL checks their GTID prerequisites and the application verifies their retained bytes. An active chain protects its selected archives. Existing backup holds remain until separately retired. Raw archives, physical clone bases, external backups and offline replicas need their separate protection; this review does not discover them or perform a restore.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={busy} onClick={()=>loadBackups(0)}>Load recovery base backups</Button>
