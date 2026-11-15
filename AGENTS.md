@@ -669,4 +669,3 @@ Owner decisions, 2026-11-13:
   + Authenticode) and frozen `scratchrobin-core` executable inside the existing
   Electron runtime first; migrate the desktop UI shell from Electron to Tauri
   v2 only after everything is working and qualified in Electron.
-

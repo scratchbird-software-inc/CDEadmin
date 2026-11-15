@@ -41,6 +41,17 @@ def test_facts_decode_the_options_and_trim_the_definition():
         70, True)
 
 
+def test_materialized_view_toast_facts_use_child_relation_options():
+    native = {**MVIEW, 'catalog_row': {**MVIEW['catalog_row'],
+        'toast_reloptions': ['autovacuum_enabled=false',
+                            'autovacuum_vacuum_threshold=17']}}
+    current = facts(native)
+    assert current['toast_autovacuum_enabled'] == 'f'
+    assert current['toast_vacuum_settings'] == {
+        'autovacuum_enabled': 'false', 'autovacuum_vacuum_threshold': '17'}
+    assert current['autovacuum_enabled'] == 'x'
+
+
 def test_query_is_one_select_by_the_parser():
     assert query(' SELECT 1 ; ') == 'SELECT 1'
     assert query('VALUES (1), (2)') == 'VALUES (1), (2)'

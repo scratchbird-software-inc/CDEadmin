@@ -6393,6 +6393,50 @@
     "design-where-used": {
       "reference": "SR-F-030041",
       "title": "Cross-design where-used and impact explorer"
+    },
+    "descriptor-form:apache_ignite:server": {
+      "reference": "SR-F-030042",
+      "title": "apache_ignite server descriptor form"
+    },
+    "descriptor-form:cassandra:server": {
+      "reference": "SR-F-030043",
+      "title": "cassandra server descriptor form"
+    },
+    "descriptor-form:clickhouse:server": {
+      "reference": "SR-F-030044",
+      "title": "clickhouse server descriptor form"
+    },
+    "descriptor-form:foundationdb:server": {
+      "reference": "SR-F-030045",
+      "title": "foundationdb server descriptor form"
+    },
+    "descriptor-form:influxdb:server": {
+      "reference": "SR-F-030046",
+      "title": "influxdb server descriptor form"
+    },
+    "descriptor-form:milvus:server": {
+      "reference": "SR-F-030047",
+      "title": "milvus server descriptor form"
+    },
+    "descriptor-form:mongodb:server": {
+      "reference": "SR-F-030048",
+      "title": "mongodb server descriptor form"
+    },
+    "descriptor-form:neo4j:server": {
+      "reference": "SR-F-030049",
+      "title": "neo4j server descriptor form"
+    },
+    "descriptor-form:opensearch:server": {
+      "reference": "SR-F-030050",
+      "title": "opensearch server descriptor form"
+    },
+    "descriptor-form:redis:server": {
+      "reference": "SR-F-030051",
+      "title": "redis server descriptor form"
+    },
+    "descriptor-form:tikv:server": {
+      "reference": "SR-F-030052",
+      "title": "tikv server descriptor form"
     }
   }
 }

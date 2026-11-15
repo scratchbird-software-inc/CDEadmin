@@ -25,7 +25,9 @@ def serialized_execution(method):
                 operation=request.get('operation') if isinstance(request,dict) else None
                 mutating=(method.__name__ in {'execute','control_transaction','sqlite_transform_binding','sqlite_capture_binding'} or
                     method.__name__ in {'sqlite_extension_action','sqlite_native_session_action','sqlite_native_array_action','sqlite_native_preupdate_action'} and
-                    operation not in {'inventory','status','receipt','events'})
+                    operation not in {'inventory','status','receipt','events'} or
+                    method.__name__ == 'sqlite_connection_settings_action' and operation == 'set_connection_synchronous' or
+                    method.__name__ == 'sqlite_connection_limits_action' and operation == 'set_connection_limit')
                 if (mutating and session is not None and session.language_profile=='sqlite-sql' and
                         session.provider_isolation_key is not None and session.provider_isolation_key==context.isolation_key):
                     session.native_work_revision+=1

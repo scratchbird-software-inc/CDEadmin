@@ -2651,7 +2651,7 @@ def _relational_editor_evidence(provider, request, engine):
             attempt(
                 'database.alter', 'database', 'alter', {
                     'journal_mode': 'DELETE',
-                    'synchronous': 'FULL',
+                    # synchronous is original-connection policy, not file state.
                     'user_version': 53,
                 }, database_resource,
             )

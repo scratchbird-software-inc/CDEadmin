@@ -113,7 +113,7 @@ export function showEndpointVerification(
     nodeData.username && !['endpoint-profile', 'embedded-process'].includes(nodeData.username)
       ? nodeData.username
       : '';
-  const suggestedUsername = rawUsername || (profile?.engine_id === 'firebird' ? 'SYSDBA' : '');
+  const suggestedUsername = rawUsername || profile?.suggested_username || '';
   const prompt = {
     prompt_password: true,
     prompt_tunnel_password: false,

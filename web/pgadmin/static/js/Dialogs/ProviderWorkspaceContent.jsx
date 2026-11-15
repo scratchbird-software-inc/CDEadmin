@@ -6245,8 +6245,8 @@ export default function ProviderWorkspaceContent({
       {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) && tab === 'firebird-test-data' && <FirebirdTestData
         key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
         languageProfile={languageProfile} resources={resourcePage?.items || []} />}
-      {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
-      {workspace && queryDatabaseTargetId && workspace.endpoint?.profile_id === 'postgresql-native' && tab === 'postgresql-large-object-files' && <PostgresqlLargeObjectFiles key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
+      {workspace && queryDatabaseTargetId && workspace.database_tool_tabs?.includes('postgresql-test-data') && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
+      {workspace && queryDatabaseTargetId && workspace.database_tool_tabs?.includes('postgresql-large-object-files') && tab === 'postgresql-large-object-files' && <PostgresqlLargeObjectFiles key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
       {workspace && tab === 'firebird-isql' && <FirebirdIsql post={post}
         databaseTargetId={queryDatabaseTargetId} />}
       {workspace && tab === 'metadata-search' && <FirebirdMetadataSearch

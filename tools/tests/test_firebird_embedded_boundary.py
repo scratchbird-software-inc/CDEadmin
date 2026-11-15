@@ -19,7 +19,7 @@ from pgadmin.cdeadmin.sdk.actual_engine import PilotProviderError
 from tools.tests.test_cdeadmin_actual_engine_pilots import context
 
 
-def test_embedded_interface_has_no_network_or_service_authority():
+def test_embedded_interface_has_no_network_or_remote_service_authority():
     from pgadmin.cdeadmin.providers.firebird.embedded_provider import (
         PROFILE as embedded_profile, ADMINISTRATION as embedded_admin,
     )
@@ -33,8 +33,8 @@ def test_embedded_interface_has_no_network_or_service_authority():
     assert 'service-operation' not in embedded_profile.resource_kinds
     assert 'server' not in embedded_admin.dialect.supported
     assert 'servers' in embedded_admin.dialect.not_applicable_concepts
-    assert not (_FIREBIRD_SERVICE_OPERATIONS &
-                embedded_admin.dialect.supported['database'])
+    assert (_FIREBIRD_SERVICE_OPERATIONS &
+            embedded_admin.dialect.supported['database']) == {'database_statistics'}
     assert 'create' in embedded_admin.dialect.supported['table']
 
 

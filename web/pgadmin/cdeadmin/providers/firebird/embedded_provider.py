@@ -11,6 +11,7 @@ from .provider import (
     ADMINISTRATION as NETWORK_ADMINISTRATION, _create_client,
 )
 from .embedded import embedded_route
+from . import local_services
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
@@ -37,6 +38,14 @@ class EmbeddedAdministration(RelationalAdministration):
             if resource['resource_kind'] != 'database':
                 continue
             for operation in resource.get('operations', []):
+                if operation['operation_id'] in local_services.OPERATIONS:
+                    operation.pop('workspace_scope', None)
+                    operation['title'] = 'Local database statistics (gstat)'
+                    operation['form']['title'] = operation['title']
+                    operation['form']['notes'] = (
+                        'Runs on the ScratchRobin host against the approved local '
+                        'database file. Uses filesystem access, with no network '
+                        'service credentials.')
                 if operation['operation_id'] != 'create':
                     continue
                 for field in operation.get('form', {}).get('fields', []):
@@ -47,13 +56,14 @@ class EmbeddedAdministration(RelationalAdministration):
         return value
 
 
+
 ADMINISTRATION = EmbeddedAdministration(replace(
     NETWORK_ADMINISTRATION.dialect,
     not_applicable_concepts=(
         NETWORK_ADMINISTRATION.dialect.not_applicable_concepts |
         frozenset({'servers'})),
     supported={
-        kind: (operations - _FIREBIRD_SERVICE_OPERATIONS
+        kind: ((operations - _FIREBIRD_SERVICE_OPERATIONS) | local_services.OPERATIONS
                if kind == 'database' else operations)
         for kind, operations in (
             NETWORK_ADMINISTRATION.dialect.supported.items())

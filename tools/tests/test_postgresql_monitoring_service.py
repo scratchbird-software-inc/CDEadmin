@@ -35,10 +35,11 @@ def test_selected_database_mismatch_refused():
         PostgreSQLMonitoringHost._resolved_service(conn)
 
 
-def test_current_service_password_is_a_lease_not_route_metadata(monkeypatch):
+@pytest.mark.parametrize('version', [150020,160016,170012,180002,180003,180007])
+def test_current_service_password_is_a_lease_not_route_metadata(monkeypatch, version):
     from pgadmin.utils.driver.registry import DriverRegistry
     conn = connection()
-    manager = NS(version=180003, connection=Mock(return_value=conn), user='', password=None)
+    manager = NS(version=version, connection=Mock(return_value=conn), user='', password=None)
     monkeypatch.setattr(DriverRegistry, 'get', lambda _: NS(connection_manager=lambda _: manager))
     monkeypatch.setattr('pgadmin.utils.master_password.get_crypt_key', lambda: (False, None))
     server = NS(host=None, port=None, role='', service='alias', use_ssh_tunnel=False,

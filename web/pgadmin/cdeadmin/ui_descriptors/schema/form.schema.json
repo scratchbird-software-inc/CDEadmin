@@ -465,6 +465,15 @@
         "empty_as_null": {
           "type": "boolean",
           "description": "Send null instead of an empty list, object or string, so the backend treats the field as unset (the servers API then leaves its route key out); for a field whose provider treats an empty value differently from no value"
+        },
+        "initial_value_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Path into the inspected native record used by nativeInitialValues to prefill a provider field; never executed."
         }
       }
     },

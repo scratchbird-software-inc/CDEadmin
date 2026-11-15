@@ -60,7 +60,7 @@ def service_authentication(route, options):
     The database task target is intentionally not an authentication DB default.
     """
     role = effective_service_role(options.get('role'), route.get('role'))
-    return {
+    result = {
         'requested_role': role,
         'role_source': ('task' if options.get('role') else
                         'connection' if role else 'none'),
@@ -71,6 +71,11 @@ def service_authentication(route, options):
         'authorization_authority': 'native_service_action',
         'saved_profile_modified': False,
     }
+    if route.get('attachment_mode') == 'embedded':
+        result.update(attachment_mode='embedded', execution_host='application-local',
+            network_authentication=False, authentication_database=None,
+            authorization_authority='approved-filesystem-and-native-local-service')
+    return result
 
 
 def connect_service(module, core, *, server, user=None, password=None,

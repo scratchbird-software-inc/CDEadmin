@@ -22,20 +22,6 @@
   ],
   "gaps": [
     {
-      "concept": "virtual-table.create.module_options",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
-    },
-    {
-      "concept": "fts-table.create.module_options",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
-    },
-    {
-      "concept": "Column grid depth",
-      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add collation, generated columns, autoincrement, check"
-    },
-    {
       "concept": "Table rebuild on alter",
       "reason": "SQLiteAlterDesign/SQLiteColumnDesign perform the copy-rebuild; the alter path must surface the rebuild plan on the SQL tab"
     }
@@ -126,6 +112,148 @@
           "default": false,
           "record_key": "primary_key_position",
           "record_truthy": true
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "text",
+          "editable_after_create": false
+        },
+        {
+          "field_id": "generated_expression",
+          "label": "Generated expression",
+          "control": "code",
+          "editable_after_create": false,
+          "language": "sql"
+        },
+        {
+          "field_id": "autoincrement",
+          "label": "Autoincrement",
+          "control": "boolean",
+          "editable_after_create": false
+        },
+        {
+          "field_id": "check_expression",
+          "label": "CHECK expression",
+          "control": "code",
+          "editable_after_create": false,
+          "language": "sql"
+        },
+        {
+          "field_id": "generated_storage",
+          "label": "Generated storage",
+          "control": "select",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "NONE"
+            },
+            {
+              "value": "VIRTUAL",
+              "label": "VIRTUAL"
+            },
+            {
+              "value": "STORED",
+              "label": "STORED"
+            }
+          ],
+          "editable_after_create": false
+        },
+        {
+          "field_id": "not_null_conflict",
+          "label": "not_null conflict",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "ABORT",
+              "label": "ABORT"
+            },
+            {
+              "value": "FAIL",
+              "label": "FAIL"
+            },
+            {
+              "value": "IGNORE",
+              "label": "IGNORE"
+            },
+            {
+              "value": "REPLACE",
+              "label": "REPLACE"
+            },
+            {
+              "value": "ROLLBACK",
+              "label": "ROLLBACK"
+            }
+          ],
+          "editable_after_create": false
+        },
+        {
+          "field_id": "primary_key_conflict",
+          "label": "primary_key conflict",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "ABORT",
+              "label": "ABORT"
+            },
+            {
+              "value": "FAIL",
+              "label": "FAIL"
+            },
+            {
+              "value": "IGNORE",
+              "label": "IGNORE"
+            },
+            {
+              "value": "REPLACE",
+              "label": "REPLACE"
+            },
+            {
+              "value": "ROLLBACK",
+              "label": "ROLLBACK"
+            }
+          ],
+          "editable_after_create": false
+        },
+        {
+          "field_id": "unique_conflict",
+          "label": "unique conflict",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "ABORT",
+              "label": "ABORT"
+            },
+            {
+              "value": "FAIL",
+              "label": "FAIL"
+            },
+            {
+              "value": "IGNORE",
+              "label": "IGNORE"
+            },
+            {
+              "value": "REPLACE",
+              "label": "REPLACE"
+            },
+            {
+              "value": "ROLLBACK",
+              "label": "ROLLBACK"
+            }
+          ],
+          "editable_after_create": false
         }
       ],
       "required": true,
@@ -318,7 +446,6 @@
       "tab": "Engine",
       "control": "select",
       "required": true,
-      "default": "fts5",
       "options": [
         {
           "value": "fts3",
@@ -410,19 +537,556 @@
       }
     },
     {
-      "field_id": "module_options",
-      "label": "Native constructor options",
+      "field_id": "auxiliary_columns",
+      "label": "Auxiliary columns",
+      "control": "grid",
       "tab": "Engine",
-      "control": "keyvalue",
-      "required": false,
-      "help": "FTS: {\"tokenizer\":{\"name\":\"unicode61\",\"arguments\":[\"remove_diacritics\",\"2\"]},\"prefix\":[2,3]}. FTS4 tokenizer arguments use [\"remove_diacritics=2\"]. FTS4 also accepts content, languageid, matchinfo, compress/uncompress, order and notindexed. FTS5 accepts content, content_rowid, columnsize, detail, contentless_delete, contentless_unindexed, tokendata and locale. RTree: {\"auxiliary_columns\":[\"label\"]}. FTS4aux/FTS5vocab: {\"table\":\"search\",\"database\":\"main\",\"mode\":\"row\"} (mode only for FTS5vocab; cross-database sources require TEMP). Tokenizer: {\"tokenizer\":{\"name\":\"unicode61\",\"arguments\":[\"remove_diacritics=2\"]}}. Dbstat: {\"database\":\"main\"}. Installed modules and all constructor constraints are checked by SQLite.",
+      "modes": [
+        "create"
+      ],
       "visible_when": {
-        "field": "variant",
+        "field": "module",
         "in": [
-          "virtual",
-          "fts"
+          "rtree",
+          "rtree_i32"
+        ]
+      },
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "source_table",
+      "label": "Source FTS table",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4aux",
+          "fts5vocab"
         ]
       }
+    },
+    {
+      "field_id": "source_database",
+      "label": "Source database",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4aux",
+          "fts5vocab",
+          "dbstat"
+        ]
+      }
+    },
+    {
+      "field_id": "vocabulary_mode",
+      "label": "Vocabulary mode",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5vocab"
+        ]
+      },
+      "options": [
+        {
+          "value": "row",
+          "label": "row"
+        },
+        {
+          "value": "col",
+          "label": "col"
+        },
+        {
+          "value": "instance",
+          "label": "instance"
+        }
+      ],
+      "default": "row"
+    },
+    {
+      "field_id": "tokenizer_name",
+      "label": "Tokenizer name",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts3tokenize",
+          "fts3",
+          "fts4",
+          "fts5"
+        ]
+      }
+    },
+    {
+      "field_id": "tokenizer_arguments",
+      "label": "Tokenizer arguments",
+      "control": "grid",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts3tokenize",
+          "fts3",
+          "fts4",
+          "fts5"
+        ]
+      },
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "content_mode",
+      "label": "Content storage",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4",
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "INTERNAL",
+          "label": "INTERNAL"
+        },
+        {
+          "value": "EXTERNAL",
+          "label": "EXTERNAL"
+        },
+        {
+          "value": "CONTENTLESS",
+          "label": "CONTENTLESS"
+        }
+      ]
+    },
+    {
+      "field_id": "content_table",
+      "label": "External content table",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4",
+          "fts5"
+        ]
+      }
+    },
+    {
+      "field_id": "prefix_lengths",
+      "label": "Prefix lengths",
+      "control": "grid",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4",
+          "fts5"
+        ]
+      },
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Length",
+          "control": "number",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "notindexed_columns",
+      "label": "FTS4 unindexed columns",
+      "control": "grid",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      },
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "fts_detail",
+      "label": "detail",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "full",
+          "label": "full"
+        },
+        {
+          "value": "column",
+          "label": "column"
+        },
+        {
+          "value": "none",
+          "label": "none"
+        }
+      ]
+    },
+    {
+      "field_id": "fts_order",
+      "label": "order",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "asc",
+          "label": "asc"
+        },
+        {
+          "value": "desc",
+          "label": "desc"
+        }
+      ]
+    },
+    {
+      "field_id": "fts_matchinfo",
+      "label": "matchinfo",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "fts3",
+          "label": "fts3"
+        }
+      ]
+    },
+    {
+      "field_id": "fts_compress",
+      "label": "compress",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      }
+    },
+    {
+      "field_id": "fts_uncompress",
+      "label": "uncompress",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      }
+    },
+    {
+      "field_id": "fts_languageid",
+      "label": "languageid",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts4"
+        ]
+      }
+    },
+    {
+      "field_id": "fts_content_rowid",
+      "label": "content_rowid",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      }
+    },
+    {
+      "field_id": "fts_columnsize",
+      "label": "columnsize",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0"
+        },
+        {
+          "value": "1",
+          "label": "1"
+        }
+      ]
+    },
+    {
+      "field_id": "fts_contentless_delete",
+      "label": "contentless_delete",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0",
+          "version": {
+            "minimum": "3.43.0",
+            "reason": "contentless_delete native constructor availability"
+          }
+        },
+        {
+          "value": "1",
+          "label": "1",
+          "version": {
+            "minimum": "3.43.0",
+            "reason": "contentless_delete native constructor availability"
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "fts_tokendata",
+      "label": "tokendata",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0",
+          "version": {
+            "minimum": "3.45.0",
+            "reason": "tokendata native constructor availability"
+          }
+        },
+        {
+          "value": "1",
+          "label": "1",
+          "version": {
+            "minimum": "3.45.0",
+            "reason": "tokendata native constructor availability"
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "fts_locale",
+      "label": "locale",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0",
+          "version": {
+            "minimum": "3.47.0",
+            "reason": "locale native constructor availability"
+          }
+        },
+        {
+          "value": "1",
+          "label": "1",
+          "version": {
+            "minimum": "3.47.0",
+            "reason": "locale native constructor availability"
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "fts_contentless_unindexed",
+      "label": "contentless_unindexed",
+      "control": "select",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fts5"
+        ]
+      },
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "0",
+          "label": "0",
+          "version": {
+            "minimum": "3.47.0",
+            "reason": "contentless_unindexed native constructor availability"
+          }
+        },
+        {
+          "value": "1",
+          "label": "1",
+          "version": {
+            "minimum": "3.47.0",
+            "reason": "contentless_unindexed native constructor availability"
+          }
+        }
+      ]
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database); virtual/FTS variants get a module_columns grid. Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round trip verified in-process (create, re-inspect, alter via the Columns grid diff) on SQLite 3.53.1 (profile pins 3.53.0) by tools/tests/test_ui_descriptor_roundtrip_sqlite.py. Native qualification on the pinned version remains with the platform teams."

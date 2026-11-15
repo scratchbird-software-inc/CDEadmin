@@ -1,7 +1,6 @@
 {
   "schema": "cdeadmin.ui-navigator.v1",
   "engine": "postgresql",
-  "notes": "Owner direction 2026-11-08 (PostgreSQL onto the provider tree, M2): groups follow the YugabyteDB navigator, which is PostgreSQL-derived, with the kinds YugabyteDB lacks added (text search, foreign data wrappers, languages, subscriptions, casts, conversions, operators). Kinds not yet declared in capabilities.json are listed so the tree order is settled before their forms arrive (M3-M5). The provider tree today groups by the visual-admin declarations; this descriptor is served in the engine bundle for consumers of cdeadmin.ui-navigator.v1.",
   "sort": "alphabetical",
   "groups": [
     {

@@ -22,37 +22,38 @@ def literal(name):
     return "'" + name.replace("'", "''") + "'"
 
 
-def capture(expression, kind, counter):
+def capture(expression, kind, counter, namespace=''):
     if not contains_union(kind):
         return expression
     counter[0] += 1
     variable = '__cde_union_' + str(counter[0])
     children = dict(kind.children)
     if kind.id in {'list', 'array'}:
-        body = capture(variable, children['child'], counter)
-        return f'list_transform({expression}, lambda {variable}: {body})'
+        body = capture(variable, children['child'], counter, namespace)
+        return f'{namespace}list_transform({expression}, lambda {variable}: {body})'
     if kind.id == 'map':
-        key = capture(variable + '.key', children['key'], counter)
-        value = capture(variable + '.value', children['value'], counter)
-        return ('map_from_entries(list_transform(map_entries(' + expression +
-                f'), lambda {variable}: struct_pack(key := {key}, '
+        key = capture(variable + '.key', children['key'], counter, namespace)
+        value = capture(variable + '.value', children['value'], counter, namespace)
+        return (f'{namespace}map_from_entries({namespace}list_transform('
+                f'{namespace}map_entries(' + expression +
+                f'), lambda {variable}: {namespace}struct_pack(key := {key}, '
                 f'value := {value})))')
     if kind.id == 'union':
         members = []
         for name, child in kind.children[1:]:
-            source = f'union_extract({variable}, {literal(name)})'
+            source = f'{namespace}union_extract({variable}, {literal(name)})'
             members.append(quote(name) + ' := ' +
-                           capture(source, child, counter))
-        body = ('struct_pack(__tag := CAST(union_tag(' + variable +
-                ') AS VARCHAR), __members := struct_pack(' +
+                           capture(source, child, counter, namespace))
+        body = (f'{namespace}struct_pack(__tag := CAST({namespace}union_tag(' + variable +
+                f') AS VARCHAR), __members := {namespace}struct_pack(' +
                 ', '.join(members) + '))')
     else:
         members = [quote(name) + ' := ' + capture(
-            variable + '.' + quote(name), child, counter)
+            variable + '.' + quote(name), child, counter, namespace)
             for name, child in kind.children]
-        body = 'struct_pack(' + ', '.join(members) + ')'
+        body = namespace + 'struct_pack(' + ', '.join(members) + ')'
     body = f'CASE WHEN {variable} IS NULL THEN NULL ELSE {body} END'
-    return f'list_transform([{expression}], lambda {variable}: {body})[1]'
+    return f'{namespace}list_transform([{expression}], lambda {variable}: {body})[1]'
 
 
 def project(relation):

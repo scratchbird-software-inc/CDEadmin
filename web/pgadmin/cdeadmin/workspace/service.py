@@ -40,23 +40,40 @@ class ProviderWorkspaceError(RuntimeError):
     """A provider endpoint workspace request cannot be admitted."""
 
 
-def sql_builder_declaration(endpoint):
-    """The engine's ``sql_builder`` capabilities section, or None.
-
-    The engine is the ui_descriptors folder whose capabilities list the
-    endpoint's profile; the app's shared descriptor service is used when
-    there is one.
-    """
+def endpoint_descriptor_bundle(endpoint):
+    """Resolve declarations by the endpoint's registered profile, never a UI engine branch."""
     from flask import current_app, has_app_context
     from ..ui_descriptors import APP_EXTENSION_KEY, UIDescriptorService
     descriptors = ((current_app.extensions.get(APP_EXTENSION_KEY)
                     if has_app_context() else None) or UIDescriptorService())
     profile_id = ((endpoint or {}).get('identity') or {}).get('profile_id')
     for engine_id in descriptors.engine_ids():
-        capabilities = descriptors.engine(engine_id)['capabilities']
-        if profile_id in capabilities.get('profiles', ()):
-            return capabilities.get('sql_builder') or None
+        bundle = descriptors.engine(engine_id)
+        if profile_id in bundle['capabilities'].get('profiles', ()):
+            return bundle
     return None
+
+
+def sql_builder_declaration(endpoint):
+    """The matched engine's structured SQL-builder declaration, if any."""
+    bundle = endpoint_descriptor_bundle(endpoint)
+    return bundle['capabilities'].get('sql_builder') or None if bundle else None
+
+
+def database_workspace_tool_tabs(endpoint):
+    """Database workspace entry points declared in the endpoint's engine bundle.
+
+    Navigation metadata only; native calls still authorize independently.
+    """
+    bundle = endpoint_descriptor_bundle(endpoint)
+    return sorted({
+        tool['arguments']['tab']
+        for tool in (bundle or {}).get('tools', ())
+        if tool.get('scope') == 'database'
+        and tool.get('handler') == 'open_workspace'
+        and isinstance(tool.get('arguments', {}).get('tab'), str)
+        and tool['arguments']['tab']
+    })
 
 
 class ProviderWorkspaceService:
@@ -279,6 +296,7 @@ class ProviderWorkspaceService:
             # The SQL tab offers the visual SQL builder when the engine
             # declares it (owner direction 2026-11-06, option b).
             'sql_builder': sql_builder_declaration(endpoint) is not None,
+            'database_tool_tabs': database_workspace_tool_tabs(endpoint),
             'engine_contracts': engine_contracts,
             'database_targets': self.endpoint_service.database_catalog(
                 server
@@ -797,7 +815,7 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(str(error)) from None
 
     def _mariadb_server_context(self, server):
-        from ..providers.mariadb_family.provider import MariaDBPilotProvider
+        from ..providers.mysql_family.provider import MariaDBPilotProvider
         self._principal_id(server)
         if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'mariadb-native':
             raise ProviderWorkspaceError('Select an owned native MariaDB server')
@@ -3988,6 +4006,16 @@ class ProviderWorkspaceService:
             if action=='sqlite_native_preupdate':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite preupdate request')
                 return self.studio_service.sqlite_native_preupdate_action(context,data.get('session_id'),data['request'])
+            if action == 'sqlite_connection_settings':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-connection setting')
+                return self.studio_service.sqlite_connection_settings_action(
+                    context, data.get('session_id'), data['request'])
+            if action == 'sqlite_connection_limits':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-connection limit')
+                return self.studio_service.sqlite_connection_limits_action(
+                    context, data.get('session_id'), data['request'])
             if action=='sqlite_native_arrays':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite array request')
                 return self.studio_service.sqlite_native_array_action(context,data.get('session_id'),data['request'])

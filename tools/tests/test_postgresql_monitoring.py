@@ -104,11 +104,13 @@ def test_interruption_clears_rate_baseline_and_releases_connection():
 
 @pytest.mark.parametrize('scope,key', [('database', 'transaction_refresh'), ('server', 'service_probe')])
 @pytest.mark.parametrize('commit_fails', [False, True])
-def test_scoped_heartbeat_evidence_requires_owned_transaction_commit(scope, key, commit_fails):
+@pytest.mark.parametrize('version', [150020,160016,170012,180002,180003,180007])
+def test_scoped_heartbeat_evidence_requires_owned_transaction_commit(scope, key, commit_fails, version):
     from datetime import datetime, timezone
     from unittest.mock import MagicMock
     monitor = module.PostgreSQLMonitor(Mock(), {'database': 'qa'}, scope=scope)
     connection = MagicMock()
+    connection.info.server_version = version
     connection.execute.return_value.fetchone.return_value = (
         'qa', datetime.now(timezone.utc), 42, 'collector', False, True, 7)
     if commit_fails:
@@ -125,3 +127,15 @@ def test_scoped_heartbeat_evidence_requires_owned_transaction_commit(scope, key,
     if commit_fails:
         assert result['status'] == 'unavailable' and result['last_success_at'] is None
     monitor.close()
+
+
+@pytest.mark.parametrize('version,expected', [(150020, None), (160016, False), (170012, False), (180002, True), (180007, True)])
+def test_io_source_tracks_native_view_and_column_availability(version, expected):
+    query = module.io_source(version)
+    if expected is None:
+        assert query is None
+    else:
+        assert ('read_bytes' in query) is expected
+        assert ('write_bytes' in query) is expected
+        assert ('op_bytes' in query) is (not expected)
+        assert 'pg_catalog.pg_stat_io' in query

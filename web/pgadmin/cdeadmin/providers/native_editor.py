@@ -146,7 +146,7 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False, native_variable=None):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False, native_variable=None, native_type_syntax=None, native_function=None):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
@@ -156,6 +156,8 @@ def metadata(handle, engine, transaction=None, dialect=None):
             row['native_identifier_token'] = True
         if native_type_keyword:row['native_type_keyword']=True
         if native_variable is not None:row['native_variable']=native_variable
+        if native_function is not None:row['native_function']=native_function
+        if native_type_syntax is not None:row['native_type_syntax']=native_type_syntax
         if native_type is not None:
             row['native_type']=native_type
         if table_valued:
@@ -179,6 +181,11 @@ def metadata(handle, engine, transaction=None, dialect=None):
                         'SELECT VARIABLE_NAME,VARIABLE_SCOPE,DATA_TYPE,MIN_VALUE,MAX_VALUE,DOCUMENTATION FROM performance_schema.variables_metadata ORDER BY VARIABLE_NAME LIMIT 25001'):
                     add('system-variable', [name], str(scope) + ' ' + str(data_type) + ': ' + str(documentation),
                         native_variable={'scope': scope, 'data_type': data_type, 'minimum': minimum, 'maximum': maximum})
+            if engine == 'mariadb':
+                from .mysql_family.mariadb_installed import discover
+                if discover(query, add):
+                    observations.append({'section': 'native-loadable-function-execution-state',
+                        'available': False, 'reason': 'registration-is-not-callability;no-user-code-executed'})
             for (database,) in query('databases', 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 25001'):
                 add('schema', [database])
             for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):
@@ -395,8 +402,20 @@ def metadata(handle, engine, transaction=None, dialect=None):
             if runtime != SQLITE_PROFILE.exact_version:
                 inv = inventory_for(runtime)
         words = [row['native_name'] for row in inv['lexical_rules'] if re.fullmatch(r'[A-Za-z][A-Za-z0-9_$]*', row['native_name'])]
+        if engine == 'mariadb':
+            from .mysql_family.mariadb_types import candidates
+            plugins = query('native-data-type-plugins',
+                "SELECT PLUGIN_NAME,PLUGIN_STATUS FROM information_schema.PLUGINS "
+                "WHERE PLUGIN_TYPE='DATA TYPE' ORDER BY PLUGIN_NAME LIMIT 25001")
+            types, type_observations = candidates(context['version'], context['sql_mode'], plugins)
+            observations.extend(type_observations)
+            for row in types:
+                add('type', [row['name']], row['detail'], native_type_keyword=True,
+                    native_type_syntax=row['syntax'])
         if engine in {'mysql', 'mariadb'}:
-            for group, kind in (('functions', 'function'), ('data_types', 'type')):
+            groups = (('functions', 'function'),) if engine == 'mariadb' else (
+                ('functions', 'function'), ('data_types', 'type'))
+            for group, kind in groups:
                 for row in inv[group]:
                     native_type_keyword=(engine=='mysql' and kind=='type' and row.get('inventory_kind')=='native-type-keywords')
                     pattern=r'[A-Z][A-Z0-9_]*(?: [A-Z][A-Z0-9_]*)*' if native_type_keyword else r'[A-Za-z][A-Za-z0-9_$]*'
@@ -553,6 +572,9 @@ class NativeEditorProvider:
         with session_access(self.client, handle, engine) as transaction:
             if engine == 'mysql':
                 from .mysql_family.mysql_completion import complete
+                return {'editor_context': complete(self.client, handle)}
+            if engine == 'mariadb':
+                from .mysql_family.mariadb_completion import complete
                 return {'editor_context': complete(self.client, handle)}
             return {'editor_context': metadata(handle, engine, transaction, request.get('client_sql_dialect'))}
 

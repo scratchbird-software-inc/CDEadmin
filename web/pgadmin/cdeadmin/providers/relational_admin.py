@@ -1829,7 +1829,10 @@ class RelationalAdministration:
                     'MariaDB reports this system variable as read-only.'
                 ),
             })
-        if 'GLOBAL' not in str(native.get('variable_scope', '')).upper():
+        # MariaDB SESSION means global and session; SESSION ONLY is distinct.
+        # These are MariaDB's native metadata labels, not MySQL scope flags.
+        if str(native.get('variable_scope', '')).strip().upper() not in {
+                'GLOBAL', 'SESSION'}:
             errors.append({
                 'field_id': None,
                 'code': 'mariadb_system_variable_not_global',
@@ -1839,12 +1842,38 @@ class RelationalAdministration:
                 ),
             })
         mode = draft.get('value_mode')
-        if mode not in {'VALUE', 'DEFAULT'}:
+        if mode not in {'VALUE', 'DEFAULT', 'BITMASK', 'FLAGS'}:
             errors.append({
                 'field_id': 'value_mode',
                 'code': 'invalid_mariadb_system_variable_value_mode',
                 'message': 'Select a specified value or the compiled default.',
             })
+        if mode == 'FLAGS':
+            from .mysql_family.mariadb_variables import flagset_assignments
+            try:
+                if str(native.get('variable_type', '')).upper() != 'FLAGSET':
+                    raise ValueError('Structured flags apply only to FLAGSET')
+                flagset_assignments(draft.get('flags'),
+                    draft.get('reset_defaults', False), native.get('enum_value_list'))
+            except (TypeError, ValueError):
+                errors.append({
+                    'field_id': 'flags',
+                    'code': 'invalid_mariadb_flagset_assignments',
+                    'message': 'Choose distinct native flags and on/off/default states.',
+                })
+        if mode == 'BITMASK':
+            from .mysql_family.mariadb_variables import flagset_bitmask
+            try:
+                if str(native.get('variable_type', '')).upper() != 'FLAGSET':
+                    raise ValueError('Numeric masks apply only to FLAGSET')
+                flagset_bitmask(draft.get('bitmask'), native.get('enum_value_list'))
+            except (TypeError, ValueError):
+                errors.append({
+                    'field_id': 'bitmask',
+                    'code': 'invalid_mariadb_flagset_bitmask',
+                    'message': 'Enter an unsigned decimal FLAGSET mask within '
+                               'the native option bound.',
+                })
         if mode == 'VALUE':
             if 'value' not in draft:
                 errors.append({
@@ -1884,6 +1913,9 @@ class RelationalAdministration:
                         if str(value).upper() not in {
                                 'ON', 'OFF', 'TRUE', 'FALSE', '1', '0'}:
                             raise ValueError
+                    elif variable_type == 'FLAGSET':
+                        from .mysql_family.mariadb_variables import validate_flagset
+                        validate_flagset(value, native.get('enum_value_list'))
                     elif variable_type in {'ENUM', 'SET'}:
                         choices = {
                             item for item in str(native.get(
@@ -3526,6 +3558,18 @@ class RelationalAdministration:
             }
         return response
 
+    def _row_cursor(self, client, connection):
+        if getattr(getattr(client, 'config', None),
+                   'execute_on_connection', False):
+            return connection
+        if self.dialect.engine_id == 'firebird':
+            from .firebird.temporal_arrays import cursor
+            return cursor(connection)
+        return connection.cursor()
+
+    def _public_row_values(self, values):
+        return copy.deepcopy(values)
+
     def read_rows(self, client, request, connection=None):
         route = request.get('_provider_route')
         target = request.get('target_resource')
@@ -3606,17 +3650,7 @@ class RelationalAdministration:
                 physical_identity = available(
                     connection, self._qualified(path))
             row_identity_available = bool(key_columns) or physical_identity
-            if self.dialect.engine_id == 'firebird':
-                from .firebird.temporal_arrays import cursor as array_cursor
-            cursor = (
-                connection if getattr(
-                    getattr(client, 'config', None),
-                    'execute_on_connection', False,
-                )
-                else array_cursor(connection)
-                if self.dialect.engine_id == 'firebird'
-                else connection.cursor()
-            )
+            cursor = self._row_cursor(client, connection)
             order = (
                 ' ORDER BY ' + ', '.join(
                     self._quote(name) for name in key_columns
@@ -3760,7 +3794,7 @@ class RelationalAdministration:
                         value)
                                 for name, value in values.items()}
                                if self.dialect.engine_id == 'firebird' else
-                               copy.deepcopy(values)),
+                               self._public_row_values(values)),
                     'identity_token': identity_token,
                 })
             insert_token = None
@@ -4184,6 +4218,15 @@ class RelationalAdministration:
             draft = request.get('draft', {})
             if draft.get('value_mode') == 'DEFAULT':
                 value = 'DEFAULT'
+            elif draft.get('value_mode') == 'FLAGS':
+                from .mysql_family.mariadb_variables import flagset_assignments
+                value = self._literal(flagset_assignments(draft.get('flags'),
+                    draft.get('reset_defaults', False),
+                    self._mariadb_target_native(target).get('enum_value_list')))
+            elif draft.get('value_mode') == 'BITMASK':
+                from .mysql_family.mariadb_variables import flagset_bitmask
+                value = str(flagset_bitmask(draft.get('bitmask'),
+                    self._mariadb_target_native(target).get('enum_value_list')))
             else:
                 raw_value = draft.get('value')
                 variable_type = str(self._mariadb_target_native(

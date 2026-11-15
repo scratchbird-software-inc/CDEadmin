@@ -108,7 +108,7 @@
       "tab": "Columns",
       "required": true,
       "reorderable": true,
-      "help": "Reorder is allowed in create mode only. Rows inherited from a parent table (inheritedfrom set) cannot be edited or deleted; adding is disabled while 'Of type' is set. Grid columns shown inline: name, cltype, attlen, attprecision, attnotnull, is_primary_key, defval; the rest open in the row editor.",
+      "help": "Reorder is allowed in create mode only. Rows inherited from a parent table (inheritedfrom set) cannot be edited or deleted; adding is disabled while 'Of type' is set. Grid columns shown inline: name, cltype, attlen, attprecision, attnotnull, is_primary_key, defval; the rest open in the row editor. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -574,7 +574,8 @@
             "minimum": "9.1"
           }
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "primary_key",
@@ -583,7 +584,7 @@
       "tab": "Constraints",
       "group": "Primary key",
       "native_keyword": "PRIMARY KEY",
-      "help": "At most one row; a row can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11.",
+      "help": "At most one row; a row can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -690,7 +691,8 @@
             "truthy": true
           }
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "foreign_key",
@@ -699,7 +701,7 @@
       "tab": "Constraints",
       "group": "Foreign keys",
       "native_keyword": "FOREIGN KEY",
-      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11. Grid columns shown inline: name, columns, references_table_name.",
+      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11. Grid columns shown inline: name, columns, references_table_name. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -897,7 +899,8 @@
           ],
           "native_keyword": "ON DELETE"
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "check_constraint",
@@ -906,7 +909,7 @@
       "tab": "Constraints",
       "group": "Check",
       "native_keyword": "CHECK",
-      "help": "Grid columns shown inline: name, consrc.",
+      "help": "Grid columns shown inline: name, consrc. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -967,7 +970,8 @@
           "native_keyword": "NOT VALID",
           "help": "Read-only once an existing constraint is validated."
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "unique_constraint",
@@ -976,7 +980,7 @@
       "tab": "Constraints",
       "group": "Unique",
       "native_keyword": "UNIQUE",
-      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11.",
+      "help": "Rows can be added once any column has a name. Disabled on partitioned tables before PostgreSQL 11. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -1092,7 +1096,8 @@
           },
           "native_keyword": "NULLS NOT DISTINCT"
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "exclude_constraint",
@@ -1101,7 +1106,7 @@
       "tab": "Constraints",
       "group": "Exclude",
       "native_keyword": "EXCLUDE",
-      "help": "Rows can be added once any column has a name. Grid columns shown inline: name, columns, constraint.",
+      "help": "Rows can be added once any column has a name. Grid columns shown inline: name, columns, constraint. Existing columns and constraints are managed on their own provider nodes; this table grid is used for creation.",
       "columns": [
         {
           "field_id": "name",
@@ -1269,7 +1274,8 @@
           ],
           "native_keyword": "INCLUDE"
         }
-      ]
+      ],
+      "editable_after_create": false
     },
     {
       "field_id": "is_partitioned",

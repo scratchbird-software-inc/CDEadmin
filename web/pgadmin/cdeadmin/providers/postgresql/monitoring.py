@@ -39,6 +39,16 @@ REPLICATION_SQL = '''SELECT pid, application_name, state, sync_state,
 IO_SQL = '''SELECT backend_type, object, context, reads, read_bytes,
  writes, write_bytes, hits, evictions, fsyncs, stats_reset
  FROM pg_catalog.pg_stat_io ORDER BY backend_type, object, context LIMIT 101'''
+def io_source(version):
+    # pg_stat_io arrived in 16; byte counters replace op_bytes in 18.
+    if version < 160000:
+        return None
+    if version < 180000:
+        return IO_SQL.replace('reads, read_bytes,', 'reads, op_bytes,').replace(
+            'writes, write_bytes,', 'writes,')
+    return IO_SQL
+
+
 SETTINGS_SQL = '''SELECT name, setting, unit FROM pg_catalog.pg_settings
  WHERE name IN ('max_connections','shared_buffers','track_counts','track_activities',
  'track_io_timing','stats_fetch_consistency','autovacuum','max_worker_processes')
@@ -150,8 +160,10 @@ class PostgreSQLMonitor:
                 return connect()
             connection = lease.use(attach)
         self._connection = connection
-        if connection.info.server_version != 180003:
-            raise PostgreSQLMonitoringError('Monitoring requires qualified PostgreSQL 18.3')
+        from .support_policy import admission_error
+        reason = admission_error(connection.info.server_version)
+        if reason:
+            raise PostgreSQLMonitoringError(reason)
         if route.get('role'):
             from psycopg import sql
             connection.execute(sql.SQL('SET ROLE {}').format(sql.Identifier(route['role'])))
@@ -249,6 +261,7 @@ class PostgreSQLMonitor:
                         'database': database, 'database_oid': database_oid,
                         'postmaster_started_at': postmaster,
                         'collector_pid': pid, 'user': user, 'in_recovery': recovery,
+                        'server_version_num': self._connection.info.server_version,
                         'statistics_visibility': 'all' if all_stats else 'permission-limited'})
                     condition = ' AND datname=current_database()' if self.scope == 'database' else ''
                     self._group(result, 'database', DATABASE_SQL + condition + ' ORDER BY datid')
@@ -258,7 +271,14 @@ class PostgreSQLMonitor:
                     if self.scope == 'database':
                         self._group(result, 'tables', TABLE_SQL)
                     self._group(result, 'replication', REPLICATION_SQL, scope='server', limited=not all_stats)
-                    self._group(result, 'io', IO_SQL, scope='server')
+                    io = io_source(self._connection.info.server_version)
+                    if io is None:
+                        result['groups']['io'] = {'status': 'unsupported', 'scope': 'server',
+                            'reason': 'pg_stat_io requires PostgreSQL 16 or later'}
+                    else:
+                        self._group(result, 'io', io, scope='server')
+                        result['groups']['io']['unavailable_columns'] = (
+                            ['read_bytes', 'write_bytes'] if self._connection.info.server_version < 180000 else [])
                     if self._native_metric_sources:
                         from .metrics import read_sources
                         result['groups']['native_metrics']=read_sources(self._connection,self._native_metric_sources,

@@ -94,6 +94,11 @@ PROFILE = PilotProfile(
 
 
 class SQLiteAdministration(RelationalAdministration):
+    def _compile_alter(self, request):
+        if request['resource_kind'] == 'database' and 'synchronous' in request['draft'].get('changes', {}):
+            raise RelationalClientError('synchronous is connection-local; use the original-session connection setting')
+        return super()._compile_alter(request)
+
     def catalog(self, catalog):
         from .fts_maintenance import OPERATIONS, TITLES
         value = deepcopy(catalog)
@@ -116,17 +121,34 @@ class SQLiteAdministration(RelationalAdministration):
             return form(self._field, kind)
         return super()._form(kind, operation)
 
+    def _programmable_create(self, kind, name, draft, options):
+        if kind == 'trigger':
+            from .triggers import create
+            return create(self, name, draft, options)
+        return super()._programmable_create(kind, name, draft, options)
+
     def _normalize_draft(self, kind, operation, draft):
+        if kind == 'trigger' and operation == 'create':
+            value = super()._normalize_draft(kind, operation, draft)
+            if 'when' in value:
+                condition = value.pop('when')
+                if 'when' in value['options'] and value['options']['when'] != condition:
+                    raise RelationalClientError('Conflicting SQLite trigger WHEN controls')
+                value['options']['when'] = condition
+            return value
+        if kind == 'index' and operation == 'create':
+            value = super()._normalize_draft(kind, operation, draft)
+            for key in ('terms', 'predicate'):
+                if key in value:
+                    item = value.pop(key)
+                    if key in value['options'] and value['options'][key] != item:
+                        raise RelationalClientError('Conflicting SQLite index controls')
+                    value['options'][key] = item
+            return value
         from .virtual_tables import KINDS
         if kind in KINDS and operation == 'create' and isinstance(draft, Mapping):
-            draft = dict(draft)
-            if 'options' in draft and not isinstance(draft['options'], Mapping):
-                raise RelationalClientError('create options must be an object')
-            if 'module_options' in draft:
-                options = draft.get('options', {})
-                if not isinstance(options, Mapping):
-                    raise RelationalClientError('create options must be an object')
-                draft['options'] = {**options, 'module_options': draft.pop('module_options')}
+            from .virtual_inputs import normalize
+            draft = normalize(draft)
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
@@ -149,7 +171,14 @@ class SQLiteAdministration(RelationalAdministration):
                     'code': 'invalid_sqlite_virtual_constructor', 'message': str(error)})
         return result
 
+    def _column_definition(self, item):
+        from .columns import declaration
+        return declaration(self, item)
+
     def _compile_create(self, request):
+        if request['resource_kind'] == 'index' and any(key in (request['draft'].get('options') or {}) for key in ('terms', 'predicate')):
+            from .indexes import create
+            return create(self, request)
         from .virtual_tables import KINDS, arguments
         if request['resource_kind'] not in KINDS:
             return super()._compile_create(request)
@@ -348,6 +377,29 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 if key not in {'session_id','language_profile'}},library)
         finally:
             with self.client._lock:self.client._busy.discard(id(handle))
+
+    def native_connection_limits_action(self, request):
+        from .connection_limits import action
+        self._require('execute')
+        if request.get('operation') != 'inspect':
+            self._require('administer')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            return action(handle, self.client.module, {
+                key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}})
+
+    def native_connection_settings_action(self, request):
+        from .connection_settings import action
+        self._require('execute')
+        if request.get('operation') != 'inspect':
+            self._require('administer')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            return action(handle, {key: value for key, value in request.items()
+                if key not in {'session_id', 'language_profile'}})
 
     def native_array_action(self, request, library, max_bytes=None):
         from .array_actions import action

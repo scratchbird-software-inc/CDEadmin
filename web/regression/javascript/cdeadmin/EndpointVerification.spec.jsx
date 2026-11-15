@@ -31,6 +31,20 @@ describe('provider endpoint verification', () => {
     node = {generate_url: jest.fn().mockReturnValue('/verify/1')};
   });
 
+  it('uses a declared principal default without an engine-specific rule', () => {
+    const profile = jest.spyOn(endpointProfiles, 'get').mockReturnValue({
+      profile_id: 'qualified-native', route_kind: 'network', requires_secret: true,
+      suggested_username: 'DECLARED_PRINCIPAL',
+    });
+    try {
+      showEndpointVerification('Verify', node, {
+        cde_profile_id: 'qualified-native', username: 'endpoint-profile', label: 'Server',
+      }, {}, {}, jest.fn(), jest.fn());
+      const form = pgAdmin.Browser.notifier.showModal.mock.calls[0][1](jest.fn());
+      expect(form.props.data.suggested_username).toBe('DECLARED_PRINCIPAL');
+    } finally {profile.mockRestore();}
+  });
+
   it('does not invent a password prompt for a passwordless provider',
     async () => {
       const onSuccess = jest.fn();

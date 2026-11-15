@@ -5,7 +5,7 @@ import sqlite3
 import sys
 from contextlib import closing
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -55,6 +55,47 @@ def _draft(name, **options):
                      'primary_key': True},
                     {'name': 'label', 'type': 'TEXT', 'nullable': True}],
         **options})
+
+
+def test_descriptor_options_reach_native_create_through_facade(live):
+    from pgadmin.cdeadmin.visual_admin.provider import ProviderVisualAdministration
+    path, route, client, _connection = live
+    facade = ProviderVisualAdministration(
+        SimpleNamespace(endpoint_id='owned', mode='direct'),
+        SimpleNamespace(require=lambda *_: None),
+        'sqlite', sqlite3.sqlite_version, client)
+    draft = _draft('facade_options', without_rowid=True,
+                   strict=STRICT_AVAILABLE)
+    request = dict(resource_kind='table', operation_id='create',
+                   draft=draft, _provider_route=route)
+    validated = facade.validate(request)
+    assert validated['valid'], validated
+    assert validated['draft']['without_rowid'] is True
+    assert validated['draft']['strict'] is STRICT_AVAILABLE
+    planned = client.plan_admin_operation({
+        **request, 'draft': validated['draft']})
+    assert client.apply_admin_operation(planned)['accepted']
+    with closing(sqlite3.connect(path)) as observer:
+        sql = observer.execute(
+            "SELECT sql FROM sqlite_schema WHERE name='facade_options'"
+        ).fetchone()[0]
+    assert 'WITHOUT ROWID' in sql
+    assert ('STRICT' in sql) is STRICT_AVAILABLE
+
+
+def test_strict_version_gate_uses_descriptor_and_native_runtime(live):
+    from pgadmin.cdeadmin.visual_admin.provider import ProviderVisualAdministration
+    _path, route, client, _connection = live
+    facade = ProviderVisualAdministration(
+        SimpleNamespace(), SimpleNamespace(require=lambda *_: None),
+        'sqlite', sqlite3.sqlite_version, client)
+    result = facade.validate(dict(
+        resource_kind='table', operation_id='create', _provider_route=route,
+        draft=_draft('gated_strict', strict=True)))
+    assert result['valid'] is STRICT_AVAILABLE
+    if not STRICT_AVAILABLE:
+        assert any(error['code'] == 'unsupported_version'
+                   for error in result['errors'])
 
 
 def _table_list(path, name):

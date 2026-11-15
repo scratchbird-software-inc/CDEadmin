@@ -30,12 +30,28 @@ def test_exact_native_engine_and_registered_route_required_before_capture():
         with pytest.raises(ProviderWorkspaceError):
             service.mariadb_catalog(server, {'database_target_id': 'owned-target'})
         provider.capture_catalog.assert_not_called()
+
     for target, database in (('foreign-target', 'demo'), ('owned-target', 'another-database')):
         service, server, provider, _, endpoint = fixture()
         endpoint['route']['database'] = database
         with pytest.raises(ProviderWorkspaceError):
             service.mariadb_catalog(server, {'database_target_id': target})
         provider.capture_catalog.assert_not_called()
+
+
+def test_server_scope_resolves_real_mariadb_provider_and_preserves_engine_guard():
+    service, server, provider, context, endpoint = fixture()
+    assert service._mariadb_server_context(server) == (
+        context, endpoint, provider)
+    server.endpoint_profile.profile_id = 'mysql-native'
+    service.endpoint_service.workspace.reset_mock()
+    with pytest.raises(ProviderWorkspaceError, match='MariaDB server'):
+        service._mariadb_server_context(server)
+    service.endpoint_service.workspace.assert_not_called()
+    server.endpoint_profile.profile_id = 'mariadb-native'
+    service.endpoint_service.provider_registry.resolve.return_value.instance = object()
+    with pytest.raises(ProviderWorkspaceError, match='MariaDB endpoint'):
+        service._mariadb_server_context(server)
 
 
 def test_native_uid_and_documentary_comparison_preserve_ownership():

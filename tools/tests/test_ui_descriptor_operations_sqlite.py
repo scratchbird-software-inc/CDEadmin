@@ -85,5 +85,28 @@ def test_backup_and_restore_operations(live):
 def test_every_declared_database_operation_is_exercised():
     declared = {key.split('@')[0] for key, op in OPERATIONS.items() if op['resource_kind'] == 'database'}
     exercised = {'integrity_check', 'quick_check', 'foreign_key_check', 'vacuum', 'incremental_vacuum', 'optimize',
-                 'analyze', 'reindex', 'wal_checkpoint', 'backup', 'restore'}
+                 'analyze', 'reindex', 'wal_checkpoint', 'backup', 'restore', 'set_connection_synchronous',
+                 *('set_connection_limit_'+name for name in ('length','sql_length','column','expr_depth','compound_select','function_arg','attached','like_pattern_length','variable_number','trigger_depth'))}
     assert declared == exercised
+
+
+def test_connection_synchronous_operation_on_retained_connection(live):
+    from pgadmin.cdeadmin.providers.sqlite.connection_settings import action
+    _path, _route, _client, connection, _database = live
+    before = action(connection, {'operation':'inspect'})['effective_code']
+    result = action(connection, {'operation':'set_connection_synchronous',
+        'value':'NORMAL', 'expected_code':before, 'confirmed':True})
+    assert result['effective_code'] == connection.execute('PRAGMA synchronous').fetchone()[0] == 1
+
+
+@pytest.mark.parametrize('name',['length','sql_length','column','expr_depth','compound_select','function_arg','attached','like_pattern_length','variable_number','trigger_depth'])
+def test_connection_limit_descriptor_roundtrip(live,name):
+    from pgadmin.cdeadmin.providers.sqlite.connection_limits import action, LIMITS
+    from ui_descriptor_roundtrip import operation_draft
+    _path, _route, _client, connection, _database = live
+    code = getattr(sqlite3,LIMITS[name])
+    before = connection.getlimit(code)
+    op = OPERATIONS['set_connection_limit_'+name+'@database']
+    draft = operation_draft(op, {'value':before-1,'expected_value':before,'confirmed':True})
+    result = action(connection,sqlite3,{'operation':'set_connection_limit','limit':name,**draft})
+    assert result['effective_value'] == connection.getlimit(code) == before-1

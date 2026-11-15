@@ -126,10 +126,7 @@ def test_alter_emits_one_statement_per_changed_table_fact():
         'replica_identity': 'FULL', 'description': '',
         'relacl': [{'grantee': 'reader', 'privileges': 'rw',
                     'with_grant': True}],
-        'revoke': [{'grantee': 'public'}],
-        # Grids of an existing table are not compiled here.
-        'columns': [{'name': 'id', 'cltype': 'int'}],
-        'primary_key': [{'columns': 'id'}]})
+        'revoke': [{'grantee': 'public'}]})
     assert lines == [
         'ALTER TABLE "shop"."orders" RENAME TO "orders2"',
         'ALTER TABLE "shop"."orders2" SET SCHEMA "archive"',
@@ -164,6 +161,34 @@ def test_alter_emits_one_statement_per_changed_table_fact():
     with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
         compile_table('alter', {'fillfactor': 90, 'description': 'sales',
                                 'autovacuum_enabled': 'f'})
+
+
+@pytest.mark.parametrize('field', ['columns', 'primary_key', 'foreign_key',
+    'check_constraint', 'unique_constraint', 'exclude_constraint'])
+def test_table_grid_changes_cannot_be_silently_lost_with_a_comment(field):
+    with pytest.raises(PostgreSQLNativeAdminError, match='own provider nodes'):
+        compile_table('alter', {field: [{'name': 'new_object'}],
+                                'description': 'must not partially succeed'})
+
+
+def test_toast_changes_are_compiled_from_actual_toast_relation_options():
+    native = dict(TABLE, catalog_row={**TABLE['catalog_row'],
+        'toast_reloptions': ['autovacuum_enabled=true',
+                            'autovacuum_vacuum_threshold=100']})
+    assert statements('alter', {
+        'toast_autovacuum_enabled': 'f', 'toast_autovacuum': True,
+        'vacuum_toast': [{'name': 'autovacuum_vacuum_threshold', 'value': 17}],
+        'description': 'all requested changes'}, native) == [
+        'ALTER TABLE "shop"."orders" SET (toast.autovacuum_enabled=false, '
+        'toast.autovacuum_vacuum_threshold=17)',
+        'COMMENT ON TABLE "shop"."orders" IS \'all requested changes\'']
+    assert statements('alter', {'toast_autovacuum_enabled': 'x',
+                                'toast_autovacuum': False}, native) == [
+        'ALTER TABLE "shop"."orders" RESET (toast.autovacuum_enabled, '
+        'toast.autovacuum_vacuum_threshold)']
+    with pytest.raises(PostgreSQLNativeAdminError, match='refresh native TOAST'):
+        compile_table('alter', {'toast_autovacuum': False,
+                                'description': 'not partially applied'})
 
 
 def test_refusals_keep_text_as_data():

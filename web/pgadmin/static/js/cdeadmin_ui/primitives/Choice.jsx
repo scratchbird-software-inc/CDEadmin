@@ -176,9 +176,11 @@ export function Select({
 
   const [open, setOpen] = useState(false);
   const labelId = useId();
-  const helpId = inputProps?.['aria-describedby'] || `${labelId}-help`;
   const isInvalid = Boolean(validationMessage) || Boolean(error);
   const effectiveHelp = validationMessage || helperText;
+  const helpId = useId();
+  const describedBy = [inputProps?.['aria-describedby'] || props['aria-describedby'],
+    effectiveHelp ? helpId : null].filter(Boolean).join(' ') || undefined;
   const currentOption = options.find((opt) => opt.value === value);
   const wrapperStyle = {
     ...(sx?.minWidth ? {minWidth: sx.minWidth} : {}),
@@ -209,13 +211,13 @@ export function Select({
         }}
       >
         <BaseSelect.Trigger
+          {...inputProps}
           render={<div />}
           nativeButton={false}
-          {...inputProps}
           aria-labelledby={label ? labelId : props['aria-labelledby']}
           aria-label={!label ? props['aria-label'] : undefined}
-          aria-describedby={effectiveHelp ? helpId : undefined}
           aria-invalid={isInvalid ? 'true' : undefined}
+          aria-describedby={describedBy}
           className="sr-select-trigger"
           onMouseDown={(event) => {
             if (!disabled && !open && event.button === 0) {

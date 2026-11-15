@@ -9,12 +9,7 @@
   "status": "complete",
   "engine_tab_title": "SQLite",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "WHEN condition and INSTEAD OF on views",
-      "reason": "not exposed on trigger.create"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -38,7 +33,14 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "reference_kind": "table"
+      "reference_kind": "table",
+      "visible_when": {
+        "field": "timing",
+        "in": [
+          "BEFORE",
+          "AFTER"
+        ]
+      }
     },
     {
       "field_id": "timing",
@@ -59,7 +61,8 @@
           "value": "INSTEAD OF",
           "label": "Instead Of"
         }
-      ]
+      ],
+      "default": "BEFORE"
     },
     {
       "field_id": "events",
@@ -80,22 +83,6 @@
       "wrap_list": true
     },
     {
-      "field_id": "active",
-      "label": "Active",
-      "tab": "General",
-      "control": "boolean",
-      "required": false,
-      "default": true
-    },
-    {
-      "field_id": "position",
-      "label": "Position",
-      "tab": "General",
-      "control": "number",
-      "required": false,
-      "default": 0
-    },
-    {
       "field_id": "body",
       "label": "Trigger body",
       "tab": "Definition",
@@ -103,6 +90,30 @@
       "language": "sql",
       "required": true,
       "help": "The statements to run; BEGIN ... END is added for you."
+    },
+    {
+      "field_id": "view",
+      "backend_field_id": "table",
+      "label": "View",
+      "control": "reference",
+      "reference_kind": "view",
+      "required": true,
+      "tab": "General",
+      "visible_when": {
+        "field": "timing",
+        "equals": "INSTEAD OF"
+      }
+    },
+    {
+      "field_id": "when",
+      "label": "WHEN condition",
+      "control": "code",
+      "language": "sql",
+      "tab": "Definition",
+      "modes": [
+        "create"
+      ],
+      "help": "One native expression using OLD/NEW as appropriate; SQLite binds target and event eligibility."
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. events is a single select: SQLite allows one event per trigger; the provider wraps the body in BEGIN ... END. Round trip verified in-process (create, re-inspect) on SQLite 3.53.1 (profile pins 3.53.0) by tools/tests/test_ui_descriptor_roundtrip_sqlite.py. Native qualification on the pinned version remains with the platform teams."
