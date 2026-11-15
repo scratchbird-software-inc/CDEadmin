@@ -1,0 +1,59 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "storage-file"
+  ],
+  "form_reference": "SR-F-000155",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "File name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "record_key": "filename"
+    },
+    {
+      "field_id": "file_kind",
+      "label": "Storage file kind",
+      "tab": "General",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "catalog_authority",
+      "label": "Catalog source",
+      "tab": "General",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "start",
+      "label": "Starting page",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true
+    },
+    {
+      "field_id": "length",
+      "label": "Length (pages)",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true
+    },
+    {
+      "field_id": "shadow_number",
+      "label": "Shadow number",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true
+    }
+  ],
+  "notes": "Firebird storage-file engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

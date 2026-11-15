@@ -37,7 +37,7 @@ def test_projected_dialog_values_reach_the_existing_native_compiler(kind, operat
     request, _ = request_for(kind, operation)
     assert not MYSQL_ADMINISTRATION.validate(request)['errors']
     declared = OPERATIONS[operation + '@' + kind]
-    assert declared['status'] == 'draft' and declared['produces_log']
+    assert declared['status'] == 'complete' and declared['produces_log']
     if kind == 'privilege':
         assert not declared['fields']
         return

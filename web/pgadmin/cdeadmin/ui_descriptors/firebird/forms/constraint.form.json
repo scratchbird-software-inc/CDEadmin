@@ -1,0 +1,129 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "constraint"
+  ],
+  "form_reference": "SR-F-000103",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "kind",
+      "label": "Constraint type",
+      "tab": "Definition",
+      "backend_field_id": "properties.kind",
+      "control": "select",
+      "required": true,
+      "default": "PRIMARY KEY",
+      "options": [
+        {
+          "value": "PRIMARY KEY",
+          "label": "Primary Key"
+        },
+        {
+          "value": "UNIQUE",
+          "label": "Unique"
+        },
+        {
+          "value": "FOREIGN KEY",
+          "label": "Foreign Key"
+        },
+        {
+          "value": "CHECK",
+          "label": "Check"
+        }
+      ]
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Definition",
+      "backend_field_id": "properties.columns",
+      "control": "grid",
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "column_name",
+          "label": "Columns",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true,
+      "default": [],
+      "visible_when": {
+        "field": "kind",
+        "in": [
+          "PRIMARY KEY",
+          "UNIQUE",
+          "FOREIGN KEY"
+        ]
+      }
+    },
+    {
+      "field_id": "references_table",
+      "label": "Referenced table",
+      "tab": "Definition",
+      "backend_field_id": "properties.references_table",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "kind",
+        "equals": "FOREIGN KEY"
+      }
+    },
+    {
+      "field_id": "references_columns",
+      "label": "Referenced columns",
+      "tab": "Definition",
+      "backend_field_id": "properties.references_columns",
+      "control": "grid",
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "column_name",
+          "label": "Referenced columns",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": true,
+      "default": [],
+      "visible_when": {
+        "field": "kind",
+        "equals": "FOREIGN KEY"
+      }
+    },
+    {
+      "field_id": "expression",
+      "label": "Check expression",
+      "tab": "Definition",
+      "backend_field_id": "properties.expression",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "kind",
+        "equals": "CHECK"
+      }
+    }
+  ],
+  "notes": "Firebird constraint engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

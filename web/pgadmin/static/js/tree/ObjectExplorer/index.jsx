@@ -118,6 +118,49 @@ function postTreeReady(b) {
   });
 }
 
+export function resolveExplorerDescriptorVersion(itemData, hierarchy) {
+  return (
+    itemData?.verified_runtime_version ||
+    itemData?.cde_engine_version ||
+    hierarchy?.server?.verified_runtime_version ||
+    hierarchy?.server?.cde_engine_version ||
+    undefined
+  );
+}
+
+export function isCredentialRequiredError(error) {
+  const status = error?.response?.status ?? error?.status;
+  const code = error?.response?.data?.data?.code ?? error?.data?.code ?? error?.code;
+  const message = String(
+    error?.response?.data?.errormsg || error?.message || ''
+  );
+  return (
+    code === 'CREDENTIAL_REQUIRED' ||
+    (status === 401 && /credential|verify|password|session/i.test(message))
+  );
+}
+
+function findServerItemForPath(root, targetPath) {
+  if (!root || !targetPath) return {serverItem: null, databaseTargetId: undefined};
+  const queue = [...(root.children || [])];
+  let serverItem = null;
+  let databaseTargetId;
+  while (queue.length > 0) {
+    const entry = queue.shift();
+    if (!entry?.path || !targetPath.startsWith(entry.path)) continue;
+    const data = entry._metadata?.data;
+    if (data?._type === 'server') {
+      serverItem = entry;
+    } else if (data?._type === 'cde_database_target') {
+      databaseTargetId = data._id || data.cde_database_target_id;
+    }
+    if (Array.isArray(entry.children)) {
+      queue.push(...entry.children);
+    }
+  }
+  return {serverItem, databaseTargetId};
+}
+
 export default function ObjectExplorer() {
   const [contextPos, setContextPos] = React.useState(null);
   const [contextNode, setContextNode] = React.useState(null);
@@ -185,7 +228,26 @@ export default function ObjectExplorer() {
     const host = {
       pathStyle: 'unix',
       getItems: async (path) => {
-        return mtree.readNode(path);
+        try {
+          return await mtree.readNode(path);
+        } catch (err) {
+          if (isCredentialRequiredError(err)) {
+            const {serverItem, databaseTargetId} = findServerItemForPath(
+              treeModelXRef.current?.root,
+              path
+            );
+            const serverNode = pgAdmin?.Browser?.Nodes?.server;
+            if (serverItem && serverNode?.callbacks?.verify_cde_endpoint) {
+              serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
+                item: serverItem,
+                databaseTargetId,
+                openOnSuccess: true,
+                openOnSuccessItem: pgAdmin?.Browser?.tree?.selected?.() || serverItem,
+              });
+            }
+          }
+          throw err;
+        }
       },
       sortComparator: (a, b) => {
         const firebirdOrder = compareFirebirdNodes(a, b);
@@ -249,6 +311,47 @@ export default function ObjectExplorer() {
     }
   };
 
+  useEffect(() => {
+    const events = pgAdmin?.Browser?.Events;
+    if (!events?.on) return undefined;
+    const onSelected = (item, rawData) => {
+      if (!item) return;
+      const itemData = rawData || item._metadata?.data || {};
+      const hierarchy = pgAdmin.Browser?.tree?.getTreeNodeHierarchy?.(item) ?? {};
+      const engine = itemData.cde_engine_id || hierarchy?.server?.cde_engine_id;
+      const version = resolveExplorerDescriptorVersion(itemData, hierarchy);
+      if (engine) {
+        const client = descriptorClient(getApiInstance());
+        if (!client.cached(engine, {version})) {
+          client.bundle(engine, {version})
+            .then(() => setLocaleRev((n) => n + 1))
+            .catch(() => {});
+        }
+      }
+      if (
+        (itemData._type === 'cde_resource_group' || Boolean(itemData.inode)) &&
+        itemData.has_children !== false &&
+        (!Array.isArray(item.children) || item.children.length === 0)
+      ) {
+        const loader =
+          typeof treeHandleRef.current?.openDirectory === 'function'
+            ? treeHandleRef.current.openDirectory(item)
+            : typeof item.ensureLoaded === 'function'
+              ? item.ensureLoaded()
+              : null;
+        if (loader?.then) {
+          loader
+            .then(() => {
+              pgAdmin.Browser?.Events?.trigger?.('pgadmin-browser:tree:updated', item, itemData);
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    events.on('pgadmin-browser:tree:selected', onSelected);
+    return () => events.off?.('pgadmin-browser:tree:selected', onSelected);
+  }, [pgAdmin]);
+
   const onContextMenu = React.useCallback(async (ev, item)=>{
     ev.preventDefault();
     if(item) {
@@ -256,7 +359,7 @@ export default function ObjectExplorer() {
       const itemData = item._metadata?.data ?? {};
       const hierarchy = pgAdmin.Browser.tree.getTreeNodeHierarchy?.(item) ?? {};
       const engine = itemData.cde_engine_id || hierarchy?.server?.cde_engine_id;
-      const version = itemData.cde_engine_version || hierarchy?.server?.cde_engine_version;
+      const version = resolveExplorerDescriptorVersion(itemData, hierarchy);
       if (engine) {
         const client = descriptorClient(getApiInstance());
         if (!client.cached(engine, {version})) {

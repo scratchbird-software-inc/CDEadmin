@@ -25,7 +25,7 @@ from functools import wraps
 
 from pgadmin.cdeadmin.core import EndpointContext, ProviderReleaseError, ProviderRegistry
 from pgadmin.cdeadmin.navigator import server_display_name
-from pgadmin.cdeadmin.security import SecretReference
+from pgadmin.cdeadmin.security import SecretAccessError, SecretReference
 from pgadmin.cdeadmin.security import (
     credential_from_protected_value,
     encode_credential_bundle,
@@ -153,6 +153,13 @@ def verification_permissions(profile, embedded):
 
 
 
+def _derived_target_namespace(base_namespace, target_id):
+    return str(uuid.uuid5(
+        uuid.UUID(base_namespace),
+        f'cdeadmin-database-target:{target_id}',
+    ))
+
+
 def _connection_change(method):
     """Admit local configuration changes before altering profile state."""
     @wraps(method)
@@ -177,6 +184,93 @@ def _connection_change(method):
         except (ProviderReleaseError, RelationalClientError) as exc:
             raise EndpointRegistrationError(str(exc)) from None
     return guarded
+
+
+def _database_target_change(*, target_arg_index=None, connect_only=False):
+    """Admit single-database-target changes without releasing sibling targets.
+
+    Server-wide transport or credential mutations still use ``_connection_change``
+    and rotate ``profile_generation``. Database-target attachment, activation,
+    disconnect, update, and removal guard only the affected target scope (or
+    unscoped bindings when no database targets are registered) and preserve
+    sibling database sessions.
+    """
+    def decorator(method):
+        @wraps(method)
+        def guarded(self, server, *args, **kwargs):
+            endpoint = getattr(server, 'endpoint_profile', None)
+            admission = getattr(type(self.provider_registry),
+                                'endpoint_configuration_change', None)
+            if endpoint is None or not callable(admission):
+                return method(self, server, *args, **kwargs)
+            excluded = set()
+            base_session_ns = getattr(endpoint, 'session_namespace', None)
+            targets = list(getattr(endpoint, 'database_targets', None) or ())
+            if base_session_ns and targets:
+                try:
+                    uuid.UUID(base_session_ns)
+                    valid_ns = True
+                except (TypeError, ValueError):
+                    valid_ns = False
+                if valid_ns:
+                    affected_target_id = None
+                    if (
+                        target_arg_index is not None and
+                        len(args) > target_arg_index
+                    ):
+                        affected_target_id = args[target_arg_index]
+                    if connect_only and affected_target_id is not None:
+                        raw_data = (
+                            args[target_arg_index + 1]
+                            if len(args) > target_arg_index + 1
+                            else kwargs.get('data')
+                        )
+                        extra = {
+                            k: v for k, v in dict(raw_data or {}).items()
+                            if k != 'target_id'
+                        }
+                        if not extra:
+                            affected_target_id = None
+                    for item in targets:
+                        item_id = getattr(item, 'id', None)
+                        if not item_id:
+                            continue
+                        if (
+                            affected_target_id is not None and
+                            item_id == affected_target_id
+                        ):
+                            continue
+                        excluded.add(
+                            _derived_target_namespace(base_session_ns, item_id)
+                        )
+                    excluded.add(base_session_ns)
+                    excluded.add(
+                        _derived_target_namespace(
+                            base_session_ns, 'server-scope'
+                        )
+                    )
+            from ..providers.mysql_family.mysql_recovery_bridge import bridges
+            from ..sdk import RelationalClientError
+            try:
+                with ExitStack() as held:
+                    ownership = bridges.registration_change_guard(endpoint.id)
+                    if isinstance(self.provider_registry, ProviderRegistry):
+                        held.enter_context(admission(
+                            self.provider_registry,
+                            endpoint.id,
+                            ownership=ownership,
+                            exclude_session_namespaces=excluded,
+                        ))
+                    else:
+                        held.enter_context(admission(
+                            self.provider_registry, endpoint.id
+                        ))
+                        held.enter_context(ownership)
+                    return method(self, server, *args, **kwargs)
+            except (ProviderReleaseError, RelationalClientError) as exc:
+                raise EndpointRegistrationError(str(exc)) from None
+        return guarded
+    return decorator
 
 
 def _credential_change(method):
@@ -229,6 +323,61 @@ class ProtectedColumnResolver:
         if buffer is not None:
             for index in range(len(buffer)):
                 buffer[index] = 0
+
+    def has_usable_secret(self, locator, *, server=None, credential_target=None):
+        """Return whether ``locator`` can resolve from RAM or persisted cipher."""
+        try:
+            source_kind, source_id, column, _credential_kind = (
+                self._parse_locator(locator)
+            )
+        except EndpointRegistrationError:
+            return False
+        with self._lock:
+            if locator in self._transient or locator in self._session:
+                return True
+        source = None
+        if (
+            source_kind == 'database_target' and
+            credential_target is not None and
+            str(getattr(credential_target, 'id', '')) == str(source_id)
+        ):
+            source = credential_target
+        elif (
+            source_kind in {'server', 'shared_server'} and
+            server is not None and
+            getattr(server, 'id', None) == source_id
+        ):
+            source = server
+        else:
+            try:
+                if source_kind == 'database_target':
+                    from pgadmin.model import EndpointDatabaseTarget
+                    source_type = EndpointDatabaseTarget
+                else:
+                    from pgadmin.model import Server, SharedServer
+                    source_type = (
+                        Server if source_kind == 'server' else SharedServer
+                    )
+                source = source_type.query.filter_by(id=source_id).first()
+            except Exception:
+                source = None
+        if source is None:
+            return False
+        if source_kind == 'database_target' and not getattr(
+            source, 'registration_credentials', False
+        ):
+            return False
+        ciphertext = getattr(source, column, None)
+        if not ciphertext:
+            return False
+        try:
+            from pgadmin.utils.master_password import get_crypt_key
+            key_present, _key = get_crypt_key()
+            return bool(key_present)
+        except RuntimeError:
+            return True
+        except Exception:
+            return False
 
     @contextmanager
     def transient(self, locator, value):
@@ -699,13 +848,85 @@ class EndpointService:
                     ))
             yield
 
+    def has_usable_credentials(self, server, database_target=None):
+        """Return whether ``server`` has usable credentials right now.
+
+        Process-only RAM passwords do not survive a process restart; when no
+        encrypted password is saved in SQLite and no RAM secret is retained in
+        ``self.resolver``, the endpoint requires credential re-verification.
+        """
+        if self._is_preserved_postgresql(server):
+            return True
+        endpoint = getattr(server, 'endpoint_profile', None)
+        if endpoint is None or getattr(endpoint, 'provider_version', None) is None:
+            return False
+        try:
+            profile = registration_profile(endpoint.profile_id)
+        except Exception:
+            return False
+        if profile.get('route_kind') == 'embedded_file':
+            return True
+        routes = list(getattr(endpoint, 'routes', None) or ())
+        if not routes:
+            return False
+        route_model = min(routes, key=lambda item: (item.priority, item.id))
+        credential_target = database_target
+        database_override = Ellipsis
+        database_options = None
+        if credential_target is not None:
+            database_override = getattr(credential_target, 'database', Ellipsis)
+            try:
+                database_options = self._database_target_configuration(
+                    credential_target
+                )
+            except Exception:
+                database_options = None
+        try:
+            _route, reference = self._route_and_reference(
+                server, endpoint, profile, route_model=route_model,
+                database_override=database_override,
+                database_options=database_options,
+                credential_target=credential_target,
+            )
+        except EndpointRegistrationError:
+            return False
+        if reference is None:
+            return True
+        effective_target = credential_target
+        if effective_target is None:
+            effective_target = next((
+                item for item in getattr(endpoint, 'database_targets', ())
+                if getattr(item, 'active', False)
+            ), None)
+        return self.resolver.has_usable_secret(
+            reference.locator,
+            server=server,
+            credential_target=effective_target,
+        )
+
+    def effective_verification_state(self, server, database_target=None):
+        """Derive runtime verification state from both identity and usable auth."""
+        if self._is_preserved_postgresql(server):
+            return 'verified'
+        endpoint = getattr(server, 'endpoint_profile', None)
+        runtime = getattr(endpoint, 'runtime_identity', None)
+        if runtime is None:
+            return 'unverified'
+        state = getattr(runtime, 'verification_state', None) or 'unverified'
+        if state != 'verified':
+            return state
+        if not self.has_usable_credentials(server, database_target=database_target):
+            return 'unverified'
+        return 'verified'
+
     def workspace(self, server, database_target_id=Ellipsis):
         """Build a verified endpoint DTO without exposing credentials.
 
         A retained ``database_target_id`` lets the Object Explorer browse one
         database without changing the endpoint's active query target.  An
-        explicit ``None`` requests server scope.  Either explicit scope gets
-        a derived cache namespace so native identifiers cannot collide.
+        explicit ``None`` requests server scope.  Each database target (and
+        server scope) gets derived pool, session, and cache namespaces so
+        sibling database sessions and caches stay strictly isolated.
         """
         endpoint = getattr(server, 'endpoint_profile', None)
         if self._is_preserved_postgresql(server):
@@ -753,12 +974,36 @@ class EndpointService:
                     target
                 )
                 target_cache_id = target.id
+        else:
+            active_target = next((
+                item for item in getattr(endpoint, 'database_targets', ())
+                if getattr(item, 'active', False)
+            ), None)
+            if active_target is not None:
+                target_cache_id = active_target.id
         route, _reference = self._route_and_reference(
             server, endpoint, profile, route_model=candidates[0],
             database_override=database_override,
             database_options=database_options,
             credential_target=credential_target,
         )
+        if (
+            _reference is not None and
+            isinstance(self.provider_registry, ProviderRegistry) and
+            getattr(endpoint, 'secret_references', None)
+        ):
+            effective_target = credential_target or next((
+                item for item in getattr(endpoint, 'database_targets', ())
+                if getattr(item, 'active', False)
+            ), None)
+            if not self.resolver.has_usable_secret(
+                _reference.locator,
+                server=server,
+                credential_target=effective_target,
+            ):
+                raise SecretAccessError(
+                    'Endpoint credentials are required; verify this server connection'
+                )
         route_candidates = [
             self._route_and_reference(
                 server, endpoint, profile, route_model=item,
@@ -769,11 +1014,18 @@ class EndpointService:
             for item in candidates
         ]
         if target_cache_id is not None:
-            derived_cache = str(uuid.uuid5(
-                uuid.UUID(context.cache_namespace),
-                f'cdeadmin-database-target:{target_cache_id}',
-            ))
-            context = replace(context, cache_namespace=derived_cache)
+            context = replace(
+                context,
+                cache_namespace=_derived_target_namespace(
+                    context.cache_namespace, target_cache_id
+                ),
+                session_namespace=_derived_target_namespace(
+                    context.session_namespace, target_cache_id
+                ),
+                pool_namespace=_derived_target_namespace(
+                    context.pool_namespace, target_cache_id
+                ),
+            )
         binding = self.provider_registry.resolve(context)
         identity = dict(binding.manifest['identity'])
         endpoint_payload = {
@@ -926,7 +1178,7 @@ class EndpointService:
             'forms': profile['form_contract']['database'],
         }
 
-    @_connection_change
+    @_database_target_change()
     def attach_database(self, server, data):
         """Verify, retain and activate one database on an existing server."""
         from pgadmin.model import EndpointDatabaseTarget, db
@@ -956,11 +1208,10 @@ class EndpointService:
             existing.configuration = self._encoded_route(configuration)
             existing.active = True
         self._remove_route_databases(endpoint)
-        endpoint.profile_generation = str(uuid.uuid4())
         db.session.commit()
         return self.database_catalog(server)
 
-    @_connection_change
+    @_database_target_change(target_arg_index=0)
     def update_database_target(self, server, target_id, data):
         """Edit one provider-owned database connection definition."""
         from pgadmin.model import db
@@ -989,11 +1240,10 @@ class EndpointService:
         )
         target.display_name = display_name.strip()
         target.configuration = self._encoded_route(configuration)
-        endpoint.profile_generation = str(uuid.uuid4())
         db.session.commit()
         return self.database_catalog(server)
 
-    @_connection_change
+    @_database_target_change(target_arg_index=0, connect_only=True)
     def activate_database(self, server, target_id, data=None):
         """Verify and select an already retained database target."""
         from pgadmin.model import db
@@ -1015,11 +1265,10 @@ class EndpointService:
         for item in endpoint.database_targets:
             item.active = item.id == target.id
         target.configuration = self._encoded_route(configuration)
-        endpoint.profile_generation = str(uuid.uuid4())
         db.session.commit()
         return self.database_catalog(server)
 
-    @_connection_change
+    @_database_target_change()
     def disconnect_database(self, server):
         """Return an endpoint to server scope after verifying that scope."""
         from pgadmin.model import db
@@ -1036,11 +1285,10 @@ class EndpointService:
         for item in endpoint.database_targets:
             item.active = False
         self._remove_route_databases(endpoint)
-        endpoint.profile_generation = str(uuid.uuid4())
         db.session.commit()
         return self.database_catalog(server)
 
-    @_connection_change
+    @_database_target_change(target_arg_index=0)
     def delete_database_target(self, server, target_id, data=None):
         """Forget an attachment; this never drops the provider database."""
         from pgadmin.model import db
@@ -1069,7 +1317,6 @@ class EndpointService:
                         remaining,
                         key=lambda item: (item.display_name, item.id),
                     ).active = True
-            endpoint.profile_generation = str(uuid.uuid4())
         return self.database_catalog(server)
 
     @staticmethod
@@ -1098,7 +1345,7 @@ class EndpointService:
         """Make a registration database a first-class endpoint child."""
         return self._retain_database_target(server, target)
 
-    @_connection_change
+    @_database_target_change()
     def _retain_database_target(self, server, target, *, new_identity=False):
         from pgadmin.model import EndpointDatabaseTarget, db
 
@@ -1125,7 +1372,6 @@ class EndpointService:
                 model.display_name = display_name
                 model.active = True
             self._remove_route_databases(endpoint)
-            endpoint.profile_generation = str(uuid.uuid4())
         return self.database_catalog(server)
 
     @_connection_change
@@ -1992,8 +2238,13 @@ class EndpointService:
         if database_override is not Ellipsis:
             if database_override is None:
                 route.pop('database', None)
+                route.pop('database_target_id', None)
             else:
                 route['database'] = database_override
+                if credential_target is not None and getattr(
+                    credential_target, 'id', None
+                ):
+                    route['database_target_id'] = credential_target.id
                 route.update(self._database_route_options(
                     profile, database_options or {}))
         elif isinstance(profile, dict):

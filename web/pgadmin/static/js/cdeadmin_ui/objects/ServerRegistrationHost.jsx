@@ -16,6 +16,7 @@
  */
 import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
@@ -118,18 +119,18 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
   }, [client, engine, version, mode]);
 
   if(state.status === 'loading') {
-    return <Box sx={{position: 'relative', minHeight: 160}}><ProgressOverlay message="Loading server editor" /></Box>;
+    return <Box sx={{position: 'relative', minHeight: 160}}><ProgressOverlay message={gettext('Loading server editor')} /></Box>;
   }
   if(state.status === 'error') {
     return <Box sx={{p: 2}}>
       <ValidationMessage status="error">{state.error}</ValidationMessage>
-      {onClose && <Box sx={{mt: 1}}><Button intent="neutral" onClick={onClose}>Close</Button></Box>}
+      {onClose && <Box sx={{mt: 1}}><Button intent="neutral" onClick={onClose}>{gettext('Close')}</Button></Box>}
     </Box>;
   }
   const {bundle, record} = state;
   if(!editorAvailable(bundle, 'server')) {
-    return <EmptyState message={`No server editor is declared for ${engine} yet.`}
-      actionLabel={onClose ? 'Close' : undefined} onAction={onClose} />;
+    return <EmptyState message={gettext('No server editor is declared for %s yet.', engine)}
+      actionLabel={onClose ? gettext('Close') : undefined} onAction={onClose} />;
   }
   const form = formForKind(bundle, 'server');
   const fromBackend = recordFromBackend(form, record);
@@ -157,7 +158,7 @@ export default function ServerRegistrationHost({api, engine, version, versionSup
     return response.data;
   };
   const notice = versionSupportNotice(versionSupport);
-  const resolvedApplyLabel = applyLabel || (mode === 'create' ? 'Register' : 'Save');
+  const resolvedApplyLabel = applyLabel || (mode === 'create' ? gettext('Register') : gettext('Save'));
   const editor = <ObjectEditor form={form} mode={mode} resourceKind="server" record={fromBackend} context={{}}
     title={displayName} directApply applyLabel={resolvedApplyLabel}
     apply={apply} onClose={onClose} />;

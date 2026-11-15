@@ -71,16 +71,52 @@ export function recordFromResource(resource, {form=null, resources=[]}={}) {
   return record;
 }
 
-export function makePost(api, endpointUrl, databaseTargetId) {
+function isCredentialRequiredResponse(errorOrEnvelope) {
+  const status = errorOrEnvelope?.response?.status ?? errorOrEnvelope?.status;
+  const code =
+    errorOrEnvelope?.response?.data?.data?.code ??
+    errorOrEnvelope?.data?.code ??
+    errorOrEnvelope?.code;
+  const message = String(
+    errorOrEnvelope?.response?.data?.errormsg ||
+      errorOrEnvelope?.errormsg ||
+      errorOrEnvelope?.message ||
+      ''
+  );
+  return (
+    code === 'CREDENTIAL_REQUIRED' ||
+    (status === 401 && /credential|verify|password|session/i.test(message))
+  );
+}
+
+export function makePost(api, endpointUrl, databaseTargetId, {onAuthRequired} = {}) {
   return async (payload) => {
     const request = {...(payload.request || {})};
     if(databaseTargetId && DATABASE_SCOPED.has(payload.action) && request.database_target_id === undefined) {
       request.database_target_id = databaseTargetId;
     }
-    const response = await api.post(endpointUrl, {...payload, request});
-    const envelope = response?.data;
-    if(envelope && envelope.success === 0) throw new Error(envelope.errormsg || 'Provider request failed');
-    return envelope?.data ?? envelope;
+    const send = async () => {
+      const response = await api.post(endpointUrl, {...payload, request});
+      const envelope = response?.data;
+      if(envelope && envelope.success === 0) {
+        const err = new Error(envelope.errormsg || 'Provider request failed');
+        err.data = envelope.data;
+        err.status = response?.status;
+        throw err;
+      }
+      return envelope?.data ?? envelope;
+    };
+    try {
+      return await send();
+    } catch (error) {
+      if (typeof onAuthRequired === 'function' && isCredentialRequiredResponse(error)) {
+        const verified = await onAuthRequired(error);
+        if (verified) {
+          return send();
+        }
+      }
+      throw error;
+    }
   };
 }
 
@@ -154,9 +190,10 @@ NativeChildList.propTypes = {resource: PropTypes.object, resources: PropTypes.ar
 
 export default function ProviderObjectEditorHost({api, endpointUrl, engine, version, versionSupport, resourceId, resourceKind,
   databaseTargetId, mode='alter', displayName, context={}, tabRenderers: tabRenderersProp={}, onClose, onApplied,
-  onOpenData, descriptorClient}) {
+  onOpenData, onAuthRequired, descriptorClient}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
-  const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId), [api, endpointUrl, databaseTargetId]);
+  const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId, {onAuthRequired}),
+    [api, endpointUrl, databaseTargetId, onAuthRequired]);
   const [state, setState] = useState({status: 'loading', bundle: null, resource: null, resources: [], error: null});
 
   useEffect(() => {
@@ -247,5 +284,6 @@ ProviderObjectEditorHost.propTypes = {
   onApplied: PropTypes.func,
   tabRenderers: PropTypes.object,
   onOpenData: PropTypes.func,
+  onAuthRequired: PropTypes.func,
   descriptorClient: PropTypes.object,
 };

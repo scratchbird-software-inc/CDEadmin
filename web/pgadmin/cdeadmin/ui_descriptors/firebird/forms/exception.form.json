@@ -1,0 +1,33 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "exception"
+  ],
+  "form_reference": "SR-F-000145",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "message",
+      "label": "Exception message",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    }
+  ],
+  "notes": "Firebird exception engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

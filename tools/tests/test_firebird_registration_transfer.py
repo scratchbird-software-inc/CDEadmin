@@ -10,7 +10,9 @@ from unittest.mock import Mock, patch
 import pytest
 from pgadmin.cdeadmin.core import ProviderRegistry, ProviderReleaseError
 from pgadmin.cdeadmin.endpoints.service import EndpointService, ProtectedColumnResolver
-from pgadmin.cdeadmin.endpoints.firebird_registration import catalog, transfer, secret_model
+from pgadmin.cdeadmin.endpoints.firebird_registration import (
+    catalog, catalog_generation, transfer, secret_model,
+)
 from pgadmin.cdeadmin.endpoints.profiles import EndpointRegistrationError, registration_profile
 from tools.tests import test_cdeadmin_endpoint_persistence as persistence
 
@@ -47,8 +49,8 @@ def rig():
 
 def request(rig, **changes):
     destination = rig.destination if changes.get('destination_server_id') == rig.destination.id else rig.source
-    return {'source_generation': rig.source.endpoint_profile.profile_generation,
-            'destination_generation': destination.endpoint_profile.profile_generation,
+    return {'source_generation': catalog_generation(rig.source.endpoint_profile),
+            'destination_generation': catalog_generation(destination.endpoint_profile),
             'target_id': rig.target.id, 'destination_server_id': rig.source.id,
             'operation': 'clone', 'display_name': 'Alias', 'credentials': 'source',
             'confirmed': True, **changes}
@@ -245,11 +247,13 @@ def test_created_database_registration_collision_keeps_existing_alias(rig, profi
 
 
 def test_removing_inactive_alias_invalidates_reviewed_transfer(rig):
+    initial_profile_generation = rig.source.endpoint_profile.profile_generation
     cloned = transfer(rig.service, rig.source, request(rig))
     reviewed = request(rig, display_name='Later clone')
     rig.service.delete_database_target(rig.source, cloned['target']['target_id'],
                                       {'confirmation': rig.target.database})
-    assert rig.source.endpoint_profile.profile_generation != reviewed['source_generation']
+    assert rig.source.endpoint_profile.profile_generation == initial_profile_generation
+    assert catalog_generation(rig.source.endpoint_profile) != reviewed['source_generation']
     with pytest.raises(EndpointRegistrationError, match='configuration changed'):
         transfer(rig.service, rig.source, reviewed)
     assert rig.model.EndpointDatabaseTarget.query.count() == 1

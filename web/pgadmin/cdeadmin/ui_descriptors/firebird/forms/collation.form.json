@@ -1,0 +1,176 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "collation"
+  ],
+  "form_reference": "SR-F-000146",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Collation name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "character_set",
+      "label": "Character set",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "default": "UTF8"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "source_mode",
+      "label": "Collation source",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "EXISTING",
+      "options": [
+        {
+          "value": "EXISTING",
+          "label": "Existing"
+        },
+        {
+          "value": "EXTERNAL",
+          "label": "External"
+        },
+        {
+          "value": "SAME_NAME",
+          "label": "Same Name"
+        }
+      ],
+      "help": "Existing copies a database collation. External uses an installed collation implementation. Same name omits FROM and requires an installed implementation with the new name."
+    },
+    {
+      "field_id": "base_collation",
+      "label": "Existing collation",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "source_mode",
+        "equals": "EXISTING"
+      }
+    },
+    {
+      "field_id": "external_name",
+      "label": "Installed external name",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "visible_when": {
+        "field": "source_mode",
+        "equals": "EXTERNAL"
+      }
+    },
+    {
+      "field_id": "padding",
+      "label": "Space padding",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "INHERIT",
+      "options": [
+        {
+          "value": "INHERIT",
+          "label": "Inherit"
+        },
+        {
+          "value": "PAD_SPACE",
+          "label": "Pad Space"
+        },
+        {
+          "value": "NO_PAD",
+          "label": "No Pad"
+        }
+      ],
+      "help": "INHERIT keeps the native attribute."
+    },
+    {
+      "field_id": "case_sensitivity",
+      "label": "Case comparison",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "INHERIT",
+      "options": [
+        {
+          "value": "INHERIT",
+          "label": "Inherit"
+        },
+        {
+          "value": "SENSITIVE",
+          "label": "Sensitive"
+        },
+        {
+          "value": "INSENSITIVE",
+          "label": "Insensitive"
+        }
+      ],
+      "help": "INHERIT keeps the native attribute."
+    },
+    {
+      "field_id": "accent_sensitivity",
+      "label": "Accent comparison",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "INHERIT",
+      "options": [
+        {
+          "value": "INHERIT",
+          "label": "Inherit"
+        },
+        {
+          "value": "SENSITIVE",
+          "label": "Sensitive"
+        },
+        {
+          "value": "INSENSITIVE",
+          "label": "Insensitive"
+        }
+      ],
+      "help": "INHERIT keeps the native attribute. Firebird ICU collations require case-insensitive comparison when accent-insensitive is selected. The installed implementation validates combinations."
+    },
+    {
+      "field_id": "specific_attributes",
+      "label": "Specific collation attributes",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Attribute name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Attribute value",
+          "control": "text",
+          "required": false,
+          "help": "Empty removes the inherited attribute."
+        }
+      ],
+      "required": false,
+      "default": [],
+      "help": "Installed implementation options, for example NUMERIC-SORT=1. Empty values remove inherited options; the last duplicate name wins. Native validation applies."
+    }
+  ],
+  "notes": "Firebird collation engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

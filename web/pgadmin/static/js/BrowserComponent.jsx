@@ -1078,13 +1078,41 @@ export function CatalogPageCoordinator() {
       if (!currentShell) return;
       const requestedView = ev?.detail?.tab;
       const targetId = ev?.detail?.instanceId || currentShell.focusedId;
-      const target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      let target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      if (!ev?.detail?.instanceId && (!target || target.appId !== 'data-navigator' || target.isInlineTab)) {
+        target =
+          (currentShell.instances || []).find(
+            (i) =>
+              i.appId === 'data-navigator' &&
+              !i.isInlineTab &&
+              i.meta?.isReplaceableBrowse !== false
+          ) ||
+          (currentShell.instances || []).find(
+            (i) => i.appId === 'data-navigator' && !i.isInlineTab
+          ) ||
+          null;
+        if (!target && requestedView) {
+          const selItem = pgAdmin?.Browser?.tree?.selected?.() || null;
+          const selData = (selItem && pgAdmin?.Browser?.tree?.itemData?.(selItem)) || null;
+          target = currentShell.openApplication('data-navigator', {
+            isUnboundNavigator: !selData,
+            isReplaceableBrowse: true,
+            boundNodeItem: selItem,
+            boundNodeData: selData,
+            activeView: requestedView,
+          });
+        }
+      }
       if (target && target.appId === 'data-navigator' && requestedView) {
-        const isUnbound = Boolean(target.meta?.isUnboundNavigator);
-        const item = isUnbound ? null : target.meta?.boundNodeItem || null;
-        const data = isUnbound
-          ? null
-          : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null;
+        const selItem = pgAdmin?.Browser?.tree?.selected?.() || null;
+        const selData = (selItem && pgAdmin?.Browser?.tree?.itemData?.(selItem)) || null;
+        const isUnbound = selData ? false : Boolean(target.meta?.isUnboundNavigator);
+        const item = selItem || (isUnbound ? null : target.meta?.boundNodeItem || null);
+        const data =
+          selData ||
+          (isUnbound
+            ? null
+            : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null);
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           target.instanceId,
@@ -1097,14 +1125,22 @@ export function CatalogPageCoordinator() {
           }
         );
         currentShell.updateInstance(target.instanceId, {
+          title: isUnbound ? target.title : cfg.title,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
           meta: {
             ...target.meta,
+            isUnboundNavigator: isUnbound,
+            boundNodeItem: item,
+            boundNodeData: data,
+            catalogNodeKey: isUnbound ? null : catalogNodeIdentityKey(data),
             activeView: cfg.activeView,
           },
         });
+        if (ev?.detail?.focusEditor && currentShell.focusedId !== target.instanceId) {
+          currentShell.focusInstance(target.instanceId);
+        }
       }
       if (ev?.detail?.focusEditor && typeof document !== 'undefined') {
         setTimeout(() => {

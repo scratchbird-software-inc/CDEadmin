@@ -49,7 +49,7 @@ def test_declared_maintenance_inputs_validate_and_reach_the_existing_native_comp
     direct = module.compile_operation(operation, request['draft'], request['target_resource'])
     assert actual['statements'] == direct['statements']
     declared = OPERATIONS[operation + '@' + request['resource_kind']]
-    assert declared['status'] == 'draft'
+    assert declared['status'] == 'complete'
     assert set(request['draft']) <= {f.get('backend_field_id', f['field_id']) for f in declared['fields']}
 
 

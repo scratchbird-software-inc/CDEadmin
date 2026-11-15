@@ -2788,6 +2788,29 @@ export function ProjectShellProvider({
     const handleInstanceNotification = (e) => {
       if (e?.detail) notifyInstanceEvent(e.detail);
     };
+    const handleOpenAppSurface = (e) => {
+      const appId = e?.detail?.appId;
+      if (!appId) return;
+      const payload = e?.detail?.payload || {};
+      const forceNew = Boolean(e?.detail?.forceNew);
+      if (!forceNew) {
+        const currentList = instancesRef.current || [];
+        const existing =
+          appId === 'data-navigator'
+            ? currentList.find(
+              (i) =>
+                i.appId === 'data-navigator' &&
+                  !i.isInlineTab &&
+                  i.meta?.isReplaceableBrowse !== false
+            ) || currentList.find((i) => i.appId === 'data-navigator' && !i.isInlineTab)
+            : currentList.find((i) => i.appId === appId && !i.isInlineTab);
+        if (existing) {
+          focusInstance(existing.instanceId);
+          return;
+        }
+      }
+      openApplication(appId, payload);
+    };
     const handleGlobalKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key?.toLowerCase() === 'k') {
         e.preventDefault();
@@ -2799,6 +2822,7 @@ export function ProjectShellProvider({
     window.addEventListener('scratchrobin:inspect-right-drawer', handleInspectRight);
     window.addEventListener('scratchrobin:open-preferences', handleOpenPreferences);
     window.addEventListener('scratchrobin:instance-notification', handleInstanceNotification);
+    window.addEventListener('scratchrobin:open-app-surface', handleOpenAppSurface);
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('scratchrobin:open-inline-tab', handleOpenInline);
@@ -2806,9 +2830,10 @@ export function ProjectShellProvider({
       window.removeEventListener('scratchrobin:inspect-right-drawer', handleInspectRight);
       window.removeEventListener('scratchrobin:open-preferences', handleOpenPreferences);
       window.removeEventListener('scratchrobin:instance-notification', handleInstanceNotification);
+      window.removeEventListener('scratchrobin:open-app-surface', handleOpenAppSurface);
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [closeInstance, notifyInstanceEvent, openInlineTab, updateInstance]);
+  }, [closeInstance, focusInstance, notifyInstanceEvent, openApplication, openInlineTab, updateInstance]);
 
   // Synchronize Electron native OS menus when running inside the Electron shell
   useEffect(() => {

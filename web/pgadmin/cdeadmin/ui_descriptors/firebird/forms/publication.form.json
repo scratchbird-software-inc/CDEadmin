@@ -1,0 +1,68 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "publication"
+  ],
+  "form_reference": "SR-F-000154",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true
+    },
+    {
+      "field_id": "enabled",
+      "label": "Publication enabled",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": true
+    },
+    {
+      "field_id": "include_tables",
+      "label": "Include tables",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "table_name",
+          "label": "Include tables",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false,
+      "default": [],
+      "help": "Array of table names to include."
+    },
+    {
+      "field_id": "exclude_tables",
+      "label": "Exclude tables",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "columns": [
+        {
+          "field_id": "table_name",
+          "label": "Exclude tables",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "required": false,
+      "default": [],
+      "help": "Array of table names to exclude."
+    }
+  ],
+  "notes": "Firebird publication engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

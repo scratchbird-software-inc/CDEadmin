@@ -1,0 +1,141 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "authentication-mapping"
+  ],
+  "form_reference": "SR-F-000152",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "using_mode",
+      "label": "Authentication source",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "PLUGIN",
+      "options": [
+        {
+          "value": "PLUGIN",
+          "label": "Plugin"
+        },
+        {
+          "value": "ANY_PLUGIN",
+          "label": "Any Plugin"
+        },
+        {
+          "value": "SERVERWIDE",
+          "label": "Serverwide"
+        },
+        {
+          "value": "MAPPING",
+          "label": "Mapping"
+        },
+        {
+          "value": "ANY",
+          "label": "Any"
+        }
+      ],
+      "help": "Global mappings affect all databases using the security database; local mappings affect this database only. Global changes also require authority in the security database; a local role grant alone does not grant it. A mapping does not install or enable an auth plugin. Native exact matches precede wildcard matching; conflicting destinations can reject login. Test a fresh attachment."
+    },
+    {
+      "field_id": "plugin",
+      "label": "Plugin name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Required for PLUGIN; empty for other source modes.",
+      "visible_when": {
+        "field": "using_mode",
+        "equals": "PLUGIN"
+      }
+    },
+    {
+      "field_id": "source_database",
+      "label": "Source database or alias",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Optional IN identifier, not allowed with SERVERWIDE.",
+      "visible_when": {
+        "field": "using_mode",
+        "in": [
+          "PLUGIN",
+          "ANY_PLUGIN",
+          "MAPPING",
+          "ANY"
+        ]
+      }
+    },
+    {
+      "field_id": "from_type",
+      "label": "Source identity type",
+      "tab": "Security",
+      "control": "text",
+      "required": true,
+      "default": "USER",
+      "help": "Native plugin identity type, for example USER, GROUP or Predefined_Group. Case is preserved."
+    },
+    {
+      "field_id": "from_any",
+      "label": "Any source name",
+      "tab": "Security",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
+      "field_id": "from_name",
+      "label": "Source name",
+      "tab": "Security",
+      "control": "text",
+      "required": true,
+      "help": "Required unless Any source name is selected. A literal * is not a named identity in Firebird mappings.",
+      "visible_when": {
+        "field": "from_any",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "to_type",
+      "label": "Target identity type",
+      "tab": "Security",
+      "control": "select",
+      "required": true,
+      "default": "USER",
+      "options": [
+        {
+          "value": "USER",
+          "label": "User"
+        },
+        {
+          "value": "ROLE",
+          "label": "Role"
+        }
+      ]
+    },
+    {
+      "field_id": "to_name",
+      "label": "Target name",
+      "tab": "Security",
+      "control": "text",
+      "required": false,
+      "help": "Empty preserves the original source name. Do not enter *."
+    }
+  ],
+  "notes": "Firebird authentication-mapping engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

@@ -122,6 +122,194 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.monitoring",
+      "scope": "endpoint",
+      "label": "Dashboard...",
+      "description": "Open the MariaDB monitoring dashboard.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.monitor",
+      "group": "diagnostics",
+      "priority": 14,
+      "arguments": {
+        "tab": "monitoring",
+        "dashboard_viewer": "relational_monitoring"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.monitoring",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Dashboard...",
+      "description": "Open the MariaDB database monitoring dashboard.",
+      "handler": "open_workspace",
+      "icon": "action.monitor",
+      "group": "diagnostics",
+      "priority": 14,
+      "arguments": {
+        "tab": "monitoring",
+        "dashboard_viewer": "relational_monitoring"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.monitoring_policy",
+      "scope": "endpoint",
+      "label": "Monitoring policy...",
+      "description": "Configure sampling intervals, thresholds and retention for MariaDB monitoring.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "diagnostics",
+      "mutation": "admin",
+      "priority": 15,
+      "arguments": {
+        "tab": "monitoring_policy"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.monitoring_policy",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Monitoring policy...",
+      "description": "Configure database monitoring thresholds and alert policies.",
+      "handler": "open_workspace",
+      "icon": "action.settings",
+      "group": "diagnostics",
+      "mutation": "admin",
+      "priority": 15,
+      "arguments": {
+        "tab": "monitoring_policy"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.dashboard_editor",
+      "scope": "endpoint",
+      "label": "Dashboard designer...",
+      "description": "Design and customize MariaDB monitoring dashboard layouts.",
+      "handler": "open_mariadb_dashboard_editor",
+      "slot": "after_verify",
+      "icon": "tool.erd",
+      "group": "diagnostics",
+      "mutation": "admin",
+      "priority": 16,
+      "arguments": {},
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.dashboard_editor",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Dashboard designer...",
+      "description": "Design and customize database monitoring dashboard layouts.",
+      "handler": "open_mariadb_dashboard_editor",
+      "icon": "tool.erd",
+      "group": "diagnostics",
+      "mutation": "admin",
+      "priority": 16,
+      "arguments": {},
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.catalog_ddn",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Catalog & DDN...",
+      "description": "Export, compare and round-trip MariaDB schema metadata through DDN.",
+      "handler": "open_workspace",
+      "icon": "tool.erd",
+      "group": "database",
+      "priority": 68,
+      "arguments": {
+        "tab": "export"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.server_catalog",
+      "scope": "endpoint",
+      "label": "Server catalog...",
+      "description": "Inspect and export server-wide MariaDB catalog and DDN metadata.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "tool.data-explorer",
+      "group": "information",
+      "priority": 69,
+      "arguments": {
+        "tab": "export",
+        "server_catalog": true
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.test_data",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Test data...",
+      "description": "Generate and review synthetic MariaDB test data fixtures.",
+      "handler": "open_workspace",
+      "icon": "action.edit",
+      "group": "maintenance",
+      "mutation": "write",
+      "priority": 70,
+      "arguments": {
+        "tab": "mariadb-test-data"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.binlogs",
+      "scope": "endpoint",
+      "label": "Binary logs...",
+      "description": "Inspect MariaDB binary log files, positions and GTID events.",
+      "handler": "open_mariadb_binlogs",
+      "slot": "after_verify",
+      "icon": "action.script",
+      "group": "availability",
+      "priority": 52,
+      "arguments": {},
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.binlog_replay",
+      "scope": "endpoint",
+      "label": "Binary log replay...",
+      "description": "Plan and review MariaDB point-in-time binary log replay.",
+      "handler": "open_mariadb_binlog_replay",
+      "slot": "after_verify",
+      "icon": "action.restore",
+      "group": "restore",
+      "mutation": "admin",
+      "priority": 53,
+      "arguments": {},
+      "enabled_when": [
+        "verified"
+      ]
     }
   ]
 }

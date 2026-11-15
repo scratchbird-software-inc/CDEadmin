@@ -1,0 +1,35 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "character-set"
+  ],
+  "form_reference": "SR-F-000164",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true
+    },
+    {
+      "field_id": "default_collation",
+      "label": "Default collation",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Changes the default in this database; does not change existing column definitions.",
+      "initial_value_path": [
+        "default_collation"
+      ]
+    }
+  ],
+  "notes": "Firebird character-set engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

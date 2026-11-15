@@ -4047,6 +4047,26 @@ class ProviderWorkspaceService:
             result = {**result, 'sql_history': {**(entry or {}), 'warning': notice}}
         return result
 
+    def _resolve_session_target_id(self, session_id, database_target_id):
+        if database_target_id not in (None, Ellipsis):
+            return database_target_id
+        lookup = getattr(self.studio_service, 'session_database_target_id', None)
+        if callable(lookup) and isinstance(session_id, str) and session_id:
+            retained = lookup(session_id)
+            if isinstance(retained, str) and retained:
+                return retained
+        return database_target_id
+
+    def _resolve_occurrence_target_id(self, occurrence_id, database_target_id):
+        if database_target_id not in (None, Ellipsis):
+            return database_target_id
+        lookup = getattr(self.studio_service, 'occurrence_database_target_id', None)
+        if callable(lookup) and isinstance(occurrence_id, str) and occurrence_id:
+            retained = lookup(occurrence_id)
+            if isinstance(retained, str) and retained:
+                return retained
+        return database_target_id
+
     def open_session(
         self, server, language_profile, database_target_id=None, *, session_purpose=None,
     ):
@@ -4063,6 +4083,17 @@ class ProviderWorkspaceService:
                 'transaction_access': 'READ' if session_purpose == 'firebird-data-export' else 'WRITE',
                 'transaction_lock_timeout': 10, 'transaction_auto_commit': False,
                 'transaction_no_auto_undo': False, 'transaction_ignore_limbo': False}}
+        if isinstance(database_target_id, str) and database_target_id and (
+            isinstance(endpoint.get('route'), dict) and
+            'database_target_id' not in endpoint['route']
+        ):
+            endpoint = {
+                **endpoint,
+                'route': {
+                    **endpoint['route'],
+                    'database_target_id': database_target_id,
+                },
+            }
         opened = self.studio_service.open_session(
             context, endpoint, language_profile
         )
@@ -4077,6 +4108,9 @@ class ProviderWorkspaceService:
         script_mode=False, plan_mode=False, history_sensitive=False, profile_mode=False, statistics_mode=False,
         mysql_query_attributes=None,
     ):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4175,8 +4209,11 @@ class ProviderWorkspaceService:
                         return archive.recent(request.get('offset',0),request.get('limit',25))
                     raise ValueError('Select a read-only native EDS receipt request')
             except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+        resolved_tool_target = self._resolve_session_target_id(
+            data.get('session_id'), data.get('database_target_id')
+        )
         context, endpoint, _root = self.endpoint_service.workspace(
-            server, database_target_id=data.get('database_target_id'))
+            server, database_target_id=resolved_tool_target)
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
             if action=='firebird_eds_pool':
@@ -4273,12 +4310,18 @@ class ProviderWorkspaceService:
 
     def preview_script(self, server, session_id, source,
                        database_target_id=Ellipsis):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id)
         return self.studio_service.preview_script(context, session_id, source)
 
     def query_stream(self, server, session_id, request,
                      database_target_id=Ellipsis):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id)
         if not isinstance(request, dict):
@@ -4299,6 +4342,9 @@ class ProviderWorkspaceService:
     def poll(self, server, occurrence_id, database_target_id=Ellipsis, *, buffer_rows=None):
         if buffer_rows is not None and (type(buffer_rows) is not int or not 1 <= buffer_rows <= 500):
             raise ProviderWorkspaceError('Result buffer rows must be an integer from 1 to 500')
+        database_target_id = self._resolve_occurrence_target_id(
+            occurrence_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4454,6 +4500,9 @@ class ProviderWorkspaceService:
         )
 
     def cancel(self, server, occurrence_id, database_target_id=Ellipsis):
+        database_target_id = self._resolve_occurrence_target_id(
+            occurrence_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4461,6 +4510,9 @@ class ProviderWorkspaceService:
 
     def transaction(self, server, session_id, database_target_id=None):
         """Return the provider presentation without interpreting its state."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4470,6 +4522,9 @@ class ProviderWorkspaceService:
         self, server, session_id, action, database_target_id=None,
     ):
         """Dispatch a provider-owned transaction action without inference."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4481,10 +4536,25 @@ class ProviderWorkspaceService:
         self, server, session_id, database_target_id=None,
     ):
         """Release one provider session in its original database scope."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
         return self.studio_service.close_session(context, session_id)
+
+    def reconnect_session(
+        self, server, session_id, database_target_id=None,
+    ):
+        """Reconnect a retained provider session in its original database scope."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id
+        )
+        return self.studio_service.reconnect_session(context, session_id)
 
     def _visual_admin_call(self, server, method_name, request):
         _context, callback, payload = self._prepare_visual_admin_call(
