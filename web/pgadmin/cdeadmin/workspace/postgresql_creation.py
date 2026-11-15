@@ -422,7 +422,7 @@ def creation(identity, row):
     if not isinstance(draft, dict):
         raise ValueError('Object creation requires an explicit native create draft')
     kind = row['kind']
-    allowed = {'schema': {'owner'}, 'function': {'definition'}, 'procedure': {'definition'},
+    allowed = {'extended-statistics': {'elements','kinds','table','table_schema'}, 'schema': {'owner'}, 'function': {'definition'}, 'procedure': {'definition'},
                'window-function': {'definition'}, 'aggregate': {'definition'}, 'type': {'labels', 'type_kind', 'attributes', 'subtype', 'subtype_opclass', 'collation', 'subtype_diff'},
                'domain': {'data_type', 'default', 'nullable', 'checks'},
                'index': {'table', 'keys', 'method', 'unique', 'include', 'nulls_distinct', 'predicate', 'tablespace', 'storage_parameters'},
@@ -461,6 +461,10 @@ def creation(identity, row):
             statement, partition_parent = partition_definition(kind, schema, name, draft)
         elif kind == 'type':
             statement = type_definition(qualified, draft)
+        elif kind == 'extended-statistics':
+            from ..providers.postgresql.statistics import definition
+            statement = definition(draft)
+            table_owner = {'schema': draft['table_schema'], 'table': draft['table']}
         elif kind == 'index':
             statement = index_definition(name, schema, draft)
         elif kind == 'domain':
@@ -531,7 +535,7 @@ def order_creations(operations, current):
     schemas = {op['name']: key for key, op in creates.items() if op['kind'] == 'schema'}
     edges, occupied = {}, {}
     def namespaces(kind, type_kind=None):
-        if kind in TABLE_DEFINITIONS or kind in DEFINITION_KINDS:
+        if kind in TABLE_DEFINITIONS or kind in DEFINITION_KINDS or kind == 'extended-statistics':
             return {kind}
         return {'routine'} if kind in {'function', 'procedure', 'window-function', 'aggregate'} else {'schema'} if kind == 'schema' else {'relation', 'type'} if kind in {'table', 'partitioned-table', 'view', 'materialized-view'} or type_kind == 'COMPOSITE' else {'relation'} if kind in {'sequence', 'index'} else {'type'}
     for identity, operation in creates.items():
@@ -552,7 +556,18 @@ def order_creations(operations, current):
         for reference in operation.get('references', []):
             targets = [key for key, candidate in creates.items() if candidate['kind'] in {'table', 'partitioned-table', 'materialized-view'} and
                        candidate['schema'] == reference['schema'] and candidate['name'] == reference['table']]
-            if operation.get('table_owner') == reference:
+            if operation['kind'] == 'extended-statistics':
+                if targets:
+                    if len(targets)!=1 or targets[0] not in dependencies:
+                        raise ValueError('Statistics need an explicit unique source relation dependency')
+                else:
+                    owners=[(key,row) for key,row in current['rows'].items() if row['kind'] in {'table','partitioned-table','materialized-view','foreign-table'} and row['name']==reference['table'] and row['native'].get('schema')==reference['schema']]
+                    if len(owners)!=1: raise ValueError('Statistics source relation is unavailable or ambiguous')
+                    key,row=owners[0];native=row['native'];oid=native.get('oid')
+                    if key not in dependencies or row.get('system')!='false' or native.get('catalog')!='pg_class' or type(oid)is not int or key!=f'postgresql:pg_class:{oid}':
+                        raise ValueError('Statistics need an explicit captured native source relation')
+                    operation['owner_guard']={'resource_id':key,'oid':oid,'native_sha256':digest(native)}
+            elif operation.get('table_owner') == reference:
                 if targets:
                     if len(targets) != 1 or creates[targets[0]]['kind'] != 'table' or creates[targets[0]].get('partition_parent') or targets[0] not in dependencies:
                         raise ValueError('Table-owned creation requires an explicit ordinary-table dependency')
@@ -596,18 +611,18 @@ def order_creations(operations, current):
         if missing:
             raise ValueError('Creation dependencies are unavailable: ' + ', '.join(sorted(missing)))
         for namespace in namespaces(operation['kind'], operation.get('type_kind')):
-            key = namespace, operation['schema'], ((operation['table_owner']['table'], operation['name']) if operation.get('table_owner') else operation.get('routine_signature') if namespace == 'routine' else operation['name'])
+            key = namespace, operation['schema'], ((operation['table_owner']['table'], operation['name']) if operation.get('table_owner') and operation['kind'] in TABLE_DEFINITIONS else operation.get('routine_signature') if namespace == 'routine' else operation['name'])
             if key in occupied:
                 raise ValueError('Creation drafts collide in a native namespace: ' + operation['name'])
             occupied[key] = identity
         for row in current['rows'].values():
             native = row.get('native', {})
-            namespace = {'pg_class': 'relation', 'pg_type': 'type', 'pg_namespace': 'schema', 'pg_proc': 'routine'}.get(native.get('catalog'))
+            namespace = {'pg_class': 'relation', 'pg_type': 'type', 'pg_namespace': 'schema', 'pg_proc': 'routine', 'pg_statistic_ext':'extended-statistics'}.get(native.get('catalog'))
             namespace = next((kind for kind, (_, catalog) in DEFINITION_KINDS.items()
                               if catalog == native.get('catalog')), namespace)
             namespace = next((kind for kind, definition in TABLE_DEFINITIONS.items() if definition[3] == native.get('catalog')), namespace)
             collision = row['name'] == operation['name'] and namespace in namespaces(operation['kind'], operation.get('type_kind'))
-            if collision and operation.get('table_owner'):
+            if collision and operation.get('table_owner') and operation['kind'] in TABLE_DEFINITIONS:
                 field = TABLE_DEFINITIONS[operation['kind']][4]
                 collision = str(native.get('catalog_row', {}).get(field)) == str(operation.get('owner_guard', {}).get('oid', 'new'))
             # Names alone cannot identify overloaded routines. Native CREATE

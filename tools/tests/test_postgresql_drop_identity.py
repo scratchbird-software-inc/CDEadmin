@@ -80,15 +80,24 @@ def native():
         return value
 
     def exists(name='target'):
-        return admin.execute('SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relname=%s',(schema,name)).fetchone()[0] == 1
+        return int(admin.execute('SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relname=%s',(schema,name)).fetchone()[0]) == 1
 
     state = SimpleNamespace(admin=admin, schema=schema, dsn=dsn, dboid=dboid, provider=provider,
                             create=create, role=role, exists=exists)
+    installer = provider()
+    install_request = {'resource_kind': 'database', 'operation_id': 'install-drop-namespace-guard',
+        'draft': {'confirmation': 'INSTALL DROP NAMESPACE GUARD'},
+        '_provider_route': {'server_id': 1, 'database_id': dboid}}
+    installed = installer.plan_admin_operation(install_request)
+    assert installer.apply_admin_operation({'provider_payload': installed['provider_payload']})['transaction_outcome'] == 'committed'
     try: yield state
     finally:
         for item in providers: item.close()
         admin.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
-        for value in roles: admin.execute(sql.SQL('DROP ROLE {}').format(sql.Identifier(value)))
+        admin.execute('DROP FUNCTION IF EXISTS pg_catalog.scratchrobin_lock_drop_namespace_v1(oid,oid,text)')
+        for value in roles:
+            admin.execute(sql.SQL('DROP OWNED BY {}').format(sql.Identifier(value)))
+            admin.execute(sql.SQL('DROP ROLE {}').format(sql.Identifier(value)))
         admin.close()
 
 
@@ -198,18 +207,13 @@ def test_native_table_owner_does_not_need_cluster_control_privilege(native):
 
 
 @live
-def test_native_schema_owner_only_drop_reports_lock_admission_limit_without_unguarded_fallback(native):
-    import psycopg
-    from psycopg.conninfo import make_conninfo
+def test_native_schema_owner_only_drop_uses_native_catalog_locks_without_table_privilege(native):
     req = native.create(); role = native.role()
     native.admin.execute(sql.SQL('ALTER SCHEMA {} OWNER TO {}').format(sql.Identifier(native.schema),sql.Identifier(role)))
     owner = native.provider(role); plan = owner.plan_admin_operation(req)
-    with pytest.raises(PostgreSQLStatementRejected) as failure: apply(owner, plan)
-    assert failure.value.sqlstate == '42501' and native.exists()
-    # Establish the exact remaining native privilege gap on this owned object.
-    with psycopg.connect(make_conninfo(native.dsn, options='-c role='+role)) as control:
-        control.execute(sql.SQL('DROP TABLE {}.target').format(sql.Identifier(native.schema))); control.commit()
+    apply(owner, plan)
     assert not native.exists()
+    assert native.admin.execute("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relname LIKE 'sr_drop_guard_%%'",(native.schema,)).fetchone()==(0,)
 
 
 @live
@@ -232,6 +236,8 @@ def test_native_other_cluster_with_same_database_parent_and_table_oids_cannot_re
                 if oid >= expected['schema_oid'] - 1: break
             assert oid == expected['schema_oid'] - 1
             other.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(native.schema)))
+            from pgadmin.cdeadmin.providers.postgresql.namespace_guard import INSTALL
+            other.execute(INSTALL)
             other.execute(sql.SQL('CREATE TABLE {}.target(id integer)').format(sql.Identifier(native.schema)))
             actual = other.execute('SELECT c.oid,n.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relname=%s',(native.schema,'target')).fetchone()
             assert actual == (expected['oid'], expected['schema_oid'])
@@ -265,3 +271,91 @@ def test_native_quoted_names_keep_exact_identity_through_lock_and_drop(native, n
     p = native.provider(); req = native.create(name=name)
     apply(p, p.plan_admin_operation(req))
     assert not native.exists(name)
+
+
+@live
+def test_native_schema_owner_catalog_guard_blocks_competing_drop_until_rollback(native):
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+    req=native.create();role=native.role()
+    native.admin.execute(sql.SQL('ALTER SCHEMA {} OWNER TO {}').format(sql.Identifier(native.schema),sql.Identifier(role)))
+    with psycopg.connect(make_conninfo(native.dsn,options='-c role='+role)) as owner:
+        binding=guard.observe(owner,guard.target(req),native.dboid)
+        guard.lock_and_revalidate(owner,req,binding,native.dboid)
+        assert owner.execute("SELECT count(*)::integer FROM pg_class WHERE relnamespace=%s AND relname LIKE 'sr_drop_guard_%%'",(binding['relation']['schema_oid'],)).fetchone()==(0,)
+        with psycopg.connect(native.dsn) as competitor:
+            competitor.execute("SET LOCAL lock_timeout='25ms'")
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                competitor.execute(sql.SQL('DROP TABLE {}.target').format(sql.Identifier(native.schema)))
+            competitor.rollback()
+        owner.rollback()
+    assert native.exists()
+
+
+def test_native_identity_observation_uses_stable_rows_with_inherited_driver_cursor(native):
+    import psycopg
+    from pgadmin.utils.driver.psycopg3.cursor import DictCursor
+    request=native.create()
+    with psycopg.connect(native.dsn,autocommit=True,cursor_factory=DictCursor)as inherited:
+        # This inherited cursor intentionally returns tuples from fetchone,
+        # even if callers request row_factory=dict_row. The identity guard must
+        # use a native cursor whose row contract it owns.
+        assert isinstance(inherited.execute('SELECT 1 AS value').fetchone(),tuple)
+        observed=guard.observe(inherited,guard.target(request),native.dboid)
+        assert observed['relation']['oid']==request['target_resource']['extensions']['postgresql']['native']['oid']
+        assert observed['context']['database_oid']==native.dboid
+
+
+@live
+@pytest.mark.parametrize('schema_owner', [False, True])
+def test_namespace_cannot_be_renamed_after_final_identity_check(native, monkeypatch, schema_owner):
+    import psycopg
+    req = native.create()
+    role = native.role() if schema_owner else None
+    if role:
+        native.admin.execute(sql.SQL('ALTER SCHEMA {} OWNER TO {}').format(
+            sql.Identifier(native.schema), sql.Identifier(role)))
+    p = native.provider(role); plan = p.plan_admin_operation(req)
+    original = guard.lock_and_revalidate
+    attempted = []
+    def after_check(*args, **kwargs):
+        result = original(*args, **kwargs)
+        with psycopg.connect(native.dsn, autocommit=True) as competitor:
+            competitor.execute("SET lock_timeout='100ms'")
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                competitor.execute(sql.SQL('ALTER SCHEMA {} RENAME TO {}').format(
+                    sql.Identifier(native.schema), sql.Identifier(native.schema+'_moved')))
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                competitor.execute(sql.SQL('ALTER TABLE {}.target RENAME TO target_moved').format(
+                    sql.Identifier(native.schema)))
+            attempted.append(True)
+        return result
+    monkeypatch.setattr(guard, 'lock_and_revalidate', after_check)
+    assert apply(p, plan)['transaction_outcome'] == 'committed'
+    assert attempted == [True] and not native.exists()
+
+
+@live
+def test_ordinary_owner_without_installed_namespace_helper_is_refused(native):
+    req = native.create(); role = native.role()
+    native.admin.execute(sql.SQL('ALTER SCHEMA {} OWNER TO {}').format(
+        sql.Identifier(native.schema), sql.Identifier(role)))
+    p = native.provider(role); plan = p.plan_admin_operation(req)
+    native.admin.execute('DROP FUNCTION pg_catalog.scratchrobin_lock_drop_namespace_v1(oid,oid,text)')
+    with pytest.raises(PostgreSQLStatementRejected, match='namespace DROP guard'):
+        apply(p, plan)
+    assert native.exists()
+
+
+@live
+def test_table_owner_without_table_acl_or_schema_create_can_still_drop(native):
+    req = native.create(); role = native.role()
+    native.admin.execute(sql.SQL('ALTER TABLE {}.target OWNER TO {}').format(
+        sql.Identifier(native.schema),sql.Identifier(role)))
+    native.admin.execute(sql.SQL('REVOKE ALL ON {}.target FROM {}').format(
+        sql.Identifier(native.schema),sql.Identifier(role)))
+    native.admin.execute(sql.SQL('GRANT USAGE ON SCHEMA {} TO {}').format(
+        sql.Identifier(native.schema),sql.Identifier(role)))
+    p = native.provider(role);plan=p.plan_admin_operation(req)
+    assert apply(p,plan)['transaction_outcome']=='committed'
+    assert not native.exists()

@@ -82,3 +82,53 @@ def test_secret_reference_is_rejected_before_native_connector_or_lease(route):
             client._connect_server({'route':{**route,'credential_reference_id':'other'}})
         permissions.acquire_secret.assert_not_called()
     finally:client.close()
+
+
+def test_pinned_native_filename_keeps_reviewed_inode_across_path_replacement(route,tmp_path):
+    import os
+    import sys
+    if sys.platform!='linux':pytest.skip('Linux descriptor namespace qualification')
+    original=__import__('pathlib').Path(route['database']);original.write_bytes(b'original native database')
+    expected=local.file_identity(route)
+    with local.pinned_target(route,expected) as native_path:
+        retained=tmp_path/'retained.fdb';original.rename(retained);original.write_bytes(b'replacement native database')
+        assert local.dispatch_target(route['database'])==native_path
+        assert __import__('pathlib').Path(native_path).read_bytes()==b'original native database'
+        assert str(os.stat(native_path).st_ino)==expected['inode']
+    assert not __import__('pathlib').Path(native_path).exists()
+    with pytest.raises(RelationalClientError):local.dispatch_target(route['database'])
+    with pytest.raises(RelationalClientError) as failure:
+        with local.pinned_target(route,expected):pytest.fail('replaced file pinned')
+    assert failure.value.nothing_changed and not failure.value.native_dispatched
+
+
+def test_pinned_native_filename_is_closed_when_native_dispatch_fails(route):
+    import os,sys
+    if sys.platform!='linux':pytest.skip('Linux descriptor namespace qualification')
+    with pytest.raises(RuntimeError,match='owned native refusal'):
+        with local.pinned_target(route,local.file_identity(route)) as native_path:
+            raise RuntimeError('owned native refusal')
+    assert not __import__('pathlib').Path(native_path).exists()
+
+
+def test_alias_cleanup_when_identity_is_replaced_between_open_and_link(route,tmp_path,monkeypatch):
+    import os,sys
+    from pathlib import Path
+    if sys.platform!='linux':pytest.skip('Linux inode-alias qualification')
+    original=Path(route['database']);original.write_bytes(b'original')
+    expected=local.file_identity(route);link=os.link
+    def raced(source,target,**kwargs):
+        original.rename(tmp_path/'retained.fdb');original.write_bytes(b'replacement')
+        return link(source,target,**kwargs)
+    monkeypatch.setattr(local.os,'link',raced)
+    with pytest.raises(RelationalClientError) as error:
+        with local.pinned_target(route,expected):pytest.fail('same-name replacement dispatched')
+    assert error.value.nothing_changed and not error.value.native_dispatched
+    assert not list(tmp_path.glob('.scratchrobin-statistics-*'))
+
+
+def test_obsolete_log_statistics_refuses_before_local_or_network_native_connection(route):
+    from pgadmin.cdeadmin.providers.firebird.statistics import validate_options
+    with pytest.raises(RelationalClientError,match='obsolete'):validate_options({'statistics_flags':['DB_LOG']})
+    with pytest.raises(RelationalClientError,match='obsolete'):
+        local.validate_operation(route,'database_statistics',route['database'],{'statistics_flags':['DB_LOG']})

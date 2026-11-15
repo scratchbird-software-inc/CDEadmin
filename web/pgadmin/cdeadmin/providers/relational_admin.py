@@ -5040,7 +5040,7 @@ class RelationalAdministration:
                 'IN_PLACE', 'SEQUENCE',
             }),
             'database_statistics': ('statistics_flags', {
-                'DATA_PAGES', 'DB_LOG', 'HDR_PAGES', 'IDX_PAGES',
+                'DATA_PAGES', 'HDR_PAGES', 'IDX_PAGES',
                 'SYS_RELATIONS', 'RECORD_VERSIONS', 'NOCREATION',
                 'ENCRYPTION',
             }),

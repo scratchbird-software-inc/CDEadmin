@@ -43,6 +43,12 @@ def prepared(tmp_path,original,target,seeds):
                 if row['path'][:2] == ['main',name]: del desired['rows'][identity]
             desired['rows'].update({identity:row for identity,row in template['rows'].items() if row['path'][:2] == ['main',name]})
             desired['rows'][_resource_id('table',['main'],name)]['native']['ddl'] = source
+        # The desired prototype owns derived view column types as well as
+        # table facts. Retaining old view types would describe stale metadata.
+        view_paths={tuple(row['path']) for row in baseline['rows'].values() if row['kind']=='view'}
+        for identity,row in list(desired['rows'].items()):
+            if tuple(row['path'][:2]) in view_paths:del desired['rows'][identity]
+        desired['rows'].update({identity:row for identity,row in template['rows'].items() if tuple(row['path'][:2]) in view_paths})
         rebuilds = [_resource_id('table',['main'],name) for name in sorted(target)]
         with closing(sqlite3.connect(path)) as connection:
             preview = plan(baseline,desired,baseline,connection,rebuilds=rebuilds)

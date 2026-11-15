@@ -275,7 +275,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                     pending = []
                     projection = 'to_jsonb(c)'
                     if catalog == 'pg_attribute':
-                        projection += " || jsonb_build_object('formatted_type', pg_catalog.format_type(c.atttypid,c.atttypmod), 'comment', pg_catalog.col_description(c.attrelid,c.attnum), 'default_expression', CASE WHEN c.attgenerated='' AND c.attidentity='' THEN (SELECT pg_catalog.pg_get_expr(d.adbin,d.adrelid,false) FROM pg_catalog.pg_attrdef d WHERE d.adrelid=c.attrelid AND d.adnum=c.attnum) ELSE NULL END)"
+                        projection += " || jsonb_build_object('formatted_type', pg_catalog.format_type(c.atttypid,c.atttypmod), 'comment', pg_catalog.col_description(c.attrelid,c.attnum), 'generated_expression', CASE WHEN c.attgenerated<>'' THEN (SELECT pg_catalog.pg_get_expr(d.adbin,d.adrelid,false) FROM pg_catalog.pg_attrdef d WHERE d.adrelid=c.attrelid AND d.adnum=c.attnum) ELSE NULL END, 'default_expression', CASE WHEN c.attgenerated='' AND c.attidentity='' THEN (SELECT pg_catalog.pg_get_expr(d.adbin,d.adrelid,false) FROM pg_catalog.pg_attrdef d WHERE d.adrelid=c.attrelid AND d.adnum=c.attnum) ELSE NULL END)"
                     if catalog == 'pg_attrdef':
                         projection += " || jsonb_build_object('expression_sql', pg_catalog.pg_get_expr(c.adbin,c.adrelid,false))"
                     if catalog == 'pg_foreign_table':

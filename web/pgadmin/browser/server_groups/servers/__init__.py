@@ -3389,7 +3389,7 @@ class ServerNode(PGChildNodeView):
                         'resource_page', 'resource_inspect', 'resource_refresh',
                         'browse_source', 'catalog_diagram', 'sql_builder', 'native_forms',
                         'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
-                        'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
+                        'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_object_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'sqlite_relational_review', 'duckdb_relational_review','postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
@@ -3498,7 +3498,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'sqlite_retained_schema','sqlite_retained_schema_receipts','firebird_eds_pool','firebird_eds_pool_receipts','duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'sqlite_connection_settings', 'sqlite_connection_limits', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
+                elif action in {'sqlite_retained_schema','sqlite_retained_schema_receipts','firebird_eds_pool','firebird_eds_pool_receipts','duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'sqlite_connection_settings', 'sqlite_connection_limits', 'sqlite_connection_config', 'mariadb_session_flagsets', 'mariadb_editor_context', 'sqlite_connection_pragmas', 'sqlite_connection_maintenance', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)
@@ -3672,6 +3672,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.sqlite_test_data(server, data.get('request'))
                 elif action == 'sqlite_schema_rename_design':
                     payload = service.sqlite_schema_rename_design(server, data.get('request'))
+                elif action == 'sqlite_schema_object_design':
+                    payload = service.sqlite_schema_object_design(server, data.get('request'))
                 elif action == 'sqlite_schema_column_design':
                     payload = service.sqlite_schema_column_design(server, data.get('request'))
                 elif action == 'sqlite_fts_configuration_design':

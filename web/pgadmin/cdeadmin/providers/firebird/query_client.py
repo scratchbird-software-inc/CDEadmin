@@ -1,6 +1,7 @@
 """Firebird asynchronous queries with attachment ownership and cancellation."""
 
 import copy
+import sys
 import threading
 import time
 from collections.abc import Mapping
@@ -1128,12 +1129,20 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         return database
 
     def run_server_operation(self, request, operation_id, database, options):
+        if operation_id == 'database_statistics':
+            from .statistics import validate_options
+            validate_options(options)
         route = request.get('route') or {}
         if (getattr(getattr(self.config, 'profile', None), 'protocol_id', None) == 'firebird_embedded' or
                 isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded'):
             from .local_services import validate_operation
             validate_operation(route, operation_id, database, options)
         with self._temporary_operation():
+            if isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded':
+                from .local_services import dispatch_target
+                native_database = dispatch_target(database)
+            else:
+                native_database = database
             scoped_request, scoped_options = self._service_role_scope(
                 request, options)
             authentication = service_authentication(
@@ -1141,7 +1150,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             request, options = scoped_request, scoped_options
             try:
                 result = super().run_server_operation(
-                    request, operation_id, database, options)
+                    request, operation_id, native_database, options)
                 result['service_authentication_requested'] = authentication
                 if (operation_id == 'repair_database' and
                         isinstance(result.get('repair_selection_requested'),
@@ -1375,24 +1384,29 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 result['driver_observation'].update(execution_host='application-local',
                     native_provider='Engine13', network_authentication=False,
                     reviewed_file_identity=compiled['local_service_identity'],
-                    file_identity_race_fenced=False,
+                    file_identity_race_fenced=sys.platform == 'linux',
                     native_utility_exit_code=None,
                     native_utility_exit_code_observed=False)
             return result
-        handle = request.get('_provider_session_handle')
-        if handle is None:
-            with self._temporary_operation():
-                return result_scope(super().apply_admin_operation(request))
-        with self._exclusive(handle) as state:
-            try:
-                return result_scope(super().apply_admin_operation(request))
-            except Exception as error:
-                if diagnostic_flag(error, 'task_rollback_unconfirmed'):
+        def dispatch():
+            handle = request.get('_provider_session_handle')
+            if handle is None:
+                with self._temporary_operation():
+                    return result_scope(super(FirebirdQueryClient, self).apply_admin_operation(request))
+            with self._exclusive(handle) as state:
+                try:
+                    return result_scope(super(FirebirdQueryClient, self).apply_admin_operation(request))
+                except Exception as error:
+                    if diagnostic_flag(error, 'task_rollback_unconfirmed'):
+                        state.visual_task_state_unknown = True
+                    raise
+                except BaseException:
                     state.visual_task_state_unknown = True
-                raise
-            except BaseException:
-                state.visual_task_state_unknown = True
-                raise
+                    raise
+        if local_service:
+            with local_services.pinned_target(payload['route'], compiled['local_service_identity']):
+                return dispatch()
+        return dispatch()
 
     def read_admin_rows(self, request):
         handle = request.get('_provider_session_handle')

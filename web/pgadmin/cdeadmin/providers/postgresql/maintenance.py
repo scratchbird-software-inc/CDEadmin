@@ -34,7 +34,7 @@ MAINTENANCE_OPERATIONS = {
     # Server operations from the provider tree's server scope (M6, 2026-11-11):
     # the inherited server menu's reload, restore point and WAL replay control.
     'server': frozenset({'reload', 'restore-point', 'wal-replay-pause',
-                         'wal-replay-resume'}),
+                         'wal-replay-resume', 'checkpoint'}),
     # Role and tablespace operations that act inside one database (M6,
     # 2026-11-11): the dialog picks the database; the plan's route runs there.
     'role': frozenset({'reassign-owned', 'drop-owned'}),
@@ -51,14 +51,14 @@ MOVE_OBJECT_TYPES = {'all': ('TABLE', 'INDEX', 'MATERIALIZED VIEW'), 'tables': (
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).
 CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
-    ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
+    ('server', 'checkpoint'), ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
     ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
     ('pgagent-job', 'run-now'), ('table', 'disable-triggers'), ('table', 'detach-partition'),
 })
 MUTATION_CLASSES = {
     'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
     'truncate': 'destructive', 'refresh': 'admin',
-    'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
+    'checkpoint': 'admin', 'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
     'wal-replay-resume': 'admin',
     'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
     'run-now': 'admin',
@@ -81,6 +81,7 @@ _OPTIONS = {
     ('table', 'cluster'): {'index', 'verbose'},
     ('table', 'truncate'): {'restart_identity', 'cascade', 'confirmation'},
     ('materialized-view', 'refresh'): {'concurrently', 'with_data'},
+    ('server', 'checkpoint'): {'wait_timeout_ms'},
     ('server', 'reload'): set(),
     ('server', 'restore-point'): {'name'},
     ('server', 'wal-replay-pause'): set(),
@@ -314,6 +315,13 @@ def _table_operation(operation, native):
 def _server_operation(operation, draft):
     """One server-wide function call; the result row is the receipt."""
     from .native_admin import _literal
+    if operation == 'checkpoint':
+        timeout=draft.get('wait_timeout_ms',30000)
+        if type(timeout)is not int or not 1<=timeout<=600000:
+            _refuse('Checkpoint wait timeout is 1–600000 milliseconds')
+        return {'statement':'CHECKPOINT','read_only':False,'autocommit':True,'returns_rows':False,
+                'maintenance':{'action':'checkpoint','object_kind':'server','object':None,'options':[],
+                               'transaction_mode':'autocommit','wait_timeout_ms':timeout}}
     if operation == 'reload':
         statement = 'SELECT pg_catalog.pg_reload_conf() AS reloaded'
     elif operation == 'restore-point':
@@ -382,7 +390,8 @@ def form(kind, operation, field):
                   field('new_tablespace', 'New tablespace', 'reference', required=True, reference_kind='tablespace'),
                   field('owner', 'Only objects owned by', 'reference', reference_kind='role',
                         help='Leave empty to move every object in the tablespace.')]
-    titles = {'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
+    if operation=='checkpoint':fields=[field('wait_timeout_ms','Wait timeout (milliseconds)','number',default=30000,help='1–600000. Timeout/cancellation stops waiting; native checkpoint work may continue.') ]
+    titles = {'checkpoint':'Checkpoint', 'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
               'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
               'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
               'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',

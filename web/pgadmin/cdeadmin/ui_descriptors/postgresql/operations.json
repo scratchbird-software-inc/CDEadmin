@@ -1237,6 +1237,1723 @@
       "confirmation": "none",
       "fields": [],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
+    },
+    {
+      "operation_id": "install-drop-namespace-guard",
+      "resource_kind": "database",
+      "title": "Install DROP namespace guard",
+      "menu": {
+        "category": "maintenance",
+        "order": 95
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Type INSTALL DROP NAMESPACE GUARD",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Database superuser only. Installs a fixed SECURITY DEFINER SQL function in pg_catalog to retain the native namespace and relation catalog-row locks for reviewed table DROP by table/schema owners. The function checks the invoking session or SET ROLE ownership and grants no catalog update privileges. Installation is CREATE only: an existing function is never overwritten. Inspect an existing collision before retrying. Required per database for ordinary owners, including older PostgreSQL minors whose schema rename ignores object locks. No automatic installation, SQL replay or restart. The reviewed installer explicitly grants PUBLIC EXECUTE; the fixed body restricts use to native table/schema owners. It does not grant catalog or table privileges."
+    },
+    {
+      "operation_id": "create",
+      "resource_kind": "column",
+      "title": "Create column",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "cltype",
+          "label": "Data type",
+          "control": "text",
+          "required": true,
+          "help": "A native type with its modifiers, such as numeric(10,2) or text[]."
+        },
+        {
+          "field_id": "collspcname",
+          "label": "Collation",
+          "control": "text",
+          "required": false,
+          "help": "Empty keeps the type default; on alter it is applied with the type."
+        },
+        {
+          "field_id": "attnotnull",
+          "label": "Not NULL",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "defval",
+          "label": "Default",
+          "control": "text",
+          "required": false,
+          "help": "An expression; empty drops the default on alter."
+        },
+        {
+          "field_id": "colconstype",
+          "label": "Constraint",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "n",
+              "label": "None"
+            },
+            {
+              "value": "i",
+              "label": "Identity"
+            },
+            {
+              "value": "g",
+              "label": "Generated"
+            }
+          ],
+          "default": "n"
+        },
+        {
+          "field_id": "attidentity",
+          "label": "Identity",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "a",
+              "label": "Always"
+            },
+            {
+              "value": "d",
+              "label": "By default"
+            }
+          ],
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqincrement",
+          "label": "Increment",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqstart",
+          "label": "Start",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmin",
+          "label": "Minimum",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmax",
+          "label": "Maximum",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcache",
+          "label": "Cache",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcycle",
+          "label": "Cycled",
+          "control": "boolean",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "genexpr",
+          "label": "Expression",
+          "control": "text",
+          "required": false,
+          "help": "Exact native expression; SET on PostgreSQL 17+ (virtual 18+).",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          }
+        },
+        {
+          "field_id": "generated_kind",
+          "label": "Generation storage",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "s",
+              "label": "Stored"
+            },
+            {
+              "value": "v",
+              "label": "Virtual (18+)",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ],
+          "default": "s",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          }
+        },
+        {
+          "field_id": "attstattarget",
+          "label": "Statistics",
+          "control": "number",
+          "required": false,
+          "help": "-1 uses the default statistics target."
+        },
+        {
+          "field_id": "attstorage",
+          "label": "Storage",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "p",
+              "label": "Plain"
+            },
+            {
+              "value": "m",
+              "label": "Main"
+            },
+            {
+              "value": "e",
+              "label": "External"
+            },
+            {
+              "value": "x",
+              "label": "Extended"
+            }
+          ]
+        },
+        {
+          "field_id": "attcompression",
+          "label": "Compression",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "pglz",
+              "label": "pglz"
+            },
+            {
+              "value": "lz4",
+              "label": "lz4"
+            }
+          ]
+        },
+        {
+          "field_id": "description",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "attoptions",
+          "label": "Attribute options",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Option",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "n_distinct",
+                  "label": "n_distinct"
+                },
+                {
+                  "value": "n_distinct_inherited",
+                  "label": "n_distinct_inherited"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "help": "SET (n_distinct = ...) planner hints."
+        },
+        {
+          "field_id": "attacl",
+          "label": "Column privileges",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "grantee",
+              "label": "Grantee",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "privileges",
+              "label": "Privileges (a insert, r select, w update, x references)",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "with_grant",
+              "label": "With grant option",
+              "control": "boolean",
+              "required": false
+            }
+          ],
+          "help": "Granted on this column; stated, never diffed."
+        },
+        {
+          "field_id": "seclabels",
+          "label": "Security labels",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "provider",
+              "label": "Provider",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "label",
+              "label": "Label",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "Provider-native column plan/apply. generated_kind=s/v; VIRTUAL requires native18+, SET EXPRESSION native17+ (virtual18+), DROP EXPRESSION stored only13+. KEEP never silently discards changed genexpr. Runtime is verified at review and apply, not supplied by the client. Native DDL is transactional; SET rewrites stored values and clears statistics. Refresh exact attnum/expression/kind after apply; no automatic replay.",
+      "menu": {
+        "category": "create"
+      }
+    },
+    {
+      "operation_id": "alter",
+      "resource_kind": "column",
+      "title": "Edit column",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": false,
+          "initial_value_path": [
+            "column_facts",
+            "name"
+          ]
+        },
+        {
+          "field_id": "cltype",
+          "label": "Data type",
+          "control": "text",
+          "required": false,
+          "help": "A native type with its modifiers, such as numeric(10,2) or text[].",
+          "initial_value_path": [
+            "column_facts",
+            "cltype"
+          ]
+        },
+        {
+          "field_id": "collspcname",
+          "label": "Collation",
+          "control": "text",
+          "required": false,
+          "help": "Empty keeps the type default; on alter it is applied with the type."
+        },
+        {
+          "field_id": "attnotnull",
+          "label": "Not NULL",
+          "control": "boolean",
+          "required": false,
+          "initial_value_path": [
+            "column_facts",
+            "attnotnull"
+          ]
+        },
+        {
+          "field_id": "defval",
+          "label": "Default",
+          "control": "text",
+          "required": false,
+          "help": "An expression; empty drops the default on alter.",
+          "initial_value_path": [
+            "column_facts",
+            "defval"
+          ]
+        },
+        {
+          "field_id": "colconstype",
+          "label": "Constraint",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "n",
+              "label": "None"
+            },
+            {
+              "value": "i",
+              "label": "Identity"
+            },
+            {
+              "value": "g",
+              "label": "Generated"
+            }
+          ],
+          "default": "n",
+          "initial_value_path": [
+            "column_facts",
+            "colconstype"
+          ]
+        },
+        {
+          "field_id": "attidentity",
+          "label": "Identity",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "a",
+              "label": "Always"
+            },
+            {
+              "value": "d",
+              "label": "By default"
+            }
+          ],
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          },
+          "initial_value_path": [
+            "column_facts",
+            "attidentity"
+          ]
+        },
+        {
+          "field_id": "seqincrement",
+          "label": "Increment",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqstart",
+          "label": "Start",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmin",
+          "label": "Minimum",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqmax",
+          "label": "Maximum",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcache",
+          "label": "Cache",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "seqcycle",
+          "label": "Cycled",
+          "control": "boolean",
+          "required": false,
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "i"
+          }
+        },
+        {
+          "field_id": "genexpr",
+          "label": "Expression",
+          "control": "text",
+          "required": false,
+          "help": "Exact native expression; SET on PostgreSQL 17+ (virtual 18+).",
+          "initial_value_path": [
+            "column_facts",
+            "genexpr"
+          ],
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          }
+        },
+        {
+          "field_id": "generated_kind",
+          "label": "Generation storage",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "s",
+              "label": "Stored"
+            },
+            {
+              "value": "v",
+              "label": "Virtual (18+)",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ],
+          "default": "s",
+          "initial_value_path": [
+            "column_facts",
+            "generated_kind"
+          ],
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          },
+          "readonly": true
+        },
+        {
+          "field_id": "generated_action",
+          "label": "Expression change",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "KEEP",
+              "label": "Keep"
+            },
+            {
+              "value": "SET",
+              "label": "Replace expression (17+)",
+              "version": {
+                "minimum": "17"
+              }
+            },
+            {
+              "value": "DROP",
+              "label": "Remove stored expression (13+)",
+              "version": {
+                "minimum": "13"
+              }
+            }
+          ],
+          "default": "KEEP"
+        },
+        {
+          "field_id": "using",
+          "label": "Type conversion (USING)",
+          "control": "text",
+          "required": false,
+          "help": "An expression over the old value when the type changes and PostgreSQL cannot cast it on its own."
+        },
+        {
+          "field_id": "attstattarget",
+          "label": "Statistics",
+          "control": "number",
+          "required": false,
+          "help": "-1 uses the default statistics target.",
+          "initial_value_path": [
+            "column_facts",
+            "attstattarget"
+          ]
+        },
+        {
+          "field_id": "attstorage",
+          "label": "Storage",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "p",
+              "label": "Plain"
+            },
+            {
+              "value": "m",
+              "label": "Main"
+            },
+            {
+              "value": "e",
+              "label": "External"
+            },
+            {
+              "value": "x",
+              "label": "Extended"
+            }
+          ],
+          "initial_value_path": [
+            "column_facts",
+            "attstorage"
+          ]
+        },
+        {
+          "field_id": "attcompression",
+          "label": "Compression",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "pglz",
+              "label": "pglz"
+            },
+            {
+              "value": "lz4",
+              "label": "lz4"
+            }
+          ],
+          "initial_value_path": [
+            "column_facts",
+            "attcompression"
+          ]
+        },
+        {
+          "field_id": "description",
+          "label": "Comment",
+          "control": "text",
+          "required": false,
+          "initial_value_path": [
+            "column_facts",
+            "description"
+          ]
+        },
+        {
+          "field_id": "attoptions",
+          "label": "Attribute options",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Option",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "n_distinct",
+                  "label": "n_distinct"
+                },
+                {
+                  "value": "n_distinct_inherited",
+                  "label": "n_distinct_inherited"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "help": "SET (n_distinct = ...) planner hints."
+        },
+        {
+          "field_id": "attacl",
+          "label": "Column privileges",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "grantee",
+              "label": "Grantee",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "privileges",
+              "label": "Privileges (a insert, r select, w update, x references)",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "with_grant",
+              "label": "With grant option",
+              "control": "boolean",
+              "required": false
+            }
+          ],
+          "help": "Granted on this column; stated, never diffed."
+        },
+        {
+          "field_id": "seclabels",
+          "label": "Security labels",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "provider",
+              "label": "Provider",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "label",
+              "label": "Label",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "reset_options",
+          "label": "Reset attribute options",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Option",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "revoke",
+          "label": "Revoke all column privileges from",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "grantee",
+              "label": "Grantee",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "Provider-native column plan/apply. generated_kind=s/v; VIRTUAL requires native18+, SET EXPRESSION native17+ (virtual18+), DROP EXPRESSION stored only13+. KEEP never silently discards changed genexpr. Runtime is verified at review and apply, not supplied by the client. Native DDL is transactional; SET rewrites stored values and clears statistics. Refresh exact attnum/expression/kind after apply; no automatic replay.",
+      "menu": {
+        "category": "maintenance"
+      }
+    },
+    {
+      "operation_id": "create",
+      "resource_kind": "extended-statistics",
+      "title": "Create statistics",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "owner",
+          "label": "Owner",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "target",
+          "label": "Statistics target",
+          "control": "number",
+          "required": false,
+          "help": "-1 uses default; 0\u201310000 native target."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "table_schema",
+          "label": "Table schema",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "table",
+          "label": "Table",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "elements",
+          "label": "Statistics elements",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "column",
+                  "label": "Column"
+                },
+                {
+                  "value": "expression",
+                  "label": "Expression",
+                  "version": {
+                    "minimum": "14"
+                  }
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Column or expression",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "kinds",
+          "label": "Multivariate kinds",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "ndistinct",
+                  "label": "ndistinct"
+                },
+                {
+                  "value": "dependencies",
+                  "label": "dependencies"
+                },
+                {
+                  "value": "mcv",
+                  "label": "mcv"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "menu": {
+        "category": "create"
+      }
+    },
+    {
+      "operation_id": "alter",
+      "resource_kind": "extended-statistics",
+      "title": "Alter statistics",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "owner",
+          "label": "Owner",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "target",
+          "label": "Statistics target",
+          "control": "number",
+          "required": false,
+          "help": "-1 uses default; 0\u201310000 native target."
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "menu": {
+        "category": "maintenance"
+      }
+    },
+    {
+      "operation_id": "drop",
+      "resource_kind": "extended-statistics",
+      "title": "Drop statistics",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cascade",
+          "label": "Drop dependent objects",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type statistics name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "menu": {
+        "category": "maintenance"
+      }
+    },
+    {
+      "operation_id": "inspect",
+      "resource_kind": "extended-statistics",
+      "title": "Inspect statistics",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "menu": {
+        "category": "open"
+      }
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "parameter-acl",
+      "title": "Grant parameter privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter",
+          "control": "text",
+          "required": false,
+          "help": "Use a catalog parameter name, never a setting value."
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "SET",
+                  "label": "SET"
+                },
+                {
+                  "value": "ALTER SYSTEM",
+                  "label": "ALTER SYSTEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "roles",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role or PUBLIC",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "parameter-acl",
+      "title": "Revoke parameter privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter",
+          "control": "text",
+          "required": false,
+          "help": "Use a catalog parameter name, never a setting value."
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "SET",
+                  "label": "SET"
+                },
+                {
+                  "value": "ALTER SYSTEM",
+                  "label": "ALTER SYSTEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "roles",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role or PUBLIC",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option_only",
+          "label": "Revoke grant option only",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade dependent grants",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+    },
+    {
+      "operation_id": "inspect",
+      "resource_kind": "parameter-acl",
+      "title": "Inspect parameter privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter",
+          "control": "text",
+          "required": false,
+          "help": "Use a catalog parameter name, never a setting value."
+        }
+      ],
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "default-privileges",
+      "title": "Grant default privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Future object family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "TABLES",
+              "label": "Tables"
+            },
+            {
+              "value": "SEQUENCES",
+              "label": "Sequences"
+            },
+            {
+              "value": "FUNCTIONS",
+              "label": "Functions"
+            },
+            {
+              "value": "ROUTINES",
+              "label": "Routines"
+            },
+            {
+              "value": "TYPES",
+              "label": "Types"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Schemas"
+            },
+            {
+              "value": "LARGE OBJECTS",
+              "label": "Large Objects",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ]
+        },
+        {
+          "field_id": "owner_mode",
+          "label": "Creation owner",
+          "control": "select",
+          "required": false,
+          "default": "CURRENT_ROLE",
+          "options": [
+            {
+              "value": "CURRENT_ROLE",
+              "label": "Current database role"
+            },
+            {
+              "value": "NAMED_ROLES",
+              "label": "Named roles"
+            }
+          ]
+        },
+        {
+          "field_id": "owner_kind",
+          "label": "Owner selector",
+          "control": "select",
+          "required": false,
+          "default": "ROLE",
+          "options": [
+            {
+              "value": "ROLE",
+              "label": "FOR ROLE"
+            },
+            {
+              "value": "USER",
+              "label": "FOR USER"
+            }
+          ]
+        },
+        {
+          "field_id": "owners",
+          "label": "Creation owners",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "scope",
+          "label": "Scope",
+          "control": "select",
+          "required": false,
+          "default": "GLOBAL",
+          "options": [
+            {
+              "value": "GLOBAL",
+              "label": "Entire selected database"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Selected schemas"
+            }
+          ]
+        },
+        {
+          "field_id": "schemas",
+          "label": "Schemas",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "schema",
+              "label": "Schema",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "ALL",
+                  "label": "ALL"
+                },
+                {
+                  "value": "SELECT",
+                  "label": "SELECT"
+                },
+                {
+                  "value": "INSERT",
+                  "label": "INSERT"
+                },
+                {
+                  "value": "UPDATE",
+                  "label": "UPDATE"
+                },
+                {
+                  "value": "DELETE",
+                  "label": "DELETE"
+                },
+                {
+                  "value": "TRUNCATE",
+                  "label": "TRUNCATE"
+                },
+                {
+                  "value": "REFERENCES",
+                  "label": "REFERENCES"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "TRIGGER"
+                },
+                {
+                  "value": "MAINTAIN",
+                  "label": "MAINTAIN",
+                  "version": {
+                    "minimum": "17"
+                  }
+                },
+                {
+                  "value": "USAGE",
+                  "label": "USAGE"
+                },
+                {
+                  "value": "EXECUTE",
+                  "label": "EXECUTE"
+                },
+                {
+                  "value": "CREATE",
+                  "label": "CREATE"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "default-privileges",
+      "title": "Revoke default privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Future object family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "TABLES",
+              "label": "Tables"
+            },
+            {
+              "value": "SEQUENCES",
+              "label": "Sequences"
+            },
+            {
+              "value": "FUNCTIONS",
+              "label": "Functions"
+            },
+            {
+              "value": "ROUTINES",
+              "label": "Routines"
+            },
+            {
+              "value": "TYPES",
+              "label": "Types"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Schemas"
+            },
+            {
+              "value": "LARGE OBJECTS",
+              "label": "Large Objects",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ]
+        },
+        {
+          "field_id": "owner_mode",
+          "label": "Creation owner",
+          "control": "select",
+          "required": false,
+          "default": "CURRENT_ROLE",
+          "options": [
+            {
+              "value": "CURRENT_ROLE",
+              "label": "Current database role"
+            },
+            {
+              "value": "NAMED_ROLES",
+              "label": "Named roles"
+            }
+          ]
+        },
+        {
+          "field_id": "owner_kind",
+          "label": "Owner selector",
+          "control": "select",
+          "required": false,
+          "default": "ROLE",
+          "options": [
+            {
+              "value": "ROLE",
+              "label": "FOR ROLE"
+            },
+            {
+              "value": "USER",
+              "label": "FOR USER"
+            }
+          ]
+        },
+        {
+          "field_id": "owners",
+          "label": "Creation owners",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "scope",
+          "label": "Scope",
+          "control": "select",
+          "required": false,
+          "default": "GLOBAL",
+          "options": [
+            {
+              "value": "GLOBAL",
+              "label": "Entire selected database"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Selected schemas"
+            }
+          ]
+        },
+        {
+          "field_id": "schemas",
+          "label": "Schemas",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "schema",
+              "label": "Schema",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "ALL",
+                  "label": "ALL"
+                },
+                {
+                  "value": "SELECT",
+                  "label": "SELECT"
+                },
+                {
+                  "value": "INSERT",
+                  "label": "INSERT"
+                },
+                {
+                  "value": "UPDATE",
+                  "label": "UPDATE"
+                },
+                {
+                  "value": "DELETE",
+                  "label": "DELETE"
+                },
+                {
+                  "value": "TRUNCATE",
+                  "label": "TRUNCATE"
+                },
+                {
+                  "value": "REFERENCES",
+                  "label": "REFERENCES"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "TRIGGER"
+                },
+                {
+                  "value": "MAINTAIN",
+                  "label": "MAINTAIN",
+                  "version": {
+                    "minimum": "17"
+                  }
+                },
+                {
+                  "value": "USAGE",
+                  "label": "USAGE"
+                },
+                {
+                  "value": "EXECUTE",
+                  "label": "EXECUTE"
+                },
+                {
+                  "value": "CREATE",
+                  "label": "CREATE"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option_only",
+          "label": "Revoke grant option only",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade dependent grants",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+    },
+    {
+      "operation_id": "inspect",
+      "resource_kind": "default-privileges",
+      "title": "Inspect default privileges",
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "menu": {
+        "category": "security"
+      },
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Future object family",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "TABLES",
+              "label": "Tables"
+            },
+            {
+              "value": "SEQUENCES",
+              "label": "Sequences"
+            },
+            {
+              "value": "FUNCTIONS",
+              "label": "Functions"
+            },
+            {
+              "value": "ROUTINES",
+              "label": "Routines"
+            },
+            {
+              "value": "TYPES",
+              "label": "Types"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Schemas"
+            },
+            {
+              "value": "LARGE OBJECTS",
+              "label": "Large Objects",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ]
+        },
+        {
+          "field_id": "owner_mode",
+          "label": "Creation owner",
+          "control": "select",
+          "required": false,
+          "default": "CURRENT_ROLE",
+          "options": [
+            {
+              "value": "CURRENT_ROLE",
+              "label": "Current database role"
+            },
+            {
+              "value": "NAMED_ROLES",
+              "label": "Named roles"
+            }
+          ]
+        },
+        {
+          "field_id": "owner_kind",
+          "label": "Owner selector",
+          "control": "select",
+          "required": false,
+          "default": "ROLE",
+          "options": [
+            {
+              "value": "ROLE",
+              "label": "FOR ROLE"
+            },
+            {
+              "value": "USER",
+              "label": "FOR USER"
+            }
+          ]
+        },
+        {
+          "field_id": "owners",
+          "label": "Creation owners",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "scope",
+          "label": "Scope",
+          "control": "select",
+          "required": false,
+          "default": "GLOBAL",
+          "options": [
+            {
+              "value": "GLOBAL",
+              "label": "Entire selected database"
+            },
+            {
+              "value": "SCHEMAS",
+              "label": "Selected schemas"
+            }
+          ]
+        },
+        {
+          "field_id": "schemas",
+          "label": "Schemas",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "schema",
+              "label": "Schema",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+    },
+    {
+      "operation_id": "checkpoint",
+      "resource_kind": "server",
+      "title": "Checkpoint",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "wait_timeout_ms",
+          "label": "Wait timeout (milliseconds)",
+          "control": "number",
+          "default": 30000,
+          "required": false,
+          "help": "1\u2013600000. Stops waiting; checkpoint work may continue."
+        }
+      ],
+      "notes": "Standalone native CHECKPOINT on an independent autocommit attachment, bound at review/apply to the actual server/startup/database and effective/authenticated principals. Native superuser or native checkpoint-role authority is required, independently of application administer/execute permissions. Exact CHECKPOINT command tag is required. Receipt separates nontransactional completion and connection release; rollback never undoes a checkpoint. Timeout, cancellation and lost acknowledgement have unknown effect; no automatic replay and no physical durability inference. Synchronous bounded wait; no progress stream or manual cancellation API is advertised."
     }
   ]
 }

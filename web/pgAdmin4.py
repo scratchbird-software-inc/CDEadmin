@@ -35,6 +35,9 @@ else:
     builtins.SERVER_MODE = None
 
 import config
+# Global SQLite directory policies must precede every application database.
+from sqlite_startup import apply_configured_policy
+apply_configured_policy(config)
 import setup
 from pgadmin import create_app, socketio
 from pgadmin.utils.constants import INTERNAL

@@ -87,6 +87,17 @@ def test_routine_local_plugins_are_distinct_from_unknown_column_grammars():
         ('associative_array', 'ACTIVE'), ('uuid', 'ACTIVE')])
     assert 'UUID' in rows and 'SYS_REFCURSOR' not in rows and 'ASSOCIATIVE_ARRAY' not in rows
     pending = next(row for row in observations if row['section'] == 'native-routine-type-contexts')
-    assert pending['reason'] == 'routine-local-type-completion-unimplemented'
+    assert pending['available'] and pending['reason'] == 'separate-mode-gated-routine-declarations'
     assert pending['plugins'] == ['ASSOCIATIVE_ARRAY', 'SYS_REFCURSOR']
     assert not any(row['section'] == 'native-type-plugin-parameters' for row in observations)
+
+
+def test_routine_declarations_are_separate_mode_gated_and_plugin_bound():
+    from pgadmin.cdeadmin.providers.mysql_family.mariadb_types import routine_candidates
+    assert not routine_candidates('12.2.1',[('sys_refcursor','ACTIVE')])
+    assert not routine_candidates('12.2.2',[('sys_refcursor','DISABLED')])
+    rows=routine_candidates('12.2.2',[('sys_refcursor','ACTIVE'),('associative_array','ACTIVE')])
+    assert len(rows)==3 and all(row['column_type'] is False for row in rows)
+    assert {row['required_sql_mode'] for row in rows}=={'oracle','non-oracle'}
+    assert all(row['example_sql'] and row['completion_text'] for row in rows)
+    assert not any(row['completion_text']=='ASSOCIATIVE_ARRAY' for row in rows)

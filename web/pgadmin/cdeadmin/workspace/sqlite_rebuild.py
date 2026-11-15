@@ -129,7 +129,13 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         probe.execute(temporary)
         wanted = probe.execute('PRAGMA main.table_xinfo(' + _quote(temp_name) + ')').fetchall()
         table_options = probe.execute('PRAGMA main.table_list').fetchall()
-        target_options = next(row for row in table_options if row[1] == temp_name)
+        if sqlite3.sqlite_version_info < (3,37,0):
+            target_without_rowid=probe.execute('PRAGMA main.index_info('+_quote(temp_name)+')').fetchone() is not None
+            target_strict=False  # The native pre3.37 parser cannot create STRICT.
+        else:
+            target_options=next((row for row in table_options if row[1]==temp_name),None)
+            if target_options is None:raise ValueError('Native rebuilt table flags are unavailable')
+            target_without_rowid=bool(target_options[4]);target_strict=bool(target_options[5])
         foreign_keys = probe.execute('PRAGMA main.foreign_key_list(' + _quote(temp_name) + ')').fetchall()
         target_indexes = _implicit_indexes(probe, temp_name)
         probe.execute('ALTER TABLE "main".' + _quote(temp_name) +
@@ -210,7 +216,7 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
     target_names = common + [column_renames[name] for name in column_renames]
     new_keys = [(row[1], row[2], row[5]) for row in wanted if row[5]]
     preserve_rowid = (not _metadata(before).get('without_rowid') and
-        not target_options[4] and old_keys == new_keys)
+        not target_without_rowid and old_keys == new_keys)
     rowid_alias = None
     if preserve_rowid:
         rowid_alias = next((alias for alias in ('rowid', '_rowid_', 'oid')
@@ -240,8 +246,8 @@ def plan_rebuild(before, after, baseline, connection, *, temp_name=None,
         'preserve_autoincrement': source_autoincrement and target_autoincrement,
         'target_autoincrement': target_autoincrement,
         'implicit_index_signatures': target_indexes,
-        'target_without_rowid': bool(target_options[4]),
-        'target_strict': bool(target_options[5]),
+        'target_without_rowid': target_without_rowid,
+        'target_strict': target_strict,
         'rowid_alias': rowid_alias,
         'target_columns': [{'name': name, **facts} for name, facts in new.items()],
         'expected_ddl': expected_ddl,

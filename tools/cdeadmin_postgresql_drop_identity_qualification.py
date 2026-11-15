@@ -22,6 +22,9 @@ def qualify(output):
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     paths = ['web/pgadmin/cdeadmin/providers/postgresql/provider.py',
              'web/pgadmin/cdeadmin/providers/postgresql/destructive_identity.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/namespace_guard.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/native_admin.py',
+             'web/pgadmin/cdeadmin/providers/postgresql/preserved_surface.py',
              'tools/tests/test_postgresql_drop_identity.py',
              'tools/tests/test_ui_descriptor_operations_postgresql.py',
              'tools/cdeadmin_postgresql_drop_identity_qualification.py']
@@ -34,7 +37,8 @@ def qualify(output):
             try:
                 with server(fixture) as (route, password, _fixture):
                     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', TMPDIR=str(output),
-                               PYTHONPATH=f'{ROOT}:{ROOT}/web:{ROOT}/tools')
+                               PYTHONPATH=f'{ROOT}:{ROOT}/web:{ROOT}/tools',
+                               CDEADMIN_SQLITE_STARTUP_POLICY=str(output/'absent-startup-policy.json'))
                     env['CDEADMIN_POSTGRESQL_DROP_TEST'] = json.dumps({
                         'host': route['host'], 'port': route['port'], 'user': route['user'],
                         'password': password, 'dbname': route['database']})

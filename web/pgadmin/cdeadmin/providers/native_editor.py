@@ -403,12 +403,13 @@ def metadata(handle, engine, transaction=None, dialect=None):
                 inv = inventory_for(runtime)
         words = [row['native_name'] for row in inv['lexical_rules'] if re.fullmatch(r'[A-Za-z][A-Za-z0-9_$]*', row['native_name'])]
         if engine == 'mariadb':
-            from .mysql_family.mariadb_types import candidates
+            from .mysql_family.mariadb_types import candidates, routine_candidates
             plugins = query('native-data-type-plugins',
                 "SELECT PLUGIN_NAME,PLUGIN_STATUS FROM information_schema.PLUGINS "
                 "WHERE PLUGIN_TYPE='DATA TYPE' ORDER BY PLUGIN_NAME LIMIT 25001")
             types, type_observations = candidates(context['version'], context['sql_mode'], plugins)
             observations.extend(type_observations)
+            context['routine_type_candidates'] = routine_candidates(context['version'], plugins)
             for row in types:
                 add('type', [row['name']], row['detail'], native_type_keyword=True,
                     native_type_syntax=row['syntax'])

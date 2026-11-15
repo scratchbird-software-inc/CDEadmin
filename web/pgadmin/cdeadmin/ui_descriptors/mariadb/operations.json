@@ -1637,6 +1637,281 @@
       "confirmation": "none",
       "fields": [],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+    },
+    {
+      "operation_id": "set_session_optimizer_switch_flags",
+      "resource_kind": "system-variable",
+      "title": "Set original session optimizer switches",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "value_mode",
+          "label": "Value source",
+          "control": "select",
+          "required": true,
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Specified value"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Compiled default"
+            },
+            {
+              "value": "BITMASK",
+              "label": "FLAGSET numeric mask"
+            },
+            {
+              "value": "FLAGS",
+              "label": "FLAGSET flag choices"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Global value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "VALUE"
+          }
+        },
+        {
+          "field_id": "bitmask",
+          "label": "Unsigned decimal FLAGSET mask",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "BITMASK"
+          }
+        },
+        {
+          "field_id": "reset_defaults",
+          "label": "Reset all flags to native defaults first",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          }
+        },
+        {
+          "field_id": "flags",
+          "label": "Native flag assignments",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          },
+          "columns": [
+            {
+              "field_id": "flag",
+              "label": "Native flag name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "state",
+              "label": "State",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "on",
+                  "label": "on"
+                },
+                {
+                  "value": "off",
+                  "label": "off"
+                },
+                {
+                  "value": "default",
+                  "label": "default"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original session flags",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "diagnostics_change_confirmed",
+          "label": "Allow explicit native inspection to change session diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original session change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Fixed request.variable=optimizer_switch. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session."
+    },
+    {
+      "operation_id": "set_session_optimizer_trace_flags",
+      "resource_kind": "system-variable",
+      "title": "Set original session optimizer trace",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "value_mode",
+          "label": "Value source",
+          "control": "select",
+          "required": true,
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Specified value"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Compiled default"
+            },
+            {
+              "value": "BITMASK",
+              "label": "FLAGSET numeric mask"
+            },
+            {
+              "value": "FLAGS",
+              "label": "FLAGSET flag choices"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Global value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "VALUE"
+          }
+        },
+        {
+          "field_id": "bitmask",
+          "label": "Unsigned decimal FLAGSET mask",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "BITMASK"
+          }
+        },
+        {
+          "field_id": "reset_defaults",
+          "label": "Reset all flags to native defaults first",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          }
+        },
+        {
+          "field_id": "flags",
+          "label": "Native flag assignments",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          },
+          "columns": [
+            {
+              "field_id": "flag",
+              "label": "Native flag name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "state",
+              "label": "State",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "on",
+                  "label": "on"
+                },
+                {
+                  "value": "off",
+                  "label": "off"
+                },
+                {
+                  "value": "default",
+                  "label": "default"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original session flags",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "diagnostics_change_confirmed",
+          "label": "Allow explicit native inspection to change session diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original session change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Fixed request.variable=optimizer_trace. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session."
+    },
+    {
+      "operation_id": "refresh_editor_context",
+      "resource_kind": "database",
+      "title": "Refresh original editor context",
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "fields": [
+        {
+          "field_id": "diagnostics_change_confirmed",
+          "label": "Allow native inspection to change session diagnostics",
+          "control": "boolean",
+          "required": true,
+          "help": "Explicitly reads the original query session. Its warning and row-count state can change; pending transactions remain owned by the caller."
+        }
+      ],
+      "notes": "Task mariadb_editor_context, fixed operation=refresh_completion with diagnostics_change_confirmed:true. Bind the owned public query-session ID and registered target; the server substitutes its private session ID. Returns editor_context with observed original sql_mode/default schema/role/character sets and a same-context private committed catalog. It observes once while the source is idle/locked; it is not a live guarantee after later source commands. Routine declarations remain separate from column types and carry available plus required_sql_mode gates. Temporary objects and uncommitted DDL remain explicitly unobserved. Passive source_complete still sends zero original-session commands. Do not silently call this explicit refresh on keystrokes or replay it after a lost response. Unavailable refresh returns accepted:false, outcome=context_refresh_unavailable, close_session_required and no automatic retry."
     }
   ]
 }

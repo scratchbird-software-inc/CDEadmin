@@ -58,6 +58,8 @@ def facts(native):
         'description': native.get('comment') or '',
         'colconstype': 'i' if identity else 'g' if generated else 'n',
         'attidentity': identity,
+        'generated_kind': generated,
+        'genexpr': native.get('generated_expression') or row.get('generated_expression') or '',
         # PostgreSQL 17+ stores the default target as NULL; the dialog's -1.
         'attstattarget': (-1 if row.get('attstattarget') is None
                           else row.get('attstattarget')),
@@ -253,7 +255,7 @@ def _create(native, draft):
         if _blank(draft.get('genexpr')):
             _refuse('a generated column needs genexpr')
         clause += (' GENERATED ALWAYS AS ('
-                   + expression(draft['genexpr'], 'genexpr') + ') STORED')
+                   + expression(draft['genexpr'], 'genexpr') + ') ' + generated_storage(draft))
     statements = [clause]
     target = f'{table}.{column}'
     if not _blank(draft.get('description')):
@@ -338,6 +340,27 @@ def _alter(native, draft):
     elif constype == 'g' and current['colconstype'] != 'g':
         _refuse('an existing column cannot become a generated column; '
                 'add a new one')
+    action = draft.get('generated_action', 'KEEP')
+    if action not in ('KEEP', 'SET', 'DROP'):
+        _refuse('generated_action must be KEEP, SET or DROP')
+    if current['colconstype'] == 'g':
+        if draft.get('generated_kind', current['generated_kind']) != current['generated_kind']:
+            _refuse('Stored/virtual generation cannot be converted in place')
+        changed = 'genexpr' in draft and draft['genexpr'] != current['genexpr']
+        if action == 'DROP':
+            if current['generated_kind'] != 's':
+                _refuse('DROP EXPRESSION is only supported for stored generated columns')
+            if not _blank(draft.get('genexpr')) and changed:
+                _refuse('Do not combine a replacement expression with DROP EXPRESSION')
+            statements.append(f'{alter} DROP EXPRESSION')
+        elif action == 'SET' or changed and 'generated_action' not in draft:
+            statements.append(f'{alter} SET EXPRESSION AS (' + expression(draft.get('genexpr'), 'genexpr') + ')')
+        elif changed:
+            _refuse('Select SET to change the generated expression')
+        elif constype == 'n':
+            _refuse('Select DROP to remove the stored generation expression')
+    elif action != 'KEEP' or not _blank(draft.get('genexpr')):
+        _refuse('Expression changes require an existing generated column')
     if (not _blank(draft.get('attstattarget')) and
             _int(draft['attstattarget'], 'attstattarget', -1)
             != current['attstattarget']):
@@ -382,7 +405,28 @@ def compile_operation(operation, native, draft):
         statements = _drop(native, draft)
     else:
         _refuse('column inspection stays with the provider tree')
-    return {'statement': ';\n'.join(statements), 'read_only': False}
+    result = {'statement': ';\n'.join(statements), 'read_only': False}
+    minimum = generated_minimum(operation, native, draft)
+    if minimum: result['minimum_server_version'] = minimum
+    return result
+
+
+def generated_storage(draft):
+    kind = draft.get('generated_kind', 's')
+    if kind not in ('s', 'v'):
+        _refuse('generated_kind must be s (stored) or v (virtual)')
+    return {'s':'STORED','v':'VIRTUAL'}[kind]
+
+
+def generated_minimum(operation, native, draft):
+    if operation == 'create':
+        return 180000 if draft.get('colconstype') == 'g' and draft.get('generated_kind') == 'v' else None
+    if operation == 'alter' and facts(native)['colconstype'] == 'g':
+        action = draft.get('generated_action', 'KEEP')
+        if action == 'DROP': return 130000
+        if action == 'SET' or 'genexpr' in draft and draft['genexpr'] != facts(native)['genexpr']:
+            return 180000 if facts(native)['generated_kind'] == 'v' else 170000
+    return None
 
 
 # -- form -------------------------------------------------------------------
@@ -443,8 +487,10 @@ def form(operation, field):
         field('seqcycle', 'Cycled', 'boolean',
               visible_when=_when('colconstype', 'i')),
         field('genexpr', 'Expression', help=(
-            'GENERATED ALWAYS AS (expression) STORED; set at creation only.'),
-            visible_when=_when('colconstype', 'g')),
+            'Exact native expression; SET on PostgreSQL 17+ (virtual 18+).'),
+            **initial('genexpr'), visible_when=_when('colconstype', 'g')),
+        field('generated_kind','Generation storage','select',options=[{'value':'s','label':'Stored'},{'value':'v','label':'Virtual (18+)'}],default='s',readonly=alter,**initial('generated_kind'),visible_when=_when('colconstype','g')),
+        field('generated_action','Expression change','select',options=[{'value':'KEEP','label':'Keep'},{'value':'SET','label':'Replace expression (17+)'},{'value':'DROP','label':'Remove stored expression (13+)'}],default='KEEP') if alter else None,
         field('using', 'Type conversion (USING)', help=(
             'An expression over the old value when the type changes and '
             'PostgreSQL cannot cast it on its own.')) if alter else None,

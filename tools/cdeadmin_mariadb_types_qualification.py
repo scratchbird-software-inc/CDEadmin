@@ -16,7 +16,7 @@ def main():
     sys.path[:0] = [str(root), str(root / 'web'), str(root / 'tools')]
     import config  # noqa: F401
     from tools.mariadb_qualification_support import server, _root_connection
-    from pgadmin.cdeadmin.providers.mysql_family.mariadb_types import candidates
+    from pgadmin.cdeadmin.providers.mysql_family.mariadb_types import candidates, routine_candidates
     from pgadmin.cdeadmin.providers.native_editor import metadata
     paths = ['tools/cdeadmin_mariadb_types_qualification.py',
         'web/pgadmin/cdeadmin/providers/mysql_family/mariadb_types.py',
@@ -73,6 +73,11 @@ def main():
                             proof['parameter_checks'].append({'mode': mode or 'default',
                                 'name': row['name'], 'parameters_required': False,
                                 'native_omitted_parameters_accepted': True})
+                    for item in routine_candidates(version, plugins):
+                        if (item['required_sql_mode']=='oracle') != (mode=='ORACLE'):
+                            continue
+                        cursor.execute(item['example_sql'])
+                        proof.setdefault('routine_declarations',[]).append({'name':item['name'],'mode':mode or 'default','native_execution_passed':True})
                     for name, status in plugins:
                         if name.upper() not in {'ASSOCIATIVE_ARRAY', 'SYS_REFCURSOR'} or status != 'ACTIVE':
                             continue

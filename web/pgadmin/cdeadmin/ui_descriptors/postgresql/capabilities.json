@@ -587,6 +587,85 @@
           "tier": 1
         }
       ]
+    },
+    {
+      "resource_kind": "extended-statistics",
+      "family": "engine_object",
+      "title": "Extended statistics",
+      "parent_kinds": [
+        "schema"
+      ],
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 2
+        },
+        {
+          "operation_id": "alter",
+          "tier": 2
+        },
+        {
+          "operation_id": "drop",
+          "tier": 2
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 2
+        }
+      ]
+    },
+    {
+      "resource_kind": "parameter-acl",
+      "family": "engine_object",
+      "title": "Parameter privileges",
+      "parent_kinds": [
+        "server"
+      ],
+      "operations": [
+        {
+          "operation_id": "grant",
+          "tier": 2,
+          "version": {
+            "minimum": "15"
+          }
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 2,
+          "version": {
+            "minimum": "15"
+          }
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 2,
+          "version": {
+            "minimum": "15"
+          }
+        }
+      ]
+    },
+    {
+      "resource_kind": "default-privileges",
+      "family": "engine_object",
+      "title": "Default privileges",
+      "parent_kinds": [
+        "database"
+      ],
+      "operations": [
+        {
+          "operation_id": "grant",
+          "tier": 2
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 2
+        },
+        {
+          "operation_id": "inspect",
+          "tier": 2
+        }
+      ]
     }
   ]
 }

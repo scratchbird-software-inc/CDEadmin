@@ -363,6 +363,8 @@ CDEADMIN_SQLITE_RECOVERY_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_SQLITE_RECOVERY
 CDEADMIN_SQLITE_SESSION_LIBRARY = env('CDEADMIN_SQLITE_SESSION_LIBRARY') or ''
 CDEADMIN_SQLITE_ARRAY_LIBRARY = env('CDEADMIN_SQLITE_ARRAY_LIBRARY') or ''
 CDEADMIN_SQLITE_PREUPDATE_LIBRARY = env('CDEADMIN_SQLITE_PREUPDATE_LIBRARY') or ''
+CDEADMIN_SQLITE_CONFIG_LIBRARY = env('CDEADMIN_SQLITE_CONFIG_LIBRARY') or ''
+CDEADMIN_SQLITE_STARTUP_POLICY = env('CDEADMIN_SQLITE_STARTUP_POLICY') or os.path.join(DATA_DIR,'sqlite-startup-policy.json')
 CDEADMIN_SQLITE_ARRAY_MAX_BYTES = int(env('CDEADMIN_SQLITE_ARRAY_MAX_BYTES') or 0) or None
 CDEADMIN_SQLITE_CAPTURE_ROOT = env('CDEADMIN_SQLITE_CAPTURE_ROOT') or ''
 CDEADMIN_SQLITE_CAPTURE_MAX_RUNTIME_SECONDS = int(env('CDEADMIN_SQLITE_CAPTURE_MAX_RUNTIME_SECONDS') or 0) or None
@@ -1234,3 +1236,7 @@ CDEADMIN_MONITORING_HISTORY = {'enabled': False}
 #############################################################################
 from config_overrides import evaluate_and_patch_config
 locals().update(evaluate_and_patch_config(locals()))
+
+# This boundary intentionally runs before models/setup initialize SQLite.
+from sqlite_startup import apply_configured_policy as _apply_sqlite_startup_policy
+_apply_sqlite_startup_policy(sys.modules[__name__])

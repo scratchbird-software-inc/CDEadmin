@@ -60,7 +60,7 @@ def test_native_rebuild_coordinates_renamed_column_indexes_and_trigger(tmp_path,
         for identity,row in list(desired['rows'].items()):
             if row['path'][:2]==['main','owned']:del desired['rows'][identity]
         for identity,row in template['rows'].items():
-            if row['path'][:2]==['main','owned'] or row['name']=='projection':desired['rows'][identity]=deepcopy(row)
+            if row['path'][:2] in [['main','owned'],['main','projection']]:desired['rows'][identity]=deepcopy(row)
         for row in desired['rows'].values():
             if row['kind'] in {'table','view','index','trigger'} and row['name'] in target and row['name']!='audit':row['native']['ddl']=target[row['name']]
         index_name='new_by_value' if change_identities else 'by_value'

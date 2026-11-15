@@ -869,10 +869,6 @@
               "label": "Data pages"
             },
             {
-              "value": "DB_LOG",
-              "label": "Database log"
-            },
-            {
               "value": "HDR_PAGES",
               "label": "Header pages"
             },
@@ -922,7 +918,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). DB_LOG is an obsolete native statistics option refused by Firebird5.0.4 and is not offered. Embedded Linux uses a verified private hardlink to the reviewed inode through native service completion; filesystem write/hardlink support in the approved directory is required. Other platform receipts continue to report unfenced file identity."
     },
     {
       "operation_id": "shutdown_database",

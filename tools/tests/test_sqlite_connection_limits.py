@@ -76,14 +76,15 @@ def test_pending_data_savepoint_rollback_and_authorizer_are_preserved(native,nam
         observed.append(args)
         return sqlite3.SQLITE_OK
     source.set_authorizer(authorizer)
-    result=run(native,'set_connection_limit',limit=name,value=before-1,expected_value=before,confirmed=True)
+    requested=before-1 if before>0 else 1
+    result=run(native,'set_connection_limit',limit=name,value=requested,expected_value=before,confirmed=True)
     assert result['transaction_open'] and observed==[]
     assert source.execute('SELECT * FROM pending').fetchall()==[(7,)] and observed
     source.execute('ROLLBACK TO caller')
     assert source.execute('SELECT * FROM pending').fetchall()==[]
-    assert source.getlimit(code)==before-1  # Native connection state is not rolled back.
+    assert source.getlimit(code)==result['effective_value']  # Native state is not rolled back.
     source.execute('RELEASE caller')
-    assert run(native,'inspect',limit=name)['effective_value']==before-1
+    assert run(native,'inspect',limit=name)['effective_value']==result['effective_value']
 
 
 @pytest.mark.parametrize('values',[{'limit':'unknown'},{'value':True},{'value':-1},{'value':2147483648},

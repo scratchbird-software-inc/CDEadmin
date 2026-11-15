@@ -20,7 +20,7 @@ def _check_created_scope(operation, row, owner=None):
     native = row['native']
     if operation.get('table_owner'):
         from ...workspace.postgresql_creation import TABLE_DEFINITIONS
-        field = TABLE_DEFINITIONS[operation['kind']][4]
+        field = 'stxrelid' if operation['kind']=='extended-statistics' else TABLE_DEFINITIONS[operation['kind']][4]
         if owner is None or int(native['catalog_row'][field]) != owner['native']['oid']:
             raise ValueError('Created table-owned object belongs to a different table identity')
         if operation.get('owner_guard') and owner['native']['oid'] != operation['owner_guard']['oid']:
@@ -36,8 +36,8 @@ def _check_created_scope(operation, row, owner=None):
     field = {'pg_class': 'relnamespace', 'pg_proc': 'pronamespace', 'pg_type': 'typnamespace',
              'pg_collation': 'collnamespace', 'pg_conversion': 'connamespace',
              'pg_ts_config': 'cfgnamespace', 'pg_ts_dict': 'dictnamespace',
-             'pg_ts_parser': 'prsnamespace', 'pg_ts_template': 'tmplnamespace'}.get(native['catalog'])
-    namespace = (owner['native'].get('catalog_row', {}).get('relnamespace') if owner else
+             'pg_ts_parser': 'prsnamespace', 'pg_ts_template': 'tmplnamespace', 'pg_statistic_ext':'stxnamespace'}.get(native['catalog'])
+    namespace = (owner['native'].get('catalog_row', {}).get('relnamespace') if owner and operation['kind']!='extended-statistics' else
                  native.get('catalog_row', {}).get(field))
     if namespace is None or int(namespace) != guard['oid']:
         raise ValueError('Created object belongs to a different schema identity')
@@ -60,7 +60,7 @@ def _created_identities(operations, model, connection):
         owner = None
         if operation.get('table_owner'):
             reference = operation['table_owner']
-            owners = [item for item in model['rows'].values() if item['kind'] == 'table' and
+            owners = [item for item in model['rows'].values() if item['kind'] in ({'table','partitioned-table','materialized-view','foreign-table'} if operation['kind']=='extended-statistics' else {'table'}) and
                 item['name'] == reference['table'] and item['native'].get('schema') == reference['schema']]
             if len(owners) != 1:
                 raise ValueError('Created object owning table is unavailable or ambiguous')
@@ -70,7 +70,7 @@ def _created_identities(operations, model, connection):
                 row['native'].get('schema') == operation['schema'])]
         if owner:
             from ...workspace.postgresql_creation import TABLE_DEFINITIONS
-            field = TABLE_DEFINITIONS[operation['kind']][4]
+            field = 'stxrelid' if operation['kind']=='extended-statistics' else TABLE_DEFINITIONS[operation['kind']][4]
             matches = [item for item in matches if str(item['native']['catalog_row'].get(field)) == str(owner['native']['oid'])]
         if len(matches) != 1:
             raise ValueError('Created native identity is unavailable or ambiguous')

@@ -196,6 +196,8 @@ current_blueprint = LocalProxy(_find_blueprint)
 def create_app(app_name=None):
     # Configuration settings
     import config
+    from sqlite_startup import require_applied_policy
+    require_applied_policy(config)
     if not app_name:
         app_name = config.APP_NAME
 

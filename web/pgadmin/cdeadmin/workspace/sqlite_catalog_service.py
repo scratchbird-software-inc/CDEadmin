@@ -222,3 +222,23 @@ def schema_plan(service, server, request, *, generate_renames=False):
         return preview
     finally:
         provider.client._discard_failed_session(connection)
+
+
+def object_design(service,server,request):
+    import sqlite3
+    from .sqlite_object_design import generate
+    if not isinstance(request,dict) or set(request)!={'database_target_id','baseline','resource_id','operation','fields'}:
+        raise ValueError('SQLite object design requires an exact baseline, object, operation and typed fields')
+    baseline=read_catalog(request['baseline'],engine='sqlite')
+    checked=schema_plan(service,server,{'database_target_id':request['database_target_id'],
+        'baseline':request['baseline'],'desired':request['baseline']})
+    if checked['conflicts']:raise ValueError('Native SQLite schema changed; capture a new baseline')
+    try:desired=generate(baseline,request['resource_id'],request['operation'],request['fields'])
+    except sqlite3.Error as error:raise ValueError('Native SQLite object design refused: '+str(error)[:400]) from None
+    resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
+        'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
+    result=build_export(resources,endpoint_id=baseline['provenance']['endpoint_id'],target_id=request['database_target_id'],
+        generation='native-structured-object-design',include_system=False,refreshed=True,engine='sqlite')
+    return {'snapshot':result['snapshot'],'rebuilds':[request['resource_id']] if request['operation']=='rebuild' else [],
+        'scope':'Independent registered-file design; schema-only empty prototype; no file or original-session mutation',
+        'warnings':['Review the complete native SQL and dependencies. Rebuild converts existing rows at atomic apply; removed or incompatible column values may lose data. Caller sessions and uncommitted work are not inputs to this independent-file design.']}

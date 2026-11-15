@@ -85,7 +85,8 @@
         "role",
         "privilege",
         "default-privileges",
-        "row-policy"
+        "row-policy",
+        "parameter-acl"
       ],
       "order": 6
     },

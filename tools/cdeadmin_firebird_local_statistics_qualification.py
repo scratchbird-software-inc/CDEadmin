@@ -21,7 +21,7 @@ def qualify(output,runtime):
         'local_services.py','embedded_provider.py','provider.py','query_client.py','service_connection.py')]
     names+=['web/pgadmin/cdeadmin/ui_descriptors/firebird/capabilities.json',
             'tools/cdeadmin_firebird_local_statistics_qualification.py']
-    proof={'complete':False,'scope':'Owned Engine13-only local native Firebird5.0.4 client validate/plan/apply and statistics; no network server or credentials. Not HTTP/platform or race-fenced file identity qualification.',
+    proof={'complete':False,'scope':'Owned Engine13-only local native Firebird5.0.4 client validate/plan/apply and statistics; no network server or credentials. Linux private-hardlink inode qualification; not HTTP or other-platform acceptance.',
         'checks':[],'source_sha256':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest()for name in names}}
     before=_runtime_fingerprint(runtime);area=None
     try:
@@ -68,6 +68,43 @@ def qualify(output,runtime):
                 selected={**base,'draft':{'statistics_flags':['DATA_PAGES','IDX_PAGES'],'tables':[{'value':'Stats 雪'}]}}
                 response=client.apply_admin_operation(client.plan_admin_operation(selected));result=response['driver_observation'];assert result['server_completed'];assert any('Stats 雪'in line for line in result['output']),result['output']
                 proof['checks'].append({'scope':'native-typed-table-filter','line_count':len(result['output']),'output_sha256':hashlib.sha256(json.dumps(result['output'],ensure_ascii=False).encode()).hexdigest()})
+                # Unlink the original after review/pinning and replace its path
+                # during actual native dispatch. A symlink descriptor that is merely
+                # canonicalized back to the original pathname cannot pass this.
+                original=Path(route['database']);original_bytes=original.read_bytes()
+                native_path=client._server_operation_database;swapped=[False]
+                def swap_during_native_dispatch(database):
+                    if not swapped[0]:
+                        swapped[0]=True
+                        assert '/.scratchrobin-statistics-' in database
+                        original.unlink();create(route)
+                        c=client._connect({'route':route});q=c.cursor()
+                        try:
+                            q.execute('DROP TABLE "Stats 雪"');q.execute('CREATE TABLE REPLACEMENT(ID INTEGER)');c.commit()
+                        finally:q.close();client._forget_and_close(c)
+                    return native_path(database)
+                client._server_operation_database=swap_during_native_dispatch
+                try:
+                    response=client.apply_admin_operation(client.plan_admin_operation(selected))
+                    result=response['driver_observation']
+                    assert result['file_identity_race_fenced'] and result['server_completed']
+                    assert any('Stats 雪' in line for line in result['output']),result['output']
+                    assert swapped[0] and result['service_release']['service_handle_released']
+                    proof['checks'].append('Native statistics read the pinned original after unlink and same-path replacement during dispatch')
+                finally:
+                    client._server_operation_database=native_path
+                    original.unlink(missing_ok=True);original.write_bytes(original_bytes)
+                for flag in ('DATA_PAGES','HDR_PAGES','IDX_PAGES','SYS_RELATIONS','RECORD_VERSIONS','NOCREATION','ENCRYPTION'):
+                    item={**base,'draft':{'statistics_flags':[flag]}}
+                    result=client.apply_admin_operation(client.plan_admin_operation(item))['driver_observation']
+                    assert result['server_completed'] and result['file_identity_race_fenced']
+                    proof['checks'].append({'scope':'native-statistics-flag','flag':flag,'lines':len(result['output'])})
+                obsolete={**base,'draft':{'statistics_flags':['DB_LOG']}}
+                assert client.validate_admin_operation(obsolete)['errors']
+                try:client.plan_admin_operation(obsolete)
+                except RelationalClientError:pass
+                else:raise AssertionError('Obsolete native DB_LOG option admitted')
+                proof['checks'].append('Native5 obsolete DB_LOG is refused by typed validation and before service attachment')
                 for changed in [{'host':'127.0.0.1'},{'credential_reference_id':'not-local'}]:
                     try:client.plan_admin_operation({**base,'_provider_route':{**route,**changed}})
                     except RelationalClientError:pass

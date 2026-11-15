@@ -255,6 +255,22 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         if row['kind'] in {'table', 'view', 'fts-table', 'virtual-table'} and row['resource_id'] not in before}
     replaced_views={identity for identity,row in after.items() if row['kind']=='view' and identity in before and
         not _equal(_definition(before[identity]),_definition(row))}
+    if rebuilds and any(row['kind']=='view' for row in after.values()):
+        from .sqlite_retained_schema import _prototype
+        from .sqlite_columns import verify_views
+        from ..providers.sqlite.provider import _resources
+        prototype=None
+        try:
+            prototype=_prototype(desired,{'main'})
+            if not verify_views(desired,_resources(prototype,{})):
+                raise ValueError('Desired view projection facts differ from the rebuilt native schema')
+            # Their native SELECTs determine these facts; table affinity changes
+            # can change view column types without changing a view definition.
+            replaced_views.update(identity for identity,row in after.items() if row['kind']=='view')
+        except (ValueError,sqlite3.Error) as error:
+            blockers.append({'resource_id':'','name':'Derived view projections','reason':str(error)[:400]})
+        finally:
+            if prototype is not None:prototype.close()
     def derived_view_column(row):
         return (row['kind']=='column' and len(row['path'])==3 and row['path'][0]=='main' and
             _resource_id('view',['main'],row['path'][1]) in replaced_views)

@@ -735,6 +735,109 @@ class DataStudioService:
             raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def sqlite_connection_maintenance_review(self,context,session_id,request):
+        session,binding=self._operational_session(context,session_id)
+        if session.language_profile!='sqlite-sql' or context.provider_id!='org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        binding.instance._require('administer')
+        recipes={'reindex':'REINDEX','analyze':'ANALYZE','shrink_memory':'PRAGMA shrink_memory'}
+        if (not isinstance(request,dict) or set(request)!={'maintenance'} or
+                not isinstance(request.get('maintenance'),str) or request['maintenance'] not in recipes):
+            raise DataStudioAccessError('Select a typed original-session maintenance operation')
+        if type(getattr(session,'native_work_revision',None)) is not int:
+            raise DataStudioAccessError('Original native work revision unavailable')
+        if request['maintenance']=='shrink_memory':
+            observed=binding.instance.native_connection_pragmas_action({
+                'session_id':session.provider_session['session_id'],'language_profile':session.language_profile,
+                'operation':'inspect_pragma_value','pragma':'pragma_list'})
+            if observed.get('truncated') or ['shrink_memory'] not in observed.get('rows',[]):
+                raise DataStudioAccessError('Native connection-memory release unavailable in this build')
+        source=recipes[request['maintenance']]
+        plan=self.scripts.prepare(context,session_id,source)
+        if plan.get('state')=='ready':
+            retained=self.scripts.plans[plan['plan_id']]
+            retained['expected_native_work_revision']=str(session.native_work_revision)
+            plan['expected_native_work_revision']=str(session.native_work_revision)
+        return {**plan,'generated_source':source,'maintenance':request['maintenance'],
+            'scope':'original-query-session','automatic_retry':False,
+            'warning':'Show native SQL before advancing. REINDEX/ANALYZE target the current native session scope; existing transactions remain caller-owned. Memory release acknowledgement does not prove a particular byte reduction.'}
+
+    @serialized_execution
+    def sqlite_connection_pragmas_action(self, context, session_id, request, *, host_authorized=False,host_principal=None):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_connection_pragmas_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile,
+                '_native_work_revision':getattr(session,'native_work_revision',None),
+                '_host_authorized':host_authorized is True,'_host_principal':host_principal})
+        except (ValueError, RelationalClientError) as error:
+            if getattr(error,'configuration_outcome',None)=='unknown_outcome':
+                return {'outcome':'startup_policy_publication_unknown','accepted':False,'native_applied':False,
+                    'inspect_startup_policy_required':True,'automatic_retry':False,'source_transaction_finalized':False}
+            if getattr(error,'native_outcome',None)=='unknown_outcome':
+                return {'outcome':'unknown_outcome','accepted':False,'scope':'original-connection',
+                    'effective_value_observed':False,'automatic_retry':False,
+                    'new_explicit_review_required':True}
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def mariadb_editor_context_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'mariadb-sql' or context.provider_id != 'org.cdeadmin.mariadb':
+            raise DataStudioAccessError('Native MariaDB query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_editor_context_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            if getattr(error,'native_outcome',None)=='unknown_outcome':
+                return {'outcome':'unknown_outcome','scope':'original-session',
+                    'accepted':False,'effective_value_observed':False,
+                    'close_session_required':True,'automatic_retry':False,
+                    'native_diagnostics_preserved':False}
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def mariadb_session_flagsets_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'mariadb-sql' or context.provider_id != 'org.cdeadmin.mariadb':
+            raise DataStudioAccessError('Native MariaDB query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_session_flagsets_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            if getattr(error,'native_outcome',None)=='unknown_outcome':
+                return {'outcome':'unknown_outcome','scope':'original-session',
+                    'accepted':False,'effective_value_observed':False,
+                    'close_session_required':True,'automatic_retry':False,
+                    'native_diagnostics_preserved':False}
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def sqlite_connection_config_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
+            raise DataStudioAccessError('Native SQLite query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_connection_config_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile,
+                '_native_work_revision':getattr(session,'native_work_revision',None)})
+        except (ValueError, RelationalClientError) as error:
+            if getattr(error,'native_outcome',None)=='unknown_outcome':
+                return {'outcome':'unknown_outcome','accepted':False,'scope':'original-connection',
+                    'effective_value_observed':False,'automatic_retry':False,'close_session_required':True}
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def sqlite_connection_limits_action(self, context, session_id, request):
         session, binding = self._operational_session(context, session_id)
         if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':

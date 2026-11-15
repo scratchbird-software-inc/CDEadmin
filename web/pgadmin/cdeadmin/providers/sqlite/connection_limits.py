@@ -6,6 +6,8 @@ changes. Native hard caps may clamp a requested value; report the observed value
 from ...sdk import RelationalClientError
 
 LIMITS = {
+    'vdbe_op': 'SQLITE_LIMIT_VDBE_OP',
+    'worker_threads': 'SQLITE_LIMIT_WORKER_THREADS',
     'length': 'SQLITE_LIMIT_LENGTH',
     'sql_length': 'SQLITE_LIMIT_SQL_LENGTH',
     'column': 'SQLITE_LIMIT_COLUMN',

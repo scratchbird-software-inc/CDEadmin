@@ -460,7 +460,7 @@ def apply_review(provider, route, record):
             for operation in record['plan']['operations']:
                 if operation['operation']=='append-columns' and not verify_columns(operation,list(actual_objects.values())):
                     raise _PreservationRefused('SQLite appended native columns differ from the desired catalog')
-            if (any(operation['operation']=='append-columns' for operation in record['plan']['operations']) and
+            if (any(operation['operation'] in {'append-columns','rebuild'} for operation in record['plan']['operations']) and
                     not verify_views(record['desired'],list(actual_objects.values()))):
                 raise _PreservationRefused('SQLite derived view column facts differ from the desired native catalog')
             for operation in replacements:

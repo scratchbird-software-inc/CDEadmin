@@ -426,8 +426,32 @@
             "field": "colconstype",
             "equals": "g"
           },
-          "native_keyword": "GENERATED ALWAYS AS ... STORED",
-          "help": "Read-only once the column exists."
+          "native_keyword": "GENERATED ALWAYS AS ... STORED | VIRTUAL",
+          "help": "Creation expression. Existing columns use the column expression-change operation."
+        },
+        {
+          "field_id": "generated_kind",
+          "label": "Generation storage",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "s",
+              "label": "Stored"
+            },
+            {
+              "value": "v",
+              "label": "Virtual (18+)",
+              "version": {
+                "minimum": "18"
+              }
+            }
+          ],
+          "default": "s",
+          "visible_when": {
+            "field": "colconstype",
+            "equals": "g"
+          }
         },
         {
           "field_id": "is_pk",
