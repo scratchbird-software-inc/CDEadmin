@@ -15,6 +15,8 @@
 
 import {useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../actions/t_actions';
 import {Dialog} from '../overlays/Dialog';
 import {Box, Grid, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
@@ -43,13 +45,14 @@ function validate(fields, values) {
     if(!fieldVisible(field, values) || field.available === false || field.readonly) continue;
     const value = values[field.field_id];
     const empty = value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length);
-    if(field.required && empty) errors[field.field_id] = `${field.label} is required.`;
+    if(field.required && empty) errors[field.field_id] = gettext('%s is required.', field.label);
   }
   return errors;
 }
 
 export default function OperationDialog({open, operation, targetName, context={}, executionHosts=[],
   plan, apply, onClose, onApplied}) {
+  const localeRev = useLocaleRevision();
   const needsTypedName = operation.confirmation === 'typed_name';
   // A typed-name operation's `confirmation` field is the typed box below; the
   // draft still carries it (see `draft`), so it is not shown twice.
@@ -63,7 +66,7 @@ export default function OperationDialog({open, operation, targetName, context={}
   // Errors show on a field once it is edited, and on every field once run is tried.
   const [touched, setTouched] = useState(() => new Set());
   const [submitAttempted, setSubmitAttempted] = useState(false);
-  const errors = useMemo(() => validate(fields, values), [fields, values]);
+  const errors = useMemo(() => validate(fields, values), [fields, values, localeRev]);
   const visible = activeFields(fields, {draft: values});
   const groups = operation.groups?.length ? operation.groups : [...new Set(visible.map((field) => field.group || ''))];
   const confirmed = !needsTypedName || (targetName && confirmText.trim() === targetName);
@@ -120,32 +123,39 @@ export default function OperationDialog({open, operation, targetName, context={}
   const receipt = applyState.result?.provider_result ?? applyState.result;
   const sql = planSqlText(planState.plan);
 
-  return <Dialog open={open} title={targetName ? `${operation.title} — ${targetName}` : operation.title}
+  const resolvedFormRef = operation.form_reference || undefined;
+  const resolvedFormKey = !resolvedFormRef
+    ? (operation.form?.form_key || (operation.form_id ? `operation:${operation.form_id}` : 'operation:execute'))
+    : undefined;
+
+  const opTitle = gettext.retranslate ? gettext.retranslate(operation.title || '') : operation.title;
+  return <Dialog open={open} title={targetName ? `${opTitle} — ${targetName}` : opTitle}
+    formReference={resolvedFormRef} formKey={resolvedFormKey}
     size={operation.tier === 3 || visible.some((field) => ['grid', 'code'].includes(field.control)) ? 'large' : 'medium'}
     busy={busy} onClose={busy ? undefined : onClose}
     actions={<>
-      <Button intent="neutral" onClick={onClose} disabled={busy}>{applyState.status === 'done' ? 'Close' : 'Cancel'}</Button>
-      <Button intent="neutral" disabled={busy || Object.keys(errors).length > 0} onClick={doPlan}>Preview</Button>
+      <Button intent="neutral" onClick={onClose} disabled={busy}>{applyState.status === 'done' ? gettext('Close') : gettext('Cancel')}</Button>
+      <Button intent="neutral" disabled={busy || Object.keys(errors).length > 0} onClick={doPlan}>{gettext('Preview')}</Button>
       <Button intent={operation.confirmation === 'typed_name' ? 'destructive' : 'primary'} loading={applyState.status === 'loading'}
         disabled={busy || !confirmed || applyState.status === 'done' || blocked}
         onClick={doApply}>
-        {planState.plan ? 'Run' : 'Preview and run'}
+        {planState.plan ? gettext('Run') : gettext('Preview and run')}
       </Button>
     </>}>
     <Stack gap="comfortable" data-cdeadmin-qa-key={`operation-dialog.${operation.operation_id}`}>
       {operation.status === 'draft' && <Banner status="info">
-        This operation is a draft: verification against a live server is pending.
+        {gettext('This operation is a draft: verification against a live server is pending.')}
       </Banner>}
-      {operation.description && <Banner status="info">{operation.description}</Banner>}
-      {operation.tier === 3 && operation.execution_host && <Select label="Execution host" fullWidth size="small"
-        options={executionHosts.length ? executionHosts : [{value: 'local', label: 'This ScratchRobin server'}]}
-        value={host} onChange={(next) => setHost(next)} helperText="Where the native utility runs." />}
+      {operation.description && <Banner status="info">{gettext(operation.description)}</Banner>}
+      {operation.tier === 3 && operation.execution_host && <Select label={gettext('Execution host')} fullWidth size="small"
+        options={executionHosts.length ? executionHosts : [{value: 'local', label: gettext('This ScratchRobin server')}]}
+        value={host} onChange={(next) => setHost(next)} helperText={gettext('Where the native utility runs.')} />}
       {groups.map((group) => {
         const groupFields = visible.filter((field) => (field.group || '') === group);
         if(!groupFields.length) return null;
-        return <Box key={group || '_'} component="section" aria-label={group || operation.title}>
+        return <Box key={group || '_'} component="section" aria-label={group ? gettext(group) : opTitle}>
           {group && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
-            textTransform: 'uppercase', color: 'text.secondary'}}>{group}</Box>}
+            textTransform: 'uppercase', color: 'text.secondary'}}>{gettext(group)}</Box>}
           <Grid columns={groupFields.some((field) => ['grid', 'code', 'keyvalue'].includes(field.control)) ?
             1 : 'repeat(auto-fit, minmax(240px, 1fr))'}>
             {groupFields.map((field) => <FieldControl key={field.field_id} field={field} value={values[field.field_id]}
@@ -156,27 +166,27 @@ export default function OperationDialog({open, operation, targetName, context={}
         </Box>;
       })}
       {visible.length === 0 && <Box sx={{fontSize: '0.8125rem', color: 'text.secondary'}}>
-        This operation takes no options.
+        {gettext('This operation takes no options.')}
       </Box>}
-      {needsTypedName && <TextField label={`Type ${targetName || 'the object name'} to confirm`} size="small" fullWidth
+      {needsTypedName && <TextField label={gettext('Type %s to confirm', targetName || gettext('the object name'))} size="small" fullWidth
         value={confirmText} onChange={(event) => setConfirm(event.target.value)}
-        validationMessage={confirmText && !confirmed ? 'Name does not match.' : undefined} />}
+        validationMessage={confirmText && !confirmed ? gettext('Name does not match.') : undefined} />}
       {planState.status === 'error' && <ValidationMessage status="error">{planState.error}</ValidationMessage>}
       {planState.plan && <Box data-cdeadmin-qa-key="operation-dialog.plan">
         {blocked && <Banner status="warning">
-          The provider will not run this: {(planState.plan.blockers || []).join(', ') || 'blocked'}.
+          {gettext('The provider will not run this: %s.', (planState.plan.blockers || []).join(', ') || gettext('blocked'))}
         </Banner>}
         {(planState.plan.warnings || []).length > 0 && <Banner status="info">{planState.plan.warnings.join(' ')}</Banner>}
         {Array.isArray(planState.plan.statements) && planState.plan.statements.length > 0 && (
           <Box sx={{mt: 1, mb: 1}}>
             <ScratchDiffTable
-              title="Planned Statement Impact"
+              title={gettext('Planned Statement Impact')}
               qaKey="operation-dialog.plan.diff-table"
               items={planState.plan.statements.map((stmt, idx) => ({
                 id: `stmt-${idx}`,
                 delta: operation.confirmation === 'typed_name' ? 'remove' : 'modify',
                 kind: operation.resource_kind || 'operation',
-                name: typeof stmt === 'string' ? `Step ${idx + 1}` : (stmt.label || stmt.kind || `Step ${idx + 1}`),
+                name: typeof stmt === 'string' ? gettext('Step %s', idx + 1) : (stmt.label || stmt.kind || gettext('Step %s', idx + 1)),
                 summary: typeof stmt === 'string' ? stmt : (stmt.sql || stmt.statement || stmt.summary || ''),
                 risk: operation.confirmation === 'typed_name' ? 'destructive' : 'safe',
               }))}
@@ -184,16 +194,16 @@ export default function OperationDialog({open, operation, targetName, context={}
           </Box>
         )}
         <Box component="h4" sx={{m: 0, mt: 1, mb: 0.5, fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary'}}>
-          Provider plan
+          {gettext('Provider plan')}
         </Box>
-        <CodeEditor label="Provider plan" readonly language="sql"
-          value={sql || '-- Native operation; the provider reported no SQL text.'} />
+        <CodeEditor label={gettext('Provider plan')} readonly language="sql"
+          value={sql || gettext('-- Native operation; the provider reported no SQL text.')} />
       </Box>}
       {applyState.status === 'error' && <ValidationMessage status="error">{applyState.error}</ValidationMessage>}
       {applyState.status === 'done' && <Box data-cdeadmin-qa-key="operation-dialog.receipt">
-        <ValidationMessage status="success">Completed.</ValidationMessage>
+        <ValidationMessage status="success">{gettext('Completed.')}</ValidationMessage>
         {receipt && (operation.produces_log || typeof receipt === 'string') &&
-          <CodeEditor label="Operation output" readonly language="text"
+          <CodeEditor label={gettext('Operation output')} readonly language="text"
             value={typeof receipt === 'string' ? receipt : JSON.stringify(receipt, null, 2)} />}
       </Box>}
     </Stack>

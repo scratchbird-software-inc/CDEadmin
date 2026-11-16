@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({users:true,consistent:true,checksum:true,threads:4,compression:'zstd;level=1',timeout_seconds:3600},null,2);
@@ -39,6 +40,7 @@ export default function MySQLInstanceBackups({post,endpointUrl}) {
     catch(failure) {setError(failure.message || 'Backup file download failed');}
   };
   return <Box sx={{p:2}}>
+    <FormReference formKey="mysql-instance-backups" />
     <Alert severity="info">Create a native MySQL Shell instance dump containing its selected schemas, objects, data and optional accounts/roles/grants. System schemas excluded by MySQL Shell remain excluded. The utility can briefly pause writes to establish consistency. Output stays in a private directory on the application execution host. Account definitions can contain authentication material.</Alert>
     <Alert severity="info">Backup completion and file verification are separate from restored-data/definition verification, physical recovery and production cutover. Managed backup holds protect source archives until separately retired. Closing this view does not cancel a running job.</Alert>
     {error && <Alert severity="error">{error}</Alert>}

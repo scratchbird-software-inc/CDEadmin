@@ -9,6 +9,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Checkbox, Select} from '../../primitives/Choice';
@@ -20,14 +21,21 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import {t_actions} from '../../actions/t_actions';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
   DesignCheckpointHistoryDrawer,
+  DesignerElementNavigator,
   DesignerModalTabs,
+  DesignerShellStatusBar,
   DesignerTabbedMenu,
+  executeDesignerCommand,
+  formatSavePointStatusLabel,
   FormGrid,
   KeyValuePairsEditor,
   TypedRowsEditor,
+  useDesignerShellRegions,
+  useDesignerWorkbenchEvents,
   WhereUsedDialog,
 } from './DesignerChrome';
 import {
@@ -35,33 +43,59 @@ import {
   SharedDDNTaskController,
 } from './sharedDesignLibrary';
 
-const LEVEL_OPTIONS = Object.freeze([
-  {value: 'all', label: 'All levels', viewId: 'erd_all_levels'},
-  {
-    value: 'conceptual',
-    label: 'Conceptual (Whiteboard)',
-    viewId: 'erd_conceptual',
-  },
-  {value: 'logical', label: 'Logical', viewId: 'erd_logical'},
-  {value: 'physical', label: 'Physical', viewId: 'erd_physical'},
-  {value: 'deployment', label: 'Deployment / System', viewId: 'erd_deployment'},
+const LEVEL_CYCLE = Object.freeze([
+  'all',
+  'conceptual',
+  'logical',
+  'physical',
+  'deployment',
 ]);
 
-const INSPECTOR_LEVEL_OPTIONS = Object.freeze([
-  {value: 'conceptual', label: 'Conceptual'},
-  {value: 'logical', label: 'Logical'},
-  {value: 'physical', label: 'Physical'},
-  {value: 'deployment', label: 'Deployment'},
-]);
+const UDT_SQL_TYPE_MAP = Object.freeze({
+  uuidv7: {logical: 'uuid', physical: 'UUID'},
+  'money-dec': {logical: 'decimal', physical: 'NUMERIC(19,4)'},
+  'email-dom': {logical: 'string', physical: 'VARCHAR(320)'},
+  'utc-ts': {logical: 'timestamptz', physical: 'TIMESTAMPTZ'},
+  'json-doc': {logical: 'json', physical: 'JSONB'},
+});
 
-const ENGINE_OPTIONS = Object.freeze([
-  {value: 'postgresql', label: 'PostgreSQL'},
-  {value: 'sqlite', label: 'SQLite'},
-  {value: 'duckdb', label: 'DuckDB'},
-  {value: 'firebird', label: 'Firebird 5'},
-  {value: 'mysql', label: 'MySQL'},
-  {value: 'mariadb', label: 'MariaDB'},
-]);
+function getLevelOptions() {
+  return [
+    {value: 'all', label: gettext('All levels'), viewId: 'erd_all_levels'},
+    {
+      value: 'conceptual',
+      label: gettext('Conceptual (Whiteboard)'),
+      viewId: 'erd_conceptual',
+    },
+    {value: 'logical', label: gettext('Logical'), viewId: 'erd_logical'},
+    {value: 'physical', label: gettext('Physical'), viewId: 'erd_physical'},
+    {
+      value: 'deployment',
+      label: gettext('Deployment / System'),
+      viewId: 'erd_deployment',
+    },
+  ];
+}
+
+function getInspectorLevelOptions() {
+  return [
+    {value: 'conceptual', label: gettext('Conceptual')},
+    {value: 'logical', label: gettext('Logical')},
+    {value: 'physical', label: gettext('Physical')},
+    {value: 'deployment', label: gettext('Deployment')},
+  ];
+}
+
+function getEngineOptions() {
+  return [
+    {value: 'postgresql', label: gettext('PostgreSQL')},
+    {value: 'sqlite', label: gettext('SQLite')},
+    {value: 'duckdb', label: gettext('DuckDB')},
+    {value: 'firebird', label: gettext('Firebird 5')},
+    {value: 'mysql', label: gettext('MySQL')},
+    {value: 'mariadb', label: gettext('MariaDB')},
+  ];
+}
 
 const LOGICAL_TYPE_OPTIONS = Object.freeze([
   {value: 'string', label: 'string'},
@@ -85,25 +119,31 @@ const CASE_STYLE_OPTIONS = Object.freeze([
   {value: 'camelCase', label: 'camelCase'},
 ]);
 
-const MIGRATION_FORMAT_OPTIONS = Object.freeze([
-  {value: 'plain_sql', label: 'Plain Transactional SQL'},
-  {value: 'flyway', label: 'Flyway (V{n}__{name}.sql)'},
-  {value: 'liquibase', label: 'Liquibase Formatted SQL'},
-  {value: 'atlas', label: 'Atlas Versioned SQL'},
-]);
+function getMigrationFormatOptions() {
+  return [
+    {value: 'plain_sql', label: gettext('Plain Transactional SQL')},
+    {value: 'flyway', label: gettext('Flyway (V{n}__{name}.sql)')},
+    {value: 'liquibase', label: gettext('Liquibase Formatted SQL')},
+    {value: 'atlas', label: gettext('Atlas Versioned SQL')},
+  ];
+}
 
-const BASELINE_MODE_OPTIONS = Object.freeze([
-  {value: 'active', label: 'Active Accepted Version'},
-  {value: 'version', label: 'Specific Checkpoint'},
-  {value: 'catalog', label: 'Live Catalog Baseline'},
-]);
+function getBaselineModeOptions() {
+  return [
+    {value: 'active', label: gettext('Active Accepted Version')},
+    {value: 'version', label: gettext('Specific Checkpoint')},
+    {value: 'catalog', label: gettext('Live Catalog Baseline')},
+  ];
+}
 
-const TOPOLOGY_ACTION_OPTIONS = Object.freeze([
-  {value: 'relocate_replica', label: 'Relocate Replica'},
-  {value: 'promote_failover', label: 'Promote Failover'},
-  {value: 'provision_node', label: 'Provision Host / Instance'},
-  {value: 'decommission_node', label: 'Decommission Node'},
-]);
+function getTopologyActionOptions() {
+  return [
+    {value: 'relocate_replica', label: gettext('Relocate Replica')},
+    {value: 'promote_failover', label: gettext('Promote Failover')},
+    {value: 'provision_node', label: gettext('Provision Host / Instance')},
+    {value: 'decommission_node', label: gettext('Decommission Node')},
+  ];
+}
 
 const EMPTY_ERD_STATE = Object.freeze({
   look_handdrawn: false,
@@ -121,7 +161,7 @@ const EMPTY_ERD_STATE = Object.freeze({
 
 function resolveViewForLevel(workspace, level) {
   if (!workspace?.files) return workspace?.view || '';
-  const target = LEVEL_OPTIONS.find((opt) => opt.value === level)?.viewId;
+  const target = getLevelOptions().find((opt) => opt.value === level)?.viewId;
   if (!target) return workspace.view;
   const entryText = workspace.files[workspace.entry] || '';
   if (
@@ -197,6 +237,7 @@ export function ERDDesignerSurface({
   designId,
   client: suppliedClient,
   controller: suppliedController,
+  commands = t_actions,
   readOnly = false,
   executeCommand,
   onStateChange,
@@ -221,6 +262,18 @@ export function ERDDesignerSurface({
 
   const callbacks = useRef({executeCommand, onStateChange, onError});
   callbacks.current = {executeCommand, onStateChange, onError};
+  const shellRegistryRef = useRef(null);
+  const openPropertiesDrawerRef = useRef(() => {});
+  const erdUndoStackRef = useRef([]);
+  const erdRedoStackRef = useRef([]);
+  const erdClipboardRef = useRef(null);
+
+  const levelOptions = useMemo(() => getLevelOptions(), []);
+  const inspectorLevelOptions = useMemo(() => getInspectorLevelOptions(), []);
+  const engineOptions = useMemo(() => getEngineOptions(), []);
+  const migrationFormatOptions = useMemo(() => getMigrationFormatOptions(), []);
+  const baselineModeOptions = useMemo(() => getBaselineModeOptions(), []);
+  const topologyActionOptions = useMemo(() => getTopologyActionOptions(), []);
 
   const [sessionState, setSessionState] = useState(() => controller.state());
   const [loading, setLoading] = useState(!sessionState.loaded);
@@ -229,6 +282,7 @@ export function ERDDesignerSurface({
   const [menuTab, setMenuTab] = useState('model');
   const [level, setLevel] = useState('all');
   const [busyAction, setBusyAction] = useState(false);
+  const [canvasToolMode, setCanvasToolMode] = useState('pointer');
 
   // Structured 4-level ERD state + right-hand Property Inspector
   const [erdState, setErdState] = useState(EMPTY_ERD_STATE);
@@ -236,6 +290,37 @@ export function ERDDesignerSurface({
   const [inspectorLevel, setInspectorLevel] = useState('physical');
   const [selectedElementId, setSelectedElementId] = useState('');
   const [elementDraft, setElementDraft] = useState(null);
+
+  const applyErdStateWithUndo = useCallback((updater) => {
+    setErdState((cur) => {
+      const next = typeof updater === 'function' ? updater(cur) : updater;
+      if (next !== cur) {
+        erdUndoStackRef.current.push(cur);
+        erdRedoStackRef.current = [];
+      }
+      return next;
+    });
+  }, []);
+
+  const handleUndoErd = useCallback(() => {
+    if (readOnly || erdUndoStackRef.current.length === 0) return;
+    const prev = erdUndoStackRef.current.pop();
+    setErdState((cur) => {
+      erdRedoStackRef.current.push(cur);
+      return prev;
+    });
+    setSurfaceNotice(gettext('Reverted last ERD edit.'));
+  }, [readOnly]);
+
+  const handleRedoErd = useCallback(() => {
+    if (readOnly || erdRedoStackRef.current.length === 0) return;
+    const next = erdRedoStackRef.current.pop();
+    setErdState((cur) => {
+      erdUndoStackRef.current.push(cur);
+      return next;
+    });
+    setSurfaceNotice(gettext('Restored ERD edit.'));
+  }, [readOnly]);
 
   // Naming standards live summary badge + modal state (SR-F-030012)
   const [standardsOpen, setStandardsOpen] = useState(false);
@@ -440,11 +525,37 @@ export function ERDDesignerSurface({
     }
   }, [level]);
 
+  const fallbackPhysicalTables = useMemo(() => {
+    const hasStructured =
+      (erdState.conceptual_entities || []).length > 0 ||
+      (erdState.logical_entities || []).length > 0 ||
+      (erdState.physical_tables || []).length > 0 ||
+      (erdState.deployment_nodes || []).length > 0;
+    if (hasStructured) return erdState.physical_tables || [];
+    const nodes = sessionState.layout?.nodes || [];
+    return nodes.map((n, idx) => ({
+      id: n.id || `layout-node-${idx + 1}`,
+      name: n.name || n.label || n.id || `table_${idx + 1}`,
+      schema: 'public',
+      engine: 'postgresql',
+      fields: [
+        {name: 'id', datatype: 'BIGINT', pk: true, nullable: false, references: ''},
+      ],
+      indexes: [],
+      foreign_keys: [],
+    }));
+  }, [erdState, sessionState.layout]);
+
   // Sync selected element draft when erdState or inspectorLevel changes
   const activeLevelItems = useMemo(() => {
+    if (inspectorLevel === 'physical') {
+      return (erdState.physical_tables || []).length > 0
+        ? erdState.physical_tables
+        : fallbackPhysicalTables;
+    }
     const key = listKeyForInspectorLevel(inspectorLevel);
     return erdState[key] || [];
-  }, [erdState, inspectorLevel]);
+  }, [erdState, fallbackPhysicalTables, inspectorLevel]);
 
   useEffect(() => {
     if (!activeLevelItems.length) {
@@ -461,76 +572,92 @@ export function ERDDesignerSurface({
     setElementDraft(hydrateElementDraft(inspectorLevel, existing));
   }, [activeLevelItems, inspectorLevel, selectedElementId]);
 
-  const runToolbarCommand = useCallback(async (id, invoke) => {
-    setSurfaceError('');
-    try {
-      if (callbacks.current.executeCommand) {
-        return await callbacks.current.executeCommand(id, {
+  const runToolbarCommand = useCallback(
+    async (id, invoke) => {
+      setSurfaceError('');
+      try {
+        return await executeDesignerCommand({
+          commandId: id,
           invoke,
+          executeCommand: callbacks.current.executeCommand,
+          commands,
+          shellRegistry: shellRegistryRef.current,
           enabled: true,
         });
+      } catch (err) {
+        setSurfaceError(err.message);
+        callbacks.current.onError?.(err);
+        return null;
       }
-      return await invoke();
-    } catch (err) {
-      setSurfaceError(err.message);
-      callbacks.current.onError?.(err);
-      return null;
-    }
-  }, []);
+    },
+    [commands]
+  );
 
   // -------------------------------------------------------------------------
   // Authoring & Property Inspector actions
   // -------------------------------------------------------------------------
 
-  const quickAddLevelElement = async (targetLevel) => {
+  const quickAddLevelElement = async (targetLevel, customName = null) => {
     setInspectorOpen(true);
     setInspectorLevel(targetLevel);
+    openPropertiesDrawerRef.current?.();
     if (level !== 'all' && level !== targetLevel) {
       setLevel(targetLevel);
     }
+    const key = listKeyForInspectorLevel(targetLevel);
+    const existingList = erdState[key] || [];
+    const idx = existingList.length + 1;
     if (typeof client.mutateErdElements !== 'function') {
-      const fallbackDraft = makeBlankElementDraft(targetLevel, activeLevelItems.length + 1);
+      const fallbackDraft = {
+        ...makeBlankElementDraft(targetLevel, idx),
+        id: `local-${targetLevel}-${Date.now()}-${idx}`,
+      };
+      if (customName) fallbackDraft.name = customName;
+      applyErdStateWithUndo((cur) => ({
+        ...cur,
+        [key]: [...(cur[key] || []), fallbackDraft],
+      }));
+      setSelectedElementId(fallbackDraft.id);
       setElementDraft(fallbackDraft);
       return;
     }
     setBusyAction(true);
     setSurfaceError('');
     try {
-      const idx = (erdState[listKeyForInspectorLevel(targetLevel)] || []).length + 1;
       let payload;
       if (targetLevel === 'conceptual') {
         payload = {
           operation: 'upsert_conceptual',
-          entity: {name: `Concept ${idx}`, area: 'Core'},
-          note: `Added conceptual box Concept ${idx}`,
+          entity: {name: customName || `Concept ${idx}`, area: 'Core'},
+          note: `Added conceptual box ${customName || `Concept ${idx}`}`,
         };
       } else if (targetLevel === 'logical') {
         payload = {
           operation: 'upsert_logical',
           entity: {
-            name: `Entity${idx}`,
+            name: customName || `Entity${idx}`,
             fields: [{name: 'id', datatype: 'bigint', pk: true, nullable: false}],
           },
-          note: `Added logical entity Entity${idx}`,
+          note: `Added logical entity ${customName || `Entity${idx}`}`,
         };
       } else if (targetLevel === 'deployment') {
         payload = {
           operation: 'upsert_deployment_node',
           node: {
-            name: `db-node-${idx}`,
+            name: customName || `db-node-${idx}`,
             engine: 'postgresql',
             role: 'primary',
             host: `db${idx}.internal`,
             location: 'us-east-1',
             tables: [],
           },
-          note: `Added deployment node db-node-${idx}`,
+          note: `Added deployment node ${customName || `db-node-${idx}`}`,
         };
       } else {
         payload = {
           operation: 'upsert_physical_table',
           table: {
-            name: `table_${idx}`,
+            name: customName || `table_${idx}`,
             schema: 'public',
             engine: 'postgresql',
             fields: [
@@ -544,13 +671,13 @@ export function ERDDesignerSurface({
             indexes: [],
             foreign_keys: [],
           },
-          note: `Added physical table table_${idx}`,
+          note: `Added physical table ${customName || `table_${idx}`}`,
         };
       }
       const res = await controller.mutateErdElements(payload);
       if (res?.elements) {
-        setErdState({...EMPTY_ERD_STATE, ...res.elements});
-        const items = res.elements[listKeyForInspectorLevel(targetLevel)] || [];
+        applyErdStateWithUndo({...EMPTY_ERD_STATE, ...res.elements});
+        const items = res.elements[key] || [];
         if (items.length) {
           setSelectedElementId(items[items.length - 1].id);
         }
@@ -566,7 +693,7 @@ export function ERDDesignerSurface({
 
   const toggleSketchLook = async () => {
     const nextVal = !erdState.look_handdrawn;
-    setErdState((cur) => ({...cur, look_handdrawn: nextVal}));
+    applyErdStateWithUndo((cur) => ({...cur, look_handdrawn: nextVal}));
     if (typeof client.mutateErdElements !== 'function') return;
     setBusyAction(true);
     setSurfaceError('');
@@ -591,7 +718,18 @@ export function ERDDesignerSurface({
   const saveInspectorChanges = async () => {
     if (!elementDraft) return;
     if (typeof client.mutateErdElements !== 'function') {
-      setSurfaceNotice('Saved element changes in local session.');
+      const key = listKeyForInspectorLevel(inspectorLevel);
+      applyErdStateWithUndo((cur) => {
+        const currentList = cur[key] || [];
+        const exists = currentList.some((item) => item.id === elementDraft.id);
+        const nextList = exists
+          ? currentList.map((item) =>
+            item.id === elementDraft.id ? {...item, ...elementDraft} : item
+          )
+          : [...currentList, {...elementDraft, id: elementDraft.id || `el-${Date.now()}`}];
+        return {...cur, [key]: nextList};
+      });
+      setSurfaceNotice(gettext('Saved element changes in local session.'));
       return;
     }
     setBusyAction(true);
@@ -600,10 +738,12 @@ export function ERDDesignerSurface({
       const payload = serializeElementDraftPayload(inspectorLevel, elementDraft);
       const res = await controller.mutateErdElements(payload);
       if (res?.elements) {
-        setErdState({...EMPTY_ERD_STATE, ...res.elements});
+        applyErdStateWithUndo({...EMPTY_ERD_STATE, ...res.elements});
       }
       await refreshErdInsights();
-      setSurfaceNotice(`Saved ${inspectorLevel} element "${elementDraft.name}".`);
+      setSurfaceNotice(
+        gettext('Saved %s element "%s".', inspectorLevel, elementDraft.name)
+      );
     } catch (err) {
       setSurfaceError(err.message);
     } finally {
@@ -612,7 +752,13 @@ export function ERDDesignerSurface({
   };
 
   const deleteSelectedInspectorElement = async () => {
-    if (!selectedElementId || typeof client.mutateErdElements !== 'function') {
+    if (!selectedElementId) return;
+    if (typeof client.mutateErdElements !== 'function') {
+      const key = listKeyForInspectorLevel(inspectorLevel);
+      applyErdStateWithUndo((cur) => ({
+        ...cur,
+        [key]: (cur[key] || []).filter((item) => item.id !== selectedElementId),
+      }));
       return;
     }
     setBusyAction(true);
@@ -630,7 +776,7 @@ export function ERDDesignerSurface({
         note: `Removed ${inspectorLevel} element`,
       });
       if (res?.elements) {
-        setErdState({...EMPTY_ERD_STATE, ...res.elements});
+        applyErdStateWithUndo({...EMPTY_ERD_STATE, ...res.elements});
       }
       await refreshErdInsights();
     } catch (err) {
@@ -642,7 +788,23 @@ export function ERDDesignerSurface({
 
   const submitConnectBoxes = async () => {
     if (!connectDraft.source || !connectDraft.target) {
-      setSurfaceError('Choose both source and target conceptual boxes.');
+      setSurfaceError(gettext('Choose both source and target conceptual boxes.'));
+      return;
+    }
+    if (typeof client.mutateErdElements !== 'function') {
+      applyErdStateWithUndo((cur) => ({
+        ...cur,
+        conceptual_relations: [
+          ...(cur.conceptual_relations || []),
+          {
+            id: `rel-${Date.now()}`,
+            source: connectDraft.source,
+            target: connectDraft.target,
+            title: connectDraft.title || 'relates to',
+          },
+        ],
+      }));
+      setConnectOpen(false);
       return;
     }
     setBusyAction(true);
@@ -658,7 +820,7 @@ export function ERDDesignerSurface({
         note: 'Connected conceptual whiteboard boxes',
       });
       if (res?.elements) {
-        setErdState({...EMPTY_ERD_STATE, ...res.elements});
+        applyErdStateWithUndo({...EMPTY_ERD_STATE, ...res.elements});
       }
       setConnectOpen(false);
     } catch (err) {
@@ -670,7 +832,7 @@ export function ERDDesignerSurface({
 
   const submitAddNote = async () => {
     if (!noteDraft.body.trim() && !noteDraft.title.trim()) {
-      setSurfaceError('Enter a whiteboard note title or body.');
+      setSurfaceError(gettext('Enter a whiteboard note title or body.'));
       return;
     }
     setBusyAction(true);
@@ -1228,15 +1390,16 @@ export function ERDDesignerSurface({
     () => [
       {
         id: 'model',
-        label: 'Model',
+        label: gettext('Model'),
         groups: [
           {
             id: 'save',
-            label: 'Save Draft',
+            label: gettext('Save Draft'),
             items: [
               {
                 id: 'erd.menu.save',
-                label: 'Save Checkpoint',
+                actionId: 'erd.designer.save',
+                label: gettext('Save Checkpoint'),
                 intent: 'primary',
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () =>
@@ -1246,11 +1409,11 @@ export function ERDDesignerSurface({
           },
           {
             id: 'status',
-            label: 'Status',
+            label: gettext('Status'),
             items: [
               {
                 id: 'erd.menu.in_progress',
-                label: 'Advance to In Progress',
+                label: gettext('Advance to In Progress'),
                 disabled:
                   readOnly ||
                   !sessionState.loaded ||
@@ -1259,7 +1422,7 @@ export function ERDDesignerSurface({
               },
               {
                 id: 'erd.menu.in_review',
-                label: 'Submit for Review',
+                label: gettext('Submit for Review'),
                 disabled:
                   readOnly ||
                   !sessionState.loaded ||
@@ -1269,7 +1432,8 @@ export function ERDDesignerSurface({
               },
               {
                 id: 'erd.menu.accept',
-                label: 'Accept',
+                actionId: 'erd.designer.accept',
+                label: gettext('Accept'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () =>
                   runToolbarCommand('erd.designer.accept', () =>
@@ -1278,41 +1442,43 @@ export function ERDDesignerSurface({
               },
               {
                 id: 'erd.menu.branch_draft',
-                label: 'Branch Draft',
+                label: gettext('Branch Draft'),
                 disabled:
                   readOnly ||
                   !sessionState.loaded ||
                   !sessionState.activeVersion,
                 onClick: () =>
-                  controller.branchDraft({note: 'Branched draft from active'}),
+                  controller.branchDraft({
+                    note: gettext('Branched draft from active'),
+                  }),
               },
             ],
           },
           {
             id: 'history_git',
-            label: 'History & Git',
+            label: gettext('History & Git'),
             items: [
               {
                 id: 'erd.menu.checkpoints',
-                label: 'Checkpoints & Diff…',
+                label: gettext('Checkpoints & Diff…'),
                 disabled: !sessionState.loaded,
                 onClick: () => setHistoryOpen(true),
               },
               {
                 id: 'erd.menu.git',
-                label: 'Git Sync…',
+                label: gettext('Git Sync…'),
                 disabled: !sessionState.loaded,
                 onClick: () => setGitOpen(true),
               },
               {
                 id: 'erd.menu.export',
-                label: 'Export DDN',
+                label: gettext('Export DDN'),
                 disabled: !sessionState.loaded,
                 onClick: handleExportDdn,
               },
               {
                 id: 'erd.menu.where_used',
-                label: 'Where Used…',
+                label: gettext('Where Used…'),
                 disabled: !sessionState.loaded,
                 onClick: () => {
                   setWhereUsedTarget('');
@@ -1325,21 +1491,21 @@ export function ERDDesignerSurface({
       },
       {
         id: 'author',
-        label: 'Author & Whiteboard',
+        label: gettext('Author & Whiteboard'),
         groups: [
           {
             id: 'whiteboard_sketch',
-            label: 'Whiteboard Sketch',
+            label: gettext('Whiteboard Sketch'),
             items: [
               {
                 id: 'erd.menu.add_conceptual',
-                label: '+ Conceptual Box',
+                label: gettext('+ Conceptual Box'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => quickAddLevelElement('conceptual'),
               },
               {
                 id: 'erd.menu.connect_boxes',
-                label: '+ Connect Boxes',
+                label: gettext('+ Connect Boxes'),
                 disabled:
                   readOnly ||
                   !sessionState.loaded ||
@@ -1355,23 +1521,27 @@ export function ERDDesignerSurface({
               },
               {
                 id: 'erd.menu.add_note',
-                label: '+ Note',
+                label: gettext('+ Note'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => {
-                  setNoteDraft({title: 'Whiteboard Note', area: '', body: ''});
+                  setNoteDraft({
+                    title: gettext('Whiteboard Note'),
+                    area: '',
+                    body: '',
+                  });
                   setNoteOpen(true);
                 },
               },
               {
                 id: 'erd.menu.sketch_look',
-                label: 'Sketch Look',
+                label: gettext('Sketch Look'),
                 active: Boolean(erdState.look_handdrawn),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: toggleSketchLook,
               },
               {
                 id: 'erd.menu.promote_whiteboard',
-                label: 'Make it a design…',
+                label: gettext('Make it a design…'),
                 intent: 'primary',
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => {
@@ -1384,31 +1554,34 @@ export function ERDDesignerSurface({
           },
           {
             id: 'structured_levels',
-            label: 'Structured Levels',
+            label: gettext('Structured Levels'),
             items: [
               {
                 id: 'erd.menu.add_logical',
-                label: '+ Logical Entity',
+                label: gettext('+ Logical Entity'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => quickAddLevelElement('logical'),
               },
               {
                 id: 'erd.menu.add_physical',
-                label: '+ Physical Table',
+                label: gettext('+ Physical Table'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => quickAddLevelElement('physical'),
               },
               {
                 id: 'erd.menu.add_deployment',
-                label: '+ Deployment Node',
+                label: gettext('+ Deployment Node'),
                 disabled: readOnly || !sessionState.loaded,
                 onClick: () => quickAddLevelElement('deployment'),
               },
               {
                 id: 'erd.menu.toggle_inspector',
-                label: 'Toggle Inspector',
+                label: gettext('Toggle Inspector'),
                 active: inspectorOpen,
-                onClick: () => setInspectorOpen((v) => !v),
+                onClick: () => {
+                  setInspectorOpen((v) => !v);
+                  openPropertiesDrawerRef.current?.();
+                },
               },
             ],
           },
@@ -1416,39 +1589,39 @@ export function ERDDesignerSurface({
       },
       {
         id: 'levels',
-        label: 'Levels & Layout',
+        label: gettext('Levels & Layout'),
         groups: [
           {
             id: 'level_switcher',
-            label: 'Modelling Level',
+            label: gettext('Modelling Level'),
             items: [
               {
                 id: 'erd.level.all',
-                label: 'All Levels',
+                label: gettext('All Levels'),
                 active: level === 'all',
                 onClick: () => setLevel('all'),
               },
               {
                 id: 'erd.level.conceptual',
-                label: 'Conceptual',
+                label: gettext('Conceptual'),
                 active: level === 'conceptual',
                 onClick: () => setLevel('conceptual'),
               },
               {
                 id: 'erd.level.logical',
-                label: 'Logical',
+                label: gettext('Logical'),
                 active: level === 'logical',
                 onClick: () => setLevel('logical'),
               },
               {
                 id: 'erd.level.physical',
-                label: 'Physical',
+                label: gettext('Physical'),
                 active: level === 'physical',
                 onClick: () => setLevel('physical'),
               },
               {
                 id: 'erd.level.deployment',
-                label: 'Deployment',
+                label: gettext('Deployment'),
                 active: level === 'deployment',
                 onClick: () => setLevel('deployment'),
               },
@@ -1456,18 +1629,18 @@ export function ERDDesignerSurface({
           },
           {
             id: 'layout_pins',
-            label: 'Layered Layout & Pins',
+            label: gettext('Layered Layout & Pins'),
             items: [
               {
                 id: 'erd.layout.recompute',
-                label: 'Recompute Layered Layout',
+                label: gettext('Recompute Layered Layout'),
                 disabled: !sessionState.loaded,
                 onClick: () =>
                   controller.load({version: sessionState.currentVersion}),
               },
               {
                 id: 'erd.layout.pin',
-                label: 'Pin Selected / Unpin All',
+                label: gettext('Pin Selected / Unpin All'),
                 disabled: !sessionState.loaded,
                 onClick: () => {
                   const hasPins =
@@ -1484,35 +1657,35 @@ export function ERDDesignerSurface({
       },
       {
         id: 'validate',
-        label: 'Validate & Standards',
+        label: gettext('Validate & Standards'),
         attention:
           standardsData.active_count > 0 || suspectBindings.length > 0,
         groups: [
           {
             id: 'standards_group',
-            label: 'Standards & Bindings',
+            label: gettext('Standards & Bindings'),
             items: [
               {
                 id: 'erd.menu.standards',
-                label: 'Naming Standards…',
+                label: gettext('Naming Standards…'),
                 badge: standardsData.active_count,
                 disabled: !sessionState.loaded,
                 onClick: openStandardsDialog,
               },
               {
                 id: 'erd.menu.suspect_bindings',
-                label: 'Suspect Bindings',
+                label: gettext('Suspect Bindings'),
                 badge: suspectBindings.length,
                 disabled: !sessionState.loaded,
                 onClick: () => {
                   if (suspectBindings.length === 0) {
-                    setSurfaceNotice('All catalog bindings are valid.');
+                    setSurfaceNotice(gettext('All catalog bindings are valid.'));
                   }
                 },
               },
               {
                 id: 'erd.menu.refresh',
-                label: 'Refresh Session',
+                label: gettext('Refresh Session'),
                 disabled: !sessionState.loaded,
                 onClick: async () => {
                   const next = await controller.load({
@@ -1527,15 +1700,16 @@ export function ERDDesignerSurface({
       },
       {
         id: 'deploy',
-        label: 'Compare & Deploy',
+        label: gettext('Compare & Deploy'),
         groups: [
           {
             id: 'compare_convert',
-            label: 'Conversion & Schema Plan',
+            label: gettext('Conversion & Schema Plan'),
             items: [
               {
                 id: 'erd.menu.convert',
-                label: 'Engine Conversion…',
+                actionId: 'erd.designer.convert',
+                label: gettext('Engine Conversion…'),
                 disabled: !sessionState.loaded,
                 onClick: () =>
                   runToolbarCommand('erd.designer.convert', () => {
@@ -1546,7 +1720,8 @@ export function ERDDesignerSurface({
               },
               {
                 id: 'erd.menu.alter_plan',
-                label: 'Alter Plan & Migration…',
+                actionId: 'erd.designer.alter_plan',
+                label: gettext('Alter Plan & Migration…'),
                 intent: 'primary',
                 disabled: !sessionState.loaded,
                 onClick: () =>
@@ -1559,17 +1734,17 @@ export function ERDDesignerSurface({
           },
           {
             id: 'topology_envs',
-            label: 'Topology & Environments',
+            label: gettext('Topology & Environments'),
             items: [
               {
                 id: 'erd.menu.drift',
-                label: 'System Drift…',
+                label: gettext('System Drift…'),
                 disabled: !sessionState.loaded,
                 onClick: openDriftDialog,
               },
               {
                 id: 'erd.menu.env_matrix',
-                label: 'Environment Matrix (Dev/Stage/Prod)…',
+                label: gettext('Environment Matrix (Dev/Stage/Prod)…'),
                 disabled: !sessionState.loaded,
                 onClick: openEnvironmentMatrix,
               },
@@ -1596,6 +1771,687 @@ export function ERDDesignerSurface({
     ]
   );
 
+  const selectNavigatorElement = useCallback((targetLvl, itemId) => {
+    setInspectorLevel(targetLvl);
+    setSelectedElementId(itemId);
+    setInspectorOpen(true);
+    openPropertiesDrawerRef.current?.();
+  }, []);
+
+  const erdNavigatorSections = useMemo(() => {
+    const entityItems = [
+      ...(erdState.conceptual_entities || []).map((c) => ({
+        id: c.id,
+        label: c.name || c.id,
+        sublabel: gettext('Conceptual'),
+        active: inspectorLevel === 'conceptual' && selectedElementId === c.id,
+        onSelect: () => selectNavigatorElement('conceptual', c.id),
+      })),
+      ...(erdState.logical_entities || []).map((e) => ({
+        id: e.id,
+        label: e.name || e.id,
+        sublabel: gettext('Logical'),
+        active: inspectorLevel === 'logical' && selectedElementId === e.id,
+        onSelect: () => selectNavigatorElement('logical', e.id),
+      })),
+    ];
+
+    const physTables =
+      (erdState.physical_tables || []).length > 0
+        ? erdState.physical_tables
+        : fallbackPhysicalTables;
+    const tableItems = [
+      ...physTables.map((t) => ({
+        id: t.id,
+        label: t.name || t.id,
+        sublabel: t.engine || gettext('Physical'),
+        active: inspectorLevel === 'physical' && selectedElementId === t.id,
+        onSelect: () => selectNavigatorElement('physical', t.id),
+      })),
+      ...(erdState.deployment_nodes || []).map((n) => ({
+        id: n.id,
+        label: n.name || n.id,
+        sublabel: n.role || gettext('Node'),
+        active: inspectorLevel === 'deployment' && selectedElementId === n.id,
+        onSelect: () => selectNavigatorElement('deployment', n.id),
+      })),
+    ];
+
+    const relItems = [
+      ...(erdState.conceptual_relations || []).map((r, i) => ({
+        id: r.id || `crel-${i}`,
+        label: `${r.source} -> ${r.target}`,
+        sublabel: r.title || gettext('Conceptual'),
+        active: false,
+        onSelect: () => selectNavigatorElement('conceptual', r.source),
+      })),
+      ...(erdState.logical_relations || []).map((r, i) => ({
+        id: r.id || `lrel-${i}`,
+        label: `${r.source} -> ${r.target}`,
+        sublabel: gettext('Logical'),
+        active: false,
+        onSelect: () => selectNavigatorElement('logical', r.source),
+      })),
+      ...physTables.flatMap((t) =>
+        (t.foreign_keys || []).map((fk, idx) => ({
+          id: `${t.id}-fk-${idx}`,
+          label: `${t.name} -> ${fk.ref_table}`,
+          sublabel: gettext('FK'),
+          active: false,
+          onSelect: () => selectNavigatorElement('physical', t.id),
+        }))
+      ),
+    ];
+
+    return [
+      {
+        id: 'entities',
+        label: gettext('Entities'),
+        emptyText: gettext('No conceptual or logical entities.'),
+        items: entityItems,
+      },
+      {
+        id: 'tables',
+        label: gettext('Tables'),
+        emptyText: gettext('No physical tables or nodes.'),
+        items: tableItems,
+      },
+      {
+        id: 'relationships',
+        label: gettext('Relationships'),
+        emptyText: gettext('No relationships defined.'),
+        items: relItems,
+      },
+    ];
+  }, [
+    erdState,
+    fallbackPhysicalTables,
+    inspectorLevel,
+    selectNavigatorElement,
+    selectedElementId,
+  ]);
+
+  const erdNavigatorNode = useMemo(
+    () => (
+      <DesignerElementNavigator
+        title={gettext('ERD Model Navigator')}
+        sections={erdNavigatorSections}
+      />
+    ),
+    [erdNavigatorSections]
+  );
+
+  const erdTitle =
+    sessionState.title ||
+    sessionState.design?.title ||
+    sessionState.design?.name ||
+    designId ||
+    gettext('ERD Design');
+  const primaryEngine =
+    erdState.physical_tables?.[0]?.engine ||
+    erdState.deployment_nodes?.[0]?.engine ||
+    alterDraft.targetEngine ||
+    'postgresql';
+
+  const erdStatusNode = useMemo(
+    () => (
+      <DesignerShellStatusBar
+        title={erdTitle}
+        version={sessionState.currentVersion}
+        status={sessionState.status}
+        engine={primaryEngine}
+        suspectCount={suspectBindings.length}
+        extra={
+          erdState.look_handdrawn ? (
+            <StatusBadge status="info" label={gettext('Sketch Look')} />
+          ) : null
+        }
+      />
+    ),
+    [
+      erdState.look_handdrawn,
+      erdTitle,
+      primaryEngine,
+      sessionState.currentVersion,
+      sessionState.status,
+      suspectBindings.length,
+    ]
+  );
+
+  const erdStatusText = `${erdTitle} · v${sessionState.currentVersion || 1} · ${formatSavePointStatusLabel(
+    sessionState.status
+  )} · ${primaryEngine} · ${
+    suspectBindings.length > 0
+      ? `${suspectBindings.length} ${gettext('suspect')}`
+      : gettext('valid')
+  }`;
+
+  const renderErdInspectorBody = (standalone = false) => (
+    <Box
+      component={standalone ? 'aside' : 'section'}
+      aria-label={gettext('ERD element property inspector')}
+      data-testid="erd-property-inspector"
+      sx={
+        standalone
+          ? {
+            width: 320,
+            flexShrink: 0,
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }
+          : {
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '100%',
+            bgcolor: 'background.paper',
+          }
+      }
+    >
+      <Box
+        sx={{
+          p: 1,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 0.75,
+        }}
+      >
+        <Select
+          label={gettext('Inspector level')}
+          size="small"
+          value={inspectorLevel}
+          options={inspectorLevelOptions}
+          onChange={setInspectorLevel}
+        />
+        {!readOnly && (
+          <Button
+            size="small"
+            onClick={() => quickAddLevelElement(inspectorLevel)}
+          >
+            {gettext('+ Add')}
+          </Button>
+        )}
+      </Box>
+
+      <ScrollArea
+        label={gettext('Inspector elements and properties')}
+        sx={{flex: 1, p: 1}}
+      >
+        <Stack gap="standard">
+          <Box role="list" aria-label={`${inspectorLevel} elements`}>
+            {activeLevelItems.length === 0 ? (
+              <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>
+                {gettext(
+                  'No %s elements yet. Use + Add to create one.',
+                  inspectorLevel
+                )}
+              </Box>
+            ) : (
+              <Stack gap="compact">
+                {activeLevelItems.map((item) => (
+                  <Button
+                    key={item.id}
+                    size="small"
+                    intent={
+                      item.id === selectedElementId ? 'primary' : 'neutral'
+                    }
+                    onClick={() => setSelectedElementId(item.id)}
+                  >
+                    {item.name}
+                  </Button>
+                ))}
+              </Stack>
+            )}
+          </Box>
+
+          {elementDraft && (
+            <Stack gap="compact">
+              <TextField
+                size="small"
+                label={gettext('Element Name')}
+                disabled={readOnly}
+                value={elementDraft.name ?? ''}
+                onChange={(e) =>
+                  setElementDraft((cur) => ({
+                    ...cur,
+                    name: e.target.value,
+                  }))
+                }
+              />
+
+              {inspectorLevel === 'conceptual' && (
+                <>
+                  <TextField
+                    size="small"
+                    label={gettext('Domain / Bounded Area')}
+                    disabled={readOnly}
+                    value={elementDraft.area ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        area: e.target.value,
+                      }))
+                    }
+                  />
+                  <TextArea
+                    rows={2}
+                    label={gettext('Whiteboard Note')}
+                    disabled={readOnly}
+                    value={elementDraft.note ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        note: e.target.value,
+                      }))
+                    }
+                  />
+                </>
+              )}
+
+              {inspectorLevel === 'logical' && (
+                <>
+                  <TextField
+                    size="small"
+                    label={gettext('Subject Area')}
+                    disabled={readOnly}
+                    value={elementDraft.area ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        area: e.target.value,
+                      }))
+                    }
+                  />
+                  <TypedRowsEditor
+                    label={gettext('Logical Attributes')}
+                    addLabel={gettext('Attribute')}
+                    disabled={readOnly}
+                    rows={elementDraft.fields ?? []}
+                    columns={[
+                      {key: 'name', label: gettext('Name'), minWidth: 90},
+                      {
+                        key: 'datatype',
+                        label: gettext('Type'),
+                        type: 'select',
+                        options: LOGICAL_TYPE_OPTIONS,
+                        minWidth: 95,
+                      },
+                      {
+                        key: 'pk',
+                        label: gettext('PK'),
+                        type: 'boolean',
+                        minWidth: 50,
+                      },
+                      {
+                        key: 'nullable',
+                        label: gettext('Null'),
+                        type: 'boolean',
+                        default: true,
+                        minWidth: 50,
+                      },
+                    ]}
+                    onChange={(rows) =>
+                      setElementDraft((cur) => ({...cur, fields: rows}))
+                    }
+                  />
+                </>
+              )}
+
+              {inspectorLevel === 'physical' && (
+                <>
+                  <FormGrid columns={2}>
+                    <TextField
+                      size="small"
+                      label={gettext('Schema')}
+                      disabled={readOnly}
+                      value={elementDraft.schema ?? ''}
+                      onChange={(e) =>
+                        setElementDraft((cur) => ({
+                          ...cur,
+                          schema: e.target.value,
+                        }))
+                      }
+                    />
+                    <Select
+                      size="small"
+                      label={gettext('Engine')}
+                      disabled={readOnly}
+                      value={elementDraft.engine ?? 'postgresql'}
+                      options={engineOptions}
+                      onChange={(val) =>
+                        setElementDraft((cur) => ({...cur, engine: val}))
+                      }
+                    />
+                  </FormGrid>
+                  <TypedRowsEditor
+                    label={gettext('Physical Columns')}
+                    addLabel={gettext('Column')}
+                    disabled={readOnly}
+                    rows={elementDraft.fields ?? []}
+                    columns={[
+                      {key: 'name', label: gettext('Column'), minWidth: 90},
+                      {
+                        key: 'datatype',
+                        label: gettext('SQL Type'),
+                        default: 'VARCHAR(255)',
+                        minWidth: 95,
+                      },
+                      {
+                        key: 'pk',
+                        label: gettext('PK'),
+                        type: 'boolean',
+                        minWidth: 48,
+                      },
+                      {
+                        key: 'nullable',
+                        label: gettext('Null'),
+                        type: 'boolean',
+                        default: true,
+                        minWidth: 48,
+                      },
+                      {
+                        key: 'references',
+                        label: gettext('FK Ref (tbl.col)'),
+                        minWidth: 110,
+                      },
+                    ]}
+                    onChange={(rows) =>
+                      setElementDraft((cur) => ({...cur, fields: rows}))
+                    }
+                  />
+                  <TypedRowsEditor
+                    label={gettext('Indexes')}
+                    addLabel={gettext('Index')}
+                    disabled={readOnly}
+                    rows={elementDraft.indexes ?? []}
+                    columns={[
+                      {
+                        key: 'name',
+                        label: gettext('Index Name'),
+                        minWidth: 100,
+                      },
+                      {key: 'column', label: gettext('Column'), minWidth: 85},
+                      {
+                        key: 'unique',
+                        label: gettext('Unique'),
+                        type: 'boolean',
+                        minWidth: 55,
+                      },
+                    ]}
+                    onChange={(rows) =>
+                      setElementDraft((cur) => ({...cur, indexes: rows}))
+                    }
+                  />
+                </>
+              )}
+
+              {inspectorLevel === 'deployment' && (
+                <>
+                  <FormGrid columns={2}>
+                    <Select
+                      size="small"
+                      label={gettext('Engine')}
+                      disabled={readOnly}
+                      value={elementDraft.engine ?? 'postgresql'}
+                      options={engineOptions}
+                      onChange={(val) =>
+                        setElementDraft((cur) => ({...cur, engine: val}))
+                      }
+                    />
+                    <Select
+                      size="small"
+                      label={gettext('Node Role')}
+                      disabled={readOnly}
+                      value={elementDraft.role ?? 'primary'}
+                      options={[
+                        {value: 'primary', label: gettext('Primary')},
+                        {value: 'replica', label: gettext('Replica')},
+                        {value: 'cluster', label: gettext('Cluster')},
+                        {value: 'analytics', label: gettext('Analytics')},
+                      ]}
+                      onChange={(val) =>
+                        setElementDraft((cur) => ({...cur, role: val}))
+                      }
+                    />
+                  </FormGrid>
+                  <TextField
+                    size="small"
+                    label={gettext('Host / Address')}
+                    disabled={readOnly}
+                    value={elementDraft.host ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        host: e.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    size="small"
+                    label={gettext('Cloud Region / Rack')}
+                    disabled={readOnly}
+                    value={elementDraft.location ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        location: e.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    size="small"
+                    label={gettext('Endpoint ID')}
+                    disabled={readOnly}
+                    value={elementDraft.endpoint_id ?? ''}
+                    onChange={(e) =>
+                      setElementDraft((cur) => ({
+                        ...cur,
+                        endpoint_id: e.target.value,
+                      }))
+                    }
+                  />
+                </>
+              )}
+
+              {!readOnly && (
+                <Stack direction="row" gap="compact">
+                  <Button
+                    size="small"
+                    intent="primary"
+                    loading={busyAction}
+                    onClick={saveInspectorChanges}
+                  >
+                    {gettext('Save Level Changes')}
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={busyAction}
+                    onClick={deleteSelectedInspectorElement}
+                  >
+                    {gettext('Delete')}
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+          )}
+        </Stack>
+      </ScrollArea>
+    </Box>
+  );
+
+  const erdShellInspectorNode = renderErdInspectorBody(false);
+
+  const {inShell, shell, instanceId, openPropertiesDrawer} =
+    useDesignerShellRegions({
+      title: erdTitle,
+      statusNode: erdStatusNode,
+      statusText: erdStatusText,
+      leftDrawerNode: erdNavigatorNode,
+      rightDrawerNode: erdShellInspectorNode,
+      rightOpen: inspectorOpen,
+      quickActions: {
+        onNew: readOnly
+          ? undefined
+          : () => quickAddLevelElement(level === 'all' ? inspectorLevel : level),
+        onSave:
+          readOnly || !sessionState.loaded
+            ? undefined
+            : () => runToolbarCommand('erd.designer.save', openSaveDialog),
+        onUndo: readOnly ? undefined : handleUndoErd,
+        onRedo: readOnly ? undefined : handleRedoErd,
+      },
+    });
+  shellRegistryRef.current = shell?.actionsRegistry || null;
+  openPropertiesDrawerRef.current = openPropertiesDrawer;
+
+  useDesignerWorkbenchEvents({
+    appId: 'erd-designer',
+    instanceId,
+    inShell,
+    shell,
+    onToolAction: (tool) => {
+      if (tool === 'checkpoints') {
+        setHistoryOpen(true);
+        return;
+      }
+      if (tool === 'layers') {
+        const idx = LEVEL_CYCLE.indexOf(level);
+        const nextLevel = LEVEL_CYCLE[(idx + 1) % LEVEL_CYCLE.length];
+        setLevel(nextLevel);
+        setSurfaceNotice(
+          gettext('Switched ERD modelling level to %s.', nextLevel)
+        );
+        return;
+      }
+      if (tool === 'align') {
+        controller.load({version: sessionState.currentVersion});
+        setSurfaceNotice(gettext('Recomputed layered ERD layout.'));
+        return;
+      }
+      if (tool === 'pointer' || tool === 'marquee') {
+        setCanvasToolMode(tool);
+        setSurfaceNotice(gettext('Active canvas tool: %s.', tool));
+        return;
+      }
+      if (tool === 'copy') {
+        if (elementDraft) {
+          erdClipboardRef.current = {
+            level: inspectorLevel,
+            draft: JSON.parse(JSON.stringify(elementDraft)),
+          };
+          setSurfaceNotice(
+            gettext('Copied "%s" to designer clipboard.', elementDraft.name)
+          );
+        }
+        return;
+      }
+      if (tool === 'cut') {
+        if (!readOnly && elementDraft) {
+          erdClipboardRef.current = {
+            level: inspectorLevel,
+            draft: JSON.parse(JSON.stringify(elementDraft)),
+          };
+          deleteSelectedInspectorElement();
+          setSurfaceNotice(
+            gettext('Cut "%s" to designer clipboard.', elementDraft.name)
+          );
+        }
+        return;
+      }
+      if (tool === 'paste') {
+        if (readOnly) return;
+        const clip = erdClipboardRef.current;
+        const targetLvl = clip?.level || (level === 'all' ? inspectorLevel : level);
+        const baseName = clip?.draft?.name ? `${clip.draft.name}_copy` : null;
+        quickAddLevelElement(targetLvl, baseName);
+      }
+    },
+    onPaletteSelect: (kind, itemId) => {
+      if (kind === 'stencil') {
+        if (readOnly) return;
+        if (itemId === 'concept') {
+          quickAddLevelElement('conceptual');
+          return;
+        }
+        if (itemId === 'deploy-node') {
+          quickAddLevelElement('deployment');
+          return;
+        }
+        if (itemId === 'rel-1n') {
+          setConnectDraft({
+            source: erdState.conceptual_entities[0]?.id || '',
+            target: erdState.conceptual_entities[1]?.id || '',
+            title: 'relates to',
+          });
+          setConnectOpen(true);
+          return;
+        }
+        if (itemId === 'view') {
+          quickAddLevelElement(
+            'physical',
+            `vw_${(erdState.physical_tables || []).length + 1}`
+          );
+          return;
+        }
+        quickAddLevelElement(level === 'logical' ? 'logical' : 'physical');
+        return;
+      }
+      if (kind === 'udt') {
+        if (itemId === 'type-map') {
+          runToolbarCommand('erd.designer.convert', () => {
+            setConvertResult(null);
+            setConvertTab('engines');
+            setConvertOpen(true);
+          });
+          return;
+        }
+        const mapped = UDT_SQL_TYPE_MAP[itemId] || {
+          logical: 'string',
+          physical: 'VARCHAR(255)',
+        };
+        if (!readOnly) {
+          setInspectorOpen(true);
+          openPropertiesDrawer();
+          setElementDraft((cur) => {
+            const base =
+              cur || makeBlankElementDraft(inspectorLevel, activeLevelItems.length + 1);
+            const colName = itemId.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+            const nextField =
+              inspectorLevel === 'logical'
+                ? {name: colName, datatype: mapped.logical, pk: false, nullable: true}
+                : {
+                  name: colName,
+                  datatype: mapped.physical,
+                  pk: false,
+                  nullable: true,
+                  references: '',
+                };
+            return {
+              ...base,
+              fields: [...(base.fields || []), nextField],
+            };
+          });
+          setConvertDraft((cur) => ({
+            ...cur,
+            customTypeMap: {
+              ...cur.customTypeMap,
+              [mapped.logical]: mapped.physical,
+            },
+          }));
+          setSurfaceNotice(
+            gettext('Applied UDT "%s" (%s).', itemId, mapped.physical)
+          );
+        }
+      }
+    },
+  });
+
   const alterPlan = alterBundle?.plan || null;
   const riskSummary = alterBundle?.risk_summary || {
     loses_data: 0,
@@ -1613,6 +2469,7 @@ export function ERDDesignerSurface({
     <Box
       data-cde-surface="diagram.erd.designer"
       data-erd-sketch={erdState.look_handdrawn ? 'handdrawn' : 'crisp'}
+      data-erd-tool-mode={canvasToolMode}
       sx={{
         height: '100%',
         minHeight: 0,
@@ -1623,12 +2480,13 @@ export function ERDDesignerSurface({
       <FormReference formKey="erd-designer-workspace" />
 
       <DesignerTabbedMenu
-        label="ERD designer commands"
+        label={gettext('ERD designer commands')}
         tabs={menuTabs}
         activeTab={menuTab}
         onTabChange={setMenuTab}
+        commands={commands}
         leading={
-          sessionState.loaded ? (
+          !inShell && sessionState.loaded ? (
             <Stack direction="row" gap="compact">
               <StatusBadge
                 live
@@ -1644,18 +2502,27 @@ export function ERDDesignerSurface({
                 } nodes · ${sessionState.tiles?.length || 0} tiles`}
               />
               {erdState.look_handdrawn && (
-                <StatusBadge status="info" label="Sketch Look" />
+                <StatusBadge status="info" label={gettext('Sketch Look')} />
               )}
             </Stack>
           ) : null
         }
+        shellTrailing={
+          <Select
+            label={gettext('Modelling level')}
+            size="small"
+            value={level}
+            options={levelOptions}
+            onChange={setLevel}
+          />
+        }
         trailing={
           <Stack direction="row" gap="compact">
             <Select
-              label="Modelling level"
+              label={gettext('Modelling level')}
               size="small"
               value={level}
-              options={LEVEL_OPTIONS}
+              options={levelOptions}
               onChange={setLevel}
             />
             <Button
@@ -1663,7 +2530,9 @@ export function ERDDesignerSurface({
               intent={inspectorOpen ? 'primary' : 'neutral'}
               onClick={() => setInspectorOpen((v) => !v)}
             >
-              {inspectorOpen ? 'Hide Inspector' : 'Show Inspector'}
+              {inspectorOpen
+                ? gettext('Hide Inspector')
+                : gettext('Show Inspector')}
             </Button>
           </Stack>
         }
@@ -1692,8 +2561,10 @@ export function ERDDesignerSurface({
               }}
             >
               <span>
-                {suspectBindings.length} catalog binding(s) marked suspect after
-                a rename or drop:
+                {gettext(
+                  '%s catalog binding(s) marked suspect after a rename or drop:',
+                  suspectBindings.length
+                )}
               </span>
               {suspectBindings.map((binding) => (
                 <Button
@@ -1701,7 +2572,7 @@ export function ERDDesignerSurface({
                   size="small"
                   onClick={() => controller.confirmSuspectBinding(binding.id)}
                 >
-                  Confirm {binding.target_ref}
+                  {gettext('Confirm %s', binding.target_ref)}
                 </Button>
               ))}
             </Box>
@@ -1709,7 +2580,7 @@ export function ERDDesignerSurface({
         </Box>
       )}
 
-      {/* Main split workspace: Shared DDNViewerSurface + Collapsible 320px Property Inspector */}
+      {/* Main workspace: inside ProjectShell Area 3c owns the Property Inspector */}
       <Box
         sx={{
           position: 'relative',
@@ -1744,359 +2615,18 @@ export function ERDDesignerSurface({
               onError={onError}
             />
           )}
-          <ProgressOverlay message={loading ? 'Loading ERD design' : ''} />
+          <ProgressOverlay
+            message={loading ? gettext('Loading ERD design') : ''}
+          />
         </Box>
 
-        {inspectorOpen && (
-          <Box
-            component="aside"
-            aria-label="ERD element property inspector"
-            data-testid="erd-property-inspector"
-            sx={{
-              width: 320,
-              flexShrink: 0,
-              borderLeft: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
-            }}
-          >
-            <Box
-              sx={{
-                p: 1,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 0.75,
-              }}
-            >
-              <Select
-                label="Inspector level"
-                size="small"
-                value={inspectorLevel}
-                options={INSPECTOR_LEVEL_OPTIONS}
-                onChange={setInspectorLevel}
-              />
-              {!readOnly && (
-                <Button
-                  size="small"
-                  onClick={() => quickAddLevelElement(inspectorLevel)}
-                >
-                  + Add
-                </Button>
-              )}
-            </Box>
-
-            <ScrollArea
-              label="Inspector elements and properties"
-              sx={{flex: 1, p: 1}}
-            >
-              <Stack gap="standard">
-                <Box role="list" aria-label={`${inspectorLevel} elements`}>
-                  {activeLevelItems.length === 0 ? (
-                    <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>
-                      No {inspectorLevel} elements yet. Use + Add to create one.
-                    </Box>
-                  ) : (
-                    <Stack gap="compact">
-                      {activeLevelItems.map((item) => (
-                        <Button
-                          key={item.id}
-                          size="small"
-                          intent={
-                            item.id === selectedElementId
-                              ? 'primary'
-                              : 'neutral'
-                          }
-                          onClick={() => setSelectedElementId(item.id)}
-                        >
-                          {item.name}
-                        </Button>
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
-
-                {elementDraft && (
-                  <Stack gap="compact">
-                    <TextField
-                      size="small"
-                      label="Element Name"
-                      disabled={readOnly}
-                      value={elementDraft.name}
-                      onChange={(e) =>
-                        setElementDraft((cur) => ({
-                          ...cur,
-                          name: e.target.value,
-                        }))
-                      }
-                    />
-
-                    {inspectorLevel === 'conceptual' && (
-                      <>
-                        <TextField
-                          size="small"
-                          label="Domain / Bounded Area"
-                          disabled={readOnly}
-                          value={elementDraft.area}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              area: e.target.value,
-                            }))
-                          }
-                        />
-                        <TextArea
-                          rows={2}
-                          label="Whiteboard Note"
-                          disabled={readOnly}
-                          value={elementDraft.note}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              note: e.target.value,
-                            }))
-                          }
-                        />
-                      </>
-                    )}
-
-                    {inspectorLevel === 'logical' && (
-                      <>
-                        <TextField
-                          size="small"
-                          label="Subject Area"
-                          disabled={readOnly}
-                          value={elementDraft.area}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              area: e.target.value,
-                            }))
-                          }
-                        />
-                        <TypedRowsEditor
-                          label="Logical Attributes"
-                          addLabel="Attribute"
-                          disabled={readOnly}
-                          rows={elementDraft.fields}
-                          columns={[
-                            {key: 'name', label: 'Name', minWidth: 90},
-                            {
-                              key: 'datatype',
-                              label: 'Type',
-                              type: 'select',
-                              options: LOGICAL_TYPE_OPTIONS,
-                              minWidth: 95,
-                            },
-                            {
-                              key: 'pk',
-                              label: 'PK',
-                              type: 'boolean',
-                              minWidth: 50,
-                            },
-                            {
-                              key: 'nullable',
-                              label: 'Null',
-                              type: 'boolean',
-                              default: true,
-                              minWidth: 50,
-                            },
-                          ]}
-                          onChange={(rows) =>
-                            setElementDraft((cur) => ({...cur, fields: rows}))
-                          }
-                        />
-                      </>
-                    )}
-
-                    {inspectorLevel === 'physical' && (
-                      <>
-                        <FormGrid columns={2}>
-                          <TextField
-                            size="small"
-                            label="Schema"
-                            disabled={readOnly}
-                            value={elementDraft.schema}
-                            onChange={(e) =>
-                              setElementDraft((cur) => ({
-                                ...cur,
-                                schema: e.target.value,
-                              }))
-                            }
-                          />
-                          <Select
-                            size="small"
-                            label="Engine"
-                            disabled={readOnly}
-                            value={elementDraft.engine}
-                            options={ENGINE_OPTIONS}
-                            onChange={(val) =>
-                              setElementDraft((cur) => ({...cur, engine: val}))
-                            }
-                          />
-                        </FormGrid>
-                        <TypedRowsEditor
-                          label="Physical Columns"
-                          addLabel="Column"
-                          disabled={readOnly}
-                          rows={elementDraft.fields}
-                          columns={[
-                            {key: 'name', label: 'Column', minWidth: 90},
-                            {
-                              key: 'datatype',
-                              label: 'SQL Type',
-                              default: 'VARCHAR(255)',
-                              minWidth: 95,
-                            },
-                            {
-                              key: 'pk',
-                              label: 'PK',
-                              type: 'boolean',
-                              minWidth: 48,
-                            },
-                            {
-                              key: 'nullable',
-                              label: 'Null',
-                              type: 'boolean',
-                              default: true,
-                              minWidth: 48,
-                            },
-                            {
-                              key: 'references',
-                              label: 'FK Ref (tbl.col)',
-                              minWidth: 110,
-                            },
-                          ]}
-                          onChange={(rows) =>
-                            setElementDraft((cur) => ({...cur, fields: rows}))
-                          }
-                        />
-                        <TypedRowsEditor
-                          label="Indexes"
-                          addLabel="Index"
-                          disabled={readOnly}
-                          rows={elementDraft.indexes}
-                          columns={[
-                            {key: 'name', label: 'Index Name', minWidth: 100},
-                            {key: 'column', label: 'Column', minWidth: 85},
-                            {
-                              key: 'unique',
-                              label: 'Unique',
-                              type: 'boolean',
-                              minWidth: 55,
-                            },
-                          ]}
-                          onChange={(rows) =>
-                            setElementDraft((cur) => ({...cur, indexes: rows}))
-                          }
-                        />
-                      </>
-                    )}
-
-                    {inspectorLevel === 'deployment' && (
-                      <>
-                        <FormGrid columns={2}>
-                          <Select
-                            size="small"
-                            label="Engine"
-                            disabled={readOnly}
-                            value={elementDraft.engine}
-                            options={ENGINE_OPTIONS}
-                            onChange={(val) =>
-                              setElementDraft((cur) => ({...cur, engine: val}))
-                            }
-                          />
-                          <Select
-                            size="small"
-                            label="Node Role"
-                            disabled={readOnly}
-                            value={elementDraft.role}
-                            options={[
-                              {value: 'primary', label: 'Primary'},
-                              {value: 'replica', label: 'Replica'},
-                              {value: 'cluster', label: 'Cluster'},
-                              {value: 'analytics', label: 'Analytics'},
-                            ]}
-                            onChange={(val) =>
-                              setElementDraft((cur) => ({...cur, role: val}))
-                            }
-                          />
-                        </FormGrid>
-                        <TextField
-                          size="small"
-                          label="Host / Address"
-                          disabled={readOnly}
-                          value={elementDraft.host}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              host: e.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Cloud Region / Rack"
-                          disabled={readOnly}
-                          value={elementDraft.location}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              location: e.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Endpoint ID"
-                          disabled={readOnly}
-                          value={elementDraft.endpoint_id}
-                          onChange={(e) =>
-                            setElementDraft((cur) => ({
-                              ...cur,
-                              endpoint_id: e.target.value,
-                            }))
-                          }
-                        />
-                      </>
-                    )}
-
-                    {!readOnly && (
-                      <Stack direction="row" gap="compact">
-                        <Button
-                          size="small"
-                          intent="primary"
-                          loading={busyAction}
-                          onClick={saveInspectorChanges}
-                        >
-                          Save Level Changes
-                        </Button>
-                        <Button
-                          size="small"
-                          disabled={busyAction}
-                          onClick={deleteSelectedInspectorElement}
-                        >
-                          Delete
-                        </Button>
-                      </Stack>
-                    )}
-                  </Stack>
-                )}
-              </Stack>
-            </ScrollArea>
-          </Box>
-        )}
+        {!inShell && inspectorOpen && renderErdInspectorBody(true)}
       </Box>
 
       {/* 1. Save Checkpoint Dialog */}
       <Dialog
         open={saveOpen}
-        title="Save ERD checkpoint"
+        title={gettext('Save ERD checkpoint')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setSaveOpen(false)}
@@ -2104,10 +2634,10 @@ export function ERDDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setSaveOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button intent="primary" loading={busyAction} onClick={submitSave}>
-              Save version
+              {gettext('Save version')}
             </Button>
           </>
         }
@@ -2119,23 +2649,23 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'details',
-              label: 'Checkpoint Details',
+              label: gettext('Checkpoint Details'),
               render: () => (
                 <FormGrid columns={2}>
                   <Select
-                    label="Save-point status"
+                    label={gettext('Save-point status')}
                     value={saveDraft.status}
                     options={[
-                      {value: 'draft', label: 'Draft'},
-                      {value: 'in_progress', label: 'In progress'},
-                      {value: 'in_review', label: 'In review'},
+                      {value: 'draft', label: gettext('Draft')},
+                      {value: 'in_progress', label: gettext('In progress')},
+                      {value: 'in_review', label: gettext('In review')},
                     ]}
                     onChange={(val) =>
                       setSaveDraft((cur) => ({...cur, status: val}))
                     }
                   />
                   <TextField
-                    label="Checkpoint note"
+                    label={gettext('Checkpoint note')}
                     value={saveDraft.note}
                     onChange={(e) =>
                       setSaveDraft((cur) => ({...cur, note: e.target.value}))
@@ -2146,11 +2676,11 @@ export function ERDDesignerSurface({
             },
             {
               id: 'ddn',
-              label: 'DDN Source',
+              label: gettext('DDN Source'),
               render: () => (
                 <Box sx={{height: 280}}>
                   <CodeEditor
-                    label="DDN source"
+                    label={gettext('DDN source')}
                     value={saveDraft.ddnText}
                     onChange={(val) =>
                       setSaveDraft((cur) => ({
@@ -2169,7 +2699,7 @@ export function ERDDesignerSurface({
       {/* 2. Accept Version Dialog (A9) */}
       <Dialog
         open={acceptOpen}
-        title="Accept ERD version"
+        title={gettext('Accept ERD version')}
         size="medium"
         busy={busyAction}
         onClose={() => !busyAction && setAcceptOpen(false)}
@@ -2177,14 +2707,14 @@ export function ERDDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setAcceptOpen(false)}>
-              Cancel
+              {gettext('Cancel')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitAccept}
             >
-              Accept version
+              {gettext('Accept version')}
             </Button>
           </>
         }
@@ -2195,11 +2725,11 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'approval',
-              label: 'Approval & Git Gate',
+              label: gettext('Approval & Git Gate'),
               render: () => (
                 <Stack gap="standard">
                   <Checkbox
-                    label="Require Git review reference for this project"
+                    label={gettext('Require Git review reference for this project')}
                     checked={acceptDraft.requireGitReview}
                     onChange={(checked) =>
                       setAcceptDraft((cur) => ({
@@ -2210,7 +2740,7 @@ export function ERDDesignerSurface({
                   />
                   <FormGrid columns={2}>
                     <TextField
-                      label="Git review reference"
+                      label={gettext('Git review reference')}
                       value={acceptDraft.gitReviewRef}
                       onChange={(e) =>
                         setAcceptDraft((cur) => ({
@@ -2220,7 +2750,7 @@ export function ERDDesignerSurface({
                       }
                     />
                     <TextField
-                      label="Approval comment"
+                      label={gettext('Approval comment')}
                       value={acceptDraft.comment}
                       onChange={(e) =>
                         setAcceptDraft((cur) => ({
@@ -2240,20 +2770,22 @@ export function ERDDesignerSurface({
       {/* 3. Whiteboard Connect Boxes & Note Dialogs */}
       <Dialog
         open={connectOpen}
-        title="Connect Conceptual Boxes"
+        title={gettext('Connect Conceptual Boxes')}
         size="medium"
         busy={busyAction}
         onClose={() => !busyAction && setConnectOpen(false)}
         defaultAction={submitConnectBoxes}
         actions={
           <>
-            <Button onClick={() => setConnectOpen(false)}>Cancel</Button>
+            <Button onClick={() => setConnectOpen(false)}>
+              {gettext('Cancel')}
+            </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitConnectBoxes}
             >
-              Connect Boxes
+              {gettext('Connect Boxes')}
             </Button>
           </>
         }
@@ -2261,7 +2793,7 @@ export function ERDDesignerSurface({
         <FormReference formKey="erd-designer-whiteboard" />
         <FormGrid columns={2}>
           <Select
-            label="From Conceptual Box"
+            label={gettext('From Conceptual Box')}
             value={connectDraft.source}
             options={erdState.conceptual_entities.map((c) => ({
               value: c.id,
@@ -2272,7 +2804,7 @@ export function ERDDesignerSurface({
             }
           />
           <Select
-            label="To Conceptual Box"
+            label={gettext('To Conceptual Box')}
             value={connectDraft.target}
             options={erdState.conceptual_entities.map((c) => ({
               value: c.id,
@@ -2283,7 +2815,7 @@ export function ERDDesignerSurface({
             }
           />
           <TextField
-            label="Relationship Verb / Phrase"
+            label={gettext('Relationship Verb / Phrase')}
             value={connectDraft.title}
             onChange={(e) =>
               setConnectDraft((cur) => ({...cur, title: e.target.value}))
@@ -2294,20 +2826,22 @@ export function ERDDesignerSurface({
 
       <Dialog
         open={noteOpen}
-        title="Add Conceptual Whiteboard Note"
+        title={gettext('Add Conceptual Whiteboard Note')}
         size="medium"
         busy={busyAction}
         onClose={() => !busyAction && setNoteOpen(false)}
         defaultAction={submitAddNote}
         actions={
           <>
-            <Button onClick={() => setNoteOpen(false)}>Cancel</Button>
+            <Button onClick={() => setNoteOpen(false)}>
+              {gettext('Cancel')}
+            </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitAddNote}
             >
-              Save Note
+              {gettext('Save Note')}
             </Button>
           </>
         }
@@ -2316,14 +2850,14 @@ export function ERDDesignerSurface({
         <Stack gap="standard">
           <FormGrid columns={2}>
             <TextField
-              label="Note Title"
+              label={gettext('Note Title')}
               value={noteDraft.title}
               onChange={(e) =>
                 setNoteDraft((cur) => ({...cur, title: e.target.value}))
               }
             />
             <TextField
-              label="Bounded Area"
+              label={gettext('Bounded Area')}
               value={noteDraft.area}
               onChange={(e) =>
                 setNoteDraft((cur) => ({...cur, area: e.target.value}))
@@ -2332,7 +2866,7 @@ export function ERDDesignerSurface({
           </FormGrid>
           <TextArea
             rows={3}
-            label="Note Text"
+            label={gettext('Note Text')}
             value={noteDraft.body}
             onChange={(e) =>
               setNoteDraft((cur) => ({...cur, body: e.target.value}))
@@ -2344,27 +2878,27 @@ export function ERDDesignerSurface({
       {/* 4. Make It A Design — Whiteboard Promotion Wizard (SR-F-030011) */}
       <Dialog
         open={promoteOpen}
-        title="Make It a Design — Promote Conceptual Whiteboard"
+        title={gettext('Make It a Design — Promote Conceptual Whiteboard')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setPromoteOpen(false)}
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setPromoteOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => runPromoteWhiteboard(false)}
             >
-              Preview Promotion
+              {gettext('Preview Promotion')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={() => runPromoteWhiteboard(true)}
             >
-              Promote & Save Checkpoint
+              {gettext('Promote & Save Checkpoint')}
             </Button>
           </>
         }
@@ -2376,38 +2910,41 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'settings',
-              label: 'Promotion Options & Catalog Match',
+              label: gettext('Promotion Options & Catalog Match'),
               render: () => (
                 <Stack gap="standard">
                   <FormGrid columns={2}>
                     <Select
-                      label="Target Physical Engine"
+                      label={gettext('Target Physical Engine')}
                       value={promoteDraft.targetEngine}
-                      options={ENGINE_OPTIONS}
+                      options={engineOptions}
                       onChange={(val) =>
                         setPromoteDraft((cur) => ({...cur, targetEngine: val}))
                       }
                     />
                     <Select
-                      label="Table Naming Convention"
+                      label={gettext('Table Naming Convention')}
                       value={promoteDraft.tableNaming}
                       options={[
                         {
                           value: 'plural_snake',
-                          label: 'Plural snake_case (customers)',
+                          label: gettext('Plural snake_case (customers)'),
                         },
                         {
                           value: 'singular_snake',
-                          label: 'Singular snake_case (customer)',
+                          label: gettext('Singular snake_case (customer)'),
                         },
-                        {value: 'preserve', label: 'Preserve normalized name'},
+                        {
+                          value: 'preserve',
+                          label: gettext('Preserve normalized name'),
+                        },
                       ]}
                       onChange={(val) =>
                         setPromoteDraft((cur) => ({...cur, tableNaming: val}))
                       }
                     />
                     <Select
-                      label="Surrogate Primary Key Pattern"
+                      label={gettext('Surrogate Primary Key Pattern')}
                       value={promoteDraft.pkStyle}
                       options={[
                         {
@@ -2421,7 +2958,7 @@ export function ERDDesignerSurface({
                       }
                     />
                     <Select
-                      label="Surrogate Key Logical Type"
+                      label={gettext('Surrogate Key Logical Type')}
                       value={promoteDraft.pkType}
                       options={[
                         {value: 'bigint', label: 'bigint'},
@@ -2434,7 +2971,9 @@ export function ERDDesignerSurface({
                     />
                   </FormGrid>
                   <Checkbox
-                    label="Add created_at audit timestamp column to generated tables"
+                    label={gettext(
+                      'Add created_at audit timestamp column to generated tables'
+                    )}
                     checked={promoteDraft.includeAuditTimestamps}
                     onChange={(checked) =>
                       setPromoteDraft((cur) => ({
@@ -2444,20 +2983,24 @@ export function ERDDesignerSurface({
                     }
                   />
                   <TypedRowsEditor
-                    label="Optional Existing Catalog Tables to Match"
-                    addLabel="Catalog Table"
+                    label={gettext('Optional Existing Catalog Tables to Match')}
+                    addLabel={gettext('Catalog Table')}
                     rows={promoteDraft.catalogRows}
                     columns={[
-                      {key: 'name', label: 'Catalog Table Name', minWidth: 150},
+                      {
+                        key: 'name',
+                        label: gettext('Catalog Table Name'),
+                        minWidth: 150,
+                      },
                       {
                         key: 'pk_column',
-                        label: 'PK Column',
+                        label: gettext('PK Column'),
                         default: 'id',
                         minWidth: 110,
                       },
                       {
                         key: 'pk_type',
-                        label: 'PK SQL Type',
+                        label: gettext('PK SQL Type'),
                         default: 'BIGINT',
                         minWidth: 110,
                       },
@@ -2471,29 +3014,42 @@ export function ERDDesignerSurface({
             },
             {
               id: 'preview',
-              label: 'Promoted Model & DDN Preview',
+              label: gettext('Promoted Model & DDN Preview'),
               render: () =>
                 !promotePreview ? (
-                  <EmptyState message="Click Preview Promotion to inspect generated Logical entities, Physical tables, surrogate keys and inferred foreign keys." />
+                  <EmptyState
+                    message={gettext(
+                      'Click Preview Promotion to inspect generated Logical entities, Physical tables, surrogate keys and inferred foreign keys.'
+                    )}
+                  />
                 ) : (
                   <Stack gap="standard">
                     <Stack direction="row" gap="compact">
                       <StatusBadge
                         status="success"
-                        label={`${promotePreview.promoted_logical_count} Logical Entities`}
+                        label={gettext(
+                          '%s Logical Entities',
+                          promotePreview.promoted_logical_count
+                        )}
                       />
                       <StatusBadge
                         status="success"
-                        label={`${promotePreview.promoted_physical_count} Physical Tables`}
+                        label={gettext(
+                          '%s Physical Tables',
+                          promotePreview.promoted_physical_count
+                        )}
                       />
                       <StatusBadge
                         status="info"
-                        label={`${promotePreview.inferred_foreign_keys || 0} Inferred FKs`}
+                        label={gettext(
+                          '%s Inferred FKs',
+                          promotePreview.inferred_foreign_keys || 0
+                        )}
                       />
                     </Stack>
                     <Box sx={{height: 220}}>
                       <CodeEditor
-                        label="Promoted DDN preview"
+                        label={gettext('Promoted DDN preview')}
                         readonly
                         value={promotePreview.ddn_text || ''}
                       />
@@ -2508,7 +3064,7 @@ export function ERDDesignerSurface({
       {/* 5. Naming Standards, 1-Click Auto-Fix & Waivers Dialog (SR-F-030012) */}
       <Dialog
         open={standardsOpen}
-        title="ERD Naming Standards & Waiver Inspector"
+        title={gettext('ERD Naming Standards & Waiver Inspector')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setStandardsOpen(false)}
@@ -2518,13 +3074,13 @@ export function ERDDesignerSurface({
               disabled={busyAction}
               onClick={() => setStandardsOpen(false)}
             >
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => runStandardsAction('check')}
             >
-              Re-check Standards
+              {gettext('Re-check Standards')}
             </Button>
             <Button
               intent="primary"
@@ -2532,7 +3088,7 @@ export function ERDDesignerSurface({
               disabled={readOnly || standardsData.active_count === 0}
               onClick={() => runStandardsAction('apply_fixes')}
             >
-              1-Click Auto-Fix All
+              {gettext('1-Click Auto-Fix All')}
             </Button>
           </>
         }
@@ -2544,19 +3100,23 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'violations',
-              label: `Violations (${standardsData.active_count})`,
+              label: gettext('Violations (%s)', standardsData.active_count),
               attention: standardsData.active_count > 0,
               render: () =>
                 (standardsData.violations || []).length === 0 ? (
                   <Banner status="success">
-                    All Logical and Physical names conform to active naming
-                    standards.
+                    {gettext(
+                      'All Logical and Physical names conform to active naming standards.'
+                    )}
                   </Banner>
                 ) : (
-                  <ScrollArea label="Naming violations" sx={{maxHeight: 320}}>
+                  <ScrollArea
+                    label={gettext('Naming violations')}
+                    sx={{maxHeight: 320}}
+                  >
                     <Box
                       component="table"
-                      aria-label="Naming standard violations"
+                      aria-label={gettext('Naming standard violations')}
                       sx={{
                         width: '100%',
                         borderCollapse: 'collapse',
@@ -2566,11 +3126,11 @@ export function ERDDesignerSurface({
                       <Box component="thead">
                         <Box component="tr">
                           {[
-                            'Rule',
-                            'Current Name',
-                            'Suggested Fix',
-                            'Status',
-                            'Action',
+                            gettext('Rule'),
+                            gettext('Current Name'),
+                            gettext('Suggested Fix'),
+                            gettext('Status'),
+                            gettext('Action'),
                           ].map((h) => (
                             <Box
                               key={h}
@@ -2630,7 +3190,11 @@ export function ERDDesignerSurface({
                             >
                               <StatusBadge
                                 status={v.waived ? 'info' : 'warning'}
-                                label={v.waived ? 'Waived' : 'Violation'}
+                                label={
+                                  v.waived
+                                    ? gettext('Waived')
+                                    : gettext('Violation')
+                                }
                               />
                             </Box>
                             <Box
@@ -2646,7 +3210,7 @@ export function ERDDesignerSurface({
                                   size="small"
                                   onClick={() => quickWaiveViolation(v)}
                                 >
-                                  Waive
+                                  {gettext('Waive')}
                                 </Button>
                               )}
                             </Box>
@@ -2659,11 +3223,11 @@ export function ERDDesignerSurface({
             },
             {
               id: 'rules',
-              label: 'Rules Configuration',
+              label: gettext('Rules Configuration'),
               render: () => (
                 <FormGrid columns={2}>
                   <Select
-                    label="Physical Table Case"
+                    label={gettext('Physical Table Case')}
                     value={standardsData.rules.table_case}
                     options={CASE_STYLE_OPTIONS}
                     onChange={(val) =>
@@ -2674,7 +3238,7 @@ export function ERDDesignerSurface({
                     }
                   />
                   <Select
-                    label="Column & Attribute Case"
+                    label={gettext('Column & Attribute Case')}
                     value={standardsData.rules.column_case}
                     options={CASE_STYLE_OPTIONS}
                     onChange={(val) =>
@@ -2685,7 +3249,7 @@ export function ERDDesignerSurface({
                     }
                   />
                   <TextField
-                    label="Primary Key Constraint Pattern"
+                    label={gettext('Primary Key Constraint Pattern')}
                     value={standardsData.rules.pk_pattern}
                     onChange={(e) =>
                       setStandardsData((cur) => ({
@@ -2695,7 +3259,7 @@ export function ERDDesignerSurface({
                     }
                   />
                   <TextField
-                    label="Foreign Key Constraint Pattern"
+                    label={gettext('Foreign Key Constraint Pattern')}
                     value={standardsData.rules.fk_pattern}
                     onChange={(e) =>
                       setStandardsData((cur) => ({
@@ -2705,7 +3269,7 @@ export function ERDDesignerSurface({
                     }
                   />
                   <TextField
-                    label="Index Pattern"
+                    label={gettext('Index Pattern')}
                     value={standardsData.rules.ix_pattern}
                     onChange={(e) =>
                       setStandardsData((cur) => ({
@@ -2719,18 +3283,21 @@ export function ERDDesignerSurface({
             },
             {
               id: 'waivers',
-              label: `Recorded Waivers (${(standardsData.waivers || []).length})`,
+              label: gettext(
+                'Recorded Waivers (%s)',
+                (standardsData.waivers || []).length
+              ),
               render: () => (
                 <Stack gap="standard">
                   <TypedRowsEditor
-                    label="Persistent Naming Waivers"
-                    addLabel="Waiver"
+                    label={gettext('Persistent Naming Waivers')}
+                    addLabel={gettext('Waiver')}
                     disabled={readOnly}
                     rows={standardsData.waivers}
                     columns={[
                       {
                         key: 'rule_id',
-                        label: 'Rule',
+                        label: gettext('Rule'),
                         type: 'select',
                         options: [
                           {value: 'table_case', label: 'table_case'},
@@ -2738,19 +3305,19 @@ export function ERDDesignerSurface({
                           {value: 'pk_pattern', label: 'pk_pattern'},
                           {value: 'fk_pattern', label: 'fk_pattern'},
                           {value: 'ix_pattern', label: 'ix_pattern'},
-                          {value: '*', label: '* (All rules)'},
+                          {value: '*', label: gettext('* (All rules)')},
                         ],
                         minWidth: 120,
                       },
                       {
                         key: 'target',
-                        label: 'Target (e.g. table:LegacyTbl)',
+                        label: gettext('Target (e.g. table:LegacyTbl)'),
                         minWidth: 160,
                       },
                       {
                         key: 'reason',
-                        label: 'Approval Reason',
-                        default: 'Legacy contract',
+                        label: gettext('Approval Reason'),
+                        default: gettext('Legacy contract'),
                         minWidth: 160,
                       },
                     ]}
@@ -2765,7 +3332,7 @@ export function ERDDesignerSurface({
                         loading={busyAction}
                         onClick={() => runStandardsAction('save_waivers')}
                       >
-                        Save Waivers
+                        {gettext('Save Waivers')}
                       </Button>
                     </Box>
                   )}
@@ -2779,20 +3346,20 @@ export function ERDDesignerSurface({
       {/* 6. Engine Conversion Dialog (SR-F-030014 — Typed KeyValuePairsEditor, zero raw JSON) */}
       <Dialog
         open={convertOpen}
-        title="Convert ERD Engine"
+        title={gettext('Convert ERD Engine')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setConvertOpen(false)}
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setConvertOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => runEngineConversion(false)}
             >
-              Preview Conversion
+              {gettext('Preview Conversion')}
             </Button>
             {!readOnly && (
               <Button
@@ -2800,7 +3367,7 @@ export function ERDDesignerSurface({
                 loading={busyAction}
                 onClick={() => runEngineConversion(true)}
               >
-                Save Converted Version
+                {gettext('Save Converted Version')}
               </Button>
             )}
           </>
@@ -2813,31 +3380,31 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'engines',
-              label: 'Engines & Type Overrides',
+              label: gettext('Engines & Type Overrides'),
               render: () => (
                 <Stack gap="standard">
                   <FormGrid columns={2}>
                     <Select
-                      label="Source engine"
+                      label={gettext('Source engine')}
                       value={convertDraft.sourceEngine}
-                      options={ENGINE_OPTIONS}
+                      options={engineOptions}
                       onChange={(val) =>
                         setConvertDraft((cur) => ({...cur, sourceEngine: val}))
                       }
                     />
                     <Select
-                      label="Target engine"
+                      label={gettext('Target engine')}
                       value={convertDraft.targetEngine}
-                      options={ENGINE_OPTIONS}
+                      options={engineOptions}
                       onChange={(val) =>
                         setConvertDraft((cur) => ({...cur, targetEngine: val}))
                       }
                     />
                   </FormGrid>
                   <KeyValuePairsEditor
-                    label="Custom Engine Type Overrides"
-                    keyLabel="Logical Type"
-                    valueLabel="Target Physical SQL Type"
+                    label={gettext('Custom Engine Type Overrides')}
+                    keyLabel={gettext('Logical Type')}
+                    valueLabel={gettext('Target Physical SQL Type')}
                     keyPlaceholder="e.g. decimal"
                     valuePlaceholder="e.g. NUMERIC(20,4)"
                     value={convertDraft.customTypeMap}
@@ -2846,9 +3413,9 @@ export function ERDDesignerSurface({
                     }
                   />
                   <KeyValuePairsEditor
-                    label="Loss Choices"
-                    keyLabel="Lossy Item / Element ID"
-                    valueLabel="Explicit Conversion Choice"
+                    label={gettext('Loss Choices')}
+                    keyLabel={gettext('Lossy Item / Element ID')}
+                    valueLabel={gettext('Explicit Conversion Choice')}
                     keyPlaceholder="e.g. json"
                     valuePlaceholder="e.g. store_as_text"
                     value={convertDraft.lossChoices}
@@ -2861,20 +3428,26 @@ export function ERDDesignerSurface({
             },
             {
               id: 'preview',
-              label: 'DDN Preview & Loss Report',
+              label: gettext('DDN Preview & Loss Report'),
               render: () =>
                 !convertResult ? (
-                  <EmptyState message="Click Preview Conversion to inspect mapped physical types, lossy item warnings and DDN output." />
+                  <EmptyState
+                    message={gettext(
+                      'Click Preview Conversion to inspect mapped physical types, lossy item warnings and DDN output.'
+                    )}
+                  />
                 ) : (
                   <Stack gap="standard">
                     <Banner status="success">
-                      Converted to {convertResult.loss_report?.target_engine}{' '}
-                      (lossy items:{' '}
-                      {convertResult.loss_report?.lossy_count ?? 0})
+                      {gettext(
+                        'Converted to %s (lossy items: %s)',
+                        convertResult.loss_report?.target_engine,
+                        convertResult.loss_report?.lossy_count ?? 0
+                      )}
                     </Banner>
                     <Box sx={{height: 240}}>
                       <CodeEditor
-                        label="Converted DDN Preview"
+                        label={gettext('Converted DDN Preview')}
                         readonly
                         value={convertResult.ddn_text || ''}
                       />
@@ -2889,14 +3462,14 @@ export function ERDDesignerSurface({
       {/* 7. Alter Plan, 4-Bucket Risk & Migration Review Dialog (SR-F-030013) */}
       <Dialog
         open={alterOpen}
-        title="Preview ERD alter plan"
+        title={gettext('Preview ERD alter plan')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setAlterOpen(false)}
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setAlterOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             {!readOnly && typeof client.deployErdPlan === 'function' && (
               <Button
@@ -2904,7 +3477,7 @@ export function ERDDesignerSurface({
                 loading={busyAction}
                 onClick={() => submitAlterToOperationReview()}
               >
-                Submit to Native Operation Review
+                {gettext('Submit to Native Operation Review')}
               </Button>
             )}
           </>
@@ -2917,32 +3490,32 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'risks',
-              label: 'Differences & 4 Risk Categories',
+              label: gettext('Differences & 4 Risk Categories'),
               render: () => (
                 <Stack gap="standard">
                   <FormGrid columns={3}>
                     <Select
-                      label="Target SQL engine"
+                      label={gettext('Target SQL engine')}
                       value={alterDraft.targetEngine}
-                      options={ENGINE_OPTIONS}
+                      options={engineOptions}
                       onChange={(val) => {
                         setAlterDraft((cur) => ({...cur, targetEngine: val}));
                         loadAlterPlan({targetEngine: val}, selectedDiffs);
                       }}
                     />
                     <Select
-                      label="Baseline Mode"
+                      label={gettext('Baseline Mode')}
                       value={alterDraft.baselineMode}
-                      options={BASELINE_MODE_OPTIONS}
+                      options={baselineModeOptions}
                       onChange={(val) => {
                         setAlterDraft((cur) => ({...cur, baselineMode: val}));
                         loadAlterPlan({baselineMode: val}, undefined);
                       }}
                     />
                     <Select
-                      label="Migration Wrapper"
+                      label={gettext('Migration Wrapper')}
                       value={alterDraft.migrationFormat}
-                      options={MIGRATION_FORMAT_OPTIONS}
+                      options={migrationFormatOptions}
                       onChange={(val) => {
                         setAlterDraft((cur) => ({
                           ...cur,
@@ -2963,14 +3536,14 @@ export function ERDDesignerSurface({
 
                       <Box
                         role="group"
-                        aria-label="Risk classification summary"
+                        aria-label={gettext('Risk classification summary')}
                         sx={{display: 'flex', flexWrap: 'wrap', gap: 1}}
                       >
                         <StatusBadge
                           status={
                             riskSummary.loses_data > 0 ? 'error' : 'success'
                           }
-                          label={`Loses Data: ${riskSummary.loses_data}`}
+                          label={gettext('Loses Data: %s', riskSummary.loses_data)}
                         />
                         <StatusBadge
                           status={
@@ -2978,7 +3551,10 @@ export function ERDDesignerSurface({
                               ? 'warning'
                               : 'success'
                           }
-                          label={`May Fail on Existing Data: ${riskSummary.may_fail_on_existing_data}`}
+                          label={gettext(
+                            'May Fail on Existing Data: %s',
+                            riskSummary.may_fail_on_existing_data
+                          )}
                         />
                         <StatusBadge
                           status={
@@ -2986,7 +3562,10 @@ export function ERDDesignerSurface({
                               ? 'error'
                               : 'success'
                           }
-                          label={`Breaks Running Clients: ${riskSummary.breaks_running_clients}`}
+                          label={gettext(
+                            'Breaks Running Clients: %s',
+                            riskSummary.breaks_running_clients
+                          )}
                         />
                         <StatusBadge
                           status={
@@ -2994,18 +3573,21 @@ export function ERDDesignerSurface({
                               ? 'warning'
                               : 'success'
                           }
-                          label={`Locks / Copies Table: ${riskSummary.locks_or_copies_table}`}
+                          label={gettext(
+                            'Locks / Copies Table: %s',
+                            riskSummary.locks_or_copies_table
+                          )}
                         />
                       </Box>
 
                       <ScrollArea
-                        label="Detected schema differences"
+                        label={gettext('Detected schema differences')}
                         sx={{maxHeight: 220}}
                       >
-                        <Box role="group" aria-label="Detected differences">
+                        <Box role="group" aria-label={gettext('Detected differences')}>
                           {(alterPlan.differences || []).length === 0 ? (
                             <Box sx={{fontSize: '0.8125rem', py: 0.5}}>
-                              No physical schema differences detected.
+                              {gettext('No physical schema differences detected.')}
                             </Box>
                           ) : (
                             <Stack gap="compact">
@@ -3013,7 +3595,9 @@ export function ERDDesignerSurface({
                                 <Checkbox
                                   key={diff.difference_id}
                                   label={`${diff.change_kind}: ${diff.object_name}${
-                                    diff.destructive ? ' (destructive)' : ''
+                                    diff.destructive
+                                      ? ` (${gettext('destructive')})`
+                                      : ''
                                   }`}
                                   checked={selectedDiffs.includes(
                                     diff.difference_id
@@ -3037,20 +3621,22 @@ export function ERDDesignerSurface({
             },
             {
               id: 'sql_preview',
-              label: 'Migration SQL Preview',
+              label: gettext('Migration SQL Preview'),
               render: () => (
                 <Stack gap="standard">
                   <Select
-                    label="Migration Output Format"
+                    label={gettext('Migration Output Format')}
                     value={alterDraft.migrationFormat}
-                    options={MIGRATION_FORMAT_OPTIONS}
+                    options={migrationFormatOptions}
                     onChange={(val) =>
                       setAlterDraft((cur) => ({...cur, migrationFormat: val}))
                     }
                   />
                   <Box sx={{height: 250}}>
                     <CodeEditor
-                      label="Generated change plan (native operation review required)"
+                      label={gettext(
+                        'Generated change plan (native operation review required)'
+                      )}
                       language="sql"
                       readonly
                       value={activeMigrationSql}
@@ -3061,22 +3647,22 @@ export function ERDDesignerSurface({
             },
             {
               id: 'submit_review',
-              label: 'Native Operation Review',
+              label: gettext('Native Operation Review'),
               render: () => (
                 <Stack gap="standard">
                   <Banner status="info">
-                    Schema changes are queued into ScratchRobin&apos;s
-                    OperationBus in <strong>awaiting_approval</strong> state and
-                    are never executed directly by the ERD designer.
+                    {gettext(
+                      "Schema changes are queued into ScratchRobin's OperationBus in awaiting_approval state and are never executed directly by the ERD designer."
+                    )}
                   </Banner>
                   <FormGrid columns={3}>
                     <Select
-                      label="Target Environment"
+                      label={gettext('Target Environment')}
                       value={alterDraft.environment}
                       options={[
-                        {value: 'dev', label: 'Development'},
-                        {value: 'staging', label: 'Staging'},
-                        {value: 'prod', label: 'Production'},
+                        {value: 'dev', label: gettext('Development')},
+                        {value: 'staging', label: gettext('Staging')},
+                        {value: 'prod', label: gettext('Production')},
                       ]}
                       onChange={(val) =>
                         setAlterDraft((cur) => ({
@@ -3087,7 +3673,7 @@ export function ERDDesignerSurface({
                       }
                     />
                     <TextField
-                      label="Target Endpoint ID"
+                      label={gettext('Target Endpoint ID')}
                       value={alterDraft.endpointId}
                       onChange={(e) =>
                         setAlterDraft((cur) => ({
@@ -3097,7 +3683,7 @@ export function ERDDesignerSurface({
                       }
                     />
                     <TextField
-                      label="Required Approver Principal (optional)"
+                      label={gettext('Required Approver Principal (optional)')}
                       placeholder="e.g. role:dba-lead"
                       value={alterDraft.approverPrincipal}
                       onChange={(e) =>
@@ -3111,11 +3697,13 @@ export function ERDDesignerSurface({
                   {reviewReceipt && (
                     <Box data-testid="erd-operation-review-receipt">
                       <Banner status="success">
-                        Queued Operation <code>{reviewReceipt.operation_id}</code>{' '}
-                        in status <strong>{reviewReceipt.status}</strong> (
-                        {reviewReceipt.statement_count} statements · applied
-                        immediately: {String(reviewReceipt.applied_immediately)}
-                        ).
+                        {gettext(
+                          'Queued Operation %s in status %s (%s statements · applied immediately: %s).',
+                          reviewReceipt.operation_id,
+                          reviewReceipt.status,
+                          reviewReceipt.statement_count,
+                          String(reviewReceipt.applied_immediately)
+                        )}
                       </Banner>
                     </Box>
                   )}
@@ -3129,7 +3717,7 @@ export function ERDDesignerSurface({
       {/* 8. System Diagram Drift & Topology Change Review Dialog (SR-F-030014) */}
       <Dialog
         open={driftOpen}
-        title="System diagram drift and change review"
+        title={gettext('System diagram drift and change review')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setDriftOpen(false)}
@@ -3137,20 +3725,20 @@ export function ERDDesignerSurface({
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setDriftOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => evaluateSystemDrift(liveTopologyRows)}
             >
-              Evaluate Drift
+              {gettext('Evaluate Drift')}
             </Button>
             <Button
               intent="primary"
               loading={busyAction}
               onClick={submitDiagramProposal}
             >
-              Request native review
+              {gettext('Request native review')}
             </Button>
           </>
         }
@@ -3162,43 +3750,47 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'topology',
-              label: 'Live Topology & Drift',
+              label: gettext('Live Topology & Drift'),
               render: () => (
                 <Stack gap="standard">
                   {driftReport && (
                     <Banner
                       status={driftReport.has_drift ? 'warning' : 'success'}
                     >
-                      Drift status:{' '}
-                      {driftReport.has_drift ? 'Drift detected' : 'In sync'}{' '}
-                      (matched: {driftReport.matched?.length || 0}, missing:{' '}
-                      {driftReport.missing_in_live?.length || 0}, property
-                      drift: {driftReport.property_drift?.length || 0})
+                      {gettext(
+                        'Drift status: %s (matched: %s, missing: %s, property drift: %s)',
+                        driftReport.has_drift
+                          ? gettext('Drift detected')
+                          : gettext('In sync'),
+                        driftReport.matched?.length || 0,
+                        driftReport.missing_in_live?.length || 0,
+                        driftReport.property_drift?.length || 0
+                      )}
                     </Banner>
                   )}
                   <TypedRowsEditor
-                    label="Live Topology Nodes"
-                    addLabel="Live Node"
+                    label={gettext('Live Topology Nodes')}
+                    addLabel={gettext('Live Node')}
                     rows={liveTopologyRows}
                     columns={[
-                      {key: 'id', label: 'Node ID', minWidth: 110},
-                      {key: 'host', label: 'Host', minWidth: 120},
+                      {key: 'id', label: gettext('Node ID'), minWidth: 110},
+                      {key: 'host', label: gettext('Host'), minWidth: 120},
                       {
                         key: 'engine',
-                        label: 'Engine',
+                        label: gettext('Engine'),
                         type: 'select',
-                        options: ENGINE_OPTIONS,
+                        options: engineOptions,
                         minWidth: 110,
                       },
                       {
                         key: 'role',
-                        label: 'Role',
+                        label: gettext('Role'),
                         default: 'primary',
                         minWidth: 95,
                       },
                       {
                         key: 'status',
-                        label: 'Status',
+                        label: gettext('Status'),
                         default: 'online',
                         minWidth: 90,
                       },
@@ -3210,12 +3802,12 @@ export function ERDDesignerSurface({
             },
             {
               id: 'proposal',
-              label: 'Propose Native Review Change',
+              label: gettext('Propose Native Review Change'),
               render: () => (
                 <Stack gap="standard">
                   <FormGrid columns={3}>
                     <TextField
-                      label="Element ID"
+                      label={gettext('Element ID')}
                       value={proposalDraft.elementId}
                       onChange={(e) =>
                         setProposalDraft((cur) => ({
@@ -3225,15 +3817,15 @@ export function ERDDesignerSurface({
                       }
                     />
                     <Select
-                      label="Requested topology action"
+                      label={gettext('Requested topology action')}
                       value={proposalDraft.action}
-                      options={TOPOLOGY_ACTION_OPTIONS}
+                      options={topologyActionOptions}
                       onChange={(val) =>
                         setProposalDraft((cur) => ({...cur, action: val}))
                       }
                     />
                     <TextField
-                      label="Target host / rack"
+                      label={gettext('Target host / rack')}
                       value={proposalDraft.targetHost}
                       onChange={(e) =>
                         setProposalDraft((cur) => ({
@@ -3246,10 +3838,11 @@ export function ERDDesignerSurface({
                   {changeProposal && (
                     <Box data-testid="erd-change-proposal">
                       <Banner status="info">
-                        Proposal {changeProposal.proposal_id} queued for
-                        ScratchRobin native-operation review (applied
-                        immediately:{' '}
-                        {String(changeProposal.applied_immediately)}).
+                        {gettext(
+                          'Proposal %s queued for ScratchRobin native-operation review (applied immediately: %s).',
+                          changeProposal.proposal_id,
+                          String(changeProposal.applied_immediately)
+                        )}
                       </Banner>
                     </Box>
                   )}
@@ -3263,13 +3856,13 @@ export function ERDDesignerSurface({
       {/* 9. Multi-Target Deployment Environment Matrix (Dev / Staging / Prod, SR-F-030014) */}
       <Dialog
         open={envMatrixOpen}
-        title="Multi-Target Deployment Environment Matrix"
+        title={gettext('Multi-Target Deployment Environment Matrix')}
         size="large"
         busy={busyAction}
         onClose={() => !busyAction && setEnvMatrixOpen(false)}
         actions={
           <Button disabled={busyAction} onClick={() => setEnvMatrixOpen(false)}>
-            Close
+            {gettext('Close')}
           </Button>
         }
       >
@@ -3279,22 +3872,30 @@ export function ERDDesignerSurface({
           tabs={[
             {
               id: 'matrix',
-              label: 'Dev / Staging / Prod Matrix',
+              label: gettext('Dev / Staging / Prod Matrix'),
               render: () => (
                 <Stack gap="standard">
                   {envReceipt && (
                     <Banner status="success">
-                      Queued Operation <code>{envReceipt.operation_id}</code>{' '}
-                      for approval ({envReceipt.status}).
+                      {gettext(
+                        'Queued Operation %s for approval (%s).',
+                        envReceipt.operation_id,
+                        envReceipt.status
+                      )}
                     </Banner>
                   )}
                   {environments.length === 0 ? (
-                    <EmptyState message="No environment records loaded yet." />
+                    <EmptyState
+                      message={gettext('No environment records loaded yet.')}
+                    />
                   ) : (
-                    <ScrollArea label="Environment matrix" sx={{maxHeight: 320}}>
+                    <ScrollArea
+                      label={gettext('Environment matrix')}
+                      sx={{maxHeight: 320}}
+                    >
                       <Box
                         component="table"
-                        aria-label="Deployment environment matrix"
+                        aria-label={gettext('Deployment environment matrix')}
                         sx={{
                           width: '100%',
                           borderCollapse: 'collapse',
@@ -3304,12 +3905,12 @@ export function ERDDesignerSurface({
                         <Box component="thead">
                           <Box component="tr">
                             {[
-                              'Environment',
-                              'Endpoint / Target',
-                              'Deployed',
-                              'Desired',
-                              'Drift Status',
-                              'Actions',
+                              gettext('Environment'),
+                              gettext('Endpoint / Target'),
+                              gettext('Deployed'),
+                              gettext('Desired'),
+                              gettext('Drift Status'),
+                              gettext('Actions'),
                             ].map((h) => (
                               <Box
                                 key={h}
@@ -3411,7 +4012,7 @@ export function ERDDesignerSurface({
                                         )
                                       }
                                     >
-                                      Queue Review
+                                      {gettext('Queue Review')}
                                     </Button>
                                     <Button
                                       size="small"
@@ -3420,7 +4021,7 @@ export function ERDDesignerSurface({
                                         recordVerifiedDeployment(env)
                                       }
                                     >
-                                      Record Verified
+                                      {gettext('Record Verified')}
                                     </Button>
                                   </Stack>
                                 )}
@@ -3441,26 +4042,26 @@ export function ERDDesignerSurface({
       {/* 10. Git Sync Dialog */}
       <Dialog
         open={gitOpen}
-        title="ERD Git Sync & Worktree Link"
+        title={gettext('ERD Git Sync & Worktree Link')}
         size="medium"
         busy={busyAction}
         onClose={() => !busyAction && setGitOpen(false)}
         actions={
           <>
             <Button disabled={busyAction} onClick={() => setGitOpen(false)}>
-              Close
+              {gettext('Close')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => runGitAction('link')}
             >
-              Link Path
+              {gettext('Link Path')}
             </Button>
             <Button
               disabled={busyAction}
               onClick={() => runGitAction('drift')}
             >
-              Check Drift
+              {gettext('Check Drift')}
             </Button>
             {!readOnly && (
               <>
@@ -3468,14 +4069,14 @@ export function ERDDesignerSurface({
                   disabled={busyAction}
                   onClick={() => runGitAction('load')}
                 >
-                  Load from Git
+                  {gettext('Load from Git')}
                 </Button>
                 <Button
                   intent="primary"
                   loading={busyAction}
                   onClick={() => runGitAction('save')}
                 >
-                  Save DDN to Git
+                  {gettext('Save DDN to Git')}
                 </Button>
               </>
             )}
@@ -3486,15 +4087,15 @@ export function ERDDesignerSurface({
         <Stack gap="standard">
           {gitStatusInfo && (
             <Banner status="info">
-              Git sync state:{' '}
-              <strong>
-                {gitStatusInfo.sync_state || gitStatusInfo.status || 'updated'}
-              </strong>
+              {gettext(
+                'Git sync state: %s',
+                gitStatusInfo.sync_state || gitStatusInfo.status || 'updated'
+              )}
             </Banner>
           )}
           <FormGrid columns={2}>
             <TextField
-              label="Git Repository Worktree Path"
+              label={gettext('Git Repository Worktree Path')}
               placeholder="/path/to/repo"
               value={gitDraft.repository}
               onChange={(e) =>
@@ -3502,21 +4103,21 @@ export function ERDDesignerSurface({
               }
             />
             <TextField
-              label="Relative DDN File Path"
+              label={gettext('Relative DDN File Path')}
               value={gitDraft.path}
               onChange={(e) =>
                 setGitDraft((cur) => ({...cur, path: e.target.value}))
               }
             />
             <TextField
-              label="Branch"
+              label={gettext('Branch')}
               value={gitDraft.branch}
               onChange={(e) =>
                 setGitDraft((cur) => ({...cur, branch: e.target.value}))
               }
             />
             <TextField
-              label="Note / Commit Summary"
+              label={gettext('Note / Commit Summary')}
               value={gitDraft.note}
               onChange={(e) =>
                 setGitDraft((cur) => ({...cur, note: e.target.value}))
@@ -3524,7 +4125,7 @@ export function ERDDesignerSurface({
             />
           </FormGrid>
           <Checkbox
-            label="Create Git commit when saving DDN to repository"
+            label={gettext('Create Git commit when saving DDN to repository')}
             checked={gitDraft.commit}
             onChange={(checked) =>
               setGitDraft((cur) => ({...cur, commit: checked}))
@@ -3748,6 +4349,7 @@ ERDDesignerSurface.propTypes = {
   designId: PropTypes.string.isRequired,
   client: PropTypes.object,
   controller: PropTypes.object,
+  commands: PropTypes.object,
   readOnly: PropTypes.bool,
   executeCommand: PropTypes.func,
   onStateChange: PropTypes.func,

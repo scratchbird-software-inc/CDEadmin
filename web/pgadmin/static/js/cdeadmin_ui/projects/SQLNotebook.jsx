@@ -9,6 +9,8 @@
 
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../actions/t_actions';
 import {Box, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Checkbox, Select} from '../primitives/Choice';
@@ -21,6 +23,7 @@ import {
   QueryStepStatusFooter,
 } from '../query';
 import {ProjectAssetClient} from './ProjectAssetClient';
+import FormReference from '../navigation/FormReference';
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {
   NOTEBOOK_TYPE,
@@ -54,6 +57,8 @@ export default function SQLNotebook({
   initialAssetId = '',
   onDirty,
 }) {
+  useLocaleRevision();
+  const policyOptions = POLICY_OPTIONS.map((opt) => ({value: opt.value, label: gettext(opt.label)}));
   const client = useMemo(() => suppliedClient || new ProjectAssetClient(), [suppliedClient]);
   const [projects, setProjects] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -262,25 +267,25 @@ export default function SQLNotebook({
   };
 
   const projectOptions = [
-    {value: '', label: 'Select project'},
+    {value: '', label: gettext('Select project')},
     ...projects.map((item) => ({value: item.project_id, label: item.name})),
   ];
   const savedNotebookOptions = [
-    {value: '', label: 'New notebook'},
+    {value: '', label: gettext('New notebook')},
     ...assets.map((item) => ({
       value: item.asset_id,
       label: `${item.name} (v${item.version})`,
     })),
   ];
   const revisionOptions = [
-    {value: '', label: 'Latest'},
+    {value: '', label: gettext('Latest')},
     ...revisions.map((item) => ({
       value: String(item.version),
       label: `v${item.version}`,
     })),
   ];
   const cellOptions = [
-    {value: '', label: 'Select cell'},
+    {value: '', label: gettext('Select cell')},
     ...document.cells.map((item, index) => ({
       value: item.id,
       label: `${index + 1}. ${item.kind}: ${item.source.slice(0, 40)}`,
@@ -298,6 +303,7 @@ export default function SQLNotebook({
   return (
     <ScratchScrollArea orientation="both" style={{height: '100%', minHeight: 150}}>
       <Box component="section" aria-label="SQL notebook" sx={{p: 1.5}}>
+        <FormReference formKey="sql-notebook" />
         <Stack gap="compact">
           <Banner status="info">
             Notes, SQL and explicitly retained result pages. Opening, importing and sharing never execute SQL.
@@ -311,7 +317,7 @@ export default function SQLNotebook({
           <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'flex-end'}}>
             <Select
               size="small"
-              label="Notebook project"
+              label={gettext('Notebook project')}
               value={projects.some((item) => item.project_id === projectId) ? projectId : ''}
               options={projectOptions}
               disabled={locked || (dirty && Boolean(assetId))}
@@ -325,14 +331,14 @@ export default function SQLNotebook({
               }}
             />
             <Button disabled={locked || dirty} onClick={() => perform(refresh)}>
-              Refresh projects
+              {gettext('Refresh projects')}
             </Button>
             <Button disabled={locked || readonly} onClick={reset}>
-              Discard draft / new notebook
+              {gettext('Discard draft / new notebook')}
             </Button>
             <Select
               size="small"
-              label="Saved notebook"
+              label={gettext('Saved notebook')}
               value={assets.some((item) => item.asset_id === assetId) ? assetId : ''}
               options={savedNotebookOptions}
               sx={{minWidth: 180}}
@@ -345,7 +351,7 @@ export default function SQLNotebook({
             />
             <TextField
               size="small"
-              label="Notebook name"
+              label={gettext('Notebook name')}
               value={name}
               disabled={locked || readonly}
               onChange={(event) => {
@@ -354,11 +360,11 @@ export default function SQLNotebook({
               }}
             />
             <Button disabled={locked || readonly || !projectId} onClick={save}>
-              Save notebook revision
+              {gettext('Save notebook revision')}
             </Button>
             <Select
               size="small"
-              label="Notebook revision"
+              label={gettext('Notebook revision')}
               value={revision}
               options={revisionOptions}
               disabled={locked || dirty || !version}
@@ -371,13 +377,13 @@ export default function SQLNotebook({
                 perform(() => load(projectId, assetId, revision ? Number(revision) : null))
               }
             >
-              Reload notebook
+              {gettext('Reload notebook')}
             </Button>
             <Button
               disabled={locked || dirty || readonly}
               onClick={() => fileInputRef.current?.click()}
             >
-              Import notebook
+              {gettext('Import notebook')}
             </Button>
             <input
               ref={fileInputRef}
@@ -432,14 +438,14 @@ export default function SQLNotebook({
 
           <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-end'}}>
             <Button disabled={locked || readonly || document.cells.length >= 200} onClick={() => add('note')}>
-              Add note
+              {gettext('Add note')}
             </Button>
             <Button disabled={locked || readonly || document.cells.length >= 200} onClick={() => add('sql')}>
-              Add SQL cell
+              {gettext('Add SQL cell')}
             </Button>
             <Select
               size="small"
-              label="Notebook cell"
+              label={gettext('Notebook cell')}
               value={selected}
               options={cellOptions}
               sx={{minWidth: 200}}
@@ -447,10 +453,10 @@ export default function SQLNotebook({
               onChange={(nextVal) => setSelected(nextVal)}
             />
             <Button disabled={locked || readonly || !cell} onClick={() => move(-1)}>
-              Move cell up
+              {gettext('Move cell up')}
             </Button>
             <Button disabled={locked || readonly || !cell} onClick={() => move(1)}>
-              Move cell down
+              {gettext('Move cell down')}
             </Button>
             <Button
               disabled={locked || readonly || !cell}
@@ -462,7 +468,7 @@ export default function SQLNotebook({
                 setSelected('');
               }}
             >
-              Remove cell
+              {gettext('Remove cell')}
             </Button>
           </Box>
 
@@ -471,7 +477,7 @@ export default function SQLNotebook({
               <TextArea
                 fullWidth
                 rows={3}
-                label={cell.kind === 'sql' ? 'Notebook SQL cell' : 'Notebook note'}
+                label={cell.kind === 'sql' ? gettext('Notebook SQL cell') : gettext('Notebook note')}
                 value={cell.source}
                 disabled={locked || readonly}
                 onChange={(event) =>
@@ -485,20 +491,20 @@ export default function SQLNotebook({
                 <Stack gap="compact">
                   <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center'}}>
                     <Button disabled={locked || !bound || !onLoad} onClick={() => onLoad(cell.source)}>
-                      Load cell in SQL editor
+                      {gettext('Load cell in SQL editor')}
                     </Button>
                     <Button
                       disabled={locked || readonly || !onLoad}
                       onClick={() => editCell(cell.id, {source: editorSource, snapshot: null})}
                     >
-                      Replace cell from SQL editor
+                      {gettext('Replace cell from SQL editor')}
                     </Button>
                     <Button
                       intent="primary"
                       disabled={locked || !bound || !onRun || !cell.source.trim()}
                       onClick={runSelectedSqlCell}
                     >
-                      Run selected SQL cell
+                      {gettext('Run selected SQL cell')}
                     </Button>
                     <QueryExecutionToolbarCluster
                       controller={queryController}
@@ -512,7 +518,7 @@ export default function SQLNotebook({
                   {canRetain && (
                     <Box className="sr-bui-table-card" sx={{p: 1.25}}>
                       <Box sx={{fontSize: '0.78rem', mb: 1}}>
-                        Retain at most 100 rows from the displayed page. Columns default to omitted; sensitive names default to redacted.
+                        {gettext('Retain at most 100 rows from the displayed page. Columns default to omitted; sensitive names default to redacted.')}
                       </Box>
                       <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1}}>
                         {(rendered.view_model?.columns || []).map((column, index) => (
@@ -520,9 +526,9 @@ export default function SQLNotebook({
                             key={index}
                             size="small"
                             sx={{minWidth: 160}}
-                            label={`Snapshot ${column.name}`}
+                            label={gettext('Snapshot %s', column.name)}
                             value={policies[index] || 'omit'}
-                            options={POLICY_OPTIONS}
+                            options={policyOptions}
                             disabled={locked || readonly}
                             onChange={(nextVal) =>
                               setPolicies({...policies, [index]: nextVal})
@@ -545,7 +551,7 @@ export default function SQLNotebook({
                           )
                         }
                       >
-                        Retain reviewed page snapshot
+                        {gettext('Retain reviewed page snapshot')}
                       </Button>
                     </Box>
                   )}
@@ -553,7 +559,7 @@ export default function SQLNotebook({
                     <>
                       <Box
                         component="pre"
-                        aria-label="Retained notebook snapshot"
+                        aria-label={gettext('Retained notebook snapshot')}
                         className="sr-bui-table-card"
                         sx={{p: 1.25, maxHeight: 220, overflow: 'auto', fontSize: '0.75rem'}}
                       >
@@ -564,7 +570,7 @@ export default function SQLNotebook({
                           disabled={locked || readonly}
                           onClick={() => editCell(cell.id, {snapshot: null})}
                         >
-                          Remove retained snapshot
+                          {gettext('Remove retained snapshot')}
                         </Button>
                       </Box>
                     </>
@@ -578,14 +584,14 @@ export default function SQLNotebook({
             checked={reviewed}
             disabled={locked || dirty || !version}
             onChange={(nextChecked) => setReviewed(nextChecked)}
-            label="I reviewed notes, SQL literals and retained data for secrets before sharing this saved revision."
+            label={gettext('I reviewed notes, SQL literals and retained data for secrets before sharing this saved revision.')}
           />
           <Box>
             <Button
               disabled={locked || dirty || !reviewed || !version}
               onClick={download}
             >
-              Export shareable notebook
+              {gettext('Export shareable notebook')}
             </Button>
           </Box>
 

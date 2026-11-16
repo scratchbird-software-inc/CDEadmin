@@ -44,8 +44,86 @@ function resourceEditorAvailable(bundle, resourceKind) {
  * 2026-11-11, option 1: `cde_native_editor` lists create/alter/drop).
  */
 function nodeEditorAvailable(bundle, resourceKind, itemData, operation) {
-  return resourceEditorAvailable(bundle, resourceKind) ||
+  if (!bundle || !resourceKind) return false;
+  const tier1SupportsOp = !operation || Boolean(bundle?.kinds?.[resourceKind]?.tier1?.includes(operation));
+  return (tier1SupportsOp && resourceEditorAvailable(bundle, resourceKind)) ||
     (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation));
+}
+
+/**
+ * Synchronous check for whether a loaded descriptor bundle covers a resource
+ * kind with a declarative/native editor. Never returns true when `bundle` is
+ * null/undefined so backend context actions are never stripped while loading.
+ */
+export function familyCoversKind(bundle, resourceKind, itemData = null, operation = 'alter') {
+  if (!bundle || !resourceKind) return false;
+  return nodeEditorAvailable(bundle, resourceKind, itemData, operation);
+}
+
+export function cachedDescriptorBundle(api, engine, version) {
+  if (!engine) return null;
+  const client = descriptorClient(api);
+  return client.cached(engine, {version}) || (version ? client.cached(engine) : null);
+}
+
+const TARGET_OPERATION_FIELD_IDS = [
+  'table_name',
+  'object_name',
+  'routine_name',
+  'view_name',
+  'sequence_name',
+  'role_name',
+  'name',
+];
+
+const CHILD_NAMING_OPERATIONS = new Set([
+  'create-partition',
+  'create_partition',
+  'restore-point',
+  'load_database',
+]);
+
+export function withTargetOperationDefaults(operation, targetName, resourceKind) {
+  if (!operation || !targetName || !Array.isArray(operation.fields) || !operation.fields.length) {
+    return operation;
+  }
+  if (CHILD_NAMING_OPERATIONS.has(operation.operation_id)) {
+    return operation;
+  }
+  let matchedId = null;
+  for (const candidate of TARGET_OPERATION_FIELD_IDS) {
+    if (candidate === 'table_name' && resourceKind && resourceKind !== 'table') {
+      continue;
+    }
+    const field = operation.fields.find((f) => f.field_id === candidate);
+    if (field && field.default === undefined) {
+      matchedId = candidate;
+      break;
+    }
+  }
+  if (!matchedId) return operation;
+  return {
+    ...operation,
+    fields: operation.fields.map((field) =>
+      field.field_id === matchedId && field.default === undefined
+        ? {...field, default: targetName}
+        : field
+    ),
+  };
+}
+
+export function promptEndpointVerification(endpointItem, databaseTargetId) {
+  const serverNode = pgAdmin?.Browser?.Nodes?.server;
+  if (!endpointItem || typeof serverNode?.callbacks?.verify_cde_endpoint !== 'function') {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
+      item: endpointItem,
+      databaseTargetId: databaseTargetId || '__retry__',
+      onSuccess: () => resolve(true),
+    });
+  });
 }
 
 /*
@@ -96,7 +174,12 @@ function treeContext(itemData, item) {
   if(!endpoint.data || !providerEndpointSessionReady(endpoint.data)) return null;
   const engine = itemData?.cde_engine_id || endpoint.data.cde_engine_id;
   if(!engine) return null;
-  return {endpoint, engine, version: endpoint.data.verified_runtime_version,
+  const version =
+    itemData?.verified_runtime_version ||
+    itemData?.cde_engine_version ||
+    endpoint.data.verified_runtime_version ||
+    endpoint.data.cde_engine_version;
+  return {endpoint, engine, version,
     versionSupport: endpoint.data.version_support, api: getApiInstance()};
 }
 
@@ -160,11 +243,13 @@ function openEditorPanel({context, itemData, item, resourceKind, resourceId, mod
   const panelId = `id-object-editor-${++editorSequence}`;
   const onClose = () => closeInlineOrWorkspaceTab(panelId, workspace);
   const title = gettext('%s — %s', mode === 'create' ? gettext('Create') : gettext('Edit'), displayName);
+  const onAuthRequired = () => promptEndpointVerification(context.endpoint.item, itemData.cde_database_target_id);
   const content = <ErrorBoundary>
     <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
       version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
       databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
       onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter', openIfClosed: mode === 'create'})}
+      onAuthRequired={onAuthRequired}
       onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
         database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
         display_name: displayName, task_title: gettext('Data')})} />
@@ -188,7 +273,7 @@ export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
     // No descriptors served for this engine: the legacy workspace still works.
     return false;
   }
-  if(!nodeEditorAvailable(bundle, itemData.cde_resource_kind, itemData, 'alter')) return false;
+  if(!nodeEditorAvailable(bundle, itemData.cde_resource_kind, itemData, mode)) return false;
   return openEditorPanel({context, itemData, item, resourceKind: itemData.cde_resource_kind,
     resourceId: itemData.cde_resource_id, mode, displayName: itemData.label || itemData._label});
 }
@@ -197,7 +282,7 @@ export async function tryOpenFamilyEditor(itemData, item, {mode='alter'}={}) {
 export function openFamilyCreate(itemData, item, resourceKind) {
   const context = treeContext(itemData, item);
   if(!context) return false;
-  const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
+  const bundle = cachedDescriptorBundle(context.api, context.engine, context.version);
   if(!bundle || !nodeEditorAvailable(bundle, resourceKind, itemData, 'create')) return false;
   return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
     displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
@@ -206,11 +291,12 @@ export function openFamilyCreate(itemData, item, resourceKind) {
 /** Run a tier 2/3 descriptor operation on a tree resource in the OperationDialog. */
 export function openDescriptorOperation(itemData, item, operation) {
   const context = treeContext(itemData, item);
-  if(!context) return false;
+  if(!context || !operation) return false;
   const serverNode = pgAdmin.Browser.Nodes.server;
   const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
     itemData.cde_database_target_id);
-  const post = makePost(context.api, endpointUrl, itemData.cde_database_target_id);
+  const onAuthRequired = () => promptEndpointVerification(context.endpoint.item, itemData.cde_database_target_id);
+  const post = makePost(context.api, endpointUrl, itemData.cde_database_target_id, {onAuthRequired});
   const mount = document.createElement('div');
   document.body.appendChild(mount);
   const root = createRoot(mount);
@@ -231,7 +317,8 @@ export function openDescriptorOperation(itemData, item, operation) {
     // nodes and the object name otherwise (what the providers validate).
     const targetName = itemData._type === 'cde_database_target' ?
       (itemData.cde_database || itemData.label || itemData._label) : (itemData.label || itemData._label);
-    root.render(<Theme><OperationDialog open operation={operation} targetName={targetName}
+    const effectiveOperation = withTargetOperationDefaults(operation, targetName, itemData.cde_resource_kind);
+    root.render(<Theme><OperationDialog open operation={effectiveOperation} targetName={targetName}
       context={operationContext(bundle, resources, target)} plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
       onClose={close} onApplied={() => refreshNode(item, {parent: itemData._type === 'cde_resource' || operation.operation_id === 'drop'})} /></Theme>);
   };
@@ -279,7 +366,7 @@ export function familyEditorContextActions(itemData, item) {
   if(!providerServer && !['cde_resource', 'cde_resource_group', 'cde_database_target'].includes(itemData?._type)) return [];
   const context = treeContext(itemData, item);
   if(!context) return [];
-  const bundle = descriptorClient(context.api).cached(context.engine, {version: context.version});
+  const bundle = cachedDescriptorBundle(context.api, context.engine, context.version);
   if(!bundle) return [];
   const entries = [];
   const resourceKind = providerServer ? 'server' :
@@ -291,12 +378,20 @@ export function familyEditorContextActions(itemData, item) {
   // Create entries: a group node creates its own kind; a database creates any top-level kind.
   // A database node also creates the engine-object kinds the server flags as
   // natively creatable (owner decision 2026-11-11, option 1).
+  const DATABASE_NON_CHILD_KINDS = new Set([
+    'database', 'server', 'role', 'tablespace', 'pgagent-job', 'replica-node',
+    'column', 'constraint', 'index', 'partitioned-index', 'trigger', 'rule',
+    'row-policy', 'partition', 'global-authentication-mapping', 'service-operation',
+  ]);
   const nativeKinds = (Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [])
     .filter((kind) => !['database', 'server'].includes(kind));
   const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
     itemData._type === 'cde_database_target' ?
-      [...new Set([...Object.values(bundle.kinds).filter((kind) => kind.family !== 'engine_object' && kind.tier1.includes('create') &&
-        !['database', 'server'].includes(kind.resource_kind)).map((kind) => kind.resource_kind), ...nativeKinds])] : [];
+      [...new Set([...Object.values(bundle.kinds).filter((kind) =>
+        kind.tier1.includes('create') &&
+        (kind.family !== 'engine_object' || editorAvailable(bundle, kind.resource_kind)) &&
+        !DATABASE_NON_CHILD_KINDS.has(kind.resource_kind)
+      ).map((kind) => kind.resource_kind), ...nativeKinds])] : [];
   const creatable = childKinds.filter((kind) => bundle.kinds[kind]?.tier1.includes('create') &&
     (nodeEditorAvailable(bundle, kind, itemData, 'create') || nativeKinds.includes(kind)));
   if(creatable.length === 1) {

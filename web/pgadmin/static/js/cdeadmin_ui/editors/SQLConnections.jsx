@@ -15,28 +15,99 @@ function subscribe(notify) {listeners.add(notify); return () => listeners.delete
 // Connections whose content shows the selector in its own query toolbar.
 const slotHosts = new Set();
 const SlotContext = createContext(null);
+
+function splitEndpointAndTarget(rawUrl, explicitDatabaseTargetId) {
+  const str = String(rawUrl || '');
+  if (str.includes('::')) {
+    const sep = str.indexOf('::');
+    const base = str.slice(0, sep);
+    const suffix = str.slice(sep + 2);
+    return {
+      endpointUrl: base,
+      databaseTargetId: explicitDatabaseTargetId !== undefined && explicitDatabaseTargetId !== null
+        ? String(explicitDatabaseTargetId)
+        : suffix,
+    };
+  }
+  let parsedTarget = '';
+  let normalizedUrl = str;
+  const qIdx = str.indexOf('?');
+  if (qIdx >= 0) {
+    const pathPart = str.slice(0, qIdx);
+    const params = new URLSearchParams(str.slice(qIdx + 1));
+    if (params.has('database_target_id')) {
+      parsedTarget = params.get('database_target_id') || '';
+      params.delete('database_target_id');
+    }
+    const rest = params.toString();
+    normalizedUrl = rest ? `${pathPart}?${rest}` : pathPart;
+  }
+  const resolvedTarget = explicitDatabaseTargetId !== undefined && explicitDatabaseTargetId !== null
+    ? String(explicitDatabaseTargetId)
+    : parsedTarget;
+  return {endpointUrl: normalizedUrl, databaseTargetId: resolvedTarget};
+}
+
+export function sqlConnectionKey(idOrConnection, explicitDatabaseTargetId) {
+  if (idOrConnection && typeof idOrConnection === 'object') {
+    const rawUrl = idOrConnection.endpointUrl ?? idOrConnection.id ?? '';
+    const targetId = explicitDatabaseTargetId !== undefined
+      ? explicitDatabaseTargetId
+      : idOrConnection.databaseTargetId;
+    const {endpointUrl, databaseTargetId} = splitEndpointAndTarget(rawUrl, targetId);
+    return `${endpointUrl}::${databaseTargetId || ''}`;
+  }
+  const {endpointUrl, databaseTargetId} = splitEndpointAndTarget(idOrConnection, explicitDatabaseTargetId);
+  return `${endpointUrl}::${databaseTargetId || ''}`;
+}
+
+function normalizeConnectionEntry(connection) {
+  const key = sqlConnectionKey(connection);
+  const {endpointUrl, databaseTargetId} = splitEndpointAndTarget(
+    connection?.endpointUrl ?? connection?.id ?? '',
+    connection?.databaseTargetId,
+  );
+  return {
+    ...connection,
+    id: key,
+    endpointUrl: connection?.id && !String(connection.id).includes('::') ? connection.id : endpointUrl,
+    baseEndpointUrl: endpointUrl,
+    databaseTargetId: databaseTargetId || connection?.databaseTargetId || '',
+  };
+}
+
 export function registerSQLConnection(connection) {
-  if (!entries.some(item => item.id === connection.id)) entries = [...entries, connection];
+  const normalized = normalizeConnectionEntry(connection);
+  if (!entries.some(item => item.id === normalized.id)) entries = [...entries, normalized];
   workbenchContextService.update({connectionState: entries.length ? 'connected' : 'disconnected'});
   notifyAll();
 }
 export function removeSQLConnections(serverId, databaseTargetId) {
   entries = entries.filter(item => String(item.serverId) !== String(serverId) ||
-    (databaseTargetId !== undefined && item.databaseTargetId !== databaseTargetId));
-  if (!entries.some(item => item.id === selected)) selected = '';
+    (databaseTargetId !== undefined && String(item.databaseTargetId || '') !== String(databaseTargetId || '')));
+  if (!entries.some(item => item.id === selected)) selected = entries[0]?.id || '';
+  if (!entries.length) selected = '';
   workbenchContextService.update({connectionState: entries.length ? 'connected' : 'disconnected'});
   notifyAll();
 }
 export function activateSQLConnection(connection) {
-  if (!entries.some(item => item.id === connection.id)) entries = [...entries, connection];
-  entries = entries.map(item => item.id === connection.id ? {...item, content: item.content || connection.content} : item);
-  selected = connection.id;
+  const normalized = normalizeConnectionEntry(connection);
+  if (!entries.some(item => item.id === normalized.id)) entries = [...entries, normalized];
+  entries = entries.map(item => item.id === normalized.id
+    ? {...item, ...normalized, content: item.content || normalized.content}
+    : item);
+  selected = normalized.id;
   workbenchContextService.update({connectionState: entries.length ? 'connected' : 'disconnected'});
   notifyAll();
 }
-export function labelSQLConnection(id, label, engine) {
-  if (!entries.some(item => item.id === id && (item.label !== label || (!item.engine && engine)))) return;
-  entries = entries.map(item => item.id === id ? {...item, label, engine: item.engine || engine} : item);
+export function labelSQLConnection(id, label, engine, databaseTargetId) {
+  const key = sqlConnectionKey(id, databaseTargetId);
+  const {endpointUrl, databaseTargetId: parsedTarget} = splitEndpointAndTarget(id, databaseTargetId);
+  const matchesEntry = (item) =>
+    item.id === key ||
+    (!parsedTarget && item.endpointUrl === id && entries.filter(e => e.baseEndpointUrl === endpointUrl).length === 1);
+  if (!entries.some(item => matchesEntry(item) && (item.label !== label || (!item.engine && engine)))) return;
+  entries = entries.map(item => matchesEntry(item) ? {...item, label, engine: item.engine || engine} : item);
   workbenchContextService.update({connectionState: entries.length ? 'connected' : 'disconnected'});
   notifyAll();
 }
@@ -48,16 +119,36 @@ export function useSQLConnections() {
 // already be open, so a request is posted here rather than passed on open.
 const sourceRequests = new Map();
 let requestSequence = 0;
-export function requestSQLSource(id, request) {
-  sourceRequests.set(id, {...request, nonce: ++requestSequence});
+export function requestSQLSource(id, request, databaseTargetId) {
+  const key = sqlConnectionKey(id, databaseTargetId ?? request?.database_target_id ?? request?.databaseTargetId);
+  sourceRequests.set(key, {...request, nonce: ++requestSequence});
   notifyAll();
 }
-export function takeSQLSourceRequest(id, nonce) {
-  if (sourceRequests.get(id)?.nonce === nonce) sourceRequests.delete(id);
+export function takeSQLSourceRequest(id, nonce, databaseTargetId) {
+  const key = sqlConnectionKey(id, databaseTargetId);
+  if (sourceRequests.get(key)?.nonce === nonce) {
+    sourceRequests.delete(key);
+    return;
+  }
+  for (const [entryKey, pending] of sourceRequests.entries()) {
+    if (pending?.nonce === nonce) {
+      sourceRequests.delete(entryKey);
+      break;
+    }
+  }
 }
-export function useSQLSourceRequest(id) {
+export function useSQLSourceRequest(id, databaseTargetId) {
+  const slotEntryId = useContext(SlotContext);
   useSyncExternalStore(subscribe, () => version);
-  return sourceRequests.get(id) || null;
+  const key = sqlConnectionKey(id, databaseTargetId);
+  if (sourceRequests.has(key)) return sourceRequests.get(key) || null;
+  if (slotEntryId) {
+    const {endpointUrl, databaseTargetId: parsedTarget} = splitEndpointAndTarget(id, databaseTargetId);
+    if (!parsedTarget && slotEntryId.startsWith(`${endpointUrl}::`) && sourceRequests.has(slotEntryId)) {
+      return sourceRequests.get(slotEntryId) || null;
+    }
+  }
+  return null;
 }
 /**
  * The SQL tab's connection selector. Owner direction 2026-11-05: it sits at
@@ -133,7 +224,7 @@ DisconnectedQueryTool.propTypes = {
   onSaveAsBiQuestion: PropTypes.func,
 };
 
-export default function SQLConnections() {
+export default function SQLConnections({instanceId = null}) {
   const state = useSQLConnections();
   const rootRef = useRef(null);
   const [draftSql, setDraftSql] = useState('');
@@ -164,11 +255,15 @@ export default function SQLConnections() {
     const detail = {
       activity: 'activity.bi-designs',
       design_shortcut: 'bi_question_from_sql',
+      kind: 'question',
       sql,
     };
     if (typeof window !== 'undefined') {
       window.__cdeadminPendingDesignShortcut = detail;
       window.dispatchEvent(new CustomEvent('cdeadmin:design-shortcut', {detail}));
+      window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+        detail: {appId: 'bi-designer', payload: detail},
+      }));
       window.pgAdmin?.Browser?.CDEadminCommandContext?.()?.showActivity?.('activity.bi-designs');
     }
   }, [readCurrentEditorSql]);
@@ -201,9 +296,53 @@ export default function SQLConnections() {
         }
       }
     };
+    const onSqlEditorAction = (event) => {
+      const targetInstanceId = event?.detail?.instanceId;
+      if (instanceId && targetInstanceId && targetInstanceId !== instanceId) return;
+      const action = event?.detail?.action;
+      if (!action) return;
+      if (action === 'save_bi_question') {
+        handleSaveAsBiQuestion();
+        return;
+      }
+      const activeBox = rootRef.current?.querySelector('[data-active-connection="true"]');
+      if (!activeBox) return;
+      const selectors = {
+        execute: ['button[aria-label="Run"]:not(:disabled)', 'button[title="Run"]:not(:disabled)'],
+        explain: ['button[aria-label*="Explain"]:not(:disabled)', 'button[title*="Explain"]:not(:disabled)'],
+        cancel: ['button[aria-label="Cancel request"]:not(:disabled)', 'button[title="Cancel request"]:not(:disabled)'],
+        commit: ['button[aria-label="commit"]:not(:disabled)', 'button[title="commit"]:not(:disabled)'],
+        rollback: ['button[aria-label="rollback"]:not(:disabled)', 'button[title="rollback"]:not(:disabled)'],
+        sql_builder: ['button:not(:disabled)'],
+      }[action];
+      if (!selectors) return;
+      for (const selector of selectors) {
+        if (action === 'sql_builder') {
+          const btn = Array.from(activeBox.querySelectorAll(selector)).find((el) =>
+            /build query/i.test(el.textContent || '')
+          );
+          if (btn) {
+            btn.click();
+            return;
+          }
+        } else {
+          const btn = activeBox.querySelector(selector);
+          if (btn) {
+            btn.click();
+            return;
+          }
+        }
+      }
+    };
     window.addEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
-    return () => window.removeEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
-  }, []);
+    window.addEventListener('scratchrobin:open-sql-from-bi', onOpenSqlInEditor);
+    window.addEventListener('scratchrobin:sql-editor-action', onSqlEditorAction);
+    return () => {
+      window.removeEventListener('cdeadmin:open-sql-in-editor', onOpenSqlInEditor);
+      window.removeEventListener('scratchrobin:open-sql-from-bi', onOpenSqlInEditor);
+      window.removeEventListener('scratchrobin:sql-editor-action', onSqlEditorAction);
+    };
+  }, [handleSaveAsBiQuestion, instanceId]);
 
   return <QueryToolFrame ref={rootRef} sx={{color: 'text.primary', bgcolor: 'background.default'}}>
     {state.selected && <QueryToolToolbar>
@@ -222,3 +361,7 @@ export default function SQLConnections() {
         flexDirection: 'column', flex: 1, minHeight: 0}}><SlotContext.Provider value={item.id}>{item.content}</SlotContext.Provider></Box>)}
   </QueryToolFrame>;
 }
+
+SQLConnections.propTypes = {
+  instanceId: PropTypes.string,
+};

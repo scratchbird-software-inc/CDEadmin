@@ -412,6 +412,10 @@
       "cte.materialized": {
         "available": true
       },
+      "cte.cycle": {
+        "available": false,
+        "reason": "DuckDB 1.5.2 has no SQL:2023 CYCLE clause for recursive common table expressions."
+      },
       "distinct": {
         "available": true
       },
@@ -449,6 +453,15 @@
         "available": true
       },
       "aggregate.distinct": {
+        "available": true
+      },
+      "window": {
+        "available": true
+      },
+      "window.partition_by": {
+        "available": true
+      },
+      "window.order_by": {
         "available": true
       },
       "group_by": {

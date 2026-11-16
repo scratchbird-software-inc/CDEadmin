@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, MenuItem, TextField, Typography} from '@mui/material';
 import getApiInstance from '../api_instance';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLAlerts({endpoint, catalog, rules, onChange, active, busy, alerts}) {
   const [error, setError] = useState(''), [pending, setPending] = useState(false);
@@ -21,6 +22,7 @@ export default function MySQLAlerts({endpoint, catalog, rules, onChange, active,
     finally {if(token === serial.current) setPending(false);}
   };
   return <Box sx={{my: 1}}>
+    <FormReference formKey="mysql-alerts" />
     <Typography variant="h6">MySQL alert policies</Typography>
     <Alert severity="info">Rules evaluate server observations on the dedicated collector, including when this screen is closed.
       Thresholds use greater than; duration requires consecutive observations in one source epoch. Missing data stays unknown unless explicitly configured to alert.

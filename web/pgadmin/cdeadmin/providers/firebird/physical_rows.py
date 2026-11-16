@@ -2,12 +2,32 @@
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
 
-def available(connection, target):
+def _unquote_relation(target):
+    text = str(target or '').strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1].replace('""', '"')
+    return text
+
+
+def available(connection, target, relation_name=None):
     import firebird.driver as native
     from firebird.driver.types import SQLDataType
+    rel_name = relation_name or _unquote_relation(target)
     with connection.cursor() as query:
         statement = None
         try:
+            if rel_name:
+                query.execute(
+                    'SELECT COALESCE(RDB$SYSTEM_FLAG, 0), '
+                    'COALESCE(RDB$RELATION_TYPE, 0) '
+                    'FROM RDB$RELATIONS WHERE TRIM(RDB$RELATION_NAME) = ?',
+                    (rel_name,),
+                )
+                rel_meta = query.fetchone()
+                if rel_meta is not None and (
+                    int(rel_meta[0]) != 0 or int(rel_meta[1]) not in (0, 4, 5)
+                ):
+                    return False
             statement = query.prepare(
                 'SELECT RDB$DB_KEY, RDB$RECORD_VERSION FROM ' + target +
                 ' WHERE RDB$DB_KEY=? AND RDB$RECORD_VERSION=?')

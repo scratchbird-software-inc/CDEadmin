@@ -106,8 +106,8 @@ def test_declarations_list_every_option(name):
     assert list(declared(name)['options']) == list(OPTION_IDS)
     lacks = {option for option, entry in options(name).items()
              if not entry['available']}
-    assert lacks == {'cte.materialized', 'distinct_on', 'join.full',
-                     'group_by.cube', 'group_by.grouping_sets',
+    assert lacks == {'cte.materialized', 'cte.cycle', 'distinct_on',
+                     'join.full', 'group_by.cube', 'group_by.grouping_sets',
                      'group_by.all', 'order_by.nulls'}
 
 
@@ -160,6 +160,15 @@ UNAVAILABLE = {
                                    'query': query({'from': relation(
                                        'customers')})['query']}],
                          **query({'from': {'source': {'cte': 'c'}}})},
+    'cte.cycle': {'recursive': True,
+                  'with': [{'name': 'c',
+                            'cycle': {'columns': ['customer_id'],
+                                      'set_column': 'is_cycle',
+                                      'using_column': 'path'},
+                            'query': query({'from': relation('customers'),
+                                            'columns': [{'expr': col(
+                                                'customer_id')}]})['query']}],
+                  **query({'from': {'source': {'cte': 'c'}}})},
     'distinct_on': query({'from': relation('customers'),
                           'distinct_on': [col('region')],
                           'columns': [{'expr': col('region')}]}),

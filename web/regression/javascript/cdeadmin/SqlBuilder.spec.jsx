@@ -17,20 +17,27 @@
 
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
+import {libraries, setupDDNDOM} from './ddnTestRuntime';
+import {
+  resetDDNLibraryLoaderForTests,
+  setDDNLibraryLoaderForTests,
+} from 'sources/cdeadmin_ui/integrations/ddn';
 import SqlBuilderDialog from 'sources/cdeadmin_ui/editors/SqlBuilderDialog';
 import {
   BuilderDraftError, emptyColumn, emptyCondition, emptyCte, emptyDraft, emptyJoin,
-  emptyOrder, emptySelect, cteSource, relationSource, toModel,
+  emptyOrder, emptySelect, cteSource, relationSource, toModel, toStageModel,
 } from 'sources/cdeadmin_ui/editors/sqlBuilderModel';
 
-const OPTION_IDS = ['cte', 'cte.recursive', 'cte.materialized', 'distinct', 'distinct_on',
-  'join.inner', 'join.left', 'join.right', 'join.full', 'join.cross', 'join.natural',
-  'join.using', 'where', 'where.or', 'aggregate', 'aggregate.distinct', 'group_by',
-  'group_by.rollup', 'group_by.cube', 'group_by.grouping_sets', 'group_by.all', 'having',
-  'order_by', 'order_by.nulls', 'limit', 'offset', 'set.union', 'set.union_all',
-  'set.intersect', 'set.except'];
+const OPTION_IDS = ['cte', 'cte.recursive', 'cte.materialized', 'cte.cycle',
+  'distinct', 'distinct_on', 'join.inner', 'join.left', 'join.right', 'join.full',
+  'join.cross', 'join.natural', 'join.using', 'where', 'where.or', 'aggregate',
+  'aggregate.distinct', 'window', 'window.partition_by', 'window.order_by',
+  'group_by', 'group_by.rollup', 'group_by.cube', 'group_by.grouping_sets',
+  'group_by.all', 'having', 'order_by', 'order_by.nulls', 'limit', 'offset',
+  'set.union', 'set.union_all', 'set.intersect', 'set.except'];
 
 const LACKS = {
+  'cte.cycle': 'SQLite has no CYCLE detection on recursive CTEs.',
   distinct_on: 'SQLite has no DISTINCT ON.',
   'group_by.rollup': 'SQLite has no ROLLUP.',
   'join.right': 'Needs a newer SQLite: 3.35.0 refuses RIGHT and FULL joins.',
@@ -153,7 +160,7 @@ describe('SqlBuilderDialog', () => {
     }
     // A field the connection lacks is disabled and says why.
     expect(screen.getByLabelText('Query DISTINCT ON')).toBeDisabled();
-    expect(screen.getByText('SQLite has no DISTINCT ON.', {selector: 'p'})).toBeInTheDocument();
+    expect(screen.getByText('SQLite has no DISTINCT ON.', {selector: '.sr-field-help'})).toBeInTheDocument();
   });
 
   it('disables join types the connection lacks', async () => {
@@ -209,5 +216,162 @@ describe('SqlBuilderDialog', () => {
       .toBeInTheDocument();
     expect(onInsert).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('models window functions (OVER), recursive CTE CYCLE clauses, and partial CTE stage slices', () => {
+    const draft = emptyDraft(ORDERS);
+    draft.recursive = true;
+    const cte = emptyCte('tree', ORDERS);
+    cte.cycleEnabled = true;
+    cte.cycleColumns = 'id';
+    cte.cycleSetColumn = 'is_cycle';
+    cte.cycleUsingColumn = 'path_arr';
+    draft.ctes = [cte];
+
+    const main = draft.query.selects[0];
+    main.columns = [
+      {
+        ...emptyColumn('window'),
+        func: 'row_number',
+        partitionBy: [JSON.stringify(['orders', 'customer_id'])],
+        windowOrderColumn: JSON.stringify(['orders', 'amount']),
+        windowOrderDirection: 'desc',
+        alias: 'rn',
+      },
+      {
+        ...emptyColumn('window'),
+        func: 'sum',
+        star: false,
+        column: JSON.stringify(['orders', 'amount']),
+        partitionBy: [JSON.stringify(['orders', 'customer_id'])],
+        alias: 'running_total',
+      },
+    ];
+
+    const full = toModel(draft);
+    expect(full.recursive).toBe(true);
+    expect(full.with[0].cycle).toEqual({
+      columns: ['id'],
+      set_column: 'is_cycle',
+      using_column: 'path_arr',
+    });
+    expect(full.query.selects[0].columns).toEqual([
+      {
+        expr: {
+          window: {
+            function: 'row_number',
+            partition_by: [{column: ['orders', 'customer_id']}],
+            order_by: [{expr: {column: ['orders', 'amount']}, direction: 'desc'}],
+          },
+        },
+        alias: 'rn',
+      },
+      {
+        expr: {
+          window: {
+            function: 'sum',
+            distinct: false,
+            argument: {column: ['orders', 'amount']},
+            partition_by: [{column: ['orders', 'customer_id']}],
+          },
+        },
+        alias: 'running_total',
+      },
+    ]);
+
+    // Stage preview model slices CTEs up to the named CTE even if the final query is incomplete
+    draft.query.selects[0].source = '';
+    const slice = toStageModel(draft, 'tree');
+    expect(slice.with).toHaveLength(1);
+    expect(slice.query.selects[0].from.source).toEqual({cte: 'tree'});
+  });
+
+  it('renders DDN query dataflow via DDNViewerSurface, previews live CTE stage rows, and gates recursive CYCLE', async () => {
+    setupDDNDOM();
+    setDDNLibraryLoaderForTests(() => Promise.resolve(libraries()));
+    const sampleFlowDdn = [
+      'version ddn-next-1',
+      '// ScratchRobin module: scratchrobin.sql_builder.flow@1',
+      '',
+      'view "query_flow" as "ddn@1"',
+      '    with',
+      '        id "query_flow"',
+      '        title "Query & CTE Dataflow"',
+      '        selection',
+      '            include empty list',
+      '',
+    ].join('\n');
+
+    try {
+      const post = jest.fn((payload) => {
+        const op = payload.request.operation;
+        if(op === 'options') return Promise.resolve(optionsResponse());
+        if(op === 'ddn') {
+          return Promise.resolve({
+            format: 'ddn-source-workspace@1',
+            entry: 'query-flow.ddn',
+            view: 'query_flow',
+            files: {'query-flow.ddn': sampleFlowDdn},
+            stages: [{id: 'cte1', kind: 'cte', label: 'WITH cte1'}],
+            fanout_warnings: [
+              {
+                stage: 'Query',
+                code: 'cross_join_fanout',
+                severity: 'warning',
+                detail: 'CROSS JOIN to main.orders multiplies output row cardinality.',
+              },
+            ],
+          });
+        }
+        if(op === 'preview_stage') {
+          return Promise.resolve({
+            stage: payload.request.stage,
+            source: 'WITH "cte1" AS (SELECT * FROM "main"."customers") SELECT * FROM "cte1" LIMIT 50',
+            columns: [{name: 'id'}, {name: 'name'}],
+            rows: [[1, 'Ada'], [2, 'Linus']],
+            row_count: 2,
+            truncated: false,
+          });
+        }
+        return Promise.resolve({source: 'SELECT 1', language_profile: 'sqlite-sql'});
+      });
+
+      renderDialog(post);
+      await screen.findByRole('combobox', {name: 'Query FROM'});
+
+      // Add a CTE and enable RECURSIVE -> CYCLE detection is gated with engine reason
+      fireEvent.click(screen.getByRole('button', {name: 'Add common table expression'}));
+      fireEvent.click(screen.getByRole('checkbox', {name: 'RECURSIVE'}));
+      const cycleBox = screen.getByRole('checkbox', {
+        name: `CYCLE detection (${LACKS['cte.cycle']})`,
+      });
+      expect(cycleBox).toBeDisabled();
+
+      // Stage navigation strip lists WITH cte1 and Final Query
+      const stageGroup = screen.getByRole('group', {name: 'Query dataflow stages'});
+      expect(within(stageGroup).getByRole('button', {name: /WITH cte1/})).toBeInTheDocument();
+      expect(within(stageGroup).getByRole('button', {name: /Final Query/})).toBeInTheDocument();
+
+      // Render DDN dataflow -> mounts shared DDNViewerSurface + displays fan-out warning
+      fireEvent.click(screen.getByRole('button', {name: 'Render DDN dataflow'}));
+      expect(await screen.findByLabelText('Query DDN dataflow')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Query: CROSS JOIN to main\.orders multiplies output row cardinality\./)
+      ).toBeInTheDocument();
+
+      // Preview stage rows on cte1 -> executes preview_stage and displays live intermediate rows
+      fireEvent.click(screen.getByRole('button', {name: 'Preview stage rows'}));
+      const stagePanel = await screen.findByLabelText('Stage preview');
+      expect(within(stagePanel).getByText('Stage preview: cte1')).toBeInTheDocument();
+      const rowsTable = within(stagePanel).getByRole('table', {name: 'Stage preview rows'});
+      expect(within(rowsTable).getByText('Ada')).toBeInTheDocument();
+      expect(within(rowsTable).getByText('Linus')).toBeInTheDocument();
+      expect(post).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'sql_builder',
+        request: expect.objectContaining({operation: 'preview_stage', stage: 'cte1', limit: 50}),
+      }));
+    } finally {
+      resetDDNLibraryLoaderForTests();
+    }
   });
 });

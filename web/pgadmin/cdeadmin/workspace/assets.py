@@ -3908,6 +3908,18 @@ class ProjectAssetRepository:
             project_key=project_key
         ).first()
 
+    def project_by_id(self, project_uuid):
+        if not project_uuid:
+            return None
+        return self.project_model.query.filter_by(id=project_uuid).first()
+
+    def children_of(self, parent_uuid):
+        if not parent_uuid:
+            return []
+        return self.project_model.query.filter_by(
+            parent_project_id=parent_uuid
+        ).all()
+
     def accessible_project(self, user_id, role_ids, project_key):
         owned = self.project(user_id, project_key)
         if owned is not None:
@@ -3990,17 +4002,61 @@ class ProjectAssetService:
                 f'project {needed} access is required'
             )
 
+    def _resolve_and_validate_parent(
+        self, user_id, role_ids, current_project, raw_parent_key
+    ):
+        if raw_parent_key is None or raw_parent_key == '':
+            return None
+        parent_key = _safe_id(raw_parent_key, 'parent project ID')
+        if current_project is not None and (
+            parent_key == current_project.project_key
+        ):
+            raise ProjectAssetError(
+                'a project cannot be its own parent'
+            )
+        parent_row, _parent_access = self.repository.accessible_project(
+            user_id, role_ids, parent_key
+        )
+        if parent_row is None:
+            raise ProjectAssetNotFound('parent project was not found')
+        if current_project is not None and parent_row.id == current_project.id:
+            raise ProjectAssetError(
+                'a project cannot be its own parent'
+            )
+        forbidden_ids = (
+            {current_project.id} if current_project is not None else set()
+        )
+        visited = set()
+        cursor = parent_row
+        while cursor is not None:
+            if cursor.id in forbidden_ids or cursor.id in visited:
+                raise ProjectAssetError(
+                    'circular project dependency loop is not allowed'
+                )
+            visited.add(cursor.id)
+            next_parent_id = getattr(cursor, 'parent_project_id', None)
+            cursor = (
+                self.repository.project_by_id(next_parent_id)
+                if next_parent_id else None
+            )
+        return parent_row
+
     def list_projects(self, user_id, role_ids=()):
         return [self._project(row, access) for row, access in
                 self.repository.projects(user_id, role_ids)]
 
-    def create_project(self, user_id, project_key, request):
+    def create_project(self, user_id, project_key, request, role_ids=()):
         project_key = _safe_id(project_key, 'project ID')
         if self.repository.project_by_key(project_key):
             raise ProjectAssetConflict('project already exists')
         request = request if isinstance(request, dict) else {}
+        parent_row = self._resolve_and_validate_parent(
+            user_id, role_ids, None, request.get('parent_project_id')
+        )
         row = self.repository.new_project(
-            id=str(uuid.uuid4()), user_id=user_id, project_key=project_key,
+            id=str(uuid.uuid4()), user_id=user_id,
+            parent_project_id=parent_row.id if parent_row is not None else None,
+            project_key=project_key,
             name=_text(
                 request.get('name') or project_key, 'project name', 128
             ),
@@ -4034,6 +4090,13 @@ class ProjectAssetService:
             raise ProjectAssetError('expected project revision is invalid')
         if project.revision != expected:
             raise ProjectAssetConflict('project revision has changed')
+        if 'parent_project_id' in request:
+            parent_row = self._resolve_and_validate_parent(
+                user_id, role_ids, project, request.get('parent_project_id')
+            )
+            project.parent_project_id = (
+                parent_row.id if parent_row is not None else None
+            )
         if 'name' in request:
             project.name = _text(request['name'], 'project name', 128)
         if 'description' in request:
@@ -4067,6 +4130,9 @@ class ProjectAssetService:
             )
         if project.revision != expected:
             raise ProjectAssetConflict('project revision has changed')
+        if hasattr(self.repository, 'children_of'):
+            for child in self.repository.children_of(project.id):
+                child.parent_project_id = None
         self.repository.delete(project)
         self.repository.commit()
         return {'project_id': project.project_key,
@@ -4246,9 +4312,16 @@ class ProjectAssetService:
             raise ProjectAssetNotFound('asset was not found')
         return row
 
-    @staticmethod
-    def _project(row, access):
-        return {'project_id': row.project_key, 'name': row.name,
+    def _project(self, row, access):
+        parent_key = None
+        parent_uuid = getattr(row, 'parent_project_id', None)
+        if parent_uuid and hasattr(self.repository, 'project_by_id'):
+            parent_row = self.repository.project_by_id(parent_uuid)
+            if parent_row is not None:
+                parent_key = parent_row.project_key
+        return {'project_id': row.project_key,
+                'parent_project_id': parent_key,
+                'name': row.name,
                 'description': row.description, 'revision': row.revision,
                 'access': access,
                 'source_control_eligible': row.source_control_eligible,
@@ -4385,7 +4458,7 @@ def _register_routes(app):
         body = request.get_json(silent=True) or {}
         if request.method == 'PUT':
             return invoke(lambda service: service.create_project(
-                user_id, project_id, body
+                user_id, project_id, body, role_ids
             ))
         if request.method == 'POST':
             return invoke(lambda service: service.update_project(

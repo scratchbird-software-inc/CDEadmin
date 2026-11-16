@@ -298,3 +298,55 @@ def test_color_schemes_typography_placements_engines_and_security(tmp_path):
         assert sw_json['catalog'].get('Settings') not in (None, '')
 
 
+def test_user_preferences_persistence_and_command_line_tabbed_icon_bar(tmp_path):
+    app, _store = _build_test_app(tmp_path)
+    client = app.test_client()
+
+    authz = client.get('/cdeadmin/api/shell/authorization').get_json()
+    by_id = {item['id']: item for item in authz['applications']}
+    assert by_id['command-line']['supports_tabbed_icon_bar'] is True
+    assert 'user_preferences' in authz
+    assert authz['user_preferences']['query_limits'] == 1000
+    assert authz['user_preferences']['ddn_dialect'] == 'ddn-next-1'
+
+    get0 = client.get('/cdeadmin/api/shell/preferences')
+    assert get0.status_code == 200
+    prefs0 = get0.get_json()['preferences']
+    assert prefs0['query_limits'] == 1000
+
+    put_resp = client.put(
+        '/cdeadmin/api/shell/preferences',
+        json={
+            'preferences': {
+                'query_limits': 500,
+                'auto_commit': False,
+                'git_review_gate': True,
+                'shortcut_overrides': {'shell.command_palette': 'Ctrl+Shift+P'},
+            }
+        },
+    )
+    assert put_resp.status_code == 200
+    saved = put_resp.get_json()['preferences']
+    assert saved['query_limits'] == 500
+    assert saved['auto_commit'] is False
+    assert saved['git_review_gate'] is True
+    assert saved['shortcut_overrides']['shell.command_palette'] == 'Ctrl+Shift+P'
+
+    # Also accessible via /settings?scope=user and PUT /settings with scope='user'
+    put2 = client.put(
+        '/cdeadmin/api/shell/settings',
+        json={
+            'scope': 'user',
+            'user': {'query_limits': 250},
+        },
+    )
+    assert put2.status_code == 200
+    assert put2.get_json()['preferences']['query_limits'] == 250
+    assert put2.get_json()['preferences']['auto_commit'] is False
+
+    get_scoped = client.get('/cdeadmin/api/shell/settings?scope=user').get_json()
+    assert get_scoped['scope'] == 'user'
+    assert get_scoped['preferences']['query_limits'] == 250
+
+
+

@@ -199,11 +199,24 @@ def _cde_navigator_parent(profile):
     return f"engine_type_{navigator_engine_id(profile['engine_id'])}"
 
 
+def _effective_verification_state(server):
+    """Return effective runtime verification state, honoring usable auth."""
+    runtime = getattr(getattr(server, 'endpoint_profile', None),
+                      'runtime_identity', None)
+    fallback = getattr(runtime, 'verification_state', 'unverified') or 'unverified'
+    try:
+        return endpoint_service_for_app(current_app).effective_verification_state(
+            server
+        )
+    except Exception:
+        return fallback
+
+
 def _cde_endpoint_actions(server, profile):
     """Return provider-owned menus for provider endpoints only."""
     if profile['workflow'] != 'provider_endpoint':
         return None
-    state = server.endpoint_profile.runtime_identity.verification_state
+    state = _effective_verification_state(server)
     return endpoint_context_actions(
         profile, state,
         is_password_saved=bool(server.save_password),
@@ -253,10 +266,11 @@ def _native_create_kinds(visual_admin):
 
 
 def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
-                        native_create_kinds=()):
+                        native_create_kinds=(), server_verified=True):
     """Place every retained database directly below its owning endpoint."""
     nodes = []
     for entry in database_entries(catalog):
+        effective_active = bool(entry['active']) and bool(server_verified)
         state = {
             'scope': 'database',
             'target_id': entry['target_id'],
@@ -268,7 +282,7 @@ def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
             'target_id': entry['target_id'],
             'database': entry['database'],
             'display_name': entry['display_name'],
-            'active': entry['active'],
+            'active': effective_active,
         }
         node_id = hashlib.sha256(
             f"{sid}:{entry['target_id']}".encode('utf-8')
@@ -276,7 +290,10 @@ def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
         nodes.append({
             'id': f'cde_database_target_{node_id}',
             'label': entry['display_name'],
-            'icon': 'icon-database',
+            'icon': (
+                'icon-database'
+                if effective_active else 'icon-database-not-connected'
+            ),
             'icon_key': 'object.database',
             'inode': True,
             'expandable': True,
@@ -287,7 +304,8 @@ def _cde_database_nodes(gid, sid, profile, catalog, runtime_version=None,
             'module': 'pgadmin.node.server',
             'children_url': _cde_navigator_url(gid, sid, state),
             'cde_database': entry['database'],
-            'cde_database_active': entry['active'],
+            'cde_database_active': effective_active,
+            'cde_server_verified': bool(server_verified),
             'cde_native_editor_kinds': list(native_create_kinds),
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
@@ -380,7 +398,10 @@ def _native_editor_operations(visual_admin, resource_kind):
                 for operation in item.get('operations', [])
                 if operation.get('operation_id') in {'create', 'alter',
                                                      'drop'} and
-                operation.get('execution_route') == 'provider-native' and
+                operation.get('execution_route') in {
+                    'provider-native', 'provider-visual-admin',
+                    'provider-planned', 'relational-admin', None,
+                } and
                 (operation.get('form') or {}).get('fields'))
     return []
 
@@ -900,7 +921,7 @@ class ServerModule(sg.ServerGroupPluginModule):
                 embedded_endpoint or is_loopback_server(server.host)
             )
             verification_state = (
-                server.endpoint_profile.runtime_identity.verification_state
+                _effective_verification_state(server)
                 if provider_endpoint else 'legacy'
             )
 
@@ -1218,14 +1239,29 @@ class ServerNode(PGChildNodeView):
                     'Only the endpoint owner can browse its resources.'
                 ))
             try:
-                catalog = endpoint_service_for_app(
-                    current_app
-                ).database_catalog(server)
+                endpoint_service = endpoint_service_for_app(current_app)
+                catalog = endpoint_service.database_catalog(server)
+                is_verified = (
+                    endpoint_service.effective_verification_state(server) ==
+                    'verified'
+                )
                 return make_json_response(data=_cde_database_nodes(
                     gid, sid, profile, catalog,
                     runtime_version=_runtime_node_fields(server)[
                         'verified_runtime_version'],
+                    server_verified=is_verified,
                 ))
+            except (SecretAccessError, RelationalCredentialError):
+                return make_json_response(
+                    status=401,
+                    success=0,
+                    errormsg=gettext(
+                        'Endpoint credentials are required to open this '
+                        'provider workspace.'
+                    ),
+                    info='CREDENTIAL_REQUIRED',
+                    data={'code': 'CREDENTIAL_REQUIRED', 'gid': gid, 'sid': sid},
+                )
             except (EndpointRegistrationError,
                     ProviderNavigatorError) as exc:
                 return make_json_response(
@@ -1421,7 +1457,7 @@ class ServerNode(PGChildNodeView):
                 connected = conn.connected()
             credential_values = {}
             verification_state = (
-                server.endpoint_profile.runtime_identity.verification_state
+                _effective_verification_state(server)
                 if provider_endpoint else 'legacy'
             )
             errmsg = None
@@ -1517,7 +1553,7 @@ class ServerNode(PGChildNodeView):
             conn = manager.connection()
             connected = conn.connected()
         verification_state = (
-            server.endpoint_profile.runtime_identity.verification_state
+            _effective_verification_state(server)
             if provider_endpoint else 'legacy'
         )
         errmsg = None
@@ -1999,8 +2035,7 @@ class ServerNode(PGChildNodeView):
                 server_icon_and_background(
                     connected, manager, sharedserver,
                     (
-                        server.endpoint_profile.runtime_identity.
-                        verification_state
+                        _effective_verification_state(server)
                         if provider_endpoint else None
                     ),
                 )
@@ -2008,8 +2043,7 @@ class ServerNode(PGChildNodeView):
                 else server_icon_and_background(
                     connected, manager, server,
                     (
-                        server.endpoint_profile.runtime_identity.
-                        verification_state
+                        _effective_verification_state(server)
                         if provider_endpoint else None
                     ),
                 ),
@@ -2020,7 +2054,7 @@ class ServerNode(PGChildNodeView):
                 cde_endpoint=provider_endpoint,
                 **_runtime_node_fields(server),
                 runtime_verification_state=(
-                    server.endpoint_profile.runtime_identity.verification_state
+                    _effective_verification_state(server)
                     if provider_endpoint else 'legacy'
                 ),
                 cde_engine_id=endpoint_registration['engine_id'],
@@ -2162,7 +2196,7 @@ class ServerNode(PGChildNodeView):
                 'cde_profile_id': profile['profile_id'],
                 'cde_endpoint': provider_endpoint,
                 'runtime_verification_state': (
-                    server.endpoint_profile.runtime_identity.verification_state
+                    _effective_verification_state(server)
                     if provider_endpoint else 'legacy'
                 ),
                 'db_res': get_db_restriction(server.db_res_type, server.db_res)
@@ -2246,7 +2280,11 @@ class ServerNode(PGChildNodeView):
             'shared': server.shared if config.SERVER_MODE else None,
             'shared_username': server.shared_username
             if config.SERVER_MODE else None,
-            'username': _effective_server_username(server, provider_endpoint),
+            'username': (
+                _effective_server_username(server, provider_endpoint)
+                if '_effective_server_username' in globals()
+                else server.username
+            ),
             'gid': str(server.servergroup_id),
             'group-name': sg.name if (sg and sg.name) else gettext('Servers'),
             'comment': server.comment,
@@ -2260,7 +2298,11 @@ class ServerNode(PGChildNodeView):
             'cde_profile_id': profile['profile_id'],
             'cde_endpoint': provider_endpoint,
             'runtime_verification_state': (
-                server.endpoint_profile.runtime_identity.verification_state
+                (
+                    _effective_verification_state(server)
+                    if '_effective_verification_state' in globals()
+                    else server.endpoint_profile.runtime_identity.verification_state
+                )
                 if provider_endpoint else 'legacy'
             ),
             'bgcolor': server.bgcolor,
@@ -2973,8 +3015,16 @@ class ServerNode(PGChildNodeView):
             save_password = {'true': True, 'false': False}.get(save_password)
         if not isinstance(save_password, bool):
             return bad_request(gettext('Save password must be true or false.'))
+        endpoint_profile = getattr(server, 'endpoint_profile', None)
+        resolve_username = globals().get('_effective_server_username')
+        current_username = (
+            resolve_username(server, True)
+            if callable(resolve_username)
+            else getattr(server, 'username', None)
+        )
         adopt_default_user = bool(
-            _effective_server_username(server, True) is None and
+            endpoint_profile is not None and
+            current_username is None and
             connect_as and
             not data.get('database_target_id') and
             profile.get('route_kind') != 'embedded_file'
@@ -2995,7 +3045,7 @@ class ServerNode(PGChildNodeView):
                 server, password, connect_as=connect_as,
                 database_target_id=data.get('database_target_id') or None)
             route_model = min(
-                server.endpoint_profile.routes,
+                getattr(endpoint_profile, 'routes', None) or (),
                 key=lambda item: item.priority,
                 default=None,
             )
@@ -3023,7 +3073,7 @@ class ServerNode(PGChildNodeView):
                             route_dirty = True
                             with endpoint_service._principal_lock:
                                 endpoint_service._principal_overrides.pop(
-                                    server.endpoint_profile.id, None
+                                    endpoint_profile.id, None
                                 )
                         if repair_empty_credential_kinds:
                             route_cfg.pop('credential_kinds', None)
@@ -3033,9 +3083,12 @@ class ServerNode(PGChildNodeView):
                             not data.get('database_target_id') and
                             profile.get('secret_fields')
                         ):
+                            from pgadmin.cdeadmin.endpoints.profiles import (
+                                active_secret_fields as _active_secret_fields,
+                            )
                             primary_kinds = [
                                 field['secret_kind']
-                                for field in active_secret_fields(
+                                for field in _active_secret_fields(
                                     profile, route_cfg
                                 )
                                 if field.get('primary') or field.get('required')
@@ -3059,8 +3112,8 @@ class ServerNode(PGChildNodeView):
                     if protected_password is not None:
                         target_id = data.get('database_target_id')
                         target = (endpoint_service.
-                                  _owned_database_target(server.endpoint_profile, target_id)
-                                  if target_id else None)
+                                  _owned_database_target(endpoint_profile, target_id)
+                                  if target_id and endpoint_profile is not None else None)
                         if target is not None and target.registration_credentials:
                             target.registration_password = protected_password
                         else:
@@ -3073,10 +3126,16 @@ class ServerNode(PGChildNodeView):
             return make_json_response(
                 status=401, success=0, errormsg=str(exc)
             )
+        final_username = (
+            resolve_username(server, True)
+            if callable(resolve_username)
+            else getattr(server, 'username', None)
+        )
         return make_json_response(
             data={
                 **verification,
-                'username': _effective_server_username(server, True),
+                **({'username': final_username}
+                   if callable(resolve_username) else {}),
                 'runtime_verification_state': 'verified',
                 'is_password_saved': bool(server.save_password),
                 'icon': server_icon_and_background(
@@ -3563,6 +3622,11 @@ class ServerNode(PGChildNodeView):
                         server, data.get('session_id'),
                         data.get('database_target_id'),
                     )
+                elif action == 'reconnect_session':
+                    payload = service.reconnect_session(
+                        server, data.get('session_id'),
+                        data.get('database_target_id'),
+                    )
                 elif action == 'resource_page':
                     payload = service.resource_page(
                         server, data.get('request') or {}
@@ -3714,7 +3778,6 @@ class ServerNode(PGChildNodeView):
                 elif action == 'postgresql_host_tools':
                     if scoped_target or data.get('database_target_id') not in (None, ''):
                         return bad_request('Open the server workspace for application-host and whole-cluster utilities.')
-                    from flask_security import current_user
                     host_authorized = bool(current_user.is_authenticated and (
                         not config.SERVER_MODE or current_user.has_role('Administrator')))
                     try:
@@ -4013,6 +4076,7 @@ class ServerNode(PGChildNodeView):
                     'provider workspace.'
                 ),
                 info='CREDENTIAL_REQUIRED',
+                data={'code': 'CREDENTIAL_REQUIRED', 'gid': gid, 'sid': sid},
             )
             response.headers['Cache-Control'] = 'no-store'
             return response
@@ -4093,14 +4157,15 @@ class ServerNode(PGChildNodeView):
         profile = _cde_registration(server)
         if profile['workflow'] == 'provider_endpoint':
             runtime = server.endpoint_profile.runtime_identity
+            effective_state = _effective_verification_state(server)
             return make_json_response(data={
                 'icon': server_icon_and_background(
-                    False, None, server, runtime.verification_state
+                    False, None, server, effective_state
                 ),
                 'connected': False,
                 'cde_endpoint': True,
                 'cde_profile_id': profile['profile_id'],
-                'runtime_verification_state': runtime.verification_state,
+                'runtime_verification_state': effective_state,
                 'verified_runtime_family': runtime.verified_runtime_family,
                 'verified_runtime_version': runtime.verified_runtime_version,
                 'version_support': _version_support(server),

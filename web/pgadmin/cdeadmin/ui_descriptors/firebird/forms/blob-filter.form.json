@@ -1,0 +1,131 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "blob-filter"
+  ],
+  "form_reference": "SR-F-000148",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "BLOB filter name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "BLOB filters execute native server code. The library and exported filter must already be installed and allowed by Firebird UdfAccess. This task does not install libraries or change server security. Firebird has no ALTER FILTER statement; changing a declaration requires an explicit drop and a new declaration. Loaded filters can remain in the native database cache after their declaration is dropped, until the database is unloaded. This task does not unload the database or disconnect other users. The library must match the exact server ABI."
+    },
+    {
+      "field_id": "entrypoint",
+      "label": "Exported entry point",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "At most 255 UTF-8 bytes."
+    },
+    {
+      "field_id": "module_name",
+      "label": "Installed library",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "At most 255 UTF-8 bytes."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false
+    },
+    {
+      "field_id": "input_mode",
+      "label": "Input subtype notation",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "NUMBER",
+      "options": [
+        {
+          "value": "NUMBER",
+          "label": "Number"
+        },
+        {
+          "value": "MNEMONIC",
+          "label": "Mnemonic"
+        }
+      ]
+    },
+    {
+      "field_id": "input_subtype",
+      "label": "Input subtype",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "help": "Signed 16-bit subtype. Custom subtypes are negative; non-negative values are reserved for the engine.",
+      "visible_when": {
+        "field": "input_mode",
+        "equals": "NUMBER"
+      }
+    },
+    {
+      "field_id": "input_mnemonic",
+      "label": "Input mnemonic",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "help": "Exact registered RDB$TYPES name (for example TEXT). This task does not create a subtype or modify the system catalog.",
+      "visible_when": {
+        "field": "input_mode",
+        "equals": "MNEMONIC"
+      }
+    },
+    {
+      "field_id": "output_mode",
+      "label": "Output subtype notation",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "NUMBER",
+      "options": [
+        {
+          "value": "NUMBER",
+          "label": "Number"
+        },
+        {
+          "value": "MNEMONIC",
+          "label": "Mnemonic"
+        }
+      ]
+    },
+    {
+      "field_id": "output_subtype",
+      "label": "Output subtype",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "help": "Signed 16-bit subtype. Custom subtypes are negative; non-negative values are reserved for the engine.",
+      "visible_when": {
+        "field": "output_mode",
+        "equals": "NUMBER"
+      }
+    },
+    {
+      "field_id": "output_mnemonic",
+      "label": "Output mnemonic",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "help": "Exact registered RDB$TYPES name (for example TEXT). This task does not create a subtype or modify the system catalog.",
+      "visible_when": {
+        "field": "output_mode",
+        "equals": "MNEMONIC"
+      }
+    }
+  ],
+  "notes": "Firebird blob-filter engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

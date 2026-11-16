@@ -706,13 +706,16 @@ class ProviderRegistry:
             )
 
     @contextmanager
-    def endpoint_configuration_change(self, endpoint_id, *, ownership=None):
+    def endpoint_configuration_change(
+        self, endpoint_id, *, ownership=None, exclude_session_namespaces=None
+    ):
         """Serialize configuration changes with provider-owned admission.
 
         Providers opting into this lifecycle hook must reject release while
         sessions need the existing credentials/routing. A confirmed release
         invalidates already acquired instances before metadata can change.
         """
+        excluded = frozenset(exclude_session_namespaces or ())
         with self._lock, ExitStack() as admission:
             # Preflight every opted-in binding before releasing any of them.
             # Keep provider admission held through persistence, so an already
@@ -720,6 +723,8 @@ class ProviderRegistry:
             for registration in self._registrations.values():
                 for binding in list(registration.bindings.values()):
                     if binding.context.endpoint_id != endpoint_id:
+                        continue
+                    if binding.context.session_namespace in excluded:
                         continue
                     guard = getattr(type(binding.instance),
                                     'profile_change_guard', None)
@@ -741,6 +746,8 @@ class ProviderRegistry:
             for registration in self._registrations.values():
                 for key, binding in list(registration.bindings.items()):
                     if binding.context.endpoint_id != endpoint_id:
+                        continue
+                    if binding.context.session_namespace in excluded:
                         continue
                     release = getattr(type(binding.instance),
                                       'release_for_profile_change', None)

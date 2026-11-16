@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext, contextmanager
 from enum import Enum
 from dataclasses import replace
@@ -53,7 +54,7 @@ from .identity import catalog_resource_id as _catalog_resource_id
 from .query_parameters import normalize_parameters
 from .query_values import normalize_value
 from .query_columns import describe_columns
-from .query_client import FirebirdQueryClient
+from .query_client import CONNECTION_DROP_GDS_CODES, FirebirdQueryClient
 from ..native_editor import NativeEditorProvider
 from .service_connection import (
     connect_service, notify_attached, security_context,
@@ -213,6 +214,138 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         profile = (replace(profile, required_permissions=(
             'embedded_runtime', 'filesystem')) if embedded else profile)
         super().__init__(context, permissions, client, profile)
+        self._catalog_pool = {}
+        self._catalog_pool_lock = threading.RLock()
+        self._pooled_catalog_local = threading.local()
+
+    def _visual_admin_session_context(self, payload):
+        ctx = super()._visual_admin_session_context(payload)
+        if ctx is not None:
+            return ctx
+        pooled = getattr(self._pooled_catalog_local, 'handle', None)
+        if pooled is not None:
+            return {'session_id': None, 'session_handle': pooled}
+        return None
+
+    @staticmethod
+    def _catalog_pool_key(request):
+        if not isinstance(request, Mapping):
+            return None
+        if request.get('_provider_session_handle') is not None:
+            return None
+        if request.get('session_id') is not None:
+            return None
+        route = request.get('route')
+        if not isinstance(route, Mapping) or not route.get('database'):
+            return None
+        key_payload = {
+            k: v for k, v in route.items()
+            if k != 'credential_references'
+        }
+        try:
+            return json.dumps(key_payload, sort_keys=True, default=repr)
+        except Exception:
+            return None
+
+    def _evict_catalog_pool(self):
+        with self._catalog_pool_lock:
+            pooled = list(self._catalog_pool.values())
+            self._catalog_pool.clear()
+        for conn in pooled:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _catalog_handle_healthy(conn):
+        try:
+            if conn.is_closed() is True:
+                return False
+            conn.ping()
+            return True
+        except Exception:
+            return False
+
+    def _run_with_pooled_catalog(self, request, callback):
+        pool_key = (
+            self._catalog_pool_key(request)
+            if isinstance(self.client, FirebirdQueryClient) else None
+        )
+        if pool_key is None or self.client._uses_server_scope(request):
+            return callback(request)
+
+        def invoke_once(allow_reuse):
+            reused = False
+            conn = None
+            if allow_reuse:
+                with self._catalog_pool_lock:
+                    conn = self._catalog_pool.pop(pool_key, None)
+                if conn is not None:
+                    if self._catalog_handle_healthy(conn):
+                        reused = True
+                    else:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        conn = None
+            if conn is None:
+                conn = self.client._connect({'route': request['route']})
+            with self.client._admission:
+                if not any(item is conn for item in self.client._connections):
+                    self.client._connections.append(conn)
+            keep_pooled = False
+            prev_handle = getattr(self._pooled_catalog_local, 'handle', None)
+            self._pooled_catalog_local.handle = conn
+            try:
+                result = callback(request)
+                try:
+                    tx = getattr(conn, 'main_transaction', None)
+                    if tx is not None and tx.is_active() is True:
+                        conn.rollback()
+                except Exception:
+                    pass
+                keep_pooled = not self.client._closed
+                return result, reused
+            finally:
+                self._pooled_catalog_local.handle = prev_handle
+                with self.client._admission:
+                    self.client._forget_connection(conn)
+                    self.client._attachment_states.pop(id(conn), None)
+                if keep_pooled:
+                    evicted = None
+                    with self._catalog_pool_lock:
+                        if self.client._closed:
+                            evicted = conn
+                        else:
+                            evicted = self._catalog_pool.get(pool_key)
+                            self._catalog_pool[pool_key] = conn
+                    if evicted is not None and evicted is not conn:
+                        try:
+                            evicted.close()
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        try:
+            result, _reused = invoke_once(allow_reuse=True)
+            return result
+        except Exception as exc:
+            if CONNECTION_DROP_GDS_CODES.intersection(status_codes(exc)):
+                result, _reused = invoke_once(allow_reuse=False)
+                return result
+            raise
+
+    def list_resources(self, request):
+        return self._run_with_pooled_catalog(request, super().list_resources)
+
+    def inspect_resource(self, request):
+        return self._run_with_pooled_catalog(request, super().inspect_resource)
 
     def _identity(self):
         # Session DTOs must use the same admitted evidence identity as their
@@ -307,6 +440,41 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 self._invalidate_grid_session(session_id)
             return super().close_session(request)
 
+    def reconnect_session(self, request):
+        self._require('execute')
+        request = _mapping(request)
+        session_id = request.get('session_id')
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise ValueError('Provider session is unavailable')
+        self._invalidate_grid_session(session_id)
+        if isinstance(self.client, FirebirdQueryClient):
+            outcome = self.client.reconnect_session(session.handle)
+        else:
+            fresh = self.client.open_session({'route': session.route})
+            try:
+                self.client.close_session(session.handle)
+            except Exception:
+                pass
+            session.handle = fresh
+            outcome = {
+                'reconnected': True,
+                'had_uncommitted_transaction': False,
+            }
+        transaction = self.refresh_transaction({'session_id': session_id})
+        return {
+            'session_id': session_id,
+            'reconnected': True,
+            'had_uncommitted_transaction': bool(
+                outcome.get('had_uncommitted_transaction')
+            ),
+            'transaction': transaction,
+        }
+
+    def close(self):
+        self._evict_catalog_pool()
+        return super().close()
+
     def _execute_query_token(self, handle, payload):
         if isinstance(self.client, FirebirdQueryClient):
             # Arbitrary native source may change data, metadata or transaction
@@ -333,6 +501,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         credential-store and UI recovery tests with their client runtimes.
         No connection failure is evidence that an attachment was released.
         """
+        self._evict_catalog_pool()
         lock = (self.client._admission if isinstance(
             self.client, FirebirdQueryClient) else nullcontext())
         with lock:
@@ -348,6 +517,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
 
     def release_for_profile_change(self):
         """Do not replace credentials or routing beneath an owned session."""
+        self._evict_catalog_pool()
         if not isinstance(self.client, FirebirdQueryClient):
             if self._sessions:
                 raise RelationalClientError(

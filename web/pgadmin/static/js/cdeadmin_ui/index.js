@@ -130,6 +130,7 @@ export {
   TActionsRegistry,
   createTAction,
   t_actions,
+  useLocaleRevision,
   useTActions,
 } from './actions/t_actions';
 export {

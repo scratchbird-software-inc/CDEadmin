@@ -15,6 +15,9 @@
 
 import {useEffect, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {useLocaleRevision} from '../actions/t_actions';
+import {Icon} from '../icons';
 import {Box, Stack} from '../primitives/Layout';
 import {TextField} from '../primitives/Field';
 import {Button, IconButton} from '../primitives/Button';
@@ -41,6 +44,7 @@ function toObject(rows) {
 }
 
 export default function KeyValueEditor({field, value, onChange, disabled=false, error, help}) {
+  useLocaleRevision();
   // Rows live locally so a half-typed name is not dropped by the object view.
   const [rows, setRows] = useState(() => entries(value));
   useEffect(() => {
@@ -64,20 +68,20 @@ export default function KeyValueEditor({field, value, onChange, disabled=false, 
       </Box>
       <Button size="small" intent="neutral" disabled={disabled}
         onClick={() => commit([...rows, {key: '', value: ''}])}>
-        Add setting
+        {gettext('Add setting')}
       </Button>
     </Stack>
     <Stack gap="compact" sx={{p: 1.25}}>
       {rows.map((row, index) => <Stack key={index} direction="row" gap="compact">
-        <TextField size="small" label={`Name ${index + 1}`} value={row.key} disabled={disabled}
+        <TextField size="small" label={gettext('Name %s', index + 1)} value={row.key} disabled={disabled}
           onChange={(event) => set(index, 'key', event.target.value)} sx={{flex: 1}} />
-        <TextField size="small" label={`Value ${index + 1}`} disabled={disabled}
+        <TextField size="small" label={gettext('Value %s', index + 1)} disabled={disabled}
           value={typeof row.value === 'object' ? JSON.stringify(row.value) : String(row.value ?? '')}
           onChange={(event) => set(index, 'value', event.target.value)} sx={{flex: 2}} />
-        <IconButton label={`Remove setting ${index + 1}`} disabled={disabled}
-          onClick={() => commit(rows.filter((_row, position) => position !== index))}>×</IconButton>
+        <IconButton label={gettext('Remove setting %s', index + 1)} disabled={disabled}
+          onClick={() => commit(rows.filter((_row, position) => position !== index))}><Icon iconKey="action.close" decorative /></IconButton>
       </Stack>)}
-      {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>No settings.</Box>}
+      {rows.length === 0 && <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>{gettext('No settings.')}</Box>}
     </Stack>
     {error && <Box sx={{px: 1.25, pb: 1}}><ValidationMessage status="error">{error}</ValidationMessage></Box>}
     {!error && help && <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.25, pb: 1}}>{help}</Box>}

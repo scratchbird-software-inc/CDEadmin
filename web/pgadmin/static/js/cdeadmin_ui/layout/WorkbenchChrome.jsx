@@ -41,7 +41,7 @@ Toolbar.propTypes = {
   trailing: PropTypes.node,
 };
 
-export function StatusBar({status = 'normal', label = 'Surface status', children}) {
+export function StatusBar({status = 'normal', label = 'Surface status', meta = null, children}) {
   const topBorder = status === 'normal'
     ? 'var(--sr-border-subtle)'
     : status === 'warning'
@@ -63,7 +63,14 @@ export function StatusBar({status = 'normal', label = 'Surface status', children
         borderTop: `1px solid ${topBorder}`,
       }}
     >
-      {children}
+      <div style={{display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto', overflow: 'hidden'}}>
+        {children}
+      </div>
+      {meta && (
+        <div style={{marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto'}}>
+          {meta}
+        </div>
+      )}
     </div>
   );
 }
@@ -71,6 +78,7 @@ export function StatusBar({status = 'normal', label = 'Surface status', children
 StatusBar.propTypes = {
   status: PropTypes.oneOf(['normal', 'warning', 'disconnected']),
   label: PropTypes.string,
+  meta: PropTypes.node,
   children: PropTypes.node,
 };
 

@@ -459,8 +459,8 @@ class ProfileMigrationSourceTests(unittest.TestCase):
     def test_schema_version_models_and_linear_migration_are_declared(self):
         model_source = MODEL_PATH.read_text(encoding='utf-8')
         migration_source = MIGRATION_PATH.read_text(encoding='utf-8')
-        # 60 since 2026-11-05: user_preferences.value became text.
-        self.assertRegex(model_source, r'SCHEMA_VERSION\s*=\s*60\b')
+        # 61 since 2026-11-15: cde_project.parent_project_id DAG hierarchy.
+        self.assertRegex(model_source, r'SCHEMA_VERSION\s*=\s*61\b')
         self.assertIn(
             "__tablename__ = 'cde_profile_migration_run'", model_source
         )
@@ -490,9 +490,9 @@ class ProfileMigrationSourceTests(unittest.TestCase):
                 revisions.add(revision.group(1))
             if predecessor:
                 predecessors.add(predecessor.group(1))
-        # One linear head; cde_user_preference_text_v1 since 2026-11-05.
+        # One linear head; cde_project_hierarchy_v1 since 2026-11-15.
         self.assertEqual(
-            {'cde_user_preference_text_v1'},
+            {'cde_project_hierarchy_v1'},
             revisions - predecessors,
         )
 

@@ -47,8 +47,11 @@ def test_other_engine_language_and_unknown_purpose_are_refused(profile_id, langu
 
 def test_ordinary_sessions_keep_registered_transaction_policy():
     owner, endpoint = service()
+    before = deepcopy(endpoint)
     owner.open_session('server', 'firebird-sql', 'target')
-    assert owner.studio_service.open_session.call_args.args[1] is endpoint
+    opened = owner.studio_service.open_session.call_args.args[1]
+    assert opened == {**endpoint, 'route': {**endpoint['route'], 'database_target_id': 'target'}}
+    assert endpoint == before
 
 
 def test_generator_navigation_is_firebird_database_scoped():

@@ -1,0 +1,108 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "shadow"
+  ],
+  "form_reference": "SR-F-000156",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "number",
+      "label": "Shadow number",
+      "tab": "General",
+      "control": "number",
+      "required": true,
+      "default": 1,
+      "min": 1,
+      "max": 32767,
+      "help": "A number from 1 through 32767, unique within this database."
+    },
+    {
+      "field_id": "mode",
+      "label": "Failure handling",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "AUTO",
+      "options": [
+        {
+          "value": "AUTO",
+          "label": "Auto"
+        },
+        {
+          "value": "MANUAL",
+          "label": "Manual"
+        }
+      ],
+      "help": "AUTO removes an unavailable shadow. MANUAL requires administrator intervention when a shadow is unavailable."
+    },
+    {
+      "field_id": "conditional",
+      "label": "Conditional shadow",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Native conditional shadow activation is controlled by Firebird; it is not a scheduled backup."
+    },
+    {
+      "field_id": "filename",
+      "label": "First shadow filename",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "A path on the Firebird server, not on the browser host."
+    },
+    {
+      "field_id": "length",
+      "label": "First shadow file length",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "min": 0,
+      "max": 2147483647,
+      "help": "Pages, not bytes. Empty leaves the native default."
+    },
+    {
+      "field_id": "secondary_files",
+      "label": "Secondary shadow files",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "filename",
+          "label": "Shadow filename",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "start",
+          "label": "Starting page",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "max": 2147483647,
+          "help": "Pages, not bytes. Empty leaves the native default."
+        },
+        {
+          "field_id": "length",
+          "label": "File length",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "max": 2147483647,
+          "help": "Pages, not bytes. Empty leaves the native default."
+        }
+      ],
+      "required": false,
+      "default": [],
+      "help": "Ordered native files. A file needs a starting page when its predecessor has no length."
+    }
+  ],
+  "notes": "Firebird shadow engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

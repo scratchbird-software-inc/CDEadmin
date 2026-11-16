@@ -257,6 +257,7 @@ class DataStudioService:
             completion = self.contributions.completion(language_profile)
         except DataStudioAccessError:
             completion = None
+        route_target_id = (endpoint.get('route') or {}).get('database_target_id')
         session = StudioSession(
             context.endpoint_id,
             language_profile,
@@ -265,6 +266,10 @@ class DataStudioService:
             execution.contribution_id,
             completion.contribution_id if completion else None,
             provider_isolation_key=context.isolation_key,
+            database_target_id=(
+                route_target_id if isinstance(route_target_id, str) and route_target_id
+                else None
+            ),
         )
         with self._lock:
             if session.session_id in self._sessions:
@@ -979,6 +984,60 @@ class DataStudioService:
             'finality': 'provider-owned',
         })
         return copy.deepcopy(dict(response))
+
+    @serialized_execution
+    def reconnect_session(self, context, session_id):
+        """Reconnect a retained provider session after attachment loss."""
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        reconnect = getattr(binding.instance, 'reconnect_session', None)
+        if not callable(reconnect):
+            raise DataStudioAccessError(
+                'session reconnect is unavailable for this provider'
+            )
+        try:
+            outcome = reconnect({
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile,
+            })
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+        presentation = outcome.get('transaction') if isinstance(outcome, Mapping) else None
+        if presentation is not None:
+            presentation = self._contract('TransactionPresentation', presentation)
+            if presentation['session_id'] != session.session_id:
+                raise DataStudioAccessError(
+                    'provider session reconnect changed session identity'
+                )
+            session.transaction_presentation = presentation
+        had_uncommitted = bool(
+            outcome.get('had_uncommitted_transaction')
+            if isinstance(outcome, Mapping) else False
+        )
+        self.history.append('session.reconnected', session.session_id, {
+            'endpoint_id': session.endpoint_id,
+            'had_uncommitted_transaction': had_uncommitted,
+            'finality': 'provider-owned',
+        })
+        return {
+            **session.to_dict(),
+            'session_id': session.session_id,
+            'reconnected': True,
+            'had_uncommitted_transaction': had_uncommitted,
+        }
+
+    def session_database_target_id(self, session_id):
+        with self._lock:
+            session = self._sessions.get(session_id)
+            return session.database_target_id if session is not None else None
+
+    def occurrence_database_target_id(self, occurrence_id):
+        with self._lock:
+            occurrence = self._occurrences.get(occurrence_id)
+            if occurrence is None:
+                return None
+            session = self._sessions.get(occurrence.session_id)
+            return session.database_target_id if session is not None else None
 
     def publish_channel(self, occurrence_id, channel, payload):
         if channel not in CHANNELS:

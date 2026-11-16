@@ -64,7 +64,7 @@ def children(resources, prepared, state):
     def group_has_children(kind, branch_override=None):
         effective_branch = branch_override or state.get('virtual_branch')
         if kind == 'firebird-folder':
-            if effective_branch in {'programming', 'security', 'system'}:
+            if effective_branch in ROOTS:
                 return True
             return any(category(p) == effective_branch for p in top)
         if state.get('scope') == 'resource':

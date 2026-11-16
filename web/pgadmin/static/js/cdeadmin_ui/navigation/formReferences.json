@@ -6437,6 +6437,154 @@
     "descriptor-form:tikv:server": {
       "reference": "SR-F-030052",
       "title": "tikv server descriptor form"
+    },
+    "duckdb-relational-diagram": {
+      "reference": "SR-F-030053",
+      "title": "DuckDB relational DDN diagram"
+    },
+    "sqlite-relational-diagram": {
+      "reference": "SR-F-030054",
+      "title": "SQLite relational DDN diagram"
+    },
+    "postgresql-relational-diagram": {
+      "reference": "SR-F-030055",
+      "title": "PostgreSQL relational DDN diagram"
+    },
+    "schema-compare-workspace": {
+      "reference": "SR-F-030056",
+      "title": "Cross-engine schema comparison workspace"
+    },
+    "project-explorer": {
+      "reference": "SR-F-030057",
+      "title": "Project explorer and asset navigator"
+    },
+    "sql-notebook": {
+      "reference": "SR-F-030058",
+      "title": "SQL notebook and shared investigation editor"
+    },
+    "scratch-preferences": {
+      "reference": "SR-F-030059",
+      "title": "ScratchRobin preferences and settings dialog"
+    },
+    "security-access": {
+      "reference": "SR-F-030060",
+      "title": "ScratchRobin security and access editor"
+    },
+    "command-palette": {
+      "reference": "SR-F-030061",
+      "title": "ScratchRobin command palette"
+    },
+    "mysql-alerts": {
+      "reference": "SR-F-030062",
+      "title": "MySQL native alerts workspace"
+    },
+    "mysql-archive-retention": {
+      "reference": "SR-F-030063",
+      "title": "MySQL archive retention policy workspace"
+    },
+    "mysql-backup-protection": {
+      "reference": "SR-F-030064",
+      "title": "MySQL backup protection workspace"
+    },
+    "mysql-binlog-archives": {
+      "reference": "SR-F-030065",
+      "title": "MySQL binary log archives workspace"
+    },
+    "mysql-binlog-replay": {
+      "reference": "SR-F-030066",
+      "title": "MySQL binary log replay workspace"
+    },
+    "mysql-clone": {
+      "reference": "SR-F-030067",
+      "title": "MySQL native clone workspace"
+    },
+    "mysql-content-search": {
+      "reference": "SR-F-030068",
+      "title": "MySQL catalog and content search workspace"
+    },
+    "mysql-controlled-change": {
+      "reference": "SR-F-030069",
+      "title": "MySQL controlled DDL change workspace"
+    },
+    "mysql-data-drift": {
+      "reference": "SR-F-030070",
+      "title": "MySQL data drift inspection workspace"
+    },
+    "mysql-data-import": {
+      "reference": "SR-F-030071",
+      "title": "MySQL native data import workspace"
+    },
+    "mysql-host": {
+      "reference": "SR-F-030072",
+      "title": "MySQL host administration workspace"
+    },
+    "mysql-instance-acceptance": {
+      "reference": "SR-F-030073",
+      "title": "MySQL instance acceptance workspace"
+    },
+    "mysql-instance-backups": {
+      "reference": "SR-F-030074",
+      "title": "MySQL instance backups workspace"
+    },
+    "mysql-instance-restores": {
+      "reference": "SR-F-030075",
+      "title": "MySQL instance restores workspace"
+    },
+    "mysql-physical": {
+      "reference": "SR-F-030076",
+      "title": "MySQL physical backup and restore workspace"
+    },
+    "mysql-physical-backup-schedule": {
+      "reference": "SR-F-030077",
+      "title": "MySQL physical backup schedule workspace"
+    },
+    "mysql-physical-batch-retention": {
+      "reference": "SR-F-030078",
+      "title": "MySQL physical batch retention workspace"
+    },
+    "mysql-query-plan": {
+      "reference": "SR-F-030079",
+      "title": "MySQL EXPLAIN query plan viewer"
+    },
+    "mysql-recovery-chains": {
+      "reference": "SR-F-030080",
+      "title": "MySQL recovery chains workspace"
+    },
+    "mysql-recovery-cutover": {
+      "reference": "SR-F-030081",
+      "title": "MySQL recovery cutover workspace"
+    },
+    "mysql-retention-schedule": {
+      "reference": "SR-F-030082",
+      "title": "MySQL retention schedule workspace"
+    },
+    "mysql-routers": {
+      "reference": "SR-F-030083",
+      "title": "MySQL Router fleet workspace"
+    },
+    "mysql-sandboxes": {
+      "reference": "SR-F-030084",
+      "title": "MySQL sandbox provisioning workspace"
+    },
+    "mysql-source-logs": {
+      "reference": "SR-F-030085",
+      "title": "MySQL source logs viewer"
+    },
+    "mysql-spatial": {
+      "reference": "SR-F-030086",
+      "title": "MySQL spatial inspection workspace"
+    },
+    "mysql-topologies": {
+      "reference": "SR-F-030087",
+      "title": "MySQL replication topologies workspace"
+    },
+    "mysql-workload": {
+      "reference": "SR-F-030088",
+      "title": "MySQL workload analysis workspace"
+    },
+    "command-line-workspace": {
+      "reference": "SR-F-030089",
+      "title": "Interactive multi-engine command line and ISQL/PSQL launcher workspace"
     }
   }
 }

@@ -79,6 +79,19 @@ class MemoryRepository:
     def project_by_key(self, project_key):
         return self._find(self.project_rows, project_key=project_key)
 
+    def project_by_id(self, project_uuid):
+        if not project_uuid:
+            return None
+        return self._find(self.project_rows, id=project_uuid)
+
+    def children_of(self, parent_uuid):
+        if not parent_uuid:
+            return []
+        return [
+            row for row in self.project_rows
+            if getattr(row, 'parent_project_id', None) == parent_uuid
+        ]
+
     def accessible_project(self, user_id, role_ids, project_key):
         project = self.project(user_id, project_key)
         if project:
@@ -1291,6 +1304,80 @@ class ProjectAssetRouteTests(unittest.TestCase):
     def test_service_lookup_fails_closed_without_initialization(self):
         with self.assertRaises(ProjectAssetError):
             service_for_app(SimpleNamespace(extensions={}))
+
+    def test_hierarchical_parent_child_projects_and_cycle_rejection(self):
+        # Create root -> mid -> leaf
+        r1 = self.client.put(
+            '/cdeadmin/api/projects/suite-root',
+            json={'name': 'Suite Root'},
+        )
+        self.assertEqual(200, r1.status_code)
+        self.assertIsNone(r1.get_json()['data']['parent_project_id'])
+
+        r2 = self.client.put(
+            '/cdeadmin/api/projects/accounting',
+            json={'name': 'Accounting', 'parent_project_id': 'suite-root'},
+        )
+        self.assertEqual(200, r2.status_code)
+        self.assertEqual(
+            'suite-root', r2.get_json()['data']['parent_project_id']
+        )
+
+        r3 = self.client.put(
+            '/cdeadmin/api/projects/general-ledger',
+            json={
+                'name': 'General Ledger',
+                'parent_project_id': 'accounting',
+            },
+        )
+        self.assertEqual(200, r3.status_code)
+        self.assertEqual(
+            'accounting', r3.get_json()['data']['parent_project_id']
+        )
+
+        # Reject self-parenting
+        self_resp = self.client.post(
+            '/cdeadmin/api/projects/suite-root',
+            json={'expected_revision': 0, 'parent_project_id': 'suite-root'},
+        )
+        self.assertEqual(400, self_resp.status_code)
+        self.assertIn('own parent', self_resp.get_json()['errormsg'])
+
+        # Reject 2-node cycle (suite-root -> accounting -> suite-root)
+        cyc2_resp = self.client.post(
+            '/cdeadmin/api/projects/suite-root',
+            json={'expected_revision': 0, 'parent_project_id': 'accounting'},
+        )
+        self.assertEqual(400, cyc2_resp.status_code)
+        self.assertIn('circular', cyc2_resp.get_json()['errormsg'])
+
+        # Reject 3-node cycle (suite-root -> accounting -> general-ledger -> suite-root)
+        cyc3_resp = self.client.post(
+            '/cdeadmin/api/projects/suite-root',
+            json={
+                'expected_revision': 0,
+                'parent_project_id': 'general-ledger',
+            },
+        )
+        self.assertEqual(400, cyc3_resp.status_code)
+        self.assertIn('circular', cyc3_resp.get_json()['errormsg'])
+
+        # Allow valid reparenting (general-ledger directly under suite-root) and unparenting
+        reparent_ok = self.client.post(
+            '/cdeadmin/api/projects/general-ledger',
+            json={'expected_revision': 0, 'parent_project_id': 'suite-root'},
+        )
+        self.assertEqual(200, reparent_ok.status_code)
+        self.assertEqual(
+            'suite-root', reparent_ok.get_json()['data']['parent_project_id']
+        )
+
+        unparent_ok = self.client.post(
+            '/cdeadmin/api/projects/general-ledger',
+            json={'expected_revision': 1, 'parent_project_id': None},
+        )
+        self.assertEqual(200, unparent_ok.status_code)
+        self.assertIsNone(unparent_ok.get_json()['data']['parent_project_id'])
 
 
 @unittest.skipUnless(MIGRATION_DEPENDENCIES, 'migration dependencies missing')

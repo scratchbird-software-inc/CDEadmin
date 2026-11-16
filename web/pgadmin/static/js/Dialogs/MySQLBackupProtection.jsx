@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TablePagination} from '@mui/material';
 import MySQLRecoveryChains from './MySQLRecoveryChains';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLBackupProtection({post}) {
   const [page,setPage]=useState(null),[review,setReview]=useState(null),[confirmed,setConfirmed]=useState(false);
@@ -17,6 +18,7 @@ export default function MySQLBackupProtection({post}) {
   };
   const load=offset => run('list',{offset,limit:25,...(allRegistrations ? {all_registrations:true} : {})},setPage);
   return <Box sx={{my:1}}>
+    <FormReference formKey="mysql-backup-protection" />
     <Alert severity="info">Managed native dumps and physical clones protect application archives. Native source holds also apply to other registrations of the same instance owned by the same user. Pending or uncertain records retain all archives of their own registration. Remote clone source UUIDs are not attested by the clone protocol, so donor and recipient holds remain conservative. These holds do not discover external backups. Native server logs have separate administration.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <FormControlLabel label="Show backup holds from all my registrations, including removed registrations" control={<Checkbox disabled={busy} checked={allRegistrations} onChange={event=>{setAllRegistrations(event.target.checked);setPage(null);setReview(null);setConfirmed(false);setRetired(null);}} />} />

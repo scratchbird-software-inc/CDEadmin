@@ -38,7 +38,9 @@ import config
 
 # 60 (2026-11-05): user_preferences.value is unbounded text
 # (migration cde_user_preference_text_v1).
-SCHEMA_VERSION = 60
+# 61 (2026-11-15): cde_project.parent_project_id hierarchical project DAG
+# (migration cde_project_hierarchy_v1).
+SCHEMA_VERSION = 61
 
 ##########################################################################
 #
@@ -755,6 +757,11 @@ class CDEProject(db.Model, UserScopedMixin):
     id = db.Column(db.String(36), primary_key=True)
     user_id = db.Column(
         db.Integer, db.ForeignKey(USER_ID, ondelete='CASCADE'), nullable=False
+    )
+    parent_project_id = db.Column(
+        db.String(36),
+        db.ForeignKey('cde_project.id', ondelete='SET NULL'),
+        nullable=True,
     )
     project_key = db.Column(db.String(256), nullable=False)
     name = db.Column(db.String(128), nullable=False)

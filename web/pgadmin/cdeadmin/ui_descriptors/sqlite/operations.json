@@ -263,7 +263,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -283,7 +283,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -303,7 +303,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -330,7 +330,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -364,7 +364,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -384,7 +384,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {

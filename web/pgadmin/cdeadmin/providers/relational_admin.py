@@ -3648,7 +3648,7 @@ class RelationalAdministration:
                     session_id and not owns_connection):
                 from .firebird.physical_rows import available
                 physical_identity = available(
-                    connection, self._qualified(path))
+                    connection, self._qualified(path), relation_name=path[-1])
             row_identity_available = bool(key_columns) or physical_identity
             cursor = self._row_cursor(client, connection)
             order = (

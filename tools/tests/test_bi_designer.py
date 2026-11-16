@@ -299,6 +299,28 @@ class BIDesignerBackendTests(unittest.TestCase):
         )
         self.assertEqual(exact['fidelity'], 'exact')
         self.assertEqual(exact['question']['query']['kind'], 'sbsql')
+        self.assertEqual(
+            exact['question']['query']['sbsql']['filters'][0]['parameter'],
+            'st',
+        )
+
+        # Multi-table JOIN + OVER window SQL maps onto unified SBsql
+        joined_win = sql_to_bi_question_model(
+            'SELECT c.region, SUM(o.amount) AS total, '
+            'ROW_NUMBER() OVER (PARTITION BY c.region ORDER BY c.region DESC) '
+            'AS rn FROM customers c INNER JOIN orders o '
+            'ON c.id = o.customer_id WHERE o.status = {{st}} '
+            'GROUP BY c.region LIMIT 20'
+        )
+        self.assertEqual(joined_win['fidelity'], 'exact')
+        jw_sbsql = joined_win['question']['query']['sbsql']
+        self.assertEqual(len(jw_sbsql['joins']), 1)
+        self.assertEqual(len(jw_sbsql['windows']), 1)
+        self.assertEqual(jw_sbsql['windows'][0]['function'], 'row_number')
+        # Round-trip SBsql <-> sdk.sql_builder with window calculations
+        jw_builder = sbsql_to_sql_builder_model(jw_sbsql)
+        jw_round = sql_builder_model_to_sbsql(jw_builder)
+        self.assertEqual(jw_round['windows'], jw_sbsql['windows'])
 
         unmappable = sql_to_bi_question_model(
             'WITH cte AS (SELECT 1 AS x) SELECT x FROM cte'

@@ -269,4 +269,51 @@ describe('NotebookBar', () => {
       expect(within(panel()).getByRole('group', {name: 'Styles'})).toBeInTheDocument();
     });
   });
+
+  it('provides an overflow open-tabs menu picker for 9+ tabs and supports drag-reorder', async () => {
+    const nineTabsModel = {
+      tabs: Array.from({length: 9}, (_, idx) => ({
+        id: `tab-${idx + 1}`,
+        label: `Page ${idx + 1}`,
+        draggable: true,
+        closable: true,
+        groups: [{id: `g-${idx + 1}`, label: 'Main', controls: [button(`act${idx + 1}`)]}],
+      })),
+    };
+    const onSelectTab = jest.fn();
+    const onReorderTab = jest.fn();
+    const onCloseTab = jest.fn();
+
+    render(
+      <NotebookBar
+        model={nineTabsModel}
+        activeTab="tab-1"
+        onSelectTab={onSelectTab}
+        onReorderTab={onReorderTab}
+        onCloseTab={onCloseTab}
+        label="Open Pages"
+      />
+    );
+
+    const menuTrigger = screen.getByRole('button', {name: 'Open tabs'});
+    fireEvent.click(menuTrigger);
+    const tabsMenu = await screen.findByRole('menu', {name: 'Open tabs'});
+    fireEvent.click(within(tabsMenu).getByRole('menuitemradio', {name: 'Page 9'}));
+    expect(onSelectTab).toHaveBeenCalledWith('tab-9');
+
+    // Drag tab-3 onto tab-1 -> invokes onReorderTab('tab-3', 'tab-1')
+    const tab3 = screen.getByRole('tab', {name: 'Page 3'});
+    const tab1 = screen.getByRole('tab', {name: 'Page 1'});
+    const dataTransfer = {
+      data: {},
+      setData(type, val) { this.data[type] = val; },
+      getData(type) { return this.data[type] || ''; },
+      effectAllowed: 'move',
+      dropEffect: 'move',
+    };
+    fireEvent.dragStart(tab3, {dataTransfer});
+    fireEvent.dragOver(tab1, {dataTransfer});
+    fireEvent.drop(tab1, {dataTransfer});
+    expect(onReorderTab).toHaveBeenCalledWith('tab-3', 'tab-1');
+  });
 });

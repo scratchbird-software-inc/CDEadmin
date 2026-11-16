@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLPhysicalBackupSchedule({post, physical, credentials, busy, onBusy, recovery = false}) {
   const t = text => recovery ? text.replaceAll('Full backup', 'Recovery check').replaceAll('backup', 'recovery check').replaceAll('Backup', 'Recovery check') : text;
@@ -23,6 +24,7 @@ export default function MySQLPhysicalBackupSchedule({post, physical, credentials
   const approved = identity === policy?.job_id && confirmed;
   const change = value => {setTiming({...timing, ...value}); reset(null);};
   return <Box component="section" aria-label={t('Recurring physical backups')} sx={{my: 2}}>
+    <FormReference formKey="mysql-physical-backup-schedule" />
     {recovery ? <Alert severity="warning">Start a fresh isolated read-only recovery from the selected retained copy-back on every occurrence. Compare full counts, native checksums and exported definitions with the selected expected backup. Source writes continue; the current source is not the expected checkpoint. Use private-socket recovery or explicitly provisioned TLS on a separate loopback port, keep read-only mode, and enable trusted checksum input above. Both inputs are protected while this expiring policy or its work remains unresolved.</Alert> : <Alert severity="warning">Schedule full native backups independently of this viewer. This delegates SSH and the registered SQL password encrypted until expiry or revocation, and authorizes native backup/read locks and archive protection. An optional startup drill uses separate prepared and copied files and a read-only MySQL through its private socket or explicitly provisioned TLS listener, then stops it. SQL startup does not establish full data/definition recovery acceptance.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">SQL delegation includes the registered TLS policy and CA, client certificate and private key. The expiring worker envelope encrypts these files with the password. Native verification is preserved; private host client files are removed after use. Certificate-authenticated recovery requires reviewed server TLS files and its own loopback listener.</Alert>

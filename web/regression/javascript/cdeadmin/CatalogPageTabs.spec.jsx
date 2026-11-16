@@ -433,10 +433,54 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     ).toHaveAttribute('data-active-view', 'statistics');
     expect(within(island3e).queryByRole('tablist')).not.toBeInTheDocument();
 
-    // 3. Load a second page ("server: localhost") without closing the first page ->
-    //    adds its own tab and swaps Tabbed-Icon-Bar icons to ONLY the server page's icons!
+    // 3a. Single-clicking a second catalog node ("server: localhost") in the Data Navigator tree
+    //     replaces the single Browse tab in place ("database: firebird-demo" -> "server: localhost")
+    //     and swaps Tabbed-Icon-Bar icons to ONLY the server page's icons!
     act(() => {
       pgAdmin.__selectInTree(serverItem);
+    });
+
+    expect(getPageTabs().map((t) => t.getAttribute('aria-label'))).toEqual([
+      'server: localhost',
+    ]);
+    expect(
+      within(screen.getByRole('tablist', {name: 'Open Pages'})).getByRole('tab', {
+        name: 'server: localhost',
+      })
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(getNotebookIcons()).toEqual([
+      'Properties',
+      'Statistics',
+      'Verify / Connect',
+      'Create Database',
+      'Register Database',
+      'Remove Server',
+      'Refresh',
+    ]);
+
+    // Single-clicking back on "database: firebird-demo" restores it on the replaceable Browse tab,
+    // and re-selecting the Statistics view keeps it active while opening a 2nd explicit tab!
+    act(() => {
+      pgAdmin.__selectInTree(firebirdDbItem);
+    });
+    expect(getPageTabs().map((t) => t.getAttribute('aria-label'))).toEqual([
+      'database: firebird-demo',
+    ]);
+    fireEvent.click(
+      document.querySelector('.sr-island-3b .snb-panel [aria-label="Statistics"]')
+    );
+    expect(
+      document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
+    ).toHaveAttribute('data-active-view', 'statistics');
+
+    // 3b. Explicitly opening "server: localhost" in a separate tab ("Open in Separate Tab…")
+    //     adds a second independent tab without closing "database: firebird-demo"!
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:open-catalog-tab', {
+          detail: {item: serverItem},
+        })
+      );
     });
 
     expect(getPageTabs().map((t) => t.getAttribute('aria-label'))).toEqual([
@@ -448,6 +492,11 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
         name: 'server: localhost',
       })
     ).toHaveAttribute('aria-selected', 'true');
+
+    // Verify Object menu also exposes "Open in Separate Tab…"
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Object'}));
+    expect(screen.getByRole('menuitem', {name: /Open in Separate Tab/i})).toBeInTheDocument();
+    fireEvent.keyDown(document, {key: 'Escape'});
 
     // Tabbed-Icon-Bar icons are ALWAYS the ones for the currently active page ("server: localhost")
     expect(getNotebookIcons()).toEqual([

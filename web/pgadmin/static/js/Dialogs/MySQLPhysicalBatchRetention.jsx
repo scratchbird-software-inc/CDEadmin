@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLPhysicalBatchRetention({post, credentials, scopeJobId, busy, onBusy, onChanged}) {
   const [policy, setPolicy] = useState({retention_days: 30, keep_latest: 2});
@@ -51,6 +52,7 @@ export default function MySQLPhysicalBatchRetention({post, credentials, scopeJob
     if(live.current) {if(action === 'list') setSchedules(value); else {resetSchedule(value); await onChanged();}}
   });
   return <Box component="section" aria-label="Physical retention policy" sx={{my: 2}}>
+    <FormReference formKey="mysql-physical-batch-retention" />
     <Alert severity="info">Review an age policy for this exact native source, SSH host and workspace. Keep the newest verified full-backup chains and all inputs of protected jobs. Each batch contains at most 100 fixed jobs. Pausing or closing stops future manual steps; an admitted host removal can continue. Background scans require a separately confirmed schedule.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <TextField size="small" type="number" label="Physical retention days" value={policy.retention_days} disabled={busy} onChange={event => {setPolicy({...policy, retention_days: Number(event.target.value)}); reset(null); resetSchedule(null);}} />

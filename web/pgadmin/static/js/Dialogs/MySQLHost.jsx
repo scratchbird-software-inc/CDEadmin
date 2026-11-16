@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLHost({post}) {
@@ -61,6 +62,7 @@ export default function MySQLHost({post}) {
   const configurationAfter=observed?.configuration_after_process;
   const decode=value => {try{return new TextDecoder().decode(Uint8Array.from(atob(value || ''),char => char.charCodeAt(0)));}catch{return 'Inspect the original encoded native output in the receipt.';}};
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
+    <FormReference formKey="mysql-host" />
     <Alert severity="info">Manage native MySQL configuration, initialization, Linux services and reviewed upgrades on the selected SSH host. Initialization and upgrades use explicit host authority before SQL profile admission. Native process, UUID, data-directory and unit observations bind the review. Python 3.9 or later is required on that host. SQL readiness and data acceptance require separate observations.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

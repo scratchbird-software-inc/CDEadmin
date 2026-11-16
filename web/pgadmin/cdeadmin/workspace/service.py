@@ -21,6 +21,7 @@ import copy
 import hashlib
 import json
 import threading
+import time
 
 from pgadmin.cdeadmin.resources import ResourcePage, ResourceRef
 from pgadmin.cdeadmin.visual_admin.provider import (
@@ -2637,13 +2638,40 @@ class ProviderWorkspaceService:
         the engine's ui_descriptors capabilities.json, and the cached
         catalog's relations with their columns. ``source``: the statement
         for a query model, written with the provider's own quoting; an
-        option the engine lacks is refused. Nothing is run.
+        option the engine lacks is refused. ``ddn``: server-computed DDN
+        query & CTE dataflow workspace, layout, stages and fan-out warnings.
+        ``preview_stage``: bounded read-only stage preview execution through
+        DataStudioService for a CTE stage or final query.
         """
         from ..sdk.browse import path_columns
-        from ..sdk.sql_builder import build, relations, resolve_options
-        if (not isinstance(request, dict) or set(request) - {
-                'operation', 'model', 'database_target_id'} or
-                request.get('operation') not in ('options', 'source')):
+        from ..sdk.sql_builder import (
+            build,
+            build_stage_preview,
+            relations,
+            resolve_options,
+        )
+        from .query_builder_ddn import build_query_builder_ddn
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('SQL builder request is invalid')
+        op = request.get('operation')
+        allowed_by_op = {
+            'options': {'operation', 'model', 'database_target_id'},
+            'source': {'operation', 'model', 'database_target_id'},
+            'ddn': {
+                'operation',
+                'model',
+                'join_cardinalities',
+                'database_target_id',
+            },
+            'preview_stage': {
+                'operation',
+                'model',
+                'stage',
+                'limit',
+                'database_target_id',
+            },
+        }
+        if op not in allowed_by_op or (set(request) - allowed_by_op[op]):
             raise ProviderWorkspaceError('SQL builder request is invalid')
         context, endpoint, root = self.endpoint_service.workspace(
             server,
@@ -2661,13 +2689,49 @@ class ProviderWorkspaceService:
             names = provider.sql_builder_names()
         except Exception as exc:
             raise ProviderWorkspaceError(str(exc)) from None
-        if request['operation'] == 'source':
+        if op == 'source':
             # SqlBuilderError reaches the user: the workspace route returns
             # its text (the option and why), unlike other workspace errors.
             source = build(request.get('model'), names, available,
                            provider.sql_builder_dialect())
             return {'source': source,
                     'language_profile': provider.profile.language_profile}
+        if op == 'ddn':
+            try:
+                return build_query_builder_ddn(
+                    request.get('model'),
+                    join_cardinalities=request.get('join_cardinalities'),
+                )
+            except ValueError as exc:
+                raise ProviderWorkspaceError(str(exc)) from None
+        if op == 'preview_stage':
+            limit = request.get('limit', 50)
+            if type(limit) is not int or not (1 <= limit <= 100):
+                raise ProviderWorkspaceError(
+                    'Stage preview limit must be an integer from 1 to 100.')
+            stage = request.get('stage')
+            if stage is not None and (
+                not isinstance(stage, str) or not stage.strip()
+            ):
+                raise ProviderWorkspaceError(
+                    'Stage preview stage must be a CTE name or null.')
+            source = build_stage_preview(
+                request.get('model'),
+                stage.strip() if isinstance(stage, str) else None,
+                names,
+                available,
+                provider.sql_builder_dialect(),
+                limit=limit,
+            )
+            preview = ProviderWorkspaceService._execute_sql_builder_preview(
+                self, context, endpoint, provider, source, limit
+            )
+            return {
+                'stage': stage.strip() if isinstance(stage, str) else None,
+                'source': source,
+                'language_profile': provider.profile.language_profile,
+                **preview,
+            }
         catalog, continuation, generation = [], None, None
         while True:
             page = self.resource_service.list_page(
@@ -2684,6 +2748,154 @@ class ProviderWorkspaceService:
                 'relations': relations(
                     catalog, declared['relation_kinds'],
                     lambda resource: path_columns(resource, catalog))}
+
+    def _execute_sql_builder_preview(
+        self, context, endpoint, provider, source, limit
+    ):
+        """Execute a compiled read-only SQL builder preview with cleanup."""
+        studio = getattr(self, 'studio_service', None)
+        results = getattr(self, 'result_service', None)
+        if studio is None:
+            raise ProviderWorkspaceError(
+                'Live stage preview is not available in this workspace.'
+            )
+        language = getattr(
+            getattr(provider, 'profile', None), 'language_profile', None
+        )
+        if not language:
+            raise ProviderWorkspaceError(
+                'Provider has no SQL language profile for stage preview.'
+            )
+        session_id = None
+        result_id = None
+        try:
+            opened = studio.open_session(context, endpoint, language)
+            session_id = opened['provider_session']['session_id']
+            submitted = studio.execute(
+                context,
+                session_id,
+                source,
+                output_policy={'redact_keys': []},
+            )
+            occurrence_id = submitted['occurrence_id']
+            polled = None
+            for _ in range(200):
+                polled = studio.poll(context, occurrence_id)
+                op_state = polled.get('operation') or {}
+                if op_state.get('terminal'):
+                    break
+                time.sleep(0.025)
+            if polled is None or not (polled.get('operation') or {}).get(
+                'terminal'
+            ):
+                try:
+                    studio.request_cancel(context, occurrence_id)
+                except Exception:
+                    pass
+                raise ProviderWorkspaceError(
+                    'Stage preview timed out and cancellation was requested.'
+                )
+            op_info = polled.get('operation') or {}
+            if op_info.get('status') in ('failed', 'cancelled', 'error'):
+                err_msg = (
+                    (polled.get('error') or {}).get('message')
+                    or op_info.get('message')
+                    or 'Stage preview execution failed.'
+                )
+                raise ProviderWorkspaceError(str(err_msg))
+            raw_result = polled.get('result')
+            if raw_result is None:
+                raise ProviderWorkspaceError(
+                    'Stage preview completed without returning a result set.'
+                )
+            if results is not None:
+                renderer = provider.select_renderer(copy.deepcopy(raw_result))
+                descriptor = studio.admit_result(
+                    context,
+                    occurrence_id,
+                    renderer.get('capability_ids', ()),
+                )
+                result_id = descriptor['result_id']
+                rendered = results.render(
+                    result_id,
+                    page_size=limit,
+                    endpoint_id=context.endpoint_id,
+                )
+                view_model = rendered.get('view_model') or {}
+                page_meta = rendered.get('page') or {}
+                col_defs = (
+                    view_model.get('columns')
+                    or (raw_result.get('schema') or {}).get('columns')
+                    or []
+                )
+                raw_rows = (
+                    view_model.get('rows')
+                    if 'rows' in view_model
+                    else (view_model.get('records') or [])
+                )
+                sampled_total = int(
+                    page_meta.get('sampled_count', len(raw_rows))
+                )
+            else:
+                col_defs = (raw_result.get('schema') or {}).get('columns') or []
+                raw_rows = (
+                    raw_result.get('rows')
+                    if 'rows' in raw_result
+                    else (raw_result.get('records') or [])
+                )
+                sampled_total = len(raw_rows)
+
+            col_names = [
+                str(c.get('name', c.get('key', '')))
+                if isinstance(c, dict)
+                else str(c)
+                for c in col_defs
+            ]
+            col_keys = [
+                str(c.get('key', c.get('name', '')))
+                if isinstance(c, dict)
+                else str(c)
+                for c in col_defs
+            ]
+            norm_rows = []
+            for row in list(raw_rows)[:limit]:
+                if isinstance(row, dict):
+                    if not col_keys:
+                        col_keys = [str(k) for k in row.keys()]
+                        col_names = list(col_keys)
+                    norm_rows.append([row.get(k) for k in col_keys])
+                elif isinstance(row, (list, tuple)):
+                    norm_rows.append(list(row))
+                else:
+                    norm_rows.append([row])
+            return {
+                'columns': col_names,
+                'rows': norm_rows,
+                'row_count': len(norm_rows),
+                'truncated': (
+                    sampled_total > len(norm_rows)
+                    or not raw_result.get('complete', True)
+                ),
+            }
+        except ProviderWorkspaceError:
+            raise
+        except Exception as exc:
+            raise ProviderWorkspaceError(
+                f'Stage preview failed: {exc}'
+            ) from None
+        finally:
+            if result_id is not None and results is not None:
+                release_fn = getattr(results, 'release', None)
+                if callable(release_fn):
+                    try:
+                        release_fn(result_id, endpoint_id=context.endpoint_id)
+                    except Exception:
+                        pass
+            if session_id is not None:
+                try:
+                    studio.close_session(context, session_id)
+                except Exception:
+                    pass
 
     def catalog_diagram(self, server, request):
         """One database's relations for To Diagram (catalog_diagrams)."""
@@ -3849,6 +4061,26 @@ class ProviderWorkspaceService:
             result = {**result, 'sql_history': {**(entry or {}), 'warning': notice}}
         return result
 
+    def _resolve_session_target_id(self, session_id, database_target_id):
+        if database_target_id not in (None, Ellipsis):
+            return database_target_id
+        lookup = getattr(self.studio_service, 'session_database_target_id', None)
+        if callable(lookup) and isinstance(session_id, str) and session_id:
+            retained = lookup(session_id)
+            if isinstance(retained, str) and retained:
+                return retained
+        return database_target_id
+
+    def _resolve_occurrence_target_id(self, occurrence_id, database_target_id):
+        if database_target_id not in (None, Ellipsis):
+            return database_target_id
+        lookup = getattr(self.studio_service, 'occurrence_database_target_id', None)
+        if callable(lookup) and isinstance(occurrence_id, str) and occurrence_id:
+            retained = lookup(occurrence_id)
+            if isinstance(retained, str) and retained:
+                return retained
+        return database_target_id
+
     def open_session(
         self, server, language_profile, database_target_id=None, *, session_purpose=None,
     ):
@@ -3865,6 +4097,17 @@ class ProviderWorkspaceService:
                 'transaction_access': 'READ' if session_purpose == 'firebird-data-export' else 'WRITE',
                 'transaction_lock_timeout': 10, 'transaction_auto_commit': False,
                 'transaction_no_auto_undo': False, 'transaction_ignore_limbo': False}}
+        if isinstance(database_target_id, str) and database_target_id and (
+            isinstance(endpoint.get('route'), dict) and
+            'database_target_id' not in endpoint['route']
+        ):
+            endpoint = {
+                **endpoint,
+                'route': {
+                    **endpoint['route'],
+                    'database_target_id': database_target_id,
+                },
+            }
         opened = self.studio_service.open_session(
             context, endpoint, language_profile
         )
@@ -3879,6 +4122,9 @@ class ProviderWorkspaceService:
         script_mode=False, plan_mode=False, history_sensitive=False, profile_mode=False, statistics_mode=False,
         mysql_query_attributes=None,
     ):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -3989,8 +4235,11 @@ class ProviderWorkspaceService:
                         return archive.recent(request.get('offset',0),request.get('limit',25))
                     raise ValueError('Select a read-only native EDS receipt request')
             except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
+        resolved_tool_target = self._resolve_session_target_id(
+            data.get('session_id'), data.get('database_target_id')
+        )
         context, endpoint, _root = self.endpoint_service.workspace(
-            server, database_target_id=data.get('database_target_id'))
+            server, database_target_id=resolved_tool_target)
         from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
         try:
             if action=='firebird_eds_pool':
@@ -4123,12 +4372,18 @@ class ProviderWorkspaceService:
 
     def preview_script(self, server, session_id, source,
                        database_target_id=Ellipsis):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id)
         return self.studio_service.preview_script(context, session_id, source)
 
     def query_stream(self, server, session_id, request,
                      database_target_id=Ellipsis):
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id)
         if not isinstance(request, dict):
@@ -4149,6 +4404,9 @@ class ProviderWorkspaceService:
     def poll(self, server, occurrence_id, database_target_id=Ellipsis, *, buffer_rows=None):
         if buffer_rows is not None and (type(buffer_rows) is not int or not 1 <= buffer_rows <= 500):
             raise ProviderWorkspaceError('Result buffer rows must be an integer from 1 to 500')
+        database_target_id = self._resolve_occurrence_target_id(
+            occurrence_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4304,6 +4562,9 @@ class ProviderWorkspaceService:
         )
 
     def cancel(self, server, occurrence_id, database_target_id=Ellipsis):
+        database_target_id = self._resolve_occurrence_target_id(
+            occurrence_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4311,6 +4572,9 @@ class ProviderWorkspaceService:
 
     def transaction(self, server, session_id, database_target_id=None):
         """Return the provider presentation without interpreting its state."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4320,6 +4584,9 @@ class ProviderWorkspaceService:
         self, server, session_id, action, database_target_id=None,
     ):
         """Dispatch a provider-owned transaction action without inference."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -4331,10 +4598,25 @@ class ProviderWorkspaceService:
         self, server, session_id, database_target_id=None,
     ):
         """Release one provider session in its original database scope."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
         context, _endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
         return self.studio_service.close_session(context, session_id)
+
+    def reconnect_session(
+        self, server, session_id, database_target_id=None,
+    ):
+        """Reconnect a retained provider session in its original database scope."""
+        database_target_id = self._resolve_session_target_id(
+            session_id, database_target_id
+        )
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id
+        )
+        return self.studio_service.reconnect_session(context, session_id)
 
     def _visual_admin_call(self, server, method_name, request):
         _context, callback, payload = self._prepare_visual_admin_call(

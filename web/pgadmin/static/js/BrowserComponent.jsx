@@ -20,7 +20,13 @@ import {
   dockTabIconKey,
 } from 'sources/cdeadmin_ui/workspace/Workspace';
 import EventBus from './helpers/EventBus';
-import SQLConnections from './cdeadmin_ui/editors/SQLConnections';
+import SQLConnections, {
+  SQLConnectionSelect,
+  useSQLConnections,
+} from './cdeadmin_ui/editors/SQLConnections';
+import FormReference from './cdeadmin_ui/navigation/FormReference';
+import FirebirdIsql from './Dialogs/FirebirdIsql';
+import getApiInstance from './api_instance';
 import {translateShell} from './cdeadmin_ui/shell/shellMenuI18n';
 import gettext from 'sources/gettext';
 import ObjectExplorer from './tree/ObjectExplorer';
@@ -45,7 +51,6 @@ import { useBeforeUnload } from './custom_hooks';
 import pgWindow from 'sources/window';
 import { useWorkspace, WorkspaceProvider } from '../../misc/workspaces/static/js/WorkspaceProvider';
 import { PgAdminProvider, usePgAdmin } from './PgAdminProvider';
-import PreferencesComponent from '../../preferences/static/js/components/PreferencesComponent';
 import { ApplicationStateProvider } from '../../settings/static/ApplicationStateProvider';
 import { appAutoUpdateNotifier } from './helpers/appAutoUpdateNotifier';
 import {
@@ -65,11 +70,14 @@ import {
   DESIGNER_PREFERENCES_ID,
   requestWorkbenchInspection,
   workbenchContextService,
+  TextArea,
+  TextField,
   ProjectShellProvider,
   ProjectWorkbenchFrame,
   useProjectShell,
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
+  t_actions,
 } from 'sources/cdeadmin_ui';
 import {
   canLaunchServerMenu,
@@ -99,10 +107,6 @@ import {
 
 export const processesPanelData = {
   id: BROWSER_PANELS.PROCESSES, title: gettext('Processes'), content: <Processes />, closable: true, group: 'playground'
-};
-
-export const preferencesPanelData = {
-  id: BROWSER_PANELS.PREFERENCES, title: gettext('Preferences'), content: <PreferencesComponent panelId={BROWSER_PANELS.PREFERENCES} />, closable: true, manualClose: true, group: 'playground'
 };
 
 // Startup shows ONLY the User Dashboard placeholder (no preloaded SQL tab).
@@ -704,6 +708,36 @@ export function buildNavigatorSelectionConfig(
     menuIndex += 5;
   }
 
+  if (selectedData && nodeType && nodeType !== 'server_group') {
+    const separateTabAction = `data-navigator.open_separate_tab.${safeInstId}`;
+    const separateTabLabel = gettext('Open in Separate Tab…');
+    actions.push({
+      id: separateTabAction,
+      icon: 'action.external_link',
+      application: 'data-navigator',
+      defaultText: separateTabLabel,
+      defaultHint: separateTabLabel,
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        invoke: () =>
+          window.dispatchEvent(
+            new CustomEvent('scratchrobin:open-catalog-tab', {
+              detail: {item: selectedItem, data: selectedData, activeView: resolvedView},
+            })
+          ),
+      },
+    });
+    menuItems.push({
+      id: separateTabAction,
+      actionId: separateTabAction,
+      label: separateTabLabel,
+      iconKey: 'action.external_link',
+      index: menuIndex + 5,
+    });
+  }
+
   const refreshAction = `data-navigator.refresh.${safeInstId}`;
   const refreshLabel = gettext('Refresh');
   actions.push({
@@ -896,8 +930,16 @@ export function CatalogPageCoordinator() {
       const nodeKey = catalogNodeIdentityKey(data);
       if (!nodeKey) return;
 
+      const focused = currentShell.focusedInstance;
+      const shouldFocusBrowse =
+        !focused ||
+        (focused.appId === 'data-navigator' && !focused.meta?.isCustomInlineTab);
+
       const existing = (currentShell.instances || []).find(
-        (inst) => inst.appId === 'data-navigator' && inst.meta?.catalogNodeKey === nodeKey
+        (inst) =>
+          inst.appId === 'data-navigator' &&
+          !inst.meta?.isCustomInlineTab &&
+          inst.meta?.catalogNodeKey === nodeKey
       );
       if (existing) {
         const cfg = buildNavigatorSelectionConfig(
@@ -926,32 +968,50 @@ export function CatalogPageCoordinator() {
             activeView: cfg.activeView,
           },
         });
-        currentShell.focusInstance(existing.instanceId);
+        if (shouldFocusBrowse) {
+          currentShell.focusInstance(existing.instanceId);
+        }
         return;
       }
 
-      const unbound = (currentShell.instances || []).find(
-        (inst) => inst.appId === 'data-navigator' && inst.meta?.isUnboundNavigator === true
-      );
-      if (unbound) {
+      const isReplaceableCandidate = (inst) =>
+        inst &&
+        inst.appId === 'data-navigator' &&
+        !inst.meta?.isCustomInlineTab &&
+        !inst.meta?.pinnedCatalogTab;
+
+      const replaceable =
+        (isReplaceableCandidate(focused) ? focused : null) ||
+        [...(currentShell.instances || [])].reverse().find(isReplaceableCandidate);
+
+      if (replaceable) {
         const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
-        const initialView = allowed.includes('properties') ? 'properties' : allowed[0];
+        const sameType = replaceable.meta?.boundNodeData?._type === data._type;
+        const preservedView = sameType ? replaceable.meta?.activeView : null;
+        const initialView =
+          preservedView && allowed.includes(preservedView)
+            ? preservedView
+            : allowed.includes('properties')
+              ? 'properties'
+              : allowed[0];
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
-          unbound.instanceId,
+          replaceable.instanceId,
           item,
           data,
           initialView
         );
-        currentShell.updateInstance(unbound.instanceId, {
+        currentShell.updateInstance(replaceable.instanceId, {
           title: cfg.title,
           statusText: `${cfg.title} — ${gettext('Ready')}`,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
           meta: {
-            ...unbound.meta,
+            ...replaceable.meta,
             isUnboundNavigator: false,
+            isReplaceableBrowse: !replaceable.meta?.pinnedWhenBound,
+            pinnedCatalogTab: Boolean(replaceable.meta?.pinnedWhenBound),
             catalogNodeKey: nodeKey,
             boundNodeItem: item,
             boundNodeData: data,
@@ -960,7 +1020,9 @@ export function CatalogPageCoordinator() {
             connectorIntent: 'endpoint',
           },
         });
-        currentShell.focusInstance(unbound.instanceId);
+        if (shouldFocusBrowse) {
+          currentShell.focusInstance(replaceable.instanceId);
+        }
         return;
       }
 
@@ -969,6 +1031,40 @@ export function CatalogPageCoordinator() {
       currentShell.openApplication('data-navigator', {
         title: formatCatalogPageTitle(data),
         isUnboundNavigator: false,
+        isReplaceableBrowse: true,
+        catalogNodeKey: nodeKey,
+        boundNodeItem: item,
+        boundNodeData: data,
+        activeView: initialView,
+        connectorProfileId: null,
+        connectorIntent: 'endpoint',
+        leftOpen:
+          currentShell.focusedInstance?.supportsLeftDrawer
+            ? Boolean(currentShell.shellLeftDrawerOpen)
+            : true,
+      });
+    };
+
+    const onOpenCatalogTabEvent = (ev) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const item = ev?.detail?.item || pgAdmin?.Browser?.tree?.selected?.() || null;
+      const data = ev?.detail?.data || (item ? pgAdmin?.Browser?.tree?.itemData?.(item) : null);
+      if (!data || !data._type || data._type === 'server_group') return;
+      const nodeKey = catalogNodeIdentityKey(data);
+      const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
+      const requestedView = ev?.detail?.activeView;
+      const initialView =
+        requestedView && allowed.includes(requestedView)
+          ? requestedView
+          : allowed.includes('properties')
+            ? 'properties'
+            : allowed[0];
+      currentShell.openApplication('data-navigator', {
+        title: formatCatalogPageTitle(data),
+        isUnboundNavigator: false,
+        pinnedCatalogTab: true,
+        isReplaceableBrowse: false,
         catalogNodeKey: nodeKey,
         boundNodeItem: item,
         boundNodeData: data,
@@ -991,13 +1087,41 @@ export function CatalogPageCoordinator() {
       if (!currentShell) return;
       const requestedView = ev?.detail?.tab;
       const targetId = ev?.detail?.instanceId || currentShell.focusedId;
-      const target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      let target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      if (!ev?.detail?.instanceId && (!target || target.appId !== 'data-navigator' || target.isInlineTab)) {
+        target =
+          (currentShell.instances || []).find(
+            (i) =>
+              i.appId === 'data-navigator' &&
+              !i.isInlineTab &&
+              i.meta?.isReplaceableBrowse !== false
+          ) ||
+          (currentShell.instances || []).find(
+            (i) => i.appId === 'data-navigator' && !i.isInlineTab
+          ) ||
+          null;
+        if (!target && requestedView) {
+          const selItem = pgAdmin?.Browser?.tree?.selected?.() || null;
+          const selData = (selItem && pgAdmin?.Browser?.tree?.itemData?.(selItem)) || null;
+          target = currentShell.openApplication('data-navigator', {
+            isUnboundNavigator: !selData,
+            isReplaceableBrowse: true,
+            boundNodeItem: selItem,
+            boundNodeData: selData,
+            activeView: requestedView,
+          });
+        }
+      }
       if (target && target.appId === 'data-navigator' && requestedView) {
-        const isUnbound = Boolean(target.meta?.isUnboundNavigator);
-        const item = isUnbound ? null : target.meta?.boundNodeItem || null;
-        const data = isUnbound
-          ? null
-          : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null;
+        const selItem = pgAdmin?.Browser?.tree?.selected?.() || null;
+        const selData = (selItem && pgAdmin?.Browser?.tree?.itemData?.(selItem)) || null;
+        const isUnbound = selData ? false : Boolean(target.meta?.isUnboundNavigator);
+        const item = selItem || (isUnbound ? null : target.meta?.boundNodeItem || null);
+        const data =
+          selData ||
+          (isUnbound
+            ? null
+            : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null);
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           target.instanceId,
@@ -1010,14 +1134,22 @@ export function CatalogPageCoordinator() {
           }
         );
         currentShell.updateInstance(target.instanceId, {
+          title: isUnbound ? target.title : cfg.title,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
           meta: {
             ...target.meta,
+            isUnboundNavigator: isUnbound,
+            boundNodeItem: item,
+            boundNodeData: data,
+            catalogNodeKey: isUnbound ? null : catalogNodeIdentityKey(data),
             activeView: cfg.activeView,
           },
         });
+        if (ev?.detail?.focusEditor && currentShell.focusedId !== target.instanceId) {
+          currentShell.focusInstance(target.instanceId);
+        }
       }
       if (ev?.detail?.focusEditor && typeof document !== 'undefined') {
         setTimeout(() => {
@@ -1080,6 +1212,7 @@ export function CatalogPageCoordinator() {
     if (typeof window !== 'undefined') {
       window.addEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
       window.addEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+      window.addEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
       window.addEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
     }
 
@@ -1092,6 +1225,7 @@ export function CatalogPageCoordinator() {
       if (typeof window !== 'undefined') {
         window.removeEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
         window.removeEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+        window.removeEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
         window.removeEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
       }
     };
@@ -1667,11 +1801,543 @@ export function bindDesignerOpenEvents(
   return () => removers.forEach((remove) => remove());
 }
 
-export function ProjectShellDockerBridge({config = [], enabled = false}) {
+export const PLATFORM_MODULE_DEFINITIONS = Object.freeze([
+  {slug: 'schema_compare', moduleId: 'cdeadmin.schema_compare', label: () => gettext('Schema Comparison'), iconKey: 'tool.schema-compare'},
+  {slug: 'lineage', moduleId: 'cdeadmin.lineage', label: () => gettext('Data Lineage'), iconKey: 'tool.lineage'},
+  {slug: 'quality', moduleId: 'cdeadmin.quality', label: () => gettext('Data Quality'), iconKey: 'tool.quality'},
+  {slug: 'data_contract', moduleId: 'cdeadmin.contract', label: () => gettext('Data Contract Manager'), iconKey: 'tool.contract'},
+  {slug: 'etl', moduleId: 'cdeadmin.etl', label: () => gettext('ETL Designer'), iconKey: 'tool.etl'},
+  {slug: 'cdc', moduleId: 'cdeadmin.cdc', label: () => gettext('CDC Designer'), iconKey: 'tool.cdc'},
+  {slug: 'replication', moduleId: 'cdeadmin.replication', label: () => gettext('Replication Topology'), iconKey: 'tool.replication'},
+  {slug: 'tracing', moduleId: 'cdeadmin.tracing', label: () => gettext('Distributed Tracing'), iconKey: 'tool.tracing'},
+  {slug: 'migration', moduleId: 'cdeadmin.migration', label: () => gettext('Migration Planning'), iconKey: 'tool.migration'},
+  {slug: 'api', moduleId: 'cdeadmin.api', label: () => gettext('API Designer'), iconKey: 'tool.api'},
+  {slug: 'ml_vector', moduleId: 'cdeadmin.ml_vector', label: () => gettext('ML & Vector'), iconKey: 'tool.ml-vector', requiredPermission: 'ml_vector.view'},
+  {slug: 'ai', moduleId: 'cdeadmin.ai_interface', preferredSurfaceId: 'cdeadmin.ai_interface.ai_workbench', label: () => gettext('AI Assistant'), iconKey: 'tool.ai', requiredPermission: 'ai.use', aiGated: true},
+  {slug: 'ai_interface', moduleId: 'cdeadmin.ai_interface', preferredSurfaceId: 'cdeadmin.ai_interface.ai_admin', label: () => gettext('AI Interface'), iconKey: 'tool.ai', requiredPermission: 'ai.use', aiGated: true},
+  {slug: 'discovery_intelligence', moduleId: 'cdeadmin.discovery_intelligence', label: () => gettext('Discovery Intelligence'), iconKey: 'tool.search', requiredPermission: 'discovery.use'},
+]);
+
+function sharedObjectExplorerDrawer() {
+  return (
+    <div style={{height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
+      <ObjectExplorerToolbar />
+      <div style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
+        <ObjectExplorer />
+      </div>
+    </div>
+  );
+}
+
+export function SQLStudioApplicationWorkArea({instanceId, projectAssets, initialMode = 'studio'}) {
+  const [mode, setMode] = useState(initialMode);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onMode = (event) => {
+      const targetId = event?.detail?.instanceId;
+      if (targetId && targetId !== instanceId) return;
+      const nextMode = event?.detail?.mode;
+      if (nextMode === 'studio' || nextMode === 'notebook') {
+        setMode(nextMode);
+      }
+    };
+    window.addEventListener('scratchrobin:sql-editor-mode', onMode);
+    return () => window.removeEventListener('scratchrobin:sql-editor-mode', onMode);
+  }, [instanceId]);
+
+  return (
+    <Box sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column'}}>
+      {mode === 'notebook' ? (
+        <SQLNotebook client={projectAssets} />
+      ) : (
+        <SQLConnections instanceId={instanceId} />
+      )}
+    </Box>
+  );
+}
+
+SQLStudioApplicationWorkArea.propTypes = {
+  instanceId: PropTypes.string,
+  projectAssets: PropTypes.object,
+  initialMode: PropTypes.string,
+};
+
+export function buildSqlStudioShellConfig({
+  instanceId,
+  title,
+  projectAssets,
+  renderLeftDrawer = sharedObjectExplorerDrawer,
+  renderRightDrawer,
+}) {
+  const modeStudioAction = `sql-editor.mode.studio.${instanceId}`;
+  const modeNotebookAction = `sql-editor.mode.notebook.${instanceId}`;
+  const runAction = `sql-editor.execute.${instanceId}`;
+  const explainAction = `sql-editor.explain.${instanceId}`;
+  const cancelAction = `sql-editor.cancel.${instanceId}`;
+  const commitAction = `sql-editor.commit.${instanceId}`;
+  const rollbackAction = `sql-editor.rollback.${instanceId}`;
+  const builderAction = `sql-editor.builder.${instanceId}`;
+  const saveBiAction = `sql-editor.save_bi.${instanceId}`;
+  const limitsAction = `sql-editor.limits.${instanceId}`;
+  const emitSqlAction = (action) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('scratchrobin:sql-editor-mode', {
+        detail: {instanceId, mode: 'studio'},
+      }));
+      window.dispatchEvent(new CustomEvent('scratchrobin:sql-editor-action', {
+        detail: {instanceId, action},
+      }));
+    }
+    return true;
+  };
+  return {
+    title,
+    leftDrawerSharedKey: 'data-navigator:shared-left-tree',
+    supportsLeftDrawer: true,
+    supportsRightDrawer: true,
+    supportsTabbedIconBar: true,
+    actions: [
+      {
+        id: modeStudioAction,
+        icon: 'tool.query',
+        application: 'sql-editor',
+        defaultText: gettext('SQL Studio'),
+        defaultHint: gettext('Switch to interactive SQL Studio query editor'),
+        focusScoped: true,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () => window.dispatchEvent(new CustomEvent('scratchrobin:sql-editor-mode', {
+            detail: {instanceId, mode: 'studio'},
+          })),
+        },
+      },
+      {
+        id: modeNotebookAction,
+        icon: 'object.notebook',
+        application: 'sql-editor',
+        defaultText: gettext('SQL Notebook'),
+        defaultHint: gettext('Switch to authored project SQL Notebook cells'),
+        focusScoped: true,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () => window.dispatchEvent(new CustomEvent('scratchrobin:sql-editor-mode', {
+            detail: {instanceId, mode: 'notebook'},
+          })),
+        },
+      },
+      {
+        id: runAction,
+        icon: 'action.execute',
+        application: 'sql-editor',
+        defaultText: gettext('Execute SQL'),
+        defaultHint: gettext('Run active SQL statement'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('execute')},
+      },
+      {
+        id: explainAction,
+        icon: 'action.explain',
+        application: 'sql-editor',
+        defaultText: gettext('Explain Plan'),
+        defaultHint: gettext('Generate query execution plan'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('explain')},
+      },
+      {
+        id: cancelAction,
+        icon: 'action.stop',
+        application: 'sql-editor',
+        defaultText: gettext('Cancel Running Query'),
+        defaultHint: gettext('Cancel active engine query execution'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('cancel')},
+      },
+      {
+        id: commitAction,
+        icon: 'action.commit',
+        application: 'sql-editor',
+        defaultText: gettext('Commit'),
+        defaultHint: gettext('Commit active transaction'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('commit')},
+      },
+      {
+        id: rollbackAction,
+        icon: 'action.rollback',
+        application: 'sql-editor',
+        defaultText: gettext('Rollback'),
+        defaultHint: gettext('Roll back active transaction'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('rollback')},
+      },
+      {
+        id: builderAction,
+        icon: 'action.sql_preview',
+        application: 'sql-editor',
+        defaultText: gettext('Visual SQL Builder'),
+        defaultHint: gettext('Open structured Visual SQL Builder'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('sql_builder')},
+      },
+      {
+        id: saveBiAction,
+        icon: 'tool.bi',
+        application: 'sql-editor',
+        defaultText: gettext('Save as BI Question…'),
+        defaultHint: gettext('Create a Draft BI Question from the active SQL query'),
+        focusScoped: true,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitSqlAction('save_bi_question')},
+      },
+      {
+        id: limitsAction,
+        icon: 'action.fetch_limits',
+        application: 'sql-editor',
+        defaultText: gettext('Max Rows & Step Size'),
+        defaultHint: gettext('Configure personal Max Rows and Rows per Step limits'),
+        focusScoped: true,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () =>
+            window.dispatchEvent(
+              new CustomEvent('scratchrobin:open-preferences', {
+                detail: {mode: 'user', sectionId: 'queries'},
+              })
+            ),
+        },
+      },
+    ],
+    menus: [
+      {
+        name: 'query',
+        label: gettext('Query'),
+        i18nKey: 'menu.query.title',
+        index: 25,
+        items: [
+          {
+            id: runAction,
+            actionId: runAction,
+            label: gettext('Execute SQL'),
+            i18nKey: 'menu.query.execute_sql.text',
+            hintKey: 'menu.query.execute_sql.hint',
+            iconKey: 'action.execute',
+            index: 10,
+            callback: () => emitSqlAction('execute'),
+          },
+          {
+            id: explainAction,
+            actionId: explainAction,
+            label: gettext('Explain Plan'),
+            iconKey: 'action.explain',
+            index: 15,
+            callback: () => emitSqlAction('explain'),
+          },
+          {
+            id: builderAction,
+            actionId: builderAction,
+            label: gettext('Visual SQL Builder'),
+            iconKey: 'action.sql_preview',
+            index: 20,
+            callback: () => emitSqlAction('sql_builder'),
+          },
+          {
+            id: modeNotebookAction,
+            actionId: modeNotebookAction,
+            label: gettext('SQL Notebook'),
+            iconKey: 'object.notebook',
+            index: 30,
+            callback: () => window.dispatchEvent(new CustomEvent('scratchrobin:sql-editor-mode', {
+              detail: {instanceId, mode: 'notebook'},
+            })),
+          },
+        ],
+      },
+    ],
+    ribbonTabs: [
+      {
+        id: 'sql-home',
+        label: gettext('SQL'),
+        groups: [
+          {
+            id: 'sql-view-mode',
+            label: gettext('Workspace'),
+            controls: [modeStudioAction, modeNotebookAction],
+          },
+          {
+            id: 'sql-execution',
+            label: gettext('Execution'),
+            controls: [runAction, explainAction, cancelAction, commitAction, rollbackAction],
+          },
+          {
+            id: 'sql-authoring',
+            label: gettext('Authoring'),
+            controls: [builderAction, saveBiAction, limitsAction],
+          },
+        ],
+      },
+    ],
+    renderLeftDrawer,
+    renderWorkArea: () => (
+      <SQLStudioApplicationWorkArea
+        instanceId={instanceId}
+        projectAssets={projectAssets}
+      />
+    ),
+    renderRightDrawer,
+  };
+}
+
+export function CommandLineWorkArea({instanceId}) {
+  const pgAdmin = usePgAdmin();
+  const sqlState = useSQLConnections();
+  const selectedEntry = useMemo(
+    () => sqlState.entries.find((e) => e.id === sqlState.selected) || sqlState.entries[0] || null,
+    [sqlState.entries, sqlState.selected]
+  );
+  const [surfaceMode, setSurfaceMode] = useState('console');
+  const [statement, setStatement] = useState('SELECT 1;');
+  const [busy, setBusy] = useState(false);
+  const [transcript, setTranscript] = useState([]);
+  const sessionsRef = useRef(new Map());
+  const statementRef = useRef(statement);
+  statementRef.current = statement;
+
+  const postWorkspaceAction = useCallback(async (payload) => {
+    const endpointUrl = selectedEntry?.baseEndpointUrl || selectedEntry?.endpointUrl;
+    if (!endpointUrl) {
+      throw new Error(gettext('Select a connected database first.'));
+    }
+    const response = await getApiInstance().post(endpointUrl, payload);
+    return response?.data?.data ?? response?.data ?? {};
+  }, [selectedEntry]);
+
+  const executeStatement = useCallback(async (rawSql) => {
+    const sql = String(rawSql ?? statementRef.current ?? '').trim();
+    if (!sql) return;
+    const endpointUrl = selectedEntry?.baseEndpointUrl || selectedEntry?.endpointUrl;
+    if (!endpointUrl) {
+      setTranscript((prev) => [
+        ...prev,
+        {
+          id: `cli-${Date.now()}`,
+          sql,
+          error: gettext('No active database connection selected. Connect to a database in the Data Navigator tree first.'),
+        },
+      ]);
+      return;
+    }
+    setBusy(true);
+    try {
+      const api = getApiInstance();
+      let sessionMeta = sessionsRef.current.get(selectedEntry.id);
+      if (!sessionMeta?.sessionId) {
+        const bootResp = await api.get(endpointUrl);
+        const boot = bootResp?.data?.data ?? bootResp?.data ?? {};
+        const lang = (boot.languages || [])[0] || {};
+        const languageProfile = lang.language_profile || 'sql';
+        const parameters = lang.parameter_shape === 'array' ? [] : {};
+        const openedResp = await api.post(endpointUrl, {
+          action: 'open_session',
+          language_profile: languageProfile,
+          ...(selectedEntry.databaseTargetId
+            ? {database_target_id: selectedEntry.databaseTargetId}
+            : {}),
+        });
+        const opened = openedResp?.data?.data ?? openedResp?.data ?? {};
+        sessionMeta = {
+          sessionId: opened.session_id,
+          languageProfile,
+          parameters,
+        };
+        if (sessionMeta.sessionId) {
+          sessionsRef.current.set(selectedEntry.id, sessionMeta);
+        }
+      }
+      const execResp = await api.post(endpointUrl, {
+        action: 'execute',
+        session_id: sessionMeta.sessionId,
+        source: sql,
+        parameters: sessionMeta.parameters,
+        max_rows: 200,
+        ...(selectedEntry.databaseTargetId
+          ? {database_target_id: selectedEntry.databaseTargetId}
+          : {}),
+      });
+      const execData = execResp?.data?.data ?? execResp?.data ?? {};
+      let result = execData;
+      const occurrenceId = execData.occurrence_id;
+      if (occurrenceId) {
+        let attempts = 0;
+        do {
+          if (attempts > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 60));
+          }
+          attempts += 1;
+          const polled = await api.post(endpointUrl, {
+            action: 'poll',
+            occurrence_id: occurrenceId,
+            buffer_rows: 200,
+            ...(selectedEntry.databaseTargetId
+              ? {database_target_id: selectedEntry.databaseTargetId}
+              : {}),
+          });
+          result = polled?.data?.data ?? polled?.data ?? {};
+        } while (
+          result.occurrence &&
+          !result.occurrence?.operation?.terminal &&
+          attempts < 50
+        );
+      }
+      const vm = result.rendered_result?.view_model || result;
+      const rawCols = vm.columns || [];
+      const rawRows = vm.rows || vm.records || [];
+      const opFailed =
+        result.occurrence?.operation?.status === 'failed' ||
+        result.state === 'failed';
+      setTranscript((prev) => [
+        ...prev,
+        {
+          id: `cli-${Date.now()}-${prev.length}`,
+          connectionLabel: selectedEntry.label || selectedEntry.id,
+          sql,
+          columns: rawCols.map((c) => c?.name || c?.label || String(c)),
+          rows: rawRows,
+          rowCount: vm.row_count ?? rawRows.length,
+          state: result.occurrence?.operation?.status || result.state || 'completed',
+          error:
+            result.occurrence?.operation?.error?.message ||
+            result.error?.message ||
+            (opFailed ? gettext('Execution failed.') : ''),
+        },
+      ]);
+    } catch (err) {
+      setTranscript((prev) => [
+        ...prev,
+        {
+          id: `cli-${Date.now()}-${prev.length}`,
+          connectionLabel: selectedEntry?.label || '',
+          sql,
+          error: err?.response?.data?.errormsg || err?.message || String(err),
+        },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }, [selectedEntry]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onAction = (event) => {
+      const targetId = event?.detail?.instanceId;
+      if (targetId && targetId !== instanceId) return;
+      const action = event?.detail?.action;
+      if (action === 'execute') executeStatement();
+      else if (action === 'clear') setTranscript([]);
+      else if (action === 'mode_console') setSurfaceMode('console');
+      else if (action === 'mode_firebird_isql') setSurfaceMode('firebird-isql');
+      else if (action === 'open_psql') {
+        if (typeof pgAdmin?.Tools?.Psql?.openPsqlTool === 'function') {
+          pgAdmin.Tools.Psql.openPsqlTool();
+        }
+      }
+    };
+    window.addEventListener('scratchrobin:command-line-action', onAction);
+    return () => window.removeEventListener('scratchrobin:command-line-action', onAction);
+  }, [executeStatement, instanceId, pgAdmin]);
+
+  return (
+    <Box
+      data-cdeadmin-qa-key="command-line-workspace"
+      sx={{height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, gap: 1.5}}
+    >
+      <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap'}}>
+        <Box sx={{fontWeight: 600}}>
+          {selectedEntry
+            ? `${gettext('Active Target')}: ${selectedEntry.engine ? `${selectedEntry.engine} — ` : ''}${selectedEntry.label}`
+            : gettext('Select a connected database in the toolbar or Data Navigator tree.')}
+        </Box>
+        <FormReference formKey="command-line-workspace" />
+      </Box>
+      {surfaceMode === 'firebird-isql' ? (
+        <Box sx={{flex: 1, minHeight: 0, overflow: 'auto'}}>
+          <FirebirdIsql
+            post={postWorkspaceAction}
+            databaseTargetId={selectedEntry?.databaseTargetId || ''}
+          />
+        </Box>
+      ) : (
+        <>
+          <Box sx={{display: 'flex', gap: 1, alignItems: 'flex-start'}}>
+            <Box sx={{flex: 1}}>
+              <TextArea
+                label={gettext('CLI Statement')}
+                value={statement}
+                onChange={(e) => setStatement(e?.target ? e.target.value : String(e ?? ''))}
+              />
+            </Box>
+            <Box sx={{display: 'flex', flexDirection: 'column', gap: 1, pt: 3}}>
+              <Button intent="primary" loading={busy} onClick={() => executeStatement()}>
+                {gettext('Execute Statement')}
+              </Button>
+              <Button onClick={() => setTranscript([])}>
+                {gettext('Clear Console')}
+              </Button>
+            </Box>
+          </Box>
+          <ScratchScrollArea orientation="both" style={{flex: 1, minHeight: 140}}>
+            <Box
+              role="log"
+              aria-label={gettext('CLI Transcript')}
+              sx={{fontFamily: 'monospace', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 1, p: 1}}
+            >
+              {transcript.length === 0 && (
+                <Box sx={{opacity: 0.75}}>
+                  {gettext('Ready. Enter a SQL or provider CLI command above and press Execute Statement.')}
+                </Box>
+              )}
+              {transcript.map((entry) => (
+                <Box key={entry.id} sx={{border: '1px solid var(--cde-border-subtle, #ccc)', borderRadius: 1, p: 1}}>
+                  <Box sx={{fontWeight: 600}}>
+                    {entry.connectionLabel ? `[${entry.connectionLabel}] ` : ''}&gt; {entry.sql}
+                  </Box>
+                  {entry.error ? (
+                    <Box role="alert" sx={{color: 'var(--cde-color-danger, #b91c1c)', mt: 0.5}}>
+                      {entry.error}
+                    </Box>
+                  ) : (
+                    <Box sx={{mt: 0.5, whiteSpace: 'pre-wrap'}}>
+                      {entry.columns?.length > 0 && (
+                        <Box sx={{fontWeight: 600}}>{entry.columns.join(' | ')}</Box>
+                      )}
+                      {(entry.rows || []).slice(0, 50).map((r, idx) => (
+                        <Box key={idx}>{Array.isArray(r) ? r.map((v) => (v === null ? 'NULL' : String(v))).join(' | ') : JSON.stringify(r)}</Box>
+                      ))}
+                      <Box sx={{opacity: 0.75, mt: 0.25}}>
+                        {gettext('Rows')}: {entry.rowCount ?? 0}
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          </ScratchScrollArea>
+        </>
+      )}
+    </Box>
+  );
+}
+
+CommandLineWorkArea.propTypes = {
+  instanceId: PropTypes.string,
+};
+
+export function ProjectShellDockerBridge({config = [], enabled = false, platform = null}) {
   const shell = useProjectShell();
   const pgAdmin = usePgAdmin();
   const shellRef = useRef(shell);
   shellRef.current = shell;
+  if (typeof window !== 'undefined') {
+    window.__scratchrobinProjectShellRef = shellRef;
+  }
   const panelMetaRef = useRef(new Map());
 
   const adapter = useMemo(() => {
@@ -1728,16 +2394,19 @@ export function ProjectShellDockerBridge({config = [], enabled = false}) {
             iconKey: 'tool.query',
             closable: true,
           });
+          const sqlShellCfg = buildSqlStudioShellConfig({
+            instanceId: BROWSER_PANELS.SQL,
+            title: sqlTitle,
+            projectAssets: platform?.projectAssets || null,
+            renderLeftDrawer: platform ? sharedObjectExplorerDrawer : null,
+            renderRightDrawer: platform ? () => <InspectorHost /> : null,
+          });
           currentShell.openInlineTab({
             instanceId: BROWSER_PANELS.SQL,
-            appId: 'data-navigator',
-            title: sqlTitle,
+            appId: 'sql-editor',
             iconKey: 'tool.query',
             closable: true,
-            supportsLeftDrawer: true,
-            supportsRightDrawer: true,
-            supportsTabbedIconBar: true,
-            renderWorkArea: () => <SQLConnections />,
+            ...sqlShellCfg,
           });
         } else {
           currentShell.focusInstance(BROWSER_PANELS.SQL);
@@ -1779,13 +2448,21 @@ export function ProjectShellDockerBridge({config = [], enabled = false}) {
       });
       currentShell.openInlineTab({
         instanceId: panelData.id,
-        appId: 'data-navigator',
+        appId: panelData.appId || 'data-navigator',
         title: resolvedTitle,
         iconKey: resolvedIconKey,
         closable: panelData.closable !== false,
-        supportsLeftDrawer: true,
-        supportsRightDrawer: true,
-        supportsTabbedIconBar: true,
+        supportsLeftDrawer: panelData.supportsLeftDrawer !== false,
+        supportsRightDrawer: panelData.supportsRightDrawer !== false,
+        supportsTabbedIconBar: panelData.supportsTabbedIconBar !== false,
+        leftDrawerSharedKey: panelData.leftDrawerSharedKey || undefined,
+        actions: panelData.actions || [],
+        ribbonTabs: panelData.ribbonTabs || [],
+        menus: panelData.menus || [],
+        renderLeftDrawer: panelData.renderLeftDrawer || undefined,
+        renderRightDrawer: panelData.renderRightDrawer || undefined,
+        renderToolbarExtras: panelData.renderToolbarExtras || undefined,
+        statusText: panelData.statusText || undefined,
         onBeforeClose: panelData.beforeClose || null,
         renderWorkArea: () => panelData.content,
       });
@@ -1907,12 +2584,13 @@ export function ProjectShellDockerBridge({config = [], enabled = false}) {
 ProjectShellDockerBridge.propTypes = {
   config: PropTypes.array,
   enabled: PropTypes.bool,
+  platform: PropTypes.object,
 };
 
 function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
   const pgAdmin = usePgAdmin();
   const surfaceHost = useRef(null);
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const openAssetRef = useRef(null);
   const designStoreClient = useMemo(() => new DesignStoreClient(), []);
   const {
     config, enabled,
@@ -1939,16 +2617,215 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
             'tracing.runtime': platform.tracing,
             'migration.runtime': platform.migration,
             'cdeadmin.api.runtime': platform.apiDesigner,
+            'cdeadmin.ai.runtime': platform.ai,
+            'cdeadmin.ml_vector.runtime': platform.mlVector,
+            'cdeadmin.ai_interface.runtime': platform.aiInterface,
+            'cdeadmin.discovery_intelligence.runtime': platform.discoveryIntelligence,
           },
           commands: platform.modules.commands,
           currentUser,
+          openSurface: (target, input = {}) => {
+            const nextSurfaceId =
+              typeof target === 'string'
+                ? target
+                : target?.toolKind || target?.surfaceId || '';
+            if (!nextSurfaceId) return Promise.resolve(null);
+            return surfaceHost.current?.open(nextSurfaceId, {
+              toolInstanceId: input.toolInstanceId || `surface-${nextSurfaceId}`,
+              ...input,
+            });
+          },
           onCloseBlocked: (_descriptor, reason) =>
             pgAdmin.Browser.notifier.warning(reason),
         }),
+        enrichPanel: (descriptor, surfaceId) => {
+          let surfaceDef = null;
+          try {
+            surfaceDef = platform.modules?.surfaces?.get?.(surfaceId) || null;
+          } catch {
+            surfaceDef = null;
+          }
+          const moduleId = surfaceDef?.moduleId || '';
+          const siblingSurfaces = (platform.modules?.surfaces?.list?.() || [])
+            .filter((item) => moduleId && item.moduleId === moduleId)
+            .slice(0, 8);
+          const surfaceActions = siblingSurfaces.map((sib) => ({
+            id: `surface.switch.${descriptor.toolInstanceId}.${sib.id}`,
+            icon: sib.iconKey || descriptor.presentation.iconKey || 'command.default',
+            application: 'project-explorer',
+            defaultText: sib.title,
+            defaultHint: sib.title,
+            focusScoped: true,
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: () =>
+                surfaceHost.current?.open(sib.id, {
+                  toolInstanceId: `surface-${sib.id}`,
+                  restoreRef: descriptor.restoreRef || undefined,
+                  projectId: descriptor.projectId || undefined,
+                  title: sib.title,
+                }),
+            },
+          }));
+          const explorerActionId = `surface.project_explorer.${descriptor.toolInstanceId}`;
+          const allActions = [
+            ...surfaceActions,
+            {
+              id: explorerActionId,
+              icon: 'tool.project-explorer',
+              application: 'project-explorer',
+              defaultText: gettext('Project Explorer'),
+              defaultHint: gettext('Open Project Explorer workspace'),
+              focusScoped: true,
+              target: {
+                kind: T_ACTION_TARGET_KIND.CLIENT,
+                invoke: () =>
+                  window.dispatchEvent(
+                    new CustomEvent('scratchrobin:open-app-surface', {
+                      detail: {appId: 'project-explorer'},
+                    })
+                  ),
+              },
+            },
+          ];
+          const activityItem = (platform.modules?.activity?.list?.() || []).find(
+            (act) => moduleId && act.moduleId === moduleId && typeof act.render === 'function'
+          );
+          return {
+            appId: 'project-explorer',
+            supportsLeftDrawer: true,
+            supportsRightDrawer: true,
+            supportsTabbedIconBar: true,
+            actions: allActions,
+            ribbonTabs: [
+              {
+                id: `module-ribbon-${descriptor.toolInstanceId}`,
+                label: gettext('Workspace'),
+                groups: [
+                  ...(surfaceActions.length > 0
+                    ? [
+                      {
+                        id: `module-views-${descriptor.toolInstanceId}`,
+                        label: gettext('Views'),
+                        controls: surfaceActions.map((a) => a.id),
+                      },
+                    ]
+                    : []),
+                  {
+                    id: `module-nav-${descriptor.toolInstanceId}`,
+                    label: gettext('Project'),
+                    controls: [explorerActionId],
+                  },
+                ],
+              },
+            ],
+            leftDrawerSharedKey: activityItem
+              ? undefined
+              : 'project-explorer:shared-left-tree',
+            renderLeftDrawer: () =>
+              activityItem ? (
+                activityItem.render()
+              ) : (
+                <ProjectExplorer
+                  variant="tree"
+                  client={platform.projectAssets}
+                  onOpenAsset={(p, a) => openAssetRef.current?.(p, a)}
+                />
+              ),
+            renderRightDrawer: () => <InspectorHost />,
+            statusText: `${descriptor.presentation.title} — ${gettext('Ready')}`,
+          };
+        },
+        onStateUpdated: (toolId, state) => {
+          const shellApi =
+            typeof window !== 'undefined'
+              ? window.__scratchrobinProjectShellRef?.current
+              : null;
+          if (!shellApi?.updateInstance) return;
+          const parts = [];
+          if (state?.persistence) parts.push(`${gettext('State')}: ${state.persistence}`);
+          if (Array.isArray(state?.problems) && state.problems.length > 0) {
+            parts.push(`${gettext('Problems')}: ${state.problems.length}`);
+          }
+          if (state?.activeTaskId) parts.push(`${gettext('Task')}: ${state.activeTaskId}`);
+          if (parts.length > 0) {
+            shellApi.updateInstance(toolId, {statusText: parts.join(' · ')});
+          }
+        },
       });
     }
     return surfaceHost.current;
   }, [pgAdmin, platform]);
+
+  const openPlatformModule = useCallback((slug) => {
+    const def = PLATFORM_MODULE_DEFINITIONS.find((m) => m.slug === slug);
+    if (!def) return null;
+    if (def.slug === 'schema_compare') {
+      const shellApi =
+        typeof window !== 'undefined'
+          ? window.__scratchrobinProjectShellRef?.current
+          : null;
+      if (shellApi?.openApplication) {
+        return shellApi.openApplication('schema-compare');
+      }
+    }
+    const allSurfaces = platform.modules?.surfaces?.list?.() || [];
+    const primarySurface =
+      (def.preferredSurfaceId && allSurfaces.find((s) => s.id === def.preferredSurfaceId)) ||
+      allSurfaces.find((s) => s.moduleId === def.moduleId);
+    if (!primarySurface) return null;
+    return ensureSurfaceHost()
+      .open(primarySurface.id, {
+        toolInstanceId: `module-${def.slug}-main`,
+        title: def.label(),
+        iconKey: def.iconKey,
+      })
+      .catch((error) => pgAdmin.Browser?.notifier?.error?.(error.message));
+  }, [ensureSurfaceHost, pgAdmin, platform]);
+
+  const platformModuleLaunchers = useMemo(() => {
+    const aiEnabled =
+      typeof window === 'undefined' ||
+      window.__scratchrobinShellSettings?.global?.ai_drafting_enabled !== false;
+    return PLATFORM_MODULE_DEFINITIONS.filter((def) => {
+      if (def.aiGated && !aiEnabled) return false;
+      if (def.requiredPermission && !t_actions.hasPermission(def.requiredPermission)) {
+        return false;
+      }
+      return true;
+    }).map((def) => ({
+      id: `module.open.${def.slug}`,
+      label: def.label(),
+      iconKey: def.iconKey,
+      onOpen: () => openPlatformModule(def.slug),
+    }));
+  }, [openPlatformModule]);
+
+  useEffect(() => {
+    const actionIds = PLATFORM_MODULE_DEFINITIONS.map((def) => {
+      const actionId = `module.open.${def.slug}`;
+      t_actions.upsert({
+        id: actionId,
+        icon: def.iconKey,
+        application: 'project',
+        defaultText: def.label(),
+        defaultHint: gettext('Open %s workspace', def.label()),
+        permission: def.requiredPermission || '',
+        status:
+          def.aiGated &&
+          typeof window !== 'undefined' &&
+          window.__scratchrobinShellSettings?.global?.ai_drafting_enabled === false
+            ? T_ACTION_STATUS.INVISIBLE
+            : T_ACTION_STATUS.ENABLED,
+        target: {
+          kind: T_ACTION_TARGET_KIND.CLIENT,
+          invoke: () => openPlatformModule(def.slug),
+        },
+      });
+      return actionId;
+    });
+    return () => actionIds.forEach((id) => t_actions.unregister(id));
+  }, [openPlatformModule]);
 
   useEffect(()=>{
     const docker = pgAdmin.Browser.docker.default_workspace;
@@ -1980,14 +2857,11 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
 
   const openPreferences = useCallback((sectionId) => {
     changeWorkspace(WORKSPACES.DEFAULT);
-    if(sectionId) requestPreferencesSection(sectionId);
-    if (typeof document !== 'undefined' && document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]')) {
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('scratchrobin:open-preferences', {
-        detail: {mode: 'global', sectionId: sectionId || null},
+        detail: {mode: 'user', sectionId: sectionId || null},
       }));
-      return true;
     }
-    setPreferencesOpen(true);
     return true;
   }, [changeWorkspace]);
   const openInterfaceDesigner = useCallback(
@@ -2021,6 +2895,10 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
       tracing: platform.tracing,
       migration: platform.migration,
       apiDesigner: platform.apiDesigner,
+      ai: platform.ai,
+      mlVector: platform.mlVector,
+      aiInterface: platform.aiInterface,
+      discoveryIntelligence: platform.discoveryIntelligence,
       currentUser,
       openSurface: (surfaceId, input, restoreContext) => ensureSurfaceHost().open(
         surfaceId, input, restoreContext),
@@ -2033,11 +2911,88 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
     };
   }, [changeWorkspace, ensureSurfaceHost, openAppearanceSettings,
     openCommandBarCustomizer, openInterfaceDesigner, pgAdmin,
-    platform.cdc,
-    platform.contract, platform.etl,
-    platform.lineage, platform.quality,
+    platform.ai, platform.aiInterface, platform.cdc,
+    platform.contract, platform.discoveryIntelligence, platform.etl,
+    platform.lineage, platform.mlVector, platform.quality,
     platform.apiDesigner, platform.migration, platform.replication, platform.schemaCompare,
     platform.tracing]);
+  useEffect(() => {
+    const open = (event) => ensureSurfaceHost().open(
+      `ml-vector.${event.detail?.surface || 'vector_explorer'}`, {
+        toolInstanceId: `ml-vector-${event.detail?.sessionId || 'main'}`,
+        restoreRef: event.detail?.sessionId,
+        title: gettext('ML & Vector'),
+      }
+    ).catch((error) => pgAdmin.Browser.notifier.error(error.message));
+    window.addEventListener('cdeadmin:ml-vector-open', open);
+    return () => window.removeEventListener('cdeadmin:ml-vector-open', open);
+  }, [ensureSurfaceHost, pgAdmin]);
+  useEffect(() => {
+    const open = (event) => {
+      const requested = event.detail?.screenId || 'cdeadmin.ai_interface.ai_workbench';
+      ensureSurfaceHost().open(requested, {
+        toolInstanceId: `ai-${event.detail?.sessionId || 'workbench'}`,
+        restoreRef: event.detail?.sessionId,
+        title: gettext('AI Assistant'),
+      }).catch((error) => pgAdmin.Browser.notifier.error(error.message));
+    };
+    window.addEventListener('cdeadmin:ai-open', open);
+    return () => window.removeEventListener('cdeadmin:ai-open', open);
+  }, [ensureSurfaceHost, pgAdmin]);
+  useEffect(() => {
+    const open = (event) => {
+      const fallback = (platform.modules?.surfaces?.list?.() || []).find(
+        (s) => s.moduleId === 'cdeadmin.ai_interface'
+      )?.id;
+      const screenId = event.detail?.screenId || fallback;
+      if (!screenId) return;
+      ensureSurfaceHost().open(screenId, {
+        toolInstanceId: `ai-interface-${screenId}`,
+        title: gettext('AI Interface'),
+      }).catch((error) => pgAdmin.Browser.notifier.error(error.message));
+    };
+    window.addEventListener('cdeadmin:ai-interface-open', open);
+    return () => window.removeEventListener('cdeadmin:ai-interface-open', open);
+  }, [ensureSurfaceHost, pgAdmin, platform]);
+  useEffect(() => {
+    const open = (event) => {
+      const fallback = (platform.modules?.surfaces?.list?.() || []).find(
+        (s) => s.moduleId === 'cdeadmin.discovery_intelligence'
+      )?.id;
+      const screenId = event.detail?.screenId || fallback;
+      if (!screenId) return;
+      ensureSurfaceHost().open(screenId, {
+        toolInstanceId: `discovery-${screenId}`,
+        title: gettext('Discovery Intelligence'),
+      }).catch((error) => pgAdmin.Browser.notifier.error(error.message));
+    };
+    window.addEventListener('cdeadmin:discovery-open', open);
+    return () => window.removeEventListener('cdeadmin:discovery-open', open);
+  }, [ensureSurfaceHost, pgAdmin, platform]);
+  useEffect(() => {
+    const onOpenSqlFromBi = (event) => {
+      const detail = event?.detail || {};
+      const shellApi =
+        typeof window !== 'undefined'
+          ? window.__scratchrobinProjectShellRef?.current
+          : null;
+      const existingSql = (shellApi?.instances || []).find(
+        (inst) => inst.appId === 'sql-editor' || inst.instanceId === BROWSER_PANELS.SQL
+      );
+      if (existingSql) {
+        shellApi?.focusInstance?.(existingSql.instanceId);
+      } else if (shellApi?.openApplication) {
+        shellApi.openApplication('sql-editor');
+      } else {
+        pgAdmin.Browser.docker?.default_workspace?.focus?.(BROWSER_PANELS.SQL);
+      }
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('cdeadmin:open-sql-in-editor', {detail}));
+      }, 0);
+    };
+    window.addEventListener('scratchrobin:open-sql-from-bi', onOpenSqlFromBi);
+    return () => window.removeEventListener('scratchrobin:open-sql-from-bi', onOpenSqlFromBi);
+  }, [pgAdmin]);
   useEffect(() => {
     const open = (event) => ensureSurfaceHost().open(
       `schema_compare.${event.detail.surface}`, {
@@ -2147,6 +3102,15 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         const guards = createCloseGuardRegistry();
         const id = `sql-notebook-${project.project_id}-${asset.asset_id}`;
         pgAdmin.Browser.docker.default_workspace.openTab({id, title: asset.name,
+          appId: 'project-explorer',
+          leftDrawerSharedKey: 'project-explorer:shared-left-tree',
+          renderLeftDrawer: () => (
+            <ProjectExplorer
+              variant="tree"
+              client={platform.projectAssets}
+              onOpenAsset={(p, a) => openAssetRef.current?.(p, a)}
+            />
+          ),
           closable: true, floatable: true, beforeClose: guards.beforeClose,
           content: <ModalCloseGuardContext.Provider value={guards.register}>
             <SQLNotebook client={platform.projectAssets} initialProjectId={project.project_id} initialAssetId={asset.asset_id} />
@@ -2167,6 +3131,7 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
       await surfaceHost.current.open(surface.id, {
         toolInstanceId: surface.id + '-' + asset.asset_id,
         restoreRef: asset.asset_id,
+        assetType: asset.asset_type,
         projectId: project.project_id,
         title: asset.name,
       });
@@ -2177,7 +3142,6 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
 
   // Panels outside the Project Explorer (the Diagrams tool) open assets the
   // same way it does.
-  const openAssetRef = useRef(openAsset);
   openAssetRef.current = openAsset;
   useEffect(() => {
     const open = (event) => openAssetRef.current(
@@ -2230,6 +3194,9 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ribbonTabs: navConfig.ribbonTabs,
         meta: {
           isUnboundNavigator,
+          pinnedCatalogTab: Boolean(options.pinnedCatalogTab),
+          pinnedWhenBound: Boolean(sequence > 1 && isUnboundNavigator && !options.pinnedCatalogTab),
+          isReplaceableBrowse: options.pinnedCatalogTab ? false : options.isReplaceableBrowse !== false,
           catalogNodeKey: isUnboundNavigator
             ? null
             : options.catalogNodeKey || catalogNodeIdentityKey(boundData),
@@ -2377,102 +3344,12 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
     };
 
     if (appId === 'sql-editor') {
-      const runAction = `sql-editor.execute.${instanceId}`;
-      const pauseAction = `sql-editor.pause.${instanceId}`;
-      const cancelAction = `sql-editor.cancel.${instanceId}`;
-      const limitsAction = `sql-editor.limits.${instanceId}`;
-      return {
+      return buildSqlStudioShellConfig({
+        instanceId,
         title: sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label,
-        supportsLeftDrawer: true,
-        supportsRightDrawer: true,
-        supportsTabbedIconBar: true,
-        actions: [
-          {
-            id: runAction,
-            icon: 'action.execute',
-            application: 'sql-editor',
-            defaultText: gettext('Execute SQL'),
-            defaultHint: gettext('Run active SQL statement'),
-            focusScoped: true,
-            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => true},
-          },
-          {
-            id: pauseAction,
-            icon: 'action.query_pause',
-            application: 'sql-editor',
-            defaultText: gettext('Pause Step Fetch'),
-            defaultHint: gettext('Suspend cursor step fetching after current batch'),
-            focusScoped: true,
-            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => true},
-          },
-          {
-            id: cancelAction,
-            icon: 'action.stop',
-            application: 'sql-editor',
-            defaultText: gettext('Cancel Running Query'),
-            defaultHint: gettext('Cancel active engine query execution'),
-            focusScoped: true,
-            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => true},
-          },
-          {
-            id: limitsAction,
-            icon: 'action.fetch_limits',
-            application: 'sql-editor',
-            defaultText: gettext('Max Rows & Step Size'),
-            defaultHint: gettext('Configure Max Rows and Rows per Step limits'),
-            focusScoped: true,
-            target: {
-              kind: T_ACTION_TARGET_KIND.CLIENT,
-              invoke: () =>
-                window.dispatchEvent(
-                  new CustomEvent('scratchrobin:open-preferences', {
-                    detail: {mode: 'global'},
-                  })
-                ),
-            },
-          },
-        ],
-        menus: [
-          {
-            name: 'query',
-            label: gettext('Query'),
-            i18nKey: 'menu.query.title',
-            index: 25,
-            items: [
-              {
-                id: runAction,
-                actionId: runAction,
-                label: gettext('Execute SQL'),
-                i18nKey: 'menu.query.execute_sql.text',
-                hintKey: 'menu.query.execute_sql.hint',
-                iconKey: 'action.execute',
-                index: 10,
-              },
-            ],
-          },
-        ],
-        ribbonTabs: [
-          {
-            id: 'sql-home',
-            label: gettext('SQL'),
-            groups: [
-              {
-                id: 'sql-execution',
-                label: gettext('Execution'),
-                controls: [runAction, pauseAction, cancelAction, limitsAction],
-              },
-            ],
-          },
-        ],
-        renderLeftDrawer: () => (
-          <ProjectExplorer
-            client={platform.projectAssets}
-            onOpenAsset={openAsset}
-          />
-        ),
-        renderWorkArea: () => <SQLNotebook client={platform.projectAssets} />,
+        projectAssets: platform.projectAssets,
         renderRightDrawer: inspectorRightDrawer,
-      };
+      });
     }
 
     if (appId === 'erd-designer') {
@@ -2755,6 +3632,8 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
 
     if (appId === 'project-explorer') {
       return {
+        leftDrawerSharedKey: 'project-explorer:shared-left-tree',
+        leftDrawerTitle: gettext('Project Navigator'),
         menus: [
           {
             name: 'project',
@@ -2777,8 +3656,10 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ],
         renderLeftDrawer: () => (
           <ProjectExplorer
+            variant="tree"
             client={platform.projectAssets}
             onOpenAsset={openAsset}
+            modules={platformModuleLaunchers}
             onSelectAsset={(project, asset) => {
               workbenchContextService.update({
                 surfaceTitle: asset.name,
@@ -2795,16 +3676,149 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ),
         renderWorkArea: () => (
           <ProjectExplorer
+            variant="workspace"
             client={platform.projectAssets}
             onOpenAsset={openAsset}
+            modules={platformModuleLaunchers}
           />
         ),
         renderRightDrawer: inspectorRightDrawer,
       };
     }
 
+    if (appId === 'command-line') {
+      const actExec = `command-line.execute.${instanceId}`;
+      const actClear = `command-line.clear.${instanceId}`;
+      const actConsole = `command-line.mode_console.${instanceId}`;
+      const actIsql = `command-line.mode_firebird_isql.${instanceId}`;
+      const actPsql = `command-line.open_psql.${instanceId}`;
+      const emitCli = (action) =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:command-line-action', {
+            detail: {instanceId, action},
+          })
+        );
+      return {
+        title: sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label,
+        leftDrawerSharedKey: 'data-navigator:shared-left-tree',
+        supportsLeftDrawer: true,
+        supportsRightDrawer: true,
+        supportsTabbedIconBar: true,
+        actions: [
+          {
+            id: actExec,
+            icon: 'action.execute',
+            application: 'command-line',
+            defaultText: gettext('Execute Statement'),
+            defaultHint: gettext('Run CLI statement against active database target'),
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitCli('execute')},
+          },
+          {
+            id: actClear,
+            icon: 'action.delete',
+            application: 'command-line',
+            defaultText: gettext('Clear Console'),
+            defaultHint: gettext('Clear command transcript output'),
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitCli('clear')},
+          },
+          {
+            id: actConsole,
+            icon: 'tool.command-line',
+            application: 'command-line',
+            defaultText: gettext('Interactive CLI Console'),
+            defaultHint: gettext('Switch to interactive provider CLI console'),
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitCli('mode_console')},
+          },
+          {
+            id: actIsql,
+            icon: 'tool.command-line',
+            application: 'command-line',
+            defaultText: gettext('External Firebird ISQL'),
+            defaultHint: gettext('Configure and launch external Firebird ISQL terminal'),
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitCli('mode_firebird_isql')},
+          },
+          {
+            id: actPsql,
+            icon: 'tool.psql',
+            application: 'command-line',
+            defaultText: gettext('PostgreSQL PSQL Tool'),
+            defaultHint: gettext('Open native PostgreSQL PSQL terminal session'),
+            focusScoped: true,
+            target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitCli('open_psql')},
+          },
+        ],
+        menus: [
+          {
+            name: 'terminal',
+            label: gettext('Terminal'),
+            index: 26,
+            items: [
+              {
+                id: actExec,
+                actionId: actExec,
+                label: gettext('Execute Statement'),
+                iconKey: 'action.execute',
+                index: 10,
+                callback: () => emitCli('execute'),
+              },
+              {
+                id: actClear,
+                actionId: actClear,
+                label: gettext('Clear Console'),
+                iconKey: 'action.delete',
+                index: 15,
+                callback: () => emitCli('clear'),
+              },
+              {
+                id: actIsql,
+                actionId: actIsql,
+                label: gettext('External Firebird ISQL'),
+                iconKey: 'tool.command-line',
+                index: 25,
+                callback: () => emitCli('mode_firebird_isql'),
+              },
+              {
+                id: actPsql,
+                actionId: actPsql,
+                label: gettext('PostgreSQL PSQL Tool'),
+                iconKey: 'tool.psql',
+                index: 30,
+                callback: () => emitCli('open_psql'),
+              },
+            ],
+          },
+        ],
+        ribbonTabs: [
+          {
+            id: 'cli-home',
+            label: gettext('Command Line'),
+            groups: [
+              {
+                id: 'cli-exec',
+                label: gettext('Execution'),
+                controls: [actExec, actClear],
+              },
+              {
+                id: 'cli-shells',
+                label: gettext('Engine Terminals'),
+                controls: [actConsole, actIsql, actPsql],
+              },
+            ],
+          },
+        ],
+        renderToolbarExtras: () => <SQLConnectionSelect />,
+        renderLeftDrawer: sharedObjectExplorerDrawer,
+        renderWorkArea: () => <CommandLineWorkArea instanceId={instanceId} />,
+        renderRightDrawer: inspectorRightDrawer,
+      };
+    }
+
     return null;
-  }, [designStoreClient, openAsset, pgAdmin, platform.modules.commands, platform.projectAssets, platform.schemaCompare]);
+  }, [designStoreClient, openAsset, pgAdmin, platform.modules.commands, platform.projectAssets, platform.schemaCompare, platformModuleLaunchers]);
 
   return (
     <ApplicationStateProvider>
@@ -2812,7 +3826,7 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         username={currentUser?.username || currentUser?.email || ''}
         applicationFactory={buildShellApplication}
       >
-        <ProjectShellDockerBridge config={config} enabled={enabled} />
+        <ProjectShellDockerBridge config={config} enabled={enabled} platform={platform} />
         <CatalogPageCoordinator />
         {topBarMode === 'notebook' ? <AppNotebookBar /> : <AppMenuBar />}
         <div
@@ -2823,21 +3837,6 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         >
           <ProjectWorkbenchFrame />
         </div>
-        <Dialog
-          open={preferencesOpen}
-          onClose={() => setPreferencesOpen(false)}
-          title={gettext('User Preferences')}
-          size="large"
-          actions={
-            <Button onClick={() => setPreferencesOpen(false)}>
-              {gettext('Close')}
-            </Button>
-          }
-        >
-          <Box sx={{height: '65vh', minHeight: 360}}>
-            <PreferencesComponent panelId={BROWSER_PANELS.PREFERENCES} />
-          </Box>
-        </Dialog>
       </ProjectShellProvider>
     </ApplicationStateProvider>
   );

@@ -5,6 +5,7 @@ import {startBrowserFileDownload} from './browserFileDownload';
 import ContinuousBinlog from './ContinuousBinlog';
 import MySQLArchiveRetention from './MySQLArchiveRetention';
 import MySQLSourceLogs from './MySQLSourceLogs';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw=false}) {
@@ -52,6 +53,7 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
     window.setTimeout(() => URL.revokeObjectURL(url),1000);
   };
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
+    <FormReference formKey="mysql-binlog-archives" />
     <Alert severity="info">{raw ? 'Archive a contiguous range of closed native MySQL binary logs on the application host using mysqlbinlog. GTID mode can be ON or OFF. Encrypted source logs are decrypted in the archive. The active log remains on the server.' : maria ? 'Archive a contiguous range of closed native MariaDB binary logs on the application host using mariadb-binlog. The active log remains on the server.' : 'Archive native binary logs on the application host using MySQL Shell.'} Logs include changes from the whole server. Keep downloaded files private and preserve their relative paths. Archive verification and successful database recovery have separate receipts.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

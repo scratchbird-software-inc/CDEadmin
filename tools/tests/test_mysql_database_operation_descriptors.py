@@ -43,7 +43,7 @@ def test_each_database_operation_reaches_descriptor_fields_and_existing_permissi
     catalog_operation = next(row for row in database['operations'] if row['operation_id'] == operation)
     assert catalog_operation['form']['form_id'] == 'mysql.database.' + operation
     assert catalog_operation['required_permissions']
-    assert DECLARED[operation+'@database']['status'] == 'draft'
+    assert DECLARED[operation+'@database']['status'] == 'complete'
 
 
 @pytest.mark.parametrize('operation', ['backup_logical', 'restore_logical'])

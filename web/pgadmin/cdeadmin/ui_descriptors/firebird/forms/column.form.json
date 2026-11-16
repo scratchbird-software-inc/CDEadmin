@@ -1,0 +1,948 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "column"
+  ],
+  "form_reference": "SR-F-000100",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Column name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "character_set",
+      "label": "Character set",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Optional for CHAR, VARCHAR and text BLOB.",
+      "initial_value_path": [
+        "type_editor",
+        "character_set"
+      ],
+      "record_key": "type_editor.character_set",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "CHAR",
+          "VARCHAR",
+          "BLOB"
+        ]
+      }
+    },
+    {
+      "field_id": "action",
+      "label": "Alteration",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "POSITION",
+      "options": [
+        {
+          "value": "POSITION",
+          "label": "Position"
+        },
+        {
+          "value": "SET NOT NULL",
+          "label": "Set Not Null"
+        },
+        {
+          "value": "DROP NOT NULL",
+          "label": "Drop Not Null"
+        },
+        {
+          "value": "SET DEFAULT",
+          "label": "Set Default"
+        },
+        {
+          "value": "DROP DEFAULT",
+          "label": "Drop Default"
+        },
+        {
+          "value": "TYPE",
+          "label": "Type"
+        },
+        {
+          "value": "COMPUTED",
+          "label": "Computed"
+        },
+        {
+          "value": "TYPE COMPUTED",
+          "label": "Type Computed"
+        },
+        {
+          "value": "IDENTITY",
+          "label": "Identity"
+        },
+        {
+          "value": "DROP IDENTITY",
+          "label": "Drop Identity"
+        }
+      ],
+      "option_values_path": [
+        "alteration",
+        "allowed_actions"
+      ],
+      "help": "Choose one native alteration. Firebird validates existing data and dependent objects. Dropping a column NOT NULL does not change its domain.",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "column_mode",
+      "label": "Column mode",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "STORED",
+      "options": [
+        {
+          "value": "STORED",
+          "label": "Stored"
+        },
+        {
+          "value": "IDENTITY",
+          "label": "Identity"
+        },
+        {
+          "value": "COMPUTED",
+          "label": "Computed"
+        },
+        {
+          "value": "COMPUTED INFERRED",
+          "label": "Computed Inferred"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "has_default",
+      "label": "Set column default",
+      "tab": "Definition",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "visible_when": {
+        "field": "column_mode",
+        "equals": "STORED"
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "default_kind",
+      "label": "Default value type",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "TEXT",
+      "options": [
+        {
+          "value": "TEXT",
+          "label": "Text"
+        },
+        {
+          "value": "BINARY",
+          "label": "Binary"
+        },
+        {
+          "value": "NUMBER",
+          "label": "Number"
+        },
+        {
+          "value": "NULL",
+          "label": "Null"
+        },
+        {
+          "value": "TRUE",
+          "label": "True"
+        },
+        {
+          "value": "FALSE",
+          "label": "False"
+        },
+        {
+          "value": "DATE",
+          "label": "Date"
+        },
+        {
+          "value": "TIME",
+          "label": "Time"
+        },
+        {
+          "value": "TIMESTAMP",
+          "label": "Timestamp"
+        },
+        {
+          "value": "CURRENT_USER",
+          "label": "Current User"
+        },
+        {
+          "value": "CURRENT_ROLE",
+          "label": "Current Role"
+        },
+        {
+          "value": "CURRENT_DATE",
+          "label": "Current Date"
+        },
+        {
+          "value": "CURRENT_TIME",
+          "label": "Current Time"
+        },
+        {
+          "value": "CURRENT_TIMESTAMP",
+          "label": "Current Timestamp"
+        },
+        {
+          "value": "LOCALTIME",
+          "label": "Localtime"
+        },
+        {
+          "value": "LOCALTIMESTAMP",
+          "label": "Localtimestamp"
+        },
+        {
+          "value": "CURRENT_CONNECTION",
+          "label": "Current Connection"
+        },
+        {
+          "value": "CURRENT_TRANSACTION",
+          "label": "Current Transaction"
+        }
+      ],
+      "visible_when": {
+        "field": "has_default",
+        "equals": true
+      }
+    },
+    {
+      "field_id": "default_value",
+      "label": "Default value",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "default_kind",
+        "in": [
+          "TEXT",
+          "BINARY",
+          "NUMBER",
+          "DATE",
+          "TIME",
+          "TIMESTAMP"
+        ]
+      }
+    },
+    {
+      "field_id": "time_precision",
+      "label": "Time precision",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "help": "Optional fractional digits, 0\u20133; empty uses the native default.",
+      "visible_when": {
+        "field": "default_kind",
+        "in": [
+          "CURRENT_TIME",
+          "CURRENT_TIMESTAMP",
+          "LOCALTIME",
+          "LOCALTIMESTAMP"
+        ]
+      }
+    },
+    {
+      "field_id": "data_type",
+      "label": "Data type",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "options": [
+        {
+          "value": "SMALLINT",
+          "label": "Smallint"
+        },
+        {
+          "value": "INTEGER",
+          "label": "Integer"
+        },
+        {
+          "value": "BIGINT",
+          "label": "Bigint"
+        },
+        {
+          "value": "INT128",
+          "label": "Int128"
+        },
+        {
+          "value": "NUMERIC",
+          "label": "Numeric"
+        },
+        {
+          "value": "DECIMAL",
+          "label": "Decimal"
+        },
+        {
+          "value": "FLOAT",
+          "label": "Float"
+        },
+        {
+          "value": "DOUBLE PRECISION",
+          "label": "Double Precision"
+        },
+        {
+          "value": "DECFLOAT",
+          "label": "Decfloat"
+        },
+        {
+          "value": "BOOLEAN",
+          "label": "Boolean"
+        },
+        {
+          "value": "DATE",
+          "label": "Date"
+        },
+        {
+          "value": "TIME",
+          "label": "Time"
+        },
+        {
+          "value": "TIMESTAMP",
+          "label": "Timestamp"
+        },
+        {
+          "value": "CHAR",
+          "label": "Char"
+        },
+        {
+          "value": "VARCHAR",
+          "label": "Varchar"
+        },
+        {
+          "value": "NCHAR",
+          "label": "Nchar"
+        },
+        {
+          "value": "NCHAR VARYING",
+          "label": "Nchar Varying"
+        },
+        {
+          "value": "BINARY",
+          "label": "Binary"
+        },
+        {
+          "value": "VARBINARY",
+          "label": "Varbinary"
+        },
+        {
+          "value": "BLOB",
+          "label": "Blob"
+        },
+        {
+          "value": "DOMAIN",
+          "label": "Domain"
+        }
+      ],
+      "help": "Prefilled from native metadata when known. Otherwise choose the intended type explicitly; no type is assumed.",
+      "initial_value_path": [
+        "type_editor",
+        "data_type"
+      ],
+      "record_key": "type_editor.data_type",
+      "visible_when": {
+        "field": "column_mode",
+        "in": [
+          "STORED",
+          "IDENTITY",
+          "COMPUTED"
+        ]
+      }
+    },
+    {
+      "field_id": "domain",
+      "label": "Domain name",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "help": "For DOMAIN only.",
+      "initial_value_path": [
+        "type_editor",
+        "domain"
+      ],
+      "record_key": "type_editor.domain",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "DOMAIN"
+        ]
+      }
+    },
+    {
+      "field_id": "length",
+      "label": "Length",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "default": 1,
+      "help": "Character/binary types only.",
+      "initial_value_path": [
+        "type_editor",
+        "length"
+      ],
+      "record_key": "type_editor.length",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "CHAR",
+          "VARCHAR",
+          "NCHAR",
+          "NCHAR VARYING",
+          "BINARY",
+          "VARBINARY"
+        ]
+      }
+    },
+    {
+      "field_id": "precision",
+      "label": "Precision",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "help": "NUMERIC/DECIMAL: 1\u201338; FLOAT: 1\u201353; DECFLOAT: 16 or 34.",
+      "initial_value_path": [
+        "type_editor",
+        "precision"
+      ],
+      "record_key": "type_editor.precision",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "NUMERIC",
+          "DECIMAL",
+          "FLOAT",
+          "DECFLOAT"
+        ]
+      }
+    },
+    {
+      "field_id": "scale",
+      "label": "Scale",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "default": 0,
+      "help": "NUMERIC/DECIMAL only.",
+      "initial_value_path": [
+        "type_editor",
+        "scale"
+      ],
+      "record_key": "type_editor.scale",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "NUMERIC",
+          "DECIMAL"
+        ]
+      }
+    },
+    {
+      "field_id": "blob_subtype",
+      "label": "BLOB subtype",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "default": 0,
+      "help": "0 binary, 1 text, or a native custom subtype.",
+      "initial_value_path": [
+        "type_editor",
+        "blob_subtype"
+      ],
+      "record_key": "type_editor.blob_subtype",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "BLOB"
+        ]
+      }
+    },
+    {
+      "field_id": "segment_size",
+      "label": "BLOB segment size",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "help": "Optional segment size, 0\u201365535.",
+      "initial_value_path": [
+        "type_editor",
+        "segment_size"
+      ],
+      "record_key": "type_editor.segment_size",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "BLOB"
+        ]
+      }
+    },
+    {
+      "field_id": "time_zone",
+      "label": "Time zone type",
+      "tab": "Definition",
+      "control": "select",
+      "required": false,
+      "default": "WITHOUT TIME ZONE",
+      "options": [
+        {
+          "value": "WITHOUT TIME ZONE",
+          "label": "Without Time Zone"
+        },
+        {
+          "value": "WITH TIME ZONE",
+          "label": "With Time Zone"
+        }
+      ],
+      "initial_value_path": [
+        "type_editor",
+        "time_zone"
+      ],
+      "record_key": "type_editor.time_zone",
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "TIME",
+          "TIMESTAMP"
+        ]
+      }
+    },
+    {
+      "field_id": "expression",
+      "label": "Computed expression",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "initial_value_path": [
+        "computed_source"
+      ],
+      "record_key": "computed_source",
+      "visible_when": {
+        "field": "column_mode",
+        "in": [
+          "COMPUTED",
+          "COMPUTED INFERRED"
+        ]
+      }
+    },
+    {
+      "field_id": "generation",
+      "label": "Identity generation",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "BY DEFAULT",
+      "options": [
+        {
+          "value": "ALWAYS",
+          "label": "Always"
+        },
+        {
+          "value": "BY DEFAULT",
+          "label": "By Default"
+        }
+      ],
+      "visible_when": {
+        "field": "column_mode",
+        "equals": "IDENTITY"
+      }
+    },
+    {
+      "field_id": "start_value",
+      "label": "Identity start (signed 64-bit)",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "column_mode",
+        "equals": "IDENTITY"
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "increment",
+      "label": "Identity increment (signed 32-bit)",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "column_mode",
+        "equals": "IDENTITY"
+      }
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "column_mode",
+        "in": [
+          "STORED",
+          "IDENTITY"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "dimensions",
+      "label": "Array dimensions",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "lower",
+          "label": "Lower bound",
+          "control": "number",
+          "required": true,
+          "default": 1
+        },
+        {
+          "field_id": "upper",
+          "label": "Upper bound",
+          "control": "number",
+          "required": true,
+          "default": 1
+        }
+      ],
+      "required": false,
+      "default": [],
+      "visible_when": {
+        "field": "data_type",
+        "in": [
+          "SMALLINT",
+          "INTEGER",
+          "BIGINT",
+          "INT128",
+          "NUMERIC",
+          "DECIMAL",
+          "FLOAT",
+          "DOUBLE PRECISION",
+          "DECFLOAT",
+          "BOOLEAN",
+          "DATE",
+          "TIME",
+          "TIMESTAMP",
+          "CHAR",
+          "VARCHAR",
+          "NCHAR",
+          "NCHAR VARYING",
+          "BINARY",
+          "VARBINARY"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "constraints",
+      "label": "Column constraints",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "kind",
+          "label": "Constraint kind",
+          "control": "select",
+          "required": true,
+          "default": "NOT NULL",
+          "options": [
+            {
+              "value": "NOT NULL",
+              "label": "Not Null"
+            },
+            {
+              "value": "CHECK",
+              "label": "Check"
+            },
+            {
+              "value": "UNIQUE",
+              "label": "Unique"
+            },
+            {
+              "value": "PRIMARY KEY",
+              "label": "Primary Key"
+            },
+            {
+              "value": "REFERENCES",
+              "label": "References"
+            }
+          ]
+        },
+        {
+          "field_id": "name",
+          "label": "Constraint name (optional)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "expression",
+          "label": "Check expression",
+          "control": "code",
+          "language": "sql",
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "CHECK"
+            ]
+          }
+        },
+        {
+          "field_id": "reference_table",
+          "label": "Referenced table",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "REFERENCES"
+            ]
+          }
+        },
+        {
+          "field_id": "reference_column",
+          "label": "Referenced column (empty uses primary key)",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "REFERENCES"
+            ]
+          }
+        },
+        {
+          "field_id": "on_update",
+          "label": "On update",
+          "control": "select",
+          "required": false,
+          "default": "UNCHANGED",
+          "options": [
+            {
+              "value": "UNCHANGED",
+              "label": "Unchanged"
+            },
+            {
+              "value": "NO ACTION",
+              "label": "No Action"
+            },
+            {
+              "value": "CASCADE",
+              "label": "Cascade"
+            },
+            {
+              "value": "SET DEFAULT",
+              "label": "Set Default"
+            },
+            {
+              "value": "SET NULL",
+              "label": "Set Null"
+            }
+          ],
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "REFERENCES"
+            ]
+          }
+        },
+        {
+          "field_id": "on_delete",
+          "label": "On delete",
+          "control": "select",
+          "required": false,
+          "default": "UNCHANGED",
+          "options": [
+            {
+              "value": "UNCHANGED",
+              "label": "Unchanged"
+            },
+            {
+              "value": "NO ACTION",
+              "label": "No Action"
+            },
+            {
+              "value": "CASCADE",
+              "label": "Cascade"
+            },
+            {
+              "value": "SET DEFAULT",
+              "label": "Set Default"
+            },
+            {
+              "value": "SET NULL",
+              "label": "Set Null"
+            }
+          ],
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "REFERENCES"
+            ]
+          }
+        },
+        {
+          "field_id": "index_name",
+          "label": "Backing index name (optional)",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "UNIQUE",
+              "PRIMARY KEY",
+              "REFERENCES"
+            ]
+          }
+        },
+        {
+          "field_id": "index_direction",
+          "label": "Backing index direction",
+          "control": "select",
+          "required": false,
+          "default": "ASCENDING",
+          "options": [
+            {
+              "value": "ASCENDING",
+              "label": "Ascending"
+            },
+            {
+              "value": "DESCENDING",
+              "label": "Descending"
+            }
+          ],
+          "visible_when": {
+            "field": "kind",
+            "in": [
+              "UNIQUE",
+              "PRIMARY KEY",
+              "REFERENCES"
+            ]
+          }
+        }
+      ],
+      "required": false,
+      "default": [],
+      "visible_when": {
+        "field": "column_mode",
+        "in": [
+          "STORED",
+          "IDENTITY"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "position",
+      "label": "Position (one-based)",
+      "tab": "Engine",
+      "control": "number",
+      "required": true,
+      "default": 1,
+      "initial_value_path": [
+        "alteration",
+        "position"
+      ],
+      "record_key": "alteration.position",
+      "visible_when": {
+        "field": "action",
+        "in": [
+          "POSITION"
+        ]
+      },
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "restart",
+      "label": "Restart identity",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "UNCHANGED",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ORIGINAL",
+          "label": "Original"
+        },
+        {
+          "value": "WITH VALUE",
+          "label": "With Value"
+        }
+      ],
+      "visible_when": {
+        "field": "action",
+        "in": [
+          "IDENTITY"
+        ]
+      },
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "restart_value",
+      "label": "Restart value (signed 64-bit)",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "help": "Used only with WITH VALUE.",
+      "visible_when": {
+        "field": "restart",
+        "in": [
+          "WITH VALUE"
+        ]
+      },
+      "modes": [
+        "alter"
+      ]
+    }
+  ],
+  "notes": "Firebird column engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

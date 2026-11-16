@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 export default function MySQLRecoveryCutover({run, deployment, credentials, busy}) {
   const [selection, setSelection] = useState({target_server_id: '', acceptance_job_id: '', source_fence_job_id: '', target_confirmation: '', event_scheduler: 'OFF', acceptance_scope_acknowledged: false});
@@ -20,6 +21,7 @@ export default function MySQLRecoveryCutover({run, deployment, credentials, busy
   }, [receipt?.job_id, receipt?.state]);
   const change = (key, value) => {setSelection(current => ({...current, [key]: value})); setReview(null); setConfirmed(false);};
   return <Box component="section" aria-label="Recovered service activation">
+    <FormReference formKey="mysql-recovery-cutover" />
     <Alert severity="warning">Register the permanent listener as a normal MySQL target and run independent dump acceptance there. Stop and disable the original source through reviewed host controls. Activation repeats the selected data and definition checks under native locks, persists writable startup, and changes the live read-only flags. Application routing and boot enablement remain explicit host/application choices.</Alert>
     <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', my: 1}}>
       {['target_server_id', 'acceptance_job_id', 'source_fence_job_id', 'target_confirmation'].map(key => <TextField key={key} size="small" disabled={busy}

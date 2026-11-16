@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogReplay({post,engine='mysql'}) {
@@ -45,6 +46,7 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
     window.setTimeout(() => URL.revokeObjectURL(url),1000);
   };
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
+    <FormReference formKey="mysql-binlog-replay" />
     <Alert severity="warning">Replay changes from a sealed whole-server archive onto this separate target. Restore and verify a compatible base first. Transactions can commit individually; cancellation does not undo them. Native utility return and GTID coverage do not verify recovered data or production cutover.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     {engine==='mysql' && <TextField disabled={busy} select size="small" label="Archive format" value={family} onChange={event => {generation.current++;setFamily(event.target.value);setTarget(null);setArchives(null);setArchive('');setBoundaries(null);setStart(null);setStop(null);setMode('all');setReview(null);}}><MenuItem value="shell">MySQL Shell archive</MenuItem><MenuItem value="raw">MySQL raw closed logs</MenuItem></TextField>}

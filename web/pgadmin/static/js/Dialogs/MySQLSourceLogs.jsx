@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLSourceLogs({post,reset=false}) {
@@ -37,6 +38,7 @@ export default function MySQLSourceLogs({post,reset=false}) {
   const change=setter => event => {setter(event.target.value);setReview(null);setConfirmed(false);};
   const load=next => run('list',{offset:next*25,limit:25},value => {setJobs(value);setPage(next);});
   return <Box sx={{my:1}}>
+    <FormReference formKey="mysql-source-logs" />
     <Alert severity="warning">{reset ? 'Reset permanently removes ALL native binary logs and clears GTID history, including the active log. Use an exclusive maintenance window and check backups, replicas and active archive receivers. This is not routine retention. Reused filenames do not identify the old log generation.' : 'Native server log administration permanently removes binary logs on the selected database server. Check required backups and replicas first. Application archive files have separate retention controls.'}</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>

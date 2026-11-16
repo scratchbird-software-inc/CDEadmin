@@ -1,0 +1,65 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "configuration"
+  ],
+  "form_reference": "SR-F-001377",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Setting name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "value",
+      "label": "Effective value",
+      "tab": "General",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "default_value",
+      "label": "Default value",
+      "tab": "General",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "explicitly_set",
+      "label": "Explicitly set",
+      "tab": "Definition",
+      "control": "boolean",
+      "readonly": true
+    },
+    {
+      "field_id": "value_source",
+      "label": "Value source",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "native_type",
+      "label": "Setting type",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true
+    },
+    {
+      "field_id": "configuration_scope",
+      "label": "Scope",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true
+    }
+  ],
+  "notes": "Firebird configuration engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

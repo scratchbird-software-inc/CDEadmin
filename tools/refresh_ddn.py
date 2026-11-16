@@ -8,7 +8,22 @@ from pathlib import Path
 from ddn_intake import CONTRACT, refresh as capture, verify_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = Path(os.environ.get('SCRATCHROBIN_DDN_SOURCE', str(ROOT.parent / 'Diagram-Design-Notation')))
+
+
+def _default_ddn_source() -> Path:
+    env_source = os.environ.get('SCRATCHROBIN_DDN_SOURCE')
+    if env_source:
+        return Path(env_source)
+    sibling = ROOT.parent / 'Diagram-Design-Notation'
+    if sibling.exists():
+        return sibling
+    alt_sibling = ROOT.parent.parent / 'Sandbox' / 'Diagram-Design-Notation'
+    if alt_sibling.exists():
+        return alt_sibling
+    return sibling
+
+
+DEFAULT_SOURCE = _default_ddn_source()
 DEFAULT_WORK = Path(os.environ.get('SCRATCHROBIN_DDN_WORK',
                                   str(ROOT.parent / 'ChatGPT_Codex_1_Workarea/ddn-intake')))
 DEST = ROOT / 'web/pgadmin/static/vendor/ddn/current'

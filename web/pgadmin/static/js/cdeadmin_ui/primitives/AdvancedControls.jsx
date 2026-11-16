@@ -498,6 +498,7 @@ export function MultiSelect({
             setOpen(true);
           }}
           onFocus={() => !disabled && setOpen(true)}
+          onClick={() => !disabled && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           className="sr-input"
           style={{minWidth: 60}}
@@ -515,6 +516,8 @@ export function MultiSelect({
                 className="sr-select-item"
                 onMouseDown={(e) => {
                   e.preventDefault();
+                }}
+                onClick={() => {
                   toggleItem(opt);
                 }}
               >

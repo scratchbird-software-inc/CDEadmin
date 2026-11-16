@@ -9,15 +9,38 @@
 
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
-import {ProjectExplorer} from 'sources/cdeadmin_ui/projects/ProjectExplorer';
+import {
+  ProjectExplorer,
+  buildProjectVirtualTree,
+  canAssignProjectParent,
+  collectDescendantProjectIds,
+} from 'sources/cdeadmin_ui/projects/ProjectExplorer';
+import {assetIcon} from 'sources/cdeadmin_ui/projects/ProjectNavigatorModel';
 
 const projects = [{project_id: 'project-one', name: 'Project One', access: 'owner'}];
-const state = {assets: [{asset_id: 'diagram-one', name: 'System diagram',
-  path: 'diagrams/system.ddn', asset_type: 'ddn-workspace', version: 3,
-  validation_state: 'valid'}]};
+const state = {
+  assets: [
+    {
+      asset_id: 'diagram-one',
+      name: 'System diagram',
+      path: 'diagrams/system.ddn',
+      asset_type: 'ddn-workspace',
+      version: 3,
+      validation_state: 'valid',
+      resource_bindings: [
+        {kind: 'table', nativeIdentity: 'GL_ENTRY', resource_id: 'table:GL_ENTRY', bindingRole: 'owned'},
+        {kind: 'view', nativeIdentity: 'VW_ERP_GL_TRIAL_BALANCE', resource_id: 'view:VW_ERP_GL_TRIAL_BALANCE', bindingRole: 'owned'},
+        {kind: 'procedure', nativeIdentity: 'SP_COMPANY_FINANCIAL_SNAPSHOT', resource_id: 'procedure:SP_COMPANY_FINANCIAL_SNAPSHOT', bindingRole: 'owned'},
+        {kind: 'package', nativeIdentity: 'PKG_FRAPPE_SUITE', resource_id: 'package:PKG_FRAPPE_SUITE', bindingRole: 'owned'},
+        {kind: 'function', nativeIdentity: 'FN_DOCSTATUS_LABEL', resource_id: 'function:FN_DOCSTATUS_LABEL', bindingRole: 'owned'},
+        {kind: 'sequence', nativeIdentity: 'SEQ_GL_ENTRY', resource_id: 'sequence:SEQ_GL_ENTRY', bindingRole: 'owned'},
+      ],
+    },
+  ],
+};
 
-describe('Project Explorer', () => {
-  it('loads projects separately from assets and opens the selected asset', async () => {
+describe('Project Explorer / Project Navigator', () => {
+  it('loads projects separately from assets, renders virtual levels, and opens the selected asset', async () => {
     const client = {listProjects: jest.fn().mockResolvedValue(projects),
       project: jest.fn().mockResolvedValue(state)};
     const onOpenAsset = jest.fn();
@@ -26,9 +49,85 @@ describe('Project Explorer', () => {
     expect(await screen.findByText('Project One')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', {name: 'Expand Project One'}));
     expect(await screen.findByText('System diagram')).toBeInTheDocument();
+    expect(screen.getByText('Tables')).toBeInTheDocument();
+    expect(screen.getByText('Views')).toBeInTheDocument();
+    expect(screen.getByText('Coding')).toBeInTheDocument();
+    expect(screen.getByText('Screens')).toBeInTheDocument();
+    expect(screen.getByText('Reports')).toBeInTheDocument();
+    expect(screen.getByText('Tasks')).toBeInTheDocument();
+    expect(screen.getByText('Calendars')).toBeInTheDocument();
+    expect(screen.getByText('Channels')).toBeInTheDocument();
+    expect(screen.getByText('Members')).toBeInTheDocument();
+    expect(screen.getByText('Notes, Documents, Transcripts')).toBeInTheDocument();
+
     fireEvent.doubleClick(screen.getByRole('treeitem', {name: /System diagram/}));
     expect(onOpenAsset).toHaveBeenCalledWith(projects[0], state.assets[0]);
     expect(client.project).toHaveBeenCalledWith('project-one');
+  });
+
+  it('builds the complete virtual hierarchy including Coding, Reports, Tasks, Calendars, Channels, and Members', () => {
+    const vtree = buildProjectVirtualTree(projects[0], state, [{project_id: 'sub-1', name: 'Sub Project'}]);
+    const keys = vtree.map((v) => v.key);
+    expect(keys).toEqual([
+      'projects',
+      'tables',
+      'views',
+      'coding',
+      'screens',
+      'reports',
+      'tasks',
+      'calendars',
+      'channels',
+      'members',
+      'documents',
+    ]);
+    const coding = vtree.find((v) => v.key === 'coding');
+    expect(coding.subgroups.map((s) => s.key)).toEqual([
+      'procedures', 'packages', 'functions', 'sequences',
+    ]);
+    expect(coding.totalCount).toBe(4);
+
+    const reports = vtree.find((v) => v.key === 'reports');
+    expect(reports.subgroups.map((s) => s.key)).toEqual([
+      'print', 'graphs', 'diagrams', 'pdf',
+    ]);
+    expect(reports.totalCount).toBe(1);
+
+    const tasks = vtree.find((v) => v.key === 'tasks');
+    expect(tasks.subgroups.map((s) => s.key)).toEqual([
+      'pending', 'in_process', 'completed',
+    ]);
+
+    const calendars = vtree.find((v) => v.key === 'calendars');
+    expect(calendars.subgroups.map((s) => s.key)).toEqual([
+      'shared_personal', 'gantt',
+    ]);
+
+    const members = vtree.find((v) => v.key === 'members');
+    expect(members.subgroups.map((s) => s.key)).toEqual([
+      'groups', 'individuals',
+    ]);
+  });
+
+  it('populates Area 3e workspace with auto-placing fields and virtual-spot item buttons when clicking virtual folders', async () => {
+    const client = {listProjects: jest.fn().mockResolvedValue(projects),
+      project: jest.fn().mockResolvedValue(state)};
+    const TreeComp = withTheme(ProjectExplorer);
+    render(
+      <div>
+        <TreeComp variant="tree" client={client} />
+        <TreeComp variant="workspace" client={client} />
+      </div>
+    );
+    await screen.findAllByText('Project One');
+    expect(await screen.findByTestId('auto-placing-properties-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('virtual-group-buttons-grid')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Expand Project One'}));
+    await screen.findByText('GL_ENTRY');
+    fireEvent.click(screen.getByRole('treeitem', {name: /Tables/}));
+    const grid = await screen.findByTestId('virtual-group-buttons-grid');
+    expect(grid).toHaveTextContent('GL_ENTRY');
   });
 
   it('filters loaded authored assets by name, path, and type', async () => {
@@ -92,5 +191,77 @@ describe('Project Explorer', () => {
     ));
     await waitFor(() => expect(screen.queryByRole('dialog', {name: 'New project'}))
       .not.toBeInTheDocument());
+  });
+
+  it('renders nested parent/child projects under (virt) Projects and prevents circular dependency loops', async () => {
+    const hierarchical = [
+      {project_id: 'erp-suite', name: 'ERP Suite', parent_project_id: null, revision: 0, access: 'owner'},
+      {project_id: 'accounting', name: 'Accounting', parent_project_id: 'erp-suite', revision: 0, access: 'owner'},
+      {project_id: 'general-ledger', name: 'General Ledger', parent_project_id: 'accounting', revision: 0, access: 'owner'},
+      {project_id: 'standalone', name: 'Standalone BI', parent_project_id: null, revision: 0, access: 'owner'},
+    ];
+    expect([...collectDescendantProjectIds(hierarchical, 'erp-suite')].sort())
+      .toEqual(['accounting', 'general-ledger']);
+    expect(canAssignProjectParent(hierarchical, 'erp-suite', 'erp-suite')).toBe(false);
+    expect(canAssignProjectParent(hierarchical, 'erp-suite', 'accounting')).toBe(false);
+    expect(canAssignProjectParent(hierarchical, 'erp-suite', 'general-ledger')).toBe(false);
+    expect(canAssignProjectParent(hierarchical, 'erp-suite', 'standalone')).toBe(true);
+
+    const client = {
+      listProjects: jest.fn().mockResolvedValue(hierarchical),
+      project: jest.fn().mockResolvedValue({assets: []}),
+      updateProject: jest.fn().mockResolvedValue({}),
+    };
+    const Component = withTheme(ProjectExplorer);
+    render(<Component client={client} />);
+    expect(await screen.findByText('ERP Suite')).toBeInTheDocument();
+    expect(screen.queryByText('Accounting')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Expand ERP Suite'}));
+    expect(await screen.findByText('Projects')).toBeInTheDocument();
+    expect(await screen.findByText('Accounting')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Set parent'}));
+    const select = screen.getByLabelText('Parent project');
+    const optionValues = [...select.querySelectorAll('option')].map((o) => o.value);
+    expect(optionValues).toContain('standalone');
+    expect(optionValues).not.toContain('erp-suite');
+    expect(optionValues).not.toContain('accounting');
+    expect(optionValues).not.toContain('general-ledger');
+  });
+
+  it('maps semantic icons and virtual folders for cubes, composed dashboards, and all platform module assets', () => {
+    expect(assetIcon('cdeadmin.design.cube')).toBe('object.cube');
+    expect(assetIcon('cdeadmin.design.dashboard')).toBe('tool.bi');
+    expect(assetIcon('cdeadmin.design.monitoring_dashboard')).toBe('tool.bi');
+    expect(assetIcon('cdeadmin.design.screen')).toBe('tool.screen-mesh');
+    expect(assetIcon('cdeadmin.lineage.v1')).toBe('tool.lineage');
+    expect(assetIcon('cdeadmin.schema_compare.v1')).toBe('tool.schema-compare');
+    expect(assetIcon('cdeadmin.quality.v1')).toBe('tool.quality');
+    expect(assetIcon('cdeadmin.contract.v1')).toBe('tool.contract');
+    expect(assetIcon('cdeadmin.etl.v1')).toBe('tool.etl');
+    expect(assetIcon('cdeadmin.cdc.v1')).toBe('tool.cdc');
+    expect(assetIcon('cdeadmin.replication.v1')).toBe('tool.replication');
+    expect(assetIcon('cdeadmin.tracing.v1')).toBe('tool.tracing');
+    expect(assetIcon('cdeadmin.migration.v1')).toBe('tool.migration');
+    expect(assetIcon('cdeadmin.api.v1')).toBe('tool.api');
+    expect(assetIcon('cdeadmin.ml_vector.v1')).toBe('tool.ml-vector');
+    expect(assetIcon('cdeadmin.ai.v1')).toBe('tool.ai');
+    expect(assetIcon('cdeadmin.ai_interface.agent_profile.v1')).toBe('tool.ai');
+
+    const richTree = buildProjectVirtualTree(projects[0], {
+      assets: [
+        {asset_id: 'c1', name: 'GL Cube', asset_type: 'cdeadmin.design.cube'},
+        {asset_id: 'd1', name: 'CFO Dashboard', asset_type: 'cdeadmin.design.dashboard'},
+        {asset_id: 'e1', name: 'Edge to Lakehouse ETL', asset_type: 'cdeadmin.etl.v1'},
+        {asset_id: 'q1', name: 'Balanced GL Rules', asset_type: 'cdeadmin.quality.v1'},
+      ],
+    });
+    const reports = richTree.find((v) => v.key === 'reports');
+    const graphs = reports.subgroups.find((s) => s.key === 'graphs');
+    const diagrams = reports.subgroups.find((s) => s.key === 'diagrams');
+    const docs = richTree.find((v) => v.key === 'documents');
+    expect(graphs.items.map((i) => i.asset.asset_id)).toEqual(['c1', 'd1']);
+    expect(diagrams.items.map((i) => i.asset.asset_id)).toEqual(['e1']);
+    expect(docs.items.map((i) => i.asset.asset_id)).toEqual(['q1']);
   });
 });

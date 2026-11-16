@@ -1,12 +1,14 @@
 """Firebird asynchronous queries with attachment ownership and cancellation."""
 
 import copy
+import re
 import sys
 import threading
 import time
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from unittest.mock import Mock
 
 from pgadmin.cdeadmin.sdk.relational import (
     RelationalClientError, RelationalDBAPIClient, _ResultToken,
@@ -31,6 +33,24 @@ QUERY_FAILURE_NOTICE = (
     'A failed result does not confirm rollback. Earlier work or procedure '
     'writes may remain pending; inspect the transaction before committing '
     'or retrying.')
+
+CONNECTION_DROP_GDS_CODES = frozenset({
+    335544324,  # isc_bad_db_handle
+    335544721,  # isc_network_error
+    335544722,  # isc_net_connect_err
+    335544723,  # isc_net_connect_listen_err
+    335544725,  # isc_net_write_err
+    335544726,  # isc_net_read_err
+    335544727,  # isc_lost_db_connection
+    335544856,  # isc_att_shutdown (session idle timeout / admin shutdown)
+})
+
+_MUTATING_SQL_PREFIX_RE = re.compile(
+    r'^\s*(?:--[^\r\n]*[\r\n]+|/\*.*?\*/\s*)*'
+    r'(INSERT|UPDATE|DELETE|MERGE|EXECUTE|CREATE|ALTER|DROP|RECREATE|'
+    r'DECLARE|COMMENT|GRANT|REVOKE|SAVEPOINT|RELEASE)\b',
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 @dataclass(eq=False)
@@ -67,6 +87,12 @@ class _AttachmentState:
     stream_expired: bool = False
     script_context: object = None
     script_ddl_transaction: object = None
+    open_request: dict | None = None
+    autocommit_enabled: bool = False
+    explicit_transaction_open: bool = False
+    uncommitted_connection_lost: bool = False
+    lost_status_codes: tuple = ()
+    reconnected_count: int = 0
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
@@ -146,7 +172,108 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         # the opening admission until both stages publish or clean up the
         # attachment; do not hold the lock during native driver work.
         with self._connecting():
-            return super().open_session(request)
+            handle = super().open_session(request)
+            if (
+                isinstance(request, Mapping) and
+                isinstance(request.get('route'), Mapping) and
+                request['route'].get('database')
+            ):
+                state = self._state(handle)
+                state.open_request = copy.deepcopy(dict(request))
+                state.autocommit_enabled = bool(
+                    request['route'].get('transaction_auto_commit') or
+                    getattr(handle, 'autocommit', False) is True
+                )
+            return handle
+
+    @staticmethod
+    def _can_auto_reconnect(state):
+        return (
+            state.open_request is not None and
+            not state.explicit_transaction_open and
+            not state.uncommitted_connection_lost and
+            not state.worker_interrupted and
+            not state.visual_task_state_unknown
+        )
+
+    def _rebind_live_attachment(self, handle, state):
+        if state.open_request is None:
+            raise RelationalClientError(
+                'Firebird session cannot reconnect without an open route'
+            )
+        with self._connecting():
+            fresh = super().open_session(copy.deepcopy(state.open_request))
+            with self._admission:
+                self._connections[:] = [
+                    item for item in self._connections if item is not fresh
+                ]
+        try:
+            handle.close()
+        except Exception:
+            pass
+        if isinstance(handle, Mock) or isinstance(fresh, Mock):
+            handle.__dict__.clear()
+            handle.__dict__.update(fresh.__dict__)
+        elif hasattr(handle, '__dict__') and hasattr(fresh, '__dict__'):
+            handle.__dict__.clear()
+            handle.__dict__.update(fresh.__dict__)
+        else:
+            for slot in getattr(type(handle), '__slots__', ()):
+                if hasattr(fresh, slot):
+                    setattr(handle, slot, getattr(fresh, slot))
+        state.cancellation_state_unknown = False
+        state.result_cleanup_failed = False
+        state.worker_interrupted = False
+        state.visual_task_state_unknown = False
+        state.attachment_liveness_failed = False
+        state.profiler_state_unknown = False
+        state.uncommitted_connection_lost = False
+        state.lost_status_codes = ()
+        state.explicit_transaction_open = False
+        state.failed_cursors.clear()
+        state.result_stream = None
+        state.blob_upload = None
+        state.stream_owner = None
+        state.stream_last_activity = None
+        state.stream_expired = False
+        state.reconnected_count += 1
+        return handle
+
+    @staticmethod
+    def _uncommitted_lost_error(codes=()):
+        error = RelationalClientError(
+            'Firebird attachment disconnected while an uncommitted '
+            'transaction was open; confirm and reconnect this session'
+        )
+        error.code = 'TRANSACTION_CONNECTION_LOST'
+        error.reconnect_required = True
+        error.had_uncommitted_transaction = True
+        error.gds_codes = tuple(codes or ())
+        error.native_status_codes = tuple(codes or ())
+        return error
+
+    def reconnect_session(self, handle):
+        state = self._state(handle)
+        if not state.lock.acquire(blocking=False):
+            raise RelationalClientError('Firebird session is busy')
+        try:
+            if state.query is not None:
+                raise RelationalClientError(
+                    'Firebird query is running; cancel or wait before '
+                    'reconnecting this session'
+                )
+            had_uncommitted = bool(
+                state.explicit_transaction_open or
+                state.uncommitted_connection_lost
+            )
+            self._rebind_live_attachment(handle, state)
+            return {
+                'reconnected': True,
+                'had_uncommitted_transaction': had_uncommitted,
+                'reconnected_count': state.reconnected_count,
+            }
+        finally:
+            state.lock.release()
 
     def _connect_server(self, request):
         route = request.get('route') or {}
@@ -275,7 +402,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 id(handle), _AttachmentState())
 
     @contextmanager
-    def _exclusive(self, handle, *, closing=False, stream_access=False):
+    def _exclusive(
+        self, handle, *, closing=False, stream_access=False,
+        allow_lost_observation=False,
+    ):
         if id(handle) in self._failed_initializations and not closing:
             raise RelationalClientError(
                 'Firebird initialization failed; attachment is cleanup-only')
@@ -289,10 +419,39 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird query is running; cancel or wait before '
                     'using this session')
+            if (
+                not closing and not allow_lost_observation and
+                state.uncommitted_connection_lost
+            ):
+                raise self._uncommitted_lost_error(state.lost_status_codes)
+            if (
+                not (closing or stream_access) and state.stream_expired and
+                state.result_stream is None and state.blob_upload is None and
+                self._can_auto_reconnect(state)
+            ):
+                if (
+                    state.result_cleanup_failed or
+                    state.attachment_liveness_failed or
+                    state.cancellation_state_unknown
+                ):
+                    self._rebind_live_attachment(handle, state)
+                else:
+                    state.stream_expired = False
+                    state.stream_owner = None
+                    state.stream_last_activity = None
             if ((state.result_stream is not None or state.stream_expired) and
                     not (closing or stream_access)):
                 raise RelationalClientError(
                     'Close the streaming result before using this session')
+            if (
+                not closing and not allow_lost_observation and
+                (
+                    state.cancellation_state_unknown or
+                    state.result_cleanup_failed or
+                    state.attachment_liveness_failed
+                ) and self._can_auto_reconnect(state)
+            ):
+                self._rebind_live_attachment(handle, state)
             if state.cancellation_state_unknown and not closing:
                 raise RelationalClientError(
                     'Firebird cancellation state is unknown; close this '
@@ -309,7 +468,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 raise RelationalClientError(
                     'Firebird visual task state is unknown; close this '
                     'session and explicitly reconnect')
-            if state.attachment_liveness_failed and not closing:
+            if (
+                state.attachment_liveness_failed and
+                not closing and not allow_lost_observation
+            ):
                 raise RelationalClientError(
                     'Firebird attachment liveness check failed; close this '
                     'session and explicitly reconnect')
@@ -410,6 +572,42 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             execution_completed = diagnostic_flag(
                 exc, 'native_execution_completed')
             cleanup_failed = diagnostic_flag(exc, 'cursor_cleanup_failed')
+            reconnect_required = bool(
+                getattr(exc, 'reconnect_required', False) or
+                state.uncommitted_connection_lost
+            )
+            had_uncommitted = bool(
+                getattr(exc, 'had_uncommitted_transaction', False) or
+                state.uncommitted_connection_lost
+            )
+            error_code = getattr(exc, 'code', None) or (
+                'TRANSACTION_CONNECTION_LOST' if reconnect_required else None
+            )
+            error_payload = {
+                'message': (
+                    str(exc) if reconnect_required else (
+                        'Firebird query executed, but result cleanup '
+                        'failed. Do not replay the statement.'
+                        if execution_completed
+                        else ('Firebird query failed and cursor cleanup '
+                              'did not complete. Do not replay the '
+                              'statement; close this session.'
+                              if cleanup_failed
+                              else 'Firebird query did not complete.')) +
+                    ' ' + QUERY_FAILURE_NOTICE
+                ),
+                'error_type': type(exc).__name__,
+                'native_status_codes': list(codes),
+                'native_execution_completed': execution_completed,
+                'cursor_cleanup_failed': cleanup_failed,
+                'cleanup_status_codes': list(status_codes(
+                    exc, 'cleanup_gds_codes')),
+            }
+            if error_code:
+                error_payload['code'] = error_code
+            if reconnect_required:
+                error_payload['reconnect_required'] = True
+                error_payload['had_uncommitted_transaction'] = had_uncommitted
             native = {
                 'result_kind': self.config.profile.result_kind,
                 'schema': {'columns': []}, 'complete': True,
@@ -418,24 +616,12 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     'rows': [], 'rowcount': None,
                     'execution_state': 'cancelled' if 335544794 in codes
                     else 'failed',
-                    'error': {
-                        'message': (
-                            'Firebird query executed, but result cleanup '
-                            'failed. Do not replay the statement.'
-                            if execution_completed
-                            else ('Firebird query failed and cursor cleanup '
-                                  'did not complete. Do not replay the '
-                                  'statement; close this session.'
-                                  if cleanup_failed
-                                  else 'Firebird query did not complete.')) +
-                        ' ' + QUERY_FAILURE_NOTICE,
-                        'error_type': type(exc).__name__,
-                        'native_status_codes': list(codes),
-                        'native_execution_completed': execution_completed,
-                        'cursor_cleanup_failed': cleanup_failed,
-                        'cleanup_status_codes': list(status_codes(
-                            exc, 'cleanup_gds_codes')),
-                    },
+                    **({'code': error_code} if error_code else {}),
+                    **({
+                        'reconnect_required': True,
+                        'had_uncommitted_transaction': had_uncommitted,
+                    } if reconnect_required else {}),
+                    'error': error_payload,
                 },
             }
         except BaseException as interruption:
@@ -499,7 +685,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             if state.attachment_liveness_failed:
                 native['payload']['session_reuse_blocked'] = True
                 native['payload']['session_reuse_blocked_reason'] = (
-                    'attachment_liveness_failed')
+                    'uncommitted_transaction_connection_lost'
+                    if state.uncommitted_connection_lost
+                    else 'attachment_liveness_failed'
+                )
             if state.result_cleanup_failed:
                 native['payload']['session_reuse_blocked'] = True
                 native['payload']['session_reuse_blocked_reason'] = (
@@ -514,12 +703,20 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     query.handle._att.cancel_operation(
                         self.module.CancelType.ENABLE)
                 except BaseException as exc:
-                    state.cancellation_state_unknown = True
-                    native['payload']['session_reuse_blocked'] = True
-                    native['payload']['session_reuse_blocked_reason'] = (
-                        'cancellation_state_unknown')
-                    native['payload']['cancel_cleanup_error_type'] = (
-                        type(exc).__name__)
+                    reconnected = False
+                    if self._can_auto_reconnect(state):
+                        try:
+                            self._rebind_live_attachment(query.handle, state)
+                            reconnected = True
+                        except Exception:
+                            reconnected = False
+                    if not reconnected:
+                        state.cancellation_state_unknown = True
+                        native['payload']['session_reuse_blocked'] = True
+                        native['payload']['session_reuse_blocked_reason'] = (
+                            'cancellation_state_unknown')
+                        native['payload']['cancel_cleanup_error_type'] = (
+                            type(exc).__name__)
             query.result = native
             query.done = True
             state.query = None
@@ -604,8 +801,35 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         if starts_transaction(request.get('source')):
             return self._start_transaction_sql(handle, request)
         command = transaction_command(request.get('source'))
+        state = self._attachment_states.get(id(handle))
         if command is None:
-            token = super().execute(handle, request)
+            try:
+                token = super().execute(handle, request)
+            except Exception as exc:
+                codes = status_codes(exc)
+                if state is not None and CONNECTION_DROP_GDS_CODES.intersection(codes):
+                    if self._can_auto_reconnect(state):
+                        self._rebind_live_attachment(handle, state)
+                        token = super().execute(handle, request)
+                    elif (
+                        state.open_request is not None and
+                        state.explicit_transaction_open
+                    ):
+                        state.uncommitted_connection_lost = True
+                        state.attachment_liveness_failed = True
+                        state.lost_status_codes = tuple(codes)
+                        raise self._uncommitted_lost_error(codes) from None
+                    else:
+                        raise
+                else:
+                    raise
+            if (
+                state is not None and
+                not state.autocommit_enabled and
+                getattr(handle, 'autocommit', False) is not True and
+                _MUTATING_SQL_PREFIX_RE.match(request.get('source') or '')
+            ):
+                state.explicit_transaction_open = True
             token.firebird_statement_metrics = copy.deepcopy(
                 getattr(token.cursor, 'statement_metrics', None))
             if dialect is not None:
@@ -626,7 +850,25 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             raise RelationalClientError(
                 'Firebird transaction commands do not accept parameters')
         action, retaining = command
-        receipt = self._finish_transaction(handle, action, retaining)
+        try:
+            receipt = self._finish_transaction(handle, action, retaining)
+        except Exception as exc:
+            codes = status_codes(exc)
+            if (
+                state is not None and
+                state.open_request is not None and
+                state.explicit_transaction_open and
+                CONNECTION_DROP_GDS_CODES.intersection(codes)
+            ):
+                state.uncommitted_connection_lost = True
+                state.attachment_liveness_failed = True
+                state.lost_status_codes = tuple(codes)
+                raise self._uncommitted_lost_error(codes) from None
+            raise
+        if state is not None and not retaining:
+            state.explicit_transaction_open = False
+            state.uncommitted_connection_lost = False
+            state.lost_status_codes = ()
         token = _ResultToken(None, handle, (), [], None, closed=True)
         token.firebird_transaction_receipt = receipt
         if dialect is not None:
@@ -697,6 +939,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             error.gds_codes = status_codes(exc)
             raise error from None
         handle.main_transaction._tra = native
+        state = self._attachment_states.get(id(handle))
+        if state is not None:
+            state.explicit_transaction_open = True
         token = _ResultToken(None, handle, (), [], None, closed=True)
         if dialect is not None:
             token.firebird_statement_dialect = dialect
@@ -743,13 +988,21 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             except Exception as exc:
                 state = self._state(token.connection)
                 with state.lock:
-                    state.result_cleanup_failed = True
-                error = RelationalClientError(
-                    'Firebird query executed but result cursor release '
-                    'failed (' + type(exc).__name__ + ')')
-                error.gds_codes = status_codes(exc)
-                error.native_execution_completed = True
-                raise error from None
+                    healed = False
+                    if self._can_auto_reconnect(state):
+                        try:
+                            self._rebind_live_attachment(token.connection, state)
+                            healed = True
+                        except Exception:
+                            healed = False
+                    if not healed:
+                        state.result_cleanup_failed = True
+                        error = RelationalClientError(
+                            'Firebird query executed but result cursor release '
+                            'failed (' + type(exc).__name__ + ')')
+                        error.gds_codes = status_codes(exc)
+                        error.native_execution_completed = True
+                        raise error from None
             token.closed = True
         result = super().describe_result(token)
         metrics = getattr(token, 'firebird_statement_metrics', None)
@@ -784,18 +1037,60 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     'protocol_id': self.config.profile.protocol_id}
 
     def describe_transaction(self, handle):
-        with self._exclusive(handle) as state:
+        with self._exclusive(handle, allow_lost_observation=True) as state:
+            if state.uncommitted_connection_lost:
+                return {
+                    'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False,
+                    'native_observation': (
+                        'Firebird TransactionManager / transaction info'
+                    ),
+                    'state': 'connection_lost',
+                    'attachment_live': False,
+                    'code': 'TRANSACTION_CONNECTION_LOST',
+                    'reconnect_required': True,
+                    'had_uncommitted_transaction': True,
+                    'native_status_codes': list(state.lost_status_codes),
+                    'fields': {},
+                    'attachment_fields': {},
+                }
             result = super().describe_transaction(handle)
             if result.get('attachment_live') is False:
+                if self._can_auto_reconnect(state):
+                    try:
+                        self._rebind_live_attachment(handle, state)
+                        reconnected = super().describe_transaction(handle)
+                        if reconnected.get('attachment_live') is not False:
+                            return {**reconnected, 'reconnected': True}
+                        result = reconnected
+                    except Exception:
+                        pass
+                if state.open_request is not None and state.explicit_transaction_open:
+                    state.uncommitted_connection_lost = True
+                    state.attachment_liveness_failed = True
+                    state.lost_status_codes = tuple(
+                        result.get('native_status_codes') or ()
+                    )
+                    return {
+                        **result,
+                        'state': 'connection_lost',
+                        'code': 'TRANSACTION_CONNECTION_LOST',
+                        'reconnect_required': True,
+                        'had_uncommitted_transaction': True,
+                    }
                 state.attachment_liveness_failed = True
             return result
 
     def control_transaction(self, handle, action):
-        with self._exclusive(handle):
+        with self._exclusive(handle) as state:
             if action not in self.transaction_actions:
                 raise RelationalClientError(
                     'Firebird transaction action is unavailable')
-            return self._finish_transaction(handle, action)
+            receipt = self._finish_transaction(handle, action)
+            state.explicit_transaction_open = False
+            state.uncommitted_connection_lost = False
+            state.lost_status_codes = ()
+            return receipt
 
     def close_session(self, handle):
         with self._exclusive(handle, closing=True):

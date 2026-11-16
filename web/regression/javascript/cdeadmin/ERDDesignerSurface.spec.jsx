@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {useEffect, useRef} from 'react';
 import {
   act,
   fireEvent,
@@ -17,6 +18,12 @@ import {
 } from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {libraries, setupDDNDOM} from './ddnTestRuntime';
+import {
+  ProjectShellProvider,
+  ProjectWorkbenchFrame,
+  useProjectShell,
+} from 'sources/cdeadmin_ui/shell/ProjectShell';
+import {TActionsRegistry} from 'sources/cdeadmin_ui/actions/t_actions';
 import {
   ERDDesignerSurface,
   ERDModelsNavigator,
@@ -808,5 +815,160 @@ describe('Task-specific ERD and data modelling designer', () => {
     expect(
       await within(whereDialog).findByText('Orders Revenue Dashboard')
     ).toBeInTheDocument();
+  });
+
+  it('integrates cooperatively into ProjectShell 6-region anatomy (3a navigator, 3b ribbon + 3b1 quick actions, 3c inspector, 3d status, zero in-3e DesignerTabbedMenu)', async () => {
+    let headVer = 2;
+    const mockClient = {
+      openSession: jest.fn(async () => makeSession({suspect: true, version: headVer})),
+      inspectErdElements: jest.fn(async () => ({
+        look_handdrawn: false,
+        conceptual_entities: [
+          {id: '019a0000-0000-7000-8000-000000000201', name: 'Customer', area: 'CRM', note: ''},
+        ],
+        conceptual_relations: [],
+        conceptual_notes: [],
+        logical_entities: [],
+        logical_relations: [],
+        physical_tables: [
+          {
+            id: '019a0000-0000-7000-8000-000000000301',
+            name: 'CustomerAccounts',
+            schema: 'public',
+            engine: 'postgresql',
+            fields: [],
+            indexes: [],
+            foreign_keys: [],
+          },
+        ],
+        deployment_nodes: [],
+        deployment_links: [],
+        level_links: [],
+        extensions: {},
+      })),
+      evaluateErdStandards: jest.fn(async () => ({
+        violations: [],
+        active_count: 0,
+        waived_count: 0,
+        rules: {},
+        waivers: [],
+      })),
+      saveVersion: jest.fn(async () => {
+        headVer += 1;
+        return makeSession({suspect: true, version: headVer});
+      }),
+    };
+
+    function AutoOpenErd() {
+      const shell = useProjectShell();
+      const openedRef = useRef(false);
+      useEffect(() => {
+        if (shell && !openedRef.current) {
+          openedRef.current = true;
+          shell.openInlineTab({
+            instanceId: 'erd-designer-1',
+            appId: 'erd-designer',
+            title: 'Billing ERD',
+            supportsLeftDrawer: true,
+            leftOpen: true,
+            supportsRightDrawer: true,
+            rightOpen: true,
+            supportsTabbedIconBar: true,
+            renderWorkArea: () => (
+              <ERDDesignerSurface
+                projectId="models"
+                designId="019a0000-0000-7000-8000-000000000010"
+                client={mockClient}
+              />
+            ),
+          });
+        }
+      }, [shell]);
+      return null;
+    }
+
+    const actionsRegistry = new TActionsRegistry();
+    const ShellHarness = withTheme(() => (
+      <ProjectShellProvider
+        actionsRegistry={actionsRegistry}
+        fetchImpl={jest.fn(async () => ({ok: false, status: 404, json: async () => ({})}))}
+      >
+        <AutoOpenErd />
+        <ProjectWorkbenchFrame />
+      </ProjectShellProvider>
+    ));
+
+    const {container} = render(<ShellHarness />);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-area-part="3e"] [data-cde-surface="diagram.ddn.viewer"]')
+      ).not.toBeNull()
+    );
+
+    const area3e = container.querySelector('[data-area-part="3e"]');
+    const area3a = container.querySelector('[data-area-part="3a"]');
+    const area3bPanel = container.querySelector('.sr-island-3b .snb-panel');
+    const area3c = container.querySelector('[data-area-part="3c"]');
+    const area3d = container.querySelector('[data-area-part="3d"]');
+
+    expect(area3e).not.toBeNull();
+    expect(area3a).not.toBeNull();
+    expect(area3bPanel).not.toBeNull();
+    expect(area3c).not.toBeNull();
+    expect(area3d).not.toBeNull();
+
+    // Zero DesignerTabbedMenu or duplicate right inspector inside Area 3e
+    expect(
+      area3e.querySelector('[data-cdeadmin-qa-key="designer-tabbed-menu"]')
+    ).toBeNull();
+    expect(within(area3e).queryByTestId('erd-property-inspector')).toBeNull();
+
+    // Area 3b ribbon hosts promoted ERD commands and invokes real callbacks
+    const saveRibbonBtn = await within(area3bPanel).findByRole('button', {
+      name: /Save Checkpoint/i,
+    });
+    fireEvent.click(saveRibbonBtn);
+    const saveDialog = await screen.findByRole('dialog', {
+      name: /Save ERD checkpoint/i,
+    });
+    fireEvent.click(within(saveDialog).getByRole('button', {name: /Cancel/i}));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', {name: /Save ERD checkpoint/i})
+      ).not.toBeInTheDocument()
+    );
+
+    // Area 3b1 Quick-Access Save invokes real openSaveDialog -> saveVersion callback
+    const area3b = container.querySelector('.sr-island-3b');
+    const quickSaveBtn = within(area3b).getAllByRole('button', {
+      name: /^Save$/i,
+    })[0];
+    fireEvent.click(quickSaveBtn);
+    const saveDialog2 = await screen.findByRole('dialog', {
+      name: /Save ERD checkpoint/i,
+    });
+    fireEvent.click(
+      within(saveDialog2).getByRole('button', {name: /^Save version$/i})
+    );
+    await waitFor(() => expect(mockClient.saveVersion).toHaveBeenCalledTimes(1));
+
+    // Area 3a renders Model Navigator; clicking Customer selects it into Area 3c Inspector
+    expect(
+      await within(area3a).findByRole('navigation', {name: /ERD Model Navigator/i})
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(area3a).getByRole('button', {name: /Customer Conceptual/i})
+    );
+
+    const inspector3c = await within(area3c).findByTestId('erd-property-inspector');
+    await waitFor(() =>
+      expect(within(inspector3c).getByDisplayValue('Customer')).toBeInTheDocument()
+    );
+
+    // Area 3d renders status bar with title, status, engine, and suspect binding state
+    expect(within(area3d).getByText('Billing ERD')).toBeInTheDocument();
+    expect(within(area3d).getByText('Draft')).toBeInTheDocument();
+    expect(within(area3d).getByText(/1 suspect/i)).toBeInTheDocument();
   });
 });

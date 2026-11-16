@@ -1,6 +1,7 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const modes = {text_contains: 'Text contains (literal)', text_exact: 'Text equals', text_prefix: 'Text starts with (literal)',
   numeric_equal: 'Numeric equals', binary_exact: 'Binary equals (hex)', binary_contains: 'Binary contains (hex)', is_null: 'Is NULL'};
@@ -75,6 +76,7 @@ export default function MySQLContentSearch({post, databaseTargetId=null}) {
     return {...current, [details.table_name]: {...item, columns:selected ? item.columns.filter(c => c!==column) : [...item.columns,column]}};
   });
   return <Box aria-label="MySQL database content search" sx={{p:1,height:'100%',overflow:'auto'}}>
+    <FormReference formKey="mysql-content-search" />
     <Typography component="h3">MySQL database content search</Typography>
     <Alert severity="info">Search persistent base tables visible to the native account. Observers own separate read-only transactions.
       Results are bounded, private and kept in memory for five minutes. Native server logging still applies.</Alert>

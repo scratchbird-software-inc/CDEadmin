@@ -13,11 +13,20 @@ import pgAdmin from 'sources/pgadmin';
 import getApiInstance from 'sources/api_instance';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import {
-  LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, providerEndpointUrl, reportServerEditorFailure,
-  tryOpenFamilyEditor, tryOpenServerForm,
+  LEGACY_REGISTRATION_RETIRED, familyEditorContextActions, promptEndpointVerification,
+  providerEndpointUrl, reportServerEditorFailure, tryOpenFamilyEditor, tryOpenServerForm,
 } from './ProviderObjectEditor';
 import {diagramChoices} from 'sources/cdeadmin_ui/integrations/ddn/toDiagramMenu';
-import {requestDiagramCreate} from 'sources/cdeadmin_ui/integrations/ddn/DiagramsNavigator';
+import {
+  BI_DESIGN_OPEN_EVENT,
+  CUBE_OPEN_EVENT,
+  ERD_MODEL_OPEN_EVENT,
+  SCREEN_MESH_OPEN_EVENT,
+  requestBIDesignCreate,
+  requestCubeCreate,
+  requestERDModelCreate,
+  requestScreenMeshCreate,
+} from 'sources/cdeadmin_ui/integrations/ddn';
 
 const ACTION_SCHEMA = 'cdeadmin.context-action.v1';
 const SAFE_HANDLERS = new Set([
@@ -94,24 +103,47 @@ function serverSelection(item) {
   return {item: null, data: null};
 }
 
-function openNodeServerProperties(itemData, item) {
-  const tree = pgAdmin.Browser?.tree;
-  const targetItem = item || tree?.selected?.();
-  const targetData = itemData || (targetItem ? tree?.itemData?.(targetItem) : null);
-  const serverNode = pgAdmin.Browser?.Nodes?.server;
-  if (
-    typeof document !== 'undefined' &&
-    typeof window !== 'undefined' &&
-    document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
-  ) {
-    if (targetItem) {
-      void tree?.select?.(targetItem);
-    }
+function hasNavigatorOrProjectShell() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return false;
+  }
+  return Boolean(
+    document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]') ||
+    document.querySelector('[data-cdeadmin-qa-key="project-shell-backdrop"]')
+  );
+}
+
+function focusNavigatorPropertiesTab(tree, targetItem) {
+  if (targetItem) {
+    void tree?.select?.(targetItem);
+    const selectedData = tree?.itemData?.(targetItem);
+    pgAdmin.Browser?.Events?.trigger?.('pgadmin-browser:tree:selected', targetItem, selectedData);
+  }
+  window.dispatchEvent(
+    new CustomEvent('scratchrobin:open-app-surface', {
+      detail: {appId: 'data-navigator', payload: {tab: 'properties', focusEditor: true}},
+    })
+  );
+  const selectProperties = () => {
     window.dispatchEvent(
       new CustomEvent('scratchrobin:navigator-select-tab', {
         detail: {tab: 'properties', focusEditor: true},
       })
     );
+  };
+  selectProperties();
+  if (typeof window.setTimeout === 'function') {
+    window.setTimeout(selectProperties, 0);
+  }
+}
+
+export function openNodeServerProperties(itemData, item) {
+  const tree = pgAdmin.Browser?.tree;
+  const targetItem = item || tree?.selected?.();
+  const targetData = itemData || (targetItem ? tree?.itemData?.(targetItem) : null);
+  const serverNode = pgAdmin.Browser?.Nodes?.server;
+  if (hasNavigatorOrProjectShell()) {
+    focusNavigatorPropertiesTab(tree, targetItem);
     return true;
   }
   if (targetData?._type === 'localhost_placeholder') {
@@ -142,22 +174,11 @@ function openNodeServerProperties(itemData, item) {
   return false;
 }
 
-function openNodeDatabaseProperties(itemData, item, fallbackMenu = null) {
+export function openNodeDatabaseProperties(itemData, item, fallbackMenu = null) {
   const tree = pgAdmin.Browser?.tree;
   const targetItem = item || tree?.selected?.();
-  if (
-    typeof document !== 'undefined' &&
-    typeof window !== 'undefined' &&
-    document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
-  ) {
-    if (targetItem) {
-      void tree?.select?.(targetItem);
-    }
-    window.dispatchEvent(
-      new CustomEvent('scratchrobin:navigator-select-tab', {
-        detail: {tab: 'properties', focusEditor: true},
-      })
-    );
+  if (hasNavigatorOrProjectShell()) {
+    focusNavigatorPropertiesTab(tree, targetItem);
     return true;
   }
   if (fallbackMenu) {
@@ -176,51 +197,133 @@ function showConnectorInformation(args, context) {
   return false;
 }
 
+const DESIGN_SHORTCUT_TARGETS = Object.freeze({
+  erd_from_database: {
+    appId: 'erd-designer',
+    openEvent: ERD_MODEL_OPEN_EVENT,
+    requestCreate: requestERDModelCreate,
+  },
+  where_used: {
+    appId: 'erd-designer',
+    openEvent: ERD_MODEL_OPEN_EVENT,
+    requestCreate: null,
+  },
+  cube_from_table: {
+    appId: 'cube-designer',
+    openEvent: CUBE_OPEN_EVENT,
+    requestCreate: requestCubeCreate,
+  },
+  bi_question_from_table: {
+    appId: 'bi-designer',
+    openEvent: BI_DESIGN_OPEN_EVENT,
+    requestCreate: requestBIDesignCreate,
+  },
+  screen_mesh_from_table: {
+    appId: 'screen-mesh-designer',
+    openEvent: SCREEN_MESH_OPEN_EVENT,
+    requestCreate: requestScreenMeshCreate,
+  },
+});
+
+const ACTIVITY_APP_SURFACE = Object.freeze({
+  'activity.diagrams': 'erd-designer',
+  'activity.erd-models': 'erd-designer',
+  'activity.cubes': 'cube-designer',
+  'activity.bi': 'bi-designer',
+  'activity.bi-designs': 'bi-designer',
+  'activity.screen-meshes': 'screen-mesh-designer',
+});
+
+const SURFACE_APP_TARGETS = Object.freeze({
+  'bi.questions': {appId: 'bi-designer', openEvent: BI_DESIGN_OPEN_EVENT},
+  'design.bi': {appId: 'bi-designer', openEvent: BI_DESIGN_OPEN_EVENT},
+  'erd.models': {appId: 'erd-designer', openEvent: ERD_MODEL_OPEN_EVENT},
+  'design.erd': {appId: 'erd-designer', openEvent: ERD_MODEL_OPEN_EVENT},
+  'cubes.models': {appId: 'cube-designer', openEvent: CUBE_OPEN_EVENT},
+  'design.cube': {appId: 'cube-designer', openEvent: CUBE_OPEN_EVENT},
+  'screen.meshes': {appId: 'screen-mesh-designer', openEvent: SCREEN_MESH_OPEN_EVENT},
+  'design.screen_mesh': {appId: 'screen-mesh-designer', openEvent: SCREEN_MESH_OPEN_EVENT},
+});
+
 /**
  * Engine-neutral opener for a surface registered in the workbench tool
- * registry (cdeadmin_ui/platform/SurfaceRegistry). The descriptor names the
- * surface; the endpoint comes from the tree selection. No engine knowledge.
+ * registry or ProjectShell designer surfaces. The descriptor names the
+ * surface or design shortcut; the endpoint comes from the tree selection.
  */
 export function openRegisteredTool(surfaceId, endpoint, title, args = {}) {
-  const serverNode = pgAdmin.Browser.Nodes.server;
-  const workbench = pgAdmin.Browser.CDEadminCommandContext?.();
-  if(args?.activity && args?.design_shortcut) {
-    if(!endpoint?.data || typeof workbench?.showActivity !== 'function') {
+  const serverNode = pgAdmin.Browser.Nodes?.server;
+  const workbench = pgAdmin.Browser?.CDEadminCommandContext?.();
+  if(args?.design_shortcut || args?.activity) {
+    if(!endpoint?.data) {
       throw new Error(gettext('The workbench tool host is unavailable.'));
     }
     const endpointId = Number(endpoint.data._id ?? endpoint.data.id);
     const label = endpoint.data.label || endpoint.data._label || '';
-    workbench.showActivity(args.activity);
+    const shortcutTarget = DESIGN_SHORTCUT_TARGETS[args.design_shortcut] || null;
+    const appId = shortcutTarget?.appId || ACTIVITY_APP_SURFACE[args.activity] || 'erd-designer';
+    const payload = {
+      ...args,
+      title,
+      endpointId,
+      providerId: endpoint.data.cde_engine_id,
+      endpointLabel: label,
+    };
     if(typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new CustomEvent('cdeadmin:design-shortcut', {
-        detail: {
-          ...args,
-          endpointId,
-          providerId: endpoint.data.cde_engine_id,
-          endpointLabel: label,
-        },
+      window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+        detail: {appId, payload},
       }));
+      shortcutTarget?.requestCreate?.();
+      if(shortcutTarget?.openEvent) {
+        window.dispatchEvent(new CustomEvent(shortcutTarget.openEvent, {detail: payload}));
+      }
+      return true;
     }
-    return true;
+    if(typeof workbench?.showActivity === 'function') {
+      workbench.showActivity(args.activity);
+      shortcutTarget?.requestCreate?.();
+      return true;
+    }
+    throw new Error(gettext('The workbench tool host is unavailable.'));
   }
   if(typeof surfaceId !== 'string' || !surfaceId) {
     throw new Error(gettext('The tool descriptor does not name a surface.'));
   }
-  if(!endpoint?.data || typeof workbench?.openSurface !== 'function') {
+  if(!endpoint?.data) {
     throw new Error(gettext('The workbench tool host is unavailable.'));
   }
   const endpointId = Number(endpoint.data._id ?? endpoint.data.id);
   const label = endpoint.data.label || endpoint.data._label || '';
-  return workbench.openSurface(surfaceId, {
-    toolInstanceId: `${surfaceId}:${endpointId}`,
-    restoreRef: `${surfaceId}:${endpointId}`,
-    title: label ? gettext('%s — %s', title, label) : title,
-    context: {providerId: endpoint.data.cde_engine_id, endpointId},
-  }, {
-    api: getApiInstance(),
-    endpointUrl: providerEndpointUrl(serverNode, endpoint.item, endpoint.data),
-    endpointLabel: label,
-  }).catch((error) => pgAdmin.Browser.notifier.error(error?.message || String(error)));
+  if(typeof workbench?.openSurface === 'function') {
+    return workbench.openSurface(surfaceId, {
+      toolInstanceId: `${surfaceId}:${endpointId}`,
+      restoreRef: `${surfaceId}:${endpointId}`,
+      title: label ? gettext('%s — %s', title, label) : title,
+      context: {providerId: endpoint.data.cde_engine_id, endpointId},
+    }, {
+      api: getApiInstance(),
+      endpointUrl: providerEndpointUrl(serverNode, endpoint.item, endpoint.data),
+      endpointLabel: label,
+    }).catch((error) => pgAdmin.Browser.notifier.error(error?.message || String(error)));
+  }
+  const surfaceTarget = SURFACE_APP_TARGETS[surfaceId] || {appId: surfaceId, openEvent: null};
+  if(typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    const payload = {
+      ...args,
+      surface: surfaceId,
+      title: label ? gettext('%s — %s', title, label) : title,
+      endpointId,
+      providerId: endpoint.data.cde_engine_id,
+      endpointLabel: label,
+    };
+    window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+      detail: {appId: surfaceTarget.appId, payload},
+    }));
+    if(surfaceTarget.openEvent) {
+      window.dispatchEvent(new CustomEvent(surfaceTarget.openEvent, {detail: payload}));
+    }
+    return true;
+  }
+  throw new Error(gettext('The workbench tool host is unavailable.'));
 }
 
 function dispatch(action, args, context) {
@@ -439,16 +542,38 @@ export function providerQueryTool(itemData, item) {
     'Select a server, database or object to open its Query Tool.'), open: () => false};
 }
 
+function isDatabaseConnectAction(action) {
+  const suffix = String(action?.command_id || '').split('.').at(-1);
+  if (suffix === 'connect' || suffix === 'connect_database') return true;
+  const normalizedLabel = String(action?.label || '').trim().toLowerCase().replace(/\.+$/, '');
+  return normalizedLabel === 'connect database' || normalizedLabel === 'connect to database';
+}
+
 export function providerContextMenuItems(itemData, item=null) {
   if(!isProviderContextNode(itemData)) return null;
   const rt = (txt) =>
     typeof gettext.retranslate === 'function' ? gettext.retranslate(txt) : gettext(txt);
-  return itemData.cde_context_actions.filter((action) =>
-    action?.schema === ACTION_SCHEMA &&
-    typeof action.command_id === 'string' &&
-    typeof action.label === 'string' &&
-    SAFE_HANDLERS.has(action.handler)
-  ).map((action) => ({
+  const seenCommandIds = new Set();
+  const isDbNode =
+    itemData?._type === 'cde_database_target' || itemData?.cde_resource_kind === 'database';
+  let seenDbConnect = false;
+  return itemData.cde_context_actions.filter((action) => {
+    if (
+      action?.schema !== ACTION_SCHEMA ||
+      typeof action.command_id !== 'string' ||
+      typeof action.label !== 'string' ||
+      !SAFE_HANDLERS.has(action.handler)
+    ) {
+      return false;
+    }
+    if (seenCommandIds.has(action.command_id)) return false;
+    if (isDbNode && isDatabaseConnectAction(action)) {
+      if (seenDbConnect) return false;
+      seenDbConnect = true;
+    }
+    seenCommandIds.add(action.command_id);
+    return true;
+  }).map((action) => ({
     name: action.command_id.replace(/[^a-zA-Z0-9_]+/g, '_'),
     commandId: action.command_id,
     commandVersion: action.command_version || 1,
@@ -509,10 +634,50 @@ export function openInheritedTool(tool, item) {
   }
 }
 
-function executeProviderAction(menu, itemData, item) {
-  const invoke = ()=>menu.commandHandler(
+function isCredentialRequiredError(error) {
+  const status = error?.response?.status ?? error?.status;
+  const data = error?.response?.data;
+  const code =
+    error?.code ||
+    data?.code ||
+    data?.data?.code ||
+    data?.result?.code ||
+    data?.error?.code;
+  if (code === 'CREDENTIAL_REQUIRED') return true;
+  if (
+    status === 401 &&
+    /credential|verify|password/i.test(String(data?.errormsg || error?.message || ''))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function executeProviderAction(menu, itemData, item) {
+  const invokeOnce = () => menu.commandHandler(
     menu.commandArguments({itemData, item}), {itemData, item}
   );
+  const invoke = () => {
+    const result = invokeOnce();
+    if (!result || typeof result.then !== 'function') {
+      return result;
+    }
+    return result.catch(async (error) => {
+      if (isCredentialRequiredError(error)) {
+        const endpoint = serverSelection(item || pgAdmin.Browser?.tree?.selected?.());
+        const args = menu.commandArguments({itemData, item});
+        const databaseTargetId = args?.database_target_id || itemData?.cde_database_target_id;
+        if (endpoint.item) {
+          const verified = await promptEndpointVerification(endpoint.item, databaseTargetId);
+          if (verified) {
+            return invokeOnce();
+          }
+        }
+        return false;
+      }
+      throw error;
+    });
+  };
   if(!menu.requiresConfirmation) return invoke();
   return pgAdmin.Browser.notifier.confirm(
     gettext('Confirm provider action'),
@@ -558,8 +723,22 @@ function toDiagramEntry(menu, itemData, item) {
     providerId: itemData?.cde_provider_id || '', objectTypes: [itemData?._type || 'object'],
     children: [...listed, {id: `${menu.commandId}.new`, label: gettext('New diagram…'),
       iconKey: 'action.new', enabled: true, execute: () => {
-        pgAdmin.Browser.CDEadminCommandContext?.().showActivity?.('activity.diagrams');
-        requestDiagramCreate();
+        const args = menu.commandArguments({itemData, item});
+        const payload = {
+          ...args,
+          providerId: itemData?.cde_engine_id || itemData?.cde_provider_id || '',
+          source: 'to_diagram',
+        };
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+            detail: {appId: 'erd-designer', payload},
+          }));
+          requestERDModelCreate();
+          window.dispatchEvent(new CustomEvent(ERD_MODEL_OPEN_EVENT, {detail: payload}));
+          return true;
+        }
+        requestERDModelCreate();
+        return true;
       }}],
   };
 }

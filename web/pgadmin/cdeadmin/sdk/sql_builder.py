@@ -29,6 +29,7 @@ OPTIONS = (
     ('cte', 'Common table expressions (WITH)'),
     ('cte.recursive', 'Recursive common table expressions'),
     ('cte.materialized', 'MATERIALIZED and NOT MATERIALIZED'),
+    ('cte.cycle', 'Recursive CTE cycle detection (CYCLE)'),
     ('distinct', 'SELECT DISTINCT'),
     ('distinct_on', 'DISTINCT ON'),
     ('join.inner', 'Inner join'),
@@ -42,6 +43,9 @@ OPTIONS = (
     ('where.or', 'OR conditions'),
     ('aggregate', 'Aggregate functions'),
     ('aggregate.distinct', 'Aggregates of distinct values'),
+    ('window', 'Window functions (OVER)'),
+    ('window.partition_by', 'Window PARTITION BY'),
+    ('window.order_by', 'Window ORDER BY'),
     ('group_by', 'GROUP BY'),
     ('group_by.rollup', 'GROUP BY ROLLUP'),
     ('group_by.cube', 'GROUP BY CUBE'),
@@ -59,6 +63,8 @@ OPTIONS = (
 )
 OPTION_IDS = tuple(option for option, _label in OPTIONS)
 AGGREGATES = ('count', 'sum', 'avg', 'min', 'max')
+RANKING_WINDOWS = ('row_number', 'rank', 'dense_rank')
+WINDOWS = (*RANKING_WINDOWS, *AGGREGATES)
 COMPARISONS = ('=', '<>', '<', '<=', '>', '>=', 'LIKE', 'NOT LIKE')
 JOINS = {'inner': 'JOIN', 'left': 'LEFT JOIN', 'right': 'RIGHT JOIN',
          'full': 'FULL OUTER JOIN', 'cross': 'CROSS JOIN',
@@ -213,17 +219,25 @@ class _Writer:
                          _list(values, label, empty=False))
 
     # -- expressions -----------------------------------------------------
-    def expression(self, value, label='Expression', aggregates=True):
+    def expression(self, value, label='Expression', aggregates=True,
+                   windows=False):
         # An aggregate's argument is a column or a value: SQL does not nest
         # aggregates, and this keeps the model's depth bounded.
-        value = _object(value, ('column', 'value', 'aggregate')
-                        if aggregates else ('column', 'value'), label)
+        if isinstance(value, Mapping) and 'window' in value and not windows:
+            raise SqlBuilderError(
+                'Window functions are only allowed in SELECT columns.')
+        allowed = ('column', 'value',
+                   *(('aggregate',) if aggregates else ()),
+                   *(('window',) if windows else ()))
+        value = _object(value, allowed, label)
         kind, body = _one_of(value, label)
         if kind == 'column':
             parts = _list(body, f'{label} column', empty=False, limit=2)
             return '.'.join(self.name(part, 'Column name') for part in parts)
         if kind == 'value':
             return self.literal(body)
+        if kind == 'window':
+            return self.window(body)
         aggregate = _object(body, ('function', 'distinct', 'argument'),
                             'Aggregate', ('function', 'argument'))
         self.need('aggregate')
@@ -242,6 +256,58 @@ class _Writer:
         argument = self.expression(aggregate['argument'],
                                    'Aggregate argument', aggregates=False)
         return f'{function}({"DISTINCT " if distinct else ""}{argument})'
+
+    def window(self, body):
+        window = _object(
+            body,
+            ('function', 'distinct', 'argument', 'partition_by', 'order_by'),
+            'Window function', ('function',))
+        self.need('window')
+        function = window['function']
+        if function not in WINDOWS:
+            raise SqlBuilderError(
+                f'Window function must be one of {", ".join(WINDOWS)}.')
+        distinct = _flag(window.get('distinct', False), 'Window distinct')
+        raw_arg = window.get('argument')
+        if function in RANKING_WINDOWS:
+            if distinct or raw_arg is not None:
+                raise SqlBuilderError(f'{function} takes no argument.')
+            call = f'{function}()'
+        else:
+            arg = '*' if (raw_arg is None and function == 'count') else raw_arg
+            if arg is None:
+                raise SqlBuilderError(
+                    f'Window {function} needs an argument.')
+            if arg == '*':
+                if function != 'count' or distinct:
+                    raise SqlBuilderError('Only count takes *.')
+                call = 'count(*)'
+            else:
+                if distinct:
+                    self.need('aggregate.distinct')
+                col_expr = _object(arg, ('column',),
+                                   'Window argument', ('column',))
+                written_arg = self.expression(
+                    col_expr, 'Window argument', aggregates=False)
+                call = (f'{function}({"DISTINCT " if distinct else ""}'
+                        f'{written_arg})')
+        over_parts = []
+        partition_by = _list(window.get('partition_by', []),
+                             'Window PARTITION BY')
+        if partition_by:
+            self.need('window.partition_by')
+            over_parts.append('PARTITION BY ' + ', '.join(
+                self.expression(_object(item, ('column',),
+                                        'Window PARTITION BY item',
+                                        ('column',)),
+                                'Window PARTITION BY item', aggregates=False)
+                for item in partition_by))
+        order_by = _list(window.get('order_by', []), 'Window ORDER BY')
+        if order_by:
+            self.need('window.order_by')
+            over_parts.append('ORDER BY ' + ', '.join(
+                self.order(item, aggregates=False) for item in order_by))
+        return f'{call} OVER ({" ".join(over_parts)})'
 
     def expressions(self, values, label):
         return ', '.join(self.expression(item, label) for item in
@@ -327,7 +393,7 @@ class _Writer:
             qualifier = value['all']
             return ('*' if qualifier is None else
                     self.name(qualifier, 'Qualifier') + '.*')
-        text = self.expression(value.get('expr'), 'Column')
+        text = self.expression(value.get('expr'), 'Column', windows=True)
         if value.get('alias') is not None:
             text += ' AS ' + self.name(value['alias'], 'Alias')
         return text
@@ -395,13 +461,15 @@ class _Writer:
         return lines
 
     # -- a compound query ------------------------------------------------
-    def order(self, value):
+    def order(self, value, aggregates=True):
         value = _object(value, ('expr', 'direction', 'nulls'), 'Order',
                         ('expr',))
         direction = value.get('direction', 'asc')
         if direction not in ('asc', 'desc'):
             raise SqlBuilderError('Direction must be asc or desc.')
-        text = f'{self.expression(value["expr"])} {direction.upper()}'
+        expr_sql = self.expression(value['expr'], 'Order expression',
+                                   aggregates=aggregates)
+        text = f'{expr_sql} {direction.upper()}'
         if value.get('nulls') is not None:
             if value['nulls'] not in ('first', 'last'):
                 raise SqlBuilderError('NULLS must be first or last.')
@@ -456,8 +524,10 @@ class _Writer:
 
     # -- the whole statement ---------------------------------------------
     def cte(self, value, visible, recursive):
-        value = _object(value, ('name', 'columns', 'materialized', 'query'),
-                        'CTE', ('name', 'query'))
+        value = _object(
+            value,
+            ('name', 'columns', 'materialized', 'cycle', 'query'),
+            'CTE', ('name', 'query'))
         name = _name(value['name'], 'CTE name')
         if name in visible:
             raise SqlBuilderError(f'Two CTEs are named {name}.')
@@ -470,10 +540,28 @@ class _Writer:
             self.need('cte.materialized')
             head += (' MATERIALIZED' if _flag(materialized, 'materialized')
                      else ' NOT MATERIALIZED')
+        cycle_suffix = ''
+        if value.get('cycle') is not None:
+            self.need('cte.cycle')
+            if not recursive:
+                raise SqlBuilderError('CYCLE requires WITH RECURSIVE.')
+            cycle = _object(
+                value['cycle'],
+                ('columns', 'set_column', 'using_column'),
+                'CTE CYCLE',
+                ('columns', 'set_column', 'using_column'))
+            cycle_cols = self.name_list(cycle['columns'], 'CYCLE column')
+            set_raw = _name(cycle['set_column'], 'CYCLE SET column')
+            using_raw = _name(cycle['using_column'], 'CYCLE USING column')
+            if set_raw == using_raw:
+                raise SqlBuilderError(
+                    'CYCLE SET column and USING column must differ.')
+            cycle_suffix = (f' CYCLE {cycle_cols} SET {self.names(set_raw)} '
+                            f'USING {self.names(using_raw)}')
         # A recursive CTE may read itself; any CTE reads earlier ones.
         scope = visible + [name] if recursive else list(visible)
         body = self.compound(value['query'], scope, indent=4)
-        return name, [head + ' (', *body]
+        return name, [head + ' (', *body], cycle_suffix
 
     def statement(self, model):
         model = _object(model, ('with', 'recursive', 'query'),
@@ -489,9 +577,11 @@ class _Writer:
                 self.need('cte.recursive')
             lines.append('WITH RECURSIVE' if recursive else 'WITH')
             for index, item in enumerate(ctes):
-                name, written = self.cte(item, visible, recursive)
+                name, written, cycle_suffix = self.cte(
+                    item, visible, recursive)
                 lines.extend(written)
-                lines.append('  )' + (',' if index < len(ctes) - 1 else ''))
+                lines.append('  )' + cycle_suffix + (
+                    ',' if index < len(ctes) - 1 else ''))
                 visible.append(name)
         lines.extend(self.compound(model['query'], visible))
         return '\n'.join(lines)
@@ -510,6 +600,60 @@ def build(model: Mapping[str, Any], names: Callable[[str], str],
         statement = _Writer(names, available, {
             **writer.dialect, 'text': 'mysql-hex'}).statement(model)
     return statement
+
+
+def build_stage_preview(model: Mapping[str, Any], stage: str | None,
+                        names: Callable[[str], str],
+                        available: Mapping[str, Mapping[str, Any]],
+                        dialect: Mapping[str, Any] | None = None,
+                        limit: int = 50) -> str:
+    """Compile a bounded read-only preview for a CTE stage or final query."""
+    if type(limit) is not int or not (1 <= limit <= 500):
+        raise SqlBuilderError(
+            'Preview limit must be an integer from 1 to 500.'
+        )
+    if not isinstance(model, Mapping):
+        raise SqlBuilderError('Query model must be an object.')
+    has_limit = (available.get('limit') or {}).get('available') is True
+    if stage is None:
+        query_raw = _object(
+            model.get('query'),
+            ('selects', 'operators', 'order_by', 'limit', 'offset'),
+            'Query', ('selects',))
+        preview_query = dict(query_raw)
+        if has_limit:
+            existing = preview_query.get('limit')
+            if type(existing) is int and existing >= 0:
+                preview_query['limit'] = min(existing, limit)
+            else:
+                preview_query['limit'] = limit
+        preview_model: dict[str, Any] = {**dict(model), 'query': preview_query}
+        return build(preview_model, names, available, dialect)
+
+    stage_name = _name(stage, 'Preview CTE stage')
+    ctes = _list(model.get('with', []), 'WITH', empty=False,
+                 limit=LIMITS['ctes'])
+    cutoff = None
+    for idx, item in enumerate(ctes):
+        if isinstance(item, Mapping) and item.get('name') == stage_name:
+            cutoff = idx
+            break
+    if cutoff is None:
+        raise SqlBuilderError(f'No CTE named {stage_name} is in WITH.')
+    stage_query: dict[str, Any] = {
+        'selects': [{
+            'from': {'source': {'cte': stage_name}},
+            'columns': [],
+        }],
+    }
+    if has_limit:
+        stage_query['limit'] = limit
+    preview_model = {
+        'recursive': model.get('recursive', False),
+        'with': list(ctes[:cutoff + 1]),
+        'query': stage_query,
+    }
+    return build(preview_model, names, available, dialect)
 
 
 def relations(catalog: Sequence[Mapping[str, Any]], kinds: Sequence[str],

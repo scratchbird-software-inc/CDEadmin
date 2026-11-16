@@ -1054,7 +1054,7 @@ def database_target_context_actions(
             ('drop', 'Delete DuckDB database file...', 'action.delete',
              'destructive'),
         )
-    if engine_id == 'mysql':
+    if profile.get('route_kind') != 'embedded_file':
         action_specs = tuple(item for item in action_specs if item[0] != 'connect')
     for offset, (operation_id, label, icon, mutation) in enumerate(
         action_specs
@@ -1071,11 +1071,12 @@ def database_target_context_actions(
             disabled_reason=form['disabled_reason'] or '',
             confirmation=False,
         ))
-    actions.append(_action(
-        f'database.{engine_id}.connect', 'Connect database...',
-        'verify_endpoint', icon='action.connect', group='connection',
-        priority=10, arguments=base,
-    ))
+    if profile.get('route_kind') != 'embedded_file':
+        actions.append(_action(
+            f'database.{engine_id}.connect', 'Connect database...',
+            'verify_endpoint', icon='action.connect', group='connection',
+            priority=10, arguments=base,
+        ))
     if engine_id == 'mysql':
         actions.append(_action(
             'database.mysql.disconnect',

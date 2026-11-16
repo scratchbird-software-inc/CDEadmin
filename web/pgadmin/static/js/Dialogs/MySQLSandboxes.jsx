@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLSandboxes({post}) {
@@ -42,6 +43,7 @@ export default function MySQLSandboxes({post}) {
   };
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
   return <Box sx={{p:2}}>
+    <FormReference formKey="mysql-sandboxes" />
     <Alert severity="info">Native MySQL testing sandboxes run on the ScratchRobin application execution host under its operating-system account. This works without connecting to the selected database registration. Review the host and directory before dispatch. Closing this view does not stop a job or a sandbox.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={busy} onClick={()=>run('catalog',{},value=>{setCatalog(value);setDirectory(value.sandbox_directories[0] || '');invalidate();})}>Load native sandbox capabilities</Button>

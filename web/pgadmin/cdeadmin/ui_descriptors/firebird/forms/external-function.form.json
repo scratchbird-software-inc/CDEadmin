@@ -1,0 +1,577 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "firebird",
+  "family": "engine_object",
+  "resource_kinds": [
+    "external-function"
+  ],
+  "form_reference": "SR-F-000147",
+  "status": "complete",
+  "engine_tab_title": "Firebird",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Function name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "Legacy external functions execute native server code. The library must already be installed and permitted by Firebird UdfAccess; this task does not install code or change server security. Argument and return mechanisms must match the installed function ABI exactly. Prefer PSQL or UDR functions for new development.",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "entrypoint",
+      "label": "Exported entry point",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "At most 255 UTF-8 bytes."
+    },
+    {
+      "field_id": "module_name",
+      "label": "Installed library",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "help": "At most 255 UTF-8 bytes."
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "alter_target",
+      "label": "Alter library binding",
+      "tab": "General",
+      "control": "select",
+      "required": true,
+      "default": "BOTH",
+      "options": [
+        {
+          "value": "BOTH",
+          "label": "Both"
+        },
+        {
+          "value": "ENTRY_POINT",
+          "label": "Entry Point"
+        },
+        {
+          "value": "MODULE_NAME",
+          "label": "Module Name"
+        }
+      ],
+      "help": "Legacy external functions execute native server code. The library must already be installed and permitted by Firebird UdfAccess; this task does not install code or change server security. Argument and return mechanisms must match the installed function ABI exactly. Prefer PSQL or UDR functions for new development. Native ALTER cannot change the signature.",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "arguments",
+      "label": "Ordered input arguments",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "data_type",
+          "label": "Data type",
+          "control": "select",
+          "required": true,
+          "default": "INTEGER",
+          "options": [
+            {
+              "value": "SMALLINT",
+              "label": "Smallint"
+            },
+            {
+              "value": "INTEGER",
+              "label": "Integer"
+            },
+            {
+              "value": "BIGINT",
+              "label": "Bigint"
+            },
+            {
+              "value": "INT128",
+              "label": "Int128"
+            },
+            {
+              "value": "NUMERIC",
+              "label": "Numeric"
+            },
+            {
+              "value": "DECIMAL",
+              "label": "Decimal"
+            },
+            {
+              "value": "FLOAT",
+              "label": "Float"
+            },
+            {
+              "value": "DOUBLE PRECISION",
+              "label": "Double Precision"
+            },
+            {
+              "value": "DECFLOAT",
+              "label": "Decfloat"
+            },
+            {
+              "value": "BOOLEAN",
+              "label": "Boolean"
+            },
+            {
+              "value": "DATE",
+              "label": "Date"
+            },
+            {
+              "value": "TIME",
+              "label": "Time"
+            },
+            {
+              "value": "TIMESTAMP",
+              "label": "Timestamp"
+            },
+            {
+              "value": "CHAR",
+              "label": "Char"
+            },
+            {
+              "value": "VARCHAR",
+              "label": "Varchar"
+            },
+            {
+              "value": "NCHAR",
+              "label": "Nchar"
+            },
+            {
+              "value": "NCHAR VARYING",
+              "label": "Nchar Varying"
+            },
+            {
+              "value": "BINARY",
+              "label": "Binary"
+            },
+            {
+              "value": "VARBINARY",
+              "label": "Varbinary"
+            },
+            {
+              "value": "BLOB",
+              "label": "Blob"
+            },
+            {
+              "value": "CSTRING",
+              "label": "Cstring"
+            }
+          ]
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "number",
+          "required": true,
+          "default": 32,
+          "visible_when": {
+            "field": "data_type",
+            "in": [
+              "CHAR",
+              "VARCHAR",
+              "NCHAR",
+              "NCHAR VARYING",
+              "BINARY",
+              "VARBINARY",
+              "CSTRING"
+            ]
+          }
+        },
+        {
+          "field_id": "precision",
+          "label": "Precision",
+          "control": "number",
+          "required": false,
+          "visible_when": {
+            "field": "data_type",
+            "in": [
+              "NUMERIC",
+              "DECIMAL",
+              "FLOAT",
+              "DECFLOAT"
+            ]
+          }
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale",
+          "control": "number",
+          "required": false,
+          "default": 0,
+          "visible_when": {
+            "field": "data_type",
+            "in": [
+              "NUMERIC",
+              "DECIMAL"
+            ]
+          }
+        },
+        {
+          "field_id": "character_set",
+          "label": "Character set",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "data_type",
+            "in": [
+              "CHAR",
+              "VARCHAR",
+              "CSTRING"
+            ]
+          }
+        },
+        {
+          "field_id": "time_zone",
+          "label": "Time zone",
+          "control": "select",
+          "required": true,
+          "default": "WITHOUT TIME ZONE",
+          "options": [
+            {
+              "value": "WITHOUT TIME ZONE",
+              "label": "Without Time Zone"
+            },
+            {
+              "value": "WITH TIME ZONE",
+              "label": "With Time Zone"
+            }
+          ],
+          "visible_when": {
+            "field": "data_type",
+            "in": [
+              "TIME",
+              "TIMESTAMP"
+            ]
+          }
+        },
+        {
+          "field_id": "mechanism",
+          "label": "Input mechanism",
+          "control": "select",
+          "required": true,
+          "default": "REFERENCE",
+          "options": [
+            {
+              "value": "REFERENCE",
+              "label": "Reference"
+            },
+            {
+              "value": "DESCRIPTOR",
+              "label": "Descriptor"
+            },
+            {
+              "value": "SCALAR_ARRAY",
+              "label": "Scalar Array"
+            },
+            {
+              "value": "NULL",
+              "label": "Null"
+            }
+          ]
+        }
+      ],
+      "required": false,
+      "default": [],
+      "help": "The order and mechanisms must match the installed function. At most 15 inputs, or 14 with a BLOB return.",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_mode",
+      "label": "Return declaration",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "TYPE",
+      "options": [
+        {
+          "value": "TYPE",
+          "label": "Type"
+        },
+        {
+          "value": "PARAMETER",
+          "label": "Parameter"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_data_type",
+      "label": "Return data type",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "INTEGER",
+      "options": [
+        {
+          "value": "SMALLINT",
+          "label": "Smallint"
+        },
+        {
+          "value": "INTEGER",
+          "label": "Integer"
+        },
+        {
+          "value": "BIGINT",
+          "label": "Bigint"
+        },
+        {
+          "value": "INT128",
+          "label": "Int128"
+        },
+        {
+          "value": "NUMERIC",
+          "label": "Numeric"
+        },
+        {
+          "value": "DECIMAL",
+          "label": "Decimal"
+        },
+        {
+          "value": "FLOAT",
+          "label": "Float"
+        },
+        {
+          "value": "DOUBLE PRECISION",
+          "label": "Double Precision"
+        },
+        {
+          "value": "DECFLOAT",
+          "label": "Decfloat"
+        },
+        {
+          "value": "BOOLEAN",
+          "label": "Boolean"
+        },
+        {
+          "value": "DATE",
+          "label": "Date"
+        },
+        {
+          "value": "TIME",
+          "label": "Time"
+        },
+        {
+          "value": "TIMESTAMP",
+          "label": "Timestamp"
+        },
+        {
+          "value": "CHAR",
+          "label": "Char"
+        },
+        {
+          "value": "VARCHAR",
+          "label": "Varchar"
+        },
+        {
+          "value": "NCHAR",
+          "label": "Nchar"
+        },
+        {
+          "value": "NCHAR VARYING",
+          "label": "Nchar Varying"
+        },
+        {
+          "value": "BINARY",
+          "label": "Binary"
+        },
+        {
+          "value": "VARBINARY",
+          "label": "Varbinary"
+        },
+        {
+          "value": "BLOB",
+          "label": "Blob"
+        },
+        {
+          "value": "CSTRING",
+          "label": "Cstring"
+        }
+      ],
+      "visible_when": {
+        "field": "return_mode",
+        "equals": "TYPE"
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_length",
+      "label": "Return length",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "default": 32,
+      "visible_when": {
+        "field": "return_data_type",
+        "in": [
+          "CHAR",
+          "VARCHAR",
+          "NCHAR",
+          "NCHAR VARYING",
+          "BINARY",
+          "VARBINARY",
+          "CSTRING"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_precision",
+      "label": "Return precision",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "visible_when": {
+        "field": "return_data_type",
+        "in": [
+          "NUMERIC",
+          "DECIMAL",
+          "FLOAT",
+          "DECFLOAT"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_scale",
+      "label": "Return scale",
+      "tab": "Definition",
+      "control": "number",
+      "required": false,
+      "default": 0,
+      "visible_when": {
+        "field": "return_data_type",
+        "in": [
+          "NUMERIC",
+          "DECIMAL"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_character_set",
+      "label": "Return character set",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "return_data_type",
+        "in": [
+          "CHAR",
+          "VARCHAR",
+          "CSTRING"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_time_zone",
+      "label": "Return time zone",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "WITHOUT TIME ZONE",
+      "options": [
+        {
+          "value": "WITHOUT TIME ZONE",
+          "label": "Without Time Zone"
+        },
+        {
+          "value": "WITH TIME ZONE",
+          "label": "With Time Zone"
+        }
+      ],
+      "visible_when": {
+        "field": "return_data_type",
+        "in": [
+          "TIME",
+          "TIMESTAMP"
+        ]
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_mechanism",
+      "label": "Return mechanism",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "REFERENCE",
+      "options": [
+        {
+          "value": "REFERENCE",
+          "label": "Reference"
+        },
+        {
+          "value": "VALUE",
+          "label": "Value"
+        },
+        {
+          "value": "DESCRIPTOR",
+          "label": "Descriptor"
+        },
+        {
+          "value": "FREE_IT",
+          "label": "Free It"
+        },
+        {
+          "value": "DESCRIPTOR_FREE_IT",
+          "label": "Descriptor Free It"
+        }
+      ],
+      "visible_when": {
+        "field": "return_mode",
+        "equals": "TYPE"
+      },
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "return_parameter",
+      "label": "Return parameter position",
+      "tab": "Definition",
+      "control": "number",
+      "required": true,
+      "help": "One-based input position. For numeric output parameters use a matching BY DESCRIPTOR ABI: Firebird 5.0.4 does not copy ordinary numeric reference output back into the result.",
+      "visible_when": {
+        "field": "return_mode",
+        "equals": "PARAMETER"
+      },
+      "modes": [
+        "create"
+      ]
+    }
+  ],
+  "notes": "Firebird external-function engine_object form aligned with provider visual_admin contract (owner direction 2026-10-29, ui_unified_design.rst decision 15)."
+}

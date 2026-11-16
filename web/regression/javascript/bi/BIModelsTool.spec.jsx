@@ -212,8 +212,8 @@ describe('BIModelsTool', () => {
     await act(async () => {});
     fireEvent.click(screen.getByRole('button', {name: 'New model'}));
     expect(await screen.findByLabelText(/^Model name/)).toHaveValue('New semantic model');
-    fireEvent.change(screen.getByRole('combobox', {name: 'Discovered resource'}).parentElement.querySelector('input'),
-      {target: {value: 'table:extra'}});
+    fireEvent.click(screen.getByRole('combobox', {name: 'Discovered resource'}));
+    fireEvent.click(await screen.findByRole('option', {name: /extra/}));
     fireEvent.click(screen.getByRole('button', {name: 'Add as source'}));
     fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     await waitFor(() => expect(workspace.called('semantic_model_create')).toHaveLength(1));
@@ -297,7 +297,7 @@ describe('BIModelsTool', () => {
       expect(workspace.called('semantic_query_execute')).toHaveLength(0);
 
       const measures = screen.getByRole('combobox', {name: /^Measures/});
-      fireEvent.mouseDown(measures);
+      fireEvent.click(measures);
       fireEvent.click(await screen.findByRole('option', {name: 'Revenue'}));
       fireEvent.click(screen.getByRole('button', {name: 'Compile query'}));
       expect(await screen.findByLabelText('Compiled query')).toHaveTextContent('SELECT region FROM sales');
@@ -319,7 +319,7 @@ describe('BIModelsTool', () => {
       fireEvent.change(screen.getByLabelText(/^Model name/), {target: {value: 'Edited'}});
       tab('Try it');
       expect(screen.getByText('Queries run against your unsaved edits.')).toBeInTheDocument();
-      fireEvent.mouseDown(screen.getByRole('combobox', {name: /^Measures/}));
+      fireEvent.click(screen.getByRole('combobox', {name: /^Measures/}));
       fireEvent.click(await screen.findByRole('option', {name: 'Revenue'}));
       fireEvent.click(screen.getByRole('button', {name: 'Compile query'}));
       await waitFor(() => expect(workspace.called('semantic_query_compile')).toHaveLength(1));
@@ -337,7 +337,7 @@ describe('BIModelsTool', () => {
       fireEvent.click(await screen.findByRole('button', {name: /Sales cube/}));
       await screen.findByRole('heading', {name: 'Sales cube'});
       tab('Try it');
-      fireEvent.mouseDown(screen.getByRole('combobox', {name: /^Measures/}));
+      fireEvent.click(screen.getByRole('combobox', {name: /^Measures/}));
       fireEvent.click(await screen.findByRole('option', {name: 'Revenue'}));
       fireEvent.click(screen.getByRole('button', {name: 'Run query'}));
       await waitFor(() => expect(workspace.called('semantic_query_execute')).toHaveLength(1));

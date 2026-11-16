@@ -64,7 +64,8 @@ import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
 import {labelSQLConnection} from '../cdeadmin_ui/editors/SQLConnections';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {resolveSectionIconKey} from '../cdeadmin_ui/icons/registry';
-import {useProjectInstanceScope} from '../cdeadmin_ui/shell/ProjectShell';
+import {useProjectInstanceScope, useProjectShell} from '../cdeadmin_ui/shell/ProjectShell';
+import {T_ACTION_STATUS, T_ACTION_TARGET_KIND} from '../cdeadmin_ui/actions/t_actions';
 import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
 import FirebirdQueryHistory from './FirebirdQueryHistory';
 import FirebirdProfiler from './FirebirdProfiler';
@@ -1896,7 +1897,10 @@ KeyValueDataGrid.propTypes = {
 };
 
 export function StructuredDataGrid({catalog, resources, post, setError,
-  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled, clientSqlDialect=3}) {
+  languageProfile, databaseTargetId, initialResourceId, onLoadSql, sqlLoadDisabled, clientSqlDialect=3,
+  autoLoad=false, browseNonce=null}) {
+  const instanceScope = useProjectInstanceScope();
+  const autoLoadedKeyRef = useRef(null);
   const theme = useTheme();
   const [rootFontSize, setRootFontSize] = useState(16);
   const themeScale = theme.cdeadminPresentation?.scale ?? 100;
@@ -2054,6 +2058,28 @@ export function StructuredDataGrid({catalog, resources, post, setError,
       setWorking(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoLoad || !target || working || !limitsValid) return;
+    const loadKey = `${target.resource_id}:${browseNonce || 'initial'}`;
+    if (autoLoadedKeyRef.current === loadKey) return;
+    autoLoadedKeyRef.current = loadKey;
+    load();
+  }, [autoLoad, browseNonce, limitsValid, target?.resource_id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !instanceScope?.instanceId) return undefined;
+    const onGridAction = (event) => {
+      if (event?.detail?.instanceId && event.detail.instanceId !== instanceScope.instanceId) return;
+      const act = event?.detail?.action;
+      if (act === 'load') load();
+      else if (act === 'commit') controlTransaction('commit');
+      else if (act === 'rollback') controlTransaction('rollback');
+      else if (act === 'toggle_edit') setEditMode((prev) => !prev);
+    };
+    window.addEventListener('scratchrobin:provider-grid-action', onGridAction);
+    return () => window.removeEventListener('scratchrobin:provider-grid-action', onGridAction);
+  });
 
   const mutate = async (operationId, draft, confirmed=false) => {
     const activeSession = await ensureSession();
@@ -2423,6 +2449,8 @@ export function StructuredDataGrid({catalog, resources, post, setError,
 }
 
 StructuredDataGrid.propTypes = {
+  autoLoad: PropTypes.bool,
+  browseNonce: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   clientSqlDialect: PropTypes.number,
   catalog: PropTypes.object,
   resources: PropTypes.array,
@@ -5340,6 +5368,10 @@ export default function ProviderWorkspaceContent({
   const [resultPresentation, setResultPresentation] = useState('native');
   const [queryPollingPaused, setQueryPollingPaused] = useState(false);
   const [querySessionBlocked, setQuerySessionBlocked] = useState(false);
+  const [hadUncommittedTransaction, setHadUncommittedTransaction] = useState(false);
+  const shell = useProjectShell();
+  const instanceScope = useProjectInstanceScope();
+  const inShell = Boolean(shell && instanceScope?.instanceId);
   const [transaction, setTransaction] = useState(null);
   const [sessionAutocommit, setSessionAutocommit] = useState(null);
   const managedAutocommit = languageProfile === 'postgresql-sql' ||
@@ -5568,6 +5600,20 @@ export default function ProviderWorkspaceContent({
     handledSourceRequest.current = nonce;
     takeSQLSourceRequest(endpointUrl, nonce);
     const latest = () => workspaceMounted.current && handledSourceRequest.current === nonce;
+    if (typeof sourceRequest.sql === 'string') {
+      const requestedDialect = sourceRequest.dialect || languageProfile;
+      const languageTitle = (workspace.languages || []).find((item) =>
+        item.language_profile === requestedDialect)?.title;
+      setSelectRequest({
+        source: sourceRequest.sql,
+        languageProfile: requestedDialect,
+        languageTitle,
+        nonce,
+        what: sourceRequest.title || 'the BI question SQL',
+        retry: 'open the SQL again',
+      });
+      return;
+    }
     // The editor's active dialect lets a provider with several languages
     // write in the one in use; client_sql_dialect matters only where the
     // provider's language has dialects.
@@ -5844,10 +5890,15 @@ export default function ProviderWorkspaceContent({
         setError(gettext('Firebird query did not complete.') +
           (codes ? ' ' + gettext('Native status codes:') + ' ' + codes : ''));
       }
-      if (native?.session_reuse_blocked) {
+      if (native?.session_reuse_blocked || native?.reconnect_required) {
         setQuerySessionBlocked(true);
+        if (native.had_uncommitted_transaction || sessionAutocommit === false) {
+          setHadUncommittedTransaction(true);
+        }
         const reason = native.session_reuse_blocked_reason;
-        if (reason === 'result_cleanup_failed') {
+        if (native.had_uncommitted_transaction) {
+          setError(gettext('Connection dropped while an uncommitted transaction was open. Uncommitted work was rolled back by the engine. Confirm reconnect to open a clean session.'));
+        } else if (reason === 'result_cleanup_failed') {
           setError(gettext('Firebird result cleanup failed. Do not replay the statement. Close this query session and explicitly reconnect.'));
         } else if (reason === 'cancellation_state_unknown' || native.cancel_cleanup_error_type) {
           setError(gettext('Firebird cancellation state is unknown. Close this query session and explicitly reconnect.'));
@@ -5868,14 +5919,39 @@ export default function ProviderWorkspaceContent({
         }
       }
       setQueryPollingPaused(Boolean(mysql?.has_page));
-      setOccurrenceId(response.occurrence?.operation?.terminal ? null : id);
+      const isTerminal = Boolean(response.occurrence?.operation?.terminal);
+      setOccurrenceId(isTerminal ? null : id);
+      if (isTerminal && inShell && shell?.focusedId && shell.focusedId !== instanceScope?.instanceId && typeof window !== 'undefined') {
+        const hasErr = Boolean(mysql?.error || native?.error || mysql?.session_reuse_blocked || native?.session_reuse_blocked);
+        window.dispatchEvent(new CustomEvent('scratchrobin:instance-notification', {
+          detail: {
+            instanceId: instanceScope.instanceId,
+            appId: 'sql-editor',
+            title: workspace?.endpoint?.display_name || gettext('SQL Editor'),
+            message: hasErr ? gettext('Background query failed') : gettext('Background query finished'),
+            status: hasErr ? 'error' : 'success',
+          },
+        }));
+      }
     } catch (requestError) {
       setQueryPollingPaused(true);
-      setError(errorMessage(requestError));
+      const errMsg = errorMessage(requestError);
+      setError(errMsg);
+      if (inShell && shell?.focusedId && shell.focusedId !== instanceScope?.instanceId && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('scratchrobin:instance-notification', {
+          detail: {
+            instanceId: instanceScope.instanceId,
+            appId: 'sql-editor',
+            title: workspace?.endpoint?.display_name || gettext('SQL Editor'),
+            message: errMsg || gettext('Background query failed'),
+            status: 'error',
+          },
+        }));
+      }
     } finally {
       setBusy(false);
     }
-  }, [acceptRendered, bufferRows, languageProfile, managedAutocommit, post, queryDatabaseTargetId]);
+  }, [acceptRendered, bufferRows, inShell, instanceScope?.instanceId, languageProfile, managedAutocommit, post, queryDatabaseTargetId, sessionAutocommit, shell?.focusedId, workspace?.endpoint?.display_name]);
 
   useEffect(() => {
     if (!workspace?.languages?.some(item => item.language_profile === languageProfile) ||
@@ -6027,9 +6103,51 @@ export default function ProviderWorkspaceContent({
       setScriptLocked(false);
       setScriptEditorGeneration(value => value + 1);
       setQuerySessionBlocked(false);
+      setHadUncommittedTransaction(false);
       setTransaction(null); setRendered(null); setResultHistory([]);
     } catch (requestError) {
       setError(errorMessage(requestError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reconnectQuerySession = async () => {
+    const targetSession = querySessionIdRef.current;
+    if (!targetSession) return;
+    if (hadUncommittedTransaction && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const ok = window.confirm(
+        gettext('An uncommitted transaction was lost when the connection dropped. Confirm reconnecting to a clean session?')
+      );
+      if (!ok) return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await post({
+        action: 'reconnect_session',
+        session_id: targetSession,
+        confirmed: true,
+        database_target_id: queryDatabaseTargetId,
+      });
+      setQuerySessionBlocked(false);
+      setHadUncommittedTransaction(false);
+      setTransaction(null);
+    } catch {
+      try {
+        await post({
+          action: 'close_session',
+          session_id: targetSession,
+          database_target_id: queryDatabaseTargetId,
+        }).catch(() => {});
+        querySessionIdRef.current = null;
+        setSessionId(null);
+        setQuerySessionBlocked(false);
+        setHadUncommittedTransaction(false);
+        await ensureSession();
+      } catch (retryError) {
+        setError(errorMessage(retryError));
+      }
     } finally {
       setBusy(false);
     }
@@ -6124,6 +6242,90 @@ export default function ProviderWorkspaceContent({
   );
   const composedWorkspace = initialContext.composition_mode === 'tabbed';
 
+  useEffect(() => {
+    if (!inShell || !instanceScope?.instanceId || !shell || tab === 'studio') return undefined;
+    const instId = instanceScope.instanceId;
+    const pfx = `provider-ws.${instId}`;
+    const regActions = [];
+    const controls = [];
+    const addAct = (suffix, icon, text, invoke, status = T_ACTION_STATUS.ENABLED) => {
+      const id = `${pfx}.${suffix}`;
+      regActions.push({
+        id,
+        icon,
+        application: 'data-navigator',
+        defaultText: text,
+        defaultHint: text,
+        focusScoped: true,
+        status,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke},
+      });
+      controls.push(id);
+    };
+    addAct('refresh', 'action.refresh', gettext('Refresh Catalog'), () => reloadResources());
+    if (tab === 'data') {
+      addAct('grid_load', 'action.execute', gettext('Load Rows'), () =>
+        window.dispatchEvent(new CustomEvent('scratchrobin:provider-grid-action', {detail: {instanceId: instId, action: 'load'}}))
+      );
+      addAct('grid_edit', 'action.edit', gettext('Toggle Edit Mode'), () =>
+        window.dispatchEvent(new CustomEvent('scratchrobin:provider-grid-action', {detail: {instanceId: instId, action: 'toggle_edit'}}))
+      );
+      addAct('grid_commit', 'action.commit', gettext('Commit Changes'), () =>
+        window.dispatchEvent(new CustomEvent('scratchrobin:provider-grid-action', {detail: {instanceId: instId, action: 'commit'}}))
+      );
+      addAct('grid_rollback', 'action.rollback', gettext('Rollback Changes'), () =>
+        window.dispatchEvent(new CustomEvent('scratchrobin:provider-grid-action', {detail: {instanceId: instId, action: 'rollback'}}))
+      );
+    }
+    if (tab !== initialTab) {
+      addAct('back', 'action.undo', gettext('Back'), () => setTab(initialTab));
+    }
+    regActions.forEach((a) => shell.actionsRegistry?.upsert?.(a));
+    if (composedWorkspace) {
+      const composedTabs = [
+        ['properties', gettext('Database Properties')],
+        ['resources', gettext('Resource Explorer')],
+        ['studio', gettext('Data Studio')],
+        ['data', gettext('Edit Data')],
+        ['administration', gettext('Administration')],
+        ['operations', gettext('Operations & Health')],
+        ...(['firebird-native', 'firebird-embedded'].includes(workspace?.endpoint?.profile_id)
+          ? [['firebird-recovery', gettext('Prepared Transaction Recovery')]]
+          : []),
+        ['semantic', gettext('Cubes & Semantic Models')],
+        ['movement', gettext('Import & Bulk')],
+        ...((initialTab === 'connections' || workspace?.endpoint?.route_management_available)
+          ? [['connections', gettext('Databases & Connections')]]
+          : []),
+      ];
+      instanceScope.setSubsections({
+        items: composedTabs.map(([id, label]) => ({
+          id,
+          label,
+          hint: label,
+          icon: resolveSectionIconKey(id, label),
+          checked: id === tab,
+        })),
+        onSelect: (nextTab) => setTab(nextTab),
+      });
+    }
+    const endpointLabel = workspace?.endpoint?.display_name || workspace?.endpoint?.endpoint_id || '';
+    shell.updateInstance?.(instId, {
+      actions: regActions,
+      ribbonTabs: [
+        {
+          id: `${pfx}.home`,
+          label: gettext('Workspace'),
+          groups: [{id: `${pfx}.actions`, label: gettext('Actions'), controls}],
+        },
+      ],
+      ...(endpointLabel ? {statusText: `${endpointLabel} — ${tab}`} : {}),
+    });
+    return () => {
+      regActions.forEach((a) => shell.actionsRegistry?.unregister?.(a.id));
+    };
+  }, [composedWorkspace, inShell, initialTab, instanceScope, tab, workspace?.endpoint?.display_name, workspace?.endpoint?.endpoint_id, workspace?.endpoint?.profile_id]);
+
   if (focusedServerForm) {
     return <ModalContent sx={{minWidth: 0}}>
       {error && <Alert severity="error">{error}</Alert>}
@@ -6137,8 +6339,8 @@ export default function ProviderWorkspaceContent({
           onEndpointRemoved?.(result);
           closeModal();
         }} />}
-      <ModalFooter><Button onClick={closeModal}>{gettext('Close')}</Button>
-      </ModalFooter>
+      {!inShell && <ModalFooter><Button onClick={closeModal}>{gettext('Close')}</Button>
+      </ModalFooter>}
     </ModalContent>;
   }
 
@@ -6161,14 +6363,14 @@ export default function ProviderWorkspaceContent({
           approvedCreationRoot={workspace.endpoint_registration?.primary_route?.configuration?.database_create_root || ''}
           focused />
       </Box>}
-      <ModalFooter><Button onClick={closeModal}>{gettext('Close')}</Button>
-      </ModalFooter>
+      {!inShell && <ModalFooter><Button onClick={closeModal}>{gettext('Close')}</Button>
+      </ModalFooter>}
     </ModalContent>;
   }
 
   return (
     <ModalContent>
-      {composedWorkspace && <Tabs value={tab}
+      {composedWorkspace && !inShell && <Tabs value={tab}
         onChange={(_event, value) => setTab(value)}>
         <Tab value="properties" label={gettext('Database Properties')} />
         <Tab value="resources" label={gettext('Resource Explorer')} />
@@ -6303,7 +6505,7 @@ export default function ProviderWorkspaceContent({
         sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
           minHeight: 0, minWidth: 0, overflow: 'auto'}}>
         <QueryToolToolbar aria-label="SQL execution toolbar">
-          {languageProfile === 'mysql-sql' && queryDatabaseTargetId && <Button onClick={() => {setNotebookMounted(true); setNotebookOpen(!notebookOpen);}}>SQL notebook</Button>}
+          {queryDatabaseTargetId && <Button onClick={() => {setNotebookMounted(true); setNotebookOpen(!notebookOpen);}}>{gettext('SQL notebook')}</Button>}
           <QueryToolAction action="execute" title={gettext('Run')} disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId || !source.trim()}
             onClick={() => execute()} />
           {languageProfile === 'firebird-sql' && <QueryToolAction action="explain" title={gettext('Explain / query plan')}
@@ -6329,6 +6531,8 @@ export default function ProviderWorkspaceContent({
               disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || !!occurrenceId || (managedAutocommit && sessionAutocommit !== false)} onClick={() => controlTransaction(action)} />)}
           <QueryToolAction action="close" title={gettext('Close query session')} disabled={busy || !!occurrenceId || !sessionId}
             onClick={releaseQuerySession} />
+          {querySessionBlocked && sessionId && <Button size="small" color="warning" disabled={busy || !!occurrenceId}
+            onClick={reconnectQuerySession}>{hadUncommittedTransaction ? gettext('Confirm & Reconnect') : gettext('Reconnect session')}</Button>}
           <QueryToolAction action="info" title={gettext('Connection details')}
             onClick={() => setConnectionInfoOpen(true)} />
           {workspace.sql_builder && <Button size="small" onClick={() => setBuilderOpen(true)}
@@ -6351,9 +6555,9 @@ export default function ProviderWorkspaceContent({
           <SQLConnectionSlot />
           {busy && <CircularProgress size={24} />}
         </QueryToolToolbar>
-        {notebookMounted && languageProfile === 'mysql-sql' && <Box sx={{display: notebookOpen ? 'block' : 'none', maxHeight: '55%', overflow: 'auto', flexShrink: 0}}>
+        {notebookMounted && queryDatabaseTargetId && <Box sx={{display: notebookOpen ? 'block' : 'none', maxHeight: '55%', overflow: 'auto', flexShrink: 0}}>
           <SQLNotebook key={endpointUrl + ':' + queryDatabaseTargetId}
-            scope={{engine: 'mysql', endpoint_id: String(workspace.endpoint.endpoint_id), database_target_id: queryDatabaseTargetId}}
+            scope={{engine: languageProfile.replace(/-sql$/, ''), endpoint_id: String(workspace.endpoint.endpoint_id), database_target_id: queryDatabaseTargetId}}
             editorSource={source} rendered={rendered} executedSource={notebookExecutedSource?.context === endpointUrl + ':' + queryDatabaseTargetId ? notebookExecutedSource.source : null}
             onDirty={setNotebookDirty}
             disabled={busy || queryStreamActive || scriptLocked || querySessionBlocked || sessionPolicyUnknown || !!occurrenceId}
@@ -6754,6 +6958,8 @@ export default function ProviderWorkspaceContent({
         workspace.visual_admin?.model_family
       ) &&
         <StructuredDataGrid catalog={workspace.visual_admin}
+          autoLoad={Boolean(initialContext.auto_load_rows || initialContext.browse_data)}
+          browseNonce={initialContext.browse_nonce}
           sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
           clientSqlDialect={clientSqlDialect}
           onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
@@ -6770,7 +6976,7 @@ export default function ProviderWorkspaceContent({
           languageProfile={workspace.languages?.[0]?.language_profile}
           post={post} setError={setError}
           initialResource={selectedResource} />}
-      {tab !== 'studio' && <ModalFooter sx={{flexShrink: 0}}>
+      {tab !== 'studio' && !inShell && <ModalFooter sx={{flexShrink: 0}}>
         <Button onClick={closeModal}>{gettext('Close')}</Button></ModalFooter>}
     </ModalContent>
   );

@@ -315,6 +315,8 @@ def create_standard_container(engine):
         if (
                 observed.returncode == 0 and
                 observed.stdout.strip() == configuration):
+            run(["docker", "update", "--restart", "unless-stopped", name],
+                check=False, capture=True)
             return
         if docker_running(name):
             run(["docker", "stop", "--timeout", "30", name])
@@ -322,7 +324,10 @@ def create_standard_container(engine):
         # volumes and is reattached below.
         run(["docker", "rm", name])
     ensure_network()
-    command = ["docker", "create", "--name", name, "--network", NETWORK]
+    command = [
+        "docker", "create", "--restart", "unless-stopped",
+        "--name", name, "--network", NETWORK,
+    ]
     if spec.get("configuration"):
         command += [
             "--label", "org.cdeadmin.demo.configuration=" +
@@ -650,7 +655,8 @@ def _create_cassandra_node(name, host, volume, rack):
         ),
     }
     command = [
-        "docker", "create", "--name", name, "--network", NETWORK,
+        "docker", "create", "--restart", "unless-stopped",
+        "--name", name, "--network", NETWORK,
         "--label",
         f"org.cdeadmin.demo.configuration={CASSANDRA_CONFIGURATION}",
         "-p", f"{host}:19042:19042",
@@ -780,7 +786,8 @@ def start_ignite():
             run(["docker", "rm", name])
         if not docker_exists(name):
             command = [
-                "docker", "create", "--name", name, "--hostname", name,
+                "docker", "create", "--restart", "unless-stopped",
+                "--name", name, "--hostname", name,
                 "--network", NETWORK, "--label",
                 "org.cdeadmin.demo.configuration=" + IGNITE_CONFIGURATION,
             ]
@@ -901,7 +908,8 @@ def start_tikv_stack():
                 # untouched; this topology attaches distinct API-v2 volumes.
                 run(["docker", "rm", name])
         if not docker_exists(name):
-            command = ["docker", "create", "--name", name,
+            command = ["docker", "create", "--restart", "unless-stopped",
+                       "--name", name,
                        "--network", NETWORK, "--label",
                        "org.cdeadmin.demo.configuration=" +
                        tikv_configuration]
@@ -968,7 +976,8 @@ def start_tidb():
         ]))
     for container, image, arguments in definitions:
         if not docker_exists(container):
-            run(['docker', 'create', '--name', container, '--network', NETWORK,
+            run(['docker', 'create', '--restart', 'unless-stopped',
+                 '--name', container, '--network', NETWORK,
                  '--cpus=2',
                  '-v', f'{container}-v1:/data',
                  '-v', f'{config}:/etc/tidb-transactional.toml:ro',
@@ -990,7 +999,8 @@ def start_tidb():
             run(['docker', 'rename', name, retired])
     if not docker_exists(name):
         run([
-            "docker", "create", "--name", name, "--network", NETWORK,
+            "docker", "create", "--restart", "unless-stopped",
+            "--name", name, "--network", NETWORK,
             "-p", "127.0.0.1:54000:4000",
             "-p", "127.0.0.1:51000:10080", "pingcap/tidb:v8.5.6",
             "--store=tikv", f"--path={pd}:2379",
@@ -1070,7 +1080,8 @@ def _write_tool(name, body):
 def start_tidb_ticdc():
     _require_tidb_stack()
     if not docker_exists(TIDB_TICDC):
-        run(['docker', 'create', '--name', TIDB_TICDC, '--network', NETWORK,
+        run(['docker', 'create', '--restart', 'unless-stopped',
+             '--name', TIDB_TICDC, '--network', NETWORK,
              '-p', '127.0.0.1:58300:8300', 'pingcap/ticdc:v8.5.6',
              '/cdc', 'server', f'--pd=http://{TIDB_PD}:2379',
              '--addr=0.0.0.0:8300',
@@ -1106,7 +1117,8 @@ def tidb_backup_storage(prefix):
 def start_tidb_br():
     _require_tidb_stack()
     if not docker_exists(TIDB_MINIO):
-        run(['docker', 'create', '--name', TIDB_MINIO, '--network', NETWORK,
+        run(['docker', 'create', '--restart', 'unless-stopped',
+             '--name', TIDB_MINIO, '--network', NETWORK,
              '-v', f'{TIDB_MINIO}:/data',
              '-e', 'MINIO_ROOT_USER=cdeadmin',
              '-e', f'MINIO_ROOT_PASSWORD={PASSWORD}',
@@ -1143,7 +1155,8 @@ def start_tidb_tiflash():
             'memory limit first: with less, TiKV stores are OOM-killed.')
     config = ROOT / 'config/tidb'
     if not docker_exists(TIDB_TIFLASH):
-        run(['docker', 'create', '--name', TIDB_TIFLASH, '--network', NETWORK,
+        run(['docker', 'create', '--restart', 'unless-stopped',
+             '--name', TIDB_TIFLASH, '--network', NETWORK,
              '--cpus=2', '--memory=4g',
              '-v', f'{TIDB_TIFLASH}:/data',
              '-v', f'{config / "tiflash.toml"}:/etc/tiflash.toml:ro',
@@ -1224,7 +1237,8 @@ def start_milvus():
     )
     for name, image, ports, volumes, environment, args in definitions:
         if not docker_exists(name):
-            command = ["docker", "create", "--name", name,
+            command = ["docker", "create", "--restart", "unless-stopped",
+                       "--name", name,
                        "--network", NETWORK]
             for host_port, container_port in ports:
                 command += ["-p", f"127.0.0.1:{host_port}:{container_port}"]
@@ -1343,7 +1357,8 @@ def start_foundationdb():
                 f"missing FoundationDB entrypoint: {FOUNDATIONDB_ENTRYPOINT}"
             )
         run([
-            "docker", "create", "--name", name, "--network", NETWORK,
+            "docker", "create", "--restart", "unless-stopped",
+            "--name", name, "--network", NETWORK,
             "--label", "org.cdeadmin.demo.configuration=" +
             FOUNDATIONDB_CONFIGURATION,
             "-p", "127.0.0.1:54500:54500",

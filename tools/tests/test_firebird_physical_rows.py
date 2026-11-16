@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION
-from pgadmin.cdeadmin.providers.firebird.physical_rows import verify_owner
+from pgadmin.cdeadmin.providers.firebird.physical_rows import available, verify_owner
 from pgadmin.cdeadmin.providers.relational_admin import _RowIdentity
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
 
@@ -43,3 +43,20 @@ def test_physical_predicate_keeps_opaque_key_and_version_not_guessed_values():
     assert ADMINISTRATION._identity_predicate(identity) == (
         'RDB$DB_KEY = ? AND RDB$RECORD_VERSION = ?',
         (b'\0\xff\1\2\3\4\5\6', 9))
+
+
+@pytest.mark.parametrize('system_flag,relation_type', [
+    (1, 3),  # MON$ virtual monitoring table
+    (1, 0),  # RDB$ system table
+    (0, 2),  # external file table
+])
+def test_virtual_and_system_relations_do_not_claim_physical_row_identity(
+        system_flag, relation_type):
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (system_flag, relation_type)
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    assert available(
+        connection, '"MON$ATTACHMENTS"', relation_name='MON$ATTACHMENTS'
+    ) is False
+    cursor.prepare.assert_not_called()

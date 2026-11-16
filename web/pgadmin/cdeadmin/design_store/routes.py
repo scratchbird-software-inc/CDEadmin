@@ -1279,6 +1279,36 @@ def _register_routes(app, project_asset_service) -> None:
                     dialect=str(body.get('dialect') or 'sqlite'),
                     parameter_values=body.get('parameter_values'),
                 )
+            if action == 'query_ddn':
+                from ..workspace.query_builder_ddn import (
+                    build_query_builder_ddn,
+                )
+                from .bi_ddn import sbsql_to_sql_builder_model
+
+                sbsql_in = body.get('sbsql')
+                if sbsql_in is None:
+                    q_model = body.get('question')
+                    if q_model is None:
+                        q_model = ddn_to_question(
+                            design['version']['ddn_text']
+                        )['question']
+                    qspec = q_model.get('query') or {}
+                    if qspec.get('kind') != 'sbsql':
+                        raise DesignStoreError(
+                            'Query DDN dataflow requires an SBsql question'
+                        )
+                    sbsql_in = qspec.get('sbsql')
+                builder_model = sbsql_to_sql_builder_model(sbsql_in)
+                card_map = {
+                    str(j.get('alias') or ''): str(
+                        j.get('cardinality') or 'undeclared'
+                    )
+                    for j in (sbsql_in.get('joins') or [])
+                    if isinstance(j, dict) and j.get('alias')
+                }
+                return build_query_builder_ddn(
+                    builder_model, join_cardinalities=card_map
+                )
             if action == 'from_sql':
                 mapped = sql_to_bi_question_model(
                     str(body.get('sql') or ''),

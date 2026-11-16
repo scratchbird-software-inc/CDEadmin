@@ -21,7 +21,6 @@ import { Box, Tab, Tabs } from '@mui/material';
 import { PgIconButton } from '../../../static/js/components/Buttons';
 import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
 import StopRoundedIcon from '@mui/icons-material/StopRounded';
-import WelcomeDashboard from './WelcomeDashboard';
 import ActiveQuery from './ActiveQuery.ui';
 import ServerLog from './ServerLog.ui';
 import _ from 'lodash';
@@ -931,22 +930,17 @@ function Dashboard({
         serverId={sid} targetId={treeNodeInfo?.cde_database_target?._id} />;
     }
     return (
-      sid && !serverConnected ? (
-        <Box className='Dashboard-dashboardPanel'>
-          <div className='Dashboard-emptyPanel'>
-            <EmptyPanelMessage text={msg}/>
-          </div>
-        </Box>
-      ) : (
-        <WelcomeDashboard
-          pgBrowser={pgAdmin.Browser}
-          node={node}
-          itemData={nodeData}
-          item={nodeItem}
-          sid={sid}
-          did={did}
-        />
-      )
+      <Box className='Dashboard-dashboardPanel'>
+        <div className='Dashboard-emptyPanel'>
+          <EmptyPanelMessage
+            text={
+              sid && !serverConnected
+                ? msg
+                : gettext('Select a connected server or database in the Data Navigator to view live monitoring metrics.')
+            }
+          />
+        </div>
+      </Box>
     );
   };
 

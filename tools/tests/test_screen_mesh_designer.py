@@ -412,9 +412,9 @@ class ScreenMeshDesignerBackendTests(unittest.TestCase):
             self.assertEqual(accepted['version']['status'], 'accepted')
 
     def test_f3_descriptor_form_import_and_qa_screenshot_manifest(self):
-        """F3: discover 122 SR-F forms and import with QA manifest into DDN."""
+        """F3: discover 147 SR-F forms and import with QA manifest into DDN."""
         forms = list_available_descriptor_forms()
-        self.assertEqual(len(forms), 122)
+        self.assertEqual(len(forms), 147)
         self.assertTrue(
             all(f['form_reference'].startswith('SR-F-') for f in forms)
         )

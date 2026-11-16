@@ -347,7 +347,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/external-function.form.json"
     },
     {
       "resource_kind": "exception",
@@ -393,7 +394,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/exception.form.json"
     },
     {
       "resource_kind": "trigger",
@@ -537,7 +539,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/character-set.form.json"
     },
     {
       "resource_kind": "collation",
@@ -563,7 +566,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/collation.form.json"
     },
     {
       "resource_kind": "blob-filter",
@@ -589,7 +593,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/blob-filter.form.json"
     },
     {
       "resource_kind": "user",
@@ -724,7 +729,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/authentication-mapping.form.json"
     },
     {
       "resource_kind": "global-authentication-mapping",
@@ -760,7 +766,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/global-authentication-mapping.form.json"
     },
     {
       "resource_kind": "database",
@@ -874,7 +881,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/shadow.form.json"
     },
     {
       "resource_kind": "publication",
@@ -890,7 +898,8 @@
           "tier": 1,
           "mutation_class": "write"
         }
-      ]
+      ],
+      "form": "forms/publication.form.json"
     },
     {
       "resource_kind": "server",
@@ -949,7 +958,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/column.form.json"
     },
     {
       "resource_kind": "constraint",
@@ -971,7 +981,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/constraint.form.json"
     },
     {
       "resource_kind": "storage-file",
@@ -983,7 +994,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/storage-file.form.json"
     },
     {
       "resource_kind": "configuration",
@@ -995,7 +1007,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/configuration.form.json"
     },
     {
       "resource_kind": "service-operation",
@@ -1007,7 +1020,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/service-operation.form.json"
     }
   ]
 }

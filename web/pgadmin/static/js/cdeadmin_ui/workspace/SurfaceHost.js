@@ -20,7 +20,10 @@ export class SurfaceHost {
     this.referencePanelId = options.referencePanelId ?? 'id-main';
     this.context = options.context ?? (() => ({}));
     this.contextService = options.contextService ?? workbenchContextService;
+    this.enrichPanel = options.enrichPanel ?? null;
+    this.onStateUpdated = options.onStateUpdated ?? null;
     this.states = new Map();
+    this.surfaceIds = new Map();
     this.closing = new Set();
     this.activeToolId = '';
     this.removeClosingListener = docker.eventBus?.registerListener?.(
@@ -32,10 +35,12 @@ export class SurfaceHost {
   }
 
   setSurfaceState(toolId, state) {
-    this.states.set(toolId, Object.freeze({
+    const merged = Object.freeze({
       ...this.surfaceState(toolId), ...state,
-    }));
+    });
+    this.states.set(toolId, merged);
     if(this.activeToolId === toolId) this.contextService.update(state);
+    this.onStateUpdated?.(toolId, merged, this.surfaceIds.get(toolId) || '');
   }
 
   surfaceState(toolId) { return this.states.get(toolId) ?? Object.freeze({}); }
@@ -48,12 +53,17 @@ export class SurfaceHost {
       this.activate(descriptor.toolInstanceId, descriptor, surfaceId);
       return Object.freeze({descriptor, panel: existing, existing: true});
     }
+    this.surfaceIds.set(descriptor.toolInstanceId, surfaceId);
     const restoreContext = {...this.context(), ...context,
       setSurfaceState: (state) => this.setSurfaceState(
         descriptor.toolInstanceId, state
       )};
     const content = await this.registry.restore(descriptor, restoreContext);
+    const extraChrome = this.enrichPanel
+      ? (this.enrichPanel(descriptor, surfaceId, restoreContext) || {})
+      : {};
     const panel = {
+      ...extraChrome,
       id: descriptor.toolInstanceId,
       title: descriptor.presentation.title,
       icon: descriptor.presentation.iconKey,

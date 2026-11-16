@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Alert, Box, Button, Typography} from '@mui/material';
 import {mysqlPlanText, parseMySQLPlan} from './mysqlPlanPresentation';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 function PlanNode({id, graph, selected, onSelect}) {
   const node = graph.nodes[id];
@@ -43,6 +44,7 @@ export default function MySQLQueryPlan({rendered, analyzeRequested=false, pendin
   const [selected, setSelected] = useState(0);
   const node = graph.nodes?.[selected] || graph.nodes?.[0];
   return <Box aria-label={gettext('MySQL query plan')} sx={{mt: 1, minWidth: 0}}>
+    <FormReference formKey="mysql-query-plan" />
     <Alert severity="info">{analyzeRequested ?
       gettext('EXPLAIN ANALYZE was requested and executes the statement on the selected SQL session. A displayed plan does not establish commit or rollback.') :
       gettext('Native optimizer estimates are shown as reported. Costs are not elapsed milliseconds; links follow the native plan nesting.')}</Alert>

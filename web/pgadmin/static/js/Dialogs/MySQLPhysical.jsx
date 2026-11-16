@@ -5,6 +5,7 @@ import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import MySQLPhysicalBatchRetention from './MySQLPhysicalBatchRetention';
 import MySQLPhysicalBackupSchedule from './MySQLPhysicalBackupSchedule';
 import MySQLRecoveryCutover from './MySQLRecoveryCutover';
+import FormReference from '../cdeadmin_ui/navigation/FormReference';
 
 const initial = {connection: {host: '', port: 22, username: '', host_key: '', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'},
   workspace: '/var/backups/scratchrobin/physical', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', phase: 'backup',
@@ -75,6 +76,7 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
     }
   };
   return <Box component="section" aria-label="Native MySQL physical backups" sx={{p: 1, overflow: 'auto', flex: 1}}>
+    <FormReference formKey="mysql-physical" />
     <Alert severity="info">XtraBackup 9.7.1-rc1 runs on the pinned Linux database SSH host. Backup, prepare and copy-back retain separate files. Managed recovery starts another data copy using native MySQL 9.7.0. Choose read-only inspection or explicitly writable replay with binary logging. It stops on request or its reviewed lifetime. Recovered-data acceptance and cutover have separate gates. Closing this viewer leaves admitted remote work running.</Alert>
     <Alert severity="info">Database credential delegation also transfers the registered TLS CA, client certificate and private key to private job files on the pinned host. Native certificate and hostname verification stay enabled as registered. These files are removed after authentication or utility completion; public receipts contain only the policy and fingerprints.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
