@@ -383,380 +383,62 @@ def compute_server_layout(
     gap_y: int = 180,
     use_cache: bool = True,
 ) -> dict[str, Any]:
-    """Compute deterministic layered layout, incremental placement and tiles.
+    """Compute deterministic host layout, obstacle-free routing and spatial tiles.
 
-    Implements owner decisions B2 and B3:
-    - Runs on the server with deterministic Sugiyama-style longest-path
-      layering and barycenter crossing reduction.
-    - Honors pinned node coordinates and performs incremental placement for
-      unpinned/new nodes without colliding with pinned nodes.
-    - Partitions the resulting canvas into spatial tiles of ``tile_size``
-      pixels and caches the result by ``(ddn_sha256, view_id, tile_size)``.
+    Delegates to ``robin_scene_engine.compile_robin_scene`` so that all server
+    sessions, layout endpoints and spatial viewport tiles share exact card
+    geometry, strict per-view filtering, 4-level architectural swimlanes and
+    field-port orthogonal routing.
     """
     if tile_size < 128:
         raise ValueError('tile_size must be at least 128 pixels')
-    info = inspect_ddn_text(ddn_text)
-    selected_view = (
-        view_id
-        or (info['views'][0]['id'] if info['views'] else 'main')
+    if not isinstance(ddn_text, str) or not ddn_text.strip():
+        raise ValueError('DDN text must be a non-empty string')
+    _ = (gap_x, gap_y)
+    from .robin_scene_engine import compile_robin_scene
+
+    scene = compile_robin_scene(
+        ddn_text,
+        view_id=view_id,
+        pinned_positions=pinned_positions,
+        tile_size=tile_size,
+        use_cache=use_cache,
     )
-    digest = sha256_text(ddn_text)
+    digest = scene['ddn_sha256']
+    selected_view = scene['view_id']
     if use_cache and not pinned_positions:
         cached = GLOBAL_TILE_CACHE.get(digest, selected_view, tile_size)
         if cached is not None:
             return cached
 
-    blocks = _parse_blocks(ddn_text)
-    saved_placements = _extract_existing_layout(blocks)
-    pins: dict[str, dict[str, Any]] = dict(saved_placements)
-    if pinned_positions:
-        for nid, pos in pinned_positions.items():
-            if isinstance(pos, dict) and 'x' in pos and 'y' in pos:
-                pins[nid] = {
-                    'x': float(pos['x']),
-                    'y': float(pos['y']),
-                    'pinned': bool(pos.get('pinned', True)),
-                }
-
-    # Collect member counts and directed edges between top-level nodes.
-    member_To_parent: dict[str, str] = {}
-    member_counts: dict[str, int] = {}
-    raw_edges: list[dict[str, str]] = []
-
-    for block in blocks:
-        if block['kind'] == 'element' and block['role'] != 'record':
-            members = [
-                m.group(1).replace('""', '"')
-                for m in _MEMBER_ITEM_RE.finditer(block['body'])
-            ]
-            if members:
-                member_counts[block['id']] = len(members)
-                for mid in members:
-                    member_To_parent[mid] = block['id']
-        elif block['kind'] == 'relation':
-            endpoints = [
-                m.group(1).replace('""', '"')
-                for m in _ENDPOINT_DEF_RE.finditer(block['body'])
-            ]
-            if len(endpoints) >= 2:
-                raw_edges.append({
-                    'id': block['id'],
-                    'title': block['title'],
-                    'source': endpoints[0],
-                    'target': endpoints[1],
-                })
-
-    child_roles = {'field', 'index', 'constraint', 'ref', 'record'}
-    top_nodes: list[dict[str, Any]] = []
-    node_by_id: dict[str, dict[str, Any]] = {}
-    for elem in info['elements']:
-        eid = elem['id']
-        role = elem['role']
-        if eid in member_To_parent or role in child_roles:
-            continue
-        m_count = member_counts.get(eid, 0)
-        width = 240.0
-        height = float(64 + min(m_count, 24) * 22)
-        node_entry = {
-            'id': eid,
-            'name': elem['name'],
-            'role': role,
-            'width': width,
-            'height': height,
-            'member_count': m_count,
-        }
-        top_nodes.append(node_entry)
-        node_by_id[eid] = node_entry
-
-    # If a diagram only has child elements, lay out all non-record elements.
-    if not top_nodes:
-        for elem in info['elements']:
-            if elem['role'] == 'record':
-                continue
-            eid = elem['id']
-            node_entry = {
-                'id': eid,
-                'name': elem['name'],
-                'role': elem['role'],
-                'width': 220.0,
-                'height': 72.0,
-                'member_count': 0,
-            }
-            top_nodes.append(node_entry)
-            node_by_id[eid] = node_entry
-
-    edges: list[dict[str, Any]] = []
-    outgoing: dict[str, list[str]] = {n['id']: [] for n in top_nodes}
-    incoming: dict[str, list[str]] = {n['id']: [] for n in top_nodes}
-
-    for edge in raw_edges:
-        src = member_To_parent.get(edge['source'], edge['source'])
-        tgt = member_To_parent.get(edge['target'], edge['target'])
-        if src in node_by_id and tgt in node_by_id:
-            edges.append({
-                'id': edge['id'],
-                'title': edge['title'],
-                'source': src,
-                'target': tgt,
-            })
-            if src != tgt:
-                outgoing[src].append(tgt)
-                incoming[tgt].append(src)
-
-    # Deterministic longest-path layering with cycle guard.
-    ordered_ids = sorted(
-        node_by_id,
-        key=lambda nid: (node_by_id[nid]['name'], nid),
-    )
-    layers: dict[str, int] = {}
-    visiting: set[str] = set()
-
-    def assign_layer(nid: str) -> int:
-        if nid in layers:
-            return layers[nid]
-        if nid in visiting:
-            return 0
-        visiting.add(nid)
-        preds = incoming.get(nid, [])
-        if not preds:
-            depth = 0
-        else:
-            depth = max(assign_layer(p) + 1 for p in preds)
-        visiting.remove(nid)
-        layers[nid] = min(depth, max(0, len(ordered_ids) - 1))
-        return layers[nid]
-
-    for nid in ordered_ids:
-        assign_layer(nid)
-
-    by_layer: dict[int, list[str]] = {}
-    for nid in ordered_ids:
-        by_layer.setdefault(layers[nid], []).append(nid)
-
-    # Barycenter ordering pass (forward + backward) for crossing reduction.
-    sorted_layer_indices = sorted(by_layer)
-    order_in_layer: dict[str, int] = {}
-    for l_idx in sorted_layer_indices:
-        for pos_idx, nid in enumerate(by_layer[l_idx]):
-            order_in_layer[nid] = pos_idx
-
-    for _pass in range(2):
-        for l_idx in sorted_layer_indices[1:]:
-            def _bary_fwd(nid: str) -> tuple[float, str, str]:
-                preds = incoming.get(nid, [])
-                if not preds:
-                    return (
-                        float(order_in_layer[nid]),
-                        node_by_id[nid]['name'],
-                        nid,
-                    )
-                avg = sum(order_in_layer[p] for p in preds) / len(preds)
-                return (avg, node_by_id[nid]['name'], nid)
-
-            by_layer[l_idx].sort(key=_bary_fwd)
-            for pos_idx, nid in enumerate(by_layer[l_idx]):
-                order_in_layer[nid] = pos_idx
-
-        for l_idx in reversed(sorted_layer_indices[:-1]):
-            def _bary_bwd(nid: str) -> tuple[float, str, str]:
-                succs = outgoing.get(nid, [])
-                if not succs:
-                    return (
-                        float(order_in_layer[nid]),
-                        node_by_id[nid]['name'],
-                        nid,
-                    )
-                avg = sum(order_in_layer[s] for s in succs) / len(succs)
-                return (avg, node_by_id[nid]['name'], nid)
-
-            by_layer[l_idx].sort(key=_bary_bwd)
-            for pos_idx, nid in enumerate(by_layer[l_idx]):
-                order_in_layer[nid] = pos_idx
-
-    # Place nodes: honor pinned nodes first, then incrementally place others.
-    occupied_boxes: list[tuple[float, float, float, float]] = []
-    placed_nodes: list[dict[str, Any]] = []
-    placed_by_id: dict[str, dict[str, Any]] = {}
-
-    for nid in ordered_ids:
-        pin = pins.get(nid)
-        if pin and pin.get('pinned'):
-            node = node_by_id[nid]
-            x = float(pin['x'])
-            y = float(pin['y'])
-            occupied_boxes.append(
-                (x, y, x + node['width'], y + node['height'])
-            )
-            placed = {
-                **node,
-                'layer': layers[nid],
-                'order': order_in_layer[nid],
-                'x': x,
-                'y': y,
-                'pinned': True,
-            }
-            placed_nodes.append(placed)
-            placed_by_id[nid] = placed
-
-    def _overlaps(
-        x: float, y: float, w: float, h: float, margin: float = 24.0
-    ) -> bool:
-        for ox1, oy1, ox2, oy2 in occupied_boxes:
-            if not (
-                x + w + margin <= ox1
-                or ox2 + margin <= x
-                or y + h + margin <= oy1
-                or oy2 + margin <= y
-            ):
-                return True
-        return False
-
-    for l_idx in sorted_layer_indices:
-        cursor_y = 48.0
-        base_x = 48.0 + float(l_idx * gap_x)
-        for nid in by_layer[l_idx]:
-            if nid in placed_by_id:
-                continue
-            node = node_by_id[nid]
-            saved = pins.get(nid)
-            if saved and not _overlaps(
-                saved['x'], saved['y'], node['width'], node['height']
-            ):
-                x = float(saved['x'])
-                y = float(saved['y'])
-            else:
-                x = base_x
-                y = cursor_y
-                while _overlaps(x, y, node['width'], node['height']):
-                    y += float(gap_y)
-            cursor_y = max(cursor_y, y + node['height'] + 48.0)
-            occupied_boxes.append(
-                (x, y, x + node['width'], y + node['height'])
-            )
-            placed = {
-                **node,
-                'layer': l_idx,
-                'order': order_in_layer[nid],
-                'x': x,
-                'y': y,
-                'pinned': False,
-            }
-            placed_nodes.append(placed)
-            placed_by_id[nid] = placed
-
-    placed_nodes.sort(
-        key=lambda item: (item['layer'], item['order'], item['id'])
-    )
-
-    # Compute orthogonal layered edge waypoints.
-    routed_edges: list[dict[str, Any]] = []
-    for edge in edges:
-        src_node = placed_by_id[edge['source']]
-        tgt_node = placed_by_id[edge['target']]
-        sx = src_node['x'] + src_node['width']
-        sy = src_node['y'] + src_node['height'] / 2.0
-        tx = tgt_node['x']
-        ty = tgt_node['y'] + tgt_node['height'] / 2.0
-        mid_x = round((sx + tx) / 2.0, 2)
-        waypoints = [
-            {'x': round(sx, 2), 'y': round(sy, 2)},
-            {'x': mid_x, 'y': round(sy, 2)},
-            {'x': mid_x, 'y': round(ty, 2)},
-            {'x': round(tx, 2), 'y': round(ty, 2)},
-        ]
-        routed_edges.append({
-            **edge,
-            'points': waypoints,
-            'bounds': {
-                'min_x': min(p['x'] for p in waypoints),
-                'min_y': min(p['y'] for p in waypoints),
-                'max_x': max(p['x'] for p in waypoints),
-                'max_y': max(p['y'] for p in waypoints),
-            },
-        })
-
-    if placed_nodes:
-        min_x = min(n['x'] for n in placed_nodes)
-        min_y = min(n['y'] for n in placed_nodes)
-        max_x = max(n['x'] + n['width'] for n in placed_nodes)
-        max_y = max(n['y'] + n['height'] for n in placed_nodes)
-    else:
-        min_x = min_y = 0.0
-        max_x = max_y = float(tile_size)
-
-    canvas_bounds = {
-        'min_x': round(min_x, 2),
-        'min_y': round(min_y, 2),
-        'max_x': round(max_x, 2),
-        'max_y': round(max_y, 2),
-        'width': round(max(1.0, max_x - min_x + 96.0), 2),
-        'height': round(max(1.0, max_y - min_y + 96.0), 2),
-    }
-
-    # Partition into spatial tiles of tile_size x tile_size.
-    min_tx = int(math.floor(min_x / tile_size))
-    max_tx = int(math.floor(max_x / tile_size))
-    min_ty = int(math.floor(min_y / tile_size))
-    max_ty = int(math.floor(max_y / tile_size))
-
-    tiles: list[dict[str, Any]] = []
-    for ty in range(min_ty, max_ty + 1):
-        for tx in range(min_tx, max_tx + 1):
-            bx1 = float(tx * tile_size)
-            by1 = float(ty * tile_size)
-            bx2 = float((tx + 1) * tile_size)
-            by2 = float((ty + 1) * tile_size)
-            tile_nodes = [
-                n['id']
-                for n in placed_nodes
-                if not (
-                    n['x'] + n['width'] < bx1
-                    or n['x'] > bx2
-                    or n['y'] + n['height'] < by1
-                    or n['y'] > by2
-                )
-            ]
-            tile_edges = [
-                e['id']
-                for e in routed_edges
-                if not (
-                    e['bounds']['max_x'] < bx1
-                    or e['bounds']['min_x'] > bx2
-                    or e['bounds']['max_y'] < by1
-                    or e['bounds']['min_y'] > by2
-                )
-            ]
-            if tile_nodes or tile_edges or (tx == min_tx and ty == min_ty):
-                tile_key = hashlib.sha256(
-                    f'{digest}:{selected_view}:{tile_size}:{tx}:{ty}'.encode(
-                        'utf-8'
-                    )
-                ).hexdigest()[:24]
-                tiles.append({
-                    'tx': tx,
-                    'ty': ty,
-                    'tile_key': tile_key,
-                    'bounds': {
-                        'min_x': bx1,
-                        'min_y': by1,
-                        'max_x': bx2,
-                        'max_y': by2,
-                    },
-                    'node_ids': tile_nodes,
-                    'edge_ids': tile_edges,
-                })
-
     result = {
         'ddn_sha256': digest,
         'view_id': selected_view,
+        'profile': scene.get('profile', 'ddn@1'),
         'algorithm': 'scratchrobin-server-layered@1',
         'tile_size': tile_size,
-        'canvas_bounds': canvas_bounds,
-        'nodes': placed_nodes,
-        'edges': routed_edges,
-        'tiles': tiles,
+        'canvas_bounds': scene['canvas_bounds'],
+        'views': scene.get('views', []),
+        'summary': scene.get('summary', {}),
+        'minimap': scene.get('minimap', []),
+        'zones': scene.get('zones', []),
+        'widgets': scene.get('widgets', []),
+        'nodes': scene['nodes'],
+        'edges': scene['edges'],
+        'tiles': [
+            {
+                'tx': t['tx'],
+                'ty': t['ty'],
+                'coord': t['coord'],
+                'tile_key': t['tile_key'],
+                'bounds': t['bounds'],
+                'node_ids': t['node_ids'],
+                'edge_ids': t['edge_ids'],
+            }
+            for t in scene['tiles']
+        ],
     }
-    if use_cache:
+    if use_cache and not pinned_positions:
         GLOBAL_TILE_CACHE.put(digest, selected_view, tile_size, result)
     return result
 
@@ -764,41 +446,55 @@ def compute_server_layout(
 def apply_layout_to_ddn_text(
     ddn_text: str, layout: dict[str, Any]
 ) -> str:
-    """Embed server-computed coordinates and pin flags into ``ddn_text``."""
+    """Embed server-computed coordinates and pin flags into ``ddn_text`` in O(N)."""
     nodes_by_id = {
         node['id']: node for node in layout.get('nodes', ())
     }
     if not nodes_by_id:
         return ddn_text
 
-    updated = ddn_text
+    # Single-pass line scan updating existing subject_id record blocks in O(N)
+    lines = ddn_text.splitlines(keepends=True)
+    out_lines: list[str] = []
+    seen_subjects: set[str] = set()
+    subj_re = re.compile(r'^(\s+)subject_id\s+"((?:[^"]|"")+)"\s*$')
+    layout_kv_re = re.compile(r'^\s+layout_(?:x|y|pinned)\s+')
+
+    idx = 0
+    total = len(lines)
+    while idx < total:
+        line = lines[idx]
+        m = subj_re.match(line.rstrip('\r\n'))
+        if m:
+            indent = m.group(1)
+            sid = m.group(2).replace('""', '"')
+            out_lines.append(line)
+            idx += 1
+            if sid in nodes_by_id:
+                seen_subjects.add(sid)
+                node = nodes_by_id[sid]
+                x_str = str(round(float(node['x']), 2))
+                y_str = str(round(float(node['y']), 2))
+                pin_str = 'true' if node.get('pinned') else 'false'
+                while idx < total and layout_kv_re.match(lines[idx]):
+                    idx += 1
+                out_lines.append(f'{indent}layout_x "{x_str}"\n')
+                out_lines.append(f'{indent}layout_y "{y_str}"\n')
+                out_lines.append(f'{indent}layout_pinned "{pin_str}"\n')
+            continue
+        out_lines.append(line)
+        idx += 1
+
+    updated = ''.join(out_lines)
+    extra_records: list[str] = []
     for nid, node in nodes_by_id.items():
-        q_id = nid.replace('"', '""')
+        if nid in seen_subjects:
+            continue
         x_str = str(round(float(node['x']), 2))
         y_str = str(round(float(node['y']), 2))
         pin_str = 'true' if node.get('pinned') else 'false'
-
-        # If a companion relations.mapping_<id> record exists, update/add
-        # layout_x, layout_y, layout_pinned inside its record block.
-        esc_id = re.escape(q_id)
-        pattern = re.compile(
-            rf'(element\s+"relations\.mapping_{esc_id}"\s+as\s+"record"'
-            rf'[\s\S]*?\n\s+record\n\s+subject_id\s+"{esc_id}"\n)'
-            rf'(?:\s+layout_x\s+"[^"]*"\n)?'
-            rf'(?:\s+layout_y\s+"[^"]*"\n)?'
-            rf'(?:\s+layout_pinned\s+"[^"]*"\n)?',
-            re.MULTILINE,
-        )
-        if pattern.search(updated):
-            replacement = (
-                rf'\g<1>'
-                f'                    layout_x "{x_str}"\n'
-                f'                    layout_y "{y_str}"\n'
-                f'                    layout_pinned "{pin_str}"\n'
-            )
-            updated = pattern.sub(replacement, updated, count=1)
-        else:
-            rec_source = ddn.annotation(
+        extra_records.append(
+            ddn.annotation(
                 nid,
                 node.get('name') or nid,
                 f'layout:{nid}',
@@ -810,7 +506,9 @@ def apply_layout_to_ddn_text(
                 },
                 'scratchrobin.layout',
             )
-            updated = updated.rstrip() + '\n\n' + rec_source
+        )
+    if extra_records:
+        updated = updated.rstrip() + '\n\n' + '\n'.join(extra_records)
     return updated
 
 
@@ -1713,6 +1411,13 @@ class StoreDDNProcess:
             entry=f'{design["key"]}.ddn',
             view=view_id,
         )
+        from .robin_scene_engine import compile_robin_scene, slice_scene_response
+
+        scene = compile_robin_scene(
+            ddn_text,
+            view_id=workspace['view'],
+            tile_size=tile_size,
+        )
         layout = compute_server_layout(
             ddn_text,
             view_id=workspace['view'],
@@ -1732,6 +1437,7 @@ class StoreDDNProcess:
             'design': design,
             'workspace': workspace,
             'layout': layout,
+            'scene': slice_scene_response(scene),
             'resolved_includes': resolved_includes,
             'binding_summary': binding_summary,
         }

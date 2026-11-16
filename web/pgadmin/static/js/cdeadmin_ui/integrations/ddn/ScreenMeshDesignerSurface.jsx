@@ -3135,7 +3135,17 @@ export function ScreenMeshDesignerSurface({
           >
             {viewerSnapshot && (
               <DDNViewerSurface
+                projectId={projectId}
+                designId={designId}
+                version={sessionState.currentVersion}
+                initialScene={sessionState.scene}
+                client={client}
                 snapshot={viewerSnapshot}
+                view={viewerSnapshot.view}
+                editable={!readOnly}
+                onPinNode={(nodeId, x, y) => {
+                  if (!readOnly) controller.pinNode(nodeId, x, y, true);
+                }}
                 showViewSelector={false}
                 onExport={onExport}
                 onError={onError}

@@ -162,6 +162,27 @@ export function BIDesignsNavigator({
     setError('');
     try {
       const projects = await projectClient.listProjects();
+      if (typeof designClient.listAllDesigns === 'function') {
+        try {
+          const allBi = await designClient.listAllDesigns({
+            kind: ['question', 'dashboard'],
+          });
+          const byProj = new Map();
+          for (const d of allBi || []) {
+            if (!byProj.has(d.project_id)) byProj.set(d.project_id, []);
+            byProj.get(d.project_id).push(d);
+          }
+          const batchLoaded = projects.map((project) => ({
+            project,
+            items: byProj.get(project.project_id) || [],
+            error: '',
+          }));
+          setGroups(batchLoaded);
+          return batchLoaded;
+        } catch {
+          // Fall back to per-project listing if batch endpoint is mocked out in tests
+        }
+      }
       const loaded = await Promise.all(
         projects.map(async (project) => {
           try {

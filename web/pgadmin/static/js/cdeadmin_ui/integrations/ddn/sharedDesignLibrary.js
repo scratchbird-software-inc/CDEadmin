@@ -83,6 +83,79 @@ export class DesignStoreClient {
     );
   }
 
+  listAllDesigns({kind = null} = {}) {
+    const params = new URLSearchParams();
+    if (Array.isArray(kind)) {
+      if (kind.length) params.set('kind', kind.join(','));
+    } else if (kind) {
+      params.set('kind', String(kind));
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() => this.api.get(`/cdeadmin/api/designs${suffix}`));
+  }
+
+  fetchDesignTiles(
+    projectId,
+    designId,
+    {version = null, view = null, tileSize = 1024, coords = null} = {}
+  ) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    if (view) params.set('view', String(view));
+    if (tileSize) params.set('tile_size', String(tileSize));
+    if (Array.isArray(coords) && coords.length) {
+      params.set('coords', coords.join(','));
+    } else if (typeof coords === 'string' && coords) {
+      params.set('coords', coords);
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/tiles${suffix}`
+      )
+    );
+  }
+
+  fetchDesignSvg(projectId, designId, {version = null, view = null} = {}) {
+    const params = new URLSearchParams();
+    if (version !== null && version !== undefined) {
+      params.set('version', String(version));
+    }
+    if (view) params.set('view', String(view));
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return callApi(() =>
+      this.api.get(
+        `${ROOT}/${segment(projectId)}/designs/${segment(designId)}/svg${suffix}`
+      )
+    );
+  }
+
+  compileDdnScene({
+    workspace = null,
+    files = null,
+    ddnText = null,
+    entry = null,
+    view = null,
+    tileSize = 1024,
+    coords = null,
+    includeSvg = false,
+  } = {}) {
+    return callApi(() =>
+      this.api.post('/cdeadmin/api/ddn/scene', {
+        workspace,
+        files,
+        ddn_text: ddnText,
+        entry,
+        view,
+        tile_size: tileSize,
+        coords: Array.isArray(coords) ? coords.join(',') : coords,
+        include_svg: Boolean(includeSvg),
+      })
+    );
+  }
+
   createDesign(projectId, payload) {
     return callApi(() =>
       this.api.post(`${ROOT}/${segment(projectId)}/designs`, payload)
@@ -1325,8 +1398,14 @@ export class SharedDDNTaskController {
         kind: this.kind,
       });
     }
-    const {design, workspace, layout, resolved_includes, binding_summary} =
-      this.session;
+    const {
+      design,
+      workspace,
+      layout,
+      scene,
+      resolved_includes,
+      binding_summary,
+    } = this.session;
     return Object.freeze({
       loaded: true,
       projectId: this.projectId,
@@ -1339,7 +1418,8 @@ export class SharedDDNTaskController {
       status: design.version.status,
       workspace: validateDDNSnapshot(workspace),
       layout,
-      tiles: layout?.tiles || [],
+      scene: scene || null,
+      tiles: scene?.tiles || layout?.tiles || [],
       resolvedIncludes: resolved_includes || [],
       bindings: design.bindings || [],
       bindingSummary: binding_summary || {

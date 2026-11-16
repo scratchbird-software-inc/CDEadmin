@@ -681,6 +681,42 @@ def test_design_store_flask_routes_end_to_end(tmp_path):
     assert 'DROP COLUMN' not in sub_plan['script']
     assert 'RENAME TO "accounts"' in sub_plan['script']
 
+    # 7. Batch cross-project listing, spatial tile streaming, SVG export & ad-hoc scene compilation
+    batch_res = client.get('/cdeadmin/api/designs?kind=erd')
+    assert batch_res.status_code == 200
+    batch_items = batch_res.get_json()['data']
+    assert len(batch_items) >= 2
+    assert {d['id'] for d in batch_items} >= {design_id, erd_id}
+
+    tiles_res = client.get(
+        f'/cdeadmin/api/projects/demo-proj/designs/{design_id}/tiles?tile_size=512&coords=0:0'
+    )
+    assert tiles_res.status_code == 200
+    tiles_data = tiles_res.get_json()['data']
+    assert tiles_data['algorithm'] == 'scratchrobin-server-layered@1'
+    assert '0:0' in tiles_data['loaded_tiles']
+    assert len(tiles_data['loaded_tiles']['0:0']['nodes']) >= 1
+
+    svg_res = client.get(
+        f'/cdeadmin/api/projects/demo-proj/designs/{design_id}/svg'
+    )
+    assert svg_res.status_code == 200
+    assert '<svg ' in svg_res.get_json()['data']['svg']
+
+    adhoc_res = client.post(
+        '/cdeadmin/api/ddn/scene',
+        json={
+            'files': {'orders.ddn': _sample_erd_ddn()},
+            'entry': 'orders.ddn',
+            'tile_size': 512,
+            'include_svg': True,
+        },
+    )
+    assert adhoc_res.status_code == 200
+    adhoc_scene = adhoc_res.get_json()['data']
+    assert adhoc_scene['summary']['node_count'] == 2
+    assert '<svg ' in adhoc_scene['svg']
+
 
 def test_live_sqlite_and_duckdb_erd_roundtrip_and_alter_preview(tmp_path):
     import sqlite3

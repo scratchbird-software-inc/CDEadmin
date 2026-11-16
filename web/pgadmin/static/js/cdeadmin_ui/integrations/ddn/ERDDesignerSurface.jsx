@@ -2604,11 +2604,34 @@ export function ERDDesignerSurface({
           )}
           {sessionState.loaded && sessionState.workspace && (
             <DDNViewerSurface
+              projectId={projectId}
+              designId={designId}
+              version={sessionState.currentVersion}
+              initialScene={sessionState.scene}
+              client={client}
               snapshot={{
                 ...sessionState.workspace,
                 view: activeView,
               }}
               view={activeView}
+              editable={!readOnly}
+              selectedNodeId={selectedElementId}
+              onSelectNode={(node) => {
+                if (!node) return;
+                if (
+                  node.level &&
+                  ['conceptual', 'logical', 'physical', 'deployment'].includes(
+                    node.level
+                  )
+                ) {
+                  setInspectorLevel(node.level);
+                }
+                setSelectedElementId(node.id || '');
+                openPropertiesDrawerRef.current?.();
+              }}
+              onPinNode={(nodeId, x, y) => {
+                if (!readOnly) controller.pinNode(nodeId, x, y, true);
+              }}
               showViewSelector={false}
               executeCommand={executeCommand}
               onExport={onExport}

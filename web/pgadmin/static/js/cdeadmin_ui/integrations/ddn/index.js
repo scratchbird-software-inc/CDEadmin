@@ -27,6 +27,11 @@ export {
   DDN_PERSISTENCE_STATES,
   DDNSessionController,
 } from './DDNSessionController.js';
+export {
+  RobinTiledCanvas,
+  buildLocalFallbackScene,
+  serializeRobinSceneToSvg,
+} from './RobinTiledCanvas';
 export {DDNViewerSurface} from './DDNViewerSurface';
 export {DDNDesignerSurface} from './DDNDesignerSurface';
 export {

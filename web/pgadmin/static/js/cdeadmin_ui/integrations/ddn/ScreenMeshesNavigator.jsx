@@ -209,12 +209,36 @@ export function ScreenMeshesNavigator({
     setError('');
     try {
       const projects = await projectClient.listProjects();
+      if (typeof designClient.listAllDesigns === 'function') {
+        try {
+          const allMeshes = await designClient.listAllDesigns({
+            kind: ['screen', 'screen_flow', 'screen_mesh'],
+          });
+          const byProj = new Map();
+          for (const d of allMeshes || []) {
+            if (!byProj.has(d.project_id)) byProj.set(d.project_id, []);
+            byProj.get(d.project_id).push(d);
+          }
+          const batchLoaded = projects.map((project) => ({
+            project,
+            items: byProj.get(project.project_id) || [],
+            error: '',
+          }));
+          setGroups(batchLoaded);
+          return batchLoaded;
+        } catch {
+          // Fall back to per-project listing if batch endpoint is mocked out in tests
+        }
+      }
       const loaded = await Promise.all(
         projects.map(async (project) => {
           try {
             const all = await designClient.listDesigns(project.project_id);
             const items = (all || []).filter(
-              (d) => d.kind === 'screen' || d.kind === 'screen_flow'
+              (d) =>
+                d.kind === 'screen' ||
+                d.kind === 'screen_flow' ||
+                d.kind === 'screen_mesh'
             );
             return {project, items, error: ''};
           } catch (loadErr) {

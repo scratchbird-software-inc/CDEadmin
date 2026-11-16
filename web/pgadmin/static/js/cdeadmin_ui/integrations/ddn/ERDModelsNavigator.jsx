@@ -193,6 +193,25 @@ export function ERDModelsNavigator({
     setError('');
     try {
       const projects = await projectClient.listProjects();
+      if (typeof designClient.listAllDesigns === 'function') {
+        try {
+          const allModels = await designClient.listAllDesigns({kind: 'erd'});
+          const byProj = new Map();
+          for (const d of allModels || []) {
+            if (!byProj.has(d.project_id)) byProj.set(d.project_id, []);
+            byProj.get(d.project_id).push(d);
+          }
+          const batchLoaded = projects.map((project) => ({
+            project,
+            models: byProj.get(project.project_id) || [],
+            error: '',
+          }));
+          setGroups(batchLoaded);
+          return batchLoaded;
+        } catch {
+          // Fall back to per-project listing if batch endpoint is mocked out in tests
+        }
+      }
       const loaded = await Promise.all(
         projects.map(async (project) => {
           try {

@@ -988,7 +988,7 @@ def seed_projects_and_bindings(
             all_project_tables = anchor_tables + shared_master_tables
 
             # Build 4-level (conceptual, logical, physical, deployment) server-laid-out ERD diagram(s)!
-            diagram_tables = all_project_tables[:36]
+            diagram_tables = all_project_tables[:140]
             elem_id_by_table: dict[str, str] = {}
             conceptual_entities: list[dict[str, object]] = []
             logical_entities: list[dict[str, object]] = []
@@ -1049,12 +1049,13 @@ def seed_projects_and_bindings(
             erd_links: list[dict[str, str]] = []
             for fk in scope_fks:
                 if fk.source_table in elem_id_by_table and fk.target_table in elem_id_by_table:
-                    if fk.source_table != fk.target_table and len(erd_links) < 80:
+                    if fk.source_table != fk.target_table and len(erd_links) < 220:
                         erd_links.append({
                             "id": uuid7(),
                             "source": elem_id_by_table[fk.source_table],
                             "target": elem_id_by_table[fk.target_table],
                             "title": fk.source_col,
+                            "kind": "fk",
                         })
 
             model_title = f"{pdef['name']} — Schema Model"[:120]
@@ -1209,12 +1210,26 @@ def seed_projects_and_bindings(
             )
             total_assets += 1
 
-            # Partitioned Sub-Domain ERD Diagrams for projects with >36 owned tables so EVERY table is diagrammed!
-            if len(owned_tables) > 36:
-                for chunk_idx, start_i in enumerate(range(36, len(owned_tables), 36), start=2):
-                    chunk_tables = owned_tables[start_i:start_i + 36]
+            # Partitioned Sub-Domain ERD Diagrams only for mega-projects with >140 owned tables (with all 4 levels + element rows)!
+            if len(owned_tables) > 140:
+                for chunk_idx, start_i in enumerate(range(140, len(owned_tables), 140), start=2):
+                    chunk_tables = owned_tables[start_i:start_i + 140]
                     chunk_eids: dict[str, str] = {}
                     chunk_phys: list[dict[str, object]] = []
+                    chunk_c: list[dict[str, object]] = []
+                    chunk_l: list[dict[str, object]] = []
+                    for ct in chunk_tables[:8]:
+                        ct_spec = tables_by_name[ct]
+                        chunk_c.append({"id": uuid7(), "name": ct_spec.orig_name[:72], "role": "table"})
+                        chunk_l.append({
+                            "id": uuid7(),
+                            "name": ct_spec.orig_name[:72],
+                            "role": "table",
+                            "fields": [
+                                {"id": uuid7(), "name": c.col_name.lower(), "datatype": c.fb_type.lower(), "nullable": not c.not_null}
+                                for c in ct_spec.columns[:8]
+                            ],
+                        })
                     for ct in chunk_tables:
                         ct_spec = tables_by_name[ct]
                         ceid = uuid7()
@@ -1243,24 +1258,33 @@ def seed_projects_and_bindings(
                                 "source": chunk_eids[fk.source_table],
                                 "target": chunk_eids[fk.target_table],
                                 "title": fk.source_col,
+                                "kind": "fk",
                             })
-                    part_title = f"{pdef['name']} — Sub-Domain ERD Part {chunk_idx}"[:120]
+                    part_title = f"{pdef['name']} — Extended Schema Model (Part {chunk_idx})"[:120]
                     part_raw = build_four_level_erd_ddn(
                         title=part_title,
+                        conceptual_entities=chunk_c,
+                        logical_entities=chunk_l,
                         physical_tables=chunk_phys,
-                        level_links=chunk_links[:60],
+                        deployment_nodes=deployment_nodes,
+                        level_links=chunk_links[:160],
                     )
-                    part_ddn = apply_layout_to_ddn_text(part_raw, compute_server_layout(part_raw))
+                    part_ddn = apply_layout_to_ddn_text(part_raw, compute_server_layout(part_raw, view_id="erd_physical"))
                     part_did = _upsert_simple_design(
                         dconn,
                         project_key=pkey,
-                        design_key=f"{pkey}-erd-part-{chunk_idx}",
+                        design_key=f"{pkey}-erd-extended-{chunk_idx}",
                         kind="erd",
                         title=part_title,
                         ddn_text=part_ddn,
                         user_id=user_id,
                         now_iso=now_iso,
                     )
+                    for ct, ceid in chunk_eids.items():
+                        dconn.execute(
+                            "INSERT INTO element (id, design_id, role, name, first_version, removed_version) VALUES (?, ?, 'table', ?, 1, NULL)",
+                            (ceid, part_did, ct),
+                        )
                     part_rb = json.dumps([
                         build_resource_ref(endpoint_id, target_id, ct, role="owned", kind="table")
                         for ct in chunk_tables

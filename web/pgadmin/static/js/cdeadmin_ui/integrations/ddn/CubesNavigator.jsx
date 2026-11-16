@@ -203,6 +203,25 @@ export function CubesNavigator({
     setError('');
     try {
       const projects = await projectClient.listProjects();
+      if (typeof designClient.listAllDesigns === 'function') {
+        try {
+          const allCubes = await designClient.listAllDesigns({kind: 'cube'});
+          const byProj = new Map();
+          for (const d of allCubes || []) {
+            if (!byProj.has(d.project_id)) byProj.set(d.project_id, []);
+            byProj.get(d.project_id).push(d);
+          }
+          const batchLoaded = projects.map((project) => ({
+            project,
+            cubes: byProj.get(project.project_id) || [],
+            error: '',
+          }));
+          setGroups(batchLoaded);
+          return batchLoaded;
+        } catch {
+          // Fall back to per-project listing if batch endpoint is mocked out in tests
+        }
+      }
       const loaded = await Promise.all(
         projects.map(async (project) => {
           try {

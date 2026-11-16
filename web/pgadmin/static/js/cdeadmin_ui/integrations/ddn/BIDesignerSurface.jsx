@@ -2886,6 +2886,11 @@ export function BIDesignerSurface({
         >
           {viewerWorkspace && (
             <DDNViewerSurface
+              projectId={projectId}
+              designId={designId}
+              version={sessionState.currentVersion}
+              initialScene={sessionState.scene}
+              client={client}
               snapshot={viewerWorkspace.format ? viewerWorkspace : undefined}
               files={!viewerWorkspace.format ? viewerWorkspace.files : undefined}
               entry={viewerWorkspace.entry}

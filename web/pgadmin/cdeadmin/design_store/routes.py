@@ -2163,4 +2163,143 @@ def _register_routes(app, project_asset_service) -> None:
             )
         )
 
+    @api.route('/cdeadmin/api/designs', methods=['GET'])
+    @pga_login_required
+    def list_all_accessible_designs():
+        uid, role_ids = principal()
+        kind = request.args.get('kind') or None
+        accessible_ids: set[str] | None = None
+        if project_asset_service is not None:
+            try:
+                projs = project_asset_service.list_projects(uid, role_ids)
+                accessible_ids = {p['project_id'] for p in projs}
+            except Exception:
+                accessible_ids = None
+
+        def _fetch(store: DesignStore, _proc: StoreDDNProcess):
+            all_items = store.list_designs(project_id=None, kind=kind)
+            if accessible_ids is not None:
+                return [
+                    it for it in all_items if it['project_id'] in accessible_ids
+                ]
+            return all_items
+
+        return invoke(_fetch)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/tiles',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def design_spatial_tiles(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        version = request.args.get('version', type=int)
+        view_id = request.args.get('view') or None
+        tile_size = request.args.get('tile_size', default=1024, type=int)
+        raw_coords = request.args.get('coords') or ''
+        coords = (
+            [c.strip() for c in raw_coords.split(',') if c.strip()]
+            if raw_coords.strip()
+            else None
+        )
+        from .robin_scene_engine import compile_robin_scene, slice_scene_response
+
+        def _load_tiles(store: DesignStore, _proc: StoreDDNProcess):
+            design = store.get_design(design_id, version=version)
+            ddn_text = design['version']['ddn_text']
+            scene = compile_robin_scene(
+                ddn_text, view_id=view_id, tile_size=tile_size
+            )
+            return slice_scene_response(scene, coords=coords)
+
+        return invoke(_load_tiles)
+
+    @api.route(
+        '/cdeadmin/api/projects/<project_id>/designs/<design_id>/svg',
+        methods=['GET'],
+    )
+    @pga_login_required
+    def design_host_svg(project_id: str, design_id: str):
+        uid, role_ids = principal()
+        _check_project_access(
+            project_asset_service, uid, role_ids, project_id, 'viewer'
+        )
+        version = request.args.get('version', type=int)
+        view_id = request.args.get('view') or None
+        from .robin_scene_engine import compile_robin_scene, render_scene_to_svg
+
+        def _make_svg(store: DesignStore, _proc: StoreDDNProcess):
+            design = store.get_design(design_id, version=version)
+            scene = compile_robin_scene(
+                design['version']['ddn_text'], view_id=view_id
+            )
+            return {'svg': render_scene_to_svg(scene), 'view_id': scene['view_id']}
+
+        return invoke(_make_svg)
+
+    @api.route('/cdeadmin/api/ddn/scene', methods=['POST'])
+    @csrf_exempt
+    @pga_login_required
+    def adhoc_ddn_scene():
+        body = request.get_json(silent=True) or {}
+        from .ddn_elements import workspace_to_ddn_text
+        from .robin_scene_engine import (
+            compile_robin_scene,
+            render_scene_to_svg,
+            slice_scene_response,
+        )
+
+        raw_input = body.get('workspace') or body.get('ddn_text') or ''
+        if isinstance(raw_input, dict) and 'files' not in raw_input:
+            raw_input = {'files': raw_input}
+        elif not raw_input and isinstance(body.get('files'), dict):
+            raw_input = {
+                'format': 'ddn-source-workspace@1',
+                'files': body['files'],
+                'entry': body.get('entry') or next(iter(body['files']), 'model.ddn'),
+                'view': body.get('view_id') or body.get('view'),
+            }
+
+        def _compile(_store: DesignStore, _proc: StoreDDNProcess):
+            inferred_view = body.get('view_id') or body.get('view')
+            if isinstance(raw_input, str) and raw_input:
+                ddn_text = raw_input
+            elif isinstance(raw_input, dict) and isinstance(raw_input.get('files'), dict):
+                files_map = raw_input['files']
+                if not files_map:
+                    raise DesignStoreError('DDN files map must not be empty')
+                entry_name = (
+                    raw_input.get('entry')
+                    or body.get('entry')
+                    or next(iter(files_map))
+                )
+                ddn_text = str(files_map.get(entry_name) or next(iter(files_map.values())) or '')
+                inferred_view = inferred_view or raw_input.get('view')
+            else:
+                ddn_text, _ent, inferred_view = workspace_to_ddn_text(raw_input)
+            view_id = body.get('view_id') or body.get('view') or inferred_view
+            tile_size = int(body.get('tile_size') or 1024)
+            raw_coords = body.get('coords')
+            if isinstance(raw_coords, str) and raw_coords.strip():
+                coords_list = [c.strip() for c in raw_coords.split(',') if c.strip()]
+            elif isinstance(raw_coords, list):
+                coords_list = [str(c).strip() for c in raw_coords if str(c).strip()]
+            else:
+                coords_list = None
+            scene = compile_robin_scene(
+                ddn_text,
+                view_id=view_id,
+                pinned_positions=body.get('pinned_positions'),
+                tile_size=tile_size,
+            )
+            resp = slice_scene_response(scene, coords=coords_list)
+            if body.get('include_svg'):
+                resp['svg'] = render_scene_to_svg(scene)
+            return resp
+
+        return invoke(_compile)
+
     app.register_blueprint(api)

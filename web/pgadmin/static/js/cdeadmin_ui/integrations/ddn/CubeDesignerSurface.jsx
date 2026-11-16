@@ -2681,7 +2681,17 @@ export function CubeDesignerSurface({
         {viewerSnapshot ? (
           <DDNViewerSurface
             key={`${sessionState.currentVersion}:${viewerSnapshot.view}`}
+            projectId={projectId}
+            designId={designId}
+            version={sessionState.currentVersion}
+            initialScene={!previewLocale ? sessionState.scene : null}
+            client={client}
             snapshot={viewerSnapshot}
+            view={viewerSnapshot.view}
+            editable={!readOnly}
+            onPinNode={(nodeId, x, y) => {
+              if (!readOnly) controller.pinNode(nodeId, x, y, true);
+            }}
             title={
               localizedPreviewModel?.name ||
               sessionState.design?.title ||

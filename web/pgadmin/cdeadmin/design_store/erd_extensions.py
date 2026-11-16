@@ -2002,6 +2002,9 @@ def import_erd_external(
 # ---------------------------------------------------------------------------
 
 
+_ERD_STATE_CACHE: dict[str, dict[str, Any]] = {}
+
+
 def inspect_erd_elements(
     store: DesignStore,
     *,
@@ -2011,9 +2014,15 @@ def inspect_erd_elements(
     """Return structured 4-level ERD state for the Property Inspector & forms."""
     design = store.get_design(design_id, version=version)
     ver_obj = design['version']
-    parsed = _parse_ddn_into_erd_state(
-        ver_obj['ddn_text'], default_title=design['title']
-    )
+    cache_key = f"{ver_obj.get('ddn_sha256') or sha256_text(ver_obj['ddn_text'])}:{design['title']}"
+    parsed = _ERD_STATE_CACHE.get(cache_key)
+    if parsed is None:
+        parsed = _parse_ddn_into_erd_state(
+            ver_obj['ddn_text'], default_title=design['title']
+        )
+        if len(_ERD_STATE_CACHE) > 256:
+            _ERD_STATE_CACHE.clear()
+        _ERD_STATE_CACHE[cache_key] = parsed
     return {
         'design_id': design['id'],
         'title': design['title'],
