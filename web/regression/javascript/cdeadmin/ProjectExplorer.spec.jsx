@@ -234,6 +234,7 @@ describe('Project Explorer / Project Navigator', () => {
     expect(assetIcon('cdeadmin.design.dashboard')).toBe('tool.bi');
     expect(assetIcon('cdeadmin.design.monitoring_dashboard')).toBe('tool.bi');
     expect(assetIcon('cdeadmin.design.screen')).toBe('tool.screen-mesh');
+    expect(assetIcon('cdeadmin.design.screen_mesh')).toBe('tool.screen-mesh');
     expect(assetIcon('cdeadmin.lineage.v1')).toBe('tool.lineage');
     expect(assetIcon('cdeadmin.schema_compare.v1')).toBe('tool.schema-compare');
     expect(assetIcon('cdeadmin.quality.v1')).toBe('tool.quality');
@@ -263,5 +264,93 @@ describe('Project Explorer / Project Navigator', () => {
     expect(graphs.items.map((i) => i.asset.asset_id)).toEqual(['c1', 'd1']);
     expect(diagrams.items.map((i) => i.asset.asset_id)).toEqual(['e1']);
     expect(docs.items.map((i) => i.asset.asset_id)).toEqual(['q1']);
+  });
+
+  it('streams CDETree nodes from the host navigatorNodes endpoint with Data Explorer parity', async () => {
+    const navigatorNodes = jest.fn(async ({parent = '', query = ''}) => {
+      if (!parent) {
+        return {
+          matching_project_count: 1,
+          nodes: [
+            {
+              id: 'proj~analytics',
+              label: 'Analytics BI',
+              info_label: ' (Owner)',
+              icon_key: 'object.schema',
+              _type: 'cde_project',
+              inode: true,
+              has_children: true,
+              auto_expand: Boolean(query),
+              project_id: 'analytics',
+              project: {project_id: 'analytics', name: 'Analytics BI', access: 'owner'},
+            },
+          ],
+        };
+      }
+      if (parent.endsWith('proj~analytics')) {
+        return {
+          matching_project_count: 1,
+          nodes: [
+            {
+              id: 'virt~analytics~screens',
+              label: 'Screens',
+              info_label: ' (1)',
+              icon_key: 'ui.screen_frame',
+              _type: 'cde_project_virtual',
+              inode: true,
+              has_children: true,
+              auto_expand: true,
+              project_id: 'analytics',
+              virtual_id: 'virt:analytics:screens',
+            },
+          ],
+        };
+      }
+      if (parent.endsWith('virt~analytics~screens')) {
+        return {
+          matching_project_count: 1,
+          nodes: [
+            {
+              id: 'item~analytics~asset~mesh-1',
+              label: 'Lakehouse Analytics Explorer — Screen Mesh',
+              info_label: ' · v1',
+              icon_key: 'ui.screen_frame',
+              _type: 'cde_project_leaf',
+              inode: false,
+              has_children: false,
+              project_id: 'analytics',
+              leaf: {
+                itemKind: 'asset',
+                id: 'analytics:asset:mesh-1',
+                label: 'Lakehouse Analytics Explorer — Screen Mesh',
+                asset: {asset_id: 'mesh-1', name: 'Lakehouse Analytics Explorer — Screen Mesh', asset_type: 'cdeadmin.design.screen'},
+                project: {project_id: 'analytics', name: 'Analytics BI'},
+              },
+            },
+          ],
+        };
+      }
+      return {matching_project_count: 1, nodes: []};
+    });
+    const projectSpy = jest.fn();
+    const onOpenAsset = jest.fn();
+    const client = {
+      listProjects: jest.fn().mockResolvedValue([{project_id: 'analytics', name: 'Analytics BI', access: 'owner'}]),
+      navigatorNodes,
+      project: projectSpy,
+    };
+    const Component = withTheme(ProjectExplorer);
+    const {container} = render(<Component client={client} onOpenAsset={onOpenAsset} />);
+
+    expect(await screen.findByText('Analytics BI')).toBeInTheDocument();
+    expect(container.querySelector('.file-tree .file-entry button.directory-toggle')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Expand Analytics BI'}));
+    expect(await screen.findByText('Screens')).toBeInTheDocument();
+    expect(await screen.findByText('Lakehouse Analytics Explorer — Screen Mesh')).toBeInTheDocument();
+    expect(projectSpy).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(screen.getByRole('treeitem', {name: /Lakehouse Analytics Explorer/}));
+    expect(onOpenAsset).toHaveBeenCalledTimes(1);
   });
 });

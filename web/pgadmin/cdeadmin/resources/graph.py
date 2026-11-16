@@ -70,7 +70,7 @@ class GenerationAwareResourceCache:
             f'cdeadmin-resource-generation:{epoch}',
         ))
 
-    def page(self, context, parent: ResourceRef):
+    def peek_page(self, context, parent: ResourceRef):
         generation = self.generation(context)
         with self._lock:
             entry = self._pages.get(
@@ -78,21 +78,29 @@ class GenerationAwareResourceCache:
             )
             if entry is None or entry.generation != generation:
                 return None
-            return tuple(copy.deepcopy(entry.resources))
+            return entry.resources
+
+    def page(self, context, parent: ResourceRef):
+        cached = self.peek_page(context, parent)
+        if cached is None:
+            return None
+        return tuple(copy.deepcopy(cached))
 
     def put(
         self, context, parent: ResourceRef,
         resources: tuple[dict[str, Any], ...],
+        *, already_owned: bool = False,
     ) -> str:
         generation = self.generation(context)
+        stored = tuple(resources) if already_owned else copy.deepcopy(resources)
         with self._lock:
             self._pages[(context.cache_namespace, parent.resource_id)] = (
-                _CacheEntry(generation, copy.deepcopy(resources))
+                _CacheEntry(generation, stored)
             )
-            for resource in resources:
+            for resource in stored:
                 self._resources[
                     (context.cache_namespace, resource['resource_id'])
-                ] = copy.deepcopy(resource)
+                ] = resource
         return generation
 
     def resource(self, context, ref: ResourceRef):
@@ -229,7 +237,7 @@ class ResourceExplorerService:
         offset = self._decode_cursor(
             cursor, parent_ref, generation
         ) if cursor else 0
-        resources = self.cache.page(context, parent_ref)
+        resources = self.cache.peek_page(context, parent_ref)
         if resources is None:
             provider_request = copy.deepcopy(parent)
             if provider_route is not None:
@@ -237,7 +245,7 @@ class ResourceExplorerService:
             raw = binding.instance.list_resources(provider_request)
             resources = self._admit_children(context, parent_ref, raw)
             generation = self.cache.put(
-                context, parent_ref, resources
+                context, parent_ref, resources, already_owned=True,
             )
         if offset > len(resources):
             raise ResourceAccessError('page cursor offset exceeds result')
@@ -254,6 +262,31 @@ class ResourceExplorerService:
             next_cursor,
             len(resources),
         )
+
+    def list_all_readonly(
+        self, context, parent_payload: Mapping[str, Any], *,
+        provider_route: Mapping[str, Any] | None = None,
+    ) -> tuple[str, tuple[dict[str, Any], ...]]:
+        """Return (generation, cached_resources_tuple) without 500-item paging copies."""
+        parent = self._resource(parent_payload)
+        parent_ref = self._ref(parent)
+        self._require_endpoint(context, parent_ref)
+        binding = self._binding_for_resources(
+            self.provider_registry, context
+        )
+        self._ensure_contributions(binding)
+        generation = self.cache.generation(context)
+        resources = self.cache.peek_page(context, parent_ref)
+        if resources is None:
+            provider_request = copy.deepcopy(parent)
+            if provider_route is not None:
+                provider_request['route'] = copy.deepcopy(provider_route)
+            raw = binding.instance.list_resources(provider_request)
+            resources = self._admit_children(context, parent_ref, raw)
+            generation = self.cache.put(
+                context, parent_ref, resources, already_owned=True,
+            )
+        return generation, resources
 
     def inspect(
         self, context, ref: ResourceRef, *,

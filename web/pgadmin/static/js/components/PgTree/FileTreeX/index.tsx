@@ -141,10 +141,10 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
         tabIndex={-1}>
         <div style={{flex: 1, minHeight: 0, width: '100%'}}>
           <AutoSizer onResize={this.onResize}
-            renderProp={({ width = 100, height = 100 }) => (
+            renderProp={({ width = 320, height = 600 }) => (
               <FileTree
-                height={height}
-                width={width}
+                height={height || 600}
+                width={width || 320}
                 model={model}
                 itemHeight={effectiveRowHeight}
                 onReady={this.handleTreeReady}
@@ -746,6 +746,9 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
     }
     if (item._metadata?.data?.has_children === false && !(Array.isArray((item as any).children) && (item as any).children.length > 0)) {
       await this.setActiveFile(item as FileEntry);
+      if (item._metadata?.data?._type === 'cde_project_leaf') {
+        this.events.dispatch(FileTreeXEvent.onTreeEvents, ev, 'activated', item);
+      }
       return;
     }
     await this.toggleDirectory(item as Directory);

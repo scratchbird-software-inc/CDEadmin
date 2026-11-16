@@ -47,6 +47,22 @@ export class ProjectAssetClient {
     return invoke(() => this.api.get(ROOT));
   }
 
+  navigatorNodes({parent='', query=''}={}) {
+    const params = new URLSearchParams();
+    if(parent) params.set('parent', String(parent));
+    if(query) params.set('q', String(query));
+    const qs = params.toString();
+    return invoke(() => this.api.get(
+      `/cdeadmin/api/project-navigator/nodes${qs ? `?${qs}` : ''}`
+    ));
+  }
+
+  projectVirtualTree(projectId) {
+    return invoke(() => this.api.get(
+      `${ROOT}/${segment(projectId)}/virtual-tree`
+    ));
+  }
+
   createProject(projectId, request={}) {
     return invoke(() => this.api.put(
       `${ROOT}/${segment(projectId)}`, request

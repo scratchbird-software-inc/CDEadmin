@@ -152,7 +152,18 @@ export class ManageTreeNodes {
     let treeData = [];
     if (url) {
       try {
-        const res = await api.get(url, {timeout: 30000});
+        let res;
+        try {
+          res = await api.get(url, {timeout: 90000});
+        } catch (firstErr: any) {
+          // Host maintains persistent database connections; if a large catalog
+          // warm-up or idle socket rebind timed out once, retry transparently.
+          if (firstErr?.code === 'ECONNABORTED') {
+            res = await api.get(url, {timeout: 90000});
+          } else {
+            throw firstErr;
+          }
+        }
         treeData = res.data.data;
       } catch (error) {
         /* react-aspen does not handle reject case */

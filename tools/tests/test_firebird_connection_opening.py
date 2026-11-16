@@ -92,3 +92,42 @@ def test_only_owned_configurations_are_accepted(fixture):
         opening.connect(module, core, failed_owner=failed,
                         database='external-config')
     dispatcher.attach_database.assert_not_called()
+
+
+def test_host_multi_slot_pool_and_keepalive_evict_dead_handles():
+    from pgadmin.cdeadmin.providers.firebird.provider import FirebirdProvider
+
+    class DummyHandle:
+        def __init__(self, healthy=True):
+            self.healthy = healthy
+            self.closed = False
+            self.info = SimpleNamespace(firebird_version='5.0.4')
+
+        def is_closed(self):
+            return self.closed
+
+        def ping(self):
+            if not self.healthy:
+                raise RuntimeError('socket closed')
+
+        def close(self):
+            self.closed = True
+
+    prov = object.__new__(FirebirdProvider)
+    import threading
+    prov._catalog_pool = {}
+    prov._catalog_pool_lock = threading.RLock()
+    prov._pooled_catalog_local = threading.local()
+    prov.client = SimpleNamespace(_closed=False, _attachment_states={})
+    prov._sessions = {}
+
+    live_conn = DummyHandle(healthy=True)
+    dead_conn = DummyHandle(healthy=False)
+    prov._catalog_pool[('127.0.0.1', 53050, '/demo.fdb')] = [live_conn, dead_conn]
+
+    prov._maintain_host_connections()
+
+    remaining = prov._catalog_pool[('127.0.0.1', 53050, '/demo.fdb')]
+    assert remaining == [live_conn]
+    assert dead_conn.closed is True
+    assert live_conn.closed is False

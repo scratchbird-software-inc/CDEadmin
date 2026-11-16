@@ -1056,6 +1056,49 @@ kbd,
   border-right: 1px solid transparent !important;
   font-size: 0.8125rem;
 }
+
+/* =========================================================================
+   Canonical ScratchRobin Object Icon Sprites (Data & Project Navigators)
+   ========================================================================= */
+i[class*="icon-"],
+.file-icon[class*="icon-"] {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.icon-object { background-image: url('/static/assets/cdeadmin/objects/catalog_object.svg'); }
+.icon-server { background-image: url('/static/assets/cdeadmin/objects/server.svg'); }
+.icon-server-group { background-image: url('/static/assets/cdeadmin/objects/server_group.svg'); }
+.icon-database { background-image: url('/static/assets/cdeadmin/objects/database.svg'); }
+.icon-schema { background-image: url('/static/assets/cdeadmin/objects/schema.svg'); }
+.icon-table { background-image: url('/static/assets/cdeadmin/objects/table.svg'); }
+.icon-coll-table { background-image: url('/static/assets/cdeadmin/objects/coll-table.svg'); }
+.icon-view { background-image: url('/static/assets/cdeadmin/objects/view.svg'); }
+.icon-mview { background-image: url('/static/assets/cdeadmin/objects/mview.svg'); }
+.icon-column { background-image: url('/static/assets/cdeadmin/objects/column.svg'); }
+.icon-domain { background-image: url('/static/assets/cdeadmin/objects/domain.svg'); }
+.icon-type { background-image: url('/static/assets/cdeadmin/objects/type.svg'); }
+.icon-sequence { background-image: url('/static/assets/cdeadmin/objects/sequence.svg'); }
+.icon-function { background-image: url('/static/assets/cdeadmin/objects/function.svg'); }
+.icon-procedure { background-image: url('/static/assets/cdeadmin/objects/procedure.svg'); }
+.icon-package { background-image: url('/static/assets/cdeadmin/objects/package.svg'); }
+.icon-trigger { background-image: url('/static/assets/cdeadmin/objects/trigger.svg'); }
+.icon-index { background-image: url('/static/assets/cdeadmin/objects/index.svg'); }
+.icon-check_constraint { background-image: url('/static/assets/cdeadmin/objects/check-constraint.svg'); }
+.icon-role { background-image: url('/static/assets/cdeadmin/objects/role.svg'); }
+.icon-security { background-image: url('/static/assets/cdeadmin/objects/group.svg'); }
+.icon-extension { background-image: url('/static/assets/cdeadmin/objects/extension.svg'); }
+.icon-partition { background-image: url('/static/assets/cdeadmin/objects/partition.svg'); }
+.icon-tablespace { background-image: url('/static/assets/cdeadmin/objects/tablespace.svg'); }
+.icon-publication { background-image: url('/static/assets/cdeadmin/objects/publication.svg'); }
+.icon-pga_job { background-image: url('/static/assets/cdeadmin/objects/pga_job.svg'); }
+.icon-event_trigger { background-image: url('/static/assets/cdeadmin/objects/event_trigger.svg'); }
 `;
 
 export function ensureScratchDomCompat(win = typeof window !== 'undefined' ? window : null) {

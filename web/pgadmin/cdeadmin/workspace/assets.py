@@ -4042,8 +4042,10 @@ class ProjectAssetService:
         return parent_row
 
     def list_projects(self, user_id, role_ids=()):
-        return [self._project(row, access) for row, access in
-                self.repository.projects(user_id, role_ids)]
+        pairs = self.repository.projects(user_id, role_ids)
+        by_uuid = {row.id: row for row, _access in pairs}
+        return [self._project(row, access, by_uuid=by_uuid)
+                for row, access in pairs]
 
     def create_project(self, user_id, project_key, request, role_ids=()):
         project_key = _safe_id(project_key, 'project ID')
@@ -4312,11 +4314,18 @@ class ProjectAssetService:
             raise ProjectAssetNotFound('asset was not found')
         return row
 
-    def _project(self, row, access):
+    def _project(self, row, access, by_uuid=None):
         parent_key = None
         parent_uuid = getattr(row, 'parent_project_id', None)
-        if parent_uuid and hasattr(self.repository, 'project_by_id'):
-            parent_row = self.repository.project_by_id(parent_uuid)
+        if parent_uuid:
+            parent_row = (
+                by_uuid.get(parent_uuid)
+                if by_uuid is not None and parent_uuid in by_uuid
+                else (
+                    self.repository.project_by_id(parent_uuid)
+                    if hasattr(self.repository, 'project_by_id') else None
+                )
+            )
             if parent_row is not None:
                 parent_key = parent_row.project_key
         return {'project_id': row.project_key,
@@ -4449,6 +4458,27 @@ def _register_routes(app):
     def projects():
         user_id, role_ids = principal()
         return invoke(lambda service: service.list_projects(user_id, role_ids))
+
+    @api.route('/cdeadmin/api/project-navigator/nodes', methods=['GET'])
+    @pga_login_required
+    def project_navigator_nodes():
+        from .project_navigator import list_project_navigator_nodes
+        user_id, role_ids = principal()
+        parent = request.args.get('parent', '')
+        query = request.args.get('q', '')
+        return invoke(lambda service: list_project_navigator_nodes(
+            service, user_id, role_ids, parent=parent, query=query
+        ))
+
+    @api.route('/cdeadmin/api/projects/<project_id>/virtual-tree',
+               methods=['GET'])
+    @pga_login_required
+    def project_virtual_tree(project_id):
+        from .project_navigator import get_project_virtual_tree_payload
+        user_id, role_ids = principal()
+        return invoke(lambda service: get_project_virtual_tree_payload(
+            service, user_id, role_ids, project_id=project_id
+        ))
 
     @api.route('/cdeadmin/api/projects/<project_id>',
                methods=['GET', 'POST', 'PUT', 'DELETE'])

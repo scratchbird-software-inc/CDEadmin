@@ -45,7 +45,8 @@ export function assetIcon(assetType) {
   }
   if (
     assetType === 'cdeadmin.design.screen' ||
-    assetType === 'cdeadmin.design.screen_flow'
+    assetType === 'cdeadmin.design.screen_flow' ||
+    assetType === 'cdeadmin.design.screen_mesh'
   ) {
     return 'tool.screen-mesh';
   }
@@ -217,6 +218,7 @@ export function extractProjectDatabaseObjects(state) {
 const SCREEN_TYPES = new Set([
   'cdeadmin.design.screen',
   'cdeadmin.design.screen_flow',
+  'cdeadmin.design.screen_mesh',
 ]);
 const GRAPH_TYPES = new Set([
   'cdeadmin.design.question',
@@ -630,7 +632,7 @@ export function buildProjectVirtualTree(project, state, childProjects = []) {
       id: `virt:${pid}:screens`,
       key: 'screens',
       label: 'Screens',
-      iconKey: 'object.table',
+      iconKey: 'ui.screen_frame',
       project,
       items: toAssetItems(screens),
       subgroups: [],

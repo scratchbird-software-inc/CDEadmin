@@ -1174,10 +1174,12 @@ const ACTION_COMPONENTS = Object.freeze({
   branch_draft: BranchDraftIcon,
   browse_data: BrowseDataGridIcon,
   cancel: CancelCircleIcon,
+  check: AcceptVersionIcon,
   checkpoints: HistoryIcon,
   close: CancelCircleIcon,
   collector_snapshot: CollectorSnapshotIcon,
   command_palette: CommandLineIcon,
+  comment: SectionCommentsIcon,
   commit: SaveIcon,
   compare: GitCompareIcon,
   compare_run: RefreshIcon,
@@ -1488,6 +1490,9 @@ const BUILTIN_DEFINITIONS = [
   ),
   componentDefinition(
     'object.notebook', ICON_CATEGORIES.OBJECT, FileAddIcon, 'SQL Notebook'
+  ),
+  componentDefinition(
+    'object.schedule', ICON_CATEGORIES.OBJECT, CalendarClockIcon, 'Schedule & Calendar'
   ),
   componentDefinition(
     'object.setting', ICON_CATEGORIES.OBJECT, SettingsIcon, 'Configuration Setting'

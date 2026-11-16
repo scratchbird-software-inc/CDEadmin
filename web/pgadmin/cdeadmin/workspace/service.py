@@ -585,21 +585,27 @@ class ProviderWorkspaceService:
         describe_admin = getattr(
             binding.instance, 'visual_admin_descriptor', None
         )
-        page = self.resource_service.list_page(
-            context, root, page_size=500,
-            provider_route=endpoint['route'],
-        ).to_dict()
-        resources = list(page['items'])
-        continuation = page.get('next_cursor')
-        generation = page['generation']
-        while continuation is not None:
+        if hasattr(self.resource_service, 'list_all_readonly'):
+            generation, resources_tuple = self.resource_service.list_all_readonly(
+                context, root, provider_route=endpoint['route'],
+            )
+            resources = list(resources_tuple)
+        else:
             page = self.resource_service.list_page(
-                context, root, page_size=500, cursor=continuation,
-                expected_generation=generation,
+                context, root, page_size=500,
                 provider_route=endpoint['route'],
             ).to_dict()
-            resources.extend(page['items'])
+            resources = list(page['items'])
             continuation = page.get('next_cursor')
+            generation = page['generation']
+            while continuation is not None:
+                page = self.resource_service.list_page(
+                    context, root, page_size=500, cursor=continuation,
+                    expected_generation=generation,
+                    provider_route=endpoint['route'],
+                ).to_dict()
+                resources.extend(page['items'])
+                continuation = page.get('next_cursor')
         return {
             'generation': generation,
             'resources': resources,

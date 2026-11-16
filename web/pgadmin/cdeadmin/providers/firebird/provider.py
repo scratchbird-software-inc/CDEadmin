@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+import weakref
 from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext, contextmanager
 from enum import Enum
@@ -201,6 +202,38 @@ ADMINISTRATION = RelationalAdministration(RelationalAdminDialect(
 ))
 
 
+_LIVE_FIREBIRD_PROVIDERS: weakref.WeakSet = weakref.WeakSet()
+_KEEPALIVE_LOCK = threading.Lock()
+_KEEPALIVE_STARTED = False
+_MAX_POOLED_PER_KEY = 4
+
+
+def _ensure_firebird_host_keepalive():
+    """Start one lightweight host daemon thread keeping Firebird handles warm."""
+    global _KEEPALIVE_STARTED
+    with _KEEPALIVE_LOCK:
+        if _KEEPALIVE_STARTED:
+            return
+        _KEEPALIVE_STARTED = True
+
+        def _worker():
+            import time as _time
+            while True:
+                _time.sleep(40.0)
+                for prov in list(_LIVE_FIREBIRD_PROVIDERS):
+                    try:
+                        prov._maintain_host_connections()
+                    except Exception:
+                        pass
+
+        thread = threading.Thread(
+            target=_worker,
+            name='scratchrobin-firebird-host-keepalive',
+            daemon=True,
+        )
+        thread.start()
+
+
 class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.firebird
@@ -217,6 +250,60 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._catalog_pool = {}
         self._catalog_pool_lock = threading.RLock()
         self._pooled_catalog_local = threading.local()
+        if isinstance(self.client, FirebirdQueryClient):
+            _LIVE_FIREBIRD_PROVIDERS.add(self)
+            _ensure_firebird_host_keepalive()
+
+    def _maintain_host_connections(self):
+        """Proactively ping pooled catalog handles & idle non-transactional sessions."""
+        if getattr(self.client, '_closed', True):
+            return
+        # 1. Maintain warm catalog pool handles
+        dead_pooled = []
+        with self._catalog_pool_lock:
+            for pkey, bucket in list(self._catalog_pool.items()):
+                handles = bucket if isinstance(bucket, list) else [bucket]
+                alive = []
+                for conn in handles:
+                    if self._catalog_handle_healthy(conn):
+                        alive.append(conn)
+                    else:
+                        dead_pooled.append(conn)
+                if alive:
+                    self._catalog_pool[pkey] = alive
+                else:
+                    self._catalog_pool.pop(pkey, None)
+        for conn in dead_pooled:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        # 2. Maintain idle user sessions that have no open transaction
+        if not isinstance(self.client, FirebirdQueryClient):
+            return
+        for session in list(getattr(self, '_sessions', {}).values()):
+            handle = getattr(session, 'handle', None)
+            if handle is None:
+                continue
+            state = self.client._attachment_states.get(id(handle))
+            if state is None or not state.lock.acquire(blocking=False):
+                continue
+            try:
+                if (
+                    state.query is not None
+                    or state.stream_running
+                    or state.explicit_transaction_open
+                    or state.uncommitted_connection_lost
+                ):
+                    continue
+                if not self._catalog_handle_healthy(handle):
+                    if self.client._can_auto_reconnect(state):
+                        self.client._rebind_live_attachment(handle, state)
+            except Exception:
+                pass
+            finally:
+                state.lock.release()
 
     def _visual_admin_session_context(self, payload):
         ctx = super()._visual_admin_session_context(payload)
@@ -249,13 +336,15 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
 
     def _evict_catalog_pool(self):
         with self._catalog_pool_lock:
-            pooled = list(self._catalog_pool.values())
+            buckets = list(self._catalog_pool.values())
             self._catalog_pool.clear()
-        for conn in pooled:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        for bucket in buckets:
+            handles = bucket if isinstance(bucket, list) else [bucket]
+            for conn in handles:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     @staticmethod
     def _catalog_handle_healthy(conn):
@@ -279,17 +368,31 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
             reused = False
             conn = None
             if allow_reuse:
+                stale = []
                 with self._catalog_pool_lock:
-                    conn = self._catalog_pool.pop(pool_key, None)
-                if conn is not None:
-                    if self._catalog_handle_healthy(conn):
-                        reused = True
-                    else:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                        conn = None
+                    bucket = self._catalog_pool.get(pool_key)
+                    if isinstance(bucket, list):
+                        while bucket:
+                            cand = bucket.pop()
+                            if self._catalog_handle_healthy(cand):
+                                conn = cand
+                                reused = True
+                                break
+                            stale.append(cand)
+                        if not bucket:
+                            self._catalog_pool.pop(pool_key, None)
+                    elif bucket is not None:
+                        self._catalog_pool.pop(pool_key, None)
+                        if self._catalog_handle_healthy(bucket):
+                            conn = bucket
+                            reused = True
+                        else:
+                            stale.append(bucket)
+                for bad in stale:
+                    try:
+                        bad.close()
+                    except Exception:
+                        pass
             if conn is None:
                 conn = self.client._connect({'route': request['route']})
             with self.client._admission:
@@ -319,8 +422,14 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                         if self.client._closed:
                             evicted = conn
                         else:
-                            evicted = self._catalog_pool.get(pool_key)
-                            self._catalog_pool[pool_key] = conn
+                            bucket = self._catalog_pool.get(pool_key)
+                            if not isinstance(bucket, list):
+                                bucket = [bucket] if bucket is not None else []
+                            if conn not in bucket:
+                                bucket.append(conn)
+                            if len(bucket) > _MAX_POOLED_PER_KEY:
+                                evicted = bucket.pop(0)
+                            self._catalog_pool[pool_key] = bucket
                     if evicted is not None and evicted is not conn:
                         try:
                             evicted.close()
@@ -1510,6 +1619,10 @@ def _resources(connection, request):
     try:
         generation = str(request.get('capability_generation') or 'current')
         resources = {}
+        by_name = {}
+        by_kind = {}
+        cols_by_domain = {}
+        rels_by_path = {}
 
         def add(kind, path, name, native=None, *, native_identity=None):
             path = [str(item).rstrip(' ') for item in path]
@@ -1520,9 +1633,10 @@ def _resources(connection, request):
                 resource_id = _catalog_resource_id(kind, [], json.dumps(
                     native_identity, ensure_ascii=False,
                     separators=(',', ':')))
-            if resource_id in resources and kind not in {'metric', 'service-operation'}:
+            prior = resources.get(resource_id)
+            if prior is not None and kind not in {'metric', 'service-operation'}:
                 raise RelationalClientError('Duplicate Firebird catalog resource identity')
-            resources[resource_id] = {
+            entry = {
                 'resource_id': resource_id,
                 'resource_kind': kind,
                 'display_name': name,
@@ -1539,7 +1653,25 @@ def _resources(connection, request):
                     flag = parent.get('native', {}).get('system_object') if parent else None
                     if type(flag) is bool:
                         native.setdefault('system_object', flag)
-                resources[resource_id]['native'] = native
+                entry['native'] = native
+            resources[resource_id] = entry
+            if prior is not None:
+                try:
+                    by_name.get(prior['display_name'], []).remove(prior)
+                except ValueError:
+                    pass
+                try:
+                    by_kind.get(prior['resource_kind'], []).remove(prior)
+                except ValueError:
+                    pass
+            by_name.setdefault(name, []).append(entry)
+            by_kind.setdefault(kind, []).append(entry)
+            if kind == 'column' and native and native.get('domain'):
+                cols_by_domain.setdefault(
+                    str(native['domain']).rstrip(' '), []
+                ).append(entry)
+            elif kind in {'table', 'view'}:
+                rels_by_path.setdefault(tuple(entry['display_path']), []).append(entry)
 
         catalog_reader = CatalogReader(cursor, _materialize_catalog_value)
         catalog_rows = catalog_reader.rows
@@ -1749,9 +1881,10 @@ def _resources(connection, request):
                     'navigator_parent_resource_id': owner_id,
                 })
         relation_rows = catalog_rows(
-            'SELECT TRIM(TRAILING FROM RDB$RELATION_NAME), RDB$VIEW_BLR, '
+            'SELECT TRIM(TRAILING FROM RDB$RELATION_NAME), '
+            'CASE WHEN RDB$VIEW_BLR IS NOT NULL THEN 1 END, '
             'RDB$VIEW_SOURCE, '
-            'RDB$DESCRIPTION, RDB$RELATION_ID, '
+            'CAST(LEFT(RDB$DESCRIPTION, 8000) AS VARCHAR(8000)), RDB$RELATION_ID, '
             'RDB$SYSTEM_FLAG, RDB$RELATION_TYPE, '
             'TRIM(TRAILING FROM RDB$SECURITY_CLASS), TRIM(TRAILING FROM '
             'RDB$EXTERNAL_FILE), '
@@ -1814,7 +1947,7 @@ def _resources(connection, request):
              'TRIM(TRAILING FROM RF.RDB$FIELD_NAME), TRIM(TRAILING FROM '
              'RF.RDB$FIELD_SOURCE), '
              'RF.RDB$NULL_FLAG, '
-             'RF.RDB$DEFAULT_SOURCE, '
+             'CAST(LEFT(RF.RDB$DEFAULT_SOURCE, 8000) AS VARCHAR(8000)), '
              'F.RDB$FIELD_TYPE, F.RDB$FIELD_SUB_TYPE, '
              'F.RDB$FIELD_LENGTH, F.RDB$FIELD_SCALE, '
              'F.RDB$FIELD_PRECISION, F.RDB$CHARACTER_LENGTH, '
@@ -1823,9 +1956,9 @@ def _resources(connection, request):
              'TRIM(TRAILING FROM CO.RDB$COLLATION_NAME), '
              'RF.RDB$IDENTITY_TYPE, '
              'TRIM(TRAILING FROM RF.RDB$GENERATOR_NAME), '
-             'F.RDB$COMPUTED_SOURCE, '
+             'CAST(LEFT(F.RDB$COMPUTED_SOURCE, 8000) AS VARCHAR(8000)), '
              'RF.RDB$FIELD_POSITION, '
-             'RF.RDB$DESCRIPTION, G.RDB$INITIAL_VALUE, '
+             'CAST(LEFT(RF.RDB$DESCRIPTION, 8000) AS VARCHAR(8000)), G.RDB$INITIAL_VALUE, '
              'G.RDB$GENERATOR_INCREMENT, F.RDB$NULL_FLAG, F.RDB$DIMENSIONS '
              'FROM RDB$RELATION_FIELDS RF JOIN RDB$RELATIONS R ON '
              'R.RDB$RELATION_NAME = RF.RDB$RELATION_NAME JOIN RDB$FIELDS F '
@@ -2165,9 +2298,8 @@ def _resources(connection, request):
             name = str(name or '').rstrip(' ')
             package = str(package or '').rstrip(' ')
             return [
-                item for item in resources.values()
+                item for item in by_name.get(name, ())
                 if item['resource_kind'] == kind and
-                item['display_name'] == name and
                 str(item.get('native', {}).get('package') or '') == package
             ]
 
@@ -2404,12 +2536,11 @@ def _resources(connection, request):
             if object_type is not None and kinds is None:
                 return []
             return [
-                item for item in resources.values()
-                if item['display_name'] == normalized and (
-                    kinds is None or item['resource_kind'] in kinds
-                ) and (object_type not in {5, 15} or
-                       str(item.get('native', {}).get('package') or '') ==
-                       str(package or '').rstrip(' '))
+                item for item in by_name.get(normalized, ())
+                if (kinds is None or item['resource_kind'] in kinds) and
+                (object_type not in {5, 15} or
+                 str(item.get('native', {}).get('package') or '') ==
+                 str(package or '').rstrip(' '))
             ]
 
         for (
@@ -2439,17 +2570,12 @@ def _resources(connection, request):
                 # Computed view/table expressions depend through an implicit
                 # RDB$FIELDS record, not the relation's display name. Preserve
                 # that native record and resolve its real column/owner links.
-                computed_columns = [item for item in resources.values() if
-                                    item['resource_kind'] == 'column' and
-                                    item.get('native', {}).get('domain') ==
-                                    str(dependent_name or '').rstrip(' ')]
+                dom_key = str(dependent_name or '').rstrip(' ')
+                computed_columns = list(cols_by_domain.get(dom_key, ()))
                 dependent_targets = list(computed_columns)
                 for column in computed_columns:
-                    for owner in resources.values():
-                        if (owner['resource_kind'] in {'table', 'view'} and
-                                owner['display_path'] ==
-                                column['display_path'][:-1] and
-                                owner not in dependent_targets):
+                    for owner in rels_by_path.get(tuple(column['display_path'][:-1]), ()):
+                        if owner not in dependent_targets:
                             dependent_targets.append(owner)
                 dependent['dependent_resolution'] = {
                     'state': 'resolved' if computed_columns else 'unresolved',
@@ -2565,8 +2691,7 @@ def _resources(connection, request):
                 grant.get('object_type'), set()
             )
             targets = (
-                [target for target in resources.values()
-                 if target['resource_kind'] == 'database']
+                list(by_kind.get('database', ()))
                 if grant.get('object_type') == 21 else
                 [target for target in objects_named(object_name)
                  if target['resource_kind'] in target_kinds and
@@ -3096,10 +3221,11 @@ def _resources(connection, request):
                     statements.append(
                         f'COMMENT ON PACKAGE {identifier(name)} '
                         f"IS '{comment}'")
-                members = sorted((member for member in resources.values()
-                                  if member['resource_kind'] in {
-                                      'function', 'procedure'} and
-                                  member.get('native', {}).get('package') ==
+                members = sorted((member for member in (
+                                      *by_kind.get('function', ()),
+                                      *by_kind.get('procedure', ()),
+                                  )
+                                  if member.get('native', {}).get('package') ==
                                   name), key=lambda member: (
                                       member['resource_kind'],
                                       member['display_name']))
@@ -3607,25 +3733,34 @@ def _resources(connection, request):
                 item['display_path'] = [
                     native['package'], item['display_name'],
                 ]
-        system_paths = [tuple(item['display_path'])
-                        for item in resources.values()
-                        if item.get('native', {}).get('system_object')]
+        pkgs_by_path = {
+            tuple(p['display_path']): p for p in by_kind.get('package', ())
+        }
+        system_path_set = {
+            tuple(item['display_path'])
+            for item in resources.values()
+            if item.get('native', {}).get('system_object')
+        }
         for item in resources.values():
             path = tuple(item['display_path'])
             if len(path) > 1 and item['resource_kind'] in {
                     'column', 'index', 'constraint', 'trigger',
                     'procedure', 'function', 'external-function'}:
-                owner_kinds = {'table', 'view'} if item['resource_kind'] in {
+                parent_key = path[:-1]
+                if item['resource_kind'] in {
                     'column', 'index', 'constraint', 'trigger'
-                } else {'package'}
-                owners = [parent for parent in resources.values()
-                          if parent['resource_kind'] in owner_kinds and
-                          parent['display_path'] == list(path[:-1])]
+                }:
+                    owners = rels_by_path.get(parent_key, ())
+                    is_pkg = False
+                else:
+                    pkg_owner = pkgs_by_path.get(parent_key)
+                    owners = [pkg_owner] if pkg_owner is not None else ()
+                    is_pkg = True
                 if len(owners) == 1:
                     item.setdefault('native', {})[
                         'navigator_parent_resource_id'] = owners[0][
                             'resource_id']
-                    if owner_kinds == {'package'}:
+                    if is_pkg:
                         item['native']['administration'] = {
                             'allowed_operations': [
                                 'inspect', 'comment', 'grant', 'revoke'],
@@ -3638,7 +3773,10 @@ def _resources(connection, request):
                                 'Package members are defined in their '
                                 'owning package header and body.'),
                         }
-            if any(path[:len(parent)] == parent for parent in system_paths):
+            if system_path_set and any(
+                path[:depth] in system_path_set
+                for depth in range(1, len(path) + 1)
+            ):
                 item.setdefault('native', {})['system_object'] = True
         for item in resources.values():
             if item['resource_kind'] == 'database':

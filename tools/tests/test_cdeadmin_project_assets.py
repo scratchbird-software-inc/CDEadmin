@@ -1379,6 +1379,95 @@ class ProjectAssetRouteTests(unittest.TestCase):
         self.assertEqual(200, unparent_ok.status_code)
         self.assertIsNone(unparent_ok.get_json()['data']['parent_project_id'])
 
+    def test_host_project_navigator_nodes_and_virtual_tree_endpoints(self):
+        self.client.put('/cdeadmin/api/projects/analytics', json={
+            'name': 'Analytics BI',
+            'description': 'Lakehouse analytics',
+        })
+        self.client.put('/cdeadmin/api/projects/analytics-kpi', json={
+            'name': 'Analytics KPI Pack',
+            'parent_project_id': 'analytics',
+        })
+        self.client.put(
+            '/cdeadmin/api/projects/analytics/assets/mesh-1',
+            json={
+                'asset_type': 'cdeadmin.design.screen_mesh',
+                'name': 'Lakehouse Analytics Explorer — Screen Mesh',
+                'path': 'screens/analytics-explorer.screen.ddn',
+                'schema_name': 'cdeadmin.design.screen_mesh',
+                'schema_version': 1,
+                'expected_version': 0,
+                'content': {'design_id': 'mesh-1', 'project_id': 'analytics'},
+                'metadata': {'screen_count': 2},
+                'dependency_references': [],
+                'resource_bindings': [{
+                    'schema': 'cdeadmin.resource-ref.v1',
+                    'provider': 'firebird',
+                    'resource_id': 'table:FACT_GL_LEDGER',
+                    'kind': 'table',
+                    'nativeIdentity': 'FACT_GL_LEDGER',
+                    'bindingRole': 'owned',
+                }],
+                'validation_state': 'valid',
+                'validation_details': [],
+            },
+        )
+
+        # Root nodes from host
+        root_resp = self.client.get('/cdeadmin/api/project-navigator/nodes')
+        self.assertEqual(200, root_resp.status_code)
+        root_data = root_resp.get_json()['data']
+        self.assertEqual(1, len(root_data['nodes']))
+        self.assertEqual('Analytics BI', root_data['nodes'][0]['label'])
+        self.assertEqual('proj~analytics', root_data['nodes'][0]['id'])
+
+        # Project virtual folder nodes from host
+        proj_resp = self.client.get(
+            '/cdeadmin/api/project-navigator/nodes?parent=proj~analytics'
+        )
+        self.assertEqual(200, proj_resp.status_code)
+        vnodes = proj_resp.get_json()['data']['nodes']
+        self.assertEqual(
+            [
+                'Projects', 'Tables', 'Views', 'Coding', 'Screens',
+                'Reports', 'Tasks', 'Calendars', 'Channels', 'Members',
+                'Notes, Documents, Transcripts',
+            ],
+            [n['label'] for n in vnodes],
+        )
+
+        # Screen mesh asset classified under Screens (never Documents)
+        screens_resp = self.client.get(
+            '/cdeadmin/api/project-navigator/nodes?parent=virt~analytics~screens'
+        )
+        self.assertEqual(200, screens_resp.status_code)
+        screen_leaves = screens_resp.get_json()['data']['nodes']
+        self.assertEqual(1, len(screen_leaves))
+        self.assertEqual(
+            'Lakehouse Analytics Explorer — Screen Mesh',
+            screen_leaves[0]['label'],
+        )
+
+        # Host search filter across resource bindings
+        filtered_resp = self.client.get(
+            '/cdeadmin/api/project-navigator/nodes?q=fact_gl_ledger'
+        )
+        self.assertEqual(200, filtered_resp.status_code)
+        self.assertEqual(
+            1, filtered_resp.get_json()['data']['matching_project_count']
+        )
+
+        # Host virtual-tree workspace endpoint
+        vt_resp = self.client.get('/cdeadmin/api/projects/analytics/virtual-tree')
+        self.assertEqual(200, vt_resp.status_code)
+        vt_data = vt_resp.get_json()['data']
+        self.assertEqual('Analytics BI', vt_data['project']['name'])
+        self.assertEqual(1, len(vt_data['child_projects']))
+        screens_group = next(
+            v for v in vt_data['virtual_tree'] if v['key'] == 'screens'
+        )
+        self.assertEqual(1, screens_group['totalCount'])
+
 
 @unittest.skipUnless(MIGRATION_DEPENDENCIES, 'migration dependencies missing')
 class ProjectAssetMigrationTests(unittest.TestCase):
