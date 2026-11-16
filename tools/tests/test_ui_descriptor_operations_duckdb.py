@@ -78,4 +78,19 @@ def test_every_declared_database_operation_is_exercised():
     declared = {key.split('@')[0] for key, op in OPERATIONS.items() if op['resource_kind'] == 'database'}
     exercised = {'checkpoint', 'force_checkpoint', 'vacuum', 'analyze', 'export_database', 'import_database'}
     # update_extensions needs network access to the extension repository; it is not round-tripped here.
+    # These original-session dialogs are exercised by the typed task adapter,
+    # its native regression suite and authenticated HTTP, rather than file apply.
+    # An explicit inventory keeps new undeclared qualification gaps detectable.
+    exercised.update({
+        'editor_attachment_inventory', 'editor_attachment_review_attach',
+        'editor_attachment_review_detach', 'editor_attachment_review_rename', 'editor_attachment_apply',
+        'editor_attachment_receipt', 'editor_attachment_discard',
+        'editor_extension_inventory', 'editor_extension_review_install',
+        'editor_extension_review_load', 'editor_extension_apply', 'editor_extension_receipt',
+        'editor_copy_inventory', 'editor_copy_review', 'editor_copy_apply',
+        'editor_copy_receipt', 'editor_copy_cancel', 'editor_copy_discard',
+        'editor_secret_inventory', 'editor_secret_review_create', 'editor_secret_review_drop',
+        'editor_secret_apply', 'editor_secret_receipts',
+        'editor_receipt_list', 'editor_receipt_get', 'editor_receipt_release',
+    })
     assert declared - {'update_extensions'} == exercised

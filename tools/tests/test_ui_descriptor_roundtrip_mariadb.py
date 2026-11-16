@@ -155,12 +155,13 @@ def test_view_index_trigger_forms(live):
 def test_sequence_and_routine_forms(live):
     route, client = live
     sequence_form = resolved_form('mariadb', 'sequence')
-    run(client, route, 'sequence', 'create', backend_draft(sequence_form, {'name': 'rt_seq', 'parent': DATABASE, 'start': 10,
-                                                                           'increment': 5, 'cycle': False}))
+    run(client, route, 'sequence', 'create', backend_draft(sequence_form, {'name': 'rt_seq', 'parent': DATABASE, 'start': '10',
+                                                                           'increment': '5', 'cycle_mode': 'NOCYCLE'}))
     sequence, baseline = record(client, route, 'sequence', 'rt_seq', 'sequence')
-    assert (baseline['start'], baseline['increment'], baseline['cycle']) == ('10', '5', False)
-    alter = backend_draft(sequence_form, {**baseline, 'restart': 100, 'increment': 7}, mode='alter', baseline=baseline)
-    assert 'RESTART WITH 100 INCREMENT BY 7' in run(client, route, 'sequence', 'alter', alter, target=sequence)
+    assert (baseline['start'], baseline['increment'], baseline['cycle_mode']) == ('10', '5', 'NOCYCLE')
+    alter = backend_draft(sequence_form, {**baseline, 'restart': '100', 'increment': '7', 'confirmation': 'rt_seq'}, mode='alter', baseline=baseline)
+    sql = run(client, route, 'sequence', 'alter', alter, target=sequence)
+    assert 'RESTART WITH 100' in sql and 'INCREMENT BY 7' in sql
     assert query(f'SELECT NEXTVAL(`{DATABASE}`.rt_seq)') == [(100,)]
 
     routine_form = resolved_form('mariadb', 'routine')

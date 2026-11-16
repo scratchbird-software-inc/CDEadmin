@@ -1666,6 +1666,7 @@ def _relational_editor_evidence(provider, request, engine):
                     attempt(
                         'sequence.alter', 'sequence', 'alter', {
                             'restart': 10, 'increment': 2,
+                            'confirmation': 'cde_editor_sequence',
                         }, sequence,
                     )
                     if attempt(

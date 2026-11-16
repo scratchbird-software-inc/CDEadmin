@@ -10,7 +10,8 @@ from .secret_values import compile_secret
 def form(field):
     return {'form_id': 'duckdb.secret.create', 'title': 'Create native DuckDB secret', 'fields': [
         field('name', 'Secret name', 'text', False, 'Leave empty for the native default name.'),
-        field('secret_type', 'Native secret type', 'text'),
+        field('secret_type', 'Native secret type', 'text', False,
+              'A literal type is required unless an explicit TYPE expression and name are supplied.'),
         field('persistence_mode', 'Native persistence', 'select', True, default='TEMPORARY',
               options=('TEMPORARY', 'PERSISTENT', 'DEFAULT')),
         field('storage', 'Native storage', 'text', False, 'Empty uses DuckDB\'s selected default storage.'),

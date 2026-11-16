@@ -40,7 +40,9 @@ class EmbeddedAdministration(RelationalAdministration):
             for operation in resource.get('operations', []):
                 if operation['operation_id'] in local_services.OPERATIONS:
                     operation.pop('workspace_scope', None)
-                    operation['title'] = 'Local database statistics (gstat)'
+                    operation['title'] = ('Local database statistics (gstat)'
+                        if operation['operation_id'] == 'database_statistics'
+                        else 'Local ' + operation['title'])
                     operation['form']['title'] = operation['title']
                     operation['form']['notes'] = (
                         'Runs on the ScratchRobin host against the approved local '

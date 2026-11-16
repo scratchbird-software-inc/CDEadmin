@@ -79,6 +79,13 @@ def provider_form_fields(operation_id, kind='large-object'):
 def test_every_operation_is_a_provider_native_route():
     assert OPERATIONS, 'postgresql/operations.json lists no operations'
     for key, operation in OPERATIONS.items():
+        from pgadmin.cdeadmin.providers.postgresql.host_tools import OPERATIONS as HOST_TOOLS
+        if operation['operation_id'] in HOST_TOOLS:
+            from pgadmin.cdeadmin.workspace.postgresql_host_tool_service import descriptors
+            assert operation['resource_kind'] == 'server'
+            assert operation in descriptors()
+            assert 'postgresql_host_tools' in operation['notes']
+            continue
         assert operation['operation_id'] in POSTGRESQL_ADMIN_OPERATIONS[operation['resource_kind']], key
         assert operation['tier'] in (2, 3), key
         provider = provider_form_fields(operation['operation_id'], operation['resource_kind'])
@@ -92,6 +99,10 @@ def test_every_operation_is_a_provider_native_route():
 
 def test_destructive_operations_confirm_and_complete_ones_are_tested():
     for key, operation in OPERATIONS.items():
+        from pgadmin.cdeadmin.providers.postgresql.host_tools import OPERATIONS as HOST_TOOLS
+        if operation['operation_id'] in HOST_TOOLS:
+            assert operation['status'] == 'draft'
+            continue
         provider = provider_form_fields(operation['operation_id'], operation['resource_kind'])
         if 'confirmation' in provider and provider['confirmation']['required']:
             assert operation['confirmation'] != 'none', key
@@ -100,12 +111,16 @@ def test_destructive_operations_confirm_and_complete_ones_are_tested():
 
 
 def test_no_descriptor_without_a_provider_route():
-    """A descriptor must have a provider compiler; table alter and friends stay legacy-preserved."""
+    """SQL descriptors require a provider compiler; host task descriptors require their fixed native task route."""
     from pgadmin.cdeadmin.providers.postgresql.maintenance import MAINTENANCE_OPERATIONS
     from pgadmin.cdeadmin.providers.postgresql.native_admin import (
         POSTGRESQL_NATIVE_FORM_KINDS, PostgreSQLNativeAdminError, compile_native_admin)
     for operation in OPERATIONS.values():
         kind, operation_id = operation['resource_kind'], operation['operation_id']
+        from pgadmin.cdeadmin.providers.postgresql.host_tools import OPERATIONS as HOST_TOOLS
+        if operation_id in HOST_TOOLS:
+            assert kind == 'server' and 'postgresql_host_tools' in operation['notes']
+            continue
         assert kind in POSTGRESQL_NATIVE_FORM_KINDS or operation_id in MAINTENANCE_OPERATIONS.get(kind, ()), (kind, operation_id)
     # Partitions stay legacy-preserved until M7 reaches them (tables are native since M7).
     with pytest.raises(PostgreSQLNativeAdminError, match='preserved PostgreSQL UI'):

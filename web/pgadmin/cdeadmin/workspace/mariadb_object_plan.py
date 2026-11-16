@@ -63,28 +63,24 @@ def compile_sequence(before, after, operation, database):
         return 'DROP SEQUENCE '+target
     if (operation != 'alter' or before is None or not isinstance(intent, dict) or
             intent.get('action') != 'alter-options' or set(intent)-{
-                'action', 'start', 'minvalue', 'maxvalue', 'increment', 'cache', 'cycle', 'restart', 'confirmation'} or
+                'action', 'start', 'minvalue', 'maxvalue', 'increment', 'cache', 'cycle', 'restart', 'confirmation', 'integer_type', 'unsigned', 'minimum_mode', 'maximum_mode', 'restart_initial', 'cycle_mode'} or
             len(set(intent)-{'action', 'confirmation'}) < 1 or
             not _equal({key: before['native'].get(key) for key in ('definition', 'definition_context')},
                 {key: after['native'].get(key) for key in ('definition', 'definition_context')})):
         raise ValueError('Sequence ALTER requires explicit options with unchanged native definition/context')
-    clauses = []
-    for key, prefix in [('start', 'START WITH '), ('minvalue', 'MINVALUE '), ('maxvalue', 'MAXVALUE '),
-            ('increment', 'INCREMENT BY '), ('cache', 'CACHE '), ('restart', 'RESTART WITH ')]:
-        if key in intent:
-            value = intent[key]
-            if type(value) is not int or not -(2**63) <= value <= 2**64-1:
-                raise ValueError('Sequence options require exact native bounded integers')
-            clauses.append(prefix+str(value))
-    if 'cycle' in intent:
-        if type(intent['cycle']) is not bool: raise ValueError('Sequence cycle option must be boolean')
-        clauses.append('CYCLE' if intent['cycle'] else 'NOCYCLE')
-    if 'restart' in intent:
-        if intent.get('confirmation') != after['name']:
-            raise ValueError('Sequence restart requires exact native name confirmation')
-    elif 'confirmation' in intent:
-        raise ValueError('Sequence confirmation applies only to an explicit restart')
-    return 'ALTER SEQUENCE '+target+' '+' '.join(clauses)
+    from ..providers.mysql_family.mariadb_sequence_options import clauses
+    options = {({'minvalue': 'minimum', 'maxvalue': 'maximum'}.get(key, key)): value
+               for key, value in intent.items() if key != 'action'}
+    if 'cycle' in options:
+        if type(options['cycle']) is not bool:
+            raise ValueError('Sequence cycle option must be boolean')
+        options['cycle_mode'] = 'CYCLE' if options.pop('cycle') else 'NOCYCLE'
+    from ..sdk import RelationalClientError
+    try:
+        return 'ALTER SEQUENCE '+target+' '+clauses(options, True, after['name'])
+    except RelationalClientError as error:
+        raise ValueError(str(error)) from None
+
 
 
 def compile_object(before, after, operation, database, trigger_order=None):

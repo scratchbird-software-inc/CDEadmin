@@ -57,6 +57,64 @@ def test_local_catalog_keeps_shared_typed_form_and_database_target_scope():
     assert not embedded.ADMINISTRATION.supports('database','backup_logical')
 
 
+@pytest.mark.parametrize('operation,options', [
+    ('set_access_mode', {'mode': 'READ_ONLY'}),
+    ('set_page_cache_size', {'page_buffers': 512}),
+    ('set_sweep_interval', {'sweep_interval': 0}),
+    ('set_space_reservation', {'mode': 'RESERVE'}),
+    ('set_write_mode', {'mode': 'SYNC'}),
+    ('set_sql_dialect', {'sql_dialect': '3'}),
+    ('set_replica_mode', {'mode': 'NONE'}),
+    ('remove_linger', {}),
+    ('sweep_database', {'parallel_workers': 2}),
+    ('validate_database', {'include_table': 'OWNED', 'lock_timeout': 0}),
+])
+def test_local_administration_has_typed_options_and_database_scoped_forms(route, operation, options):
+    assert local.validate_operation(route, operation, route['database'], options)
+    with pytest.raises(RelationalClientError):
+        local.validate_operation(route, operation, route['database'], {**options, 'host': 'other'})
+    catalog = embedded.ADMINISTRATION.catalog(catalog_for_engine('firebird'))
+    task = next(x for row in catalog['objects'] if row['resource_kind'] == 'database'
+                for x in row['operations'] if x['operation_id'] == operation)
+    assert not task.get('workspace_scope')
+    assert task['title'].startswith('Local ')
+
+
+@pytest.mark.parametrize('operation,options', [
+    ('set_access_mode', {'mode': 'WRITABLE'}),
+    ('set_page_cache_size', {'page_buffers': True}),
+    ('set_page_cache_size', {}),
+    ('set_sweep_interval', {}),
+    ('set_sweep_interval', {'sweep_interval': -1}),
+    ('set_sql_dialect', {'sql_dialect': '2'}),
+    ('sweep_database', {'parallel_workers': 0}),
+    ('validate_database', {'lock_timeout': -2}),
+])
+def test_invalid_local_options_are_refused_before_native_service(route, operation, options):
+    with pytest.raises(RelationalClientError):
+        local.validate_operation(route, operation, route['database'], options)
+
+
+def test_unqualified_mutation_pinning_platform_is_not_admitted(route, monkeypatch):
+    monkeypatch.setattr(local.sys, 'platform', 'win32')
+    with pytest.raises(RelationalClientError, match='Linux only'):
+        local.validate_operation(route, 'remove_linger', route['database'], {})
+
+
+def test_mutating_alias_is_removed_after_interrupted_dispatch(route):
+    original = local.file_identity(route)
+    native = None
+    with pytest.raises(KeyboardInterrupt):
+        with local.pinned_target(route, original, 'sweep_database') as native:
+            assert local.dispatch_target(route['database']) == native
+            raise KeyboardInterrupt()
+    from pathlib import Path
+    assert not Path(native).exists()
+    assert local.file_identity(route) == original
+    with pytest.raises(RelationalClientError):
+        local.dispatch_target(route['database'])
+
+
 def test_replaced_file_is_refused_before_service_dispatch(route,tmp_path):
     request={'resource_kind':'database','operation_id':'database_statistics','draft':{'statistics_flags':['HDR_PAGES']},'_provider_route':route}
     permissions=Mock()

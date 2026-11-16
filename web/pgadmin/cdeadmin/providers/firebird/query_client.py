@@ -1404,7 +1404,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     state.visual_task_state_unknown = True
                     raise
         if local_service:
-            with local_services.pinned_target(payload['route'], compiled['local_service_identity']):
+            with local_services.pinned_target(payload['route'], compiled['local_service_identity'], compiled['operation_id']):
                 return dispatch()
         return dispatch()
 

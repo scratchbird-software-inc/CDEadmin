@@ -715,7 +715,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "repair_database",
@@ -842,7 +842,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "database_statistics",
@@ -1061,7 +1061,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "set_sweep_interval",
@@ -1089,7 +1089,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "set_space_reservation",
@@ -1128,7 +1128,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "set_write_mode",
@@ -1167,7 +1167,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "set_access_mode",
@@ -1206,7 +1206,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "set_sql_dialect",
@@ -1245,7 +1245,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "activate_shadow",
@@ -1295,7 +1295,7 @@
     {
       "operation_id": "remove_linger",
       "resource_kind": "database",
-      "title": "Remove database linger for the next attachment",
+      "title": "Remove current database linger",
       "menu": {
         "category": "maintenance"
       },
@@ -1312,7 +1312,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Draft: the task is accepted and completes, but Firebird exposes no queryable or durable effect (linger is a server cache lifetime, not a header attribute), so nothing could be observed. Exercised by tools/tests/test_ui_descriptor_operations_firebird.py as a smoke run only."
+      "notes": "Presentation remains draft because the runtime effect has no native getter. Native no_linger acknowledges removal of current runtime linger; it does not change persistent RDB$LINGER or guarantee release of peer locks. No runtime linger getter exists; display native acknowledgement with effect unobserved. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "fixup_database",
@@ -1390,7 +1390,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Firebird 5.0.3 refuses this Services API task over an Srp256 network attachment; verified through the local Services API route. Embedded profile: application-local Engine13 5.0.4 on Linux; requires embedded_runtime, filesystem and administration authority. Review binds the approved local inode and exact typed options; Apply uses the retained one-use visual administration plan. No network credentials. Native response loss is unknown, never automatically retried. Windows/macOS local mutation pinning is unavailable pending platform qualification."
     },
     {
       "operation_id": "upgrade_database",

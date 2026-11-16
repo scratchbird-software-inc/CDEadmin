@@ -137,10 +137,13 @@ def retain_key_until_deadline(client, record):
 
 
 def compile_operation(route, draft, origin, before):
-    if not isinstance(draft, dict) or draft.get('action') not in {'attach', 'detach'}:
-        raise ValueError('Select native ATTACH or DETACH')
+    if not isinstance(draft, dict) or draft.get('action') not in {'attach', 'detach', 'rename'}:
+        raise ValueError('Select native ATTACH, DETACH or SET ALIAS')
     attaching = draft['action'] == 'attach'
+    renaming = draft['action'] == 'rename'
     allowed = {'action', 'alias', 'path', 'read_only', 'conflict', 'create_if_missing', 'storage_options', 'encryption_key', 'encryption_cipher'} if attaching else {'action', 'alias', 'if_exists'}
+    if renaming:
+        allowed = {'action', 'alias', 'new_alias', 'dependent_sql_confirmed'}
     if set(draft) - allowed:
         raise ValueError('Unknown native attachment option')
     alias = draft.get('alias')
@@ -153,7 +156,18 @@ def compile_operation(route, draft, origin, before):
         alias = target['name']
     identity = None
     parameters = ()
-    if attaching:
+    if renaming:
+        new_alias = draft.get('new_alias')
+        if (target is None or target['type'] != 'duckdb' or not isinstance(new_alias, str)
+                or not new_alias or '\x00' in new_alias or len(new_alias.encode()) > 65536
+                or identifier_key(new_alias) in {'system', 'temp'}
+                or any(identifier_key(row['name']) == identifier_key(new_alias) for row in before)):
+            raise ValueError('Select an attached native DuckDB catalog and an unused exact new alias')
+        if draft.get('dependent_sql_confirmed') is not True:
+            raise ValueError('Confirm that stored/external SQL can retain the old alias and that rollback does not restore it')
+        identity = file_identity(route, target['path']) if target['path'] else {'path': ':memory:', 'memory': True}
+        source = 'ALTER DATABASE ' + quote(alias) + ' SET ALIAS TO ' + quote(new_alias)
+    elif attaching:
         read_only = draft.get('read_only', True);create = draft.get('create_if_missing', False)
         conflict = draft.get('conflict', 'ERROR')
         if type(read_only) is not bool or type(create) is not bool or conflict not in {'ERROR', 'IGNORE', 'REPLACE'}:
@@ -198,7 +212,7 @@ def compile_operation(route, draft, origin, before):
         source = 'DETACH DATABASE ' + ('IF EXISTS ' if missing_ok else '') + quote(alias)
     import duckdb
     statements = duckdb.extract_statements(source)
-    expected = duckdb.StatementType.ATTACH if attaching else duckdb.StatementType.DETACH
+    expected = duckdb.StatementType.ALTER if renaming else duckdb.StatementType.ATTACH if attaching else duckdb.StatementType.DETACH
     if len(statements) != 1 or statements[0].type != expected:
         raise ValueError('Exactly one provider-built native attachment statement is required')
     return {'source': source, 'draft': deepcopy(draft), 'file_identity': identity, 'alias': alias, 'parameters': parameters}
@@ -255,6 +269,9 @@ def action(client, handle, route, request):
             raise ValueError('Close old attachment reviews before creating another')
         compiled = compile_operation(route, request.get('draft'), origin, before)
         alias_reuse(context, handle, compiled)
+        if compiled['draft']['action'] == 'rename':
+            from .catalog_alias import snapshot
+            compiled['alias_snapshot'] = snapshot(handle, compiled['alias'])
         record = {'review_id': str(uuid.uuid4()), 'state': 'reviewed', 'session_scope_id': scope,
             'deadline': now + 300, 'compiled': compiled, 'baseline': before,
             'source': compiled['source'], 'alias': compiled['alias'],
@@ -266,6 +283,11 @@ def action(client, handle, route, request):
                 'Storage options follow native file creation/open rules. Existing file headers can retain their prior storage format; supplied options do not rewrite a file.',
                 'ATTACH follows its native transaction. Rollback does not restore a detached catalog or remove a file created by ATTACH.',
                 'Registered automatic attachments can be restored when another connection opens. External file/instance changes are not fenced.']}
+        if compiled['draft']['action'] == 'rename':
+            record.update(new_alias=compiled['draft']['new_alias'], alias_review=deepcopy(compiled['alias_snapshot']))
+            record['warnings'] += ['SET ALIAS changes the native namespace immediately and rollback does not restore the old alias. No physical file is renamed.',
+                'Native stored SQL and external/dynamic references are not rewritten; views or macros retaining the old alias can fail. Source hashes and native dependency rows are observations, not complete reference analysis.',
+                'Descendant resource IDs change. Invalidate the old IDs and refresh the complete returned identity inventory; confirm affected design bindings separately.']
         # A public review fingerprint must not be derived from a private key.
         record['review_digest'] = hashlib.sha256(json.dumps(public(record), sort_keys=True).encode()).hexdigest()
         client._attachment_reviews[record['review_id']] = record
@@ -282,6 +304,9 @@ def action(client, handle, route, request):
     try:
         rebuilt = compile_operation(route, record['compiled']['draft'], origin, before)
         transaction = alias_reuse(context, handle, rebuilt)
+        if rebuilt['draft']['action'] == 'rename':
+            from .catalog_alias import snapshot
+            rebuilt['alias_snapshot'] = snapshot(handle, rebuilt['alias'])
     except (ValueError, RelationalClientError):
         record.update(state='refused', native_dispatched=False, native_acknowledged=False,
             reason='Native attachment namespace or file changed since review')
@@ -312,7 +337,19 @@ def action(client, handle, route, request):
         client.publish_receipt(handle,'attachments',public(record))
         after = catalogs(handle)
         selected = next((row for row in after if row['name'] == record['alias']), None)
-        if record['action'] == 'detach':
+        if record['action'] == 'rename':
+            new_alias = record['compiled']['draft']['new_alias']
+            renamed = next((row for row in after if row['name'] == new_alias), None)
+            prior = next(row for row in before if row['name'] == record['alias'])
+            verified = selected is None and renamed is not None and {**renamed, 'name': prior['name']} == prior
+            from .catalog_alias import snapshot
+            refreshed = snapshot(handle, new_alias)
+            record.update(invalidate_resource_ids=[row['resource_id'] for row in record['alias_review']['descendants']],
+                refreshed_descendant_identities=refreshed['descendants'], stored_sql_rewritten=False, physical_file_renamed=False,
+                alias_restored_by_rollback=False)
+            if verified:
+                context['detached_aliases'][identifier_key(record['alias'])] = transaction
+        elif record['action'] == 'detach':
             verified = selected is None
             if verified and any(identifier_key(row['name']) == identifier_key(record['alias']) for row in before):
                 context['detached_aliases'][identifier_key(record['alias'])] = transaction

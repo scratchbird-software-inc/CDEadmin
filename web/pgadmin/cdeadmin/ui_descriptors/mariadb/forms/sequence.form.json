@@ -23,79 +23,203 @@
       "label": "Database",
       "tab": "General",
       "control": "reference",
-      "required": false,
-      "help": "Use a qualified database or schema name where needed.",
       "reference_kind": "database"
     },
     {
-      "field_id": "start",
-      "label": "Start value",
+      "field_id": "integer_type",
+      "label": "Native integer type",
+      "control": "select",
+      "default": "",
+      "options": [
+        {
+          "value": "",
+          "label": "Preserve"
+        },
+        {
+          "value": "TINYINT",
+          "label": "TINYINT"
+        },
+        {
+          "value": "SMALLINT",
+          "label": "SMALLINT"
+        },
+        {
+          "value": "MEDIUMINT",
+          "label": "MEDIUMINT"
+        },
+        {
+          "value": "INT",
+          "label": "INT"
+        },
+        {
+          "value": "BIGINT",
+          "label": "BIGINT"
+        }
+      ],
       "tab": "General",
-      "control": "number",
-      "required": false,
+      "help": "Native ALTER AS cannot be combined with other sequence options. Review type changes separately; no automatic multi-statement split."
+    },
+    {
+      "field_id": "unsigned",
+      "label": "Unsigned (requires explicit type)",
+      "control": "boolean",
+      "default": false,
+      "tab": "General"
+    },
+    {
+      "field_id": "start",
+      "label": "Exact start value",
+      "control": "text",
+      "tab": "General",
       "record_key": "ddl",
       "record_pattern": "\\bstart with (-?\\d+)"
     },
     {
       "field_id": "increment",
-      "label": "Increment",
+      "label": "Exact signed increment",
+      "control": "text",
       "tab": "General",
-      "control": "number",
-      "required": false,
       "record_key": "ddl",
       "record_pattern": "\\bincrement by (-?\\d+)"
     },
     {
-      "field_id": "minimum",
-      "label": "Minimum",
+      "field_id": "cache",
+      "label": "Exact signed cache size",
+      "control": "text",
       "tab": "General",
-      "control": "number",
-      "required": false,
+      "record_key": "ddl",
+      "record_pattern": "\\bcache (-?\\d+)"
+    },
+    {
+      "field_id": "minimum_mode",
+      "label": "Minimum intent",
+      "control": "select",
+      "default": "PRESERVE",
+      "options": [
+        {
+          "value": "PRESERVE",
+          "label": "PRESERVE"
+        },
+        {
+          "value": "VALUE",
+          "label": "VALUE"
+        },
+        {
+          "value": "NATIVE",
+          "label": "NATIVE"
+        }
+      ],
+      "tab": "General"
+    },
+    {
+      "field_id": "minimum",
+      "label": "Exact minimum",
+      "control": "text",
+      "visible_when": {
+        "equals": "VALUE",
+        "field": "minimum_mode"
+      },
+      "tab": "General",
       "record_key": "ddl",
       "record_pattern": "\\bminvalue (-?\\d+)"
     },
     {
+      "field_id": "maximum_mode",
+      "label": "Maximum intent",
+      "control": "select",
+      "default": "PRESERVE",
+      "options": [
+        {
+          "value": "PRESERVE",
+          "label": "PRESERVE"
+        },
+        {
+          "value": "VALUE",
+          "label": "VALUE"
+        },
+        {
+          "value": "NATIVE",
+          "label": "NATIVE"
+        }
+      ],
+      "tab": "General"
+    },
+    {
       "field_id": "maximum",
-      "label": "Maximum",
+      "label": "Exact maximum",
+      "control": "text",
+      "visible_when": {
+        "equals": "VALUE",
+        "field": "maximum_mode"
+      },
       "tab": "General",
-      "control": "number",
-      "required": false,
       "record_key": "ddl",
       "record_pattern": "\\bmaxvalue (-?\\d+)"
     },
     {
-      "field_id": "cycle",
-      "label": "Cycle",
+      "field_id": "cycle_mode",
+      "label": "Cycle intent",
+      "control": "select",
+      "default": "PRESERVE",
+      "options": [
+        {
+          "value": "PRESERVE",
+          "label": "PRESERVE"
+        },
+        {
+          "value": "CYCLE",
+          "label": "CYCLE"
+        },
+        {
+          "value": "NOCYCLE",
+          "label": "NOCYCLE"
+        }
+      ],
       "tab": "General",
-      "control": "boolean",
-      "required": false,
-      "default": false,
       "record_derive": {
         "cases": [
           {
             "key": "ddl",
             "matches": "\\bnocycle\\b",
-            "value": false
+            "value": "NOCYCLE"
           },
           {
             "key": "ddl",
             "matches": "\\bcycle\\b",
-            "value": true
+            "value": "CYCLE"
           }
         ],
-        "default": false
+        "default": "PRESERVE"
       }
     },
     {
       "field_id": "restart",
-      "label": "Restart with",
-      "tab": "General",
-      "control": "number",
-      "required": false,
+      "label": "Exact next value",
+      "control": "text",
       "modes": [
         "alter"
-      ]
+      ],
+      "tab": "General"
+    },
+    {
+      "field_id": "restart_initial",
+      "label": "Restart at original start",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "tab": "General"
+    },
+    {
+      "field_id": "confirmation",
+      "label": "Sequence name (restart only)",
+      "control": "text",
+      "modes": [
+        "alter"
+      ],
+      "tab": "General"
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
+  "notes": "Native typed options preserve exact decimal values; native bounds/default intent and confirmed restart are explicit."
 }

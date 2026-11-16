@@ -1649,6 +1649,15 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_host_tools(self, server, request, *, host_authorized=False):
+        from .postgresql_host_tool_service import action
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..sdk.tooling import ProviderToolError
+        try:
+            return action(self, server, request, host_authorized=host_authorized)
+        except (ValueError, OSError, BinlogArchiveError, ProviderToolError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_continuity(self, server, operation, request):
         from .postgresql_continuity_service import action
         from ..providers.postgresql.continuity import ContinuityError
@@ -3948,6 +3957,18 @@ class ProviderWorkspaceService:
             source, history_sensitive, 'script' if script_mode else 'statement', execute)
 
     def language_tool_action(self, server, action, data):
+        if action == 'duckdb_editor_operation':
+            from .duckdb_editor_operations import serve
+            try:
+                return serve(self, server, data)
+            except (ValueError, KeyError, TypeError) as error:
+                raise ProviderWorkspaceError(str(error)) from None
+        if action == 'sqlite_editor_operation':
+            from .sqlite_editor_operations import serve
+            try:
+                return serve(self, server, data)
+            except (ValueError, KeyError, TypeError) as error:
+                raise ProviderWorkspaceError(str(error)) from None
         if action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
             from .sqlite_retained_service import serve
             try:return serve(self,server,action,data)
@@ -4006,8 +4027,10 @@ class ProviderWorkspaceService:
                 if (not isinstance(data.get('request'), dict) or
                         not isinstance(data.get('database_target_id'), str) or not data['database_target_id']):
                     raise ProviderWorkspaceError('Select a native DuckDB attachment request')
-                return self.studio_service.duckdb_attachment_action(context, data.get('session_id'),
+                result = self.studio_service.duckdb_attachment_action(context, data.get('session_id'),
                     data['request'], endpoint['route'])
+                from .duckdb_alias_bindings import record_binding_notice
+                return record_binding_notice(self, context, data['database_target_id'], result)
             if action=='sqlite_native_preupdate':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite preupdate request')
                 return self.studio_service.sqlite_native_preupdate_action(context,data.get('session_id'),data['request'])

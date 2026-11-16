@@ -11,7 +11,21 @@ import tempfile
 from ...sdk import RelationalClientError
 from .embedded import embedded_route
 
-OPERATIONS = frozenset({'database_statistics'})
+LOCAL_OPTIONS = {
+    'set_access_mode': {'mode'},
+    'set_page_cache_size': {'page_buffers'},
+    'set_sweep_interval': {'sweep_interval'},
+    'set_space_reservation': {'mode'},
+    'set_write_mode': {'mode'},
+    'set_sql_dialect': {'sql_dialect'},
+    'set_replica_mode': {'mode'},
+    'remove_linger': set(),
+    'sweep_database': {'parallel_workers'},
+    'validate_database': {'include_table', 'exclude_table', 'include_index',
+                          'exclude_index', 'lock_timeout'},
+    'database_statistics': {'statistics_flags', 'tables'},
+}
+OPERATIONS = frozenset(LOCAL_OPTIONS)
 
 
 def route_for_service(route, permissions=None):
@@ -21,7 +35,7 @@ def route_for_service(route, permissions=None):
         raise RelationalClientError('Local Firebird services do not acquire network credentials')
     value = embedded_route(route, permissions)
     if not Path(value['database']).is_file():
-        raise RelationalClientError('Local database statistics require an existing approved file')
+        raise RelationalClientError('Local database services require an existing approved file')
     return value
 
 
@@ -29,10 +43,21 @@ def validate_operation(route, operation, database, options):
     selected = route_for_service(route)
     if operation not in OPERATIONS:
         raise RelationalClientError('This embedded local service operation is not implemented')
-    if not isinstance(options, Mapping) or set(options) - {'statistics_flags', 'tables', 'role'}:
-        raise RelationalClientError('Select typed local database statistics options')
-    from .statistics import validate_options
-    validate_options(options)
+    if not isinstance(options, Mapping) or set(options) - (LOCAL_OPTIONS[operation] | {'role'}):
+        raise RelationalClientError('Select typed local database service options')
+    if operation == 'database_statistics':
+        from .statistics import validate_options
+        validate_options(options)
+    else:
+        from ..relational_admin import RelationalAdministration
+        errors = RelationalAdministration._validate_firebird_service(operation, options)
+        for field in LOCAL_OPTIONS[operation] & {'page_buffers', 'sweep_interval'}:
+            if options.get(field) is None:
+                raise RelationalClientError('A local service requires ' + field)
+        if errors:
+            raise RelationalClientError(errors[0]['message'])
+        if sys.platform != 'linux':
+            raise RelationalClientError('Local administration file pinning is qualified on Linux only')
     actual = embedded_route({**route, 'database': database})['database']
     if actual != selected['database']:
         raise RelationalClientError('Local service target differs from the approved database')
@@ -75,7 +100,7 @@ _SERVICE_TARGET = ContextVar('firebird_local_service_target', default=None)
 
 
 @contextmanager
-def pinned_target(route, reviewed):
+def pinned_target(route, reviewed, operation='database_statistics'):
     """Pin the reviewed inode through native service completion and release.
 
     Private inode aliases never come from a request. The
@@ -107,9 +132,12 @@ def pinned_target(route, reviewed):
         # Native gstat canonicalizes descriptor symlinks. A private hardlink
         # instead gives it a stable native filename for this exact inode.
         # Verify after link creation: linking a raced same-name replacement
-        # must never authorize that replacement. Only read-only statistics
-        # use this alias; it is never a database attachment/lock alias.
-        alias_area = tempfile.TemporaryDirectory(prefix='.scratchrobin-statistics-',dir=str(Path(original).parent))
+        # must never authorize that replacement. Engine13 identifies database
+        # locks by native file identity, including hardlinks. Mutation adapters
+        # are separately qualified with an active original-path attachment.
+        prefix = ('.scratchrobin-statistics-' if operation == 'database_statistics'
+                  else '.scratchrobin-local-service-')
+        alias_area = tempfile.TemporaryDirectory(prefix=prefix,dir=str(Path(original).parent))
         native = str(Path(alias_area.name) / 'database.fdb')
         os.link(original,native,follow_symlinks=False)
         resolved = os.stat(native,follow_symlinks=False)

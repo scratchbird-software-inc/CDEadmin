@@ -2954,6 +2954,268 @@
         }
       ],
       "notes": "Standalone native CHECKPOINT on an independent autocommit attachment, bound at review/apply to the actual server/startup/database and effective/authenticated principals. Native superuser or native checkpoint-role authority is required, independently of application administer/execute permissions. Exact CHECKPOINT command tag is required. Receipt separates nontransactional completion and connection release; rollback never undoes a checkpoint. Timeout, cancellation and lost acknowledgement have unknown effect; no automatic replay and no physical durability inference. Synchronous bounded wait; no progress stream or manual cancellation API is advertised."
+    },
+    {
+      "operation_id": "host_pg_controldata",
+      "resource_kind": "server",
+      "title": "Inspect local cluster control data",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "cluster_id",
+          "label": "Operator-granted cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native timeout (seconds)",
+          "control": "number",
+          "default": 60
+        }
+      ],
+      "description": "Native pg_controldata on an operator-granted application-host cluster; fixed postgresql_host_tools review/start/status/cancel/list contract. Requires host Administrator and backup_admin independently of server connection. Process return is not an atomic live-cluster snapshot.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+    },
+    {
+      "operation_id": "host_pg_walsummary",
+      "resource_kind": "server",
+      "title": "Inspect native WAL summary files",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "summary_ids",
+          "label": "Operator-granted summary identities",
+          "control": "grid",
+          "item_kind": "string",
+          "required": true
+        },
+        {
+          "field_id": "individual",
+          "label": "List individual block numbers",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "quiet",
+          "label": "Native quiet mode (limit records may still print)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type WAL summaries",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native timeout (seconds)",
+          "control": "number",
+          "default": 60
+        }
+      ],
+      "description": "Native pg_walsummary reads exact privately staged SHA-256-bound granted files, one invocation for ordered selections. Printed relation/block references are observations, not proof these files belong to the registered remote server. postgresql_host_tools review/start/status/cancel/list; native helper/version/host authority remain backend-owned.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+    },
+    {
+      "operation_id": "host_pg_test_timing",
+      "resource_kind": "server",
+      "title": "Measure native application-host timing overhead",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "duration_seconds",
+          "label": "Native test duration (seconds, 1\u201360)",
+          "control": "number",
+          "default": 3
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Application-host hostname",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 60
+        }
+      ],
+      "description": "Native pg_test_timing on the application host. Requires a separate endpoint-scoped operator host grant plus host Administrator and backup_admin. Does not measure the registered database server. Durable native process progress/cancel/status, exact binary/version/host identity, timeout and no replay.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+    },
+    {
+      "operation_id": "host_pg_test_fsync",
+      "resource_kind": "server",
+      "title": "Measure native application-host file synchronization",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "scratch_id",
+          "label": "Operator-granted scratch filesystem identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "seconds_per_test",
+          "label": "Seconds per native test (1\u201360)",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Application-host hostname",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Overall native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 300
+        }
+      ],
+      "description": "Native pg_test_fsync uses a newly owned private file within a separately operator-granted scratch root. Its per-test duration is not the total runtime. No existing cluster file is selected, overwritten or used. Display exact host/filesystem/native version, bounded raw report, process cleanup and temporary-file cleanup separately. Not a remote-server performance measurement.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+    },
+    {
+      "operation_id": "host_pg_checksums",
+      "resource_kind": "server",
+      "title": "Manage native offline cluster checksums",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "cluster_id",
+          "label": "Operator-granted stopped cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mode",
+          "label": "Native checksum action",
+          "control": "select",
+          "default": "CHECK",
+          "options": [
+            {
+              "value": "CHECK",
+              "label": "CHECK"
+            },
+            {
+              "value": "ENABLE",
+              "label": "ENABLE"
+            },
+            {
+              "value": "DISABLE",
+              "label": "DISABLE"
+            }
+          ]
+        },
+        {
+          "field_id": "filenode",
+          "label": "Relation filenode (CHECK only)",
+          "control": "text"
+        },
+        {
+          "field_id": "progress",
+          "label": "Native progress output",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose native file output",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "sync",
+          "label": "Wait for native filesystem synchronization",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "sync_method",
+          "label": "Native sync method",
+          "control": "select",
+          "default": "fsync",
+          "options": [
+            {
+              "value": "fsync",
+              "label": "fsync"
+            },
+            {
+              "value": "syncfs",
+              "label": "syncfs"
+            }
+          ]
+        },
+        {
+          "field_id": "offline_quiescence_confirmed",
+          "label": "I control external cluster shutdown and prevent external starts/writers",
+          "control": "boolean",
+          "default": false,
+          "required": true
+        },
+        {
+          "field_id": "checksum_change_confirmed",
+          "label": "Confirm native checksum metadata/page changes",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "unsafe_no_sync_confirmed",
+          "label": "Confirm reduced durability from native no-sync",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Overall native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 300
+        }
+      ],
+      "description": "Native pg_checksums CHECK/ENABLE/DISABLE on an exactly granted stopped application-host cluster and explicitly granted tablespaces. Separate external quiescence and mutation/no-sync acknowledgements, native control/tree/runtime revalidation, persistent process-resource lease and non-replaying durable receipts. Native error/cancel/lost acknowledgement can leave partial page effects; SQL rollback and a control flag cannot prove recovery or physical data integrity.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
     }
   ]
 }

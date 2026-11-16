@@ -3498,7 +3498,7 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_metadata_search(server, data.get('request'))
                 elif action == 'firebird_editor_metadata':
                     payload = service.firebird_editor_metadata(server, data.get('database_target_id'))
-                elif action in {'sqlite_retained_schema','sqlite_retained_schema_receipts','firebird_eds_pool','firebird_eds_pool_receipts','duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'sqlite_connection_settings', 'sqlite_connection_limits', 'sqlite_connection_config', 'mariadb_session_flagsets', 'mariadb_editor_context', 'sqlite_connection_pragmas', 'sqlite_connection_maintenance', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
+                elif action in {'duckdb_editor_operation','sqlite_editor_operation','sqlite_retained_schema','sqlite_retained_schema_receipts','firebird_eds_pool','firebird_eds_pool_receipts','duckdb_session_receipts','mariadb_backup_stages', 'duckdb_attachments', 'duckdb_extensions', 'duckdb_database_copy', 'sqlite_extensions', 'sqlite_native_sessions', 'sqlite_native_arrays', 'sqlite_native_preupdate', 'sqlite_connection_settings', 'sqlite_connection_limits', 'sqlite_connection_config', 'mariadb_session_flagsets', 'mariadb_editor_context', 'sqlite_connection_pragmas', 'sqlite_connection_maintenance', 'source_validate', 'source_complete', 'source_catalog', 'native_script_prepare',
                                 'native_script_advance', 'native_script_stop',
                                 'native_script_discard'}:
                     payload = service.language_tool_action(server, action, data)
@@ -3709,6 +3709,16 @@ class ServerNode(PGChildNodeView):
                 elif action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
                     try:
                         payload = service.postgresql_replication_temporary(server, action.removeprefix('postgresql_replication_temporary_'), data.get('request'))
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action == 'postgresql_host_tools':
+                    if scoped_target or data.get('database_target_id') not in (None, ''):
+                        return bad_request('Open the server workspace for application-host and whole-cluster utilities.')
+                    from flask_security import current_user
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
+                    try:
+                        payload = service.postgresql_host_tools(server, data.get('request'), host_authorized=host_authorized)
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_release_transport','postgresql_continuity_transport','postgresql_continuity_review', 'postgresql_continuity_start',
