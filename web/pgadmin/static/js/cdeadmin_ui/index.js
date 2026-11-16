@@ -20,6 +20,10 @@ export {
   Stack,
 } from './primitives/Layout';
 export {Dialog} from './overlays/Dialog';
+export {
+  UncommittedWorkDialog,
+  promptAbandonUncommittedWork,
+} from './overlays/UncommittedWorkDialog';
 export {ScratchScrollArea} from './base/ScratchScrollArea';
 export {ScratchAlertDialog, ScratchPopoverPalette} from './base/ScratchOverlays';
 export {
@@ -111,6 +115,7 @@ export {
 export {WorkspaceHost, createWorkspaceHost} from './workspace/WorkspaceHost';
 export {WorkspaceTransferClient} from './workspace/WorkspaceTransferClient';
 export {SurfaceHost} from './workspace/SurfaceHost';
+export {default as DataEditSurface} from './surfaces/DataEditSurface';
 export {
   ProjectAssetClient,
   ProjectAssetClientError,

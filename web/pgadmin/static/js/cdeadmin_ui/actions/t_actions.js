@@ -660,6 +660,11 @@ export class TActionsRegistry {
         enabled: action.status === T_ACTION_STATUS.ENABLED,
         hidden: action.status === T_ACTION_STATUS.INVISIBLE,
         ...(typeof action.checked === 'boolean' ? {checked: action.checked} : {}),
+        ...(typeof itemSpec === 'object' && itemSpec.value !== undefined
+          ? {value: itemSpec.value}
+          : action.value !== undefined
+            ? {value: action.value}
+            : {}),
       };
       const rawPaletteItems =
         (typeof itemSpec === 'object' && Array.isArray(itemSpec.items) && itemSpec.items) ||
@@ -674,8 +679,13 @@ export class TActionsRegistry {
           return {
             id: entry.id || `${action.id}.item.${idx}`,
             label: translatedLabel,
+            tooltip: entry.tooltip
+              ? this._translateText(entry.tooltip)
+              : translatedLabel,
             command: entry.command || action.id,
             checked: entry.checked,
+            showLabel: Boolean(entry.showLabel),
+            badge: entry.badge,
             disabled: Boolean(entry.disabled),
             icon: entry.icon
               ? (size) => renderIcon({icon: entry.icon, text: translatedLabel}, size)

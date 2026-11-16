@@ -110,7 +110,7 @@ OverflowMenu.propTypes = {
 
 export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   onSelectTab, onCloseTab, onReorderTab, closeTabLabel, closeTabIcon='×', getTabProps, collapsed,
-  onCollapsedChange, start, end, contributions,
+  onCollapsedChange, start, end, subHeader, contributions,
   customization, catalog, label='Commands', dir, injectStyles=true,
   accessKeyTrigger='Alt', messages}) {
   useNotebookBarStyles(injectStyles);
@@ -606,6 +606,7 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       </div>}
       {end && <div className="snb-end">{end}</div>}
     </div>
+    {subHeader && showPanel && <div className="snb-subheader">{subHeader}</div>}
     {showPanel && <div ref={panelRef} id={panelId} className="snb-panel"
       role="tabpanel" aria-labelledby={`${id}-tab-${current.id}`}
       onKeyDown={onControlsKeyDown}>
@@ -635,6 +636,7 @@ NotebookBar.propTypes = {
   onCollapsedChange: PropTypes.func,
   start: PropTypes.node,
   end: PropTypes.node,
+  subHeader: PropTypes.node,
   contributions: PropTypes.array,
   customization: PropTypes.object,
   catalog: PropTypes.object,

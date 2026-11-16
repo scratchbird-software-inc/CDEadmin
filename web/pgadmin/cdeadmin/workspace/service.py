@@ -3744,6 +3744,17 @@ class ProviderWorkspaceService:
             server, 'cancel_visual_admin_rows', request
         )
 
+    def data_surface_action(self, server, request):
+        if getattr(self, '_data_surface_host', None) is None:
+            from .data_surface_host import DataSurfaceHostService
+            self._data_surface_host = DataSurfaceHostService()
+        try:
+            return self._data_surface_host.dispatch(
+                self, server, request if isinstance(request, dict) else {}
+            )
+        except (ValueError, RuntimeError) as exc:
+            raise ProviderWorkspaceError(str(exc)) from exc
+
     def visual_admin_operation_action(self, server, action, request):
         methods = {
             'visual_admin_operation_list': 'list_visual_admin_operations',

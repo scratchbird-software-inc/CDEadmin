@@ -1072,6 +1072,235 @@ function BinlogReplayIcon(props) {
   );
 }
 
+function LayoutGridModeIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="3" y1="14.5" x2="21" y2="14.5" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+    </svg>
+  );
+}
+
+function LayoutMiniFormsIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="3.5" width="18" height="7.5" rx="1.8" />
+      <line x1="6" y1="6.5" x2="10" y2="6.5" />
+      <line x1="13" y1="6.5" x2="18" y2="6.5" />
+      <line x1="6" y1="8.8" x2="15" y2="8.8" />
+      <rect x="3" y="13" width="18" height="7.5" rx="1.8" />
+      <line x1="6" y1="16" x2="10" y2="16" />
+      <line x1="13" y1="16" x2="18" y2="16" />
+      <line x1="6" y1="18.3" x2="15" y2="18.3" />
+    </svg>
+  );
+}
+
+function LayoutHybridIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="3.5" width="18" height="4" rx="1" />
+      <rect x="3" y="9" width="18" height="6.5" rx="1.5" />
+      <line x1="6" y1="11.5" x2="11" y2="11.5" />
+      <line x1="14" y1="11.5" x2="18" y2="11.5" />
+      <line x1="6" y1="13.5" x2="16" y2="13.5" />
+      <rect x="3" y="17" width="18" height="3.5" rx="1" />
+    </svg>
+  );
+}
+
+function LayoutSingleFormIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <rect x="6" y="7" width="5" height="3" rx="0.6" />
+      <rect x="13" y="7" width="5" height="3" rx="0.6" />
+      <rect x="6" y="12.5" width="12" height="4.5" rx="0.6" />
+    </svg>
+  );
+}
+
+function LayoutHybridEditIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <rect x="3" y="4" width="14" height="15" rx="1.8" />
+      <line x1="3" y1="9" x2="17" y2="9" />
+      <line x1="9.5" y1="4" x2="9.5" y2="19" />
+      <path d="M15.5 16.5l4.2-4.2a1.4 1.4 0 0 1 2 2l-4.2 4.2-2.6.6.6-2.6z" />
+    </svg>
+  );
+}
+
+function NavFirstIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="6" y1="6" x2="6" y2="18" />
+      <polyline points="17 6 10 12 17 18" />
+    </svg>
+  );
+}
+
+function NavPrevPageIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polyline points="13 6 7 12 13 18" />
+      <polyline points="19 6 13 12 19 18" />
+    </svg>
+  );
+}
+
+function NavPrevRowIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polyline points="15 6 9 12 15 18" />
+    </svg>
+  );
+}
+
+function NavNextRowIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  );
+}
+
+function NavNextPageIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polyline points="5 6 11 12 5 18" />
+      <polyline points="11 6 17 12 11 18" />
+    </svg>
+  );
+}
+
+function NavLastIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <polyline points="7 6 14 12 7 18" />
+      <line x1="18" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function LocateRowIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+      <line x1="12" y1="3" x2="12" y2="6" />
+      <line x1="12" y1="18" x2="12" y2="21" />
+      <line x1="3" y1="12" x2="6" y2="12" />
+      <line x1="18" y1="12" x2="21" y2="12" />
+    </svg>
+  );
+}
+
+function AlignLeftIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="10" x2="15" y2="10" />
+      <line x1="4" y1="14" x2="20" y2="14" />
+      <line x1="4" y1="18" x2="13" y2="18" />
+    </svg>
+  );
+}
+
+function AlignCenterIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="7" y1="10" x2="17" y2="10" />
+      <line x1="4" y1="14" x2="20" y2="14" />
+      <line x1="8" y1="18" x2="16" y2="18" />
+    </svg>
+  );
+}
+
+function AlignRightIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="9" y1="10" x2="20" y2="10" />
+      <line x1="4" y1="14" x2="20" y2="14" />
+      <line x1="11" y1="18" x2="20" y2="18" />
+    </svg>
+  );
+}
+
+function AlignJustifyIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="10" x2="20" y2="10" />
+      <line x1="4" y1="14" x2="20" y2="14" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+    </svg>
+  );
+}
+
+function VAlignTopIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="4" x2="20" y2="4" />
+      <line x1="12" y1="8" x2="12" y2="20" />
+      <polyline points="8 12 12 8 16 12" />
+    </svg>
+  );
+}
+
+function VAlignMiddleIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <polyline points="9 6 12 9 15 6" />
+      <polyline points="9 18 12 15 15 18" />
+    </svg>
+  );
+}
+
+function VAlignBottomIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="16" />
+      <polyline points="8 12 12 16 16 12" />
+    </svg>
+  );
+}
+
+function WrapNoneIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <polyline points="17 8 21 12 17 16" />
+    </svg>
+  );
+}
+
+function WrapFullIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <path d="M4 12h13a3 3 0 0 1 0 6h-5" />
+      <polyline points="14 16 12 18 14 20" />
+    </svg>
+  );
+}
+
+function SetNullIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="7.5" />
+      <line x1="6" y1="18" x2="18" y2="6" />
+    </svg>
+  );
+}
+
 export const ICON_CATEGORIES = Object.freeze({
   ACTION: 'action',
   ENGINE: 'engine',
@@ -1167,6 +1396,10 @@ const ACTION_COMPONENTS = Object.freeze({
   add: AddCircleIcon,
   ai_draft: AiDraftSparkleIcon,
   align: AlignIcon,
+  align_center: AlignCenterIcon,
+  align_justify: AlignJustifyIcon,
+  align_left: AlignLeftIcon,
+  align_right: AlignRightIcon,
   alter: EditIcon,
   attach: LinkIcon,
   axis_format: AxisFormatIcon,
@@ -1229,11 +1462,17 @@ const ACTION_COMPONENTS = Object.freeze({
   kiosk_device: KioskDeviceIcon,
   lattice_reducer: LatticeReducerIcon,
   layers: LayersIcon,
+  layout_grid: LayoutGridModeIcon,
+  layout_hybrid: LayoutHybridIcon,
+  layout_hybrid_edit: LayoutHybridEditIcon,
+  layout_mini_forms: LayoutMiniFormsIcon,
+  layout_single_form: LayoutSingleFormIcon,
   level_conceptual: LevelConceptualIcon,
   level_deployment: LevelDeploymentIcon,
   level_logical: LevelLogicalIcon,
   level_physical: LevelPhysicalIcon,
   locale_translation: LocaleTranslationIcon,
+  locate_row: LocateRowIcon,
   lock: LockIcon,
   maintenance: CustomizeSlidersIcon,
   manage_routes: ManageRoutesIcon,
@@ -1243,6 +1482,12 @@ const ACTION_COMPONENTS = Object.freeze({
   move_down: MoveDownIcon,
   move_up: MoveUpIcon,
   naming_standards: NamingStandardsIcon,
+  nav_first: NavFirstIcon,
+  nav_last: NavLastIcon,
+  nav_next_page: NavNextPageIcon,
+  nav_next_row: NavNextRowIcon,
+  nav_prev_page: NavPrevPageIcon,
+  nav_prev_row: NavPrevRowIcon,
   new: FileAddIcon,
   open: EyeIcon,
   operation: SectionOperationsIcon,
@@ -1283,6 +1528,7 @@ const ACTION_COMPONENTS = Object.freeze({
   select_pointer: SelectPointerIcon,
   send_review: SendReviewIcon,
   server_host: ServerHostIcon,
+  set_null: SetNullIcon,
   settings: SettingsIcon,
   sign_out: SignOutIcon,
   sketch_look: SketchLookIcon,
@@ -1306,8 +1552,14 @@ const ACTION_COMPONENTS = Object.freeze({
   undo: UndoIcon,
   unlock: UnlockOpenIcon,
   usage_matrix: UsageMatrixIcon,
+  valign_bottom: VAlignBottomIcon,
+  valign_middle: VAlignMiddleIcon,
+  valign_top: VAlignTopIcon,
   view: EyeIcon,
   where_used: WhereUsedIcon,
+  wrap_clamp: LayersIcon,
+  wrap_full: WrapFullIcon,
+  wrap_none: WrapNoneIcon,
 });
 
 const ACTION_INFERENCE = Object.freeze([

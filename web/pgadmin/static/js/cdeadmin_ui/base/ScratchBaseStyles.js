@@ -163,6 +163,15 @@ kbd,
   margin: 2px 1px;
 }
 
+.sr-scroll-left-vertical > .sr-scroll-bar[data-orientation="vertical"] {
+  left: 1px !important;
+  right: auto !important;
+}
+
+.sr-scroll-left-vertical > .sr-scroll-viewport {
+  padding-left: 10px;
+}
+
 .sr-scroll-bar[data-orientation="horizontal"] {
   height: 9px;
   flex-direction: column;

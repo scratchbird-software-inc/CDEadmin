@@ -325,6 +325,38 @@ export function GalleryControl({control, state, onCommand, hints, messages}) {
 }
 GalleryControl.propTypes = controlProps;
 
+export function SegmentedControl({control, state, onCommand, hints}) {
+  const enabled = isControlEnabled(control, state);
+  const currentValue = commandState(state, control).value ?? control.value;
+  return <span className="snb-segmented" role="radiogroup"
+    aria-label={control.label} data-snb-control={control.id}>
+    {(control.items ?? []).map((entry) => {
+      const checked = entry.checked !== undefined ?
+        Boolean(entry.checked) : entry.id === currentValue;
+      const itemDisabled = !enabled || Boolean(entry.disabled);
+      const tip = entry.tooltip ?? entry.label;
+      return <button key={entry.id} type="button"
+        className="snb-segment" role="radio"
+        aria-checked={checked}
+        aria-label={entry.label}
+        aria-disabled={itemDisabled ? 'true' : undefined}
+        title={tip}
+        tabIndex={-1}
+        data-snb-segment={entry.id}
+        data-snb-focusable=""
+        onClick={() => !itemDisabled && onCommand(
+          entry.command ?? control.command, {item: entry.id, value: entry.id}
+        )}>
+        {renderIcon(entry.icon, 'small')}
+        {entry.showLabel && <span className="snb-segment-label">{entry.label}</span>}
+        {entry.badge ? <span className="snb-segment-badge">{entry.badge}</span> : null}
+      </button>;
+    })}
+    <Hint value={hints?.[control.id]} />
+  </span>;
+}
+SegmentedControl.propTypes = controlProps;
+
 export function Control(props) {
   const {control, state} = props;
   if(!isControlVisible(control, state)) return null;
@@ -345,6 +377,8 @@ export function Control(props) {
     return <ColorControl {...props} />;
   case 'gallery':
     return <GalleryControl {...props} />;
+  case 'segmented':
+    return <SegmentedControl {...props} />;
   default:
     return <CommandButton {...props} />;
   }

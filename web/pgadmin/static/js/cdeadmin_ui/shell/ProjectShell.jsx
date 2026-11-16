@@ -3213,6 +3213,7 @@ export function ProjectApplicationNotebookBar() {
   const [, bumpPlacements] = useState(0);
   const draggedTabOutsideRef = useRef(false);
   const [hoverHint, setHoverHint] = useState(null);
+  const [underTabByInstance, setUnderTabByInstance] = useState({});
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -3274,8 +3275,21 @@ export function ProjectApplicationNotebookBar() {
     return `${prefix}.${cleaned || fallbackIndex}`;
   };
 
+  const hasUnderTabs = Boolean(
+    activeInstance?.useUnderTabs && Array.isArray(ribbonTabs) && ribbonTabs.length > 1
+  );
+  const selectedUnderTabId =
+    hasUnderTabs && activeInstance
+      ? (ribbonTabs.some((rt) => rt.id === underTabByInstance[activeInstance.instanceId])
+        ? underTabByInstance[activeInstance.instanceId]
+        : ribbonTabs[0].id)
+      : null;
+  const visibleRibbonTabs = hasUnderTabs
+    ? ribbonTabs.filter((rt) => rt.id === selectedUnderTabId)
+    : ribbonTabs || [];
+
   const baseActiveGroups = activeInstance
-    ? (ribbonTabs || []).flatMap((rt, tIdx) =>
+    ? visibleRibbonTabs.flatMap((rt, tIdx) =>
       (rt.groups || []).map((g, gIdx) => ({
         ...g,
         rawGroupId: g.id || '',
@@ -3436,6 +3450,7 @@ export function ProjectApplicationNotebookBar() {
     <div
       className="sr-island sr-island-3b"
       data-area-part="3b"
+      data-ribbon-mode={activeInstance?.ribbonMode === 'ms-grouped' ? 'ms-grouped' : 'compact'}
       data-cdeadmin-qa-key="project-application-notebookbar"
       data-dashboard-tab-active={isDashboardActive ? 'true' : 'false'}
       style={barStyle}
@@ -3452,6 +3467,37 @@ export function ProjectApplicationNotebookBar() {
         state={bar.state}
         catalog={bar.catalog}
         selectedTab={selectedSafeTabId}
+        subHeader={
+          hasUnderTabs && activeInstance ? (
+            <div
+              className="sr-3b-undertabs"
+              role="tablist"
+              aria-label={gettext('%s Sub-tabs', activeInstance.title)}
+              data-cdeadmin-qa-key="notebookbar-undertabs"
+            >
+              {ribbonTabs.map((rt) => {
+                const isSubSelected = rt.id === selectedUnderTabId;
+                return (
+                  <button
+                    key={rt.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSubSelected}
+                    className={`sr-3b-undertab${isSubSelected ? ' active' : ''}`}
+                    onClick={() =>
+                      setUnderTabByInstance((prev) => ({
+                        ...prev,
+                        [activeInstance.instanceId]: rt.id,
+                      }))
+                    }
+                  >
+                    {rt.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null
+        }
         onSelectTab={(tabId) => {
           setHoverHint(null);
           const instId = instanceIdByTabId.get(tabId) || tabId;

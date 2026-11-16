@@ -11,8 +11,8 @@
 // contributions and user customization. Pure functions; see README.md.
 
 export const CONTROL_TYPES = Object.freeze([
-  'button', 'toggle', 'menu', 'split', 'select', 'color', 'gallery', 'stack',
-  'separator',
+  'button', 'toggle', 'menu', 'split', 'select', 'color', 'gallery',
+  'segmented', 'stack', 'separator',
 ]);
 export const CUSTOMIZATION_SCHEMA = 'scratch.notebookbar-customization.v1';
 
@@ -50,7 +50,7 @@ function checkControl(control, seen, path) {
   if(typeof control.command !== 'string' || !control.command) {
     fail(`${control.id} needs a command`);
   }
-  if(['menu', 'split', 'gallery'].includes(type) &&
+  if(['menu', 'split', 'gallery', 'segmented'].includes(type) &&
       list(control.items).length === 0) {
     fail(`${control.id} needs items`);
   }

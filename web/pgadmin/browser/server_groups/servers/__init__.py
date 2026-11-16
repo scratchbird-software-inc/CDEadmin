@@ -4024,6 +4024,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.cancel_visual_admin_rows(
                         server, data.get('request')
                     )
+                elif action == 'data_surface_action':
+                    payload = service.data_surface_action(
+                        server, data.get('request') or {}
+                    )
                 elif isinstance(action, str) and action.startswith(
                     'visual_admin_operation_'
                 ):

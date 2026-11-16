@@ -98,11 +98,14 @@ import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
+import {promptAbandonUncommittedWork} from '../cdeadmin_ui/overlays/UncommittedWorkDialog';
 import SqlBuilderDialog from '../cdeadmin_ui/editors/SqlBuilderDialog';
+import DataEditSurface from '../cdeadmin_ui/surfaces/DataEditSurface';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
+  'data_surface_action',
   'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal','postgresql_large_object_start',
   'postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
@@ -5404,6 +5407,7 @@ export default function ProviderWorkspaceContent({
   const [error, setError] = useState(null);
   const querySessionIdRef = useRef(null);
   const querySessionOpeningRef = useRef(null);
+  const firebirdTxActivityRef = useRef(false);
   useModalCloseGuard(async () => {
     if (occurrenceId || (busy && (sessionId || querySessionOpeningRef.current))) {
       setError(gettext('Wait for the current query request to finish, or cancel the running query before closing this workspace.'));
@@ -5412,11 +5416,50 @@ export default function ProviderWorkspaceContent({
     if (querySessionOpeningRef.current) await querySessionOpeningRef.current.catch(() => {});
     const closingSession = querySessionIdRef.current;
     if (!closingSession) return true;
+    if (
+      languageProfile === 'firebird-sql' &&
+      firebirdTxActivityRef.current &&
+      !querySessionBlocked
+    ) {
+      const decision = await promptAbandonUncommittedWork({
+        surfaceTitle: workspace?.endpoint?.display_name || gettext('Firebird SQL'),
+        isFirebird: true,
+      });
+      if (decision === 'cancel') {
+        return false;
+      }
+      setBusy(true);
+      try {
+        if (decision === 'yes') {
+          await post({
+            action: 'transaction_action',
+            session_id: closingSession,
+            transaction_action: 'rollback',
+            database_target_id: queryDatabaseTargetId,
+          }).catch(() => {});
+          firebirdTxActivityRef.current = false;
+        } else if (decision === 'no') {
+          await post({
+            action: 'transaction_action',
+            session_id: closingSession,
+            transaction_action: 'commit',
+            database_target_id: queryDatabaseTargetId,
+          });
+          firebirdTxActivityRef.current = false;
+          onCatalogMutated?.({transactionAction: 'commit'});
+        }
+      } catch (txError) {
+        setError(errorMessage(txError));
+        setBusy(false);
+        return false;
+      }
+    }
     setBusy(true);
     try {
       await post({action: 'close_session', session_id: closingSession,
         database_target_id: queryDatabaseTargetId});
       querySessionIdRef.current = null;
+      firebirdTxActivityRef.current = false;
       setSessionId(null);
       setSessionAutocommit(null);
       setTransaction(null);
@@ -6004,6 +6047,18 @@ export default function ProviderWorkspaceContent({
       const activeSession = sessionCommand ? sessionId : await ensureSession();
       // A previous observation is no longer current once execution begins.
       setTransaction(null);
+      if (
+        languageProfile === 'firebird-sql' &&
+        !planMode &&
+        !profileMode &&
+        sessionAutocommit !== true &&
+        (scriptMode ||
+          !/^\s*(?:--[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*(?:SELECT|SHOW)\b/i.test(
+            String(executionSource || '')
+          ))
+      ) {
+        firebirdTxActivityRef.current = true;
+      }
       const occurrence = await post({
         action: 'execute', session_id: activeSession, source: executionSource,
         parameters,
@@ -6077,6 +6132,9 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId,
       });
       observeTransaction(observation);
+      if (action === 'commit' || action === 'rollback') {
+        firebirdTxActivityRef.current = false;
+      }
       if (action === 'commit') {
         onCatalogMutated?.({transactionAction: action});
       }
@@ -6098,6 +6156,7 @@ export default function ProviderWorkspaceContent({
         database_target_id: queryDatabaseTargetId,
       });
       querySessionIdRef.current = null;
+      firebirdTxActivityRef.current = false;
       setSessionId(null);
       setSessionAutocommit(null);
       setScriptLocked(false);
@@ -6241,9 +6300,68 @@ export default function ProviderWorkspaceContent({
     initialContext.server_mode
   );
   const composedWorkspace = initialContext.composition_mode === 'tabbed';
+  const isNonRelationalDataModel = [
+    'document', 'graph', 'data-structure-key-value',
+    'time-series-analytic', 'vector-analytic', 'search-analytic',
+    'search-document-analytic', 'columnar-analytic', 'wide-column',
+    'bitemporal-document-relational',
+  ].includes(workspace?.visual_admin?.model_family);
+  const isDedicatedDataSurface = Boolean(
+    inShell && tab === 'data' && !isNonRelationalDataModel
+  );
+  const dedicatedTargetResource = useMemo(() => {
+    const items = resourcePage?.items || [];
+    if (initialContext.resource_id) {
+      const matched = items.find((r) => r.resource_id === initialContext.resource_id);
+      if (matched) return matched;
+      const fallbackName = initialContext.display_name ||
+        String(initialContext.resource_id).split(':').pop() || 'Object';
+      return {
+        resource_id: initialContext.resource_id,
+        resource_kind: initialContext.resource_kind || 'table',
+        display_name: fallbackName,
+        name: fallbackName,
+      };
+    }
+    if (selectedResource && ['table', 'view', 'materialized-view'].includes(selectedResource.resource_kind)) {
+      return selectedResource;
+    }
+    return items.find((r) => ['table', 'view', 'materialized-view'].includes(r.resource_kind)) || null;
+  }, [initialContext.display_name, initialContext.resource_id, initialContext.resource_kind, resourcePage?.items, selectedResource]);
 
   useEffect(() => {
     if (!inShell || !instanceScope?.instanceId || !shell || tab === 'studio') return undefined;
+    if (isDedicatedDataSurface) {
+      if (composedWorkspace) {
+        const composedTabs = [
+          ['properties', gettext('Database Properties')],
+          ['resources', gettext('Resource Explorer')],
+          ['studio', gettext('Data Studio')],
+          ['data', gettext('Edit Data')],
+          ['administration', gettext('Administration')],
+          ['operations', gettext('Operations & Health')],
+          ...(['firebird-native', 'firebird-embedded'].includes(workspace?.endpoint?.profile_id)
+            ? [['firebird-recovery', gettext('Prepared Transaction Recovery')]]
+            : []),
+          ['semantic', gettext('Cubes & Semantic Models')],
+          ['movement', gettext('Import & Bulk')],
+          ...((initialTab === 'connections' || workspace?.endpoint?.route_management_available)
+            ? [['connections', gettext('Databases & Connections')]]
+            : []),
+        ];
+        instanceScope.setSubsections({
+          items: composedTabs.map(([id, label]) => ({
+            id,
+            label,
+            hint: label,
+            icon: resolveSectionIconKey(id, label),
+            checked: id === tab,
+          })),
+          onSelect: (nextTab) => setTab(nextTab),
+        });
+      }
+      return undefined;
+    }
     const instId = instanceScope.instanceId;
     const pfx = `provider-ws.${instId}`;
     const regActions = [];
@@ -6324,7 +6442,7 @@ export default function ProviderWorkspaceContent({
     return () => {
       regActions.forEach((a) => shell.actionsRegistry?.unregister?.(a.id));
     };
-  }, [composedWorkspace, inShell, initialTab, instanceScope, tab, workspace?.endpoint?.display_name, workspace?.endpoint?.endpoint_id, workspace?.endpoint?.profile_id]);
+  }, [composedWorkspace, inShell, initialTab, instanceScope, isDedicatedDataSurface, tab, workspace?.endpoint?.display_name, workspace?.endpoint?.endpoint_id, workspace?.endpoint?.profile_id]);
 
   if (focusedServerForm) {
     return <ModalContent sx={{minWidth: 0}}>
@@ -6389,7 +6507,7 @@ export default function ProviderWorkspaceContent({
         {workspace?.visual_admin?.model_family === 'document' &&
           <Tab value="streams" label={gettext('Change streams')} />}
       </Tabs>}
-      {!composedWorkspace && workspace && tab !== 'studio' && <Box sx={{display: 'flex',
+      {!composedWorkspace && workspace && tab !== 'studio' && !isDedicatedDataSurface && <Box sx={{display: 'flex',
         alignItems: 'center', gap: 1, px: 2, py: 1,
         borderBottom: 1, borderColor: 'divider'}}>
         <Box component="strong">{{
@@ -6428,7 +6546,7 @@ export default function ProviderWorkspaceContent({
         {tab !== initialTab && <Button size="small" sx={{ml: 'auto'}}
           onClick={() => setTab(initialTab)}>{gettext('Back')}</Button>}
       </Box>}
-      <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+      {!isDedicatedDataSurface && <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
         {workspace && tab !== 'studio' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('metadata-search')}>Search database metadata</Button>}
         {workspace && tab !== 'studio' && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
@@ -6436,7 +6554,7 @@ export default function ProviderWorkspaceContent({
         {workspace && tab === 'firebird-events' && <FirebirdEvents key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
         {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('firebird-templates')}>Object code templates</Button>}
-      </Box>
+      </Box>}
       {workspace && selectedResource && tab === 'firebird-templates' && <FirebirdTemplates post={post}
         resource={selectedResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}
         disabled={busy || !!occurrenceId || scriptLocked}
@@ -6455,14 +6573,14 @@ export default function ProviderWorkspaceContent({
         targets={workspace.database_targets?.targets || []} post={post} onOpen={onOpenSearchResult} />}
       {workspace && tab === 'firebird-server-catalog' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdServerCatalog endpoint={workspace.endpoint} targets={workspace.database_targets?.targets || []} post={post} />}
-      <FormReference formKey="workspace" />
-      {(error || workspace) && <Box role="region" tabIndex={0}
+      {!isDedicatedDataSurface && <FormReference formKey="workspace" />}
+      {(error || (workspace && !isDedicatedDataSurface)) && <Box role="region" tabIndex={0}
         aria-label={gettext('Provider workspace status')}
         sx={{minHeight: 0, maxHeight: '40%', overflow: 'auto', flexShrink: 0}}>
         {error && <Alert severity="error">{error}</Alert>}
-        {workspace && <EngineContractStatus
+        {workspace && !isDedicatedDataSurface && <EngineContractStatus
           contract={workspace.engine_contracts} />}
-        {workspace && <GridActivationStatus hidePassed={tab === 'studio'} contract={workspace.grid_workspace} />}
+        {workspace && !isDedicatedDataSurface && <GridActivationStatus hidePassed={tab === 'studio'} contract={workspace.grid_workspace} />}
       </Box>}
       {busy && !workspace && <Box p={3}><CircularProgress /></Box>}
       {workspace && tab === 'resources' && <NativeNavigation
@@ -6949,28 +7067,44 @@ export default function ProviderWorkspaceContent({
           resources={resourcePage?.items || []}
           post={post} setError={setError}
           initialResource={selectedResource} />}
-      {workspace && tab === 'data' && ![
-        'document', 'graph', 'data-structure-key-value',
-        'time-series-analytic', 'vector-analytic', 'search-analytic',
-        'search-document-analytic', 'columnar-analytic', 'wide-column',
-        'bitemporal-document-relational',
-      ].includes(
-        workspace.visual_admin?.model_family
-      ) &&
-        <StructuredDataGrid catalog={workspace.visual_admin}
-          autoLoad={Boolean(initialContext.auto_load_rows || initialContext.browse_data)}
-          browseNonce={initialContext.browse_nonce}
-          sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
-          clientSqlDialect={clientSqlDialect}
-          onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
-            if (busy || occurrenceId || scriptLocked) return;
-            setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(generatedDialect); setTab('studio');
-          }}
-          resources={resourcePage?.items || []}
-          post={post} setError={setError}
-          languageProfile={workspace.languages?.[0]?.language_profile}
-          databaseTargetId={queryDatabaseTargetId}
-          initialResourceId={initialContext.resource_id} />}
+      {workspace && tab === 'data' && !isNonRelationalDataModel && (
+        isDedicatedDataSurface ? (
+          <DataEditSurface
+            endpointLabel={
+              [
+                workspace.endpoint?.display_name || workspace.endpoint?.endpoint_id,
+                queryTarget?.display_name || queryDatabaseTargetId,
+              ].filter(Boolean).join(' / ')
+            }
+            engineId={workspace.endpoint?.verified_runtime_family || workspace.endpoint?.profile_id || 'relational'}
+            languageProfile={workspace.languages?.[0]?.language_profile || languageProfile}
+            databaseTargetId={queryDatabaseTargetId}
+            targetResource={dedicatedTargetResource}
+            post={post}
+            onOpenInSqlEditor={({source: generatedSource, parameters}) => {
+              if (busy || occurrenceId || scriptLocked) return;
+              setSource(generatedSource || '');
+              setParameterSource(JSON.stringify(parameters || {}));
+              setTab('studio');
+            }}
+          />
+        ) : (
+          <StructuredDataGrid catalog={workspace.visual_admin}
+            autoLoad={Boolean(initialContext.auto_load_rows || initialContext.browse_data)}
+            browseNonce={initialContext.browse_nonce}
+            sqlLoadDisabled={busy || !!occurrenceId || scriptLocked}
+            clientSqlDialect={clientSqlDialect}
+            onLoadSql={({source: generatedSource, parameters, client_sql_dialect: generatedDialect=3}) => {
+              if (busy || occurrenceId || scriptLocked) return;
+              setSource(generatedSource); setParameterSource(JSON.stringify(parameters)); setClientSqlDialect(generatedDialect); setTab('studio');
+            }}
+            resources={resourcePage?.items || []}
+            post={post} setError={setError}
+            languageProfile={workspace.languages?.[0]?.language_profile}
+            databaseTargetId={queryDatabaseTargetId}
+            initialResourceId={initialContext.resource_id} />
+        )
+      )}
       {workspace && tab === 'streams' && workspace.visual_admin?.model_family === 'document' &&
         <ChangeStreamViewer resources={resourcePage?.items || []}
           languageProfile={workspace.languages?.[0]?.language_profile}

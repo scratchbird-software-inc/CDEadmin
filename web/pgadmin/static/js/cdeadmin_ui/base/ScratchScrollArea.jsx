@@ -24,6 +24,7 @@ function isJsdomEnvironment() {
 export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
   label,
   orientation = 'both',
+  verticalSide = 'right',
   className = '',
   viewportClassName = '',
   contentClassName = '',
@@ -46,6 +47,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
   const rootClassName = [
     'sr-scroll-root',
     fillViewport ? 'sr-scroll-fill' : '',
+    verticalSide === 'left' ? 'sr-scroll-left-vertical' : '',
     className,
   ].filter(Boolean).join(' ');
 
@@ -60,6 +62,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
         ref={ref}
         role={label ? 'region' : props.role}
         aria-label={label}
+        data-vertical-side={verticalSide}
         tabIndex={label ? (props.tabIndex ?? 0) : props.tabIndex}
         className={rootClassName}
         style={style}
@@ -123,6 +126,7 @@ export const ScratchScrollArea = forwardRef(function ScratchScrollArea({
 ScratchScrollArea.propTypes = {
   label: PropTypes.string,
   orientation: PropTypes.oneOf(['both', 'vertical', 'horizontal']),
+  verticalSide: PropTypes.oneOf(['right', 'left']),
   className: PropTypes.string,
   viewportClassName: PropTypes.string,
   contentClassName: PropTypes.string,
