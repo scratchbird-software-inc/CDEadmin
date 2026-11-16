@@ -3131,6 +3131,7 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
       await surfaceHost.current.open(surface.id, {
         toolInstanceId: surface.id + '-' + asset.asset_id,
         restoreRef: asset.asset_id,
+        assetType: asset.asset_type,
         projectId: project.project_id,
         title: asset.name,
       });

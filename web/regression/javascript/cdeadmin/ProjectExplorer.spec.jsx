@@ -15,6 +15,7 @@ import {
   canAssignProjectParent,
   collectDescendantProjectIds,
 } from 'sources/cdeadmin_ui/projects/ProjectExplorer';
+import {assetIcon} from 'sources/cdeadmin_ui/projects/ProjectNavigatorModel';
 
 const projects = [{project_id: 'project-one', name: 'Project One', access: 'owner'}];
 const state = {
@@ -226,5 +227,41 @@ describe('Project Explorer / Project Navigator', () => {
     expect(optionValues).not.toContain('erp-suite');
     expect(optionValues).not.toContain('accounting');
     expect(optionValues).not.toContain('general-ledger');
+  });
+
+  it('maps semantic icons and virtual folders for cubes, composed dashboards, and all platform module assets', () => {
+    expect(assetIcon('cdeadmin.design.cube')).toBe('object.cube');
+    expect(assetIcon('cdeadmin.design.dashboard')).toBe('tool.bi');
+    expect(assetIcon('cdeadmin.design.monitoring_dashboard')).toBe('tool.bi');
+    expect(assetIcon('cdeadmin.design.screen')).toBe('tool.screen-mesh');
+    expect(assetIcon('cdeadmin.lineage.v1')).toBe('tool.lineage');
+    expect(assetIcon('cdeadmin.schema_compare.v1')).toBe('tool.schema-compare');
+    expect(assetIcon('cdeadmin.quality.v1')).toBe('tool.quality');
+    expect(assetIcon('cdeadmin.contract.v1')).toBe('tool.contract');
+    expect(assetIcon('cdeadmin.etl.v1')).toBe('tool.etl');
+    expect(assetIcon('cdeadmin.cdc.v1')).toBe('tool.cdc');
+    expect(assetIcon('cdeadmin.replication.v1')).toBe('tool.replication');
+    expect(assetIcon('cdeadmin.tracing.v1')).toBe('tool.tracing');
+    expect(assetIcon('cdeadmin.migration.v1')).toBe('tool.migration');
+    expect(assetIcon('cdeadmin.api.v1')).toBe('tool.api');
+    expect(assetIcon('cdeadmin.ml_vector.v1')).toBe('tool.ml-vector');
+    expect(assetIcon('cdeadmin.ai.v1')).toBe('tool.ai');
+    expect(assetIcon('cdeadmin.ai_interface.agent_profile.v1')).toBe('tool.ai');
+
+    const richTree = buildProjectVirtualTree(projects[0], {
+      assets: [
+        {asset_id: 'c1', name: 'GL Cube', asset_type: 'cdeadmin.design.cube'},
+        {asset_id: 'd1', name: 'CFO Dashboard', asset_type: 'cdeadmin.design.dashboard'},
+        {asset_id: 'e1', name: 'Edge to Lakehouse ETL', asset_type: 'cdeadmin.etl.v1'},
+        {asset_id: 'q1', name: 'Balanced GL Rules', asset_type: 'cdeadmin.quality.v1'},
+      ],
+    });
+    const reports = richTree.find((v) => v.key === 'reports');
+    const graphs = reports.subgroups.find((s) => s.key === 'graphs');
+    const diagrams = reports.subgroups.find((s) => s.key === 'diagrams');
+    const docs = richTree.find((v) => v.key === 'documents');
+    expect(graphs.items.map((i) => i.asset.asset_id)).toEqual(['c1', 'd1']);
+    expect(diagrams.items.map((i) => i.asset.asset_id)).toEqual(['e1']);
+    expect(docs.items.map((i) => i.asset.asset_id)).toEqual(['q1']);
   });
 });

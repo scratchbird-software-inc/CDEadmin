@@ -8,23 +8,51 @@
 //////////////////////////////////////////////////////////////
 
 export function assetIcon(assetType) {
-  if (
-    assetType === 'ddn-workspace' ||
-    assetType === 'cdeadmin.design.erd' ||
-    assetType === 'cdeadmin.lineage.v1' ||
-    assetType === 'cdeadmin.schema_compare.v1'
-  ) {
+  const typeStr = String(assetType || '');
+  if (assetType === 'ddn-workspace' || assetType === 'cdeadmin.design.erd') {
     return 'tool.erd';
+  }
+  if (assetType === 'cdeadmin.lineage.v1') return 'tool.lineage';
+  if (assetType === 'cdeadmin.schema_compare.v1') return 'tool.schema-compare';
+  if (assetType === 'cdeadmin.quality.v1') return 'tool.quality';
+  if (assetType === 'cdeadmin.contract.v1') return 'tool.contract';
+  if (assetType === 'cdeadmin.etl.v1') return 'tool.etl';
+  if (assetType === 'cdeadmin.cdc.v1') return 'tool.cdc';
+  if (assetType === 'cdeadmin.replication.v1') return 'tool.replication';
+  if (assetType === 'cdeadmin.tracing.v1') return 'tool.tracing';
+  if (assetType === 'cdeadmin.migration.v1') return 'tool.migration';
+  if (assetType === 'cdeadmin.api.v1') return 'tool.api';
+  if (assetType === 'cdeadmin.ml_vector.v1') return 'tool.ml-vector';
+  if (
+    assetType === 'cdeadmin.ai.v1' ||
+    typeStr.startsWith('cdeadmin.ai_interface.')
+  ) {
+    return 'tool.ai';
+  }
+  if (
+    assetType === 'BusinessTerm' ||
+    assetType === 'Domain' ||
+    assetType === 'MetricDefinition' ||
+    assetType === 'DataProduct' ||
+    assetType === 'SavedSearch' ||
+    assetType === 'DiscoveryCollection' ||
+    assetType === 'RankingProfile' ||
+    assetType === 'CertificationProfile' ||
+    assetType === 'IndexSourceConfig' ||
+    typeStr.startsWith('cdeadmin.discovery.')
+  ) {
+    return 'tool.search';
   }
   if (
     assetType === 'cdeadmin.design.screen' ||
     assetType === 'cdeadmin.design.screen_flow'
   ) {
-    return 'object.table';
+    return 'tool.screen-mesh';
   }
   if (
     assetType === 'cdeadmin.design.question' ||
-    assetType === 'cdeadmin.design.dashboard'
+    assetType === 'cdeadmin.design.dashboard' ||
+    assetType === 'cdeadmin.design.monitoring_dashboard'
   ) {
     return 'tool.bi';
   }
@@ -193,6 +221,7 @@ const SCREEN_TYPES = new Set([
 const GRAPH_TYPES = new Set([
   'cdeadmin.design.question',
   'cdeadmin.design.dashboard',
+  'cdeadmin.design.monitoring_dashboard',
   'cdeadmin.design.cube',
   'cube',
   'semantic-model',
@@ -202,6 +231,11 @@ const DIAGRAM_TYPES = new Set([
   'ddn-workspace',
   'cdeadmin.lineage.v1',
   'cdeadmin.schema_compare.v1',
+  'cdeadmin.etl.v1',
+  'cdeadmin.cdc.v1',
+  'cdeadmin.replication.v1',
+  'cdeadmin.migration.v1',
+  'cdeadmin.tracing.v1',
 ]);
 
 export const PROJECT_LOCAL_ASSET_TYPES = new Set([

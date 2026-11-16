@@ -10,6 +10,8 @@ import {PROJECT_ASSET_SERVICE_ID} from '../../integrations/ddn/module';
 import {DISCOVERY_COMMAND_CATALOG, DISCOVERY_INTELLIGENCE_MANIFEST,
   DISCOVERY_INTELLIGENCE_MODULE_ID, DISCOVERY_PERMISSION_CATALOG} from
   '../../specifications/ai_discovery_zero_grey';
+import {DISCOVERY_ADMINISTRATION_ASSET_TYPES} from
+  './DiscoveryAdministrationAssets';
 import {DISCOVERY_INTERFACE_SCREENS, DISCOVERY_SCREEN_GROUPS} from
   './DiscoveryInterfaceContracts';
 import {DiscoveryInterfaceWorkspace} from './DiscoveryInterfaceWorkspace';
@@ -177,7 +179,10 @@ export function discoveryIntelligenceModuleDefinition(registry) {
         title: label(screen.screen_id.replace(
           `${DISCOVERY_INTELLIGENCE_MODULE_ID}.`, '')),
         iconKey: 'tool.search',
-        assetTypes: [...DISCOVERY_INTELLIGENCE_MANIFEST.assetTypes],
+        assetTypes: [
+          ...DISCOVERY_INTELLIGENCE_MANIFEST.assetTypes,
+          ...Object.values(DISCOVERY_ADMINISTRATION_ASSET_TYPES),
+        ],
         readOnly: false, editable: true, detachable: true, duplicable: true,
         fullscreen: true,
         restore: (descriptor, context) => surfaceRuntime(registry,
