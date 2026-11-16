@@ -103,7 +103,7 @@ def insert_long(connection):
 class SourceTests(unittest.TestCase):
     def test_model_and_version_declare_text(self):
         source = MODEL_PATH.read_text(encoding='utf-8')
-        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*60\b')
+        self.assertRegex(source, r'SCHEMA_VERSION\s*=\s*61\b')
         start = source.index("__tablename__ = 'user_preferences'")
         model = source[start:source.index('class ', start)]
         self.assertIn('value = db.Column(db.Text, nullable=False)', model)

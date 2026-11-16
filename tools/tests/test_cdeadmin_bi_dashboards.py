@@ -803,7 +803,7 @@ class MigrationTests(unittest.TestCase):
             self.assertIn(needle, source)
         # 60 since 2026-11-05 (user_preferences.value became text); the BI
         # tables themselves never bumped it.
-        self.assertIn('SCHEMA_VERSION = 60', source)
+        self.assertIn('SCHEMA_VERSION = 61', source)
 
 
 class MonitoringConversionTests(unittest.TestCase):

@@ -2719,11 +2719,15 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
                 ],
               },
             ],
+            leftDrawerSharedKey: activityItem
+              ? undefined
+              : 'project-explorer:shared-left-tree',
             renderLeftDrawer: () =>
               activityItem ? (
                 activityItem.render()
               ) : (
                 <ProjectExplorer
+                  variant="tree"
                   client={platform.projectAssets}
                   onOpenAsset={(p, a) => openAssetRef.current?.(p, a)}
                 />
@@ -3098,6 +3102,15 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         const guards = createCloseGuardRegistry();
         const id = `sql-notebook-${project.project_id}-${asset.asset_id}`;
         pgAdmin.Browser.docker.default_workspace.openTab({id, title: asset.name,
+          appId: 'project-explorer',
+          leftDrawerSharedKey: 'project-explorer:shared-left-tree',
+          renderLeftDrawer: () => (
+            <ProjectExplorer
+              variant="tree"
+              client={platform.projectAssets}
+              onOpenAsset={(p, a) => openAssetRef.current?.(p, a)}
+            />
+          ),
           closable: true, floatable: true, beforeClose: guards.beforeClose,
           content: <ModalCloseGuardContext.Provider value={guards.register}>
             <SQLNotebook client={platform.projectAssets} initialProjectId={project.project_id} initialAssetId={asset.asset_id} />
@@ -3618,6 +3631,8 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
 
     if (appId === 'project-explorer') {
       return {
+        leftDrawerSharedKey: 'project-explorer:shared-left-tree',
+        leftDrawerTitle: gettext('Project Navigator'),
         menus: [
           {
             name: 'project',
@@ -3640,6 +3655,7 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ],
         renderLeftDrawer: () => (
           <ProjectExplorer
+            variant="tree"
             client={platform.projectAssets}
             onOpenAsset={openAsset}
             modules={platformModuleLaunchers}
@@ -3659,6 +3675,7 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         ),
         renderWorkArea: () => (
           <ProjectExplorer
+            variant="workspace"
             client={platform.projectAssets}
             onOpenAsset={openAsset}
             modules={platformModuleLaunchers}
