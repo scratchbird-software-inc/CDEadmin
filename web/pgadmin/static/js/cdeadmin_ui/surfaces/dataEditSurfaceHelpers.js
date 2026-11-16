@@ -250,7 +250,12 @@ export function coerceEditedValue(rawInput, col, colMeta) {
  * Convert visible form columns into SR-F-020033 (`formCellLayout.js`) descriptors
  * so Mini-Forms (b), Hybrid (c), and Single Form (d) share identical placement logic.
  */
-export function buildFormLayoutPlacements(columns, formFieldPrefs, availableWidth) {
+export function buildFormLayoutPlacements(
+  columns,
+  formFieldPrefs,
+  availableWidth,
+  prevNumCols = null
+) {
   const descriptors = columns.map((col) => {
     const meta = inferColumnMeta(col);
     const prefs = formFieldPrefs[col.name] || {};
@@ -275,6 +280,7 @@ export function buildFormLayoutPlacements(columns, formFieldPrefs, availableWidt
   });
   return computeCellGridLayout(descriptors, Math.max(240, availableWidth || 720), {}, {
     colGap: 14,
+    prevNumCols,
   });
 }
 

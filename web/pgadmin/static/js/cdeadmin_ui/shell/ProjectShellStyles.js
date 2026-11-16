@@ -448,7 +448,7 @@ html[data-theme="dark"] {
 }
 
 .sr-island-3b[data-ribbon-mode="ms-grouped"] .snb-group:last-of-type {
-  border-inline-end: none;
+  border-inline-end-color: transparent;
 }
 
 .sr-island-3b[data-ribbon-mode="ms-grouped"] .snb-group-body {

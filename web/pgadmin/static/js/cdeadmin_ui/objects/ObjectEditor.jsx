@@ -85,26 +85,56 @@ function AdaptiveFieldGroupGrid({
   onFieldChange,
 }) {
   const containerRef = useRef(null);
+  const prevColsRef = useRef(null);
   const [availableWidth, setAvailableWidth] = useState(760);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
-    const measure = () => {
-      const w = el.clientWidth || el.getBoundingClientRect?.().width || 0;
+    let rafId = null;
+    const isJsdom =
+      typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
+
+    const applyWidth = (rawW) => {
+      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
       if (w > 80) {
-        setAvailableWidth((prev) => (Math.abs(prev - w) >= 4 ? w : prev));
+        setAvailableWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
       }
     };
-    measure();
+
+    const scheduleMeasure = (entries) => {
+      const entryW = entries?.[0]?.contentRect?.width;
+      if (isJsdom || typeof requestAnimationFrame !== 'function') {
+        applyWidth(entryW);
+        return;
+      }
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyWidth(el.clientWidth || entryW);
+      });
+    };
+
+    applyWidth(el.clientWidth);
     if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(measure);
+      const ro = new ResizeObserver(scheduleMeasure);
       ro.observe(el);
-      return () => ro.disconnect();
+      return () => {
+        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(rafId);
+        }
+        ro.disconnect();
+      };
     }
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
+      const onWinResize = () => scheduleMeasure();
+      window.addEventListener('resize', onWinResize);
+      return () => {
+        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(rafId);
+        }
+        window.removeEventListener('resize', onWinResize);
+      };
     }
     return undefined;
   }, []);
@@ -118,10 +148,14 @@ function AdaptiveFieldGroupGrid({
     return map;
   }, [fields, context, draft, resourceKind]);
 
-  const layout = useMemo(
-    () => computeCellGridLayout(fields, availableWidth, optionsByField, {colGap: COL_GAP_PX}),
-    [fields, availableWidth, optionsByField]
-  );
+  const layout = useMemo(() => {
+    const computed = computeCellGridLayout(fields, availableWidth, optionsByField, {
+      colGap: COL_GAP_PX,
+      prevNumCols: prevColsRef.current,
+    });
+    prevColsRef.current = computed.numCols;
+    return computed;
+  }, [fields, availableWidth, optionsByField]);
 
   const placementByField = useMemo(() => {
     const map = new Map();
@@ -134,17 +168,20 @@ function AdaptiveFieldGroupGrid({
   return (
     <div
       ref={containerRef}
-      data-cdeadmin-qa-key="object-editor.cell-grid"
-      data-cell-columns={layout.numCols}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${layout.numCols}, minmax(0, 1fr))`,
-        columnGap: `${COL_GAP_PX}px`,
-        rowGap: `${ROW_GAP_PX}px`,
-        alignItems: 'start',
-        width: '100%',
-      }}
+      style={{width: '100%', minWidth: 0, overflowX: 'hidden', boxSizing: 'border-box'}}
     >
+      <div
+        data-cdeadmin-qa-key="object-editor.cell-grid"
+        data-cell-columns={layout.numCols}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${layout.numCols}, minmax(0, 1fr))`,
+          columnGap: `${COL_GAP_PX}px`,
+          rowGap: `${ROW_GAP_PX}px`,
+          alignItems: 'start',
+          width: '100%',
+        }}
+      >
       {fields.map((field) => {
         const show = shownError(field.field_id);
         const placement = placementByField.get(field.field_id) || {row: 1, colStart: 1, span: 1};
@@ -177,6 +214,7 @@ function AdaptiveFieldGroupGrid({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

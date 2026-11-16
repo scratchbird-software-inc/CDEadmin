@@ -19,6 +19,7 @@ import {
   useProjectShell,
 } from '../../../pgadmin/static/js/cdeadmin_ui/shell';
 import DataEditSurface from '../../../pgadmin/static/js/cdeadmin_ui/surfaces/DataEditSurface';
+import {computeCellGridLayout} from '../../../pgadmin/static/js/cdeadmin_ui/objects/formCellLayout';
 import ProviderWorkspaceContent from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
 import getApiInstance from '../../../pgadmin/static/js/api_instance';
 
@@ -631,5 +632,68 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     });
     expect(actionsCalled).toContain('rollback_batch');
     expect(actionsCalled).toContain('close_surface');
+  });
+
+  it('prevents column-wrap scrollbar oscillation and NotebookBar 1px fold loops during dynamic resize sweeps', async () => {
+    // 1. Verify 24px hysteresis deadband blocks ±16px scrollbar feedback loops
+    const sampleFields = [
+      {field_id: 'f1', label: 'Account Code', control: 'text'},
+      {field_id: 'f2', label: 'Ledger Title', control: 'text'},
+      {field_id: 'f3', label: 'Balance', control: 'number'},
+      {field_id: 'f4', label: 'Active', control: 'boolean'},
+    ];
+    // Find exact 2->3 column threshold
+    const wide = computeCellGridLayout(sampleFields, 900, {}, {colGap: 16});
+    expect(wide.numCols).toBeGreaterThanOrEqual(3);
+    const cellW = wide.cellWidth;
+    const exactThreeColThreshold = Math.ceil(3 * cellW + 2 * 16);
+
+    // Drop just below 3-col threshold -> drops to 2 cols (simulating scrollbar appearing)
+    const dropped = computeCellGridLayout(
+      sampleFields,
+      exactThreeColThreshold - 4,
+      {},
+      {colGap: 16, prevNumCols: 3}
+    );
+    expect(dropped.numCols).toBe(2);
+
+    // If scrollbar disappears (+16px), hysteresis (24px) MUST keep numCols at 2 (no 2->3->2 loop!)
+    const afterScrollbarGone = computeCellGridLayout(
+      sampleFields,
+      exactThreeColThreshold + 12,
+      {},
+      {colGap: 16, prevNumCols: dropped.numCols}
+    );
+    expect(afterScrollbarGone.numCols).toBe(2);
+
+    // Once user genuinely widens past the 24px deadband (+30px), it cleanly advances to 3 cols
+    const genuinelyWider = computeCellGridLayout(
+      sampleFields,
+      exactThreeColThreshold + 30,
+      {},
+      {colGap: 16, prevNumCols: dropped.numCols}
+    );
+    expect(genuinelyWider.numCols).toBe(3);
+
+    // 2. Sweep drawer widths across Mini-Forms & Single Form inside ProjectShell with zero crash
+    let shellRef = null;
+    const post = jest.fn(async () => makeHostFixture());
+    render(
+      <TestShell>
+        <ShellLauncher post={post} onShellReady={(s) => { shellRef = s; }} />
+      </TestShell>
+    );
+    expect(await screen.findByText('Cash On Hand')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('radio', {name: 'Mini-Forms'}));
+    await act(async () => {});
+
+    // Sweep 30 drawer width steps back and forth
+    await act(async () => {
+      for (const w of [220, 260, 310, 311, 312, 360, 420, 480, 419, 311, 250]) {
+        shellRef.setDrawerWidth('left', w);
+      }
+    });
+    expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]')).toBeTruthy();
   });
 });

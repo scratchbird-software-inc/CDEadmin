@@ -124,6 +124,7 @@ function AdaptiveRecordFormCard({
   isEditing,
   draftValues,
   columns,
+  formLayout,
   formFieldPrefs,
   booleanFormat,
   localeDateFormat,
@@ -136,40 +137,22 @@ function AdaptiveRecordFormCard({
   onFormContextMenu,
   onFieldContextMenu,
 }) {
-  const cardRef = useRef(null);
-  const [availWidth, setAvailWidth] = useState(720);
   const [focusedColName, setFocusedColName] = useState(null);
 
-  useEffect(() => {
-    const el = cardRef.current;
-    if (!el) return undefined;
-    const measure = () => {
-      const w = el.clientWidth || el.getBoundingClientRect?.().width || 0;
-      if (w > 100) {
-        setAvailWidth((prev) => (Math.abs(prev - w) >= 4 ? w : prev));
-      }
-    };
-    measure();
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(measure);
-      ro.observe(el);
-      return () => ro.disconnect();
-    }
-    return undefined;
-  }, []);
-
-  const layout = useMemo(
-    () => buildFormLayoutPlacements(columns, formFieldPrefs, availWidth - 64),
-    [columns, formFieldPrefs, availWidth]
+  const resolvedLayout = useMemo(
+    () =>
+      formLayout ||
+      buildFormLayoutPlacements(columns, formFieldPrefs, 720),
+    [formLayout, columns, formFieldPrefs]
   );
 
   const placementMap = useMemo(() => {
     const m = new Map();
-    for (const p of layout.placements || []) {
+    for (const p of resolvedLayout.placements || []) {
       m.set(p.fieldId, p);
     }
     return m;
-  }, [layout.placements]);
+  }, [resolvedLayout.placements]);
 
   const stageMarker =
     row.stage_state === 'inserted'
@@ -182,7 +165,6 @@ function AdaptiveRecordFormCard({
 
   return (
     <div
-      ref={cardRef}
       data-cdeadmin-qa-key={`data-surface-record-form-${row.row_number}`}
       onClick={() => onSelectRow?.(rowIndex)}
       onContextMenu={(ev) => {
@@ -247,10 +229,10 @@ function AdaptiveRecordFormCard({
         )}
       </div>
 
-      {/* Left-side hover scrollbar area + strict focus-visibility guarantee */}
-      <ScratchScrollArea
-        orientation="vertical"
-        verticalSide="left"
+      {/* Zero-ResizeObserver left-side hover scrollbar + strict focus-visibility guarantee */}
+      <div
+        className="sr-left-hover-scroll"
+        data-vertical-side="left"
         style={{
           flex: 1,
           minWidth: 0,
@@ -264,15 +246,16 @@ function AdaptiveRecordFormCard({
         }}
       >
         <div
-          data-cell-columns={layout.numCols}
+          data-cell-columns={resolvedLayout.numCols}
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${layout.numCols}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${resolvedLayout.numCols}, minmax(0, 1fr))`,
             columnGap: '14px',
             rowGap: '12px',
             padding: '10px 14px 14px 10px',
             alignItems: 'start',
             width: '100%',
+            boxSizing: 'border-box',
           }}
         >
           {columns.map((col) => {
@@ -284,8 +267,8 @@ function AdaptiveRecordFormCard({
               span: 1,
             };
             const effectiveSpan = fPrefs.inlineBox
-              ? layout.numCols
-              : Math.min(layout.numCols, placement.span || 1);
+              ? resolvedLayout.numCols
+              : Math.min(resolvedLayout.numCols, placement.span || 1);
             const rawVal =
               isEditing &&
               draftValues &&
@@ -526,7 +509,7 @@ function AdaptiveRecordFormCard({
             );
           })}
         </div>
-      </ScratchScrollArea>
+      </div>
     </div>
   );
 }
@@ -538,6 +521,7 @@ AdaptiveRecordFormCard.propTypes = {
   isEditing: PropTypes.bool,
   draftValues: PropTypes.object,
   columns: PropTypes.array.isRequired,
+  formLayout: PropTypes.object,
   formFieldPrefs: PropTypes.object.isRequired,
   booleanFormat: PropTypes.string,
   localeDateFormat: PropTypes.bool,
@@ -631,17 +615,40 @@ export default function DataEditSurface({
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return undefined;
-    const measure = () => {
-      const w = el.clientWidth || el.getBoundingClientRect?.().width || 0;
+    let rafId = null;
+    const isJsdom =
+      typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
+
+    const applyWidth = (rawW) => {
+      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
       if (w > 120) {
-        setViewportWidth((prev) => (Math.abs(prev - w) >= 4 ? w : prev));
+        setViewportWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
       }
     };
-    measure();
+
+    const scheduleMeasure = (entries) => {
+      const entryW = entries?.[0]?.contentRect?.width;
+      if (isJsdom || typeof requestAnimationFrame !== 'function') {
+        applyWidth(entryW);
+        return;
+      }
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyWidth(el.clientWidth || entryW);
+      });
+    };
+
+    applyWidth(el.clientWidth);
     if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(measure);
+      const ro = new ResizeObserver(scheduleMeasure);
       ro.observe(el);
-      return () => ro.disconnect();
+      return () => {
+        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(rafId);
+        }
+        ro.disconnect();
+      };
     }
     return undefined;
   }, []);
@@ -764,6 +771,18 @@ export default function DataEditSurface({
       orderedColumns(columns, layout.formColOrder, layout.formVisibleCols),
     [columns, layout.formColOrder, layout.formVisibleCols]
   );
+
+  const prevFormColsRef = useRef(null);
+  const sharedFormLayout = useMemo(() => {
+    const computed = buildFormLayoutPlacements(
+      formColumns,
+      layout.formFieldPrefs,
+      viewportWidth - GUTTER_WIDTH - 36,
+      prevFormColsRef.current
+    );
+    prevFormColsRef.current = computed.numCols;
+    return computed;
+  }, [formColumns, layout.formFieldPrefs, viewportWidth]);
 
   const currentRow = rows[activeRowIndex] || null;
   const activeColObj = useMemo(
@@ -3739,6 +3758,7 @@ export default function DataEditSurface({
           isEditing={isRowEdit}
           draftValues={isRowEdit ? rowDraft : null}
           columns={formColumns}
+          formLayout={sharedFormLayout}
           formFieldPrefs={layout.formFieldPrefs}
           booleanFormat={layout.booleanFormat}
           localeDateFormat={layout.localeDateFormat}
@@ -3776,6 +3796,7 @@ export default function DataEditSurface({
                     isEditing={isRowEdit}
                     draftValues={isRowEdit ? rowDraft : null}
                     columns={formColumns}
+                    formLayout={sharedFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
                     booleanFormat={layout.booleanFormat}
                     localeDateFormat={layout.localeDateFormat}
@@ -4039,6 +4060,7 @@ export default function DataEditSurface({
                       isEditing={isRowEdit}
                       draftValues={isRowEdit ? rowDraft : null}
                       columns={formColumns}
+                      formLayout={sharedFormLayout}
                       formFieldPrefs={layout.formFieldPrefs}
                       booleanFormat={layout.booleanFormat}
                       localeDateFormat={layout.localeDateFormat}

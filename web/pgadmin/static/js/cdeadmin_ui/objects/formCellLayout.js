@@ -137,7 +137,7 @@ export function computeCellGridLayout(
   fields,
   availableWidth,
   optionsByField = {},
-  {colGap = 16, explicitWidths = null} = {}
+  {colGap = 16, explicitWidths = null, prevNumCols = null, hysteresisPx = 24} = {}
 ) {
   if (!Array.isArray(fields) || fields.length === 0) {
     return {numCols: 1, cellWidth: 220, placements: []};
@@ -161,7 +161,15 @@ export function computeCellGridLayout(
       : 240;
   const cellWidth = clamp(rawMean, MIN_CELL_PX, MAX_CELL_PX);
   const safeAvailable = Math.max(180, Number(availableWidth) || 760);
-  const numCols = Math.max(1, Math.floor((safeAvailable + colGap) / (cellWidth + colGap)));
+  const rawCols = Math.max(1, Math.floor((safeAvailable + colGap) / (cellWidth + colGap)));
+  let numCols = rawCols;
+  if (Number.isInteger(prevNumCols) && prevNumCols >= 1 && rawCols === prevNumCols + 1) {
+    const expandThreshold =
+      (prevNumCols + 1) * cellWidth + prevNumCols * colGap + hysteresisPx;
+    if (safeAvailable < expandThreshold) {
+      numCols = prevNumCols;
+    }
+  }
 
   const placements = [];
   let colCursor = 1;

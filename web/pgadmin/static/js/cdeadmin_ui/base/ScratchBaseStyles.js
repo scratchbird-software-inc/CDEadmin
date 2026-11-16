@@ -172,6 +172,36 @@ kbd,
   padding-left: 10px;
 }
 
+/* Lightweight zero-observer left-side hover scrollbar for dynamic record forms */
+.sr-left-hover-scroll {
+  direction: rtl;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sr-left-hover-scroll:hover,
+.sr-left-hover-scroll:focus-within {
+  scrollbar-color: var(--sr-scrollbar-thumb) transparent;
+}
+.sr-left-hover-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+.sr-left-hover-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sr-left-hover-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+.sr-left-hover-scroll:hover::-webkit-scrollbar-thumb,
+.sr-left-hover-scroll:focus-within::-webkit-scrollbar-thumb {
+  background: var(--sr-scrollbar-thumb);
+}
+.sr-left-hover-scroll > * {
+  direction: ltr;
+}
+
 .sr-scroll-bar[data-orientation="horizontal"] {
   height: 9px;
   flex-direction: column;

@@ -283,23 +283,68 @@ function DrawerInsetResizeHandle({
   invert = false,
 }) {
   const startRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastDispatchedRef = useRef(value);
   const [dragging, setDragging] = useState(false);
   const clamp = (next) => Math.max(min, Math.min(max, Math.round(next)));
   const delta = (next) => (invert ? -next : next);
+  const isJsdom =
+    typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafRef.current);
+      }
+    },
+    []
+  );
 
   const handlePointerDown = (event) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    startRef.current = {x: event.clientX, value};
+    startRef.current = {x: event.clientX, value, latestX: event.clientX};
+    lastDispatchedRef.current = value;
     setDragging(true);
   };
 
   const handlePointerMove = (event) => {
     if (!startRef.current) return;
-    onChange?.(clamp(startRef.current.value + delta(event.clientX - startRef.current.x)));
+    startRef.current.latestX = event.clientX;
+    const flush = () => {
+      rafRef.current = null;
+      if (!startRef.current) return;
+      const next = clamp(
+        startRef.current.value + delta(startRef.current.latestX - startRef.current.x)
+      );
+      if (next !== lastDispatchedRef.current) {
+        lastDispatchedRef.current = next;
+        onChange?.(next);
+      }
+    };
+    if (isJsdom || typeof requestAnimationFrame !== 'function') {
+      flush();
+      return;
+    }
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(flush);
+    }
   };
 
   const handlePointerUp = (event) => {
+    if (rafRef.current !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (startRef.current) {
+      const finalW = clamp(
+        startRef.current.value + delta(event.clientX - startRef.current.x)
+      );
+      if (finalW !== lastDispatchedRef.current) {
+        lastDispatchedRef.current = finalW;
+        onChange?.(finalW);
+      }
+    }
     event.currentTarget.releasePointerCapture?.(event.pointerId);
     startRef.current = null;
     setDragging(false);
@@ -447,14 +492,19 @@ function FloatingSubFormPortal({
         data-cdeadmin-qa-key={`floating-workarea-${instance.instanceId}`}
         sx={{flex: 1, minHeight: 0, overflow: 'auto', position: 'relative'}}
       >
-        <InstanceWorkAreaScope
-          instanceId={instance.instanceId}
-          setInstanceSubsections={setInstanceSubsections}
+        <ShellSurfaceErrorBoundary
+          resetKey={`${instance.instanceId}:floating`}
+          surfaceName={instance.title}
         >
-          {typeof instance.renderWorkArea === 'function'
-            ? instance.renderWorkArea(instance)
-            : instance.workArea}
-        </InstanceWorkAreaScope>
+          <InstanceWorkAreaScope
+            instanceId={instance.instanceId}
+            setInstanceSubsections={setInstanceSubsections}
+          >
+            {typeof instance.renderWorkArea === 'function'
+              ? instance.renderWorkArea(instance)
+              : instance.workArea}
+          </InstanceWorkAreaScope>
+        </ShellSurfaceErrorBoundary>
       </Box>
       {showStatusBar && (
         <StatusBar label={`${instance.title} status`}>
@@ -1586,17 +1636,25 @@ export function ProjectShellProvider({
           : clampWidth(width, 200, 640, 320);
       const field = side === 'left' ? 'left_drawer_width' : 'right_drawer_width';
 
-      setSettings((prev) => ({
-        ...prev,
-        applications: {
-          ...prev.applications,
-          [appId]: {
-            ...(prev.applications?.[appId] || {}),
-            [field]: clamped,
+      let didChange = false;
+      setSettings((prev) => {
+        if (prev.applications?.[appId]?.[field] === clamped) {
+          return prev;
+        }
+        didChange = true;
+        return {
+          ...prev,
+          applications: {
+            ...prev.applications,
+            [appId]: {
+              ...(prev.applications?.[appId] || {}),
+              [field]: clamped,
+            },
           },
-        },
-      }));
+        };
+      });
 
+      if (!didChange) return;
       const local = loadLocalDrawerWidths();
       local[appId] = {
         ...(local[appId] || {}),
@@ -3826,7 +3884,13 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
       {/* Area 3 Outer Column: 3b across full top width, then [3a | [3e + 3c / 3d]] */}
       <div className="sr-area3-outer" data-cdeadmin-qa-key="project-area-3-outer">
         {/* Area 3b — Tabbed-Notebook-Bar Island (3b1, 3b2, 3b3, 3b4, 3b) */}
-        <ProjectApplicationNotebookBar />
+        <ShellSurfaceErrorBoundary
+          resetKey={`${focusedId || 'dashboard'}:notebookbar`}
+          surfaceName={gettext('Tabbed Icon Bar')}
+          compact
+        >
+          <ProjectApplicationNotebookBar />
+        </ShellSurfaceErrorBoundary>
 
         <div className="sr-area3-lower-row">
           {/* Area 3a — Optional Left Side Drawer Island (extends to bottom) */}

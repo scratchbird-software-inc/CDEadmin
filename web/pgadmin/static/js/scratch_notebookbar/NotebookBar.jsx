@@ -176,10 +176,20 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   }, [shownIds]);
 
   // Overflow: measure group widths, fold what does not fit.
+  // Reset cached widths when switching ribbon tabs or models so stale sizes
+  // never carry across tabs, and ignore <=2px subpixel/border jitter so
+  // folding/unfolding at an exact boundary can never oscillate in useLayoutEffect.
+  useLayoutEffect(() => {
+    widths.current.clear();
+  }, [current?.id, resolved]);
+
   const measure = useCallback((groupId, width) => {
-    if(width > 0 && widths.current.get(groupId) !== width) {
-      widths.current.set(groupId, width);
-      setMeasured((value) => value + 1);
+    if(width > 0) {
+      const prev = widths.current.get(groupId);
+      if(prev === undefined || Math.abs(prev - width) > 2) {
+        widths.current.set(groupId, width);
+        setMeasured((value) => value + 1);
+      }
     }
   }, []);
   // Measure horizontal tab-strip overflow and panel group-folding width with a single ResizeObserver.
@@ -202,7 +212,10 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       observer = new ResizeObserver((entries) => {
         for(const entry of entries || []) {
           if(panel && (!entry.target || entry.target === panel) && entry.contentRect) {
-            setPanelWidth(entry.contentRect.width);
+            const nextW = Math.floor(entry.contentRect.width);
+            setPanelWidth((prev) =>
+              prev !== null && Math.abs(prev - nextW) < 2 ? prev : nextW
+            );
           }
         }
         updateStripOverflow();
