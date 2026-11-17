@@ -116,6 +116,9 @@ def _infer_client_type(col: dict[str, Any]) -> tuple[str, str, bool]:
 
 def _quote_ident(name: str, engine_id: str) -> str:
     clean = str(name or '')
+    if engine_id in ('firebird', 'firebird-embedded'):
+        from ..providers.firebird.identifiers import query_names
+        return query_names()(clean)
     if engine_id in ('mysql', 'mariadb'):
         return '`' + clean.replace('`', '``') + '`'
     return '"' + clean.replace('"', '""') + '"'

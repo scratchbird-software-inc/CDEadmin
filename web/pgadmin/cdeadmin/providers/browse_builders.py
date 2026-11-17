@@ -64,7 +64,6 @@ def _backtick(name):
 # names start with a letter.
 _LOWER = re.compile(r'[a-z_][a-z0-9_]*')
 _LOWER_LETTER = re.compile(r'[a-z][a-z0-9_]*')
-_UPPER = re.compile(r'[A-Z][A-Z0-9_$]*')
 _ANY_CASE = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 _MYSQL = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
 
@@ -97,10 +96,6 @@ def _cassandra_reserved(row):
     return row.get('category') == 'reserved_keyword'
 
 
-def _firebird_reserved(row):
-    return row.get('non_reserved') is not True
-
-
 def _every_keyword(row):
     return True
 
@@ -127,8 +122,8 @@ def _catalog_columns(catalog, match, *, order=None, exclude=None,
 def firebird(self, resource, native, catalog, language):
     _kind(resource, 'table', 'view')
     columns = path_columns(resource, catalog)
-    names = SqlNames('"', regular=_UPPER,
-                     reserved=contract_keywords(self, _firebird_reserved))
+    from .firebird.identifiers import query_names
+    names = query_names()
     if resource.get('client_sql_dialect') == 1:
         # SQL dialect 1 has no delimited identifiers: a double-quoted name
         # is a string. Only names that need no quotes can be written.

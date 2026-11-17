@@ -62,6 +62,22 @@ SQL import retains compound ON predicates instead of keeping only their first
 equality. Catalog-driven projections quote native relation/column identities.
 These corrections do not constitute full arbitrary-SQL round-trip qualification.
 
+Firebird query identifier spelling
+---------------------------------
+
+Visual queries, generated query templates, display SELECT statements and Browse
+Data share the Firebird 5.0.4 identifier policy. Names matching
+``[A-Z][A-Z0-9_$]*`` are emitted without delimiters unless reserved by that
+profile's native lexical inventory. Mixed/lowercase names, special characters,
+non-ASCII names, invalid leading characters and reserved words retain double
+quotes; embedded quotes are doubled. Catalog identities are not uppercased or
+trimmed by the SQL formatter. Lowercase generated aliases therefore stay quoted.
+Raw SQL expressions entered by the user are not rewritten.
+
+The keyword inventory is pinned to the admitted 5.0.4 provider, shared by network
+and embedded registrations. It is not an older-version compatibility list;
+support for an older Firebird profile requires its own verified keyword data.
+
 Continuation checklist
 ----------------------
 

@@ -645,9 +645,9 @@ def test_visual_builder_selectable_stored_procedures_views_and_fk_auto_joins(tmp
     )
     assert scene_proc['loaded_tiles']['0:0']['nodes'][0]['role'] == 'PROC'
     assert 'GET_EMP_PROJ(:EMP_NO)' in scene_proc['loaded_tiles']['0:0']['nodes'][0]['name']
-    assert 'FROM "GET_EMP_PROJ"(:EMP_NO) AS "p1"' in sql_proc
+    assert 'FROM GET_EMP_PROJ(:EMP_NO) AS "p1"' in sql_proc
     # Firebird 0-arg selectable procedure MUST NOT emit empty `()`
-    assert 'CROSS JOIN "ALL_LANGS" AS "p2"' in sql_proc
+    assert 'CROSS JOIN ALL_LANGS AS "p2"' in sql_proc
 
     # Parse back SQL containing selectable procedure call
     parsed_proc, fid_proc = parse_sql_to_visual_model(sql_proc)
