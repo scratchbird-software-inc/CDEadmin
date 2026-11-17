@@ -30,6 +30,19 @@ and limits as lossy, warning that regeneration can omit content. Identifier
 quoting for new navigator drag payloads comes from the shared language-profile
 descriptors rather than engine checks in the tree renderer.
 
+SQL execution adapter correction
+--------------------------------
+
+The SQL surface calls the public retained-session execution API with explicit
+session, source and bound-parameter arguments. It consumes the rendered table
+under ``view_model`` and uses the declared record lookup keys, preserving
+independent values when joined columns have repeated labels. The unit fixture
+uses the real call signature so passing a whole payload as the session argument
+cannot silently pass. An owned Linux Firebird 5.0.4 embedded API check executes
+an ASSETS/CUSTOMERS join and reads every returned column, including independently
+valued duplicate labels. This does not extend native qualification to the other
+items below.
+
 Continuation checklist
 ----------------------
 

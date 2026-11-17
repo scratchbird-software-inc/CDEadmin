@@ -3651,7 +3651,7 @@ class SqlSurfaceHostService:
         if surface.language_profile == 'firebird-sql':
             exec_payload['client_sql_dialect'] = 3
 
-        occurrence = workspace_service.execute(server, exec_payload)
+        occurrence = workspace_service.execute(server, **exec_payload)
         occ_id = occurrence.get('occurrence_id')
 
         # Poll synchronously on host until terminal (bounded safety timeout)
@@ -3707,11 +3707,24 @@ class SqlSurfaceHostService:
             qp = fb_payload['query_plan']
             plan_text = str(qp.get('plan_text') or qp.get('raw') or qp) if isinstance(qp, dict) else str(qp)
 
-        # Extract columns & rows from `rendered_result`
-        raw_cols = rendered.get('columns') or res_obj.get('columns') or []
+        # The public result renderer nests its bounded, redacted table in
+        # view_model. Keep legacy renderer compatibility without losing it.
+        view_model = rendered.get('view_model')
+        table = view_model if isinstance(view_model, dict) else rendered
+        raw_cols = table.get('columns') or res_obj.get('columns') or []
         cols: list[dict[str, Any]] = []
+        source_keys: list[str] = []
+        used_names: set[str] = set()
         for idx, c in enumerate(raw_cols):
             if isinstance(c, dict):
+                original_name = str(c.get('name') or c.get('label') or f'COL_{idx + 1}')
+                name = original_name
+                suffix = 2
+                while name in used_names:
+                    name = f'{original_name} ({suffix})'
+                    suffix += 1
+                used_names.add(name)
+                source_keys.append(c['key'] if isinstance(c.get('key'), str) else original_name)
                 max_len = (
                     c.get('max_length')
                     or c.get('character_length')
@@ -3719,7 +3732,8 @@ class SqlSurfaceHostService:
                     or c.get('display_size')
                 )
                 cols.append({
-                    'name': str(c.get('name') or c.get('label') or f'COL_{idx + 1}'),
+                    'name': name,
+                    'source_name': original_name,
                     'native_type': str(c.get('native_type') or c.get('type_name') or c.get('data_type') or 'TEXT'),
                     'nullable': bool(c.get('nullable', True)),
                     'key': bool(
@@ -3735,15 +3749,22 @@ class SqlSurfaceHostService:
                     ),
                 })
             else:
+                name = str(c)
+                suffix = 2
+                while name in used_names:
+                    name = f'{c} ({suffix})'
+                    suffix += 1
+                used_names.add(name)
+                source_keys.append(str(c))
                 cols.append({
-                    'name': str(c),
+                    'name': name,
                     'native_type': 'TEXT',
                     'nullable': True,
                     'key': False,
                     'editable': False,
                 })
 
-        page_rows = (
+        page_rows = (table.get('rows') or []) if isinstance(view_model, dict) else (
             (rendered.get('page') or {}).get('rows')
             or rendered.get('rows')
             or res_obj.get('rows')
@@ -3753,9 +3774,12 @@ class SqlSurfaceHostService:
         col_names = [c['name'] for c in cols]
         for r_i, r_item in enumerate(page_rows):
             if isinstance(r_item, dict) and 'values' in r_item and isinstance(r_item['values'], dict):
-                vals = dict(r_item['values'])
+                record = r_item['values']
+                vals = {cname: record.get(key, record.get(col.get('source_name', cname)))
+                        for cname, key, col in zip(col_names, source_keys, cols)}
             elif isinstance(r_item, dict):
-                vals = {cname: r_item.get(cname) for cname in col_names}
+                vals = {cname: r_item.get(key, r_item.get(col.get('source_name', cname)))
+                        for cname, key, col in zip(col_names, source_keys, cols)}
             elif isinstance(r_item, (list, tuple)):
                 vals = {
                     col_names[c_i]: r_item[c_i] if c_i < len(r_item) else None

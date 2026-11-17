@@ -99,7 +99,12 @@ class FakeSqlWorkspaceService:
         self.tx_actions.append((session_id, action))
         return {'session_id': session_id, 'action': action}
 
-    def execute(self, server, payload):
+    def execute(self, server, session_id, source, parameters=None,
+                database_target_id=None, *, max_rows=None,
+                client_sql_dialect=None, plan_mode=False):
+        payload = {'session_id': session_id, 'source': source, 'parameters': parameters,
+                   'database_target_id': database_target_id, 'max_rows': max_rows,
+                   'client_sql_dialect': client_sql_dialect, 'plan_mode': plan_mode}
         self._occ_seq += 1
         occ_id = f'occ-{self._occ_seq}'
         self.executed.append(copy.deepcopy(payload))
@@ -784,3 +789,46 @@ def test_executable_routine_metadata_cannot_be_overridden_by_source_text(source)
                 'parameters': [{'name': 'OUT_ID', 'mode': 'output', 'field_type': 8}],
             },
         }, engine_id='firebird')
+
+
+def test_join_execution_uses_public_api_and_rendered_column_keys(tmp_path):
+    from inspect import signature
+    from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService
+
+    class RenderedJoinWorkspace(FakeSqlWorkspaceService):
+        def poll(self, server, occ_id, buffer_rows=200, database_target_id=None):
+            return {
+                'occurrence': {'operation': {'terminal': True}, 'result': {}},
+                'rendered_result': {
+                    'view_model': {
+                        'columns': [
+                            {'name': 'CUSTOMER_ID', 'key': 'col_0', 'native_type': 'INTEGER'},
+                            {'name': 'CUSTOMER_ID', 'key': 'col_1', 'native_type': 'INTEGER'},
+                        ],
+                        'rows': [{'col_0': 7, 'col_1': 107}],
+                    },
+                    'page': {'next_cursor': None},
+                },
+            }
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path/'snips.db'),
+        quick_query_store=QuickQueryStore(tmp_path/'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path/'layout.db'),
+    )
+    workspace = RenderedJoinWorkspace()
+    server = SimpleNamespace(id=1, user_id=1)
+    sql = 'select * from "ASSETS" a join "CUSTOMERS" b on a."CUSTOMER_ID"=b."CUSTOMER_ID"'
+    state = host.dispatch(workspace, server, {
+        'sub_action': 'execute', 'surface_id': 'join-contract',
+        'engine_id': 'firebird', 'language_profile': 'firebird-sql',
+        'database_target_id': 'owned.fdb', 'sql_source': sql,
+    })
+    call = workspace.executed[0]
+    signature(ProviderWorkspaceService.execute).bind(workspace, server, **call)
+    assert call['source'] == sql
+    assert call['database_target_id'] == 'owned.fdb'
+    assert state['result_count'] == 1
+    result = state['active_result']
+    assert [c['name'] for c in result['columns']] == ['CUSTOMER_ID', 'CUSTOMER_ID (2)']
+    assert result['rows'][0]['values'] == {'CUSTOMER_ID': 7, 'CUSTOMER_ID (2)': 107}
