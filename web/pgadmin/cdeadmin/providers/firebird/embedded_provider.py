@@ -39,15 +39,21 @@ class EmbeddedAdministration(RelationalAdministration):
                 continue
             for operation in resource.get('operations', []):
                 if operation['operation_id'] in local_services.OPERATIONS:
-                    operation.pop('workspace_scope', None)
+                    if operation['operation_id'] not in {'shutdown_database', 'bring_online', 'fixup_database', 'activate_shadow'}:
+                        operation.pop('workspace_scope', None)
+                    # The existing service workspace builds registered-target
+                    # references without opening a SQL attachment. Its name
+                    # does not select transport or acquire network secrets.
                     operation['title'] = ('Local database statistics (gstat)'
                         if operation['operation_id'] == 'database_statistics'
                         else 'Local ' + operation['title'])
                     operation['form']['title'] = operation['title']
-                    operation['form']['notes'] = (
+                    operation['form']['notes'] = (operation['form'].get('notes', '') + ' ' +
                         'Runs on the ScratchRobin host against the approved local '
                         'database file. Uses filesystem access, with no network '
-                        'service credentials.')
+                        'service credentials. Native filename-sensitive tasks use '
+                        'the canonical file with a reviewed identity recheck; '
+                        'their result does not claim an OS rename race fence.').strip()
                 if operation['operation_id'] != 'create':
                     continue
                 for field in operation.get('form', {}).get('fields', []):

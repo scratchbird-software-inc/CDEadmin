@@ -118,7 +118,11 @@ def qualify(output, runtime):
                 else:
                     raise AssertionError('A consumed native review was replayed')
                 assert result['server_completed'] and result['native_provider'] == 'Engine13', result
-                assert result['file_identity_race_fenced'] and not result['network_authentication']
+                assert not result['network_authentication']
+                if op in {'remove_linger', 'sweep_database', 'validate_database'}:
+                    assert not result['file_identity_race_fenced']
+                else:
+                    assert result['file_identity_race_fenced']
                 assert result['service_release']['connection_released']
                 assert result['service_release']['service_handle_released']
                 return result

@@ -3451,14 +3451,14 @@ class ServerNode(PGChildNodeView):
                         'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_object_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
                         'mariadb_relational_review', 'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt', 'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture', 'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save', 'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts', 'mariadb_server_plan', 'mariadb_server_review', 'mariadb_server_apply', 'mariadb_server_receipt', 'mariadb_server_receipts', 'mariadb_design_read', 'mariadb_design_save',
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
-                        'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'sqlite_relational_review', 'duckdb_relational_review','postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
+                        'firebird_recipe_read', 'firebird_recipe_save', 'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'sqlite_relational_review', 'duckdb_relational_review','postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
                         'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
                         'firebird_schema_apply', 'firebird_schema_receipt',
                         'firebird_design_read', 'firebird_design_save',
                         'firebird_relational_review',
-                        'query_history_read', 'query_history_configure', 'query_history_clear', 'firebird_events', 'firebird_object_templates', 'firebird_isql_context'}:
+                        'query_history_read', 'query_history_configure', 'query_history_clear', 'firebird_events', 'firebird_trace', 'firebird_object_templates', 'firebird_isql_context'}:
                     resource_request = data.get('request') or {}
                     if not isinstance(resource_request, dict) or (
                             resource_request.get('database_target_id') not in
@@ -3551,6 +3551,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_object_templates(server, data.get('request'))
                 elif action == 'firebird_isql_context':
                     payload = service.firebird_isql_context(server, data.get('request'))
+                elif action == 'firebird_trace':
+                    payload = service.firebird_trace_action(server, data.get('request'))
                 elif action == 'firebird_events':
                     payload = service.firebird_event_action(server, data.get('request'))
                 elif action == 'firebird_metadata_search':
@@ -3648,6 +3650,16 @@ class ServerNode(PGChildNodeView):
                                 'sqlite_recipe_read', 'sqlite_recipe_save'}:
                     engine, _recipe, operation = action.split('_')
                     payload = service.native_recipe_asset(server, engine, operation, data.get('request'))
+                elif action in {'firebird_recipe_read', 'firebird_recipe_save'}:
+                    from pgadmin.cdeadmin.workspace.assets import ProjectAssetError
+                    try:
+                        payload = service.firebird_recipe_asset(server, action.removeprefix('firebird_recipe_'), data.get('request'))
+                    except ProjectAssetError as error:
+                        response = make_json_response(status=error.status_code, success=0,
+                            errormsg=gettext('The Firebird recipe could not be saved or loaded; refresh before saving again.'),
+                            info=('FIREBIRD_RECIPE_CONFLICT' if error.status_code == 409 else 'FIREBIRD_RECIPE_REFUSED'))
+                        response.headers['Cache-Control'] = 'no-store'
+                        return response
                 elif action in {'mariadb_recipe_read', 'mariadb_recipe_save'}:
                     payload = service.mariadb_recipe_asset(server, action.removeprefix('mariadb_recipe_'), data.get('request'))
                 elif action in {'postgresql_data_plan', 'duckdb_data_plan', 'sqlite_data_plan'}:

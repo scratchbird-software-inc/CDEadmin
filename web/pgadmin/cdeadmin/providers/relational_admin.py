@@ -3241,7 +3241,10 @@ class RelationalAdministration:
             }
         if driver_operation == 'firebird-drop-database':
             observation = client.drop_database(
-                {'route': route}, compiled['database'], driver_operation
+                {'route': {**route, 'transaction_isolation': 'SNAPSHOT',
+                           'transaction_auto_commit': False},
+                 '_firebird_target_binding': payload.get('firebird_target_binding')},
+                compiled['database'], driver_operation
             )
             response = {
                 'accepted': True,
@@ -3348,6 +3351,14 @@ class RelationalAdministration:
             raise RelationalClientError(
                 'this operation runs outside a transaction and needs an '
                 'independently owned connection')
+        if (owns_connection and self.dialect.engine_id == 'firebird' and
+                payload.get('firebird_target_binding')):
+            # This operation owns its transaction; never inherit an endpoint's
+            # autocommit/read-committed defaults for reviewed metadata DDL.
+            route = {**route, 'transaction_isolation': 'SNAPSHOT',
+                     'transaction_auto_commit': False,
+                     'transaction_no_auto_undo': False,
+                     'transaction_ignore_limbo': False}
         connection = connection or client._connect({'route': route})
         if outside:
             # Statements such as PostgreSQL's CREATE DATABASE refuse to run
@@ -3360,6 +3371,13 @@ class RelationalAdministration:
         results = []
         identity_change = None
         try:
+            if (self.dialect.engine_id == 'firebird' and
+                    payload.get('firebird_target_binding')):
+                from .firebird.metadata_guard import verify
+                if not owns_connection and route.get('transaction_auto_commit'):
+                    from .firebird.metadata_guard import _refused
+                    raise _refused('Reviewed metadata changes cannot use a caller-owned autocommit transaction')
+                verify(connection, payload['firebird_target_binding'])
             if self.dialect.engine_id == 'firebird':
                 from .firebird.physical_rows import verify_owner
                 for statement in compiled.get('statements', []):

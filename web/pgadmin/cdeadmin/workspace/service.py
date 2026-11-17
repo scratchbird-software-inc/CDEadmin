@@ -98,6 +98,8 @@ class ProviderWorkspaceService:
         self.report_scheduler_service = report_scheduler_service
         from ..providers.firebird.events import EventSubscriptions
         self.firebird_events = EventSubscriptions()
+        from ..providers.firebird.trace_sessions import TraceSessions
+        self.firebird_traces = TraceSessions()
         self._semantic_executions = {}
         self._semantic_lock = threading.RLock()
         from pgadmin.cdeadmin.providers.firebird.recovery_groups import (
@@ -1515,6 +1517,39 @@ class ProviderWorkspaceService:
             return result
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
+
+    def firebird_recipe_asset(self, server, action, request):
+        from .assets import ProjectAssetConflict
+        from .firebird_recipe_assets import FirebirdRecipeAssets, validate
+        from ..providers.firebird.provider import FirebirdProvider
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.orm.exc import StaleDataError
+        if (not isinstance(request, dict) or action not in {'read', 'save'} or
+                getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
+                not in {'firebird-native', 'firebird-embedded'}):
+            raise ProviderWorkspaceError('Select a native Firebird recipe scope')
+        target = request.get('database_target_id')
+        if not isinstance(target, str) or not target or not any(
+                item['target_id'] == target for item in
+                self.endpoint_service.database_catalog(server)['targets']):
+            raise ProviderWorkspaceError('Recipe database registration is unavailable')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Recipe engine differs from the native endpoint')
+        provider._require('data_read', 'resource')
+        scope = {'endpoint_id': str(context.endpoint_id), 'database_target_id': target}
+        assets = self.firebird_design_assets.assets
+        try:
+            resources = None
+            if action == 'save':
+                validate(request.get('recipe'), scope)
+                resources = provider.list_resources({'route': endpoint['route']})
+            return FirebirdRecipeAssets(assets).apply(
+                self._principal_id(server), scope, action, request, resources)
+        except (IntegrityError, StaleDataError):
+            assets.repository.rollback()
+            raise ProjectAssetConflict('Recipe changed concurrently; reload before saving') from None
 
     def native_recipe_asset(self, server, engine, action, request):
         from .assets import ProjectAssetError
@@ -3943,6 +3978,99 @@ class ProviderWorkspaceService:
                 'user': route.get('user') or '', 'role': route.get('role') or '',
                 'charset': route.get('charset') or 'UTF8', 'sql_dialect': int(dialect)}
 
+    def firebird_trace_action(self, server, request):
+        from dataclasses import asdict
+        from ..operations.store import JsonOperationStore
+        from ..providers.firebird.provider import FirebirdProvider, _create_client
+        from ..providers.firebird.trace_config import normalize, observe_scope, text, descriptor, render
+        from .firebird_schema_plan import digest
+        from .firebird_trace_actions import TraceActions
+        if (not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str)
+                or not request['database_target_id'] or not isinstance(request.get('action'), str)):
+            raise ProviderWorkspaceError('Select a registered database and trace action')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Native trace requires Firebird')
+        provider._admit_transport({'route': endpoint['route']})
+        provider._require('administer', 'resource')
+        provider._require('maintenance_admin', 'endpoint')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native trace requires durable operation storage')
+        journal = TraceActions(store.path.with_name('firebird-trace-operations.json'))
+        owner = self._operation_principal(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        action = request['action']
+        body = {key: value for key, value in request.items() if key not in {'database_target_id', 'action'}}
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return self.firebird_traces.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'poll' and not set(body) - {'trace_id', 'after', 'limit'} and isinstance(body.get('trace_id'), str):
+                try:
+                    self.firebird_traces._get(owner, binding, body['trace_id'])
+                except ValueError:
+                    return journal.session(owner, binding, body['trace_id'])
+                return self.firebird_traces.poll(owner, binding, body['trace_id'], body.get('after', 0), body.get('limit', 200))
+            if action == 'review':
+                operation = body.get('operation')
+                if not isinstance(operation, str):
+                    raise ValueError('Select a native trace operation')
+                if operation == 'start' and not set(body) - {'operation', 'options', 'name'}:
+                    options = normalize(body.get('options', {}))
+                    name = text(body.get('name', 'ScratchRobin native trace'), 128)
+                    scope = observe_scope(provider.client, endpoint['route'])
+                    return journal.review(owner, binding, operation, {'scope': scope, 'options': options, 'name': name,
+                        'native_configuration': render(scope['database'], options, scope['attachment_names'])})
+                if operation in {'stop', 'suspend', 'resume', 'release', 'forget'} and set(body) == {'operation', 'trace_id'} and isinstance(body['trace_id'], str):
+                    self.firebird_traces._get(owner, binding, body['trace_id'])
+                    return journal.review(owner, binding, operation, {'trace_id': body['trace_id']})
+                raise ValueError('Invalid trace review')
+            if action == 'apply':
+                def execute(record):
+                    payload = record['payload']
+                    if record['operation'] != 'start':
+                        return self.firebird_traces.control(owner, binding, payload['trace_id'], record['operation'])
+                    if render(payload['scope']['database'], payload['options'],
+                              payload['scope'].get('attachment_names', ())) != payload.get('native_configuration'):
+                        return {'state': 'rejected', 'native_dispatched': False,
+                                'reason': 'Native trace configuration changed; review again'}
+                    try:
+                        current_scope = observe_scope(provider.client, endpoint['route'])
+                    except Exception as error:
+                        return {'state': 'rejected', 'native_dispatched': False,
+                                'error_type': type(error).__name__,
+                                'reason': 'Cannot revalidate the reviewed database; review again'}
+                    if current_scope != payload['scope']:
+                        return {'state': 'rejected', 'native_dispatched': False,
+                                'reason': 'Native database identity changed; review again'}
+                    client = _create_client(provider.permissions,
+                        attachment_mode=endpoint['route'].get('attachment_mode') or 'network',
+                        profile=provider.profile, administration=provider.client.config.administration)
+                    def connect():
+                        handle = client._connect_server({'route': copy.deepcopy(endpoint['route'])})
+                        # No reconnect: trace controls keep the native handle,
+                        # not an authentication buffer containing credentials.
+                        handle.spb = b''
+                        return handle
+                    def release():
+                        client.close()
+                        return not client._connections and not client._server_handles
+                    result = self.firebird_traces.start(owner, binding, payload['scope'], payload['options'],
+                        payload['name'], connect, release,
+                        lambda snapshot: journal.finish_session(owner, binding, snapshot))
+                    journal.finish_session(owner, binding, result)
+                    return result
+                return journal.apply(owner, binding, body, execute)
+            raise ValueError('Invalid trace action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def firebird_event_action(self, server, request):
         from ..providers.firebird.provider import FirebirdProvider
         from .firebird_schema_plan import digest
@@ -4731,6 +4859,7 @@ def init_app(
     service.design_process = design_process_for_app(app)
     import atexit
     atexit.register(service.firebird_events.close)
+    atexit.register(service.firebird_traces.close)
     app.extensions[APP_EXTENSION_KEY] = service
     if semantic_model_service is not None:
         from pgadmin.cdeadmin.bi import init_app as init_bi

@@ -2745,8 +2745,20 @@ is acquired or accepted by the local Services adapter.
        flag. A completed call is not a declaration that every database page
        was checked when filters were supplied. It performs no repair action.
 
-The Linux adapter pins the reviewed device/inode with an application-created
-private hardlink for the entire native action and service release. Engine13
+For short header operations on a database without LINGER, active physical
+backup or auxiliary files, the Linux adapter pins the reviewed device/inode
+with an application-created private hardlink for the native action and
+service release. A native maintenance attachment checks these conditions,
+using the operation's SQL role and suppressing database triggers. Managed SQL
+attachment admission for that inode is held until the private alias is released.
+Long sweep/validation tasks, unavailable SQL attachments and filename-sensitive
+database states use the canonical filename with a retained file descriptor and
+identity recheck instead. Those results report
+``file_identity_race_fenced=false``: a filesystem administrator can replace a
+filename after its final check. This scope does not promise protection from
+concurrent changes made outside ScratchRobin. Canonical handling preserves
+native default delta filenames and prevents LINGER retaining a deleted alias.
+Engine13
 uses native file identity for database locks. Native qualification verifies
 that a service through this alias preserves an original-path SQL transaction,
 and that replacing the public filename immediately before dispatch changes
@@ -2781,3 +2793,311 @@ service qualification. The separate embedded contract gate refreshes attachment,
 SQL-equivalence and monitoring evidence against the current source bindings.
 Human form acceptance and Windows/macOS qualification remain external;
 ScratchBird history qualification remains owner-deferred and is not run.
+
+Embedded availability: shutdown and recovery
+------------------------------------------
+
+The embedded database catalog surfaces ``shutdown_database`` and
+``bring_online`` through the shared Firebird descriptors. They use the local
+Engine13 Services attachment, never a remote server or network credential.
+Shutdown accepts ``mode`` (MULTI, SINGLE, FULL), ``method`` (FORCED,
+DENY_ATTACHMENTS, DENY_TRANSACTIONS), integer ``shutdown_timeout`` (0..32767),
+optional ``role`` and the descriptor's textual ``confirmation`` attention field.
+Bring-online accepts ``mode`` (NORMAL, MULTI, SINGLE) and optional ``role``.
+The shared Apply request still requires confirmation of the retained review.
+
+Both operations retain ``workspace_scope=server_service`` so the generic
+workspace builds a target from an authorized registered database without SQL.
+For embedded registrations this scope describes workspace discovery, not a
+network transport. The UI requests the workspace with ``database_target_id``
+and ``focused_operation_id=bring_online`` (or ``shutdown_database``); the
+returned target has ``extensions.cdeadmin.service_scope_only=true``. Pass that
+target to the existing ``visual_admin_validate`` and ``visual_admin_plan``
+actions, then submit the returned plan ID/digest to ``visual_admin_apply``.
+This path remains reachable after FULL shutdown rejects ordinary SQL. Server
+authorization and stored route configuration remain authoritative.
+
+Show the native availability warning, including forced attachment termination,
+pending-work loss and the need to inspect state after any native failure.
+SINGLE/FULL shutdown during physical backup is refused by the engine; the
+application never silently ends backup or retries shutdown. Successful
+service acknowledgement, independent observed shutdown mode and released
+service handles are separate evidence. Failed dispatched calls remain unknown
+and consume their review. Responses use ``Cache-Control: no-store``.
+
+The local availability qualifier covers all nine shutdown mode/method pairs,
+FULL SQL refusal and read-only header observation, online transitions, pending
+transactions, native physical-backup refusal, valid MULTI shutdown during backup
+and persistent LINGER filename behavior on owned Linux Engine13 5.0.4 fixtures.
+Other versions, human form acceptance and native Windows/macOS qualification
+are not established by that evidence.
+
+Firebird native target review and stale-plan refusal (FB-AUD-01)
+--------------------------------------------------------------
+
+The generic Firebird client now retains an internal native target binding for
+mutations of existing database/catalog objects. It combines the native database
+GUID and file ID with each selected catalog record's DB_KEY and native record
+transaction number; child columns and packaged routines also bind their parent.
+A DB_KEY alone is not treated as a permanent identity. Numbered shadows bind
+all of their native RDB$FILES records. The implementation selects fixed native
+catalogs and binds object names as parameters; it never derives SQL catalogs or
+identifiers from client-supplied guard fields.
+
+Existing ``visual_admin_plan`` and ``visual_admin_apply`` hooks are retained.
+The preview adds ``native_target_revalidation_required=true``. The complete
+binding remains in the server-owned one-use plan, not an editable form field
+or an Apply argument. Apply rechecks the binding on the executing connection.
+An absent/replaced/changed target returns the existing HTTP 409
+``PROVIDER_OPERATION_REJECTED`` receipt, with stage ``provider_rejected``,
+``unknown_outcome=false`` and an explicit refresh/review message. Refresh the
+native catalog and request a new review; do not retry the consumed plan or
+silently select another object with the same name. A native response failure
+after dispatch retains the existing conservative unknown-outcome/no-retry
+receipt and numeric native diagnostics.
+
+Owned metadata operations use an independent SNAPSHOT transaction with native
+autocommit disabled. Borrowed sessions must already provide a compatible native
+SNAPSHOT transaction without endpoint autocommit; the backend never commits,
+rolls back, reconnects or changes the isolation of a caller transaction merely
+to satisfy a metadata precondition. An incompatible borrowed transaction is
+refused before mutation. Offer an explicitly reviewed independent operation
+rather than silently moving a user's work to a different connection. Successful
+borrowed DDL still uses the native task savepoint and remains caller-owned.
+The database-drop driver API also checks the reviewed database identity on the
+actual attachment it will drop, and retains failed release ownership when
+cleanup cannot be confirmed.
+
+``tools/cdeadmin_firebird_metadata_guard_qualification.py`` uses an isolated
+Firebird 5.0.4 runtime, disposable database files and its own loopback network
+listener. It exercises embedded and network native review/apply, same-name table
+replacement before Apply, replacement after the preflight read, unchanged-target
+DROP, all 21 catalog identity selectors, packaged routine parents, pending caller
+DML with transactional DDL/rollback, raced and fresh table grants, and replaced
+and fresh native database drops. Declared external-function/filter fixtures
+qualify catalog record identity only; their library callbacks are not loaded or
+claimed as functional native plugins.
+
+This correction does not close the full FB-AUD-01 investigation by itself.
+The native table DROP and recorded table-grant races are covered; the remaining
+mutation variants still require their native race matrix. A SNAPSHOT catalog
+read is not a universal lock on unrelated catalog writes. User administration
+and global authentication mappings act through external/security-database
+interfaces, so this catalog binding is not represented as their native identity
+protocol. DDN schema application retains its separate review/precondition path.
+Full task completion must retain these limits rather than extrapolate from the
+successful table/drop or selector checks. Human form acceptance and other
+platform qualification remain external.
+
+Embedded copied-database fixup
+-----------------------------
+
+``database.fixup_database`` is surfaced for the embedded profile through the
+shared Firebird operation descriptor. It accepts ``fixup_flags`` (empty or
+``["SEQUENCE"]``), optional ``role`` and textual ``confirmation``. Select the
+registered offline copied database through the attachment-free workspace using
+``focused_operation_id=fixup_database`` and its ``database_target_id``. The
+normal validate/plan/apply actions bind the approved filesystem route and inode.
+No SQL attachment is opened to the copy before native NFIX. The Linux raw-file
+adapter holds a private inode alias and blocks new managed SQL attachments for
+that inode until native completion and service release.
+
+This operation requires an offline filesystem copy made during native backup
+mode. It does not copy a running database, shut down another server or secure
+exclusive access against external processes. The descriptor's offline warning
+must remain visible. Native NFIX resets the GUID/replication identity by default;
+SEQUENCE requests preservation. ``restore_policy_requested`` describes the
+request, not an independently observed replication counter. The owned Linux
+5.0.4 qualifier directly observes default GUID reset and SEQUENCE GUID
+preservation, data retention, one-use reviews and native refusal on a normal
+primary. Nonzero replication-counter qualification remains in the replication
+acceptance work. A native failure is unknown, consumes the review and is never
+retried automatically. A successful response does not qualify the copied
+application's recovery beyond the checks actually performed.
+
+Persistent private Firebird test-data recipes (FB-AUD-08)
+------------------------------------------------------
+
+The test-data tool descriptor publishes ``recipe_read_action=firebird_recipe_read``
+and ``recipe_save_action=firebird_recipe_save``. These workspace actions accept
+an explicit registered ``database_target_id`` for Firebird network or embedded.
+Read accepts optional ``recipe_id`` (default ``default``, 1..64 ASCII letters,
+digits, dots, underscores or hyphens, starting with a letter/digit) and optional
+positive integer ``version``. A missing current recipe returns version zero and
+``recipe=null``. Read returns the server-owned ``scope``; include it unchanged
+inside a saved ``scratchrobin.firebird.test-data@1`` recipe. Existing file recipes
+can add this scope before requesting persistence; do not relabel another format.
+
+Save accepts ``recipe_id``, integer ``expected_version`` (zero for first save)
+and ``recipe``. The recipe has exactly ``format``, ``scope``, uint32 ``seed`` and
+``tables``. It retains the existing Firebird generator sources: default,
+constant, sequential, random-integer, choice, file, existing and generated.
+Bounds are 1 MiB UTF8 JSON, 1..32 tables, 1..1000 rows per table, 5000 total rows,
+1..1000 choice/file values, and 32 nested value levels. Keep fractional and large
+numeric values as exact strings or native typed envelopes; only NULL percentages
+admit fractional JSON numbers. Save checks native user-table/column references
+and insertability without staging rows. Generated references must resolve to
+explicit generated columns with acyclic dependencies. Existing sample values
+and foreign-key validity must be checked again by the native preview/staging
+workflow; a saved draft is not a certificate of current type/FK validity.
+
+Revisions use the existing transactional project-asset repository in the local
+configuration database. Storage keys include owner, engine, endpoint, database
+target and recipe name. Revisions are immutable and historical reads do not
+advance the current revision. A stale expected version returns HTTP409 with
+``info=FIREBIRD_RECIPE_CONFLICT``; refresh before saving again. Other recipe
+refusals return ``FIREBIRD_RECIPE_REFUSED`` and never echo stored sample values.
+All responses are ``Cache-Control: no-store``. Do not replay an uncertain save;
+read the current revision to reconcile it.
+
+Results include ``version``, ``current_version``, ``scope``, ``recipe``,
+``executed=false``, ``requires_native_preview``, ``contains_user_values`` and
+``source_control_eligible=false``. Recipes are private; grants to a different
+project do not share this store. Secret-bearing content is refused, and file,
+choice or constant values remain potentially sensitive personal test data.
+Show that review requirement when loading. Save/load never executes generated
+SQL, opens a test-data transaction, commits an editor transaction or changes the
+existing file import/export workflow. Native row staging and explicit
+commit/rollback continue through the existing dedicated Firebird data session.
+
+Managed Firebird database user trace (FB-AUD-02, partial)
+------------------------------------------------------
+
+The database tool descriptor declares ``database.firebird.trace`` with
+``tab=firebird-trace``, ``workspace_action=firebird_trace`` and
+``describe_action=describe``. The UI group owns that tool's presentation.
+Backend requests use the authenticated workspace endpoint with an explicit
+registered ``database_target_id`` in both the outer workspace payload and
+its ``request``. Every call rechecks ``administer`` on the resource and
+``maintenance_admin`` on the endpoint, plus the provider's transport authority.
+The engine remains authoritative for native trace privileges.
+
+The request's ``action`` selects:
+
+* ``describe``: returns ``scratchrobin.firebird.trace-api@1`` with typed native
+  option fields, bounds, defaults and zero-value meanings. Booleans cover the
+  database trace events, plans, counters, BLR and DYN; UInt32 fields cover the
+  connection filter, duration and native text/argument limits. SQL and GDS-code
+  filters are bounded strings. No file-output or service-audit settings are
+  admitted by this database-scoped workflow.
+* ``review`` with ``operation=start``: accepts optional ``name`` (128 UTF8
+  bytes) and ``options``. The backend observes the native filename, engine
+  version, database GUID and native file ID through an independent read-only
+  SNAPSHOT attachment; it does not borrow the editor transaction. Embedded
+  Linux also compares the approved filesystem inode against the attachment
+  identity to reject stale native filename-cache matches. Only Firebird 5.0.4
+  is admitted by this new configuration profile. The retained payload includes
+  read-only ``native_configuration`` for the operation dialog's SQL/native-plan
+  tab. Apply refuses a review if the current renderer would produce different
+  native configuration; this is a Services plan, not an executable SQL script.
+* ``review`` with ``operation=suspend|resume|stop|release|forget``: accepts an
+  opaque managed ``trace_id``. It never accepts an arbitrary native session ID.
+  These controls do not need a new SQL attachment, so cleanup remains available
+  when the database stops admitting SQL connections.
+* ``apply``: accepts only the returned ``review_id``, ``review_digest`` and
+  ``confirmed=true``. Reviews expire after 300 seconds. A cross-process file
+  lock protects the durable claim before native dispatch. Reusing a review
+  returns its existing receipt and never executes it again. A native target
+  identity change before start is a known rejection without trace dispatch.
+* ``get``: reads an owned review/action receipt by ``review_id``.
+* ``list``: lists this owner's managed traces for this endpoint/target. For
+  live handles it separately observes the native trace session's presence and
+  flags. It does not list or control external native sessions.
+* ``poll``: accepts ``trace_id``, optional nonnegative ``after`` sequence
+  (default zero) and integer ``limit`` (1..200, default 200). Returned lines
+  have ``sequence``, ``text`` and ``truncated``; ``next_sequence`` advances the
+  cursor, while ``delivery_gap`` and ``dropped_lines`` expose overwritten data.
+
+The renderer disables database and service defaults, then enables an escaped
+SIMILAR TO pattern for the observed server-native filename and the verified
+registration attachment selector. Firebird passes an attachment alias to its
+trace plugin even when MON$DATABASE reports a physical filename. The selected
+registration alias is therefore included only after its connection supplied the
+reviewed native GUID/file identity. Unlisted aliases of the same file are not
+guessed or captured automatically; alias case variants are not automatically
+expanded. This is native filename/alias scope, not a permanent inode lock: an
+external administrator can later reassign a filename or alias. Configuration macros, double
+quotes and control characters are refused rather than rendered ambiguously.
+Braces are escaped independently for the native configuration grammar.
+
+Defaults enable connection and initialization events, with SQL/BLR/DYN lengths
+256, argument length 64, argument count 8 and duration threshold zero. Native
+length/count zero means unlimited, not disabled; the backend preserves that
+meaning. All integer options accept the native UInt32 range. Statement,
+routine, trigger, plan, error, warning, context, BLR/DYN or filter capture
+requires ``capture_sensitive=true`` in the reviewed options. Captured SQL,
+arguments and diagnostics can contain sensitive values; no masking guarantee
+is made. Output is private to the authorized owner/target and never published,
+exported to Git or stored as SQL/monitoring history by this workflow.
+
+A private client owns separate reader and control Services connections; driver
+authentication buffers are discarded after attachment and no reconnect occurs.
+The live worker drains timed native output independently of UI polls. Each
+stream retains at most 2000 lines and 1 MiB, clips a single line to 32768 UTF8
+bytes, and stops after 120 seconds without a poll or 3600 seconds total. There
+are at most 16 active traces, four per owner and 32 retained live/finished
+records per process. ``forget`` explicitly discards a finished stream only
+when its owned handles were released. Failed release stays owned and admits
+an explicitly reviewed ``release`` retry; it never replays start or a native
+control to repair an audit write.
+
+Native acknowledgement, observed output, plugin diagnostics, native stop/end
+and handle release are distinct fields. ``capture_success_inferred`` stays
+false: native start can return an ID before a plugin reports configuration
+errors. The worker detects native plugin diagnostic headers and requests stop.
+``native_started``, ``native_stop_acknowledged``, ``native_end_observed`` and
+``cleanup_confirmed`` report only their respective observations. Unknown
+native outcomes remain unknown. The action receipt's ``submitted`` state is
+not a claim of successful native capture; inspect its ``outcome`` and poll.
+
+Only review/settings and lifecycle metadata are written to the private
+``firebird-trace-operations.json`` beside the operation store. Captured text
+never enters that journal. A maximum of 1000 action receipts is retained;
+only expired, never-dispatched reviews are pruned automatically. A missing
+live handle can return an authorized durable session receipt with
+``live_handle_available=false`` and ``output_available=false``. An unconfirmed
+session after process loss is ``unknown_after_process_loss``, never restarted
+or stopped automatically by recycling its native ID. All workspace responses
+use ``Cache-Control: no-store``. Credentials, permission or endpoint-generation
+changes invalidate the live binding; a caller that cannot renew the lease
+cannot keep collection running through polls.
+
+The owning audit item remains open for service/server tracing, system-audit
+configuration, externally created trace-session administration, restricted
+native-account/network failure qualification and the full native option/event
+matrix. Human UI and native Windows/macOS acceptance remain external.
+ScratchBird history qualification remains deferred and is not run here.
+
+Embedded shadow activation recovery
+-----------------------------------
+
+The embedded provider exposes ``activate_shadow`` through the shared Firebird
+operation descriptor. Its required fields are ``shadow_filename``, exact-path
+``confirmation`` and ``original_isolated=true``; ``role`` is optional. The
+original registered database and its parent directory may be unavailable.
+Open the attachment-free workspace with ``focused_operation_id=activate_shadow``
+and the existing ``database_target_id``, then use the normal visual administration
+validate, plan and one-use confirmed apply actions. No SQL connection to the
+original or recovery file is required before native activation.
+
+The recovery filename must be canonical, existing and inside the approved
+filesystem root. Symlinks, a hardlink to an existing primary, mismatched compiled
+targets and replacement of the reviewed inode are refused. Apply retains a file
+handle and rechecks its identity, but passes the canonical filename to Firebird:
+``file_identity_race_fenced=false`` explicitly records that an external process
+can still race that pathname. The isolation checkbox is an operator assertion,
+not proof of exclusive access. The existing destructive recovery warning remains
+part of review. Do not run the recovered database alongside its original.
+
+The native service reads the header without SQL and requires a complete primary
+header identifying an active shadow before activation. Results preserve native
+header verification, service completion and handle-release observations. A lost
+native outcome is not safe to replay. Recovery does not retarget the saved
+registration automatically; the UI must present the actual recovery filename
+and let the user explicitly update the registration separately.
+
+Owned Linux Firebird 5.0.4 qualification covers LINGER 0 and 1, missing originals,
+retained data, canonical MON$DATABASE_NAME and default backup delta handling,
+ordinary-primary refusal and replacement before apply. It does not establish
+external-process exclusivity, older-version support, native Windows/macOS
+qualification or human form acceptance.

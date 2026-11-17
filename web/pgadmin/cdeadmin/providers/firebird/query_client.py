@@ -164,7 +164,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 self._opening -= 1
 
     def _connect(self, request):
-        with self._connecting():
+        from .local_services import attachment_admission
+        with self._connecting(), attachment_admission(request.get('route', {})):
             return super()._connect(request)
 
     def open_session(self, request):
@@ -1431,7 +1432,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         if (getattr(getattr(self.config, 'profile', None), 'protocol_id', None) == 'firebird_embedded' or
                 isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded'):
             from .local_services import validate_operation
-            validate_operation(route, operation_id, database, options)
+            route = validate_operation(route, operation_id, database, options)
+            request = {**request, 'route': route}
         with self._temporary_operation():
             if isinstance(route, Mapping) and route.get('attachment_mode') == 'embedded':
                 from .local_services import dispatch_target
@@ -1580,6 +1582,20 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         failure.native_status_codes = codes
         return failure
 
+    def admin_operation_field_contract(self, request):
+        # The shared shutdown descriptor has a typed-name attention field;
+        # the native service has no corresponding SPB option. Admit that
+        # declared field without replacing the native option validators or
+        # silently accepting arbitrary service arguments.
+        if (request.get('resource_kind') != 'database' or
+                request.get('operation_id') not in {'shutdown_database', 'fixup_database'}):
+            return None
+        fields = copy.deepcopy(request['legacy_fields'])
+        if not any(field['field_id'] == 'confirmation' for field in fields):
+            fields.append({'field_id': 'confirmation', 'label': 'Confirmation',
+                           'control': 'text', 'required': False})
+        return {'fields': fields, 'authority': 'ui_descriptors/firebird/operations.json'}
+
     def plan_admin_operation(self, request):
         with self._temporary_operation():
             plan = super().plan_admin_operation(request)
@@ -1604,6 +1620,17 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 payload['firebird_dialect_binding'] = binding
                 plan['command_preview']['firebird_dialect_binding'] = dict(
                     binding)
+            if (payload.get('compiled', {}).get('statements') or
+                    payload.get('compiled', {}).get('driver_operation') == 'firebird-drop-database'):
+                from .metadata_guard import selection, observe
+                selected = selection(request, self.config.administration)
+                if selected is not None:
+                    connection = self._connect({'route': payload['route']})
+                    try:
+                        payload['firebird_target_binding'] = observe(connection, selected)
+                    finally:
+                        self._forget_and_close(connection)
+                    plan['command_preview']['native_target_revalidation_required'] = True
             if payload.get('compiled', {}).get('driver_operation') == (
                     'firebird-limbo'):
                 compiled = payload['compiled']
@@ -1614,6 +1641,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 self._release_attachment(connection)
             if payload.get('compiled', {}).get('driver_operation') == (
                     'firebird-service'):
+                service_route = payload['route']
                 if payload['route'].get('attachment_mode') == 'embedded':
                     from . import local_services
                     compiled = payload['compiled']
@@ -1622,17 +1650,24 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     compiled['database'] = route['database']
                     compiled['local_service_identity'] = local_services.file_identity(route)
                     compiled['execution_host'] = 'application-local'
+                    service_route = route
                 # Services credentials may differ from a database attachment.
                 # Obtain them before the visual layer retains the one-shot
                 # plan. A credential refresh can replace the provider binding
                 # and must not strand a reviewed plan during Apply. This only
                 # attaches/detaches: no service action is started here.
                 request, _options = self._service_role_scope(
-                    {'route': payload['route']},
+                    {'route': service_route},
                     payload['compiled'].get('options', {}))
                 server = self._connect_server(request)
                 self._release_server(server)
             return plan
+
+    def _verify_database_drop(self, connection, request):
+        expected = request.get('_firebird_target_binding')
+        if expected is not None:
+            from .metadata_guard import verify
+            verify(connection, expected)
 
     def _finish_server_operation(self, server, result, failure):
         try:
@@ -1666,9 +1701,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         if local_service:
             from . import local_services
             try:
-                local_services.validate_operation(payload['route'], compiled['operation_id'],
+                local_route = local_services.validate_operation(payload['route'], compiled['operation_id'],
                     compiled['database'], compiled.get('options', {}))
-                if compiled.get('local_service_identity') != local_services.file_identity(payload['route']):
+                if compiled.get('local_service_identity') != local_services.file_identity(local_route):
                     raise RelationalClientError('Local database file changed since review; refresh and review again')
             except RelationalClientError as error:
                 error.rejected = error.nothing_changed = True
@@ -1679,7 +1714,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 result['driver_observation'].update(execution_host='application-local',
                     native_provider='Engine13', network_authentication=False,
                     reviewed_file_identity=compiled['local_service_identity'],
-                    file_identity_race_fenced=sys.platform == 'linux',
+                    file_identity_race_fenced=local_file_fenced,
+                    native_filename_policy=('private_inode_alias' if local_file_fenced else 'canonical_filename_rechecked'),
                     native_utility_exit_code=None,
                     native_utility_exit_code_observed=False)
             return result
@@ -1699,7 +1735,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     state.visual_task_state_unknown = True
                     raise
         if local_service:
-            with local_services.pinned_target(payload['route'], compiled['local_service_identity'], compiled['operation_id']):
+            with self._temporary_operation(), local_services.service_filename(
+                    self, local_route, compiled['local_service_identity'],
+                    compiled['operation_id'], compiled.get('options', {})) as local_file_fenced:
                 return dispatch()
         return dispatch()
 

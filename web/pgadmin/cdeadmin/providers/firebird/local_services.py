@@ -7,6 +7,8 @@ import os
 import stat
 import sys
 import tempfile
+from threading import RLock
+from weakref import WeakValueDictionary
 
 from ...sdk import RelationalClientError
 from .embedded import embedded_route
@@ -24,6 +26,10 @@ LOCAL_OPTIONS = {
     'validate_database': {'include_table', 'exclude_table', 'include_index',
                           'exclude_index', 'lock_timeout'},
     'database_statistics': {'statistics_flags', 'tables'},
+    'shutdown_database': {'mode', 'method', 'shutdown_timeout', 'confirmation'},
+    'bring_online': {'mode'},
+    'fixup_database': {'fixup_flags', 'confirmation'},
+    'activate_shadow': {'shadow_filename', 'confirmation', 'original_isolated'},
 }
 OPERATIONS = frozenset(LOCAL_OPTIONS)
 
@@ -40,11 +46,28 @@ def route_for_service(route, permissions=None):
 
 
 def validate_operation(route, operation, database, options):
-    selected = route_for_service(route)
     if operation not in OPERATIONS:
         raise RelationalClientError('This embedded local service operation is not implemented')
     if not isinstance(options, Mapping) or set(options) - (LOCAL_OPTIONS[operation] | {'role'}):
         raise RelationalClientError('Select typed local database service options')
+    if 'confirmation' in options and not isinstance(options['confirmation'], str):
+        raise RelationalClientError('Confirmation must be text')
+    if operation == 'activate_shadow':
+        from ..embedded_route import contained_database
+        from .shadow_activation import validate
+        if not isinstance(route, Mapping):
+            raise RelationalClientError('Local recovery requires an approved embedded route')
+        # The primary can be absent or its old parent removed. Authorize its
+        # stored path lexically, then admit only the existing recovery target.
+        original = contained_database(route)
+        values = validate(options, original)
+        selected = route_for_service({**route, 'database': values['shadow_filename']})
+        if selected['database'] != values['shadow_filename']:
+            raise RelationalClientError('Select the canonical absolute shadow filename')
+        if Path(original).exists() and os.path.samefile(original, selected['database']):
+            raise RelationalClientError('The shadow target must not be the original database inode')
+    else:
+        selected = route_for_service(route)
     if operation == 'database_statistics':
         from .statistics import validate_options
         validate_options(options)
@@ -97,10 +120,113 @@ def arguments(route, permissions, module):
 
 
 _SERVICE_TARGET = ContextVar('firebird_local_service_target', default=None)
+_MAINTENANCE_PROBE = ContextVar('firebird_local_maintenance_probe', default=False)
+_ADMISSION_LOCK = RLock()
+_ADMISSIONS = WeakValueDictionary()
+
+
+def maintenance_probe_active():
+    return _MAINTENANCE_PROBE.get()
 
 
 @contextmanager
-def pinned_target(route, reviewed, operation='database_statistics'):
+def attachment_admission(route):
+    """Do not let a new managed SQL attachment adopt a private service alias."""
+    if route.get('attachment_mode') != 'embedded':
+        yield
+        return
+    identity = file_identity(route)
+    key = (identity['device'], identity['inode'])
+    with _ADMISSION_LOCK:
+        lock = _ADMISSIONS.get(key)
+        if lock is None:
+            lock = RLock()
+            _ADMISSIONS[key] = lock
+    with lock:
+        yield
+
+
+@contextmanager
+def service_filename(client, route, reviewed, operation, options):
+    """Keep native filename semantics for caches and auxiliary files.
+
+    Private aliases are restricted to short header operations on a database
+    with no linger or auxiliary files. Canonical operations retain/recheck
+    the reviewed descriptor but do not claim an OS rename race fence.
+    """
+    if operation == 'activate_shadow':
+        # An SQL probe could itself activate/open a recovery file. Activation
+        # must keep the canonical native filename, including persistent LINGER
+        # and any auxiliary-file references inherited from the primary.
+        with attachment_admission(route), pinned_target(route, reviewed, operation, private_alias=False):
+            yield False
+        return
+    if operation == 'fixup_database':
+        # NFIX writes raw header pages. Never attach the copied database as
+        # a preflight: that could create a delta file before fixup. Hold new
+        # managed SQL admission, without claiming external file exclusivity.
+        with attachment_admission(route), pinned_target(route, reviewed, operation):
+            yield True
+        return
+    if operation == 'database_statistics':
+        with pinned_target(route, reviewed, operation):
+            yield sys.platform == 'linux'
+        return
+    private = False
+    with attachment_admission(route):
+        if operation not in {'sweep_database', 'validate_database'}:
+            scoped, _ = client._service_role_scope({'route': route}, options)
+            token = _MAINTENANCE_PROBE.set(True)
+            connection = None
+            failure = None
+            try:
+                probe = dict(scoped['route'], transaction_access='READ',
+                             transaction_isolation='SNAPSHOT',
+                             transaction_auto_commit=False,
+                             transaction_no_auto_undo=False,
+                             transaction_ignore_limbo=False)
+                connection = client._connect({'route': probe})
+                import firebird.driver as native
+                actual = connection.info.get_info(native.DbInfoCode.DB_FILE_ID)
+                expected = (int(reviewed['device']).to_bytes(8, sys.byteorder) +
+                            int(reviewed['inode']).to_bytes(8, sys.byteorder)).hex()
+                if actual.lower() != expected:
+                    error = RelationalClientError('Native maintenance file differs from reviewed file')
+                    error.rejected = error.nothing_changed = True
+                    error.native_dispatched = error.automatic_retry = False
+                    raise error
+                cursor = connection.cursor()
+                try:
+                    cursor.execute('SELECT COALESCE(RDB$LINGER,0) FROM RDB$DATABASE')
+                    linger = cursor.fetchone()[0]
+                    cursor.execute('SELECT MON$BACKUP_STATE FROM MON$DATABASE')
+                    backup = cursor.fetchone()[0]
+                    cursor.execute('SELECT COUNT(*) FROM RDB$FILES')
+                    auxiliary = cursor.fetchone()[0]
+                    private = linger == 0 and backup == 0 and auxiliary == 0
+                finally:
+                    cursor.close()
+            except RelationalClientError as error:
+                failure = error
+                # FULL/SINGLE shutdown must not strand attachment-free recovery.
+                # An observed identity mismatch is never a fallback condition.
+                if str(error).startswith('Native maintenance file differs'):
+                    raise
+            finally:
+                _MAINTENANCE_PROBE.reset(token)
+                if connection is not None:
+                    client._finish_temporary_attachment(connection, failure)
+        if private:
+            with pinned_target(route, reviewed, operation):
+                yield True
+            return
+    # Long online work must not hold SQL admission for its whole duration.
+    with pinned_target(route, reviewed, operation, private_alias=False):
+        yield False
+
+
+@contextmanager
+def pinned_target(route, reviewed, operation='database_statistics', *, private_alias=True):
     """Pin the reviewed inode through native service completion and release.
 
     Private inode aliases never come from a request. The
@@ -129,6 +255,13 @@ def pinned_target(route, reviewed, operation='database_statistics'):
         actual = {'path': original, 'device': str(info.st_dev), 'inode': str(info.st_ino)}
         if not stat.S_ISREG(info.st_mode) or actual != reviewed:
             raise RelationalClientError('Local database file changed since review; native service not dispatched')
+        if not private_alias:
+            if file_identity(route) != reviewed:
+                raise RelationalClientError('Local database file changed before native service dispatch')
+            token = _SERVICE_TARGET.set((original, original))
+            entered = True
+            yield original
+            return
         # Native gstat canonicalizes descriptor symlinks. A private hardlink
         # instead gives it a stable native filename for this exact inode.
         # Verify after link creation: linking a raced same-name replacement

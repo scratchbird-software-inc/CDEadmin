@@ -859,6 +859,30 @@
           "tier": 3,
           "mutation_class": "admin",
           "support_state": "implemented"
+        },
+        {
+          "operation_id": "shutdown_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "activate_shadow",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "fixup_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "bring_online",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
         }
       ]
     },

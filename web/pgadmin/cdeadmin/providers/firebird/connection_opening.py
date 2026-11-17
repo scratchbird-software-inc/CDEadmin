@@ -15,7 +15,7 @@ CONFIG_FIELDS = (
 def connect(module, core, *, database, failed_owner, user=None, password=None,
             role=None, no_gc=None, no_db_triggers=None, dbkey_scope=None,
             crypt_callback=None, charset=None, auth_plugin_list=None,
-            session_time_zone=None):
+            session_time_zone=None, maintenance_probe=False):
     if not isinstance(database, str) or not re.fullmatch(
             r'cde_database_[0-9a-f]{24}', database):
         raise RelationalClientError(
@@ -51,8 +51,15 @@ def connect(module, core, *, database, failed_owner, user=None, password=None,
         sql_dialect=config.sql_dialect.value, no_gc=no_gc,
         no_db_triggers=no_db_triggers, dbkey_scope=dbkey_scope)
     buffer = build(core, options)
-    for callback in core.get_callbacks(
-            core.ConnectionHook.ATTACH_REQUEST, core.Connection):
+    if maintenance_probe:
+        # Public isc_dpb_gfix_attach (66), absent from the driver's enum.
+        # Native maintenance authorization applies and database triggers are
+        # suppressed by the engine, just as for the requested gfix operation.
+        with core.a.get_api().util.get_xpb_builder(core.XpbKind.DPB, buffer) as builder:
+            builder.insert_tag(66)
+            buffer = builder.get_buffer()
+    for callback in (() if maintenance_probe else core.get_callbacks(
+            core.ConnectionHook.ATTACH_REQUEST, core.Connection)):
         connection = callback(dsn, buffer)
         if connection is not None:
             connection._cdeadmin_attached_pending = True
@@ -68,7 +75,7 @@ def connect(module, core, *, database, failed_owner, user=None, password=None,
             connection._att = dispatcher.attach_database(dsn, buffer, 'utf-8')
             core.Connection.__init__(connection, connection._att, dsn, buffer,
                                      config.sql_dialect.value, charset)
-        connection._cdeadmin_attached_pending = True
+        connection._cdeadmin_attached_pending = not maintenance_probe
         return connection
     except BaseException:
         if connection._att is not None:

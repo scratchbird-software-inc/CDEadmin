@@ -3752,7 +3752,8 @@ def _sequence_state(cursor, name):
 
 def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
                    administration=ADMINISTRATION):
-    from .local_services import arguments as local_service_arguments
+    from .local_services import (arguments as local_service_arguments,
+                                 maintenance_probe_active)
     module = load_optional_module('firebird.driver')
     core = (load_optional_module('firebird.driver.core')
             if module is not None else None)
@@ -3821,6 +3822,8 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         if core is not None else None), database_connector=(
         (lambda **kwargs: connect_database(
             module, core, failed_owner=client._retain_failed_attachment,
+            maintenance_probe=(attachment_mode == 'embedded' and
+                               maintenance_probe_active()),
             **kwargs)) if core is not None else None))
     return client
 
