@@ -422,6 +422,89 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
       if (ref) {
         events.dispatch(FileTreeXEvent.onTreeEvents, e, 'dragstart', item);
       }
+
+      const rawData = item?.getMetadata?.('data') || {};
+      const kindAliases: Record<string, string> = {
+        mview: 'materialized-view',
+        foreign_table: 'foreign-table',
+        partition: 'partitioned-table',
+        edbfunc: 'function',
+        edbproc: 'procedure',
+      };
+      const rawKind = String(rawData.cde_resource_kind || rawData._type || '').toLowerCase();
+      const normKind = kindAliases[rawKind] || rawKind;
+      const rawLabel = String(rawData.label || rawData._label || '').trim();
+      const cleanName = ['procedure', 'function', 'routine'].includes(normKind)
+        ? rawLabel.replace(/\([^)]*\)\s*$/, '').trim()
+        : rawLabel;
+
+      const draggableCatalogKinds = new Set([
+        'table',
+        'view',
+        'materialized-view',
+        'foreign-table',
+        'partitioned-table',
+        'procedure',
+        'function',
+        'routine',
+        'column',
+      ]);
+
+      if (e.dataTransfer && cleanName && (rawData._type === 'cde_resource' || draggableCatalogKinds.has(normKind))) {
+        e.dataTransfer.effectAllowed = 'copyMove';
+        const catalogPayload = {
+          resource_id: String(rawData.cde_resource_id || ''),
+          resource_kind: normKind || 'table',
+          display_name: cleanName,
+          raw_label: rawLabel,
+          database_target_id: String(rawData.cde_database_target_id || ''),
+          engine_id: String(rawData.cde_engine_id || ''),
+          server_id: rawData.cde_server_id ?? null,
+        };
+        try {
+          e.dataTransfer.setData(
+            'application/x-scratchrobin-catalog-object',
+            JSON.stringify(catalogPayload)
+          );
+        } catch {
+          // Ignore custom MIME restriction in older test shims
+        }
+
+        let existingText = '';
+        try {
+          existingText = e.dataTransfer.getData('text') || '';
+        } catch {
+          existingText = '';
+        }
+        if (!existingText) {
+          const eng = String(rawData.cde_engine_id || '').toLowerCase();
+          const qChar = eng.includes('mysql') || eng.includes('mariadb') ? '`' : '"';
+          const quotedIdent = `${qChar}${cleanName.replaceAll(qChar, qChar + qChar)}${qChar}`;
+          try {
+            e.dataTransfer.setData(
+              'text',
+              JSON.stringify({
+                text: quotedIdent,
+                nodeType: normKind,
+                cur: { from: quotedIdent.length, to: quotedIdent.length },
+                scratchrobinCatalogObject: catalogPayload,
+              })
+            );
+          } catch {
+            // Ignore
+          }
+        } else {
+          try {
+            const parsed = JSON.parse(existingText);
+            if (parsed && typeof parsed === 'object') {
+              parsed.scratchrobinCatalogObject = catalogPayload;
+              e.dataTransfer.setData('text', JSON.stringify(parsed));
+            }
+          } catch {
+            // Leave plain text untouched
+          }
+        }
+      }
     }
   };
 }

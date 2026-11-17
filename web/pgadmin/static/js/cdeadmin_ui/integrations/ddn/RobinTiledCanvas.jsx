@@ -1145,6 +1145,10 @@ export function RobinTiledCanvas({
   onRequestTiles,
   selectedNodeId = '',
   onSelectNode,
+  onSelectEdge,
+  onToggleField,
+  onCreateFieldJoin,
+  onRemoveNode,
   editable = false,
   onPinNode,
   canvasApiRef = null,
@@ -1154,10 +1158,12 @@ export function RobinTiledCanvas({
   const [viewportSize, setViewportSize] = useState({width: 960, height: 620});
   const [camera, setCamera] = useState({x: 0, y: 0, zoom: 1});
   const [hoveredNodeId, setHoveredNodeId] = useState('');
+  const [hoveredFieldTarget, setHoveredFieldTarget] = useState(null);
   const [dragState, setDragState] = useState(null);
   const [nodeOverrides, setNodeOverrides] = useState({});
   const requestedCoordsRef = useRef(new Set());
   const fitSignatureRef = useRef('');
+  const sceneShaRef = useRef('');
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1171,6 +1177,20 @@ export function RobinTiledCanvas({
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  const clientToWorld = useCallback(
+    (clientX, clientY) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      const localX = rect ? clientX - rect.left : clientX;
+      const localY = rect ? clientY - rect.top : clientY;
+      const z = Math.max(0.08, camera.zoom);
+      return {
+        x: Math.round((localX - camera.x) / z),
+        y: Math.round((localY - camera.y) / z),
+      };
+    },
+    [camera.x, camera.y, camera.zoom]
+  );
 
   const fitWorkarea = useCallback(() => {
     if (!scene?.canvas_bounds) return;
@@ -1190,8 +1210,14 @@ export function RobinTiledCanvas({
   // Reset overrides and auto-fit whenever a new model or view is loaded
   useEffect(() => {
     if (!scene) return;
-    const sig = `${scene.ddn_sha256}:${scene.view_id}`;
+    const sig = scene.fit_key
+      ? `${scene.fit_key}:${scene.view_id || ''}`
+      : `${scene.ddn_sha256}:${scene.view_id}`;
     requestedCoordsRef.current = new Set(Object.keys(loadedTiles || {}));
+    if (sceneShaRef.current !== scene.ddn_sha256) {
+      sceneShaRef.current = scene.ddn_sha256 || '';
+      setNodeOverrides({});
+    }
     if (fitSignatureRef.current !== sig) {
       fitSignatureRef.current = sig;
       setNodeOverrides({});
@@ -1248,6 +1274,7 @@ export function RobinTiledCanvas({
     canvasApiRef,
     () => ({
       fitWorkarea,
+      clientToWorld,
       zoomIn: () =>
         setCamera((c) => ({...c, zoom: Math.min(2.6, c.zoom * 1.22)})),
       zoomOut: () =>
@@ -1255,7 +1282,7 @@ export function RobinTiledCanvas({
       resetZoom: () => setCamera((c) => ({...c, zoom: 1})),
       exportSvg: () => serializeRobinSceneToSvg(scene, loadedTiles),
     }),
-    [fitWorkarea, loadedTiles, scene]
+    [clientToWorld, fitWorkarea, loadedTiles, scene]
   );
 
   // Deduplicate visible primitives across loaded tiles intersecting the viewport
@@ -1359,6 +1386,9 @@ export function RobinTiledCanvas({
       const nx = Math.round(dragState.origX + dx);
       const ny = Math.round(dragState.origY + dy);
       setNodeOverrides((prev) => ({...prev, [dragState.nodeId]: {x: nx, y: ny}}));
+    } else if (dragState.kind === 'field_join') {
+      const wp = clientToWorld(evt.clientX, evt.clientY);
+      setDragState((prev) => (prev ? {...prev, curX: wp.x, curY: wp.y} : null));
     }
   };
 
@@ -1368,9 +1398,30 @@ export function RobinTiledCanvas({
       if (pos && onPinNode) {
         onPinNode(dragState.nodeId, pos.x, pos.y);
       }
+    } else if (dragState?.kind === 'field_join') {
+      if (
+        hoveredFieldTarget &&
+        hoveredFieldTarget.nodeId !== dragState.sourceNodeId &&
+        typeof onCreateFieldJoin === 'function'
+      ) {
+        onCreateFieldJoin(
+          dragState.sourceNodeId,
+          dragState.sourceField,
+          hoveredFieldTarget.nodeId,
+          hoveredFieldTarget.fieldName
+        );
+      }
     }
     if (dragState) setDragState(null);
   };
+
+  const baseNodesById = useMemo(() => {
+    const m = {};
+    for (const n of visibleScene.nodes) {
+      m[n.id] = n;
+    }
+    return m;
+  }, [visibleScene.nodes]);
 
   const totalNodeCount = scene?.summary?.node_count || visibleScene.nodes.length;
   const overviewLod = camera.zoom < 0.44 && totalNodeCount > 18;
@@ -1394,7 +1445,12 @@ export function RobinTiledCanvas({
         overflow: 'hidden',
         bgcolor: '#f8fafc',
         userSelect: 'none',
-        cursor: dragState?.kind === 'pan' ? 'grabbing' : 'grab',
+        cursor:
+          dragState?.kind === 'pan'
+            ? 'grabbing'
+            : dragState?.kind === 'field_join'
+              ? 'crosshair'
+              : 'grab',
       }}
     >
       <svg
@@ -1516,17 +1572,49 @@ export function RobinTiledCanvas({
 
           {/* 2. Obstacle-Avoiding Orthogonal Relationship Routes */}
           {visibleScene.edges.map((e) => {
-            const pts = e.points || [];
-            if (pts.length < 2) return null;
+            const rawPts = e.points || [];
+            if (rawPts.length < 2) return null;
+            const srcOv = nodeOverrides[e.source];
+            const dstOv = nodeOverrides[e.target];
+            const srcBase = baseNodesById[e.source];
+            const dstBase = baseNodesById[e.target];
+            let pts = rawPts;
+            let lblPos = e.label_pos;
+            if ((srcOv && srcBase) || (dstOv && dstBase)) {
+              const sdx = srcOv && srcBase ? srcOv.x - srcBase.x : 0;
+              const sdy = srcOv && srcBase ? srcOv.y - srcBase.y : 0;
+              const ddx = dstOv && dstBase ? dstOv.x - dstBase.x : 0;
+              const ddy = dstOv && dstBase ? dstOv.y - dstBase.y : 0;
+              const p0 = {x: rawPts[0].x + sdx, y: rawPts[0].y + sdy};
+              const pLast = {
+                x: rawPts[rawPts.length - 1].x + ddx,
+                y: rawPts[rawPts.length - 1].y + ddy,
+              };
+              const midX = (p0.x + pLast.x) / 2;
+              pts = [p0, {x: midX, y: p0.y}, {x: midX, y: pLast.y}, pLast];
+              if (lblPos) {
+                lblPos = {...lblPos, x: midX, y: (p0.y + pLast.y) / 2};
+              }
+            }
             const dCmd = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')}`;
             const isHighlighted =
               activeFocusId &&
               (e.source === activeFocusId || e.target === activeFocusId);
             const isDimmed = Boolean(activeFocusId && !isHighlighted);
             const strokeColor = isHighlighted ? '#2563eb' : '#475569';
-            const strokeW = isHighlighted ? 2.4 : 1.45;
+            const strokeW = isHighlighted ? 2.4 : 1.65;
             return (
-              <g key={e.id} opacity={isDimmed ? 0.25 : 1}>
+              <g
+                key={e.id}
+                opacity={isDimmed ? 0.25 : 1}
+                style={{cursor: onSelectEdge ? 'pointer' : 'default'}}
+                onClick={(evt) => {
+                  if (onSelectEdge) {
+                    evt.stopPropagation();
+                    onSelectEdge(e);
+                  }
+                }}
+              >
                 <path
                   d={dCmd}
                   fill="none"
@@ -1542,15 +1630,17 @@ export function RobinTiledCanvas({
                       ? isHighlighted
                         ? 'url(#robin-arrow-hi)'
                         : 'url(#robin-arrow)'
-                      : 'url(#robin-one)'
+                      : e.target_mark === 'many'
+                        ? 'url(#robin-many)'
+                        : 'url(#robin-one)'
                   }
                 />
-                {!overviewLod && e.display_label && e.label_pos && (
+                {!overviewLod && e.display_label && lblPos && (
                   <g>
                     <rect
-                      x={e.label_pos.x - (e.label_pos.w || 64) / 2}
-                      y={e.label_pos.y - 9}
-                      width={e.label_pos.w || 64}
+                      x={lblPos.x - (lblPos.w || 64) / 2}
+                      y={lblPos.y - 9}
+                      width={lblPos.w || 64}
                       height={18}
                       rx={4}
                       fill="#ffffff"
@@ -1558,8 +1648,8 @@ export function RobinTiledCanvas({
                       strokeWidth={1}
                     />
                     <text
-                      x={e.label_pos.x}
-                      y={e.label_pos.y + 3.5}
+                      x={lblPos.x}
+                      y={lblPos.y + 3.5}
                       textAnchor="middle"
                       fontSize={10}
                       fontWeight={isHighlighted ? 700 : 500}
@@ -1587,7 +1677,7 @@ export function RobinTiledCanvas({
             return null;
           })}
 
-          {/* 4. Entity / Table / Dimensional / Topology Cards */}
+          {/* 4. Entity / Table / Procedure / Dimensional / Topology Cards */}
           {visibleScene.nodes.map((n) => {
             const override = nodeOverrides[n.id];
             const nx = override ? override.x : n.x;
@@ -1599,10 +1689,16 @@ export function RobinTiledCanvas({
             const roleBadge = (n.engine || n.role || n.level || 'table')
               .toUpperCase()
               .slice(0, 10);
+            const hasRemoveBtn = typeof onRemoveNode === 'function';
+            const hasCheckboxes = typeof onToggleField === 'function';
+            const hasJoinPorts = typeof onCreateFieldJoin === 'function';
+            const badgeW = Math.max(44, roleBadge.length * 6.2 + 12);
+            const badgeRightOffset = hasRemoveBtn ? 30 : 8;
 
             return (
               <g
                 key={n.id}
+                data-cdeadmin-qa-key={`canvas-node-card-${n.id}`}
                 transform={`translate(${nx}, ${ny})`}
                 opacity={dimmed ? 0.38 : 1}
                 style={{cursor: editable ? 'move' : 'pointer'}}
@@ -1647,19 +1743,19 @@ export function RobinTiledCanvas({
                 >
                   {String(n.name || '').slice(
                     0,
-                    Math.max(18, Math.floor((n.width - 78) / 7.2))
+                    Math.max(16, Math.floor((n.width - badgeW - badgeRightOffset - 18) / 7.1))
                   )}
                 </text>
                 <rect
-                  x={n.width - Math.max(46, roleBadge.length * 6.2 + 12) - 8}
+                  x={n.width - badgeW - badgeRightOffset}
                   y={9}
-                  width={Math.max(46, roleBadge.length * 6.2 + 12)}
+                  width={badgeW}
                   height={19}
                   rx={4}
                   fill={pal.badge_bg || '#bfdbfe'}
                 />
                 <text
-                  x={n.width - 14}
+                  x={n.width - badgeRightOffset - 6}
                   y={22}
                   textAnchor="end"
                   fontSize={9.5}
@@ -1668,6 +1764,38 @@ export function RobinTiledCanvas({
                 >
                   {roleBadge}
                 </text>
+                {hasRemoveBtn && (
+                  <g
+                    data-cdeadmin-qa-key={`canvas-remove-node-${n.id}`}
+                    role="button"
+                    aria-label={`Remove ${n.raw_name || n.name}`}
+                    style={{cursor: 'pointer'}}
+                    onPointerDown={(evt) => evt.stopPropagation()}
+                    onClick={(evt) => {
+                      evt.stopPropagation();
+                      onRemoveNode(n.id);
+                    }}
+                  >
+                    <rect
+                      x={n.width - 24}
+                      y={9}
+                      width={18}
+                      height={19}
+                      rx={4}
+                      fill="rgba(15, 23, 42, 0.08)"
+                    />
+                    <text
+                      x={n.width - 15}
+                      y={22.5}
+                      textAnchor="middle"
+                      fontSize={13}
+                      fontWeight={700}
+                      fill={pal.header_fg}
+                    >
+                      ×
+                    </text>
+                  </g>
+                )}
 
                 {overviewLod ? (
                   <text
@@ -1683,20 +1811,92 @@ export function RobinTiledCanvas({
                   <>
                     {(n.fields || []).map((f, fi) => {
                       const rowY = CARD_HEADER_H + fi * FIELD_ROW_H;
+                      const rawColName = String(f.raw_name || f.name || '');
+                      const isChecked = f.selected !== false;
+                      const checkShift = hasCheckboxes ? 18 : 0;
+                      const isJoinDropHover =
+                        dragState?.kind === 'field_join' &&
+                        dragState.sourceNodeId !== n.id &&
+                        hoveredFieldTarget?.nodeId === n.id &&
+                        hoveredFieldTarget?.fieldName === rawColName;
+                      const portCenterY = ny + rowY + FIELD_ROW_H / 2;
+
                       return (
-                        <g key={f.id || fi}>
-                          {fi % 2 === 1 && (
-                            <rect
-                              x={1.5}
-                              y={rowY}
-                              width={n.width - 3}
-                              height={FIELD_ROW_H}
-                              fill="#f8fafc"
-                            />
+                        <g
+                          key={f.id || fi}
+                          onPointerEnter={() => {
+                            if (hasJoinPorts) {
+                              setHoveredFieldTarget({
+                                nodeId: n.id,
+                                fieldName: rawColName,
+                                portX: nx,
+                                portY: portCenterY,
+                              });
+                            }
+                          }}
+                          onPointerLeave={() => {
+                            if (hasJoinPorts) {
+                              setHoveredFieldTarget((cur) =>
+                                cur?.nodeId === n.id && cur?.fieldName === rawColName
+                                  ? null
+                                  : cur
+                              );
+                            }
+                          }}
+                        >
+                          <rect
+                            x={1.5}
+                            y={rowY}
+                            width={n.width - 3}
+                            height={FIELD_ROW_H}
+                            fill={
+                              isJoinDropHover
+                                ? '#dbeafe'
+                                : fi % 2 === 1
+                                  ? '#f8fafc'
+                                  : 'transparent'
+                            }
+                          />
+
+                          {hasCheckboxes && (
+                            <g
+                              data-cdeadmin-qa-key={`canvas-field-check-${n.id}-${rawColName}`}
+                              role="checkbox"
+                              aria-checked={isChecked}
+                              aria-label={`Select column ${rawColName}`}
+                              style={{cursor: 'pointer'}}
+                              onPointerDown={(evt) => evt.stopPropagation()}
+                              onClick={(evt) => {
+                                evt.stopPropagation();
+                                onToggleField(n.id, rawColName, !isChecked);
+                              }}
+                            >
+                              <rect
+                                x={8}
+                                y={rowY + 5}
+                                width={12}
+                                height={12}
+                                rx={2.5}
+                                fill={isChecked ? '#2563eb' : '#ffffff'}
+                                stroke={isChecked ? '#1d4ed8' : '#94a3b8'}
+                                strokeWidth={1.2}
+                              />
+                              {isChecked && (
+                                <path
+                                  d={`M 10.5 ${rowY + 11} L 13 ${rowY + 13.5} L 17.5 ${rowY + 8}`}
+                                  fill="none"
+                                  stroke="#ffffff"
+                                  strokeWidth={1.6}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              )}
+                            </g>
                           )}
+
                           {f.is_pk && (
                             <rect
-                              x={8}
+                              x={8 + checkShift}
                               y={rowY + 4}
                               width={20}
                               height={14}
@@ -1708,7 +1908,7 @@ export function RobinTiledCanvas({
                           )}
                           {!f.is_pk && f.is_fk && (
                             <rect
-                              x={8}
+                              x={8 + checkShift}
                               y={rowY + 4}
                               width={20}
                               height={14}
@@ -1720,7 +1920,7 @@ export function RobinTiledCanvas({
                           )}
                           {(f.is_pk || f.is_fk) && (
                             <text
-                              x={18}
+                              x={18 + checkShift}
                               y={rowY + 14}
                               textAnchor="middle"
                               fontSize={8.5}
@@ -1731,24 +1931,73 @@ export function RobinTiledCanvas({
                             </text>
                           )}
                           <text
-                            x={f.is_pk || f.is_fk ? 34 : 12}
+                            x={(f.is_pk || f.is_fk ? 34 : 10) + checkShift}
                             y={rowY + 15}
                             fontSize={11}
                             fontWeight={f.is_pk ? 700 : 500}
                             fill="#1e293b"
                           >
-                            {`${String(f.name || '').slice(0, 26)}${f.nullable === false ? ' *' : ''}`}
+                            {`${String(f.name || '').slice(0, hasCheckboxes ? 22 : 26)}${f.nullable === false ? ' *' : ''}`}
                           </text>
                           {f.datatype && (
                             <text
                               x={n.width - 10}
                               y={rowY + 15}
                               textAnchor="end"
-                              fontSize={10}
+                              fontSize={9.5}
                               fill="#64748b"
                             >
-                              {String(f.datatype).slice(0, 18)}
+                              {String(f.datatype).slice(0, 15)}
                             </text>
+                          )}
+
+                          {/* Left & Right Column Connector Ports for Drag-to-Join */}
+                          {hasJoinPorts && (
+                            <>
+                              <circle
+                                cx={0}
+                                cy={rowY + FIELD_ROW_H / 2}
+                                r={isJoinDropHover ? 5.5 : 4}
+                                fill={isJoinDropHover ? '#2563eb' : '#ffffff'}
+                                stroke="#2563eb"
+                                strokeWidth={1.4}
+                                style={{cursor: 'crosshair'}}
+                                onPointerDown={(evt) => {
+                                  evt.stopPropagation();
+                                  setDragState({
+                                    kind: 'field_join',
+                                    sourceNodeId: n.id,
+                                    sourceField: rawColName,
+                                    startX: nx,
+                                    startY: portCenterY,
+                                    curX: nx,
+                                    curY: portCenterY,
+                                  });
+                                }}
+                              />
+                              <circle
+                                data-cdeadmin-qa-key={`canvas-join-port-${n.id}-${rawColName}`}
+                                cx={n.width}
+                                cy={rowY + FIELD_ROW_H / 2}
+                                r={isJoinDropHover ? 5.5 : 4}
+                                fill={isJoinDropHover ? '#2563eb' : '#ffffff'}
+                                stroke="#2563eb"
+                                strokeWidth={1.4}
+                                style={{cursor: 'crosshair'}}
+                                onPointerDown={(evt) => {
+                                  evt.stopPropagation();
+                                  setDragState({
+                                    kind: 'field_join',
+                                    sourceNodeId: n.id,
+                                    sourceField: rawColName,
+                                    startX: nx + n.width,
+                                    startY: portCenterY,
+                                    curX: nx + n.width,
+                                    curY: portCenterY,
+                                  });
+                                }}
+                              />
+                            </>
                           )}
                         </g>
                       );
@@ -1773,6 +2022,25 @@ export function RobinTiledCanvas({
               </g>
             );
           })}
+
+          {/* 5. Live Drag-to-Join Connector Preview */}
+          {dragState?.kind === 'field_join' && (
+            <path
+              d={`M ${dragState.startX} ${dragState.startY} L ${
+                (dragState.startX + (hoveredFieldTarget?.portX ?? dragState.curX)) / 2
+              } ${dragState.startY} L ${
+                (dragState.startX + (hoveredFieldTarget?.portX ?? dragState.curX)) / 2
+              } ${hoveredFieldTarget?.portY ?? dragState.curY} L ${
+                hoveredFieldTarget?.portX ?? dragState.curX
+              } ${hoveredFieldTarget?.portY ?? dragState.curY}`}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth={2.2}
+              strokeDasharray="6 4"
+              markerEnd="url(#robin-arrow-hi)"
+              pointerEvents="none"
+            />
+          )}
         </g>
       </svg>
 
@@ -1858,6 +2126,10 @@ RobinTiledCanvas.propTypes = {
   onRequestTiles: PropTypes.func,
   selectedNodeId: PropTypes.string,
   onSelectNode: PropTypes.func,
+  onSelectEdge: PropTypes.func,
+  onToggleField: PropTypes.func,
+  onCreateFieldJoin: PropTypes.func,
+  onRemoveNode: PropTypes.func,
   editable: PropTypes.bool,
   onPinNode: PropTypes.func,
   canvasApiRef: PropTypes.object,

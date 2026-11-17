@@ -247,18 +247,92 @@ export function coerceEditedValue(rawInput, col, colMeta) {
 }
 
 /**
+ * Estimate a tight, content- and datatype-adaptive pixel width for a form field
+ * so Mini-Forms, Hybrid, and Single Form pack fields efficiently without wasted width.
+ */
+export function estimateAdaptiveColumnWidthPx(col, meta, sampleRows = null, explicitWidthPx = null) {
+  if (typeof explicitWidthPx === 'number' && Number.isFinite(explicitWidthPx) && explicitWidthPx > 0) {
+    return Math.round(explicitWidthPx);
+  }
+  const colName = String(col?.name || '');
+  const native = String(col?.native_type || '').toUpperCase();
+  const lenMatch = native.match(/\((\d+)(?:\s*,\s*\d+)?\)/);
+  const declaredLen =
+    (typeof col?.max_length === 'number' && col.max_length > 0 ? col.max_length : null) ||
+    (typeof col?.character_length === 'number' && col.character_length > 0 ? col.character_length : null) ||
+    (lenMatch ? parseInt(lenMatch[1], 10) : null);
+
+  let maxObservedChars = 0;
+  if (Array.isArray(sampleRows) && sampleRows.length > 0) {
+    const limit = Math.min(sampleRows.length, 60);
+    for (let i = 0; i < limit; i += 1) {
+      const v = sampleRows[i]?.values?.[colName];
+      if (v === null || v === undefined || typeof v === 'object') continue;
+      const len = String(v).length;
+      if (len > maxObservedChars) maxObservedChars = len;
+    }
+  }
+
+  // Header width needed so `COL_NAME 🔑  TYPE` stays readable without clipping
+  const typeTagLen = Math.min(11, native.length);
+  const headerNeedPx = Math.round(
+    colName.length * 7.1 + (col?.key ? 18 : 0) + typeTagLen * 5.0 + 22
+  );
+
+  let dataNeedPx = 148;
+  if (meta.clientType === 'boolean') {
+    dataNeedPx = 74;
+  } else if (meta.clientType === 'number') {
+    const digits = Math.max(4, Math.min(18, maxObservedChars || declaredLen || 7));
+    dataNeedPx = digits * 8.2 + 28;
+  } else if (meta.clientType === 'date') {
+    dataNeedPx = 114;
+  } else if (meta.clientType === 'time') {
+    dataNeedPx = 102;
+  } else if (meta.clientType === 'timestamp') {
+    dataNeedPx = 176;
+  } else if (meta.clientType === 'uuid') {
+    dataNeedPx = 266;
+  } else if (meta.isComplex) {
+    dataNeedPx = 156;
+  } else {
+    let targetChars;
+    if (maxObservedChars > 0) {
+      targetChars = Math.min(
+        52,
+        Math.max(
+          maxObservedChars + 2,
+          declaredLen && declaredLen <= 8 ? declaredLen : 2
+        )
+      );
+    } else if (declaredLen && declaredLen > 0) {
+      targetChars = Math.min(44, declaredLen);
+    } else {
+      targetChars = 16;
+    }
+    dataNeedPx = targetChars * 7.5 + 24;
+  }
+
+  return Math.round(Math.max(84, Math.min(420, Math.max(headerNeedPx, dataNeedPx))));
+}
+
+/**
  * Convert visible form columns into SR-F-020033 (`formCellLayout.js`) descriptors
- * so Mini-Forms (b), Hybrid (c), and Single Form (d) share identical placement logic.
+ * so Mini-Forms (b), Hybrid (c), and Single Form (d) share identical placement logic
+ * AND tight content-adaptive field widths (`adaptiveWidths`).
  */
 export function buildFormLayoutPlacements(
   columns,
   formFieldPrefs,
   availableWidth,
-  prevNumCols = null
+  prevNumCols = null,
+  sampleRows = null
 ) {
-  const descriptors = columns.map((col) => {
+  const adaptiveWidths = {};
+  const safeFormPrefs = formFieldPrefs || {};
+  const descriptors = (columns || []).map((col) => {
     const meta = inferColumnMeta(col);
-    const prefs = formFieldPrefs[col.name] || {};
+    const prefs = safeFormPrefs[col.name] || {};
     let control = 'text';
     if (prefs.inlineBox) {
       control = 'multiline';
@@ -269,19 +343,30 @@ export function buildFormLayoutPlacements(
     } else if (meta.isComplex) {
       control = 'text';
     }
+    const adaptiveW = estimateAdaptiveColumnWidthPx(
+      col,
+      meta,
+      sampleRows,
+      prefs.widthPx
+    );
+    adaptiveWidths[col.name] = adaptiveW;
     return {
       field_id: col.name,
       label: col.name,
       control,
       required: col.nullable === false,
-      width_px: prefs.widthPx || undefined,
+      width_px: prefs.inlineBox ? undefined : adaptiveW,
       max_length: meta.clientType === 'uuid' ? 36 : undefined,
     };
   });
-  return computeCellGridLayout(descriptors, Math.max(240, availableWidth || 720), {}, {
-    colGap: 14,
+  const base = computeCellGridLayout(descriptors, Math.max(240, availableWidth || 720), {}, {
+    colGap: 12,
     prevNumCols,
   });
+  return {
+    ...base,
+    adaptiveWidths,
+  };
 }
 
 function sqlLiteral(val) {

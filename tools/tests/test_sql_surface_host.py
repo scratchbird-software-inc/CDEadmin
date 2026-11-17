@@ -29,6 +29,7 @@ from pgadmin.cdeadmin.workspace.sql_surface_host import (
     extract_statement_at_cursor,
     generate_universal_object_sql,
     parse_sql_to_visual_model,
+    resolve_visual_catalog_object,
     split_sql_statements,
 )
 
@@ -148,8 +149,8 @@ class FakeSqlWorkspaceService:
                 'occurrence': {'operation': {'terminal': True}, 'result': {}},
                 'rendered_result': {
                     'columns': [
-                        {'name': 'ID', 'native_type': 'INTEGER', 'nullable': False, 'key': True},
-                        {'name': 'LABEL', 'native_type': 'VARCHAR(64)', 'nullable': True},
+                        {'name': 'ID', 'native_type': 'INTEGER', 'nullable': False, 'primary_key': True, 'key': 'col_0'},
+                        {'name': 'LABEL', 'native_type': 'VARCHAR(64)', 'character_length': 64, 'nullable': True, 'key': 'col_1'},
                     ],
                     'page': {
                         'rows': [
@@ -499,6 +500,17 @@ def test_visual_query_ddn_scene_and_sql_sync():
     scene, sql, fanout = build_visual_query_ddn_scene(vm, {}, 'firebird')
     assert len(scene['nodes']) == 3
     assert len(scene['edges']) == 2
+    # Verify exact RobinTiledCanvas contract (`loaded_tiles['0:0']`, `name`, `role`, `fields`, `{x, y}` edge points)
+    assert '0:0' in scene['loaded_tiles']
+    tile0 = scene['loaded_tiles']['0:0']
+    assert len(tile0['nodes']) == 3
+    assert tile0['nodes'][0]['name'] == 'CUSTOMERS (c)'
+    assert tile0['nodes'][0]['role'] == 'TABLE'
+    assert tile0['nodes'][0]['fields'][0]['raw_name'] == 'ID'
+    assert tile0['nodes'][0]['fields'][0]['is_pk'] is True
+    assert isinstance(tile0['edges'][0]['points'][0]['x'], (int, float))
+    assert isinstance(tile0['edges'][0]['points'][0]['y'], (int, float))
+    assert tile0['edges'][0]['display_label'] == 'INNER: ID = CUSTOMER_ID'
     assert len(fanout) == 1  # two 1:N joins trigger fan-out warning
     assert 'SUM(o.AMOUNT)' in sql
     assert 'FETCH FIRST 50 ROWS ONLY' in sql
@@ -509,6 +521,143 @@ def test_visual_query_ddn_scene_and_sql_sync():
     assert fidelity == 'exact'
     assert len(parsed['tables']) == 2
     assert len(parsed['joins']) == 1
+
+
+def test_visual_builder_selectable_stored_procedures_views_and_fk_auto_joins(tmp_path):
+    svc = FakeSqlWorkspaceService()
+    srv = SimpleNamespace(id=9, user_id=1)
+
+    catalog = [
+        {
+            'resource_id': 'table:CUSTOMERS',
+            'resource_kind': 'table',
+            'display_name': 'CUSTOMERS',
+            'display_path': ['CUSTOMERS'],
+        },
+        {
+            'resource_id': 'column:CUSTOMERS.ID',
+            'resource_kind': 'column',
+            'display_name': 'ID',
+            'display_path': ['CUSTOMERS', 'ID'],
+            'native': {'field_type': 8, 'primary_key': True, 'not_null': True, 'ordinal_position': 1},
+        },
+        {
+            'resource_id': 'column:CUSTOMERS.NAME',
+            'resource_kind': 'column',
+            'display_name': 'NAME',
+            'display_path': ['CUSTOMERS', 'NAME'],
+            'native': {'field_type': 37, 'character_length': 80, 'ordinal_position': 2},
+        },
+        {
+            'resource_id': 'table:ORDERS',
+            'resource_kind': 'table',
+            'display_name': 'ORDERS',
+            'display_path': ['ORDERS'],
+            'native': {
+                'columns': [
+                    {'name': 'ORDER_ID', 'field_type': 8, 'primary_key': True},
+                    {'name': 'CUSTOMER_ID', 'field_type': 8, 'referenced_table': 'CUSTOMERS', 'referenced_column': 'ID'},
+                ]
+            },
+        },
+        {
+            'resource_id': 'procedure:GET_EMP_PROJ',
+            'resource_kind': 'procedure',
+            'display_name': 'GET_EMP_PROJ',
+            'display_path': ['GET_EMP_PROJ'],
+            'native': {
+                'procedure_type': 1,  # Selectable Firebird procedure (SUSPEND)
+                'parameters': [
+                    {'name': 'EMP_NO', 'mode': 'input', 'position': 0, 'field_type': 7},
+                    {'name': 'PROJ_ID', 'mode': 'output', 'position': 0, 'field_type': 14, 'character_length': 5},
+                    {'name': 'PROJ_NAME', 'mode': 'output', 'position': 1, 'field_type': 37, 'character_length': 40},
+                ],
+            },
+        },
+        {
+            'resource_id': 'procedure:ALL_LANGS',
+            'resource_kind': 'procedure',
+            'display_name': 'ALL_LANGS',
+            'display_path': ['ALL_LANGS'],
+            'native': {
+                'procedure_type': 1,
+                'parameters': [
+                    {'name': 'CODE', 'mode': 'output', 'position': 0, 'field_type': 37, 'character_length': 5},
+                ],
+            },
+        },
+        {
+            'resource_id': 'procedure:LOG_AUDIT_EVENT',
+            'resource_kind': 'procedure',
+            'display_name': 'LOG_AUDIT_EVENT',
+            'display_path': ['LOG_AUDIT_EVENT'],
+            'native': {
+                'procedure_type': 2,  # Executable-only Firebird procedure
+                'parameters': [
+                    {'name': 'MSG', 'mode': 'input', 'position': 0, 'field_type': 37, 'character_length': 200},
+                ],
+            },
+        },
+    ]
+
+    # 1. Resolve CUSTOMERS from child column resources, then drop ORDERS -> auto-detects FK join!
+    cust = resolve_visual_catalog_object(
+        svc, srv, 'demo.fdb', {'resource_id': 'table:CUSTOMERS', 'resource_kind': 'table', 'display_name': 'CUSTOMERS'},
+        catalog_resources=catalog, existing_tables=[], engine_id='firebird',
+    )
+    assert [c['name'] for c in cust['object_node']['columns']] == ['ID', 'NAME']
+
+    ords = resolve_visual_catalog_object(
+        svc, srv, 'demo.fdb', {'resource_id': 'table:ORDERS', 'resource_kind': 'table', 'display_name': 'ORDERS'},
+        catalog_resources=catalog, existing_tables=[cust['object_node']], engine_id='firebird',
+    )
+    assert len(ords['suggested_joins']) == 1
+    assert ords['suggested_joins'][0]['left_column'] == 'ID'
+    assert ords['suggested_joins'][0]['right_column'] == 'CUSTOMER_ID'
+
+    # 2. Resolve selectable Firebird procedure with input & RETURNS output parameters
+    proc_sel = resolve_visual_catalog_object(
+        svc, srv, 'demo.fdb',
+        {'resource_id': 'procedure:GET_EMP_PROJ', 'resource_kind': 'procedure', 'display_name': 'GET_EMP_PROJ'},
+        catalog_resources=catalog, existing_tables=[], engine_id='firebird',
+    )
+    pnode = proc_sel['object_node']
+    assert pnode['selectable'] is True
+    assert [p['name'] for p in pnode['input_parameters']] == ['EMP_NO']
+    assert [c['name'] for c in pnode['columns']] == ['PROJ_ID', 'PROJ_NAME']
+
+    # Build scene & SQL for parameterized selectable procedure + 0-arg selectable procedure on Firebird
+    proc_zero = resolve_visual_catalog_object(
+        svc, srv, 'demo.fdb',
+        {'resource_id': 'procedure:ALL_LANGS', 'resource_kind': 'procedure', 'display_name': 'ALL_LANGS'},
+        catalog_resources=catalog, existing_tables=[pnode], engine_id='firebird',
+    )['object_node']
+
+    scene_proc, sql_proc, _ = build_visual_query_ddn_scene(
+        {'tables': [pnode, proc_zero], 'joins': [], 'projections': []},
+        {},
+        'firebird',
+    )
+    assert scene_proc['loaded_tiles']['0:0']['nodes'][0]['role'] == 'PROC'
+    assert 'GET_EMP_PROJ(:EMP_NO)' in scene_proc['loaded_tiles']['0:0']['nodes'][0]['name']
+    assert 'FROM "GET_EMP_PROJ"(:EMP_NO) AS "p1"' in sql_proc
+    # Firebird 0-arg selectable procedure MUST NOT emit empty `()`
+    assert 'CROSS JOIN "ALL_LANGS" AS "p2"' in sql_proc
+
+    # Parse back SQL containing selectable procedure call
+    parsed_proc, fid_proc = parse_sql_to_visual_model(sql_proc)
+    assert fid_proc == 'exact'
+    assert parsed_proc['tables'][0]['name'] == 'GET_EMP_PROJ'
+    assert parsed_proc['tables'][0]['resource_kind'] == 'procedure'
+    assert parsed_proc['tables'][0]['input_parameters'][0]['expr'] == ':EMP_NO'
+
+    # 3. Executable-only Firebird procedure (`procedure_type == 2`) is cleanly rejected!
+    with pytest.raises(ValueError, match='executable-only'):
+        resolve_visual_catalog_object(
+            svc, srv, 'demo.fdb',
+            {'resource_id': 'procedure:LOG_AUDIT_EVENT', 'resource_kind': 'procedure', 'display_name': 'LOG_AUDIT_EVENT'},
+            catalog_resources=catalog, existing_tables=[], engine_id='firebird',
+        )
 
 
 def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
@@ -557,6 +706,9 @@ def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
         'sql_source': 'SELECT 1 FROM RDB$DATABASE; SELECT 2 FROM RDB$DATABASE;',
     })
     assert st_multi['result_count'] == 2
+    assert st_multi['active_result']['columns'][0]['key'] is True
+    assert st_multi['active_result']['columns'][1]['key'] is False
+    assert st_multi['active_result']['columns'][1]['max_length'] == 64
     st_sel = host.dispatch(ws, srv, {
         'sub_action': 'select_result',
         'surface_id': 'ss-1',

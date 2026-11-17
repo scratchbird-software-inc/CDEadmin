@@ -70,6 +70,16 @@ export const NOTEBOOKBAR_CSS = `
   border-radius: ${S.radius} ${S.radius} 0 0; }
 .snb-tab-title { max-width: 220px; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
+.snb-tab-rename-input { font: inherit; font-weight: 600; color: ${C.text};
+  background: ${C.background}; border: 1px solid ${C.accent};
+  border-radius: calc(${S.radius} * 0.75); padding: 1px 6px;
+  min-width: 96px; max-width: 220px; height: calc(${S.tab} - 8px);
+  outline: none; }
+.snb-tab-rename-btn { border: 0; background: transparent; padding: 0 2px;
+  min-width: 18px; min-height: 18px; display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer; border-radius: ${S.radius};
+  color: ${C.muted}; opacity: 0.72; font-size: 0.75em; }
+.snb-tab-rename-btn:hover { background: ${C.hover}; color: ${C.text}; opacity: 1; }
 .snb-tab-close { border: 0; background: transparent; padding: 0 2px;
   min-width: 18px; min-height: 18px; display: inline-flex; align-items: center;
   justify-content: center; cursor: pointer; border-radius: ${S.radius};

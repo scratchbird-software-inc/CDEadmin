@@ -124,6 +124,16 @@ function coerceBoundParamValue(raw, paramType, isNull) {
   return s;
 }
 
+function LiveDrawerView({subscribe, renderRef}) {
+  const [, bump] = useState(0);
+  useEffect(() => subscribe(() => bump((n) => n + 1)), [subscribe]);
+  return renderRef.current ? renderRef.current() : null;
+}
+LiveDrawerView.propTypes = {
+  subscribe: PropTypes.func.isRequired,
+  renderRef: PropTypes.object.isRequired,
+};
+
 /**
  * Surface 2 — SQL Editor & Visual Query Builder (`sql: <DATABASE>`)
  *
@@ -197,19 +207,27 @@ export default function SqlEditorSurface({
   const [editingRowIndex, setEditingRowIndex] = useState(null);
   const [isInsertDraft, setIsInsertDraft] = useState(false);
   const [rowDraft, setRowDraft] = useState(null);
+  const [bookmarksByResult, setBookmarksByResult] = useState({});
+  const pendingCellFocusRef = useRef(null);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(960);
   const workAreaRef = useRef(null);
 
   // Visual Query Builder State (100% Area 3e RobinTiledCanvas + 3b Inspector)
   const [visualModel, setVisualModel] = useState(defaultVisualModel);
+  const visualModelRef = useRef(visualModel);
+  visualModelRef.current = visualModel;
   const [visualScene, setVisualScene] = useState(null);
+  const [visualCatalogObjects, setVisualCatalogObjects] = useState(EMPTY_ARRAY);
   const [visualFidelity, setVisualFidelity] = useState('exact');
   const [visualLossNotes, setVisualLossNotes] = useState(EMPTY_ARRAY);
   const [fanoutWarnings, setFanoutWarnings] = useState(EMPTY_ARRAY);
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState('');
   const [vbInspectorTab, setVbInspectorTab] = useState('tables');
   const [vbTableSearch, setVbTableSearch] = useState('');
+  const [vbKindFilter, setVbKindFilter] = useState('all'); // 'all' | 'table' | 'view' | 'procedure'
+  const [canvasDropActive, setCanvasDropActive] = useState(false);
+  const [canvasNotice, setCanvasNotice] = useState('');
 
   // Modal Parameter Binding Dialog State
   const [paramModalOpen, setParamModalOpen] = useState(false);
@@ -374,6 +392,13 @@ export default function SqlEditorSurface({
     if (typeof resp.autocommit === 'boolean') setAutocommit(resp.autocommit);
     if (Array.isArray(resp.quick_queries)) setQuickQueries(resp.quick_queries);
     if (Array.isArray(resp.snippets?.snippets)) setSnippetsPayload(resp.snippets);
+    if (resp.visual_builder?.ddn_scene) setVisualScene(resp.visual_builder.ddn_scene);
+    if (resp.visual_builder?.model) setVisualModel(resp.visual_builder.model);
+    if (Array.isArray(resp.visual_builder?.catalog_objects)) {
+      setVisualCatalogObjects(resp.visual_builder.catalog_objects);
+    } else if (Array.isArray(resp.catalog_objects)) {
+      setVisualCatalogObjects(resp.catalog_objects);
+    }
     const activeCols = resp.active_result?.columns || EMPTY_ARRAY;
     if (activeCols.length > 0) {
       setActiveColName((cur) =>
@@ -432,6 +457,19 @@ export default function SqlEditorSurface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [databaseTargetId, targetResource?.resource_id, initialScriptKind, initialQuickQueryId]);
 
+  // Auto-heal initial opaque UUID tab title (`sql: 146d6c07-...`) to human-readable database name
+  useEffect(() => {
+    if (!endpointLabel || !instId) return;
+    const curShell = shellRef.current;
+    const curInst = curShell?.instances?.find((i) => i.instanceId === instId);
+    if (curInst && !curInst.customTitle && /^sql:\s*[0-9a-f]{8}-[0-9a-f]{4}-/i.test(curInst.title || '')) {
+      const cleanName = endpointLabel.split('/').pop()?.trim() || endpointLabel.trim();
+      if (cleanName) {
+        curShell.updateInstance?.(instId, {title: `sql: ${cleanName}`});
+      }
+    }
+  }, [endpointLabel, instId]);
+
   useEffect(() => {
     refreshSnippets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -477,11 +515,12 @@ export default function SqlEditorSurface({
       formColumns,
       layout.formFieldPrefs,
       viewportWidth - GUTTER_WIDTH - 36,
-      prevFormColsRef.current
+      prevFormColsRef.current,
+      rows
     );
     prevFormColsRef.current = computed.numCols;
     return computed;
-  }, [formColumns, layout.formFieldPrefs, viewportWidth]);
+  }, [formColumns, layout.formFieldPrefs, viewportWidth, rows]);
 
   const currentRow = rows[activeRowIndex] || null;
   const isEditableResult = Boolean(activeResult?.editable);
@@ -535,14 +574,20 @@ export default function SqlEditorSurface({
 
   useModalCloseGuard(stableConfirmCloseGuard);
 
-  // Visual Builder Sync Helpers
+  // Visual Builder Sync & Interactive Canvas Helpers
   const syncSqlIntoVisualBuilder = useCallback(
     async (sourceOverride) => {
-      const src = sourceOverride ?? sqlTextRef.current;
+      const liveText = editorRef.current?.getValue?.() ?? sqlTextRef.current;
+      const src = sourceOverride ?? liveText;
       try {
         const res = await callHost('visual_builder_from_sql', {sql_text: src});
         if (res?.model) setVisualModel(res.model);
         if (res?.scene) setVisualScene(res.scene);
+        if (Array.isArray(res?.catalog_objects)) {
+          setVisualCatalogObjects(res.catalog_objects);
+        } else if (Array.isArray(res?.visual_builder?.catalog_objects)) {
+          setVisualCatalogObjects(res.visual_builder.catalog_objects);
+        }
         setVisualFidelity(res?.fidelity || 'exact');
         setVisualLossNotes(res?.loss_notes || EMPTY_ARRAY);
         setFanoutWarnings(res?.fanout_warnings || EMPTY_ARRAY);
@@ -555,16 +600,22 @@ export default function SqlEditorSurface({
 
   const pushVisualModelUpdate = useCallback(
     async (nextModel, syncSqlNow = true) => {
+      visualModelRef.current = nextModel;
       setVisualModel(nextModel);
       try {
         const res = await callHost('visual_builder_scene', {model: nextModel});
         if (res?.scene) setVisualScene(res.scene);
+        if (Array.isArray(res?.catalog_objects)) {
+          setVisualCatalogObjects(res.catalog_objects);
+        }
         setFanoutWarnings(res?.fanout_warnings || EMPTY_ARRAY);
-        if (syncSqlNow && typeof res?.sql_text === 'string' && res.sql_text.trim()) {
-          setSqlText(res.sql_text);
-          editorRef.current?.setValue?.(res.sql_text);
-          setVisualFidelity('exact');
-          setVisualLossNotes(EMPTY_ARRAY);
+        if (syncSqlNow && typeof res?.sql_text === 'string') {
+          if (res.sql_text.trim() || (nextModel.tables || []).length === 0) {
+            setSqlText(res.sql_text);
+            editorRef.current?.setValue?.(res.sql_text);
+            setVisualFidelity('exact');
+            setVisualLossNotes(EMPTY_ARRAY);
+          }
         }
       } catch (err) {
         setSurfaceError(err?.message || String(err));
@@ -573,11 +624,274 @@ export default function SqlEditorSurface({
     [callHost]
   );
 
+  const addCatalogObjectToCanvas = useCallback(
+    async (rawResource, dropCoords = null) => {
+      if (!rawResource) return;
+      const curModel = visualModelRef.current;
+      const rkind = String(rawResource.resource_kind || 'table').toLowerCase();
+      const rname = String(rawResource.display_name || rawResource.name || '').trim();
+      if (!rname) return;
+
+      if (rkind === 'column') {
+        setCanvasNotice(
+          gettext('Drag a Table, View, or Selectable Stored Procedure onto the canvas to add it.')
+        );
+        return;
+      }
+
+      setCanvasNotice('');
+      let resolvedNode = null;
+      let suggestedJoins = [];
+
+      try {
+        const res = await callHost('resolve_visual_object', {
+          target_resource: {
+            resource_id: rawResource.resource_id || '',
+            resource_kind: rkind,
+            display_name: rname,
+            schema_name: rawResource.schema_name || '',
+            columns: rawResource.columns,
+            input_parameters: rawResource.input_parameters,
+            extensions: rawResource.extensions,
+          },
+          existing_tables: curModel.tables || [],
+        });
+        if (Array.isArray(res?.catalog_objects)) {
+          setVisualCatalogObjects(res.catalog_objects);
+        }
+        if (res?.object_node) {
+          resolvedNode = res.object_node;
+          suggestedJoins = Array.isArray(res.suggested_joins) ? res.suggested_joins : [];
+        }
+      } catch (err) {
+        const msg = err?.message || String(err);
+        setCanvasNotice(msg);
+        return;
+      }
+
+      // Fallback when running against a lightweight test mock that returns `{}` for unknown actions
+      if (!resolvedNode) {
+        const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(rkind);
+        const pfx = isProc ? 'p' : 't';
+        let n = (curModel.tables || []).length + 1;
+        const usedAliases = new Set(
+          (curModel.tables || []).map((t) => String(t.alias || '').toLowerCase())
+        );
+        while (usedAliases.has(`${pfx}${n}`)) n += 1;
+        const alias = `${pfx}${n}`;
+        const rawCols =
+          rawResource.columns ||
+          rawResource.extensions?.cdeadmin?.catalog_metadata?.columns ||
+          [];
+        const cols = rawCols.map((c) =>
+          typeof c === 'string'
+            ? {name: c, type: 'TEXT', key: false}
+            : {
+              name: c.name || c.column_name,
+              type: c.native_type || c.data_type || c.type || 'VARCHAR',
+              key: Boolean(c.primary_key || c.key),
+              fk: Boolean(c.fk || c.foreign_key),
+              nullable: c.nullable !== false,
+            }
+        );
+        resolvedNode = {
+          id: `${isProc ? 'proc' : 'tbl'}_${alias}_${rname}`,
+          resource_id: rawResource.resource_id || '',
+          resource_kind: rkind,
+          name: rname,
+          alias,
+          input_parameters: Array.isArray(rawResource.input_parameters)
+            ? rawResource.input_parameters
+            : [],
+          columns: cols,
+        };
+      }
+
+      const idx = (curModel.tables || []).length;
+      const posX =
+        dropCoords && Number.isFinite(dropCoords.x)
+          ? Math.round(dropCoords.x)
+          : 90 + (idx % 3) * 320;
+      const posY =
+        dropCoords && Number.isFinite(dropCoords.y)
+          ? Math.round(dropCoords.y)
+          : 72 + Math.floor(idx / 3) * 280;
+
+      const positionedNode = {
+        ...resolvedNode,
+        x: posX,
+        y: posY,
+      };
+
+      const existingJoinSigs = new Set(
+        (curModel.joins || []).map(
+          (j) => `${j.left_table}.${j.left_column}->${j.right_table}.${j.right_column}`
+        )
+      );
+      const dedupedNewJoins = suggestedJoins.filter((sj) => {
+        const sig = `${sj.left_table}.${sj.left_column}->${sj.right_table}.${sj.right_column}`;
+        if (existingJoinSigs.has(sig)) return false;
+        existingJoinSigs.add(sig);
+        return true;
+      });
+
+      const nextModel = {
+        ...curModel,
+        tables: [...(curModel.tables || []), positionedNode],
+        joins: [...(curModel.joins || []), ...dedupedNewJoins],
+      };
+      setSelectedCanvasNodeId(positionedNode.id);
+      await pushVisualModelUpdate(nextModel, true);
+    },
+    [callHost, pushVisualModelUpdate]
+  );
+
+  const handleToggleCanvasField = useCallback(
+    (nodeId, colName, nextSelected) => {
+      const curModel = visualModelRef.current;
+      const tables = curModel.tables || [];
+      const targetTbl = tables.find((t) => t.id === nodeId);
+      if (!targetTbl) return;
+      const tRef = targetTbl.alias || targetTbl.name || targetTbl.id;
+
+      let nextProjections = Array.isArray(curModel.projections)
+        ? [...curModel.projections]
+        : [];
+
+      // When starting from implicit `SELECT *` (`projections === []`) and unchecking one column,
+      // materialize all other canvas columns explicitly first.
+      if (nextProjections.length === 0 && !nextSelected) {
+        const expanded = [];
+        for (const tbl of tables) {
+          const refPrefix = tbl.alias || tbl.name || tbl.id;
+          for (const col of tbl.columns || []) {
+            const cname = col.name || col;
+            if (tbl.id === nodeId && cname === colName) continue;
+            expanded.push({
+              table: refPrefix,
+              column: cname,
+              expr: `${refPrefix}.${cname}`,
+              alias: '',
+              aggregate: '',
+            });
+          }
+        }
+        nextProjections = expanded;
+      } else if (nextSelected) {
+        const exists = nextProjections.some(
+          (p) =>
+            (p.table === nodeId || p.table === targetTbl.alias || p.table === targetTbl.name) &&
+            p.column === colName
+        );
+        if (!exists) {
+          nextProjections.push({
+            table: tRef,
+            column: colName,
+            expr: `${tRef}.${colName}`,
+            alias: '',
+            aggregate: '',
+          });
+        }
+      } else {
+        nextProjections = nextProjections.filter((p) => {
+          if (
+            (p.table === nodeId || p.table === targetTbl.alias || p.table === targetTbl.name) &&
+            p.column === colName
+          ) {
+            return false;
+          }
+          const cleanExpr = String(p.expr || p.expression || '')
+            .replaceAll('"', '')
+            .replaceAll('`', '')
+            .trim();
+          return cleanExpr !== `${tRef}.${colName}` && cleanExpr !== `${targetTbl.name}.${colName}`;
+        });
+      }
+
+      pushVisualModelUpdate({...curModel, projections: nextProjections}, true);
+    },
+    [pushVisualModelUpdate]
+  );
+
+  const handleCreateCanvasJoin = useCallback(
+    (sourceNodeId, sourceField, targetNodeId, targetField) => {
+      if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) return;
+      const curModel = visualModelRef.current;
+      const srcTbl = (curModel.tables || []).find((t) => t.id === sourceNodeId);
+      const dstTbl = (curModel.tables || []).find((t) => t.id === targetNodeId);
+      if (!srcTbl || !dstTbl) return;
+
+      const exists = (curModel.joins || []).some(
+        (j) =>
+          (j.left_table === srcTbl.id || j.left_table === srcTbl.alias) &&
+          j.left_column === sourceField &&
+          (j.right_table === dstTbl.id || j.right_table === dstTbl.alias) &&
+          j.right_column === targetField
+      );
+      if (exists) return;
+
+      const newJoin = {
+        id: `join_${Date.now()}`,
+        join_type: 'INNER',
+        left_table: srcTbl.id,
+        left_column: sourceField,
+        right_table: dstTbl.id,
+        right_column: targetField,
+        cardinality: '1:N',
+      };
+      pushVisualModelUpdate(
+        {...curModel, joins: [...(curModel.joins || []), newJoin]},
+        true
+      );
+    },
+    [pushVisualModelUpdate]
+  );
+
+  const handleRemoveCanvasNode = useCallback(
+    (nodeId) => {
+      const curModel = visualModelRef.current;
+      const targetTbl = (curModel.tables || []).find((t) => t.id === nodeId);
+      if (!targetTbl) return;
+      const matchKeys = new Set(
+        [targetTbl.id, targetTbl.alias, targetTbl.name].filter(Boolean)
+      );
+      const nextTables = (curModel.tables || []).filter((t) => t.id !== nodeId);
+      const nextJoins = (curModel.joins || []).filter(
+        (j) => !matchKeys.has(j.left_table) && !matchKeys.has(j.right_table)
+      );
+      const nextProjections = (curModel.projections || []).filter((p) => {
+        if (matchKeys.has(p.table)) return false;
+        const expr = String(p.expr || p.expression || '');
+        if (targetTbl.alias && expr.startsWith(`${targetTbl.alias}.`)) return false;
+        return true;
+      });
+      if (selectedCanvasNodeId === nodeId) {
+        setSelectedCanvasNodeId('');
+      }
+      pushVisualModelUpdate(
+        {
+          ...curModel,
+          tables: nextTables,
+          joins: nextJoins,
+          projections: nextProjections,
+        },
+        true
+      );
+    },
+    [pushVisualModelUpdate, selectedCanvasNodeId]
+  );
+
   const switchSurfaceView = useCallback(
     async (nextView) => {
       setSurfaceView(nextView);
       if (nextView === SQL_SURFACE_VIEWS.VISUAL_BUILDER) {
-        await syncSqlIntoVisualBuilder(sqlTextRef.current);
+        // Ensure Data Navigator (`Area 3a` Left Drawer) is open so the user can immediately
+        // drag Tables, Views, and Selectable Stored Procedures onto the Visual Builder canvas!
+        const curShell = shellRef.current;
+        if (curShell && curShell.shellLeftDrawerOpen === false) {
+          curShell.toggleLeftDrawer?.();
+        }
+        await syncSqlIntoVisualBuilder();
         openRightDrawerWith({panel: 'visual_inspector'});
       }
     },
@@ -886,6 +1200,223 @@ export default function SqlEditorSurface({
     }
   }, [applyHostState, callHost]);
 
+  const activeResultIdxKey = String(hostData?.active_result_index ?? 0);
+  const activeBookmarks = useMemo(
+    () => bookmarksByResult[activeResultIdxKey] || new Set(),
+    [bookmarksByResult, activeResultIdxKey]
+  );
+
+  const navigateResultPage = useCallback(
+    async (nextOffset, selectLocalIdx = 0, focusTarget = null) => {
+      if (isEditingRow) {
+        const ok = await acceptCurrentRow();
+        if (!ok) return;
+      }
+      const wSize = hostData?.window_size || limitsDraft.pageSize || 200;
+      const clampedOffset = Math.max(0, nextOffset);
+      setExecuting(true);
+      try {
+        const resp = await callHost('read_window', {
+          window_offset: clampedOffset,
+          window_size: wSize,
+        });
+        applyHostState(resp);
+        const pageLen = (resp?.active_result?.rows || resp?.rows || []).length;
+        const resolvedIdx =
+          selectLocalIdx === 'last'
+            ? Math.max(0, pageLen - 1)
+            : Math.max(0, Math.min(pageLen > 0 ? pageLen - 1 : 0, selectLocalIdx));
+        setActiveRowIndex(resolvedIdx);
+        if (focusTarget) {
+          pendingCellFocusRef.current = {
+            ...focusTarget,
+            rowIndex: resolvedIdx,
+          };
+        }
+      } catch (err) {
+        setSurfaceError(err?.message || String(err));
+      } finally {
+        setExecuting(false);
+      }
+    },
+    [acceptCurrentRow, applyHostState, callHost, hostData?.window_size, isEditingRow, limitsDraft.pageSize]
+  );
+
+  const selectSqlRowAtIndex = useCallback(
+    async (nextIdx, nextColName) => {
+      if (rows.length === 0) return;
+      const clamped = Math.max(0, Math.min(rows.length - 1, nextIdx));
+      if (isEditingRow && editingRowIndex !== null && clamped !== editingRowIndex) {
+        const ok = await acceptCurrentRow();
+        if (!ok) return;
+      }
+      setActiveRowIndex(clamped);
+      if (nextColName) {
+        setActiveColName(nextColName);
+      }
+    },
+    [acceptCurrentRow, editingRowIndex, isEditingRow, rows.length]
+  );
+
+  const toggleSqlBookmark = useCallback(
+    (localIdx = activeRowIndex) => {
+      if (rows.length === 0) return;
+      const clamped = Math.max(0, Math.min(rows.length - 1, localIdx));
+      const globalIdx = (hostData?.window_offset || 0) + clamped;
+      setBookmarksByResult((prev) => {
+        const nextSet = new Set(prev[activeResultIdxKey] || []);
+        if (nextSet.has(globalIdx)) nextSet.delete(globalIdx);
+        else nextSet.add(globalIdx);
+        return {...prev, [activeResultIdxKey]: nextSet};
+      });
+    },
+    [activeResultIdxKey, activeRowIndex, hostData?.window_offset, rows.length]
+  );
+
+  const jumpSqlBookmark = useCallback(
+    async (direction = 1) => {
+      if (activeBookmarks.size === 0) return;
+      const sorted = Array.from(activeBookmarks).sort((a, b) => a - b);
+      const winOff = hostData?.window_offset || 0;
+      const winSz = hostData?.window_size || limitsDraft.pageSize || 200;
+      const curGlobal = winOff + activeRowIndex;
+      let targetGlobal;
+      if (direction > 0) {
+        targetGlobal = sorted.find((g) => g > curGlobal) ?? sorted[0];
+      } else {
+        const earlier = sorted.filter((g) => g < curGlobal);
+        targetGlobal = earlier.length > 0 ? earlier[earlier.length - 1] : sorted[sorted.length - 1];
+      }
+      if (targetGlobal >= winOff && targetGlobal < winOff + rows.length) {
+        const localIdx = targetGlobal - winOff;
+        pendingCellFocusRef.current = {
+          kind: layout.displayMode === DISPLAY_MODES.GRID ? 'grid' : 'form',
+          rowIndex: localIdx,
+          colName: activeColName || columns[0]?.name || '',
+        };
+        await selectSqlRowAtIndex(localIdx, activeColName);
+      } else {
+        const pageStart = Math.floor(targetGlobal / winSz) * winSz;
+        const localIdx = targetGlobal - pageStart;
+        await navigateResultPage(pageStart, localIdx, {
+          kind: layout.displayMode === DISPLAY_MODES.GRID ? 'grid' : 'form',
+          colName: activeColName || columns[0]?.name || '',
+        });
+      }
+    },
+    [
+      activeBookmarks,
+      activeColName,
+      activeRowIndex,
+      columns,
+      hostData?.window_offset,
+      hostData?.window_size,
+      layout.displayMode,
+      limitsDraft.pageSize,
+      navigateResultPage,
+      rows.length,
+      selectSqlRowAtIndex,
+    ]
+  );
+
+  const handleSqlKeyboardCellNavigate = useCallback(
+    async (targetRowIdx, targetColName, action = 'focus', kind = 'grid') => {
+      const winOff = hostData?.window_offset || 0;
+      const winSz = hostData?.window_size || limitsDraft.pageSize || 200;
+      const totalRows = hostData?.total_view_rows ?? rows.length;
+      const colToKeep = targetColName || activeColName || columns[0]?.name || '';
+
+      if (action === 'first_record') {
+        if (winOff > 0) {
+          await navigateResultPage(0, 0, {kind, colName: colToKeep});
+        } else {
+          pendingCellFocusRef.current = {kind, rowIndex: 0, colName: colToKeep};
+          await selectSqlRowAtIndex(0, colToKeep);
+        }
+        return;
+      }
+      if (action === 'last_record') {
+        const lastPageOff = Math.max(0, Math.floor(Math.max(0, totalRows - 1) / winSz) * winSz);
+        if (winOff !== lastPageOff && totalRows > rows.length) {
+          await navigateResultPage(lastPageOff, 'last', {kind, colName: colToKeep});
+        } else {
+          const lastIdx = Math.max(0, rows.length - 1);
+          pendingCellFocusRef.current = {kind, rowIndex: lastIdx, colName: colToKeep};
+          await selectSqlRowAtIndex(lastIdx, colToKeep);
+        }
+        return;
+      }
+      if (action === 'page_up') {
+        if (winOff > 0) {
+          await navigateResultPage(Math.max(0, winOff - winSz), 0, {kind, colName: colToKeep});
+        } else {
+          pendingCellFocusRef.current = {kind, rowIndex: 0, colName: colToKeep};
+          await selectSqlRowAtIndex(0, colToKeep);
+        }
+        return;
+      }
+      if (action === 'page_down') {
+        if (winOff + winSz < totalRows) {
+          await navigateResultPage(winOff + winSz, 0, {kind, colName: colToKeep});
+        } else {
+          const lastIdx = Math.max(0, rows.length - 1);
+          pendingCellFocusRef.current = {kind, rowIndex: lastIdx, colName: colToKeep};
+          await selectSqlRowAtIndex(lastIdx, colToKeep);
+        }
+        return;
+      }
+      if (action === 'prev_row_boundary') {
+        if (activeRowIndex > 0) {
+          const prevIdx = activeRowIndex - 1;
+          pendingCellFocusRef.current = {kind, rowIndex: prevIdx, colName: colToKeep};
+          await selectSqlRowAtIndex(prevIdx, colToKeep);
+        } else if (winOff > 0) {
+          await navigateResultPage(Math.max(0, winOff - winSz), 'last', {kind, colName: colToKeep});
+        }
+        return;
+      }
+      if (action === 'next_row_boundary') {
+        if (activeRowIndex < rows.length - 1) {
+          const nextIdx = activeRowIndex + 1;
+          pendingCellFocusRef.current = {kind, rowIndex: nextIdx, colName: colToKeep};
+          await selectSqlRowAtIndex(nextIdx, colToKeep);
+        } else if (winOff + winSz < totalRows) {
+          await navigateResultPage(winOff + winSz, 0, {kind, colName: colToKeep});
+        }
+        return;
+      }
+
+      pendingCellFocusRef.current = {kind, rowIndex: targetRowIdx, colName: colToKeep};
+      await selectSqlRowAtIndex(targetRowIdx, colToKeep);
+    },
+    [
+      activeColName,
+      activeRowIndex,
+      columns,
+      hostData?.total_view_rows,
+      hostData?.window_offset,
+      hostData?.window_size,
+      limitsDraft.pageSize,
+      navigateResultPage,
+      rows.length,
+      selectSqlRowAtIndex,
+    ]
+  );
+
+  // Restore DOM keyboard focus onto target grid/form cell after React updates `activeRowIndex` / `activeColName`
+  useEffect(() => {
+    const req = pendingCellFocusRef.current;
+    if (!req || !workAreaRef.current) return;
+    pendingCellFocusRef.current = null;
+    const attr = req.kind === 'form' ? 'data-form-nav-cell' : 'data-grid-nav-cell';
+    const escCol = String(req.colName || '').replaceAll('"', '\\"');
+    const el = workAreaRef.current.querySelector(`[${attr}="${req.rowIndex}:${escCol}"]`);
+    if (el && typeof el.focus === 'function') {
+      el.focus({preventScroll: false});
+      el.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
+    }
+  }, [activeRowIndex, activeColName, rows, isEditingRow]);
+
   const handleToggleSort = useCallback(
     async (colName, additive = false) => {
       const curSort = activeResult?.sort || EMPTY_ARRAY;
@@ -1048,8 +1579,16 @@ export default function SqlEditorSurface({
       },
     });
     if (res?.saved_quick_query) {
+      const savedName = res.saved_quick_query.name || '';
       setActiveQuickQueryId(res.saved_quick_query.query_id);
-      setActiveQuickQueryName(res.saved_quick_query.name);
+      setActiveQuickQueryName(savedName);
+      if (savedName) {
+        const curShell = shellRef.current;
+        const curInst = curShell?.instances?.find((i) => i.instanceId === instId);
+        if (curShell && (!curInst || !curInst.customTitle)) {
+          curShell.updateInstance?.(instId, {title: `sql: ${savedName}`});
+        }
+      }
     }
     if (Array.isArray(res?.quick_queries)) {
       setQuickQueries(res.quick_queries);
@@ -1081,6 +1620,13 @@ export default function SqlEditorSurface({
         const qq = res.loaded_quick_query;
         setActiveQuickQueryId(qq.query_id);
         setActiveQuickQueryName(qq.name || '');
+        if (qq.name) {
+          const curShell = shellRef.current;
+          const curInst = curShell?.instances?.find((i) => i.instanceId === instId);
+          if (curShell && (!curInst || !curInst.customTitle)) {
+            curShell.updateInstance?.(instId, {title: `sql: ${qq.name}`});
+          }
+        }
         setSqlText(qq.sql_text || '');
         editorRef.current?.setValue?.(qq.sql_text || '');
         if (qq.terminator) setTerminator(qq.terminator);
@@ -1161,6 +1707,13 @@ export default function SqlEditorSurface({
     isEditingRow,
     rows,
     gridColumns,
+    activeRowIndex,
+    activeColName,
+    navigateResultPage,
+    selectSqlRowAtIndex,
+    toggleSqlBookmark,
+    jumpSqlBookmark,
+    handleSqlKeyboardCellNavigate,
   };
 
   // Render Right Drawer (`Area 3b`) Content
@@ -1168,15 +1721,48 @@ export default function SqlEditorSurface({
     const ds = drawerStateRef.current;
 
     if (ds.panel === 'visual_inspector') {
-      const catalogTables = (resources || []).filter((r) =>
-        ['table', 'view', 'materialized-view', 'foreign-table'].includes(r.resource_kind)
-      );
-      const filteredCatalog = catalogTables.filter((t) =>
-        !vbTableSearch.trim() ||
-        String(t.display_name || t.name || '')
+      const mergedCatalogMap = new Map();
+      for (const item of visualCatalogObjects || []) {
+        const key = item.resource_id || `${item.resource_kind}:${item.display_name || item.name}`;
+        mergedCatalogMap.set(key, item);
+      }
+      for (const r of resources || []) {
+        if (
+          ![
+            'table',
+            'view',
+            'materialized-view',
+            'foreign-table',
+            'partitioned-table',
+            'procedure',
+            'function',
+            'routine',
+          ].includes(r.resource_kind)
+        ) {
+          continue;
+        }
+        const key = r.resource_id || `${r.resource_kind}:${r.display_name || r.name}`;
+        if (!mergedCatalogMap.has(key)) {
+          mergedCatalogMap.set(key, r);
+        }
+      }
+      const catalogItems = Array.from(mergedCatalogMap.values());
+      const filteredCatalog = catalogItems.filter((t) => {
+        const rk = String(t.resource_kind || 'table').toLowerCase();
+        if (vbKindFilter === 'table' && !['table', 'foreign-table', 'partitioned-table'].includes(rk)) {
+          return false;
+        }
+        if (vbKindFilter === 'view' && !rk.includes('view')) {
+          return false;
+        }
+        if (vbKindFilter === 'procedure' && !['procedure', 'function', 'routine', 'table-function'].includes(rk)) {
+          return false;
+        }
+        if (!vbTableSearch.trim()) return true;
+        return String(t.display_name || t.name || '')
           .toLowerCase()
-          .includes(vbTableSearch.trim().toLowerCase())
-      );
+          .includes(vbTableSearch.trim().toLowerCase());
+      });
       const availableCols = visualModel.tables.flatMap((tbl) =>
         (tbl.columns || []).map((c) => ({
           ref: `${tbl.alias || tbl.name}.${c.name}`,
@@ -1244,7 +1830,7 @@ export default function SqlEditorSurface({
 
           <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
             {[
-              ['tables', gettext('Tables')],
+              ['tables', gettext('Sources')],
               ['columns', gettext('Columns')],
               ['joins', gettext('Joins')],
               ['clauses', gettext('Clauses')],
@@ -1263,57 +1849,117 @@ export default function SqlEditorSurface({
           {vbInspectorTab === 'tables' && (
             <div style={{display: 'grid', gap: 8}}>
               <TextField
-                label={gettext('Add Catalog Table / View')}
-                placeholder={gettext('Filter tables…')}
+                label={gettext('Drag or Add Table / View / Procedure')}
+                placeholder={gettext('Filter tables, views, procedures…')}
                 value={vbTableSearch}
                 onChange={(e) => setVbTableSearch(e.target.value)}
               />
-              <div style={{maxHeight: 160, overflow: 'auto', display: 'grid', gap: 4}}>
-                {filteredCatalog.slice(0, 40).map((res) => {
+              <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
+                {[
+                  ['all', gettext('All')],
+                  ['table', gettext('Tables')],
+                  ['view', gettext('Views')],
+                  ['procedure', gettext('Procedures')],
+                ].map(([kid, klbl]) => (
+                  <button
+                    key={kid}
+                    type="button"
+                    data-cdeadmin-qa-key={`vb-kind-filter-${kid}`}
+                    onClick={() => setVbKindFilter(kid)}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      fontSize: '0.71rem',
+                      cursor: 'pointer',
+                      border: '1px solid var(--sr-border-default, #cbd5e1)',
+                      background:
+                        vbKindFilter === kid
+                          ? 'var(--sr-accent-primary, #2563eb)'
+                          : 'transparent',
+                      color: vbKindFilter === kid ? '#ffffff' : 'inherit',
+                    }}
+                  >
+                    {klbl}
+                  </button>
+                ))}
+              </div>
+              <div style={{maxHeight: 190, overflow: 'auto', display: 'grid', gap: 4}}>
+                {filteredCatalog.slice(0, 60).map((res) => {
                   const tname = res.display_name || res.name;
+                  const rk = String(res.resource_kind || 'table').toLowerCase();
+                  const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(rk);
+                  const isView = rk.includes('view');
+                  const badgeText = isProc ? 'PROC' : isView ? 'VIEW' : 'TABLE';
+                  const badgeBg = isProc
+                    ? 'rgba(124, 58, 237, 0.14)'
+                    : isView
+                      ? 'rgba(13, 148, 136, 0.14)'
+                      : 'rgba(37, 99, 235, 0.12)';
                   return (
                     <div
-                      key={res.resource_id || tname}
+                      key={res.resource_id || `${rk}:${tname}`}
+                      draggable
+                      title={gettext('Drag onto Visual Builder canvas or click + Add')}
+                      onDragStart={(e) => {
+                        const dragPayload = {
+                          resource_id: res.resource_id || '',
+                          resource_kind: rk,
+                          display_name: tname,
+                          schema_name: res.schema_name || '',
+                          columns: res.columns,
+                          input_parameters: res.input_parameters,
+                        };
+                        e.dataTransfer.effectAllowed = 'copy';
+                        try {
+                          e.dataTransfer.setData(
+                            'application/x-scratchrobin-catalog-object',
+                            JSON.stringify(dragPayload)
+                          );
+                        } catch {
+                          // Ignore custom MIME restriction
+                        }
+                        e.dataTransfer.setData(
+                          'text',
+                          JSON.stringify({
+                            text: tname,
+                            nodeType: rk,
+                            scratchrobinCatalogObject: dragPayload,
+                          })
+                        );
+                      }}
+                      onDoubleClick={() => addCatalogObjectToCanvas(res)}
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
+                        gap: 6,
                         padding: '4px 8px',
                         borderRadius: 6,
                         border: '1px solid var(--sr-border-subtle)',
                         fontSize: '0.78rem',
+                        cursor: 'grab',
                       }}
                     >
-                      <span>{tname}</span>
+                      <span style={{display: 'flex', alignItems: 'center', gap: 6, minWidth: 0}}>
+                        <span
+                          style={{
+                            padding: '1px 5px',
+                            borderRadius: 4,
+                            fontSize: '0.66rem',
+                            fontWeight: 700,
+                            background: badgeBg,
+                          }}
+                        >
+                          {badgeText}
+                        </span>
+                        <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                          {tname}
+                        </span>
+                      </span>
                       <Button
                         size="small"
                         data-cdeadmin-qa-key={`vb-add-table-${tname}`}
-                        onClick={() => {
-                          const idx = visualModel.tables.length + 1;
-                          const alias = `t${idx}`;
-                          const rawCols =
-                            res.extensions?.cdeadmin?.catalog_metadata?.columns ||
-                            res.columns ||
-                            [];
-                          const cols = rawCols.map((c) => ({
-                            name: c.name || c.column_name,
-                            type: c.native_type || c.data_type || 'VARCHAR',
-                            key: Boolean(c.primary_key || c.key),
-                          }));
-                          const next = {
-                            ...visualModel,
-                            tables: [
-                              ...visualModel.tables,
-                              {
-                                id: `tbl_${alias}_${tname}`,
-                                name: tname,
-                                alias,
-                                columns: cols,
-                              },
-                            ],
-                          };
-                          pushVisualModelUpdate(next, true);
-                        }}
+                        onClick={() => addCatalogObjectToCanvas(res)}
                       >
                         + {gettext('Add')}
                       </Button>
@@ -1322,41 +1968,95 @@ export default function SqlEditorSurface({
                 })}
               </div>
 
-              <strong>{gettext('Canvas Tables (%s)', visualModel.tables.length)}</strong>
-              {visualModel.tables.map((t, idx) => (
-                <div
-                  key={t.id || idx}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '5px 8px',
-                    borderRadius: 6,
-                    background:
-                      selectedCanvasNodeId === t.id
-                        ? 'var(--sr-accent-muted, rgba(37,99,235,0.12))'
-                        : 'transparent',
-                    border: '1px solid var(--sr-border-subtle)',
-                    fontSize: '0.78rem',
-                  }}
-                >
-                  <span>
-                    <strong>{t.name}</strong> ({t.alias})
-                  </span>
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      const next = {
-                        ...visualModel,
-                        tables: visualModel.tables.filter((_, i) => i !== idx),
-                      };
-                      pushVisualModelUpdate(next, true);
+              <strong>{gettext('Canvas Sources (%s)', visualModel.tables.length)}</strong>
+              {visualModel.tables.map((t, idx) => {
+                const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(
+                  String(t.resource_kind || '').toLowerCase()
+                );
+                const inParams = Array.isArray(t.input_parameters) ? t.input_parameters : [];
+                return (
+                  <div
+                    key={t.id || idx}
+                    style={{
+                      display: 'grid',
+                      gap: 6,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      background:
+                        selectedCanvasNodeId === t.id
+                          ? 'var(--sr-accent-muted, rgba(37,99,235,0.12))'
+                          : 'transparent',
+                      border: '1px solid var(--sr-border-subtle)',
+                      fontSize: '0.78rem',
                     }}
                   >
-                    ×
-                  </Button>
-                </div>
-              ))}
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                      <span
+                        style={{cursor: 'pointer'}}
+                        onClick={() => setSelectedCanvasNodeId(t.id)}
+                      >
+                        <strong>{t.name}</strong> ({t.alias})
+                        {isProc && (
+                          <span style={{marginLeft: 6, fontSize: '0.68rem', opacity: 0.8}}>
+                            [PROC]
+                          </span>
+                        )}
+                      </span>
+                      <Button
+                        size="small"
+                        onClick={() => handleRemoveCanvasNode(t.id)}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                    {isProc && inParams.length > 0 && (
+                      <div
+                        data-cdeadmin-qa-key={`vb-proc-params-${t.id}`}
+                        style={{display: 'grid', gap: 4, paddingTop: 2}}
+                      >
+                        <div style={{fontSize: '0.71rem', opacity: 0.8}}>
+                          {gettext('Procedure Input Arguments:')}
+                        </div>
+                        {inParams.map((param, pIdx) => (
+                          <div
+                            key={param.name || pIdx}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '92px 1fr',
+                              gap: 4,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <span style={{fontSize: '0.72rem', fontWeight: 600}}>
+                              {param.name}
+                            </span>
+                            <input
+                              className="sr-input"
+                              aria-label={`Argument ${param.name}`}
+                              value={param.expr ?? `:${param.name}`}
+                              onChange={(ev) => {
+                                const nextVal = ev.target.value;
+                                const nextTables = visualModel.tables.map((tblItem, ti) =>
+                                  ti === idx
+                                    ? {
+                                      ...tblItem,
+                                      input_parameters: inParams.map((pi, k) =>
+                                        k === pIdx ? {...pi, expr: nextVal} : pi
+                                      ),
+                                    }
+                                    : tblItem
+                                );
+                                pushVisualModelUpdate({...visualModel, tables: nextTables}, true);
+                              }}
+                              style={{minHeight: 24, padding: '2px 6px', fontSize: '0.74rem'}}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1996,6 +2696,7 @@ export default function SqlEditorSurface({
     activeColName,
     activeResult?.filters,
     activeResult?.staged_mutations,
+    addCatalogObjectToCanvas,
     applyHostState,
     beginEditRow,
     callHost,
@@ -2004,6 +2705,7 @@ export default function SqlEditorSurface({
     editingRowIndex,
     fanoutWarnings,
     handleApplyFilters,
+    handleRemoveCanvasNode,
     insertSnippetText,
     isEditableResult,
     isEditingRow,
@@ -2022,7 +2724,9 @@ export default function SqlEditorSurface({
     snippetTagMode,
     snippetsPayload,
     vbInspectorTab,
+    vbKindFilter,
     vbTableSearch,
+    visualCatalogObjects,
     visualFidelity,
     visualLossNotes,
     visualModel,
@@ -2030,7 +2734,20 @@ export default function SqlEditorSurface({
 
   const renderRightDrawerRef = useRef(renderRightDrawerContent);
   renderRightDrawerRef.current = renderRightDrawerContent;
-  const stableRenderRightDrawer = useCallback(() => renderRightDrawerRef.current(), []);
+  const drawerListenersRef = useRef(new Set());
+  const subscribeDrawer = useCallback((listener) => {
+    drawerListenersRef.current.add(listener);
+    return () => {
+      drawerListenersRef.current.delete(listener);
+    };
+  }, []);
+  useEffect(() => {
+    drawerListenersRef.current.forEach((fn) => fn());
+  }, [renderRightDrawerContent]);
+  const stableRenderRightDrawer = useCallback(
+    () => <LiveDrawerView subscribe={subscribeDrawer} renderRef={renderRightDrawerRef} />,
+    [subscribeDrawer]
+  );
 
   // Compact Status Bar (`Area 4` / `3d`)
   const statusSummaryText = useMemo(() => {
@@ -2223,6 +2940,134 @@ export default function SqlEditorSurface({
       gettext('Auto-Commit'),
       () => handlersRef.current.setAutocommit(!autocommit),
       {checked: autocommit}
+    );
+
+    // Record & Bookmark Navigation Group (|< << < > >> >| ! !< !>) — Surface 1 parity!
+    const winOff = hostData?.window_offset || 0;
+    const winSz = hostData?.window_size || limitsDraft.pageSize || 200;
+    const totalRows = hostData?.total_view_rows ?? rows.length;
+    const curGlobalRow = winOff + activeRowIndex;
+    const isCurrentBookmarked = rows.length > 0 && activeBookmarks.has(curGlobalRow);
+    const hasBookmarks = activeBookmarks.size > 0;
+    const navKind = layout.displayMode === DISPLAY_MODES.GRID ? 'grid' : 'form';
+
+    const navFirstId = reg(
+      'nav_first',
+      'action.nav_first',
+      gettext('First Record (|<)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          0,
+          handlersRef.current.activeColName,
+          'first_record',
+          navKind
+        ),
+      {status: winOff > 0 || activeRowIndex > 0 ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+    );
+    const navPrevPageId = reg(
+      'nav_prev_page',
+      'action.nav_prev_page',
+      gettext('Previous Page (<<)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          0,
+          handlersRef.current.activeColName,
+          'page_up',
+          navKind
+        ),
+      {status: winOff > 0 || activeRowIndex > 0 ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+    );
+    const navPrevRowId = reg(
+      'nav_prev_row',
+      'action.nav_prev_row',
+      gettext('Previous Row (<)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          Math.max(0, handlersRef.current.activeRowIndex - 1),
+          handlersRef.current.activeColName,
+          'prev_row_boundary',
+          navKind
+        ),
+      {status: winOff > 0 || activeRowIndex > 0 ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+    );
+    const navNextRowId = reg(
+      'nav_next_row',
+      'action.nav_next_row',
+      gettext('Next Row (>)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          handlersRef.current.activeRowIndex + 1,
+          handlersRef.current.activeColName,
+          'next_row_boundary',
+          navKind
+        ),
+      {
+        status:
+          activeRowIndex < rows.length - 1 || winOff + winSz < totalRows
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
+      }
+    );
+    const navNextPageId = reg(
+      'nav_next_page',
+      'action.nav_next_page',
+      gettext('Next Page (>>)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          rows.length - 1,
+          handlersRef.current.activeColName,
+          'page_down',
+          navKind
+        ),
+      {
+        status:
+          winOff + winSz < totalRows || activeRowIndex < rows.length - 1
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
+      }
+    );
+    const navLastId = reg(
+      'nav_last',
+      'action.nav_last',
+      gettext('Last Record (>|)'),
+      () =>
+        handlersRef.current.handleSqlKeyboardCellNavigate(
+          rows.length - 1,
+          handlersRef.current.activeColName,
+          'last_record',
+          navKind
+        ),
+      {
+        status:
+          totalRows > 0 && (winOff + winSz < totalRows || activeRowIndex < rows.length - 1)
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
+      }
+    );
+    const bookmarkToggleId = reg(
+      'bookmark_toggle',
+      'action.bookmark_toggle',
+      gettext('Bookmark Record (!)'),
+      () => handlersRef.current.toggleSqlBookmark(),
+      {
+        status: rows.length > 0 ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+        checked: isCurrentBookmarked,
+        shortcut: 'Ctrl+B',
+      }
+    );
+    const bookmarkPrevId = reg(
+      'bookmark_prev',
+      'action.bookmark_prev',
+      gettext('Previous Bookmark (!<)'),
+      () => handlersRef.current.jumpSqlBookmark(-1),
+      {status: hasBookmarks ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+    );
+    const bookmarkNextId = reg(
+      'bookmark_next',
+      'action.bookmark_next',
+      gettext('Next Bookmark (!>)'),
+      () => handlersRef.current.jumpSqlBookmark(1),
+      {status: hasBookmarks ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
     );
 
     // Live Row Editing Group (Surface 1 parity!)
@@ -2486,6 +3331,21 @@ export default function SqlEditorSurface({
             controls: [commitId, rollbackId, autocommitId],
           },
           {
+            id: 'navigate',
+            label: gettext('Navigate'),
+            controls: [
+              navFirstId,
+              navPrevPageId,
+              navPrevRowId,
+              navNextRowId,
+              navNextPageId,
+              navLastId,
+              bookmarkToggleId,
+              bookmarkPrevId,
+              bookmarkNextId,
+            ],
+          },
+          {
             id: 'live_edit',
             label: gettext('Edit Rows'),
             controls: [editAcceptRowId, insertRowId, duplicateRowId, deleteRowId],
@@ -2584,6 +3444,16 @@ export default function SqlEditorSurface({
           {id: `${pfx}.m.ins_row`, actionId: insertRowId, label: gettext('Insert Row'), index: 30},
           {id: `${pfx}.m.dup_row`, actionId: duplicateRowId, label: gettext('Duplicate Row'), index: 40},
           {id: `${pfx}.m.del_row`, actionId: deleteRowId, label: gettext('Delete Row'), index: 50},
+          {id: `${pfx}.m.sep_e2`, type: 'separator', index: 55},
+          {id: `${pfx}.m.nav_first`, actionId: navFirstId, label: gettext('First Record (|<)'), index: 60},
+          {id: `${pfx}.m.nav_prev_page`, actionId: navPrevPageId, label: gettext('Previous Page (<<)'), index: 62},
+          {id: `${pfx}.m.nav_prev_row`, actionId: navPrevRowId, label: gettext('Previous Row (<)'), index: 64},
+          {id: `${pfx}.m.nav_next_row`, actionId: navNextRowId, label: gettext('Next Row (>)'), index: 66},
+          {id: `${pfx}.m.nav_next_page`, actionId: navNextPageId, label: gettext('Next Page (>>)'), index: 68},
+          {id: `${pfx}.m.nav_last`, actionId: navLastId, label: gettext('Last Record (>|)'), index: 70},
+          {id: `${pfx}.m.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Bookmark Record (!)'), index: 72},
+          {id: `${pfx}.m.bm_prev`, actionId: bookmarkPrevId, label: gettext('Previous Bookmark (!<)'), index: 74},
+          {id: `${pfx}.m.bm_next`, actionId: bookmarkNextId, label: gettext('Next Bookmark (!>)'), index: 76},
         ],
       },
       {
@@ -2619,6 +3489,12 @@ export default function SqlEditorSurface({
         index: PROJECT_TOP_MENU_INDICES.WINDOW, // 70
         label: gettext('Window'),
         items: [
+          {
+            id: `${pfx}.m.rename_tab`,
+            label: gettext('Rename Tab… (F2)'),
+            index: 75,
+            callback: () => shellRef.current?.requestTabRename?.(instId),
+          },
           {id: `${pfx}.m.limits`, actionId: limitsId, label: gettext('Page & Fetch Limits…'), index: 80},
           {id: `${pfx}.m.conn`, actionId: connInfoId, label: gettext('Connection Details…'), index: 90},
         ],
@@ -2647,18 +3523,24 @@ export default function SqlEditorSurface({
       regList.forEach((a) => curShell.actionsRegistry?.unregister?.(a.id));
     };
   }, [
+    activeBookmarks,
+    activeRowIndex,
     autocommit,
     canInsertResult,
     executing,
     hasUncommitted,
     hostData?.active_result_index,
     hostData?.result_count,
+    hostData?.total_view_rows,
+    hostData?.window_offset,
+    hostData?.window_size,
     instId,
     instanceScope?.instanceId,
     isEditableResult,
     isEditingRow,
     layout.booleanFormat,
     layout.displayMode,
+    limitsDraft.pageSize,
     rows.length,
     splitOrientation,
     stableConfirmCloseGuard,
@@ -2898,6 +3780,8 @@ export default function SqlEditorSurface({
           {rows.map((row, rIdx) => {
             const isSelected = rIdx === activeRowIndex;
             const rowEditing = isEditingRow && editingRowIndex === rIdx;
+            const globalRowIdx = (hostData?.window_offset || 0) + rIdx;
+            const isBookmarked = activeBookmarks.has(globalRowIdx);
             const stageBg =
               row.stage_state === 'inserted'
                 ? 'rgba(22, 163, 74, 0.09)'
@@ -2913,11 +3797,7 @@ export default function SqlEditorSurface({
                 key={row.identity_token || `r-${rIdx}`}
                 data-cdeadmin-qa-key={`sql-grid-row-${rIdx}`}
                 onClick={async () => {
-                  if (isEditingRow && editingRowIndex !== null && editingRowIndex !== rIdx) {
-                    const ok = await acceptCurrentRow();
-                    if (!ok) return;
-                  }
-                  setActiveRowIndex(rIdx);
+                  await selectSqlRowAtIndex(rIdx);
                 }}
                 onDoubleClick={() => beginEditRow(rIdx)}
                 style={{
@@ -2926,29 +3806,228 @@ export default function SqlEditorSurface({
                 }}
               >
                 <td
+                  title={gettext('Double-click gutter to bookmark record (!)')}
+                  onDoubleClick={(ev) => {
+                    ev.stopPropagation();
+                    toggleSqlBookmark(rIdx);
+                  }}
                   style={{
                     padding: '4px 8px',
                     borderBottom: '1px solid var(--sr-border-subtle, #e2e8f0)',
                     borderRight: '1px solid var(--sr-border-subtle, #e2e8f0)',
                     textAlign: 'right',
                     fontVariantNumeric: 'tabular-nums',
-                    opacity: 0.75,
+                    whiteSpace: 'nowrap',
+                    opacity: 0.85,
                   }}
                 >
-                  {row.row_number || rIdx + 1}
+                  {isSelected && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        color: 'var(--sr-accent-primary, #2563eb)',
+                        marginRight: 4,
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      ▶
+                    </span>
+                  )}
+                  {isBookmarked && (
+                    <span
+                      data-cdeadmin-qa-key={`sql-bookmark-badge-${rIdx}`}
+                      aria-label={gettext('Bookmarked')}
+                      style={{
+                        display: 'inline-block',
+                        marginRight: 4,
+                        padding: '0 4px',
+                        borderRadius: 4,
+                        background: 'rgba(245, 158, 11, 0.22)',
+                        color: '#b45309',
+                        fontWeight: 800,
+                        fontSize: '0.68rem',
+                      }}
+                    >
+                      !
+                    </span>
+                  )}
+                  {row.row_number || globalRowIdx + 1}
                 </td>
-                {gridColumns.map((col) => {
+                {gridColumns.map((col, colIdx) => {
                   const val = rowEditing ? rowDraft?.[col.name] : row.values?.[col.name];
                   const isNull = val === null || val === undefined;
                   const complex = isComplexOrOversizedCell(val, col);
+                  const isActiveCell =
+                    isSelected && (activeColName ? activeColName === col.name : colIdx === 0);
                   const formatted = formatCellValue(val, col, {
                     booleanFormat: layout.booleanFormat,
                     localeDateFormat: layout.localeDateFormat,
                   });
+                  const handleGridCellKeyDown = (e, fromInput = false) => {
+                    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+                      e.preventDefault();
+                      toggleSqlBookmark(rIdx);
+                      return;
+                    }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      if (!e.shiftKey) {
+                        if (colIdx < gridColumns.length - 1) {
+                          handleSqlKeyboardCellNavigate(
+                            rIdx,
+                            gridColumns[colIdx + 1].name,
+                            'focus',
+                            'grid'
+                          );
+                        } else {
+                          handleSqlKeyboardCellNavigate(
+                            rIdx + 1,
+                            gridColumns[0]?.name || col.name,
+                            'next_row_boundary',
+                            'grid'
+                          );
+                        }
+                      } else if (colIdx > 0) {
+                        handleSqlKeyboardCellNavigate(
+                          rIdx,
+                          gridColumns[colIdx - 1].name,
+                          'focus',
+                          'grid'
+                        );
+                      } else {
+                        handleSqlKeyboardCellNavigate(
+                          Math.max(0, rIdx - 1),
+                          gridColumns[gridColumns.length - 1]?.name || col.name,
+                          'prev_row_boundary',
+                          'grid'
+                        );
+                      }
+                      return;
+                    }
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(rIdx + 1, col.name, 'next_row_boundary', 'grid');
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(
+                        Math.max(0, rIdx - 1),
+                        col.name,
+                        'prev_row_boundary',
+                        'grid'
+                      );
+                      return;
+                    }
+                    if (!fromInput && e.key === 'ArrowRight') {
+                      e.preventDefault();
+                      if (colIdx < gridColumns.length - 1) {
+                        handleSqlKeyboardCellNavigate(
+                          rIdx,
+                          gridColumns[colIdx + 1].name,
+                          'focus',
+                          'grid'
+                        );
+                      } else {
+                        handleSqlKeyboardCellNavigate(
+                          rIdx + 1,
+                          gridColumns[0]?.name || col.name,
+                          'next_row_boundary',
+                          'grid'
+                        );
+                      }
+                      return;
+                    }
+                    if (!fromInput && e.key === 'ArrowLeft') {
+                      e.preventDefault();
+                      if (colIdx > 0) {
+                        handleSqlKeyboardCellNavigate(
+                          rIdx,
+                          gridColumns[colIdx - 1].name,
+                          'focus',
+                          'grid'
+                        );
+                      } else {
+                        handleSqlKeyboardCellNavigate(
+                          Math.max(0, rIdx - 1),
+                          gridColumns[gridColumns.length - 1]?.name || col.name,
+                          'prev_row_boundary',
+                          'grid'
+                        );
+                      }
+                      return;
+                    }
+                    if (e.key === 'PageDown') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(rows.length - 1, col.name, 'page_down', 'grid');
+                      return;
+                    }
+                    if (e.key === 'PageUp') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(0, col.name, 'page_up', 'grid');
+                      return;
+                    }
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Home') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(
+                        0,
+                        gridColumns[0]?.name || col.name,
+                        'first_record',
+                        'grid'
+                      );
+                      return;
+                    }
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'End') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(
+                        rows.length - 1,
+                        gridColumns[gridColumns.length - 1]?.name || col.name,
+                        'last_record',
+                        'grid'
+                      );
+                      return;
+                    }
+                    if (!fromInput && e.key === 'Home') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(
+                        rIdx,
+                        gridColumns[0]?.name || col.name,
+                        'focus',
+                        'grid'
+                      );
+                      return;
+                    }
+                    if (!fromInput && e.key === 'End') {
+                      e.preventDefault();
+                      handleSqlKeyboardCellNavigate(
+                        rIdx,
+                        gridColumns[gridColumns.length - 1]?.name || col.name,
+                        'focus',
+                        'grid'
+                      );
+                      return;
+                    }
+                    if (!fromInput && (e.key === 'F2' || e.key === 'Enter')) {
+                      if (isEditableResult) {
+                        e.preventDefault();
+                        beginEditRow(rIdx);
+                      }
+                    }
+                  };
                   return (
                     <td
                       key={col.name}
+                      tabIndex={rowEditing && !col.read_only ? -1 : isActiveCell ? 0 : -1}
+                      data-grid-nav-cell={
+                        rowEditing && !col.read_only ? undefined : `${rIdx}:${col.name}`
+                      }
                       onClick={() => setActiveColName(col.name)}
+                      onFocus={() => setActiveColName(col.name)}
+                      onKeyDown={
+                        rowEditing && !col.read_only
+                          ? undefined
+                          : (e) => handleGridCellKeyDown(e, false)
+                      }
                       style={{
                         padding: '4px 10px',
                         borderBottom: '1px solid var(--sr-border-subtle, #e2e8f0)',
@@ -2958,12 +4037,17 @@ export default function SqlEditorSurface({
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        outline: isActiveCell
+                          ? '2px solid var(--sr-accent-primary, #2563eb)'
+                          : 'none',
+                        outlineOffset: -2,
                       }}
                     >
                       {rowEditing && !col.read_only ? (
                         <input
                           className="sr-input"
                           aria-label={`Edit ${col.name}`}
+                          data-grid-nav-cell={`${rIdx}:${col.name}`}
                           value={serializeValueForEdit(val)}
                           onChange={(e) =>
                             setRowDraft((prev) => ({
@@ -2980,6 +4064,8 @@ export default function SqlEditorSurface({
                               setEditingRowIndex(null);
                               setIsInsertDraft(false);
                               setRowDraft(null);
+                            } else {
+                              handleGridCellKeyDown(e, true);
                             }
                           }}
                           style={{width: '100%', minHeight: 24, padding: '2px 6px'}}
@@ -3097,13 +4183,21 @@ export default function SqlEditorSurface({
     }
 
     const mode = layout.displayMode;
+    const winOff = hostData?.window_offset || 0;
 
     if (mode === DISPLAY_MODES.MINI_FORMS) {
       return (
         <div
           className="sr-left-hover-scroll"
           data-cdeadmin-qa-key="sql-surface-mini-forms"
-          style={{flex: 1, minHeight: 0, overflow: 'auto', padding: 10, display: 'grid', gap: 10}}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            display: 'grid',
+            alignContent: 'start',
+            gap: 0,
+          }}
         >
           {rows.map((row, idx) => (
             <AdaptiveRecordFormCard
@@ -3112,16 +4206,28 @@ export default function SqlEditorSurface({
               rowIndex={idx}
               isCurrent={idx === activeRowIndex}
               isEditing={isEditingRow && editingRowIndex === idx}
+              isBookmarked={activeBookmarks.has(winOff + idx)}
               draftValues={rowDraft}
               columns={formColumns}
               formLayout={sharedFormLayout}
               formFieldPrefs={layout.formFieldPrefs}
               booleanFormat={layout.booleanFormat}
               localeDateFormat={layout.localeDateFormat}
-              onSelectRow={(i) => setActiveRowIndex(i)}
+              totalRowsInPage={rows.length}
+              onSelectRow={(i) => selectSqlRowAtIndex(i)}
               onFocusField={(cName) => setActiveColName(cName)}
+              onToggleBookmark={toggleSqlBookmark}
+              onNavigateFormField={(r, c, act) =>
+                handleSqlKeyboardCellNavigate(r, c, act, 'form')
+              }
               onFieldChange={(cName, val) =>
-                setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
+                setRowDraft((prev) => ({
+                  ...(prev || {}),
+                  [cName]: coerceEditedValue(
+                    val,
+                    formColumns.find((fc) => fc.name === cName) || {name: cName}
+                  ),
+                }))
               }
               onOpenComplexInDrawer={(rIdx, cName) =>
                 openRightDrawerWith({
@@ -3140,33 +4246,15 @@ export default function SqlEditorSurface({
       return (
         <div
           data-cdeadmin-qa-key="sql-surface-single-form"
-          style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 10, gap: 8}}
+          style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}
         >
-          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-            <Button
-              size="small"
-              disabled={activeRowIndex <= 0}
-              onClick={() => setActiveRowIndex((i) => Math.max(0, i - 1))}
-            >
-              ◀ {gettext('Prev')}
-            </Button>
-            <span style={{fontSize: '0.8rem'}}>
-              {gettext('Record %s of %s', rows.length ? activeRowIndex + 1 : 0, rows.length)}
-            </span>
-            <Button
-              size="small"
-              disabled={activeRowIndex >= rows.length - 1}
-              onClick={() => setActiveRowIndex((i) => Math.min(rows.length - 1, i + 1))}
-            >
-              {gettext('Next')} ▶
-            </Button>
-          </div>
           {currentRow && (
             <AdaptiveRecordFormCard
               row={currentRow}
               rowIndex={activeRowIndex}
               isCurrent
               isEditing={isEditingRow && editingRowIndex === activeRowIndex}
+              isBookmarked={activeBookmarks.has(winOff + activeRowIndex)}
               draftValues={rowDraft}
               columns={formColumns}
               formLayout={sharedFormLayout}
@@ -3174,10 +4262,21 @@ export default function SqlEditorSurface({
               booleanFormat={layout.booleanFormat}
               localeDateFormat={layout.localeDateFormat}
               fullArea
-              onSelectRow={(i) => setActiveRowIndex(i)}
+              totalRowsInPage={rows.length}
+              onSelectRow={(i) => selectSqlRowAtIndex(i)}
               onFocusField={(cName) => setActiveColName(cName)}
+              onToggleBookmark={toggleSqlBookmark}
+              onNavigateFormField={(r, c, act) =>
+                handleSqlKeyboardCellNavigate(r, c, act, 'form')
+              }
               onFieldChange={(cName, val) =>
-                setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
+                setRowDraft((prev) => ({
+                  ...(prev || {}),
+                  [cName]: coerceEditedValue(
+                    val,
+                    formColumns.find((fc) => fc.name === cName) || {name: cName}
+                  ),
+                }))
               }
               onOpenComplexInDrawer={(rIdx, cName) =>
                 openRightDrawerWith({
@@ -3202,23 +4301,35 @@ export default function SqlEditorSurface({
           style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}
         >
           {currentRow && (
-            <div style={{padding: 8, borderBottom: '1px solid var(--sr-border-default)', flexShrink: 0}}>
+            <div style={{borderBottom: '1px solid var(--sr-border-default)', flexShrink: 0}}>
               <AdaptiveRecordFormCard
                 row={currentRow}
                 rowIndex={activeRowIndex}
                 isCurrent
                 isEditing={isEditingRow && editingRowIndex === activeRowIndex}
+                isBookmarked={activeBookmarks.has(winOff + activeRowIndex)}
                 draftValues={rowDraft}
                 columns={formColumns}
                 formLayout={sharedFormLayout}
                 formFieldPrefs={layout.formFieldPrefs}
                 booleanFormat={layout.booleanFormat}
                 localeDateFormat={layout.localeDateFormat}
-                maxHeight={220}
-                onSelectRow={(i) => setActiveRowIndex(i)}
+                maxHeight="220px"
+                totalRowsInPage={rows.length}
+                onSelectRow={(i) => selectSqlRowAtIndex(i)}
                 onFocusField={(cName) => setActiveColName(cName)}
+                onToggleBookmark={toggleSqlBookmark}
+                onNavigateFormField={(r, c, act) =>
+                  handleSqlKeyboardCellNavigate(r, c, act, 'form')
+                }
                 onFieldChange={(cName, val) =>
-                  setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
+                  setRowDraft((prev) => ({
+                    ...(prev || {}),
+                    [cName]: coerceEditedValue(
+                      val,
+                      formColumns.find((fc) => fc.name === cName) || {name: cName}
+                    ),
+                  }))
                 }
                 onOpenComplexInDrawer={(rIdx, cName) =>
                   openRightDrawerWith({
@@ -3286,20 +4397,132 @@ export default function SqlEditorSurface({
       {surfaceView === SQL_SURFACE_VIEWS.VISUAL_BUILDER && (
         <div
           data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"
-          style={{flex: 1, minHeight: 0, minWidth: 0, position: 'relative', display: 'flex'}}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setCanvasDropActive(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer) {
+              e.dataTransfer.dropEffect = 'copy';
+            }
+            if (!canvasDropActive) setCanvasDropActive(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+              setCanvasDropActive(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setCanvasDropActive(false);
+            if (!e.dataTransfer) return;
+
+            let droppedObj = null;
+            try {
+              const rawCustom = e.dataTransfer.getData(
+                'application/x-scratchrobin-catalog-object'
+              );
+              if (rawCustom) {
+                droppedObj = JSON.parse(rawCustom);
+              }
+            } catch {
+              droppedObj = null;
+            }
+
+            if (!droppedObj) {
+              let rawText = '';
+              try {
+                rawText =
+                  e.dataTransfer.getData('text') ||
+                  e.dataTransfer.getData('text/plain') ||
+                  '';
+              } catch {
+                rawText = '';
+              }
+              if (rawText) {
+                try {
+                  const parsed = JSON.parse(rawText);
+                  if (parsed?.scratchrobinCatalogObject) {
+                    droppedObj = parsed.scratchrobinCatalogObject;
+                  } else if (parsed?.text) {
+                    const ident = String(parsed.text)
+                      .split('.')
+                      .pop()
+                      .replace(/^["`]|["`]$/g, '')
+                      .replace(/\([^)]*\)\s*$/, '')
+                      .trim();
+                    const kindAliases = {
+                      mview: 'materialized-view',
+                      foreign_table: 'foreign-table',
+                      partition: 'partitioned-table',
+                      edbfunc: 'function',
+                      edbproc: 'procedure',
+                    };
+                    const rk = String(parsed.nodeType || 'table').toLowerCase();
+                    droppedObj = {
+                      resource_id: '',
+                      resource_kind: kindAliases[rk] || rk,
+                      display_name: ident,
+                    };
+                  }
+                } catch {
+                  const ident = rawText
+                    .split('.')
+                    .pop()
+                    .replace(/^["`]|["`]$/g, '')
+                    .trim();
+                  if (ident) {
+                    droppedObj = {
+                      resource_id: '',
+                      resource_kind: 'table',
+                      display_name: ident,
+                    };
+                  }
+                }
+              }
+            }
+
+            if (!droppedObj?.display_name) return;
+            const wp = canvasApiRef.current?.clientToWorld?.(e.clientX, e.clientY);
+            const dropCoords = wp
+              ? {x: Math.max(24, wp.x - 90), y: Math.max(24, wp.y - 18)}
+              : null;
+            addCatalogObjectToCanvas(droppedObj, dropCoords);
+          }}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            position: 'relative',
+            display: 'flex',
+            outline: canvasDropActive
+              ? '2px dashed var(--sr-accent-primary, #2563eb)'
+              : 'none',
+            outlineOffset: -4,
+          }}
         >
           <RobinTiledCanvas
             scene={visualScene}
             selectedNodeId={selectedCanvasNodeId}
-            onSelectNode={(nodeId) => {
-              setSelectedCanvasNodeId(nodeId || '');
+            onSelectNode={(node) => {
+              const nid = typeof node === 'object' ? node?.id || '' : String(node || '');
+              setSelectedCanvasNodeId(nid);
+            }}
+            onSelectEdge={() => {
+              setVbInspectorTab('joins');
               openRightDrawerWith({panel: 'visual_inspector'});
             }}
+            onToggleField={handleToggleCanvasField}
+            onCreateFieldJoin={handleCreateCanvasJoin}
+            onRemoveNode={handleRemoveCanvasNode}
             editable
             onPinNode={(nodeId, x, y) => {
+              const cur = visualModelRef.current;
               const next = {
-                ...visualModel,
-                tables: visualModel.tables.map((t) =>
+                ...cur,
+                tables: (cur.tables || []).map((t) =>
                   t.id === nodeId ? {...t, x, y} : t
                 ),
               };
@@ -3308,21 +4531,87 @@ export default function SqlEditorSurface({
             canvasApiRef={canvasApiRef}
             ariaLabel={gettext('DDN Visual Query Builder Canvas')}
           />
-          {visualModel.tables.length === 0 && (
+
+          {canvasDropActive && (
+            <div
+              data-cdeadmin-qa-key="visual-builder-drop-indicator"
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 16,
+                padding: '6px 14px',
+                borderRadius: 999,
+                background: 'var(--sr-accent-primary, #2563eb)',
+                color: '#ffffff',
+                fontWeight: 600,
+                fontSize: '0.78rem',
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
+                pointerEvents: 'none',
+              }}
+            >
+              {gettext('Drop Table, View, or Selectable Procedure onto Canvas')}
+            </div>
+          )}
+
+          {canvasNotice && (
+            <div
+              role="alert"
+              data-cdeadmin-qa-key="visual-builder-canvas-notice"
+              style={{
+                position: 'absolute',
+                top: 14,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '7px 14px',
+                borderRadius: 8,
+                background: 'rgba(254, 242, 242, 0.97)',
+                border: '1px solid #ef4444',
+                color: '#991b1b',
+                fontSize: '0.78rem',
+                fontWeight: 500,
+                boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
+              }}
+            >
+              <span>⚠ {canvasNotice}</span>
+              <button
+                type="button"
+                aria-label={gettext('Dismiss')}
+                onClick={() => setCanvasNotice('')}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  color: '#991b1b',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {visualModel.tables.length === 0 && !canvasNotice && (
             <div
               style={{
                 position: 'absolute',
                 top: 14,
                 left: 14,
-                padding: '6px 12px',
+                padding: '7px 14px',
                 borderRadius: 999,
-                background: 'var(--sr-island-bg, rgba(255,255,255,0.94))',
+                background: 'var(--sr-island-bg, rgba(255,255,255,0.95))',
                 border: '1px solid var(--sr-border-default, #cbd5e1)',
                 fontSize: '0.78rem',
                 pointerEvents: 'none',
               }}
             >
-              {gettext('Visual Builder Canvas — use the Right Drawer Inspector to add tables & joins')}
+              {gettext(
+                'Drag Tables, Views, or Selectable Stored Procedures from Data Navigator (left) or Builder Palette (right) onto this canvas'
+              )}
             </div>
           )}
         </div>

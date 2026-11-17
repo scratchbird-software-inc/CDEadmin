@@ -124,6 +124,7 @@ export function AdaptiveRecordFormCard({
   rowIndex,
   isCurrent,
   isEditing,
+  isBookmarked = false,
   draftValues,
   columns,
   formLayout,
@@ -132,9 +133,12 @@ export function AdaptiveRecordFormCard({
   localeDateFormat,
   maxHeight,
   fullArea = false,
+  totalRowsInPage = 0,
   onSelectRow,
   onFocusField,
   onFieldChange,
+  onNavigateFormField,
+  onToggleBookmark,
   onOpenComplexInDrawer,
   onFormContextMenu,
   onFieldContextMenu,
@@ -144,8 +148,8 @@ export function AdaptiveRecordFormCard({
   const resolvedLayout = useMemo(
     () =>
       formLayout ||
-      buildFormLayoutPlacements(columns, formFieldPrefs, 720),
-    [formLayout, columns, formFieldPrefs]
+      buildFormLayoutPlacements(columns, formFieldPrefs, 720, null, row ? [row] : null),
+    [formLayout, columns, formFieldPrefs, row]
   );
 
   const placementMap = useMemo(() => {
@@ -165,6 +169,94 @@ export function AdaptiveRecordFormCard({
           ? '−'
           : '';
 
+  const handleFieldKeyNav = (ev, colIdx, col, {isMultiline = false, isTextInput = false} = {}) => {
+    if (!onNavigateFormField) return;
+    const lastColIdx = columns.length - 1;
+    const maxRowIdx = Math.max(0, (totalRowsInPage || rowIndex + 1) - 1);
+
+    if (ev.key === 'Tab' && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+      if (!ev.shiftKey && colIdx < lastColIdx) {
+        ev.preventDefault();
+        onNavigateFormField(rowIndex, columns[colIdx + 1].name);
+        return;
+      }
+      if (!ev.shiftKey && colIdx === lastColIdx && rowIndex < maxRowIdx) {
+        ev.preventDefault();
+        onNavigateFormField(rowIndex + 1, columns[0].name);
+        return;
+      }
+      if (ev.shiftKey && colIdx > 0) {
+        ev.preventDefault();
+        onNavigateFormField(rowIndex, columns[colIdx - 1].name);
+        return;
+      }
+      if (ev.shiftKey && colIdx === 0 && rowIndex > 0) {
+        ev.preventDefault();
+        onNavigateFormField(rowIndex - 1, columns[lastColIdx].name);
+        return;
+      }
+    }
+
+    if (ev.key === 'ArrowDown' && !isMultiline) {
+      ev.preventDefault();
+      onNavigateFormField(rowIndex + 1, col.name);
+      return;
+    }
+    if (ev.key === 'ArrowUp' && !isMultiline) {
+      ev.preventDefault();
+      onNavigateFormField(rowIndex - 1, col.name);
+      return;
+    }
+    if (ev.key === 'PageDown') {
+      ev.preventDefault();
+      onNavigateFormField(rowIndex, col.name, 'next_page');
+      return;
+    }
+    if (ev.key === 'PageUp') {
+      ev.preventDefault();
+      onNavigateFormField(rowIndex, col.name, 'prev_page');
+      return;
+    }
+    if (ev.key === 'Home' && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      onNavigateFormField(0, columns[0]?.name || col.name, 'first_record');
+      return;
+    }
+    if (ev.key === 'End' && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      onNavigateFormField(maxRowIdx, columns[lastColIdx]?.name || col.name, 'last_record');
+      return;
+    }
+
+    const atLeftEdge =
+      !isTextInput ||
+      (typeof ev.currentTarget?.selectionStart === 'number' &&
+        ev.currentTarget.selectionStart === 0 &&
+        ev.currentTarget.selectionEnd === 0);
+    const atRightEdge =
+      !isTextInput ||
+      (typeof ev.currentTarget?.selectionEnd === 'number' &&
+        ev.currentTarget.selectionEnd === String(ev.currentTarget.value ?? '').length);
+
+    if (ev.key === 'ArrowRight' && atRightEdge && !isMultiline) {
+      ev.preventDefault();
+      if (colIdx < lastColIdx) {
+        onNavigateFormField(rowIndex, columns[colIdx + 1].name);
+      } else if (rowIndex < maxRowIdx) {
+        onNavigateFormField(rowIndex + 1, columns[0].name);
+      }
+      return;
+    }
+    if (ev.key === 'ArrowLeft' && atLeftEdge && !isMultiline) {
+      ev.preventDefault();
+      if (colIdx > 0) {
+        onNavigateFormField(rowIndex, columns[colIdx - 1].name);
+      } else if (rowIndex > 0) {
+        onNavigateFormField(rowIndex - 1, columns[lastColIdx].name);
+      }
+    }
+  };
+
   return (
     <div
       data-cdeadmin-qa-key={`data-surface-record-form-${row.row_number}`}
@@ -178,9 +270,9 @@ export function AdaptiveRecordFormCard({
       style={{
         display: 'flex',
         alignItems: 'stretch',
+        alignSelf: 'start',
         width: '100%',
-        height: fullArea ? '100%' : undefined,
-        minHeight: fullArea ? '100%' : undefined,
+        height: fullArea ? '100%' : 'auto',
         borderBottom: fullArea
           ? 'none'
           : '1px solid var(--sr-border-default, rgba(128,128,128,0.25))',
@@ -192,8 +284,19 @@ export function AdaptiveRecordFormCard({
           : 'none',
       }}
     >
-      {/* Left row-number & status badge */}
+      {/* Left row-number, bookmark (`!`), & status badge */}
       <div
+        onClick={(ev) => {
+          if (ev.detail === 2 && onToggleBookmark) {
+            ev.stopPropagation();
+            onToggleBookmark(rowIndex);
+          }
+        }}
+        title={
+          onToggleBookmark
+            ? gettext('Row %s — Double-click gutter or click ! to toggle bookmark', row.row_number)
+            : undefined
+        }
         style={{
           width: GUTTER_WIDTH,
           flex: `0 0 ${GUTTER_WIDTH}px`,
@@ -201,8 +304,9 @@ export function AdaptiveRecordFormCard({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'flex-start',
-          paddingTop: 10,
-          gap: 4,
+          paddingTop: 7,
+          paddingBottom: 6,
+          gap: 3,
           fontSize: '0.75rem',
           fontWeight: isCurrent ? 700 : 500,
           color: 'var(--sr-text-muted, #64748b)',
@@ -216,6 +320,22 @@ export function AdaptiveRecordFormCard({
           {isCurrent ? '▶ ' : ''}
           {row.row_number}
         </span>
+        {isBookmarked && (
+          <span
+            data-cdeadmin-qa-key={`row-bookmark-badge-${rowIndex}`}
+            style={{
+              fontSize: '0.68rem',
+              fontWeight: 800,
+              padding: '0 5px',
+              borderRadius: 999,
+              background: '#f59e0b',
+              color: '#fff',
+              lineHeight: 1.35,
+            }}
+          >
+            !
+          </span>
+        )}
         {stageMarker && (
           <span
             style={{
@@ -250,17 +370,18 @@ export function AdaptiveRecordFormCard({
         <div
           data-cell-columns={resolvedLayout.numCols}
           style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${resolvedLayout.numCols}, minmax(0, 1fr))`,
-            columnGap: '14px',
-            rowGap: '12px',
-            padding: '10px 14px 14px 10px',
-            alignItems: 'start',
+            display: 'flex',
+            flexWrap: 'wrap',
+            columnGap: '12px',
+            rowGap: '7px',
+            padding: '6px 12px 8px 10px',
+            alignItems: 'flex-start',
+            alignContent: 'flex-start',
             width: '100%',
             boxSizing: 'border-box',
           }}
         >
-          {columns.map((col) => {
+          {columns.map((col, colIdx) => {
             const colMeta = inferColumnMeta(col);
             const fPrefs = formFieldPrefs[col.name] || {};
             const placement = placementMap.get(col.name) || {
@@ -268,9 +389,12 @@ export function AdaptiveRecordFormCard({
               colStart: 1,
               span: 1,
             };
-            const effectiveSpan = fPrefs.inlineBox
-              ? resolvedLayout.numCols
-              : Math.min(resolvedLayout.numCols, placement.span || 1);
+            const isFullRow = Boolean(fPrefs.inlineBox || placement.fullRow);
+            const natWidth =
+              fPrefs.widthPx ||
+              resolvedLayout.adaptiveWidths?.[col.name] ||
+              placement.naturalWidth ||
+              156;
             const rawVal =
               isEditing &&
               draftValues &&
@@ -295,6 +419,7 @@ export function AdaptiveRecordFormCard({
               <div
                 key={col.name}
                 data-form-field-wrap={col.name}
+                data-field-width-px={natWidth}
                 onContextMenu={(ev) => {
                   ev.preventDefault();
                   ev.stopPropagation();
@@ -303,23 +428,26 @@ export function AdaptiveRecordFormCard({
                   onFieldContextMenu?.(ev, col, rowIndex);
                 }}
                 style={{
-                  gridColumn: `span ${effectiveSpan}`,
-                  minWidth: 0,
+                  flex: isFullRow ? '1 1 100%' : `0 1 ${natWidth}px`,
+                  width: isFullRow ? '100%' : `${natWidth}px`,
+                  minWidth: isFullRow ? '100%' : `${Math.min(natWidth, 84)}px`,
+                  maxWidth: '100%',
                   position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 3,
+                  gap: 2,
                 }}
               >
                 <label
                   style={{
-                    fontSize: '0.73rem',
+                    fontSize: '0.71rem',
                     fontWeight: 600,
                     color: 'var(--sr-text-secondary, #475569)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: 4,
+                    gap: 6,
+                    lineHeight: 1.2,
                   }}
                 >
                   <span
@@ -334,9 +462,10 @@ export function AdaptiveRecordFormCard({
                   </span>
                   <span
                     style={{
-                      fontSize: '0.66rem',
-                      opacity: 0.65,
+                      fontSize: '0.64rem',
+                      opacity: 0.62,
                       fontWeight: 400,
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {col.native_type || ''}
@@ -349,27 +478,30 @@ export function AdaptiveRecordFormCard({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      minHeight: 30,
-                      padding: '3px 8px',
-                      borderRadius: 6,
+                      minHeight: 26,
+                      padding: '2px 7px',
+                      borderRadius: 5,
                       border:
                         '1px solid var(--sr-border-default, rgba(128,128,128,0.3))',
                       background: 'var(--sr-surface-subtle, rgba(128,128,128,0.05))',
                     }}
                   >
-                    <span style={{fontSize: '0.76rem', opacity: 0.8}}>
+                    <span style={{fontSize: '0.74rem', opacity: 0.8}}>
                       {colMeta.clientType.toUpperCase()}
                     </span>
                     <button
                       type="button"
                       className="sr-btn"
-                      style={{minHeight: 22, padding: '1px 8px', fontSize: '0.75rem'}}
+                      data-form-nav-cell={`${rowIndex}:${col.name}`}
+                      style={{minHeight: 20, padding: '1px 7px', fontSize: '0.73rem'}}
                       tabIndex={0}
                       onFocus={() => {
                         setFocusedColName(col.name);
+                        onSelectRow?.(rowIndex);
                         onFocusField?.(col.name);
                       }}
                       onBlur={() => setFocusedColName(null)}
+                      onKeyDown={(ev) => handleFieldKeyNav(ev, colIdx, col)}
                       onClick={(ev) => {
                         ev.stopPropagation();
                         onOpenComplexInDrawer?.(rowIndex, col);
@@ -381,8 +513,9 @@ export function AdaptiveRecordFormCard({
                 ) : fPrefs.inlineBox ? (
                   <textarea
                     aria-label={`${col.name}`}
+                    data-form-nav-cell={`${rowIndex}:${col.name}`}
                     readOnly={!canEditField}
-                    rows={fPrefs.rows || 4}
+                    rows={fPrefs.rows || 3}
                     value={
                       rawVal === null || rawVal === undefined
                         ? canEditField
@@ -393,18 +526,25 @@ export function AdaptiveRecordFormCard({
                     placeholder={rawVal === null ? '<null>' : ''}
                     onFocus={() => {
                       setFocusedColName(col.name);
+                      onSelectRow?.(rowIndex);
                       onFocusField?.(col.name);
                     }}
                     onBlur={() => setFocusedColName(null)}
+                    onKeyDown={(ev) =>
+                      handleFieldKeyNav(ev, colIdx, col, {
+                        isMultiline: true,
+                        isTextInput: true,
+                      })
+                    }
                     onChange={(ev) =>
                       canEditField && onFieldChange?.(col.name, ev.target.value)
                     }
                     style={{
                       width: '100%',
                       resize: 'vertical',
-                      minHeight: 68,
-                      padding: '6px 8px',
-                      borderRadius: 6,
+                      minHeight: 58,
+                      padding: '4px 7px',
+                      borderRadius: 5,
                       border: canEditField
                         ? '1px solid var(--sr-accent, #0284c7)'
                         : '1px solid var(--sr-border-default, rgba(128,128,128,0.28))',
@@ -420,13 +560,14 @@ export function AdaptiveRecordFormCard({
                         colMeta.clientType === 'json'
                           ? 'var(--sr-font-mono, monospace)'
                           : 'inherit',
-                      fontSize: '0.8125rem',
+                      fontSize: '0.8rem',
                     }}
                   />
                 ) : canEditField ? (
                   <input
                     type="text"
                     aria-label={`${col.name}`}
+                    data-form-nav-cell={`${rowIndex}:${col.name}`}
                     value={
                       rawVal === null || rawVal === undefined
                         ? ''
@@ -435,22 +576,29 @@ export function AdaptiveRecordFormCard({
                     placeholder={rawVal === null ? '<null>' : ''}
                     onFocus={() => {
                       setFocusedColName(col.name);
+                      onSelectRow?.(rowIndex);
                       onFocusField?.(col.name);
                     }}
                     onBlur={() => setFocusedColName(null)}
+                    onKeyDown={(ev) =>
+                      handleFieldKeyNav(ev, colIdx, col, {
+                        isMultiline: false,
+                        isTextInput: true,
+                      })
+                    }
                     onChange={(ev) =>
                       onFieldChange?.(col.name, ev.target.value)
                     }
                     style={{
                       width: '100%',
-                      minHeight: 30,
-                      padding: '4px 8px',
-                      borderRadius: 6,
+                      minHeight: 26,
+                      padding: '3px 7px',
+                      borderRadius: 5,
                       border: '1px solid var(--sr-accent, #0284c7)',
                       background: 'var(--sr-surface-card, transparent)',
                       color: 'inherit',
                       textAlign: hAlign,
-                      fontSize: '0.8125rem',
+                      fontSize: '0.8rem',
                     }}
                   />
                 ) : (
@@ -459,28 +607,34 @@ export function AdaptiveRecordFormCard({
                     role="textbox"
                     aria-readonly="true"
                     aria-label={`${col.name}`}
+                    data-form-nav-cell={`${rowIndex}:${col.name}`}
                     onFocus={() => {
                       setFocusedColName(col.name);
+                      onSelectRow?.(rowIndex);
                       onFocusField?.(col.name);
                     }}
                     onBlur={() => setFocusedColName(null)}
+                    onKeyDown={(ev) => handleFieldKeyNav(ev, colIdx, col)}
                     style={{
-                      minHeight: 30,
-                      padding: '5px 8px',
-                      borderRadius: 6,
+                      minHeight: 26,
+                      padding: '3px 7px',
+                      borderRadius: 5,
                       border:
-                        '1px solid var(--sr-border-subtle, rgba(128,128,128,0.24))',
+                        focusedColName === col.name
+                          ? '1.5px solid var(--sr-accent, #0284c7)'
+                          : '1px solid var(--sr-border-subtle, rgba(128,128,128,0.28))',
                       background:
-                        'var(--sr-surface-subtle, rgba(128,128,128,0.035))',
+                        'var(--sr-surface-card, rgba(255,255,255,0.6))',
                       color: formatted.isNull
                         ? 'var(--sr-text-muted, #64748b)'
                         : 'inherit',
                       fontStyle: formatted.isNull ? 'italic' : 'normal',
                       textAlign: hAlign,
-                      fontSize: '0.8125rem',
+                      fontSize: '0.8rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
+                      outline: 'none',
                     }}
                   >
                     {formatted.text}
@@ -521,6 +675,7 @@ AdaptiveRecordFormCard.propTypes = {
   rowIndex: PropTypes.number.isRequired,
   isCurrent: PropTypes.bool,
   isEditing: PropTypes.bool,
+  isBookmarked: PropTypes.bool,
   draftValues: PropTypes.object,
   columns: PropTypes.array.isRequired,
   formLayout: PropTypes.object,
@@ -529,9 +684,12 @@ AdaptiveRecordFormCard.propTypes = {
   localeDateFormat: PropTypes.bool,
   maxHeight: PropTypes.string,
   fullArea: PropTypes.bool,
+  totalRowsInPage: PropTypes.number,
   onSelectRow: PropTypes.func,
   onFocusField: PropTypes.func,
   onFieldChange: PropTypes.func,
+  onNavigateFormField: PropTypes.func,
+  onToggleBookmark: PropTypes.func,
   onOpenComplexInDrawer: PropTypes.func,
   onFormContextMenu: PropTypes.func,
   onFieldContextMenu: PropTypes.func,
@@ -573,6 +731,8 @@ export default function DataEditSurface({
   const [isInsertDraft, setIsInsertDraft] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  const [bookmarkedGlobals, setBookmarkedGlobals] = useState(() => new Set());
+  const pendingCellFocusRef = useRef(null);
 
   // Viewport tracking (decoupled from activeRowIndex!)
   const gridViewportRef = useRef(null);
@@ -780,11 +940,12 @@ export default function DataEditSurface({
       formColumns,
       layout.formFieldPrefs,
       viewportWidth - GUTTER_WIDTH - 36,
-      prevFormColsRef.current
+      prevFormColsRef.current,
+      rows
     );
     prevFormColsRef.current = computed.numCols;
     return computed;
-  }, [formColumns, layout.formFieldPrefs, viewportWidth]);
+  }, [formColumns, layout.formFieldPrefs, rows, viewportWidth]);
 
   const currentRow = rows[activeRowIndex] || null;
   const activeColObj = useMemo(
@@ -1090,19 +1251,32 @@ export default function DataEditSurface({
   }, [activeRowIndex]);
 
   const navigatePage = useCallback(
-    async (nextOffset) => {
+    async (nextOffset, selectLocalIdx = 0, focusTarget = null) => {
       if (isEditingRow) {
         const ok = await acceptCurrentRow();
         if (!ok) return;
       }
       setWorking(true);
       try {
+        const safeOff = Math.max(0, nextOffset);
         const resp = await callHost('read_window', {
-          window_offset: Math.max(0, nextOffset),
+          window_offset: safeOff,
           window_size: hostData?.window_size || 200,
         });
         applyHostResponse(resp);
-        setActiveRowIndex(0);
+        const nextLen = (resp?.rows || []).length;
+        const resolvedIdx =
+          selectLocalIdx === 'last'
+            ? Math.max(0, nextLen - 1)
+            : Math.max(0, Math.min(Number(selectLocalIdx) || 0, Math.max(0, nextLen - 1)));
+        if (focusTarget) {
+          pendingCellFocusRef.current = {
+            kind: focusTarget.kind,
+            rowIndex: resolvedIdx,
+            colName: focusTarget.colName,
+          };
+        }
+        setActiveRowIndex(resolvedIdx);
       } catch (err) {
         setSurfaceError(err?.message || String(err));
       } finally {
@@ -1111,6 +1285,147 @@ export default function DataEditSurface({
     },
     [isEditingRow, acceptCurrentRow, callHost, hostData?.window_size, applyHostResponse]
   );
+
+  const toggleBookmarkAtRow = useCallback(
+    (localIdx = activeRowIndex) => {
+      if (!rows.length) return;
+      const clamped = Math.max(0, Math.min(localIdx, rows.length - 1));
+      const globalIdx = (hostData?.window_offset || 0) + clamped;
+      setBookmarkedGlobals((prev) => {
+        const next = new Set(prev);
+        if (next.has(globalIdx)) next.delete(globalIdx);
+        else next.add(globalIdx);
+        return next;
+      });
+    },
+    [activeRowIndex, hostData?.window_offset, rows.length]
+  );
+
+  const jumpToBookmark = useCallback(
+    async (direction = 1) => {
+      if (bookmarkedGlobals.size === 0) return;
+      const sorted = Array.from(bookmarkedGlobals).sort((a, b) => a - b);
+      const winOff = hostData?.window_offset || 0;
+      const winSz = hostData?.window_size || 200;
+      const curGlobal = winOff + activeRowIndex;
+      let targetGlobal;
+      if (direction >= 0) {
+        targetGlobal = sorted.find((g) => g > curGlobal);
+        if (targetGlobal === undefined) targetGlobal = sorted[0];
+      } else {
+        const rev = [...sorted].reverse();
+        targetGlobal = rev.find((g) => g < curGlobal);
+        if (targetGlobal === undefined) targetGlobal = sorted[sorted.length - 1];
+      }
+      if (targetGlobal >= winOff && targetGlobal < winOff + rows.length) {
+        await selectRowAtIndex(targetGlobal - winOff, activeColName || undefined);
+      } else {
+        const pageOff = Math.floor(targetGlobal / winSz) * winSz;
+        await navigatePage(pageOff, targetGlobal - pageOff);
+      }
+    },
+    [
+      activeColName,
+      activeRowIndex,
+      bookmarkedGlobals,
+      hostData?.window_offset,
+      hostData?.window_size,
+      navigatePage,
+      rows.length,
+      selectRowAtIndex,
+    ]
+  );
+
+  const handleKeyboardCellNavigate = useCallback(
+    async (targetRowIdx, targetColName, action = null, kind = 'grid') => {
+      const totalRows = hostData?.total_view_rows ?? rows.length;
+      const winOff = hostData?.window_offset || 0;
+      const winSz = hostData?.window_size || 200;
+      const colToKeep = targetColName || activeColName || columns[0]?.name || '';
+
+      if (action === 'first_record') {
+        if (winOff > 0) {
+          await navigatePage(0, 0, {kind, colName: colToKeep});
+        } else {
+          pendingCellFocusRef.current = {kind, rowIndex: 0, colName: colToKeep};
+          await selectRowAtIndex(0, colToKeep);
+        }
+        return;
+      }
+      if (action === 'last_record') {
+        const lastPageOff = Math.floor(Math.max(0, totalRows - 1) / winSz) * winSz;
+        if (lastPageOff !== winOff) {
+          await navigatePage(lastPageOff, 'last', {kind, colName: colToKeep});
+        } else {
+          const lastIdx = Math.max(0, rows.length - 1);
+          pendingCellFocusRef.current = {kind, rowIndex: lastIdx, colName: colToKeep};
+          await selectRowAtIndex(lastIdx, colToKeep);
+        }
+        return;
+      }
+      if (action === 'prev_page') {
+        if (winOff > 0) {
+          await navigatePage(Math.max(0, winOff - winSz), 0, {kind, colName: colToKeep});
+        } else {
+          const nextR = Math.max(0, activeRowIndex - Math.min(25, winSz));
+          pendingCellFocusRef.current = {kind, rowIndex: nextR, colName: colToKeep};
+          await selectRowAtIndex(nextR, colToKeep);
+        }
+        return;
+      }
+      if (action === 'next_page') {
+        if (winOff + winSz < totalRows) {
+          await navigatePage(winOff + winSz, 0, {kind, colName: colToKeep});
+        } else {
+          const nextR = Math.min(Math.max(0, rows.length - 1), activeRowIndex + Math.min(25, winSz));
+          pendingCellFocusRef.current = {kind, rowIndex: nextR, colName: colToKeep};
+          await selectRowAtIndex(nextR, colToKeep);
+        }
+        return;
+      }
+
+      if (targetRowIdx < 0) {
+        if (winOff > 0) {
+          await navigatePage(Math.max(0, winOff - winSz), 'last', {kind, colName: colToKeep});
+        }
+        return;
+      }
+      if (targetRowIdx >= rows.length) {
+        if (winOff + winSz < totalRows) {
+          await navigatePage(winOff + winSz, 0, {kind, colName: colToKeep});
+        }
+        return;
+      }
+
+      pendingCellFocusRef.current = {kind, rowIndex: targetRowIdx, colName: colToKeep};
+      await selectRowAtIndex(targetRowIdx, colToKeep);
+    },
+    [
+      activeColName,
+      activeRowIndex,
+      columns,
+      hostData?.total_view_rows,
+      hostData?.window_offset,
+      hostData?.window_size,
+      navigatePage,
+      rows.length,
+      selectRowAtIndex,
+    ]
+  );
+
+  // Restore DOM keyboard focus onto target grid/form cell after React updates `activeRowIndex` / `activeColName`
+  useEffect(() => {
+    const req = pendingCellFocusRef.current;
+    if (!req || !areaRef.current) return;
+    pendingCellFocusRef.current = null;
+    const attr = req.kind === 'form' ? 'data-form-nav-cell' : 'data-grid-nav-cell';
+    const escCol = String(req.colName || '').replaceAll('"', '\\"');
+    const el = areaRef.current.querySelector(`[${attr}="${req.rowIndex}:${escCol}"]`);
+    if (el && typeof el.focus === 'function') {
+      el.focus({preventScroll: false});
+      el.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
+    }
+  }, [activeRowIndex, activeColName, rows, isEditingRow]);
 
   const setColumnPref = useCallback((colName, patch) => {
     if (!colName) return;
@@ -1264,6 +1579,9 @@ export default function DataEditSurface({
     locateCurrentRow,
     selectRowAtIndex,
     navigatePage,
+    toggleBookmarkAtRow,
+    jumpToBookmark,
+    handleKeyboardCellNavigate,
     acceptCurrentRow,
     beginEditRow,
     beginInsertRow,
@@ -1970,10 +2288,13 @@ export default function DataEditSurface({
       }
     );
 
-    // Navigate Group
+    // Navigate & Bookmark Group (`|<`, `<<`, `<`, `>`, `>>`, `>|`, `!`, `!<`, `!>`)
     const totalRows = hostData?.total_view_rows ?? rows.length;
     const winOff = hostData?.window_offset || 0;
     const winSz = hostData?.window_size || 200;
+    const curGlobalRow = winOff + activeRowIndex;
+    const isCurrentBookmarked = bookmarkedGlobals.has(curGlobalRow);
+    const hasBookmarks = bookmarkedGlobals.size > 0;
     const locateId = reg(
       'locate_row',
       'action.locate_row',
@@ -1984,51 +2305,65 @@ export default function DataEditSurface({
     const navFirstId = reg(
       'nav_first',
       'action.nav_first',
-      gettext('First Row'),
-      () => {
-        if (winOff > 0) handlersRef.current.navigatePage(0);
-        else handlersRef.current.selectRowAtIndex(0);
-      },
+      gettext('First Record (|<)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(0, activeColName, 'first_record', 'grid'),
       {enabled: totalRows > 0 && (winOff > 0 || activeRowIndex > 0)}
     );
     const navPrevPageId = reg(
       'nav_prev_page',
       'action.nav_prev_page',
-      gettext('Previous Page'),
-      () => handlersRef.current.navigatePage(Math.max(0, winOff - winSz)),
-      {enabled: winOff > 0}
+      gettext('Previous Page (<<)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(activeRowIndex, activeColName, 'prev_page', 'grid'),
+      {enabled: totalRows > 0 && (winOff > 0 || activeRowIndex > 0)}
     );
     const navPrevRowId = reg(
       'nav_prev_row',
       'action.nav_prev_row',
-      gettext('Previous Row'),
-      () => handlersRef.current.selectRowAtIndex(activeRowIndex - 1),
-      {enabled: activeRowIndex > 0}
+      gettext('Previous Row (<)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(activeRowIndex - 1, activeColName, null, 'grid'),
+      {enabled: winOff > 0 || activeRowIndex > 0}
     );
     const navNextRowId = reg(
       'nav_next_row',
       'action.nav_next_row',
-      gettext('Next Row'),
-      () => handlersRef.current.selectRowAtIndex(activeRowIndex + 1),
-      {enabled: activeRowIndex < rows.length - 1}
+      gettext('Next Row (>)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(activeRowIndex + 1, activeColName, null, 'grid'),
+      {enabled: activeRowIndex < rows.length - 1 || winOff + winSz < totalRows}
     );
     const navNextPageId = reg(
       'nav_next_page',
       'action.nav_next_page',
-      gettext('Next Page'),
-      () => handlersRef.current.navigatePage(winOff + winSz),
-      {enabled: winOff + winSz < totalRows}
+      gettext('Next Page (>>)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(activeRowIndex, activeColName, 'next_page', 'grid'),
+      {enabled: totalRows > 0 && (winOff + winSz < totalRows || activeRowIndex < rows.length - 1)}
     );
     const navLastId = reg(
       'nav_last',
       'action.nav_last',
-      gettext('Last Row'),
-      () => {
-        const lastPageOff = Math.floor(Math.max(0, totalRows - 1) / winSz) * winSz;
-        if (lastPageOff !== winOff) handlersRef.current.navigatePage(lastPageOff);
-        else handlersRef.current.selectRowAtIndex(rows.length - 1);
-      },
+      gettext('Last Record (>|)'),
+      () => handlersRef.current.handleKeyboardCellNavigate(rows.length - 1, activeColName, 'last_record', 'grid'),
       {enabled: totalRows > 0 && (winOff + winSz < totalRows || activeRowIndex < rows.length - 1)}
+    );
+    const bookmarkToggleId = reg(
+      'bookmark_toggle',
+      'action.bookmark_toggle',
+      gettext('Bookmark Record (!)'),
+      () => handlersRef.current.toggleBookmarkAtRow(),
+      {enabled: rows.length > 0, checked: isCurrentBookmarked, shortcut: 'Ctrl+B'}
+    );
+    const bookmarkPrevId = reg(
+      'bookmark_prev',
+      'action.bookmark_prev',
+      gettext('Previous Bookmark (!<)'),
+      () => handlersRef.current.jumpToBookmark(-1),
+      {enabled: hasBookmarks}
+    );
+    const bookmarkNextId = reg(
+      'bookmark_next',
+      'action.bookmark_next',
+      gettext('Next Bookmark (!>)'),
+      () => handlersRef.current.jumpToBookmark(1),
+      {enabled: hasBookmarks}
     );
     const jumpRowId = reg(
       'jump_row',
@@ -2499,20 +2834,17 @@ export default function DataEditSurface({
             id: 'navigate',
             label: gettext('Navigate'),
             controls: [
-              {id: locateId, actionId: locateId, size: 'large', showLabel: true},
-              {
-                type: 'stack',
-                id: `${pfx}.nav_stack`,
-                controls: [
-                  navFirstId,
-                  navPrevPageId,
-                  navPrevRowId,
-                  navNextRowId,
-                  navNextPageId,
-                  navLastId,
-                  jumpRowId,
-                ],
-              },
+              navFirstId,
+              navPrevPageId,
+              navPrevRowId,
+              navNextRowId,
+              navNextPageId,
+              navLastId,
+              bookmarkToggleId,
+              bookmarkPrevId,
+              bookmarkNextId,
+              locateId,
+              jumpRowId,
             ],
           },
           {
@@ -2801,7 +3133,10 @@ export default function DataEditSurface({
               {id: `${pfx}.mnu.prev_row`, actionId: navPrevRowId, label: gettext('Previous Row'), iconKey: 'action.nav_prev_row', index: 40},
               {id: `${pfx}.mnu.next_row`, actionId: navNextRowId, label: gettext('Next Row'), iconKey: 'action.nav_next_row', index: 50},
               {id: `${pfx}.mnu.next_page`, actionId: navNextPageId, label: gettext('Next Page'), iconKey: 'action.nav_next_page', index: 60},
-              {id: `${pfx}.mnu.last`, actionId: navLastId, label: gettext('Last Row'), iconKey: 'action.nav_last', index: 70},
+              {id: `${pfx}.mnu.last`, actionId: navLastId, label: gettext('Last Record (>|)'), iconKey: 'action.nav_last', index: 70},
+              {id: `${pfx}.mnu.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Toggle Bookmark (!)'), iconKey: 'action.bookmark_toggle', shortcut: 'Ctrl+B', index: 72},
+              {id: `${pfx}.mnu.bm_prev`, actionId: bookmarkPrevId, label: gettext('Previous Bookmark (!<)'), iconKey: 'action.bookmark_prev', index: 74},
+              {id: `${pfx}.mnu.bm_next`, actionId: bookmarkNextId, label: gettext('Next Bookmark (!>)'), iconKey: 'action.bookmark_next', index: 76},
               {id: `${pfx}.mnu.jump`, actionId: jumpRowId, label: gettext('Jump to Row #…'), iconKey: 'action.search', shortcut: 'Ctrl+G', index: 80},
             ],
           },
@@ -3243,6 +3578,7 @@ export default function DataEditSurface({
     errorWarnCount,
     undoStack.length,
     redoStack.length,
+    bookmarkedGlobals,
     stableRenderRightDrawer,
     stableRenderStatusBar,
   ]);
@@ -3513,6 +3849,11 @@ export default function DataEditSurface({
         {/* Left Row Number Gutter (visually distinct, no heading) */}
         <div
           role="rowheader"
+          onDoubleClick={(ev) => {
+            ev.stopPropagation();
+            toggleBookmarkAtRow(rIdx);
+          }}
+          title={gettext('Double-click or press ! to toggle bookmark')}
           style={{
             position: 'sticky',
             left: 0,
@@ -3532,7 +3873,25 @@ export default function DataEditSurface({
             userSelect: 'none',
           }}
         >
-          <span>{isCurrent ? '▶' : stageMarker}</span>
+          <span>
+            {isCurrent ? '▶' : stageMarker}
+            {bookmarkedGlobals.has((hostData?.window_offset || 0) + rIdx) && (
+              <span
+                data-cdeadmin-qa-key={`grid-bookmark-badge-${rIdx}`}
+                style={{
+                  marginLeft: 2,
+                  padding: '0 4px',
+                  borderRadius: 999,
+                  background: '#f59e0b',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '0.66rem',
+                }}
+              >
+                !
+              </span>
+            )}
+          </span>
           <span>{row.row_number}</span>
         </div>
 
@@ -3577,6 +3936,7 @@ export default function DataEditSurface({
             <div
               key={col.name}
               role="gridcell"
+              data-grid-nav-cell={`${rIdx}:${col.name}`}
               tabIndex={isActiveCell ? 0 : -1}
               onClick={(ev) => {
                 ev.stopPropagation();
@@ -3603,6 +3963,25 @@ export default function DataEditSurface({
                 }
               }}
               onKeyDown={(ev) => {
+                const colIdx = gridColumns.findIndex((c) => c.name === col.name);
+                const lastColIdx = gridColumns.length - 1;
+
+                if (ev.key === 'Tab' && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+                  ev.preventDefault();
+                  if (!ev.shiftKey) {
+                    if (colIdx < lastColIdx) {
+                      handleKeyboardCellNavigate(rIdx, gridColumns[colIdx + 1].name, null, 'grid');
+                    } else {
+                      handleKeyboardCellNavigate(rIdx + 1, gridColumns[0]?.name || col.name, null, 'grid');
+                    }
+                  } else if (colIdx > 0) {
+                    handleKeyboardCellNavigate(rIdx, gridColumns[colIdx - 1].name, null, 'grid');
+                  } else {
+                    handleKeyboardCellNavigate(rIdx - 1, gridColumns[lastColIdx]?.name || col.name, null, 'grid');
+                  }
+                  return;
+                }
+
                 if (canEditCell) {
                   if (ev.key === 'Escape') {
                     ev.preventDefault();
@@ -3610,22 +3989,59 @@ export default function DataEditSurface({
                   } else if (ev.key === 'Enter') {
                     ev.preventDefault();
                     acceptCurrentRow();
+                  } else if (ev.key === 'ArrowDown') {
+                    ev.preventDefault();
+                    handleKeyboardCellNavigate(rIdx + 1, col.name, null, 'grid');
+                  } else if (ev.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    handleKeyboardCellNavigate(rIdx - 1, col.name, null, 'grid');
                   }
                   return;
                 }
-                const colIdx = gridColumns.findIndex((c) => c.name === col.name);
+
                 if (ev.key === 'ArrowDown') {
                   ev.preventDefault();
-                  selectRowAtIndex(rIdx + 1, col.name);
+                  handleKeyboardCellNavigate(rIdx + 1, col.name, null, 'grid');
                 } else if (ev.key === 'ArrowUp') {
                   ev.preventDefault();
-                  selectRowAtIndex(rIdx - 1, col.name);
-                } else if (ev.key === 'ArrowRight' && colIdx < gridColumns.length - 1) {
+                  handleKeyboardCellNavigate(rIdx - 1, col.name, null, 'grid');
+                } else if (ev.key === 'ArrowRight') {
                   ev.preventDefault();
-                  setActiveColName(gridColumns[colIdx + 1].name);
-                } else if (ev.key === 'ArrowLeft' && colIdx > 0) {
+                  if (colIdx < lastColIdx) {
+                    handleKeyboardCellNavigate(rIdx, gridColumns[colIdx + 1].name, null, 'grid');
+                  } else {
+                    handleKeyboardCellNavigate(rIdx + 1, gridColumns[0]?.name || col.name, null, 'grid');
+                  }
+                } else if (ev.key === 'ArrowLeft') {
                   ev.preventDefault();
-                  setActiveColName(gridColumns[colIdx - 1].name);
+                  if (colIdx > 0) {
+                    handleKeyboardCellNavigate(rIdx, gridColumns[colIdx - 1].name, null, 'grid');
+                  } else {
+                    handleKeyboardCellNavigate(rIdx - 1, gridColumns[lastColIdx]?.name || col.name, null, 'grid');
+                  }
+                } else if (ev.key === 'PageDown') {
+                  ev.preventDefault();
+                  handleKeyboardCellNavigate(rIdx, col.name, 'next_page', 'grid');
+                } else if (ev.key === 'PageUp') {
+                  ev.preventDefault();
+                  handleKeyboardCellNavigate(rIdx, col.name, 'prev_page', 'grid');
+                } else if (ev.key === 'Home') {
+                  ev.preventDefault();
+                  if (ev.ctrlKey || ev.metaKey) {
+                    handleKeyboardCellNavigate(0, gridColumns[0]?.name || col.name, 'first_record', 'grid');
+                  } else {
+                    handleKeyboardCellNavigate(rIdx, gridColumns[0]?.name || col.name, null, 'grid');
+                  }
+                } else if (ev.key === 'End') {
+                  ev.preventDefault();
+                  if (ev.ctrlKey || ev.metaKey) {
+                    handleKeyboardCellNavigate(rows.length - 1, gridColumns[lastColIdx]?.name || col.name, 'last_record', 'grid');
+                  } else {
+                    handleKeyboardCellNavigate(rIdx, gridColumns[lastColIdx]?.name || col.name, null, 'grid');
+                  }
+                } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'b') {
+                  ev.preventDefault();
+                  toggleBookmarkAtRow(rIdx);
                 } else if (ev.key === 'Enter' || ev.key === 'F2') {
                   ev.preventDefault();
                   beginEditRow(rIdx);
@@ -3756,6 +4172,7 @@ export default function DataEditSurface({
           rowIndex={activeRowIndex}
           isCurrent
           isEditing={isRowEdit}
+          isBookmarked={bookmarkedGlobals.has((hostData?.window_offset || 0) + activeRowIndex)}
           draftValues={isRowEdit ? rowDraft : null}
           columns={formColumns}
           formLayout={sharedFormLayout}
@@ -3763,8 +4180,13 @@ export default function DataEditSurface({
           booleanFormat={layout.booleanFormat}
           localeDateFormat={layout.localeDateFormat}
           fullArea
+          totalRowsInPage={rows.length}
           onSelectRow={selectRowAtIndex}
           onFocusField={setActiveColName}
+          onNavigateFormField={(nextRowIdx, nextCol, action) =>
+            handleKeyboardCellNavigate(nextRowIdx, nextCol, action, 'form')
+          }
+          onToggleBookmark={toggleBookmarkAtRow}
           onFieldChange={(cName, val) =>
             setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
           }
@@ -3794,14 +4216,20 @@ export default function DataEditSurface({
                     rowIndex={rIdx}
                     isCurrent={rIdx === activeRowIndex}
                     isEditing={isRowEdit}
+                    isBookmarked={bookmarkedGlobals.has((hostData?.window_offset || 0) + rIdx)}
                     draftValues={isRowEdit ? rowDraft : null}
                     columns={formColumns}
                     formLayout={sharedFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
                     booleanFormat={layout.booleanFormat}
                     localeDateFormat={layout.localeDateFormat}
+                    totalRowsInPage={rows.length}
                     onSelectRow={selectRowAtIndex}
                     onFocusField={setActiveColName}
+                    onNavigateFormField={(nextRowIdx, nextCol, action) =>
+                      handleKeyboardCellNavigate(nextRowIdx, nextCol, action, 'form')
+                    }
+                    onToggleBookmark={toggleBookmarkAtRow}
                     onFieldChange={(cName, val) =>
                       setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
                     }
@@ -4058,6 +4486,7 @@ export default function DataEditSurface({
                       rowIndex={rIdx}
                       isCurrent
                       isEditing={isRowEdit}
+                      isBookmarked={bookmarkedGlobals.has((hostData?.window_offset || 0) + rIdx)}
                       draftValues={isRowEdit ? rowDraft : null}
                       columns={formColumns}
                       formLayout={sharedFormLayout}
@@ -4065,8 +4494,13 @@ export default function DataEditSurface({
                       booleanFormat={layout.booleanFormat}
                       localeDateFormat={layout.localeDateFormat}
                       maxHeight="46vh"
+                      totalRowsInPage={rows.length}
                       onSelectRow={selectRowAtIndex}
                       onFocusField={setActiveColName}
+                      onNavigateFormField={(nextRowIdx, nextCol, action) =>
+                        handleKeyboardCellNavigate(nextRowIdx, nextCol, action, 'form')
+                      }
+                      onToggleBookmark={toggleBookmarkAtRow}
                       onFieldChange={(cName, val) =>
                         setRowDraft((prev) => ({...(prev || {}), [cName]: val}))
                       }

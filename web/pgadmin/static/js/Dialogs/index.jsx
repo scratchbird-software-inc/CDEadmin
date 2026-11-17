@@ -397,24 +397,40 @@ export function showProviderWorkspace(
         sql_nonce: initialContext.sql_nonce || `${Date.now()}-${providerWorkspaceSequence}`,
       }
       : initialContext;
+  const isOpaqueTargetIdentifier = (val) => {
+    const s = String(val || '').trim();
+    if (!s) return true;
+    return (
+      /^(target|database|endpoint|resource|conn|srv):[0-9a-f_-]{8,}$/i.test(s) ||
+      /^[0-9a-f]{16,}$/i.test(s) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+    );
+  };
+  const cleanFileOrTargetLabel = (val) => {
+    const s = String(val || '').trim();
+    if (!s || isOpaqueTargetIdentifier(s)) return '';
+    if (s.includes('/') || s.includes('\\')) {
+      const base = s.split(/[\\/]/).filter(Boolean).pop() || '';
+      return isOpaqueTargetIdentifier(base) ? '' : base;
+    }
+    return s;
+  };
+  const humanDatabaseOrNodeLabel =
+    cleanFileOrTargetLabel(nodeData?.label) ||
+    cleanFileOrTargetLabel(nodeData?._label) ||
+    cleanFileOrTargetLabel(databaseTargetId) ||
+    cleanFileOrTargetLabel(title) ||
+    gettext('Query');
+  const humanObjectLabel =
+    cleanFileOrTargetLabel(initialContext.display_name) ||
+    cleanFileOrTargetLabel(initialContext.resource_label) ||
+    (initialContext.resource_id && initialContext.resource_kind !== 'database'
+      ? cleanFileOrTargetLabel(String(initialContext.resource_id).split(':').pop())
+      : '');
   const resolvedTitle = isDedicatedBrowseData
-    ? `data: ${
-      initialContext.display_name ||
-      initialContext.resource_label ||
-      String(initialContext.resource_id).split(':').pop() ||
-      nodeData?.label ||
-      nodeData?._label
-    }`
+    ? `data: ${humanObjectLabel || humanDatabaseOrNodeLabel}`
     : isDedicatedSqlSurface
-      ? `sql: ${
-        initialContext.display_name ||
-        initialContext.resource_label ||
-        (initialContext.resource_id ? String(initialContext.resource_id).split(':').pop() : '') ||
-        databaseTargetId ||
-        nodeData?.label ||
-        nodeData?._label ||
-        title
-      }`
+      ? `sql: ${humanObjectLabel || humanDatabaseOrNodeLabel}`
       : title;
   const panel = {
     id: panelId,

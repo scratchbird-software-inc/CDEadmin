@@ -735,6 +735,7 @@ export class TActionsRegistry {
       ...(tab.allowEmpty ? {allowEmpty: true} : {}),
       ...(tab.closable !== undefined ? {closable: Boolean(tab.closable)} : {}),
       ...(tab.draggable !== undefined ? {draggable: Boolean(tab.draggable)} : {}),
+      ...(tab.renamable !== undefined ? {renamable: Boolean(tab.renamable)} : {}),
       ...(tab.context ? {context: tab.context} : {}),
       ...(tab.selectOnContext ? {selectOnContext: true} : {}),
       groups: (tab.groups || []).map((group, idx) => {

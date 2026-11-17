@@ -1463,6 +1463,43 @@ export function ProjectShellProvider({
     [actionsRegistry, menuRegistry]
   );
 
+  const [renameTabTrigger, setRenameTabTrigger] = useState(null);
+
+  const renameInstance = useCallback((instanceId, nextTitle) => {
+    const cleaned = String(nextTitle ?? '').trim();
+    if (!instanceId || instanceId === USER_DASHBOARD_ID || !cleaned) return false;
+    let changed = false;
+    const nextList = instancesRef.current.map((item) => {
+      if (item.instanceId !== instanceId) return item;
+      changed = true;
+      if (item.popupWindow && !item.popupWindow.closed) {
+        try {
+          item.popupWindow.document.title = `${cleaned} — ScratchRobin`;
+        } catch {
+          // Ignore cross-window restrictions
+        }
+      }
+      return {
+        ...item,
+        title: cleaned,
+        customTitle: true,
+      };
+    });
+    if (!changed) return false;
+    instancesRef.current = nextList;
+    setInstances(nextList);
+    return true;
+  }, []);
+
+  const requestTabRename = useCallback(
+    (targetInstanceId = focusedIdRef.current) => {
+      if (!targetInstanceId || targetInstanceId === USER_DASHBOARD_ID) return false;
+      setRenameTabTrigger({instanceId: targetInstanceId, nonce: Date.now()});
+      return true;
+    },
+    []
+  );
+
   /**
    * Detach a docked application tab into a native pop-out window.
    * Floating windows contain ONLY the Main Work Area + bottom Status Area,
@@ -2684,6 +2721,15 @@ export function ProjectShellProvider({
         callback: () => openUserDashboardTab(),
       },
       {
+        id: 'shell.window.rename_tab',
+        label: gettext('Rename Active Tab…'),
+        shortcut: 'F2',
+        iconKey: 'action.edit',
+        index: 41,
+        disabled: !focusedInstance,
+        callback: () => requestTabRename(focusedInstance?.instanceId),
+      },
+      {
         id: 'shell.window.detach_active',
         actionId: 'shell.window.detach_active',
         label: focusedInstance?.detached
@@ -2829,6 +2875,7 @@ export function ProjectShellProvider({
     menuRegistry,
     openApplication,
     openUserDashboardTab,
+    requestTabRename,
     showStatusBar,
     showTabbedIconBar,
     toggleInstanceRightDrawer,
@@ -2989,6 +3036,9 @@ export function ProjectShellProvider({
       detachInstance,
       redockInstance,
       reorderInstances,
+      renameInstance,
+      requestTabRename,
+      renameTabTrigger,
       updateInstance,
       instanceNotifications,
       activeStatusToast,
@@ -3042,7 +3092,10 @@ export function ProjectShellProvider({
       openUserDashboardTab,
       redockInstance,
       refreshAuthorization,
+      renameInstance,
+      renameTabTrigger,
       reorderInstances,
+      requestTabRename,
       resetDrawerWidths,
       resolveAreaZoom,
       resolvePanelGap,
@@ -3273,6 +3326,21 @@ export function ProjectApplicationNotebookBar() {
   const draggedTabOutsideRef = useRef(false);
   const [hoverHint, setHoverHint] = useState(null);
   const [underTabByInstance, setUnderTabByInstance] = useState({});
+  const [tabContextMenu, setTabContextMenu] = useState(null);
+
+  useEffect(() => {
+    if (!tabContextMenu || typeof document === 'undefined') return undefined;
+    const dismiss = () => setTabContextMenu(null);
+    const onEsc = (e) => {
+      if (e.key === 'Escape') setTabContextMenu(null);
+    };
+    document.addEventListener('mousedown', dismiss);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [tabContextMenu]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -3409,6 +3477,7 @@ export function ProjectApplicationNotebookBar() {
       label: item.detached ? `${item.title} ${floatingSuffix}` : item.title,
       allowEmpty: true,
       closable: true,
+      renamable: !item.isDashboard,
       draggable: !item.isDashboard && !item.detached,
       groups:
         activeInstance && item.instanceId === activeInstance.instanceId
@@ -3573,14 +3642,42 @@ export function ProjectApplicationNotebookBar() {
           const dstInstId = instanceIdByTabId.get(targetTabId) || targetTabId;
           shell.reorderInstances?.(srcInstId, dstInstId);
         }}
+        onRenameTab={(safeTabId, nextTitle) => {
+          const instId = instanceIdByTabId.get(safeTabId) || safeTabId;
+          if (instId && instId !== USER_DASHBOARD_ID) {
+            shell.renameInstance?.(instId, nextTitle);
+          }
+        }}
+        renameTabRequest={
+          shell.renameTabTrigger?.instanceId &&
+          tabIdByInstanceId.has(shell.renameTabTrigger.instanceId)
+            ? {
+              tabId: tabIdByInstanceId.get(shell.renameTabTrigger.instanceId),
+              nonce: shell.renameTabTrigger.nonce,
+            }
+            : null
+        }
         closeTabLabel={(tab) => gettext('Close %s', tab.label)}
         closeTabIcon={<Icon iconKey="action.close" decorative size="12px" />}
         getTabProps={(tab, isSelected) => {
           const instId = instanceIdByTabId.get(tab.id) || tab.id;
+          const isDash = instId === USER_DASHBOARD_ID;
           return {
             'data-cdeadmin-tab-id': instId,
             'data-tab-active': isSelected ? 'true' : 'false',
             draggable: Boolean(tab.draggable),
+            onContextMenu: (e) => {
+              if (isDash) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setHoverHint(null);
+              setTabContextMenu({
+                instanceId: instId,
+                safeTabId: tab.id,
+                x: e.clientX,
+                y: e.clientY,
+              });
+            },
             onDragStart: (e) => {
               if (!tab.draggable) return;
               draggedTabOutsideRef.current = false;
@@ -3678,6 +3775,79 @@ export function ProjectApplicationNotebookBar() {
           </ShellSurfaceErrorBoundary>
         </div>
       )}
+      {tabContextMenu &&
+        typeof document !== 'undefined' &&
+        document.body &&
+        createPortal(
+          <div
+            role="menu"
+            aria-label={gettext('Tab actions')}
+            data-cdeadmin-qa-key="notebookbar-tab-context-menu"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              left: `${Math.max(8, tabContextMenu.x)}px`,
+              top: `${Math.max(8, tabContextMenu.y)}px`,
+              zIndex: 2400,
+              minWidth: 168,
+              padding: '4px 0',
+              borderRadius: 8,
+              background: 'var(--sr-island-bg, #ffffff)',
+              color: 'var(--sr-island-fg, #0f172a)',
+              border: '1px solid var(--sr-island-border, #cbd5e1)',
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.16)',
+              fontSize: '0.8125rem',
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-cdeadmin-qa-key="tab-ctx-rename"
+              onClick={() => {
+                const targetId = tabContextMenu.instanceId;
+                setTabContextMenu(null);
+                shell.focusInstance(targetId);
+                shell.requestTabRename?.(targetId);
+              }}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                width: '100%',
+                border: 0,
+                background: 'transparent',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span>{gettext('Rename Tab…')}</span>
+              <span style={{opacity: 0.65, fontSize: '0.75rem'}}>F2</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-cdeadmin-qa-key="tab-ctx-close"
+              onClick={() => {
+                const targetId = tabContextMenu.instanceId;
+                setTabContextMenu(null);
+                shell.closeInstance(targetId);
+              }}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                width: '100%',
+                border: 0,
+                background: 'transparent',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span>{gettext('Close Tab')}</span>
+            </button>
+          </div>,
+          document.body
+        )}
       {hoverHint &&
         typeof document !== 'undefined' &&
         document.body &&

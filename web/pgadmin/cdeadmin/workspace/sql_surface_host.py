@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import base64
 import collections
+from collections.abc import Mapping, Sequence
 import copy
 import csv
+import hashlib
 import io
 import json
 import math
@@ -2014,10 +2016,623 @@ def export_tabular_dataset(
 # 6. Visual Query Builder <-> DDN Canvas Scene & SQL Synchronizer
 # ============================================================================
 
+_FB_FIELD_TYPE_MAP: dict[int, str] = {
+    7: 'SMALLINT',
+    8: 'INTEGER',
+    10: 'FLOAT',
+    12: 'DATE',
+    13: 'TIME',
+    14: 'CHAR',
+    16: 'BIGINT',
+    23: 'BOOLEAN',
+    24: 'DECFLOAT(16)',
+    25: 'DECFLOAT(34)',
+    26: 'INT128',
+    27: 'DOUBLE PRECISION',
+    28: 'TIME WITH TIME ZONE',
+    29: 'TIMESTAMP WITH TIME ZONE',
+    35: 'TIMESTAMP',
+    37: 'VARCHAR',
+    261: 'BLOB',
+}
+
+_VISUAL_RELATION_KINDS = frozenset({
+    'table',
+    'view',
+    'materialized-view',
+    'foreign-table',
+    'partitioned-table',
+})
+_VISUAL_ROUTINE_KINDS = frozenset({
+    'procedure',
+    'function',
+    'routine',
+    'table-function',
+})
+
+
+def _extract_native_dict(res: Mapping[str, Any]) -> dict[str, Any]:
+    if isinstance(res.get('native'), Mapping):
+        return dict(res['native'])
+    if isinstance(res.get('properties'), Mapping):
+        return dict(res['properties'])
+    exts = res.get('extensions')
+    if isinstance(exts, Mapping):
+        for val in exts.values():
+            if isinstance(val, Mapping) and isinstance(val.get('native'), Mapping):
+                return dict(val['native'])
+    return {}
+
+
+def _format_catalog_field_type(meta: Mapping[str, Any]) -> str:
+    for key in ('native_type', 'data_type', 'type', 'sql_type', 'formatted_type'):
+        raw = meta.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    ft = meta.get('field_type')
+    if isinstance(ft, int) and not isinstance(ft, bool):
+        scale = meta.get('field_scale')
+        prec = meta.get('field_precision')
+        char_len = meta.get('character_length') or meta.get('field_length')
+        if isinstance(scale, int) and scale < 0 and prec:
+            return f'NUMERIC({prec}, {abs(scale)})'
+        base = _FB_FIELD_TYPE_MAP.get(ft, '')
+        if base in ('VARCHAR', 'CHAR') and char_len:
+            return f'{base}({char_len})'
+        if base:
+            return base
+    dom = str(meta.get('domain') or '').strip()
+    if dom and not dom.upper().startswith('RDB$'):
+        return dom
+    return 'TEXT'
+
+
+def _parse_routine_signature_from_source(
+    source_sql: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    """Parse input & RETURNS output columns from PSQL / SQL routine source as fallback."""
+    src = str(source_sql or '').strip()
+    if not src:
+        return [], [], False
+
+    inputs: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+
+    # Firebird `RETURNS (col1 TYPE, col2 TYPE)` or PostgreSQL `RETURNS TABLE (col1 TYPE, ...)`
+    ret_block = re.search(
+        r'\bRETURNS\s+(?:TABLE\s*)?\(([^)]+)\)',
+        src,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if ret_block:
+        for part in ret_block.group(1).split(','):
+            tok = part.strip()
+            if not tok:
+                continue
+            m_col = re.match(r'^("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+(.+)$', tok)
+            if m_col:
+                cname = m_col.group(1).strip('"')
+                ctype = m_col.group(2).strip()
+                outputs.append({
+                    'name': cname,
+                    'native_type': ctype,
+                    'type': ctype,
+                    'key': False,
+                    'fk': False,
+                    'nullable': True,
+                })
+
+    hdr_match = re.search(
+        r'\b(?:PROCEDURE|FUNCTION)\s+(?:"[^"]+"|[A-Za-z0-9_.$"]+)\s*\(([^)]*)\)',
+        src,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if hdr_match:
+        for part in hdr_match.group(1).split(','):
+            tok = part.strip()
+            if not tok:
+                continue
+            upper_tok = tok.upper()
+            if upper_tok.startswith('OUT ') or upper_tok.startswith('INOUT '):
+                rest = re.sub(r'^(?:INOUT|OUT)\s+', '', tok, flags=re.IGNORECASE).strip()
+                m_out = re.match(r'^("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+(.+)$', rest)
+                if m_out:
+                    cname = m_out.group(1).strip('"')
+                    ctype = m_out.group(2).strip()
+                    outputs.append({
+                        'name': cname,
+                        'native_type': ctype,
+                        'type': ctype,
+                        'key': False,
+                        'fk': False,
+                        'nullable': True,
+                    })
+                    if upper_tok.startswith('INOUT '):
+                        inputs.append({'name': cname, 'type': ctype, 'expr': f':{cname}'})
+                continue
+            rest = re.sub(r'^IN\s+', '', tok, flags=re.IGNORECASE).strip()
+            m_in = re.match(r'^("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+(.+)$', rest)
+            if m_in:
+                pname = m_in.group(1).strip('"')
+                ptype = re.split(r'\bDEFAULT\b|=', m_in.group(2), maxsplit=1, flags=re.IGNORECASE)[0].strip()
+                inputs.append({'name': pname, 'type': ptype, 'expr': f':{pname}'})
+
+    has_suspend_or_return_query = bool(
+        re.search(r'\b(SUSPEND|RETURNS\s+TABLE|RETURNS\s+SETOF)\b', src, re.IGNORECASE)
+    )
+    return inputs, outputs, has_suspend_or_return_query
+
+
+def resolve_visual_catalog_object(
+    workspace_service: Any,
+    server: Any,
+    database_target_id: str | None,
+    target_resource: Mapping[str, Any],
+    catalog_resources: Sequence[Mapping[str, Any]] = (),
+    existing_tables: Sequence[Mapping[str, Any]] = (),
+    engine_id: str = 'relational',
+) -> dict[str, Any]:
+    """Resolve authoritative columns, selectable procedure inputs/outputs, and FK join hints."""
+    eng = str(engine_id or 'relational').split('-')[0].lower()
+    rid = str(target_resource.get('resource_id') or '').strip()
+    req_kind = str(target_resource.get('resource_kind') or 'table').strip().lower()
+    req_name = str(
+        target_resource.get('display_name')
+        or target_resource.get('name')
+        or (rid.split(':')[-1] if rid else '')
+        or ''
+    ).strip()
+
+    matched_cat: dict[str, Any] = {}
+    for item in catalog_resources:
+        if not isinstance(item, Mapping):
+            continue
+        item_rid = str(item.get('resource_id') or '')
+        item_name = str(item.get('display_name') or item.get('name') or '')
+        item_kind = str(item.get('resource_kind') or '').lower()
+        if rid and item_rid == rid:
+            matched_cat = dict(item)
+            break
+        if req_name and item_name.lower() == req_name.lower() and (not req_kind or item_kind == req_kind):
+            matched_cat = dict(item)
+            if not rid:
+                rid = item_rid
+                break
+
+    inspected_res: dict[str, Any] = {}
+    if rid and hasattr(workspace_service, 'inspect_resource'):
+        try:
+            insp = workspace_service.inspect_resource(
+                server,
+                {'resource_id': rid, 'database_target_id': database_target_id},
+            )
+            if isinstance(insp, Mapping):
+                inspected_res = dict(insp.get('resource') if isinstance(insp.get('resource'), Mapping) else insp)
+        except Exception:
+            inspected_res = {}
+
+    merged: dict[str, Any] = {}
+    merged.update(matched_cat)
+    merged.update(dict(target_resource))
+    if inspected_res:
+        for k, v in inspected_res.items():
+            if v is not None and v != '':
+                merged[k] = v
+
+    rkind = str(merged.get('resource_kind') or req_kind or 'table').lower()
+    obj_name = str(
+        merged.get('display_name')
+        or merged.get('name')
+        or req_name
+        or (rid.split(':')[-1] if rid else 'OBJECT')
+    ).strip()
+    display_path = list(merged.get('display_path') or matched_cat.get('display_path') or [obj_name])
+    schema_name = str(merged.get('schema_name') or (display_path[-2] if len(display_path) >= 2 else '') or '').strip()
+
+    native = {}
+    native.update(_extract_native_dict(matched_cat))
+    native.update(_extract_native_dict(merged))
+    if inspected_res:
+        native.update(_extract_native_dict(inspected_res))
+
+    cat_meta = (
+        (merged.get('extensions') or {}).get('cdeadmin', {}).get('catalog_metadata')
+        or (matched_cat.get('extensions') or {}).get('cdeadmin', {}).get('catalog_metadata')
+        or {}
+    )
+
+    used_aliases = {
+        str(t.get('alias') or '').lower()
+        for t in existing_tables
+        if isinstance(t, Mapping) and t.get('alias')
+    }
+    used_ids = {
+        str(t.get('id') or '')
+        for t in existing_tables
+        if isinstance(t, Mapping) and t.get('id')
+    }
+
+    def _next_alias(prefix: str) -> str:
+        n = 1
+        while f'{prefix}{n}'.lower() in used_aliases or f'{prefix}{n}' in used_ids:
+            n += 1
+        return f'{prefix}{n}'
+
+    # --- A. Selectable Stored Procedure / Table-Returning Function ---
+    if rkind in _VISUAL_ROUTINE_KINDS:
+        raw_params = list(
+            native.get('parameters')
+            or cat_meta.get('parameters')
+            or merged.get('parameters')
+            or []
+        )
+        input_params: list[dict[str, Any]] = []
+        output_cols: list[dict[str, Any]] = []
+
+        if raw_params:
+            sorted_params = sorted(
+                [p for p in raw_params if isinstance(p, Mapping)],
+                key=lambda p: (
+                    0 if str(p.get('mode') or 'input').lower() in ('in', 'input', 'inout') else 1,
+                    int(p.get('position') if isinstance(p.get('position'), int) else 9999),
+                ),
+            )
+            for p in sorted_params:
+                pname = str(p.get('name') or p.get('parameter_name') or '').strip()
+                if not pname:
+                    continue
+                pmode = str(p.get('mode') or p.get('parameter_mode') or 'input').lower()
+                ptype = _format_catalog_field_type(p)
+                if pmode in ('in', 'input', 'inout'):
+                    input_params.append({
+                        'name': pname,
+                        'type': ptype,
+                        'expr': f':{pname}',
+                    })
+                if pmode in ('out', 'output', 'inout', 'return', 'returns', 'table'):
+                    output_cols.append({
+                        'name': pname,
+                        'native_type': ptype,
+                        'type': ptype,
+                        'key': False,
+                        'fk': False,
+                        'nullable': not bool(p.get('not_null')),
+                    })
+
+        if not output_cols:
+            ret_cols = list(
+                cat_meta.get('return_columns')
+                or native.get('return_columns')
+                or merged.get('return_columns')
+                or merged.get('columns')
+                or []
+            )
+            for rc in ret_cols:
+                if isinstance(rc, Mapping) and (rc.get('name') or rc.get('column_name')):
+                    cname = str(rc.get('name') or rc.get('column_name'))
+                    ctype = _format_catalog_field_type(rc)
+                    output_cols.append({
+                        'name': cname,
+                        'native_type': ctype,
+                        'type': ctype,
+                        'key': False,
+                        'fk': False,
+                        'nullable': rc.get('nullable', True) is not False,
+                    })
+
+        src_text = str(
+            native.get('metadata_source')
+            or native.get('source')
+            or native.get('ddl')
+            or merged.get('source')
+            or merged.get('definition')
+            or ''
+        )
+        if not output_cols and src_text:
+            parsed_in, parsed_out, _ = _parse_routine_signature_from_source(src_text)
+            if not input_params and parsed_in:
+                input_params = parsed_in
+            if parsed_out:
+                output_cols = parsed_out
+
+        # Firebird `RDB$PROCEDURE_TYPE == 2` is strictly executable (`EXECUTE PROCEDURE`), not selectable.
+        proc_type = native.get('procedure_type')
+        is_executable_only_fb = (
+            eng == 'firebird'
+            and proc_type == 2
+            and not bool(re.search(r'\bSUSPEND\b', src_text, re.IGNORECASE))
+        )
+        if is_executable_only_fb or not output_cols:
+            raise ValueError(
+                f"Procedure '{obj_name}' has no selectable RETURNS output columns (executable-only) "
+                f'and cannot be used as a SELECT source in the Visual Builder.'
+            )
+
+        alias = _next_alias('p')
+        safe_slug = re.sub(r'[^A-Za-z0-9_]', '_', obj_name)
+        node_id = f'proc_{alias}_{safe_slug}'
+        while node_id in used_ids:
+            node_id = f'{node_id}_x'
+
+        return {
+            'object_node': {
+                'id': node_id,
+                'resource_id': rid,
+                'resource_kind': 'procedure' if 'proc' in rkind else rkind,
+                'schema_name': schema_name,
+                'name': obj_name,
+                'alias': alias,
+                'selectable': True,
+                'input_parameters': input_params,
+                'columns': output_cols,
+            },
+            'suggested_joins': [],
+        }
+
+    # --- B. Table / View / Materialized View / Foreign Table ---
+    cols_out: list[dict[str, Any]] = []
+    pk_col_names: set[str] = set()
+    fk_col_names: set[str] = set()
+    fk_relations: list[dict[str, Any]] = []
+
+    # Collect PK / FK constraints from native metadata or child constraint resources
+    raw_constraints = list(
+        native.get('constraints')
+        or cat_meta.get('constraints')
+        or native.get('foreign_keys')
+        or cat_meta.get('foreign_keys')
+        or []
+    )
+    for item in catalog_resources:
+        if not isinstance(item, Mapping):
+            continue
+        ikind = str(item.get('resource_kind') or '').lower()
+        ipath = list(item.get('display_path') or ())
+        if ikind in ('constraint', 'foreign-key', 'primary-key') and ipath[:-1] == display_path:
+            raw_constraints.append({**dict(item), **_extract_native_dict(item)})
+
+    for con in raw_constraints:
+        if not isinstance(con, Mapping):
+            continue
+        ctype = str(con.get('constraint_type') or con.get('type') or con.get('resource_kind') or '').upper()
+        if 'PRIMARY' in ctype or ctype == 'PK':
+            for cname in con.get('columns') or con.get('field_names') or ():
+                pk_col_names.add(str(cname))
+        elif 'FOREIGN' in ctype or ctype in ('FK', 'FOREIGN-KEY') or con.get('referenced_table') or con.get('target_table'):
+            local_cols = list(con.get('columns') or con.get('local_columns') or con.get('field_names') or [])
+            ref_tbl = str(con.get('referenced_table') or con.get('target_table') or con.get('foreign_table') or '').strip()
+            ref_cols = list(con.get('referenced_columns') or con.get('target_columns') or con.get('foreign_columns') or [])
+            for lc in local_cols:
+                fk_col_names.add(str(lc))
+            if ref_tbl and local_cols and ref_cols:
+                fk_relations.append({
+                    'local_column': str(local_cols[0]),
+                    'referenced_table': ref_tbl,
+                    'referenced_column': str(ref_cols[0]),
+                })
+
+    raw_cols = list(
+        cat_meta.get('columns')
+        or native.get('columns')
+        or merged.get('columns')
+        or []
+    )
+    if raw_cols:
+        for rc in raw_cols:
+            if isinstance(rc, str):
+                cols_out.append({
+                    'name': rc,
+                    'native_type': 'TEXT',
+                    'type': 'TEXT',
+                    'key': rc in pk_col_names,
+                    'fk': rc in fk_col_names,
+                    'nullable': True,
+                })
+            elif isinstance(rc, Mapping) and (rc.get('name') or rc.get('column_name')):
+                cname = str(rc.get('name') or rc.get('column_name'))
+                ctype = _format_catalog_field_type(rc)
+                is_pk = bool(rc.get('key') or rc.get('primary_key') or cname in pk_col_names)
+                is_fk = bool(rc.get('fk') or rc.get('foreign_key') or cname in fk_col_names)
+                if rc.get('referenced_table') and rc.get('referenced_column'):
+                    is_fk = True
+                    fk_relations.append({
+                        'local_column': cname,
+                        'referenced_table': str(rc['referenced_table']),
+                        'referenced_column': str(rc['referenced_column']),
+                    })
+                cols_out.append({
+                    'name': cname,
+                    'native_type': ctype,
+                    'type': ctype,
+                    'key': is_pk,
+                    'fk': is_fk,
+                    'nullable': (not bool(rc.get('not_null'))) and (rc.get('nullable', True) is not False),
+                })
+
+    # Fallback 1: Child `column` resources in cached catalog (`display_path[:-1] == relation.display_path`)
+    if not cols_out and display_path:
+        child_col_items = [
+            item
+            for item in catalog_resources
+            if isinstance(item, Mapping)
+            and str(item.get('resource_kind') or '').lower() == 'column'
+            and list(item.get('display_path') or ())[:-1] == display_path
+        ]
+        child_col_items.sort(
+            key=lambda it: int(
+                _extract_native_dict(it).get('ordinal_position')
+                or _extract_native_dict(it).get('position')
+                or 9999
+            )
+        )
+        for ci in child_col_items:
+            cname = str(ci.get('display_name') or ci.get('name') or '').strip()
+            if not cname:
+                continue
+            cnat = _extract_native_dict(ci)
+            ctype = _format_catalog_field_type({**dict(ci), **cnat})
+            is_pk = bool(cnat.get('primary_key') or cnat.get('is_primary_key') or cname in pk_col_names)
+            is_fk = bool(cnat.get('foreign_key') or cnat.get('is_foreign_key') or cname in fk_col_names)
+            cols_out.append({
+                'name': cname,
+                'native_type': ctype,
+                'type': ctype,
+                'key': is_pk,
+                'fk': is_fk,
+                'nullable': (not bool(cnat.get('not_null'))) and (cnat.get('nullable', True) is not False),
+            })
+
+    # Fallback 2: Live 1-row visual-admin peek for relations when catalog only listed summary node
+    if not cols_out and hasattr(workspace_service, 'read_visual_admin_rows'):
+        try:
+            peek_target = dict(merged)
+            peek_target.setdefault('resource_kind', rkind)
+            peek_target.setdefault('display_name', obj_name)
+            peek = workspace_service.read_visual_admin_rows(
+                server,
+                {
+                    'target_resource': peek_target,
+                    'limit': 1,
+                    'database_target_id': database_target_id,
+                },
+            )
+            for pc in peek.get('columns') or ():
+                if isinstance(pc, Mapping) and pc.get('name'):
+                    cname = str(pc['name'])
+                    ctype = _format_catalog_field_type(pc)
+                    cols_out.append({
+                        'name': cname,
+                        'native_type': ctype,
+                        'type': ctype,
+                        'key': bool(pc.get('key') or cname in pk_col_names),
+                        'fk': bool(pc.get('fk') or cname in fk_col_names),
+                        'nullable': pc.get('nullable', True) is not False,
+                    })
+            if peek.get('continuation') and hasattr(workspace_service, 'cancel_visual_admin_rows'):
+                workspace_service.cancel_visual_admin_rows(
+                    server,
+                    {
+                        'continuation': peek['continuation'],
+                        'database_target_id': database_target_id,
+                    },
+                )
+        except Exception:
+            pass
+
+    alias = _next_alias('t')
+    safe_slug = re.sub(r'[^A-Za-z0-9_]', '_', obj_name)
+    node_id = f'tbl_{alias}_{safe_slug}'
+    while node_id in used_ids:
+        node_id = f'{node_id}_x'
+
+    # Auto-suggest FK joins against tables already on the canvas!
+    suggested_joins: list[dict[str, Any]] = []
+    for existing in existing_tables:
+        if not isinstance(existing, Mapping):
+            continue
+        ex_id = str(existing.get('id') or existing.get('alias') or existing.get('name') or '')
+        ex_name = str(existing.get('name') or '')
+        # Outbound FK from new table -> existing table
+        for fk in fk_relations:
+            if fk['referenced_table'].lower() == ex_name.lower():
+                suggested_joins.append({
+                    'id': f'join_{ex_id}_{node_id}_{fk["local_column"]}',
+                    'join_type': 'INNER',
+                    'left_table': ex_id,
+                    'left_column': fk['referenced_column'],
+                    'right_table': node_id,
+                    'right_column': fk['local_column'],
+                    'cardinality': '1:N',
+                })
+        # Inbound FK from existing table -> new table
+        for ex_fk in existing.get('foreign_keys') or ():
+            if isinstance(ex_fk, Mapping) and str(ex_fk.get('referenced_table') or '').lower() == obj_name.lower():
+                suggested_joins.append({
+                    'id': f'join_{ex_id}_{node_id}_{ex_fk.get("local_column")}',
+                    'join_type': 'INNER',
+                    'left_table': ex_id,
+                    'left_column': str(ex_fk.get('local_column') or 'ID'),
+                    'right_table': node_id,
+                    'right_column': str(ex_fk.get('referenced_column') or 'ID'),
+                    'cardinality': '1:N',
+                })
+
+    return {
+        'object_node': {
+            'id': node_id,
+            'resource_id': rid,
+            'resource_kind': rkind,
+            'schema_name': schema_name,
+            'name': obj_name,
+            'alias': alias,
+            'selectable': True,
+            'columns': cols_out,
+            'foreign_keys': fk_relations,
+        },
+        'suggested_joins': suggested_joins,
+    }
+
+
+def _format_visual_relation_sql(tbl: Mapping[str, Any], eng: str) -> str:
+    """Emit engine-accurate FROM / JOIN relation or selectable stored procedure reference."""
+    rkind = str(tbl.get('resource_kind') or 'table').lower()
+    raw_name = str(tbl.get('name') or tbl.get('id') or 'TABLE_NAME')
+    schema_name = str(tbl.get('schema_name') or '').strip()
+    if schema_name and eng not in ('firebird', 'sqlite'):
+        q_name = f'{_quote_ident(schema_name, eng)}.{_quote_ident(raw_name, eng)}'
+    else:
+        q_name = _quote_ident(raw_name, eng)
+
+    if rkind in _VISUAL_ROUTINE_KINDS:
+        in_params = list(tbl.get('input_parameters') or [])
+        if in_params:
+            arg_exprs = []
+            for idx, p in enumerate(in_params):
+                if isinstance(p, Mapping):
+                    p_expr = str(p.get('expr') if p.get('expr') is not None else '').strip()
+                    p_name = str(p.get('name') or f'param_{idx + 1}').strip()
+                    arg_exprs.append(p_expr if p_expr else f':{p_name}')
+                else:
+                    arg_exprs.append(str(p))
+            rel_sql = f"{q_name}({', '.join(arg_exprs)})"
+        else:
+            # Firebird forbids `()` on zero-argument selectable stored procedures (`SELECT * FROM MY_PROC p1`),
+            # whereas PostgreSQL / DuckDB / MySQL table functions use `MY_FUNC()`.
+            rel_sql = q_name if eng == 'firebird' else f'{q_name}()'
+    else:
+        rel_sql = q_name
+
+    alias = str(tbl.get('alias') or '').strip()
+    if alias:
+        rel_sql += f' AS {_quote_ident(alias, eng)}'
+    return rel_sql
+
+
 _SIMPLE_SELECT_TABLE_RE = re.compile(
     r'^\s*SELECT\b[\s\S]+?\bFROM\s+([A-Za-z0-9_."`]+)(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?(?:\s*;?\s*)$',
     re.IGNORECASE,
 )
+
+_CARD_PALETTE_BY_ROLE: dict[str, dict[str, str]] = {
+    'TABLE': {
+        'header_bg': '#dbeafe',
+        'header_fg': '#1e3a8a',
+        'border': '#2563eb',
+        'badge_bg': '#bfdbfe',
+    },
+    'VIEW': {
+        'header_bg': '#ccfbf1',
+        'header_fg': '#115e59',
+        'border': '#0d9488',
+        'badge_bg': '#99f6e4',
+    },
+    'PROC': {
+        'header_bg': '#ede9fe',
+        'header_fg': '#4c1d95',
+        'border': '#7c3aed',
+        'badge_bg': '#ddd6fe',
+    },
+}
 
 
 def build_visual_query_ddn_scene(
@@ -2026,9 +2641,9 @@ def build_visual_query_ddn_scene(
     engine_id: str = 'relational',
 ) -> tuple[dict[str, Any], str, list[str]]:
     """Build BOTH:
-    1. A `RobinTiledCanvas`-compatible DDN diagram scene (`views`, `nodes`, `edges`, `bounds`)
+    1. A `RobinTiledCanvas`-compatible DDN diagram scene (`loaded_tiles`, `nodes`, `edges`, `canvas_bounds`)
        for `100% Area 3e` visual rendering, and
-    2. Synchronized dialect SQL + fan-out warnings!
+    2. Synchronized dialect SQL (including selectable stored procedures & table functions) + fan-out warnings!
     """
     eng = str(engine_id or 'relational').split('-')[0].lower()
     tables: list[dict[str, Any]] = list(visual_model.get('tables') or [])
@@ -2043,40 +2658,125 @@ def build_visual_query_ddn_scene(
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     fanout_warnings: list[str] = []
+    node_lookup: dict[str, dict[str, Any]] = {}
+
+    card_header_h = 38
+    field_row_h = 22
 
     for idx, tbl in enumerate(tables):
         t_id = str(tbl.get('id') or f'tbl_{idx + 1}')
         t_name = str(tbl.get('name') or t_id)
-        t_alias = str(tbl.get('alias') or '')
-        cols = catalog_tables.get(t_name) or tbl.get('columns') or []
-        col_entries = []
-        for c in cols:
-            cname = str(c.get('name') if isinstance(c, dict) else c)
-            is_proj = any(
-                (p.get('table') in (t_id, t_name, t_alias) and p.get('column') == cname)
-                for p in projections
-            ) or not projections
-            col_entries.append({
-                'name': f"{'☑' if is_proj else '☐'} {cname}",
-                'type': str(c.get('native_type') or '') if isinstance(c, dict) else '',
-                'pk': bool(c.get('key')) if isinstance(c, dict) else False,
+        t_alias = str(tbl.get('alias') or '').strip()
+        rkind = str(tbl.get('resource_kind') or 'table').lower()
+        role = (
+            'PROC'
+            if rkind in _VISUAL_ROUTINE_KINDS
+            else 'VIEW'
+            if 'view' in rkind
+            else 'TABLE'
+        )
+        palette = _CARD_PALETTE_BY_ROLE[role]
+
+        in_params = list(tbl.get('input_parameters') or [])
+        if in_params:
+            sig = ', '.join(
+                str(p.get('expr') or f":{p.get('name')}")
+                if isinstance(p, Mapping)
+                else str(p)
+                for p in in_params
+            )
+            card_title = f'{t_name}({sig})' + (f' ({t_alias})' if t_alias else '')
+        else:
+            card_title = f'{t_name} ({t_alias})' if t_alias else t_name
+
+        cols = list(tbl.get('columns') or catalog_tables.get(t_name) or [])
+        fields_all: list[dict[str, Any]] = []
+        legacy_cols: list[dict[str, Any]] = []
+
+        for fi, c in enumerate(cols):
+            cname = str(c.get('name') if isinstance(c, Mapping) else c)
+            ctype = _format_catalog_field_type(c) if isinstance(c, Mapping) else ''
+            is_pk = bool(c.get('key') or c.get('primary_key')) if isinstance(c, Mapping) else False
+            is_fk = bool(c.get('fk') or c.get('foreign_key')) if isinstance(c, Mapping) else False
+            nullable = (c.get('nullable', True) is not False) if isinstance(c, Mapping) else True
+
+            if not projections:
+                is_proj = True
+            else:
+                is_proj = False
+                for p in projections:
+                    if not isinstance(p, Mapping):
+                        continue
+                    p_tbl = str(p.get('table') or '').strip()
+                    p_col = str(p.get('column') or '').strip()
+                    p_expr = str(p.get('expr') or p.get('expression') or '').strip()
+                    if p_tbl in (t_id, t_name, t_alias) and p_col in (cname, '*'):
+                        is_proj = True
+                        break
+                    clean_expr = p_expr.replace('"', '').replace('`', '')
+                    if clean_expr in (
+                        cname,
+                        f'{t_alias}.{cname}' if t_alias else '',
+                        f'{t_name}.{cname}',
+                        f'{t_id}.{cname}',
+                    ):
+                        is_proj = True
+                        break
+
+            fields_all.append({
+                'id': f'{t_id}.{cname}',
+                'name': cname,
+                'raw_name': cname,
+                'selected': is_proj,
+                'datatype': ctype,
+                'is_pk': is_pk,
+                'is_fk': is_fk,
+                'nullable': nullable,
+                'port_y': card_header_h + min(fi, 23) * field_row_h + field_row_h / 2.0,
             })
-        x = float(tbl.get('x') if tbl.get('x') is not None else 80 + (idx % 3) * 320)
-        y = float(tbl.get('y') if tbl.get('y') is not None else 70 + (idx // 3) * 260)
-        h = max(110, 46 + len(col_entries[:14]) * 20)
-        nodes.append({
+            legacy_cols.append({
+                'name': f"{'☑' if is_proj else '☐'} {cname}",
+                'raw_name': cname,
+                'selected': is_proj,
+                'type': ctype,
+                'pk': is_pk,
+            })
+
+        visible_fields = fields_all[:24]
+        hidden_count = max(0, len(fields_all) - len(visible_fields))
+        x = float(tbl.get('x') if tbl.get('x') is not None else 90 + (idx % 3) * 320)
+        y = float(tbl.get('y') if tbl.get('y') is not None else 72 + (idx // 3) * 280)
+        card_w = 268
+        card_h = (
+            card_header_h
+            + max(1, len(visible_fields)) * field_row_h
+            + (22 if hidden_count > 0 else 10)
+        )
+        node_obj = {
             'id': t_id,
             'kind': 'entity',
-            'label': f'{t_name} ({t_alias})' if t_alias else t_name,
-            'subtitle': str(tbl.get('resource_kind') or 'TABLE').upper(),
+            'name': card_title,
+            'label': card_title,
+            'raw_name': t_name,
+            'alias': t_alias,
+            'role': role,
+            'subtitle': role,
+            'resource_kind': rkind,
+            'input_parameters': in_params,
+            'palette': palette,
             'x': x,
             'y': y,
-            'width': 248,
-            'height': h,
-            'columns': col_entries[:14],
-        })
+            'width': card_w,
+            'height': card_h,
+            'fields': visible_fields,
+            'hidden_field_count': hidden_count,
+            'columns': legacy_cols[:24],
+        }
+        nodes.append(node_obj)
+        for key_ref in (t_id, t_alias, t_name):
+            if key_ref and key_ref not in node_lookup:
+                node_lookup[key_ref] = node_obj
 
-    node_by_id = {n['id']: n for n in nodes}
     one_to_many_count = 0
     for j_idx, jn in enumerate(joins):
         l_tbl = str(jn.get('left_table') or '')
@@ -2087,20 +2787,57 @@ def build_visual_query_ddn_scene(
         cardinality = str(jn.get('cardinality') or '1:N')
         if cardinality in ('1:N', 'N:M'):
             one_to_many_count += 1
-        src = node_by_id.get(l_tbl)
-        dst = node_by_id.get(r_tbl)
-        sx = (src['x'] + src['width']) if src else 200
-        sy = (src['y'] + 42) if src else 120
-        dx = dst['x'] if dst else 420
-        dy = (dst['y'] + 42) if dst else 120
-        mid_x = (sx + dx) / 2.0
+
+        src = node_lookup.get(l_tbl)
+        dst = node_lookup.get(r_tbl)
+
+        def _field_port_y(node_item: dict[str, Any] | None, col_name: str) -> float:
+            if not node_item:
+                return 120.0
+            for fi, fld in enumerate(node_item.get('fields') or ()):
+                if str(fld.get('raw_name') or fld.get('name') or '').lower() == col_name.lower():
+                    return float(node_item['y']) + card_header_h + fi * field_row_h + field_row_h / 2.0
+            return float(node_item['y']) + card_header_h + field_row_h / 2.0
+
+        sy = _field_port_y(src, l_col)
+        dy = _field_port_y(dst, r_col)
+        if src and dst:
+            if src['x'] <= dst['x']:
+                sx = float(src['x'] + src['width'])
+                dx = float(dst['x'])
+            else:
+                sx = float(src['x'])
+                dx = float(dst['x'] + dst['width'])
+        else:
+            sx = float((src['x'] + src['width']) if src else 220.0)
+            dx = float(dst['x'] if dst else 460.0)
+
+        mid_x = round((sx + dx) / 2.0, 1)
+        disp_lbl = f'{j_type}: {l_col} = {r_col}'
         edges.append({
             'id': str(jn.get('id') or f'join_{j_idx + 1}'),
-            'source': l_tbl,
-            'target': r_tbl,
+            'join_index': j_idx,
+            'source': src['id'] if src else l_tbl,
+            'target': dst['id'] if dst else r_tbl,
+            'left_column': l_col,
+            'right_column': r_col,
+            'join_type': j_type,
             'label': f'{j_type} JOIN ({l_col} = {r_col})',
+            'display_label': disp_lbl,
+            'label_pos': {
+                'x': mid_x,
+                'y': round((sy + dy) / 2.0, 1),
+                'w': max(88, int(len(disp_lbl) * 6.0 + 18)),
+            },
             'cardinality': cardinality,
-            'points': [[sx, sy], [mid_x, sy], [mid_x, dy], [dx, dy]],
+            'source_mark': 'one',
+            'target_mark': 'many' if cardinality in ('1:N', 'N:M') else 'arrow',
+            'points': [
+                {'x': round(sx, 1), 'y': round(sy, 1)},
+                {'x': mid_x, 'y': round(sy, 1)},
+                {'x': mid_x, 'y': round(dy, 1)},
+                {'x': round(dx, 1), 'y': round(dy, 1)},
+            ],
         })
 
     if one_to_many_count >= 2:
@@ -2108,16 +2845,77 @@ def build_visual_query_ddn_scene(
             'Multiple 1:N / N:M joins detected — aggregate measures may fan out without pre-aggregation.'
         )
 
-    max_x = max((n['x'] + n['width'] for n in nodes), default=800) + 100
-    max_y = max((n['y'] + n['height'] for n in nodes), default=500) + 100
-    scene = {
-        'views': [{'id': 'query_canvas', 'name': 'Visual Query Canvas', 'profile': 'erd.physical@1'}],
-        'activeViewId': 'query_canvas',
-        'bounds': {'x': 0, 'y': 0, 'width': max_x, 'height': max_y},
-        'tileSize': 2048,
+    min_x = min((float(n['x']) for n in nodes), default=0.0) - 40.0
+    min_y = min((float(n['y']) for n in nodes), default=0.0) - 40.0
+    max_x = max((float(n['x'] + n['width']) for n in nodes), default=860.0) + 120.0
+    max_y = max((float(n['y'] + n['height']) for n in nodes), default=520.0) + 120.0
+    span_w = max(640.0, max_x - min_x)
+    span_h = max(420.0, max_y - min_y)
+
+    tile_bounds = {
+        'min_x': min(0.0, min_x),
+        'min_y': min(0.0, min_y),
+        'max_x': max(2048.0, max_x),
+        'max_y': max(2048.0, max_y),
+    }
+    tile_payload = {
+        'tx': 0,
+        'ty': 0,
+        'coord': '0:0',
+        'bounds': tile_bounds,
+        'zones': [],
         'nodes': nodes,
         'edges': edges,
-        'tiles': {'0:0': {'tx': 0, 'ty': 0, 'nodes': nodes, 'edges': edges}},
+        'widgets': [],
+    }
+    scene_sig = hashlib.sha256(
+        json.dumps(
+            {
+                'nodes': [(n['id'], n['name'], len(n['fields'])) for n in nodes],
+                'edges': [(e['id'], e['display_label']) for e in edges],
+            },
+            sort_keys=True,
+        ).encode('utf-8')
+    ).hexdigest()
+
+    scene = {
+        'view_id': 'query_canvas',
+        'activeViewId': 'query_canvas',
+        'fit_key': 'query_canvas_populated' if nodes else 'query_canvas_empty',
+        'ddn_sha256': scene_sig,
+        'views': [{'id': 'query_canvas', 'name': 'Visual Query Canvas', 'profile': 'erd.physical@1'}],
+        'canvas_bounds': {
+            'min_x': round(min_x, 1),
+            'min_y': round(min_y, 1),
+            'width': round(span_w, 1),
+            'height': round(span_h, 1),
+        },
+        'bounds': {
+            'x': round(min_x, 1),
+            'y': round(min_y, 1),
+            'width': round(span_w, 1),
+            'height': round(span_h, 1),
+        },
+        'summary': {
+            'view_count': 1,
+            'node_count': len(nodes),
+            'edge_count': len(edges),
+            'widget_count': 0,
+        },
+        'tile_size': 2048,
+        'tileSize': 2048,
+        'tile_index': [
+            {
+                'tx': 0,
+                'ty': 0,
+                'coord': '0:0',
+                'bounds': tile_bounds,
+            }
+        ],
+        'nodes': nodes,
+        'edges': edges,
+        'tiles': {'0:0': tile_payload},
+        'loaded_tiles': {'0:0': tile_payload},
     }
 
     # Build Dialect SQL from structured visual model
@@ -2156,10 +2954,7 @@ def build_visual_query_ddn_scene(
         select_head = 'SELECT DISTINCT\n  *' if distinct else 'SELECT\n  *'
 
     first_t = tables[0]
-    first_sql = _quote_ident(str(first_t.get('name')), eng)
-    if first_t.get('alias'):
-        first_sql += f" AS {_quote_ident(str(first_t['alias']), eng)}"
-    from_lines = [f'FROM {first_sql}']
+    from_lines = [f'FROM {_format_visual_relation_sql(first_t, eng)}']
 
     joined_ids = {
         k
@@ -2186,9 +2981,7 @@ def build_visual_query_ddn_scene(
             if k:
                 joined_ids.add(k)
         j_type = str(jn.get('join_type') or 'INNER').upper()
-        r_sql = _quote_ident(str(r_tbl.get('name')), eng)
-        if r_tbl.get('alias'):
-            r_sql += f" AS {_quote_ident(str(r_tbl['alias']), eng)}"
+        r_sql = _format_visual_relation_sql(r_tbl, eng)
         l_qual = alias_by_id.get(l_id, _quote_ident(l_id, eng))
         r_qual = alias_by_id.get(r_id, _quote_ident(str(r_tbl.get('name')), eng))
         on_expr = str(jn.get('custom_on') or '').strip() or (
@@ -2197,14 +2990,13 @@ def build_visual_query_ddn_scene(
         )
         from_lines.append(f'{j_type} JOIN {r_sql} ON {on_expr}')
 
-    # Any additional unjoined tables become CROSS JOIN
+    # Any additional unjoined tables/procedures become CROSS JOIN
     for tbl in tables[1:]:
         tid = str(tbl.get('id') or tbl.get('name'))
-        if tid not in joined_ids:
-            t_sql = _quote_ident(str(tbl.get('name')), eng)
-            if tbl.get('alias'):
-                t_sql += f" AS {_quote_ident(str(tbl['alias']), eng)}"
-            from_lines.append(f'CROSS JOIN {t_sql}')
+        talias = str(tbl.get('alias') or '')
+        tname = str(tbl.get('name') or '')
+        if tid not in joined_ids and talias not in joined_ids and tname not in joined_ids:
+            from_lines.append(f'CROSS JOIN {_format_visual_relation_sql(tbl, eng)}')
 
     clauses = [select_head, '\n'.join(from_lines)]
     where_items = [
@@ -2243,8 +3035,20 @@ def build_visual_query_ddn_scene(
     return scene, '\n'.join(clauses) + ';', fanout_warnings
 
 
-def parse_sql_to_visual_model(sql: str) -> tuple[dict[str, Any] | None, str]:
-    """Attempt clean-room SQL -> Visual Model parsing with fidelity reporting (`exact`, `lossy`, `none`)."""
+_SQL_KEYWORDS_NOT_ALIAS = frozenset({
+    'WHERE', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'JOIN',
+    'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'FETCH', 'OFFSET', 'ON',
+    'UNION', 'INTERSECT', 'EXCEPT', 'WINDOW', 'FOR',
+})
+
+
+def parse_sql_to_visual_model(
+    sql: str,
+    catalog_tables: Mapping[str, list[dict[str, Any]]] | None = None,
+) -> tuple[dict[str, Any] | None, str]:
+    """Attempt clean-room SQL -> Visual Model parsing with fidelity reporting (`exact`, `lossy`, `none`),
+    preserving selectable stored procedure argument lists and hydrating known columns.
+    """
     raw = str(sql or '').strip().rstrip(';').strip()
     if not raw:
         return {
@@ -2263,7 +3067,7 @@ def parse_sql_to_visual_model(sql: str) -> tuple[dict[str, Any] | None, str]:
 
     has_cte_or_union = bool(re.search(r'\b(WITH\s+\w+|UNION\b|INTERSECT\b|EXCEPT\b)', raw, re.IGNORECASE))
     from_match = re.search(
-        r'\bFROM\s+([A-Za-z0-9_."`]+)(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?',
+        r'\bFROM\s+([A-Za-z0-9_."`]+)(?:\s*\(([^)]*)\))?(?:\s+(?:AS\s+)?("[^"]+"|[A-Za-z_][A-Za-z0-9_]*))?',
         raw,
         re.IGNORECASE,
     )
@@ -2273,41 +3077,70 @@ def parse_sql_to_visual_model(sql: str) -> tuple[dict[str, Any] | None, str]:
     def _strip_q(ident: str) -> str:
         return ident.split('.')[-1].strip('"` ')
 
-    base_name = _strip_q(from_match.group(1))
-    base_alias = from_match.group(2) or ''
-    if base_alias.upper() in ('WHERE', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'JOIN', 'GROUP', 'ORDER', 'LIMIT', 'FETCH'):
-        base_alias = ''
+    def _build_parsed_source(
+        raw_ident: str,
+        raw_args: str | None,
+        raw_alias: str | None,
+        x_pos: int,
+        y_pos: int,
+    ) -> dict[str, Any]:
+        clean_name = _strip_q(raw_ident)
+        clean_alias = _strip_q(raw_alias or '')
+        if clean_alias.upper() in _SQL_KEYWORDS_NOT_ALIAS:
+            clean_alias = ''
+        entry: dict[str, Any] = {
+            'id': clean_alias or clean_name,
+            'name': clean_name,
+            'alias': clean_alias,
+            'x': x_pos,
+            'y': y_pos,
+        }
+        if raw_args is not None:
+            entry['resource_kind'] = 'procedure'
+            args_list = [a.strip() for a in raw_args.split(',') if a.strip()]
+            entry['input_parameters'] = [
+                {
+                    'name': a.lstrip(':').strip() if a.strip().startswith(':') else f'arg_{i + 1}',
+                    'expr': a,
+                    'type': 'TEXT',
+                }
+                for i, a in enumerate(args_list)
+            ]
+        if catalog_tables and clean_name in catalog_tables:
+            entry['columns'] = list(catalog_tables[clean_name])
+        return entry
 
-    tables = [{
-        'id': base_alias or base_name,
-        'name': base_name,
-        'alias': base_alias,
-        'x': 90,
-        'y': 80,
-    }]
+    tables = [
+        _build_parsed_source(
+            from_match.group(1),
+            from_match.group(2),
+            from_match.group(3),
+            90,
+            72,
+        )
+    ]
     joins = []
     for idx, jm in enumerate(
         re.finditer(
-            r'\b(INNER|LEFT(?:\s+OUTER)?|RIGHT(?:\s+OUTER)?|FULL(?:\s+OUTER)?|CROSS)?\s*JOIN\s+([A-Za-z0-9_."`]+)(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?(?:\s+ON\s+([^\n]+?))?(?=\b(?:INNER|LEFT|RIGHT|FULL|CROSS|JOIN|WHERE|GROUP|HAVING|ORDER|LIMIT|FETCH)\b|$)',
+            r'\b(INNER|LEFT(?:\s+OUTER)?|RIGHT(?:\s+OUTER)?|FULL(?:\s+OUTER)?|CROSS)?\s*JOIN\s+([A-Za-z0-9_."`]+)(?:\s*\(([^)]*)\))?(?:\s+(?:AS\s+)?("[^"]+"|[A-Za-z_][A-Za-z0-9_]*))?(?:\s+ON\s+([^\n]+?))?(?=\s*\b(?:INNER|LEFT|RIGHT|FULL|CROSS|JOIN|WHERE|GROUP|HAVING|ORDER|LIMIT|FETCH)\b|$)',
             raw,
             re.IGNORECASE,
         ),
         start=1,
     ):
-        jtype = (jm.group(1) or 'INNER').upper()
-        rname = _strip_q(jm.group(2))
-        ralias = jm.group(3) or ''
-        if ralias.upper() in ('ON', 'WHERE', 'GROUP', 'ORDER', 'INNER', 'LEFT', 'RIGHT', 'JOIN'):
-            ralias = ''
-        rid = ralias or rname
-        tables.append({
-            'id': rid,
-            'name': rname,
-            'alias': ralias,
-            'x': 90 + (idx % 3) * 320,
-            'y': 80 + (idx // 3) * 250,
-        })
-        on_clause = (jm.group(4) or '').strip()
+        jtype = (jm.group(1) or 'INNER').upper().split()[0]
+        src_entry = _build_parsed_source(
+            jm.group(2),
+            jm.group(3),
+            jm.group(4),
+            90 + (idx % 3) * 320,
+            72 + (idx // 3) * 280,
+        )
+        rid = src_entry['id']
+        tables.append(src_entry)
+        on_clause = (jm.group(5) or '').strip()
+        if jtype == 'CROSS' and not on_clause:
+            continue
         eq_m = re.match(
             r'([A-Za-z0-9_."`]+)\.([A-Za-z0-9_."`]+)\s*=\s*([A-Za-z0-9_."`]+)\.([A-Za-z0-9_."`]+)',
             on_clause,
@@ -2349,11 +3182,52 @@ def parse_sql_to_visual_model(sql: str) -> tuple[dict[str, Any] | None, str]:
                 'cardinality': '1:N',
             })
 
+    # Also parse explicit `SELECT t1.col1, t2.col2 FROM ...` projections when unambiguous
+    projections: list[dict[str, Any]] = []
+    sel_match = re.match(
+        r'^\s*SELECT(?:\s+DISTINCT)?\s+([\s\S]+?)\bFROM\b',
+        raw,
+        re.IGNORECASE,
+    )
+    if sel_match:
+        sel_body = sel_match.group(1).strip()
+        if sel_body != '*':
+            for part in sel_body.split(','):
+                tok = part.strip()
+                if not tok or '(' in tok:
+                    if '(' in tok:
+                        m_alias = re.match(r'^(.+?)\s+AS\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_]*)$', tok, re.IGNORECASE)
+                        if m_alias:
+                            projections.append({'expr': m_alias.group(1).strip(), 'alias': _strip_q(m_alias.group(2)), 'aggregate': ''})
+                        else:
+                            projections.append({'expr': tok, 'alias': '', 'aggregate': ''})
+                    continue
+                m_alias = re.match(r'^(.+?)\s+AS\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_]*)$', tok, re.IGNORECASE)
+                core = m_alias.group(1).strip() if m_alias else tok
+                al_out = _strip_q(m_alias.group(2)) if m_alias else ''
+                if '.' in core:
+                    t_part, c_part = core.split('.', 1)
+                    projections.append({
+                        'table': _strip_q(t_part),
+                        'column': _strip_q(c_part),
+                        'expr': f'{_strip_q(t_part)}.{_strip_q(c_part)}',
+                        'alias': al_out,
+                        'aggregate': '',
+                    })
+                else:
+                    projections.append({
+                        'table': tables[0]['id'] if tables else '',
+                        'column': _strip_q(core),
+                        'expr': _strip_q(core),
+                        'alias': al_out,
+                        'aggregate': '',
+                    })
+
     fidelity = 'lossy' if has_cte_or_union else 'exact'
     return {
         'tables': tables,
         'joins': joins,
-        'projections': [],
+        'projections': projections,
         'filters': [],
         'group_by': [],
         'order_by': [],
@@ -2427,6 +3301,9 @@ class SqlEditorSurfaceState:
     })
     visual_fidelity: str = 'exact'
     catalog_tables_cache: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    full_catalog_loaded: bool = False
+    full_catalog_items: list[dict[str, Any]] = field(default_factory=list)
+    visual_catalog_objects: list[dict[str, Any]] = field(default_factory=list)
     query_history: list[dict[str, Any]] = field(default_factory=list)
     messages: list[dict[str, Any]] = field(default_factory=list)
     timings_ms: dict[str, float] = field(default_factory=lambda: {
@@ -2830,12 +3707,27 @@ class SqlSurfaceHostService:
         cols: list[dict[str, Any]] = []
         for idx, c in enumerate(raw_cols):
             if isinstance(c, dict):
+                max_len = (
+                    c.get('max_length')
+                    or c.get('character_length')
+                    or c.get('precision')
+                    or c.get('display_size')
+                )
                 cols.append({
                     'name': str(c.get('name') or c.get('label') or f'COL_{idx + 1}'),
                     'native_type': str(c.get('native_type') or c.get('type_name') or c.get('data_type') or 'TEXT'),
                     'nullable': bool(c.get('nullable', True)),
-                    'key': bool(c.get('key', False)),
+                    'key': bool(
+                        c.get('primary_key')
+                        or c.get('is_primary_key')
+                        or (c.get('key') is True)
+                    ),
                     'editable': False,
+                    **(
+                        {'max_length': int(max_len)}
+                        if isinstance(max_len, int) and not isinstance(max_len, bool) and max_len > 0
+                        else {}
+                    ),
                 })
             else:
                 cols.append({
@@ -3190,10 +4082,213 @@ class SqlSurfaceHostService:
                 'fidelity': surface.visual_fidelity,
                 'ddn_scene': scene,
                 'fanout_warnings': fanout_warnings,
+                'catalog_objects': surface.visual_catalog_objects,
             },
             'query_history': list(reversed(surface.query_history[-50:])),
             'messages': list(reversed(surface.messages)),
         }
+
+    def _ensure_visual_catalog(
+        self,
+        workspace_service: Any,
+        server: Any,
+        surface: SqlEditorSurfaceState,
+        extra_resources: Sequence[Mapping[str, Any]] = (),
+        force_refresh: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Populate full workspace catalog items (relations, columns, constraints, selectable routines)."""
+        if force_refresh or not surface.full_catalog_loaded:
+            fetched: list[dict[str, Any]] = []
+            if hasattr(workspace_service, 'endpoint_service') and hasattr(
+                workspace_service, 'resource_service'
+            ):
+                try:
+                    context, endpoint, root = workspace_service.endpoint_service.workspace(
+                        server,
+                        database_target_id=(
+                            surface.database_target_id
+                            if surface.database_target_id is not None
+                            else Ellipsis
+                        ),
+                    )
+                    continuation = None
+                    generation = None
+                    pages_read = 0
+                    while pages_read < 25:
+                        pages_read += 1
+                        page = workspace_service.resource_service.list_page(
+                            context,
+                            root,
+                            page_size=500,
+                            cursor=continuation,
+                            expected_generation=generation,
+                            provider_route=endpoint['route'],
+                        ).to_dict()
+                        fetched.extend(page.get('items') or [])
+                        generation = page.get('generation')
+                        continuation = page.get('next_cursor')
+                        if continuation is None:
+                            break
+                except Exception:
+                    fetched = []
+            surface.full_catalog_items = fetched
+            surface.full_catalog_loaded = True
+
+        by_key: collections.OrderedDict[str, dict[str, Any]] = collections.OrderedDict()
+        for item in list(surface.full_catalog_items) + [
+            dict(r) for r in extra_resources if isinstance(r, Mapping)
+        ]:
+            if not isinstance(item, Mapping):
+                continue
+            key = str(
+                item.get('resource_id')
+                or f"{item.get('resource_kind')}:{item.get('display_name') or item.get('name')}"
+            )
+            if key not in by_key:
+                by_key[key] = dict(item)
+            else:
+                merged_it = dict(by_key[key])
+                merged_it.update(dict(item))
+                by_key[key] = merged_it
+
+        all_items = list(by_key.values())
+        surface.full_catalog_items = all_items
+
+        # Index child columns by relation display_path for instant hydration
+        cols_by_parent_path: dict[tuple[str, ...], list[dict[str, Any]]] = collections.defaultdict(list)
+        for item in all_items:
+            if str(item.get('resource_kind') or '').lower() == 'column':
+                dpath = tuple(str(x) for x in (item.get('display_path') or ()))
+                if len(dpath) >= 2:
+                    cols_by_parent_path[dpath[:-1]].append(item)
+
+        catalog_summary: list[dict[str, Any]] = []
+        for item in all_items:
+            rkind = str(item.get('resource_kind') or '').lower()
+            if rkind not in _VISUAL_RELATION_KINDS and rkind not in _VISUAL_ROUTINE_KINDS:
+                continue
+            rname = str(item.get('display_name') or item.get('name') or '').strip()
+            if not rname:
+                continue
+            rid = str(item.get('resource_id') or '')
+            dpath = tuple(str(x) for x in (item.get('display_path') or (rname,)))
+
+            if rkind in _VISUAL_ROUTINE_KINDS:
+                try:
+                    resolved = resolve_visual_catalog_object(
+                        None,
+                        server,
+                        surface.database_target_id,
+                        item,
+                        catalog_resources=all_items,
+                        existing_tables=(),
+                        engine_id=surface.engine_id,
+                    )
+                    obj_n = resolved['object_node']
+                    surface.catalog_tables_cache[rname] = list(obj_n.get('columns') or [])
+                    catalog_summary.append({
+                        'resource_id': rid,
+                        'resource_kind': obj_n['resource_kind'],
+                        'display_name': rname,
+                        'schema_name': obj_n.get('schema_name') or '',
+                        'selectable': True,
+                        'input_parameters': obj_n.get('input_parameters') or [],
+                        'columns': obj_n.get('columns') or [],
+                    })
+                except ValueError:
+                    # Executable-only stored procedure (not selectable in FROM) — omit from selectable palette
+                    continue
+            else:
+                rcols = list(
+                    (item.get('extensions') or {})
+                    .get('cdeadmin', {})
+                    .get('catalog_metadata', {})
+                    .get('columns')
+                    or _extract_native_dict(item).get('columns')
+                    or item.get('columns')
+                    or []
+                )
+                if not rcols and dpath in cols_by_parent_path:
+                    child_items = sorted(
+                        cols_by_parent_path[dpath],
+                        key=lambda ci: int(
+                            _extract_native_dict(ci).get('ordinal_position')
+                            or _extract_native_dict(ci).get('position')
+                            or 9999
+                        ),
+                    )
+                    rcols = [
+                        {
+                            'name': str(ci.get('display_name') or ci.get('name')),
+                            'native_type': _format_catalog_field_type({**ci, **_extract_native_dict(ci)}),
+                            'type': _format_catalog_field_type({**ci, **_extract_native_dict(ci)}),
+                            'key': bool(
+                                _extract_native_dict(ci).get('primary_key')
+                                or _extract_native_dict(ci).get('is_primary_key')
+                            ),
+                            'nullable': not bool(_extract_native_dict(ci).get('not_null')),
+                        }
+                        for ci in child_items
+                        if ci.get('display_name') or ci.get('name')
+                    ]
+                if rcols:
+                    surface.catalog_tables_cache[rname] = rcols
+                catalog_summary.append({
+                    'resource_id': rid,
+                    'resource_kind': rkind,
+                    'display_name': rname,
+                    'schema_name': dpath[-2] if len(dpath) >= 2 else '',
+                    'selectable': True,
+                    'columns': surface.catalog_tables_cache.get(rname, []),
+                })
+
+        surface.visual_catalog_objects = catalog_summary
+        return all_items
+
+    def _hydrate_visual_model_columns(
+        self,
+        workspace_service: Any,
+        server: Any,
+        surface: SqlEditorSurfaceState,
+        all_items: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Ensure every table/view/procedure card in `surface.visual_model` has columns populated."""
+        for tbl in surface.visual_model.get('tables') or ():
+            if not isinstance(tbl, dict):
+                continue
+            tname = str(tbl.get('name') or '').strip()
+            if not tname:
+                continue
+            if tbl.get('columns'):
+                surface.catalog_tables_cache[tname] = list(tbl['columns'])
+                continue
+            if tname in surface.catalog_tables_cache and surface.catalog_tables_cache[tname]:
+                tbl['columns'] = list(surface.catalog_tables_cache[tname])
+                continue
+            try:
+                resolved = resolve_visual_catalog_object(
+                    workspace_service,
+                    server,
+                    surface.database_target_id,
+                    {
+                        'resource_id': tbl.get('resource_id') or '',
+                        'resource_kind': tbl.get('resource_kind') or '',
+                        'display_name': tname,
+                    },
+                    catalog_resources=all_items,
+                    existing_tables=(),
+                    engine_id=surface.engine_id,
+                )
+                obj_node = resolved['object_node']
+                if obj_node.get('columns'):
+                    tbl['columns'] = obj_node['columns']
+                    surface.catalog_tables_cache[tname] = list(obj_node['columns'])
+                if obj_node.get('resource_kind'):
+                    tbl.setdefault('resource_kind', obj_node['resource_kind'])
+                if obj_node.get('input_parameters') and not tbl.get('input_parameters'):
+                    tbl['input_parameters'] = obj_node['input_parameters']
+            except Exception:
+                pass
 
     def dispatch(
         self,
@@ -3332,14 +4427,22 @@ class SqlSurfaceHostService:
                     surface.catalog_tables_cache[rname] = list(rcols)
 
             if sub_action == 'open':
+                all_cat = self._ensure_visual_catalog(
+                    workspace_service, server, surface, catalog_resources
+                )
                 seed_sql = request.get('initial_sql') or request.get('sql_source')
                 seed_kind = request.get('script_kind') or request.get('generate_sql_kind')
                 if seed_sql and not surface.sql_source:
                     surface.sql_source = str(seed_sql)
-                    parsed_vm, fid = parse_sql_to_visual_model(surface.sql_source)
+                    parsed_vm, fid = parse_sql_to_visual_model(
+                        surface.sql_source, surface.catalog_tables_cache
+                    )
                     if parsed_vm is not None:
                         surface.visual_model = parsed_vm
                         surface.visual_fidelity = fid
+                        self._hydrate_visual_model_columns(
+                            workspace_service, server, surface, all_cat
+                        )
                 elif request.get('target_resource') and seed_kind and not surface.sql_source:
                     gen = generate_universal_object_sql(
                         workspace_service,
@@ -3354,6 +4457,35 @@ class SqlSurfaceHostService:
                 return self._serialize_state(
                     surface, user_id, window_offset=window_offset, window_size=window_size
                 )
+
+            if sub_action == 'resolve_visual_object':
+                all_cat = self._ensure_visual_catalog(
+                    workspace_service, server, surface, catalog_resources
+                )
+                target_res = dict(request.get('target_resource') or {})
+                existing_tbls = list(
+                    request.get('existing_tables')
+                    if isinstance(request.get('existing_tables'), list)
+                    else (surface.visual_model.get('tables') or [])
+                )
+                resolved = resolve_visual_catalog_object(
+                    workspace_service,
+                    server,
+                    surface.database_target_id,
+                    target_res,
+                    catalog_resources=all_cat,
+                    existing_tables=existing_tbls,
+                    engine_id=surface.engine_id,
+                )
+                obj_node = resolved['object_node']
+                if obj_node.get('name') and obj_node.get('columns'):
+                    surface.catalog_tables_cache[str(obj_node['name'])] = list(
+                        obj_node['columns']
+                    )
+                return {
+                    **resolved,
+                    'catalog_objects': surface.visual_catalog_objects,
+                }
 
             if sub_action == 'load_quick_query':
                 qq = self.quick_query_store.get_quick_query(str(request.get('query_id') or ''))
@@ -3412,14 +4544,47 @@ class SqlSurfaceHostService:
                 }
 
             if sub_action in ('sync_sql_to_visual', 'visual_builder_from_sql'):
-                surface.sql_source = str(
-                    request.get('sql_source') or request.get('sql_text') or surface.sql_source or ''
+                all_cat = self._ensure_visual_catalog(
+                    workspace_service, server, surface, catalog_resources
                 )
-                parsed_vm, fid = parse_sql_to_visual_model(surface.sql_source)
+                surface.sql_source = str(
+                    request.get('sql_source')
+                    if request.get('sql_source') is not None
+                    else request.get('sql_text')
+                    if request.get('sql_text') is not None
+                    else surface.sql_source
+                    or ''
+                )
+                parsed_vm, fid = parse_sql_to_visual_model(
+                    surface.sql_source, surface.catalog_tables_cache
+                )
                 loss_notes: list[str] = []
                 if parsed_vm is not None:
+                    # Preserve user-pinned x/y coordinates & hydrated columns when table/alias already existed
+                    prev_by_key = {}
+                    for pt in surface.visual_model.get('tables') or ():
+                        if isinstance(pt, dict):
+                            for k in (pt.get('id'), pt.get('alias'), pt.get('name')):
+                                if k:
+                                    prev_by_key[str(k)] = pt
+                    for nt in parsed_vm.get('tables') or ():
+                        old = prev_by_key.get(str(nt.get('id'))) or prev_by_key.get(str(nt.get('name')))
+                        if old:
+                            if old.get('x') is not None:
+                                nt['x'] = old['x']
+                            if old.get('y') is not None:
+                                nt['y'] = old['y']
+                            if old.get('columns') and not nt.get('columns'):
+                                nt['columns'] = old['columns']
+                            if old.get('resource_kind') and not nt.get('resource_kind'):
+                                nt['resource_kind'] = old['resource_kind']
+                            if old.get('input_parameters') and not nt.get('input_parameters'):
+                                nt['input_parameters'] = old['input_parameters']
                     surface.visual_model = parsed_vm
                     surface.visual_fidelity = fid
+                    self._hydrate_visual_model_columns(
+                        workspace_service, server, surface, all_cat
+                    )
                     if fid == 'lossy':
                         loss_notes.append(
                             'Complex SQL expressions or CTEs are preserved lossily in the visual model.'
@@ -3439,20 +4604,27 @@ class SqlSurfaceHostService:
                     'fidelity': surface.visual_fidelity,
                     'loss_notes': loss_notes,
                     'fanout_warnings': st['visual_builder']['fanout_warnings'],
+                    'catalog_objects': surface.visual_catalog_objects,
                 }
 
             if sub_action in ('sync_visual_to_sql', 'visual_builder_scene'):
+                all_cat = self._ensure_visual_catalog(
+                    workspace_service, server, surface, catalog_resources
+                )
                 incoming_model = request.get('visual_model') or request.get('model')
                 if isinstance(incoming_model, dict):
                     surface.visual_model = copy.deepcopy(incoming_model)
                 if isinstance(request.get('table_columns'), dict):
                     surface.catalog_tables_cache.update(request['table_columns'])
+                self._hydrate_visual_model_columns(
+                    workspace_service, server, surface, all_cat
+                )
                 scene_out, built_sql, fanout_out = build_visual_query_ddn_scene(
                     surface.visual_model,
                     surface.catalog_tables_cache,
                     surface.engine_id,
                 )
-                if built_sql:
+                if built_sql or not (surface.visual_model.get('tables') or []):
                     surface.sql_source = built_sql
                     surface.visual_fidelity = 'exact'
                 st = self._serialize_state(
@@ -3463,6 +4635,7 @@ class SqlSurfaceHostService:
                     'scene': scene_out,
                     'sql_text': built_sql,
                     'fanout_warnings': fanout_out,
+                    'catalog_objects': surface.visual_catalog_objects,
                 }
 
             if sub_action in ('execute', 'execute_statement', 'execute_script', 'explain_plan'):

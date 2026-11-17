@@ -109,7 +109,8 @@ OverflowMenu.propTypes = {
 };
 
 export function NotebookBar({model, state={}, context, onCommand, selectedTab,
-  onSelectTab, onCloseTab, onReorderTab, closeTabLabel, closeTabIcon='×', getTabProps, collapsed,
+  onSelectTab, onCloseTab, onReorderTab, onRenameTab, renameTabRequest, closeTabLabel,
+  closeTabIcon='×', getTabProps, collapsed,
   onCollapsedChange, start, end, subHeader, contributions,
   customization, catalog, label='Commands', dir, injectStyles=true,
   accessKeyTrigger='Alt', messages}) {
@@ -121,6 +122,9 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   const panelRef = useRef(null);
   const quickRef = useRef(null);
   const draggedTabIdRef = useRef(null);
+  const renameInputRef = useRef(null);
+  const [editingTabId, setEditingTabId] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
   const resolved = useMemo(() => {
     let value = normalizeModel(model);
     if(contributions?.length) value = mergeContributions(value, contributions);
@@ -468,6 +472,35 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
     onCommand?.(command, detail);
   };
 
+  const beginRenameTab = useCallback((tab) => {
+    if (!onRenameTab || !tab || tab.renamable === false) return;
+    setEditingTabId(tab.id);
+    setEditingValue(tab.rawLabel ?? tab.label ?? '');
+    setTimeout(() => {
+      renameInputRef.current?.focus?.();
+      renameInputRef.current?.select?.();
+    }, 0);
+  }, [onRenameTab]);
+
+  const commitRenameTab = useCallback((tab, val) => {
+    const trimmed = String(val ?? '').trim();
+    setEditingTabId(null);
+    if (trimmed && tab && onRenameTab) {
+      onRenameTab(tab.id, trimmed, tab);
+    }
+  }, [onRenameTab]);
+
+  const lastRenameNonceRef = useRef(null);
+  useEffect(() => {
+    if (!renameTabRequest?.tabId || !renameTabRequest?.nonce || !onRenameTab) return;
+    if (lastRenameNonceRef.current === renameTabRequest.nonce) return;
+    const match = tabs.find((t) => t.id === renameTabRequest.tabId);
+    if (match && match.renamable !== false) {
+      lastRenameNonceRef.current = renameTabRequest.nonce;
+      beginRenameTab(match);
+    }
+  }, [beginRenameTab, onRenameTab, renameTabRequest?.nonce, renameTabRequest?.tabId, tabs]);
+
   const panelId = `${id}-panel`;
   const showPanel = current && (!isCollapsed || peek);
   return <div ref={barRef} className={`snb-bar${isCollapsed ? ' snb-collapsed' : ''}${
@@ -487,11 +520,17 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
       <div ref={stripRef} className="snb-tabs" role="tablist" aria-label={label}>
         {tabs.map((tab, index) => {
           const isSelected = tab.id === current?.id;
+          const isEditingThisTab = editingTabId === tab.id;
+          const canRenameTab = Boolean(onRenameTab && tab.renamable !== false);
           const extraTabProps = getTabProps ? (getTabProps(tab, isSelected) || {}) : {};
           const canCloseTab = Boolean(onCloseTab && isSelected && tab.closable !== false);
           const mergedDragProps = onReorderTab ? {
-            draggable: extraTabProps.draggable ?? true,
+            draggable: isEditingThisTab ? false : (extraTabProps.draggable ?? true),
             onDragStart: (event) => {
+              if (isEditingThisTab) {
+                event.preventDefault();
+                return;
+              }
               draggedTabIdRef.current = tab.id;
               extraTabProps.onDragStart?.(event);
             },
@@ -529,21 +568,83 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
               {...extraTabProps}
               {...mergedDragProps}
               onClick={(event) => {
+                if (isEditingThisTab) return;
                 extraTabProps.onClick?.(event);
                 if (event.defaultPrevented) return;
                 if(isCollapsed) setPeek(!(peek && isSelected));
                 select(tab.id);
               }}
-              onDoubleClick={() => setCollapsedState(!isCollapsed)}
+              onDoubleClick={(event) => {
+                if (canRenameTab) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  select(tab.id);
+                  beginRenameTab(tab);
+                  return;
+                }
+                setCollapsedState(!isCollapsed);
+              }}
               onKeyDown={(event) => {
+                if (isEditingThisTab) return;
+                if (event.key === 'F2' && canRenameTab) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  beginRenameTab(tab);
+                  return;
+                }
                 if (event.target !== event.currentTarget &&
                     (event.key === 'Enter' || event.key === ' ')) {
                   return;
                 }
                 onTabKeyDown(event, index);
               }}>
-              <span className="snb-tab-title" title={tab.label}>{tab.label}</span>
-              {canCloseTab && <button type="button" className="snb-tab-close"
+              {isEditingThisTab ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="snb-tab-rename-input"
+                  data-cdeadmin-qa-key="notebookbar-tab-rename-input"
+                  aria-label="Rename tab"
+                  value={editingValue}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  onBlur={() => commitRenameTab(tab, editingValue)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitRenameTab(tab, editingValue);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setEditingTabId(null);
+                    }
+                  }}
+                />
+              ) : (
+                <span
+                  className="snb-tab-title"
+                  title={canRenameTab ? `${tab.label} — Double-click or press F2 to rename` : tab.label}
+                >
+                  {tab.label}
+                </span>
+              )}
+              {!isEditingThisTab && canRenameTab && isSelected && (
+                <button
+                  type="button"
+                  className="snb-tab-rename-btn"
+                  aria-label={`Rename ${tab.label}`}
+                  title="Rename tab (F2)"
+                  data-cdeadmin-qa-key="active-tab-rename"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    beginRenameTab(tab);
+                  }}
+                >
+                  ✎
+                </button>
+              )}
+              {!isEditingThisTab && canCloseTab && <button type="button" className="snb-tab-close"
                 aria-label={closeTabLabel ? closeTabLabel(tab) : `Close ${tab.label}`}
                 data-cdeadmin-qa-key="active-tab-close"
                 onClick={(event) => {
@@ -642,6 +743,8 @@ NotebookBar.propTypes = {
   onSelectTab: PropTypes.func,
   onCloseTab: PropTypes.func,
   onReorderTab: PropTypes.func,
+  onRenameTab: PropTypes.func,
+  renameTabRequest: PropTypes.object,
   closeTabLabel: PropTypes.func,
   closeTabIcon: PropTypes.node,
   getTabProps: PropTypes.func,

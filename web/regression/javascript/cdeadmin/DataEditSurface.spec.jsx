@@ -696,4 +696,56 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     });
     expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]')).toBeTruthy();
   });
+
+  it('supports all 9 record/bookmark navigation buttons (|< << < > >> >| ! !< !>) and Tab/Arrow keyboard navigation', async () => {
+    const post = jest.fn(async () => makeHostFixture());
+    render(
+      <TestShell>
+        <ShellLauncher post={post} />
+      </TestShell>
+    );
+    expect(await screen.findByText('Cash On Hand')).toBeInTheDocument();
+
+    const navFirstBtn = screen.getByRole('button', {name: /First Record \(\|<\)/});
+    const navPrevPageBtn = screen.getByRole('button', {name: /Previous Page \(<<\)/});
+    const navPrevRowBtn = screen.getByRole('button', {name: /Previous Row \(<\)/});
+    const navNextRowBtn = screen.getByRole('button', {name: /Next Row \(>\)/});
+    const navNextPageBtn = screen.getByRole('button', {name: /Next Page \(>>\)/});
+    const navLastBtn = screen.getByRole('button', {name: /Last Record \(>\|\)/});
+    const bookmarkBtn = screen.getByRole('button', {name: /Bookmark Record \(!\)/});
+    const bookmarkPrevBtn = screen.getByRole('button', {name: /Previous Bookmark \(!<\)/});
+    const bookmarkNextBtn = screen.getByRole('button', {name: /Next Bookmark \(!>\)/});
+
+    expect(navFirstBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(navPrevPageBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(navPrevRowBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(navNextRowBtn).not.toHaveAttribute('aria-disabled', 'true');
+    expect(navNextPageBtn).not.toHaveAttribute('aria-disabled', 'true');
+    expect(navLastBtn).not.toHaveAttribute('aria-disabled', 'true');
+
+    // Bookmark row 0 (`!`) -> jump to row 1 (`>`) -> jump back via Previous Bookmark (`!<`)
+    await act(async () => {
+      fireEvent.click(bookmarkBtn);
+    });
+    expect(document.querySelector('[data-cdeadmin-qa-key="bookmark-badge-0"]')).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.click(navNextRowBtn);
+    });
+    expect(navFirstBtn).not.toHaveAttribute('aria-disabled', 'true');
+
+    await act(async () => {
+      fireEvent.click(bookmarkPrevBtn);
+    });
+    expect(navFirstBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(bookmarkNextBtn).not.toHaveAttribute('aria-disabled', 'true');
+
+    // Keyboard navigation in Grid: Tab moves across columns and wraps to next row
+    const firstCell = document.querySelector('[data-grid-nav-cell="0:ID"]');
+    expect(firstCell).not.toBeNull();
+    await act(async () => {
+      fireEvent.keyDown(firstCell, {key: 'Tab'});
+    });
+    expect(document.activeElement?.getAttribute('data-grid-nav-cell')).toBe('0:NAME');
+  });
 });

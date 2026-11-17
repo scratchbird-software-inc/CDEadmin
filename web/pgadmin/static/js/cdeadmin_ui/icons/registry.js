@@ -1186,6 +1186,36 @@ function NavLastIcon(props) {
   );
 }
 
+function BookmarkToggleIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M7 4h10a1 1 0 0 1 1 1v15l-6-3.6L6 20V5a1 1 0 0 1 1-1z" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <circle cx="12" cy="14.6" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BookmarkPrevIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="7" y1="6" x2="7" y2="13.5" />
+      <circle cx="7" cy="17.2" r="0.9" fill="currentColor" />
+      <polyline points="18 7 12 12 18 17" />
+    </svg>
+  );
+}
+
+function BookmarkNextIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="6" y1="6" x2="6" y2="13.5" />
+      <circle cx="6" cy="17.2" r="0.9" fill="currentColor" />
+      <polyline points="11 7 17 12 11 17" />
+    </svg>
+  );
+}
+
 function LocateRowIcon(props) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -1404,6 +1434,9 @@ const ACTION_COMPONENTS = Object.freeze({
   attach: LinkIcon,
   axis_format: AxisFormatIcon,
   backup: DatabaseBackupIcon,
+  bookmark_next: BookmarkNextIcon,
+  bookmark_prev: BookmarkPrevIcon,
+  bookmark_toggle: BookmarkToggleIcon,
   branch_draft: BranchDraftIcon,
   browse_data: BrowseDataGridIcon,
   cancel: CancelCircleIcon,
