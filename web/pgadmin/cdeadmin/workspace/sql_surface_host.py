@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
+from .visual_join_plan import VisualJoinPlan
 from .data_surface_host import (
     AUTO_LOCAL_SORT_THRESHOLD,
     StagedRowMutation,
@@ -2634,6 +2635,7 @@ _CARD_PALETTE_BY_ROLE: dict[str, dict[str, str]] = {
 }
 
 
+
 def build_visual_query_ddn_scene(
     visual_model: dict[str, Any],
     catalog_tables: dict[str, list[dict[str, Any]]],
@@ -2647,6 +2649,8 @@ def build_visual_query_ddn_scene(
     eng = str(engine_id or 'relational').split('-')[0].lower()
     tables: list[dict[str, Any]] = list(visual_model.get('tables') or [])
     joins: list[dict[str, Any]] = list(visual_model.get('joins') or [])
+    join_plan = VisualJoinPlan(tables, joins)
+    tables, joins = join_plan.tables, join_plan.joins
     projections: list[dict[str, Any]] = list(visual_model.get('projections') or [])
     filters: list[dict[str, Any]] = list(visual_model.get('filters') or [])
     group_by: list[str] = list(visual_model.get('group_by') or [])
@@ -2776,7 +2780,7 @@ def build_visual_query_ddn_scene(
             if key_ref and key_ref not in node_lookup:
                 node_lookup[key_ref] = node_obj
 
-    one_to_many_count = 0
+    one_to_many_pairs = set()
     for j_idx, jn in enumerate(joins):
         l_tbl = str(jn.get('left_table') or '')
         r_tbl = str(jn.get('right_table') or '')
@@ -2785,7 +2789,7 @@ def build_visual_query_ddn_scene(
         j_type = str(jn.get('join_type') or 'INNER').upper()
         cardinality = str(jn.get('cardinality') or '1:N')
         if cardinality in ('1:N', 'N:M'):
-            one_to_many_count += 1
+            one_to_many_pairs.add(tuple(sorted((l_tbl, r_tbl))))
 
         src = node_lookup.get(l_tbl)
         dst = node_lookup.get(r_tbl)
@@ -2839,7 +2843,7 @@ def build_visual_query_ddn_scene(
             ],
         })
 
-    if one_to_many_count >= 2:
+    if len(one_to_many_pairs) >= 2:
         fanout_warnings.append(
             'Multiple 1:N / N:M joins detected — aggregate measures may fan out without pre-aggregation.'
         )
@@ -2921,25 +2925,22 @@ def build_visual_query_ddn_scene(
     if not tables:
         return scene, '', fanout_warnings
 
-    alias_by_id: dict[str, str] = {}
-    table_by_id: dict[str, dict[str, Any]] = {}
-    for tbl in tables:
-        tid = str(tbl.get('id') or tbl.get('name'))
-        tname = str(tbl.get('name') or tid)
-        talias = str(tbl.get('alias') or '').strip()
-        qual = _quote_ident(talias, eng) if talias else _quote_ident(tname, eng)
-        for k in (tid, talias, tname):
-            if k:
-                alias_by_id[k] = qual
-                table_by_id[k] = tbl
 
     if projections:
         proj_parts = []
         for p in projections:
             expr = str(p.get('expression') or p.get('expr') or '').strip()
             agg = str(p.get('aggregate') or '').strip().upper()
+            # Catalog-driven projections carry both a structured field and
+            # a display expression. Quote the structured identity, rather
+            # than emitting lower-case aliases as unquoted Firebird SQL.
+            reference = str(p.get('table') or '')
+            column = str(p.get('column') or '')
+            if reference and column and expr == f'{reference}.{column}':
+                expr = ''
             if not expr:
-                t_ref = alias_by_id.get(str(p.get('table') or ''), '')
+                reference = str(p.get('table') or '')
+                t_ref = join_plan.qualifier(join_plan.resolve(reference), lambda value: _quote_ident(value, eng)) if reference else ''
                 c_ref = _quote_ident(str(p.get('column') or '*'), eng) if p.get('column') != '*' else '*'
                 expr = f'{t_ref}.{c_ref}' if t_ref else c_ref
             if agg in ('COUNT', 'SUM', 'AVG', 'MIN', 'MAX') and not expr.upper().startswith(f'{agg}('):
@@ -2952,59 +2953,20 @@ def build_visual_query_ddn_scene(
     else:
         select_head = 'SELECT DISTINCT\n  *' if distinct else 'SELECT\n  *'
 
-    first_t = tables[0]
-    from_lines = [f'FROM {_format_visual_relation_sql(first_t, eng)}']
+    from_sql, cycle_conditions = join_plan.render(
+        lambda value: _quote_ident(value, eng),
+        lambda table: _format_visual_relation_sql(table, eng),
+    )
 
-    joined_ids = {
-        k
-        for k in (
-            str(first_t.get('id') or ''),
-            str(first_t.get('alias') or ''),
-            str(first_t.get('name') or ''),
-        )
-        if k
-    }
-
-    for jn in joins:
-        r_id = str(jn.get('right_table') or '')
-        l_id = str(jn.get('left_table') or '')
-        r_tbl = table_by_id.get(r_id)
-        if not r_tbl:
-            continue
-        for k in (
-            r_id,
-            str(r_tbl.get('id') or ''),
-            str(r_tbl.get('alias') or ''),
-            str(r_tbl.get('name') or ''),
-        ):
-            if k:
-                joined_ids.add(k)
-        j_type = str(jn.get('join_type') or 'INNER').upper()
-        r_sql = _format_visual_relation_sql(r_tbl, eng)
-        l_qual = alias_by_id.get(l_id, _quote_ident(l_id, eng))
-        r_qual = alias_by_id.get(r_id, _quote_ident(str(r_tbl.get('name')), eng))
-        on_expr = str(jn.get('custom_on') or '').strip() or (
-            f"{l_qual}.{_quote_ident(str(jn.get('left_column') or 'ID'), eng)} = "
-            f"{r_qual}.{_quote_ident(str(jn.get('right_column') or 'ID'), eng)}"
-        )
-        from_lines.append(f'{j_type} JOIN {r_sql} ON {on_expr}')
-
-    # Any additional unjoined tables/procedures become CROSS JOIN
-    for tbl in tables[1:]:
-        tid = str(tbl.get('id') or tbl.get('name'))
-        talias = str(tbl.get('alias') or '')
-        tname = str(tbl.get('name') or '')
-        if tid not in joined_ids and talias not in joined_ids and tname not in joined_ids:
-            from_lines.append(f'CROSS JOIN {_format_visual_relation_sql(tbl, eng)}')
-
-    clauses = [select_head, '\n'.join(from_lines)]
+    clauses = [select_head, from_sql]
     where_items = [
         str(f.get('expression') or '').strip()
         for f in filters
         if isinstance(f, dict) and f.get('clause', 'where') == 'where' and str(f.get('expression') or '').strip()
     ] + [str(w).strip() for w in (visual_model.get('where') or []) if str(w).strip()]
+    where_items = [f'({condition})' for condition in cycle_conditions] + where_items
     if where_items:
-        clauses.append('WHERE ' + '\n  AND '.join(where_items))
+        clauses.append('WHERE ' + '\n  AND '.join(f'({item})' for item in where_items))
     if group_by:
         clauses.append('GROUP BY ' + ', '.join(str(g) for g in group_by if str(g).strip()))
     having_items = [
@@ -3013,7 +2975,7 @@ def build_visual_query_ddn_scene(
         if isinstance(f, dict) and f.get('clause') == 'having' and str(f.get('expression') or '').strip()
     ] + [str(h).strip() for h in (visual_model.get('having') or []) if str(h).strip()]
     if having_items:
-        clauses.append('HAVING ' + '\n   AND '.join(having_items))
+        clauses.append('HAVING ' + '\n   AND '.join(f'({item})' for item in having_items))
     if order_by:
         ord_parts = []
         for o in order_by:
@@ -3140,7 +3102,7 @@ def parse_sql_to_visual_model(
         on_clause = (jm.group(5) or '').strip()
         if jtype == 'CROSS' and not on_clause:
             continue
-        eq_m = re.match(
+        eq_m = re.fullmatch(
             r'([A-Za-z0-9_."`]+)\.([A-Za-z0-9_."`]+)\s*=\s*([A-Za-z0-9_."`]+)\.([A-Za-z0-9_."`]+)',
             on_clause,
         )
@@ -3228,6 +3190,10 @@ def parse_sql_to_visual_model(
         r'\b(?:WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|FETCH|WINDOW|QUALIFY|FOR\s+UPDATE)\b',
         raw, re.IGNORECASE,
     ))
+    try:
+        VisualJoinPlan(tables, joins).render(str, lambda table: table['name'])
+    except ValueError:
+        return None, 'none'
     fidelity = 'lossy' if has_cte_or_union or has_unmodeled_clauses or ';' in raw else 'exact'
     return {
         'tables': tables,
@@ -4642,6 +4608,7 @@ class SqlSurfaceHostService:
                 )
                 incoming_model = request.get('visual_model') or request.get('model')
                 if isinstance(incoming_model, dict):
+                    build_visual_query_ddn_scene(incoming_model, surface.catalog_tables_cache, surface.engine_id)
                     surface.visual_model = copy.deepcopy(incoming_model)
                 if isinstance(request.get('table_columns'), dict):
                     surface.catalog_tables_cache.update(request['table_columns'])

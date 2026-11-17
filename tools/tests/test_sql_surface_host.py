@@ -832,3 +832,26 @@ def test_join_execution_uses_public_api_and_rendered_column_keys(tmp_path):
     result = state['active_result']
     assert [c['name'] for c in result['columns']] == ['CUSTOMER_ID', 'CUSTOMER_ID (2)']
     assert result['rows'][0]['values'] == {'CUSTOMER_ID': 7, 'CUSTOMER_ID (2)': 107}
+
+
+def test_rejected_visual_join_draft_keeps_the_last_valid_surface(tmp_path):
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path/'snips.db'),
+        quick_query_store=QuickQueryStore(tmp_path/'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path/'layout.db'),
+    )
+    workspace = FakeSqlWorkspaceService()
+    server = SimpleNamespace(id=1, user_id=1)
+    base = {'surface_id':'join-review', 'engine_id':'firebird', 'language_profile':'firebird-sql'}
+    model = {'tables':[{'id':'a','name':'ASSETS','alias':'a'},
+                       {'id':'b','name':'CUSTOMERS','alias':'b'}],
+             'joins':[{'join_type':'INNER','left_table':'b','left_column':'CUSTOMER_ID',
+                       'right_table':'a','right_column':'CUSTOMER_ID'}]}
+    accepted = host.dispatch(workspace, server, {**base,'sub_action':'visual_builder_scene','model':model})
+    invalid = copy.deepcopy(model)
+    invalid['tables'][1]['alias'] = 'a'
+    with pytest.raises(ValueError, match='unique alias'):
+        host.dispatch(workspace, server, {**base,'sub_action':'visual_builder_scene','model':invalid})
+    current = host.dispatch(workspace, server, {**base,'sub_action':'read_window'})
+    assert current['sql_source'] == accepted['sql_text']
+    assert [t['alias'] for t in current['visual_builder']['model']['tables']] == ['a','b']

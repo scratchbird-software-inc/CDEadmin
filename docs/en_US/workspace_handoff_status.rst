@@ -43,6 +43,25 @@ an ASSETS/CUSTOMERS join and reads every returned column, including independentl
 valued duplicate labels. This does not extend native qualification to the other
 items below.
 
+Join-generation correction
+--------------------------
+
+The visual builder plans relation instances and join dependencies before emitting
+SQL. Each relation instance appears once, including self joins with distinct
+aliases. Reverse canvas edges and out-of-order relationships do not introduce
+forward alias references. Composite conditions share one ON clause, inner cycle
+constraints are retained, and disconnected joined components are grouped before
+their cross product. Reversed LEFT edges retain LEFT syntax and grouping rather
+than introducing a RIGHT JOIN dependency on older supported SQLite runtimes.
+
+Duplicate aliases/identities, ambiguous or unknown relation references and
+conflicting join types are refused without replacing the last accepted model.
+Cyclic outer relationships require an explicitly nested model; the current
+flat canvas model cannot express their intended null-preservation grouping.
+SQL import retains compound ON predicates instead of keeping only their first
+equality. Catalog-driven projections quote native relation/column identities.
+These corrections do not constitute full arbitrary-SQL round-trip qualification.
+
 Continuation checklist
 ----------------------
 
