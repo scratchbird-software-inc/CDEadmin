@@ -762,3 +762,25 @@ def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
     closed = host.dispatch(ws, srv, {'sub_action': 'close_surface', 'surface_id': 'ss-1'})
     assert closed['closed'] is True
     assert len(ws.sessions_closed) == 1
+
+
+@pytest.mark.parametrize('clause', [
+    'WHERE c.ID = 1', 'GROUP BY c.ID', 'ORDER BY c.ID',
+    'FETCH FIRST 2 ROWS ONLY', 'LIMIT 2',
+])
+def test_visual_conversion_reports_unmodeled_clauses_as_lossy(clause):
+    model, fidelity = parse_sql_to_visual_model('SELECT c.ID FROM CUSTOMERS c ' + clause)
+    assert model is not None
+    assert fidelity == 'lossy'
+
+
+@pytest.mark.parametrize('source', ['', '/* SUSPEND */', 'BEGIN /* SUSPEND */ EXIT; END'])
+def test_executable_routine_metadata_cannot_be_overridden_by_source_text(source):
+    with pytest.raises(ValueError, match='executable-only'):
+        resolve_visual_catalog_object(None, None, 'owned.fdb', {
+            'resource_id': 'procedure:LOG_ONLY', 'resource_kind': 'procedure',
+            'display_name': 'LOG_ONLY', 'native': {
+                'procedure_type': 2, 'source': source,
+                'parameters': [{'name': 'OUT_ID', 'mode': 'output', 'field_type': 8}],
+            },
+        }, engine_id='firebird')

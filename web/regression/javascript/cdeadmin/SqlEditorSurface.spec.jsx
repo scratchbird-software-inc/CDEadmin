@@ -859,8 +859,8 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     expect(miniFormsWrap).not.toBeNull();
     expect(miniFormsWrap.style.alignContent).toBe('start');
     // Bookmark badges carry over into Mini-Form gutters!
-    expect(document.querySelector('[data-cdeadmin-qa-key="bookmark-badge-0"]')).not.toBeNull();
-    expect(document.querySelector('[data-cdeadmin-qa-key="bookmark-badge-2"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-0"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-2"]')).not.toBeNull();
 
     const mfField11 = document.querySelector('[data-form-nav-cell="1:NAME"]');
     expect(mfField11).not.toBeNull();
@@ -870,4 +870,27 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     const mfField21 = document.querySelector('[data-form-nav-cell="2:NAME"]');
     expect(document.activeElement).toBe(mfField21);
   });
+  test('refuses unresolved catalog objects instead of synthesizing a query node', async () => {
+    const postMock = jest.fn(async ({request}) =>
+      request.sub_action === 'resolve_visual_object' ? {} : makeSqlHostResponse()
+    );
+    await act(async () => {
+      render(<TestShell><SqlSurfaceLauncher postMock={postMock} /></TestShell>);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', {name: 'Visual Builder'}));
+    });
+    const canvas = document.querySelector('[data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"]');
+    expect(canvas).not.toBeNull();
+    postMock.mockClear();
+    await act(async () => {
+      fireEvent.drop(canvas, {dataTransfer: {
+        getData: (type) => type === 'application/x-scratchrobin-catalog-object'
+          ? JSON.stringify({resource_id: 'table:MISSING', resource_kind: 'table', display_name: 'MISSING'}) : '',
+      }});
+    });
+    expect(await screen.findByText(/server did not return catalog metadata/i)).toBeInTheDocument();
+    expect(postMock.mock.calls.some(([body]) => body.request.sub_action === 'visual_builder_scene')).toBe(false);
+  });
+
 });

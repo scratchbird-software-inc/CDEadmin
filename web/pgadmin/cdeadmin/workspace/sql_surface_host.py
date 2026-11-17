@@ -2340,7 +2340,6 @@ def resolve_visual_catalog_object(
         is_executable_only_fb = (
             eng == 'firebird'
             and proc_type == 2
-            and not bool(re.search(r'\bSUSPEND\b', src_text, re.IGNORECASE))
         )
         if is_executable_only_fb or not output_cols:
             raise ValueError(
@@ -3223,7 +3222,13 @@ def parse_sql_to_visual_model(
                         'aggregate': '',
                     })
 
-    fidelity = 'lossy' if has_cte_or_union else 'exact'
+    # These clauses are not represented by the model returned below. Preserve
+    # the source SQL and report loss before the user regenerates it visually.
+    has_unmodeled_clauses = bool(re.search(
+        r'\b(?:WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|FETCH|WINDOW|QUALIFY|FOR\s+UPDATE)\b',
+        raw, re.IGNORECASE,
+    ))
+    fidelity = 'lossy' if has_cte_or_union or has_unmodeled_clauses or ';' in raw else 'exact'
     return {
         'tables': tables,
         'joins': joins,
@@ -4587,7 +4592,7 @@ class SqlSurfaceHostService:
                     )
                     if fid == 'lossy':
                         loss_notes.append(
-                            'Complex SQL expressions or CTEs are preserved lossily in the visual model.'
+                            'The visual model does not fully represent this SQL. Regenerating SQL from it may omit clauses or expressions.'
                         )
                 else:
                     surface.visual_fidelity = 'none'

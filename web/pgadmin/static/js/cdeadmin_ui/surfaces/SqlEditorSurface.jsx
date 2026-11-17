@@ -669,42 +669,9 @@ export default function SqlEditorSurface({
         return;
       }
 
-      // Fallback when running against a lightweight test mock that returns `{}` for unknown actions
       if (!resolvedNode) {
-        const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(rkind);
-        const pfx = isProc ? 'p' : 't';
-        let n = (curModel.tables || []).length + 1;
-        const usedAliases = new Set(
-          (curModel.tables || []).map((t) => String(t.alias || '').toLowerCase())
-        );
-        while (usedAliases.has(`${pfx}${n}`)) n += 1;
-        const alias = `${pfx}${n}`;
-        const rawCols =
-          rawResource.columns ||
-          rawResource.extensions?.cdeadmin?.catalog_metadata?.columns ||
-          [];
-        const cols = rawCols.map((c) =>
-          typeof c === 'string'
-            ? {name: c, type: 'TEXT', key: false}
-            : {
-              name: c.name || c.column_name,
-              type: c.native_type || c.data_type || c.type || 'VARCHAR',
-              key: Boolean(c.primary_key || c.key),
-              fk: Boolean(c.fk || c.foreign_key),
-              nullable: c.nullable !== false,
-            }
-        );
-        resolvedNode = {
-          id: `${isProc ? 'proc' : 'tbl'}_${alias}_${rname}`,
-          resource_id: rawResource.resource_id || '',
-          resource_kind: rkind,
-          name: rname,
-          alias,
-          input_parameters: Array.isArray(rawResource.input_parameters)
-            ? rawResource.input_parameters
-            : [],
-          columns: cols,
-        };
+        setCanvasNotice(gettext('The server did not return catalog metadata for this object. Refresh the catalog and try again.'));
+        return;
       }
 
       const idx = (curModel.tables || []).length;

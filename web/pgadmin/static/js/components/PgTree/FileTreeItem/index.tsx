@@ -20,6 +20,7 @@ import {
   treeNodeAriaLabel,
 } from 'sources/cdeadmin_ui/navigation/TreeNode';
 import {ObjectIcon} from 'sources/cdeadmin_ui/icons';
+import {sqlLanguageProfile} from 'sources/cdeadmin_ui/editors/sqlLanguageProfiles';
 import gettext from 'sources/gettext';
 import {TreeBranchGuides} from './TreeBranchGuides';
 
@@ -477,8 +478,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
           existingText = '';
         }
         if (!existingText) {
-          const eng = String(rawData.cde_engine_id || '').toLowerCase();
-          const qChar = eng.includes('mysql') || eng.includes('mariadb') ? '`' : '"';
+          const qChar = sqlLanguageProfile('', rawData.cde_engine_id).identifier_quote || '"';
           const quotedIdent = `${qChar}${cleanName.replaceAll(qChar, qChar + qChar)}${qChar}`;
           try {
             e.dataTransfer.setData(

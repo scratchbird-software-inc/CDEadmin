@@ -699,11 +699,13 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
 
   it('supports all 9 record/bookmark navigation buttons (|< << < > >> >| ! !< !>) and Tab/Arrow keyboard navigation', async () => {
     const post = jest.fn(async () => makeHostFixture());
-    render(
-      <TestShell>
-        <ShellLauncher post={post} />
-      </TestShell>
-    );
+    await act(async () => {
+      render(
+        <TestShell>
+          <ShellLauncher post={post} />
+        </TestShell>
+      );
+    });
     expect(await screen.findByText('Cash On Hand')).toBeInTheDocument();
 
     const navFirstBtn = screen.getByRole('button', {name: /First Record \(\|<\)/});
@@ -727,7 +729,7 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     await act(async () => {
       fireEvent.click(bookmarkBtn);
     });
-    expect(document.querySelector('[data-cdeadmin-qa-key="bookmark-badge-0"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="grid-bookmark-badge-0"]')).not.toBeNull();
 
     await act(async () => {
       fireEvent.click(navNextRowBtn);
@@ -746,6 +748,6 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     await act(async () => {
       fireEvent.keyDown(firstCell, {key: 'Tab'});
     });
-    expect(document.activeElement?.getAttribute('data-grid-nav-cell')).toBe('0:NAME');
+    expect(document.activeElement?.getAttribute('data-grid-nav-cell')).toBe('0:ACCOUNT_NAME');
   });
 });

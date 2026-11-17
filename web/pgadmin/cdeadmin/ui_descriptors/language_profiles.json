@@ -3,111 +3,138 @@
   "profiles": {
     "firebird-sql": {
       "syntax_family": "firebird",
-      "native_transaction_close_warning": true
+      "native_transaction_close_warning": true,
+      "identifier_quote": "\""
     },
     "firebird": {
       "syntax_family": "firebird",
-      "native_transaction_close_warning": true
+      "native_transaction_close_warning": true,
+      "identifier_quote": "\""
     },
     "firebird-embedded": {
       "syntax_family": "firebird",
-      "native_transaction_close_warning": true
+      "native_transaction_close_warning": true,
+      "identifier_quote": "\""
     },
     "duckdb-sql": {
       "syntax_family": "duckdb",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "duckdb": {
       "syntax_family": "duckdb",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "mariadb-sql": {
       "syntax_family": "mariadb",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "mariadb": {
       "syntax_family": "mariadb",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "mysql-sql": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "mysql": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "tidb-sql": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "tidb": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "vitess-sql": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "vitess": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "dolt-sql": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "dolt": {
       "syntax_family": "mysql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "`"
     },
     "postgresql-sql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "postgresql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "cockroachdb-sql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "cockroachdb": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "ysql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "yugabytedb-ysql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "yugabytedb": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "xtdb-sql": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "xtdb": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "sqlite-sql": {
       "syntax_family": "sqlite",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "sqlite": {
       "syntax_family": "sqlite",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     },
     "xtdb-sql-2.1": {
       "syntax_family": "postgresql",
-      "native_transaction_close_warning": false
+      "native_transaction_close_warning": false,
+      "identifier_quote": "\""
     }
   }
 }
