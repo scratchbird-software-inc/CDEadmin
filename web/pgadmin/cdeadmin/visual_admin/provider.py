@@ -294,8 +294,11 @@ class ProviderVisualAdministration:
                 'message': 'Unknown form fields: ' + ', '.join(unknown),
             })
         admitted = {}
+        visibility = {field['field_id']: copy.deepcopy(field['default'])
+                      for field in fields if 'default' in field}
+        visibility.update(draft)
         for field in fields:
-            if not self._field_active(field, draft):
+            if not self._field_active(field, visibility):
                 continue
             field_id = field['field_id']
             value = draft.get(field_id, field.get('default'))

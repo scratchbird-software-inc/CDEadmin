@@ -217,6 +217,31 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._catalog_pool = {}
         self._catalog_pool_lock = threading.RLock()
         self._pooled_catalog_local = threading.local()
+        if isinstance(client, FirebirdQueryClient):
+            client._release_idle_catalog = self._release_idle_catalog_for_service
+
+    def _release_idle_catalog_for_service(self, route):
+        """Release only this file's idle metadata handles before maintenance.
+
+        Borrowed catalog handles and user sessions are outside this pool and
+        remain native blockers. Never rollback unexpected active transactions.
+        Failed detach stays owned by the client for explicit cleanup.
+        """
+        database = route.get('database')
+        with self._catalog_pool_lock:
+            selected = [(key, handle) for key, handle in self._catalog_pool.items()
+                        if json.loads(key).get('database') == database]
+            for _key, handle in selected:
+                transaction = getattr(handle, 'main_transaction', None)
+                if transaction is not None and transaction.is_active() is not False:
+                    raise RelationalClientError(
+                        'Catalog transaction is not idle; close it before maintenance')
+            for key, handle in selected:
+                self._catalog_pool.pop(key)
+                with self.client._admission:
+                    if not any(item is handle for item in self.client._connections):
+                        self.client._connections.append(handle)
+                self.client._forget_and_close(handle)
 
     def _visual_admin_session_context(self, payload):
         ctx = super()._visual_admin_session_context(payload)
@@ -1199,7 +1224,7 @@ def _firebird_service_operation(
         backup_files = [options['backup_file'], *(
             options.get('additional_backup_files') or []
         )]
-        if any(isinstance(options.get(field), str) and
+        if options.get('replica_mode') or any(isinstance(options.get(field), str) and
                not options[field].isascii() for field in (
                    'key_holder', 'key_name', 'crypt_plugin')):
             flags = _flag_value(module, 'SrvRestoreFlag', restore_flags)

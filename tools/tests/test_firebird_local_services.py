@@ -54,7 +54,7 @@ def test_local_catalog_keeps_shared_typed_form_and_database_target_scope():
     assert task.get('workspace_scope')!='server_service'
     assert {x['field_id']for x in task['form']['fields']}=={'statistics_flags','tables','role'}
     assert embedded.ADMINISTRATION.supports('database','database_statistics')
-    assert not embedded.ADMINISTRATION.supports('database','backup_logical')
+    assert not embedded.ADMINISTRATION.supports('database','restore_physical')
 
 
 @pytest.mark.parametrize('operation,options', [

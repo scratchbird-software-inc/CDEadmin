@@ -148,6 +148,14 @@ def test_stale_native_settings_and_process_refuse_before_claim(owned):
     owned.cursor.execute.assert_not_called()
 
 
+def test_expired_review_never_claims_or_dispatches_native_change(owned):
+    record=review(owned)
+    with patch.object(eds_pool.time,'time',return_value=record['expires_at']+1):
+        with pytest.raises(ValueError,match='expired'):apply(owned,record)
+    assert owned.archive.get(record['review_id'])['state']=='reviewed'
+    owned.cursor.execute.assert_not_called()
+
+
 def test_confirmation_session_adapter_and_owner_are_bound(owned):
     record=review(owned)
     base={'operation':'apply','review_id':record['review_id'],'review_digest':record['review_digest'],

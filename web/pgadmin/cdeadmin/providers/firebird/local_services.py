@@ -30,16 +30,31 @@ LOCAL_OPTIONS = {
     'bring_online': {'mode'},
     'fixup_database': {'fixup_flags', 'confirmation'},
     'activate_shadow': {'shadow_filename', 'confirmation', 'original_isolated'},
+    'repair_database': {'repair_action', 'repair_modifiers', 'parallel_workers', 'no_linger'},
+    'upgrade_database': set(),
+    'backup_logical': {'split_backup', 'backup_file', 'backup_volumes', 'backup_flags',
+                       'skip_data', 'include_data', 'parallel_workers', 'statistics',
+                       'verbose', 'verbose_interval', 'key_holder', 'key_name', 'crypt_plugin'},
+    'restore_logical': {'backup_file', 'additional_backup_files', 'restore_database',
+        'multiple_database_files', 'primary_file_pages', 'database_file_volumes',
+        'additional_database_files', 'database_file_pages', 'replace_existing',
+        'restore_flags', 'page_size', 'page_buffers', 'access_mode', 'replica_mode',
+        'skip_data', 'include_data', 'parallel_workers', 'statistics', 'verbose',
+        'verbose_interval', 'key_holder', 'key_name', 'crypt_plugin', 'confirmation'},
 }
 OPERATIONS = frozenset(LOCAL_OPTIONS)
 
 
-def route_for_service(route, permissions=None):
+def admit_service_route(route, permissions=None):
     if not isinstance(route, Mapping) or route.get('attachment_mode') != 'embedded':
         raise RelationalClientError('Local Firebird services require the embedded profile')
     if any(route.get(key) for key in ('credential_reference_id', 'credential_references', 'credential_kinds')):
         raise RelationalClientError('Local Firebird services do not acquire network credentials')
-    value = embedded_route(route, permissions)
+    return embedded_route(route, permissions)
+
+
+def route_for_service(route, permissions=None):
+    value = admit_service_route(route, permissions)
     if not Path(value['database']).is_file():
         raise RelationalClientError('Local database services require an existing approved file')
     return value
@@ -52,7 +67,9 @@ def validate_operation(route, operation, database, options):
         raise RelationalClientError('Select typed local database service options')
     if 'confirmation' in options and not isinstance(options['confirmation'], str):
         raise RelationalClientError('Confirmation must be text')
-    if operation == 'activate_shadow':
+    if operation == 'restore_logical':
+        selected = admit_service_route({**route, 'database': options.get('restore_database')})
+    elif operation == 'activate_shadow':
         from ..embedded_route import contained_database
         from .shadow_activation import validate
         if not isinstance(route, Mapping):
@@ -74,7 +91,8 @@ def validate_operation(route, operation, database, options):
     else:
         from ..relational_admin import RelationalAdministration
         errors = RelationalAdministration._validate_firebird_service(operation, options)
-        for field in LOCAL_OPTIONS[operation] & {'page_buffers', 'sweep_interval'}:
+        for field in ({'page_buffers'} if operation == 'set_page_cache_size' else
+                      {'sweep_interval'} if operation == 'set_sweep_interval' else set()):
             if options.get(field) is None:
                 raise RelationalClientError('A local service requires ' + field)
         if errors:
@@ -84,6 +102,12 @@ def validate_operation(route, operation, database, options):
     actual = embedded_route({**route, 'database': database})['database']
     if actual != selected['database']:
         raise RelationalClientError('Local service target differs from the approved database')
+    if operation == 'backup_logical':
+        from .local_backup import selection
+        selection(selected, options, require_absent=False)
+    if operation == 'restore_logical':
+        from .local_restore import selection
+        selection(selected, options, hash_inputs=False)
     return selected
 
 
@@ -94,7 +118,7 @@ def file_identity(route):
 
 
 def arguments(route, permissions, module):
-    selected = route_for_service(route, permissions)
+    selected = admit_service_route(route, permissions)
     from .provider import _CONFIG_LOCK, _configure_client_library, _client_library_identity
     _configure_client_library(module)
     _client_library_identity(module)
@@ -123,6 +147,15 @@ _SERVICE_TARGET = ContextVar('firebird_local_service_target', default=None)
 _MAINTENANCE_PROBE = ContextVar('firebird_local_maintenance_probe', default=False)
 _ADMISSION_LOCK = RLock()
 _ADMISSIONS = WeakValueDictionary()
+
+
+@contextmanager
+def restore_target(route):
+    """Canonical native creation/replacement has no OS rename race fence."""
+    selected = admit_service_route(route)
+    token = _SERVICE_TARGET.set((selected['database'], selected['database']))
+    try: yield False
+    finally: _SERVICE_TARGET.reset(token)
 
 
 def maintenance_probe_active():
@@ -154,10 +187,17 @@ def service_filename(client, route, reviewed, operation, options):
     with no linger or auxiliary files. Canonical operations retain/recheck
     the reviewed descriptor but do not claim an OS rename race fence.
     """
-    if operation == 'activate_shadow':
+    if operation == 'backup_logical':
+        # An online gbak must not block new managed SQL attachments for its
+        # full duration. The canonical path cannot introduce a private alias
+        # into a connection's native cache identity.
+        with pinned_target(route, reviewed, operation, private_alias=False):
+            yield False
+        return
+    if operation in {'activate_shadow', 'repair_database', 'upgrade_database'}:
         # An SQL probe could itself activate/open a recovery file. Activation
-        # must keep the canonical native filename, including persistent LINGER
-        # and any auxiliary-file references inherited from the primary.
+        # and repair must keep the canonical native filename, including LINGER
+        # and auxiliary-file references. A damaged file may not admit SQL at all.
         with attachment_admission(route), pinned_target(route, reviewed, operation, private_alias=False):
             yield False
         return

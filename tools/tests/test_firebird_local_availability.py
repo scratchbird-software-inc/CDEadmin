@@ -13,7 +13,7 @@ from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceService
 from pgadmin.cdeadmin.sdk import RelationalClientError
 
 
-@pytest.mark.parametrize('operation', ['shutdown_database', 'bring_online', 'fixup_database'])
+@pytest.mark.parametrize('operation', ['shutdown_database', 'bring_online', 'fixup_database', 'repair_database', 'upgrade_database', 'backup_logical', 'restore_logical'])
 def test_local_availability_opener_uses_registered_target_without_sql(operation):
     service = object.__new__(ProviderWorkspaceService)
     service.endpoint_service = Mock()

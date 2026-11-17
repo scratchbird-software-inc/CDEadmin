@@ -465,6 +465,18 @@
           "label": "SQL role",
           "control": "text",
           "required": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm replacement filename",
+          "group": "Files",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "replace_existing",
+            "equals": true
+          },
+          "help": "Enter the exact destination database filename. Embedded replacement requires this confirmation in addition to the reviewed apply."
         }
       ],
       "execution_host": true,
@@ -1413,7 +1425,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Draft: only a no-op upgrade of a current-ODS (13.1) database could be run; no older-ODS database was available to observe an actual upgrade. Smoke-run by tools/tests/test_ui_descriptor_operations_firebird.py."
+      "notes": "Embedded Linux Engine13 5.0.4: actual ODS13.0 to13.1 upgrade verified with a database created by Firebird4.0.5, retaining table data. Network older-ODS upgrade qualification remains draft; the earlier network test exercised only a current-ODS no-op. Uses the canonical approved local filename with identity recheck for embedded; no external-process rename fence or exclusive-access claim."
     },
     {
       "operation_id": "commit_limbo_local",

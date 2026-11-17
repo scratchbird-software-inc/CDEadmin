@@ -149,8 +149,10 @@ def start_logical_restore(server, options, flags, module, callback):
                 spb.insert_string(core.SrvRestoreOption[tag], options[field],
                                   encoding=server.encoding)
         if options.get('replica_mode'):
-            spb.insert_int(core.SrvRestoreOption.REPLICA_MODE,
-                           module.ReplicaMode[options['replica_mode']].value)
+            # Native restore declares a ByteSpb, not an IntSpb. The installed
+            # driver's integer path fails before any restore is started.
+            spb.insert_bytes(core.SrvRestoreOption.REPLICA_MODE,
+                             bytes([module.ReplicaMode[options['replica_mode']].value]))
         spb.insert_int(core.SPBItem.OPTIONS, flags)
         if options.get('verbose', True):
             spb.insert_tag(core.SPBItem.VERBOSE)

@@ -91,6 +91,27 @@ def qualify(runtime,output,*,browser_binary=None,driver_binary=None):
                 size=command({'action':'set_size','value':31})
                 lifetime=command({'action':'set_lifetime','value':1,'unit':'MINUTE'})
                 assert size['native_after']['size']=='31' and lifetime['native_after']['lifetime_seconds']=='60'
+                boundaries=[]
+                for draft,field,expected in (
+                    ({'action':'set_size','value':0},'size','0'),
+                    ({'action':'set_size','value':1000},'size','1000'),
+                    ({'action':'set_lifetime','value':65535,'unit':'SECOND'},'lifetime_seconds','65535'),
+                    ({'action':'set_lifetime','value':24,'unit':'HOUR'},'lifetime_seconds','86400'),
+                    ({'action':'set_lifetime','value':1440,'unit':'MINUTE'},'lifetime_seconds','86400'),
+                ):
+                    boundary=command(draft)
+                    assert boundary['native_after'][field]==expected,boundary
+                    boundaries.append({'draft':draft,'native_observed':expected})
+                command({'action':'set_size','value':31})
+                command({'action':'set_lifetime','value':1,'unit':'MINUTE'})
+                second=instance.open_session({'route':target})
+                try:
+                    shared=instance.eds_pool_action({'session_id':second['session_id'],
+                        'language_profile':'firebird-sql','operation':'inventory'},archive)['native_pool']
+                    assert shared['server_process_id']==before['server_process_id']
+                    assert shared['attachment_id']!=before['attachment_id'] and shared['size']=='31'
+                    assert shared['lifetime_seconds']=='60'
+                finally:instance.close_session({'session_id':second['session_id']})
                 if embedded:assert configuration()==configured
                 assert handle.main_transaction.info.id==transaction
                 with handle.cursor() as cursor:
@@ -146,6 +167,8 @@ def qualify(runtime,output,*,browser_binary=None,driver_binary=None):
                     'pool_settings_survive_caller_rollback':True,'actual_external_connections_pooled':True,
                     'clear_oldest_removes_expired_idle_only':True,'clear_all_removes_active_bindings_preserves_external_transaction':True,
                     'native_clear_database_refused':True,'durable_acknowledgement_no_replay':True})
+                proof['interfaces'][-1].update(native_boundary_values=boundaries,
+                    second_attachment_shares_observed_process_pool=True)
             finally:instance.client.close()
             restored=EDSPoolReceipts(archive.path,*archive.binding)
             assert restored.get(size['review_id'])['native_acknowledged']

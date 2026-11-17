@@ -3101,3 +3101,207 @@ retained data, canonical MON$DATABASE_NAME and default backup delta handling,
 ordinary-primary refusal and replacement before apply. It does not establish
 external-process exclusivity, older-version support, native Windows/macOS
 qualification or human form acceptance.
+
+Embedded repair and ODS upgrade
+------------------------------
+
+``repair_database`` and ``upgrade_database`` use the local Engine13 Services
+adapter and the shared Firebird operation forms. Open their attachment-free
+workspace using ``focused_operation_id`` and the selected registered
+``database_target_id``. The workspace supplies the database target resource
+for the ordinary visual administration validate, review and confirmed one-use
+apply actions. A failed SQL connection is not required to open these forms.
+
+Repair takes ``repair_action``, optional ``repair_modifiers``, ICU-only
+``parallel_workers``, ``no_linger`` and an optional task ``role``. The provider
+preserves all shared native validation: mend implies full validation; modifiers
+do not remove preset flags; ICU workers are requested, not observed; and zero
+omits the native worker DPB setting. The dedicated ODS upgrade takes only the
+optional role. The embedded filesystem/runtime authority remains required, and
+neither workflow acquires network credentials.
+
+Before dispatch, the provider releases its own idle catalog connections for
+the selected file. It refuses to close a catalog handle with an active or
+unconfirmed transaction; a failed detach remains owned for explicit cleanup.
+Other database caches, borrowed metadata handles and user sessions are not
+released. Native exclusive-access errors therefore remain possible and must
+be presented as returned, rather than forcing other attachments closed.
+
+Both tasks retain and recheck the reviewed file identity and pass its canonical
+filename to Firebird without an SQL preflight. Results explicitly report
+``file_identity_race_fenced=false``. This does not establish exclusive access
+against external processes or disconnect existing attachments. Retain the shared
+repair warnings: mend can discard damaged records, native success does not
+establish recovery, and errors can follow partial changes. Preserve a recoverable
+backup and independently inspect the native state before deciding what to do.
+
+Owned Linux Firebird 5.0.4 qualification observes all seven repair actions,
+including actual unavailable-manual-shadow cleanup and real ODS 13.0 to 13.1
+upgrades through both upgrade entry points. The legacy fixture was created by
+an isolated official Firebird 4.0.5 runtime; its row, primary key and text survive
+upgrade. Validation/mend presets on healthy fixtures retain data; ICU worker
+dispatch does not prove a stale ICU index needed rebuilding. A truncated copy
+produces a native failure with unknown outcome and blocked replay. In the
+missing-shadow case Firebird removes the catalog entry and permits SQL again,
+yet its Services status retains the original file-open error. The backend keeps
+that error and unknown outcome; subsequent inspection proves recovery separately.
+The qualification also covers a replaced inode before dispatch and loss of an
+actual completed native response. Arbitrary corruption recovery, older engine
+versions, other native platforms and human form acceptance are not certified.
+
+Embedded logical backup
+-----------------------
+
+``backup_logical`` is an application-local Engine13 Services operation. Its
+shared typed Firebird form retains single-file and ordered split-volume
+selection, byte capacities, native backup flags, include/skip patterns,
+parallel workers, statistics, verbose settings, key-holder/crypt plugin
+settings and task role. Embedded form labels identify the ScratchRobin host.
+The embedded manifest declares ``backup_admin``; review and apply still require
+the caller's grant, in addition to filesystem and embedded-runtime authority.
+
+Open ``focused_operation_id=backup_logical`` with the selected registered
+``database_target_id`` to obtain the attachment-free database target. Submit
+the ordinary visual validate, plan and confirmed one-use apply requests. The
+single-file ``split_backup=false`` default is honoured by backend conditional
+field validation even when omitted by the caller. Explicit controlling values
+override defaults. The preview includes ``local_backup_outputs`` in native
+volume order, with exact filenames, capacities and reviewed parent identities.
+The same list is retained in ``impact.backup_output_files`` on the operation
+receipt, including after a native failure, so operation lookup can recover the
+reviewed paths without inferring them from file existence.
+
+All destinations must be canonical absolute filenames inside the approved
+filesystem root, with existing parent directories. Existing outputs, aliases
+and source-database paths are refused. Apply rechecks the reviewed source and
+output directory identities, opens each approved parent by descriptor, and
+reserves output files with exclusive creation and mode 0600. No existing file
+is overwritten. Linux Engine13 writes through process-local descriptor aliases
+to those reserved inodes, so a same-name replacement cannot redirect writes.
+The source database keeps its canonical native filename and its existing
+``file_identity_race_fenced=false`` result; output-inode pinning is a separate
+observation and does not establish source-file exclusivity.
+Online backup does not hold managed SQL admission for its duration; new query
+connections remain possible, and existing caller transactions are preserved.
+
+``driver_observation.local_backup_outputs`` reports the requested filename,
+reserved device/inode identity, observed bytes, native descriptor alias and
+``requested_path_still_names_output`` for each volume. Descriptor aliases are
+diagnostics only: they expire when apply releases its handles and must not be
+used as restore paths or download links. The aggregate
+``outputs_at_reviewed_paths`` is false if a requested name or its parent was
+replaced. Native ``server_completed`` and service-handle release remain separate
+observations. ``restore_verified`` stays false: production backup does not
+restore the file merely to infer that it is usable. The UI should retain the
+reviewed destination list and inspect these fields before presenting completion.
+
+Files are visible during the operation. An exception, interruption, failed
+reservation after an earlier volume, or lost native response can leave partial
+files at the reviewed destinations. They are retained for explicit inspection;
+the backend does not automatically delete or replay them. File existence or
+nonzero size does not mean a valid backup. A failure before any output reservation
+can be a known pre-dispatch rejection; once files were created, it must not be
+reported as ``nothing_changed``. A native failure keeps the normal unknown-outcome
+receipt and its one-use review is retired. Installed native encryption plugins
+remain real dependencies; absent plugins produce native errors.
+
+Owned Linux Firebird 5.0.4 qualification independently restores full,
+metadata-only, ZIP, Unicode-filtered and split-volume outputs, checking schema,
+data and binary blobs. It verifies permission refusal, existing-output refusal,
+replacement during dispatch, retained partial output on native plugin failure,
+a lost completed response and preservation of a caller's pending transaction.
+Those restore calls are qualification controls; product restore is qualified
+separately below. Other native platforms, older versions, installed
+encryption-plugin interoperability and human form acceptance remain separate.
+
+FB-Q07: native EDS process-pool qualification
+------------------------------------------
+
+Current-source Linux Firebird 5.0.4 qualification exercises the original-session
+EDS pool API in network and embedded modes, including actual pooled external
+connections. A second attachment observes the same native process ID, pool size
+and lifetime. Native minimum/maximum size and SECOND, MINUTE and HOUR lifetime
+boundaries are read back, rather than inferred from generated SQL. A restricted
+network principal is refused until its exact native system privilege is granted.
+
+The checks retain a pending caller transaction and savepoint across pool
+administration, verify settings outside rollback, observe idle expiry, and verify
+that CLEAR ALL removes active pool tracking without cancelling its external
+transaction. CLEAR database remains refused because native 5.0.4 does not
+implement it. Native settings are process-local; archived receipts do not imply
+that they survive an engine restart.
+
+Authenticated API checks cover original-session control, URL/target scope
+conflicts, foreign receipt scopes, explicit retention confirmation and archive
+reads after session closure without resolving a SQL workspace. A separate fresh
+Python process reads both receipt scopes after the owned native server has
+stopped; the receipts explicitly remain archived observations, without a live
+native connection, replay authority or inferred transaction finality. Unit checks
+also cover expired reviews, adapter/process/role/session changes, durable claims,
+lost responses, failed persistence, cancellation and cleanup failures. Browser
+appearance and native Windows/macOS acceptance remain with their owning teams.
+
+Embedded logical restore
+------------------------
+
+``restore_logical`` uses the local Engine13 Services adapter and shared typed
+Firebird restore form. The embedded manifest grants the workflow capability
+``restore_admin``; the caller must hold that permission as well as embedded
+runtime, filesystem and administration authority. The attachment-free workspace
+uses ``focused_operation_id=restore_logical``. Its registered original database
+may be unavailable: restore does not open it or its destination as a SQL
+preflight. Service-manager attachment alone does not create a database.
+
+The form retains ordered backup volumes, single/multiple native database files
+and page allocations, create/replacement selection, restore flags, page size,
+buffers, access and replica modes, include/skip filters, workers, statistics,
+verbose settings, installed crypt/key-holder options and task role. All selected
+paths are canonical absolute application-host filenames inside the endpoint's
+approved root. Input volumes must be distinct, nonempty regular-file inodes.
+Secondary destination files must be new. Replacing a primary database requires
+``replace_existing=true`` and ``confirmation`` equal to the exact
+``restore_database`` filename, in addition to confirmed one-use apply. Native
+active attachments are not forced closed.
+
+Preview and ``impact.restore_files`` retain input SHA-256 digests and file
+identities, destination identities or expected absence, parent identities and
+ordered page allocations. Apply rechecks those values and hashes each pinned
+input before dispatch. Backup inputs are read through held Linux descriptor
+aliases; filenames cannot redirect those handles. Native database filenames stay
+canonical so stored multi-file metadata remains correct. Output filenames are
+rechecked but explicitly report no OS rename fence or external exclusive-access
+guarantee. No operation automatically retries or deletes partial database files.
+
+``driver_observation.local_restore_files`` reports input-inode pinning, reviewed
+digests, whether names still identify their inputs, whether input metadata stayed
+unchanged, and the observed destination file identities. A rename can change
+ctime even when the pinned input bytes remain intact; that uncertainty is kept.
+``data_readback_verified`` remains false in production. The native service result
+and handle-release observations are separate from later data inspection.
+Native errors or lost responses remain unknown, with reviewed paths available
+through operation lookup. Existing idle catalog handles for the selected target
+are released without closing user sessions or rolling back their transactions.
+
+``provider_result.restored_database_target`` identifies the primary file and
+reports ``registration_changed=false``. The existing registration stays selected.
+After inspecting a known completed restore, the UI can use the existing
+``database_target_attach`` action with ``database`` and ``display_name`` to
+verify/register that file, subject to the normal active-handle rules. Registration
+follow-up is separate from native restore and must never cause it to be replayed.
+
+Native restore replica mode is encoded as a one-byte SPB field. Firebird 5.0.4's
+clumplet schema rejects the installed driver's four-byte encoding before restore;
+the provider uses its corrected action-first native writer whenever a replica
+mode is selected. This correction applies to network and embedded execution.
+The existing UTF-8 plugin-name path uses the same writer and preserves every
+ordered file/page pairing.
+
+Owned Engine13 qualification verifies full, metadata-only, Unicode-filtered,
+read-only/replica, split-input, multiple-database-file and explicit replacement
+restores with independent native row, BLOB and property readback. Stale targets,
+pinned-input filename replacement, corrupt backups, lost completed responses and
+pending caller transactions are also exercised. Authenticated API checks verify
+the readonly replica properties and retained row, no-store responses, one-use
+apply, known stale-target refusal and durable unknown-outcome path lookup.
+Other native versions/platforms, installed crypt-provider interoperability and
+human UI acceptance remain separately recorded.
