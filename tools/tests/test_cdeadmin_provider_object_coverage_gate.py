@@ -83,9 +83,10 @@ class ProviderObjectCoverageGateTests(unittest.TestCase):
         # Firebird database statistics. Retain all structural/fail-closed gates.
         # 2586 adds the PostgreSQL database's reviewed namespace-guard installer.
         # Five-audit batch adds statistics4, parameter ACL3, default ACL3, CHECKPOINT1.
-        self.assertEqual(2597, result['graphical_operation_count'])
+        # Six native MariaDB server operations: diagnostics3, live plans2, shutdown1.
+        self.assertEqual(2635, result['graphical_operation_count'])
         self.assertEqual(
-            {'apache-ignite-native': 57, 'cassandra-native': 67, 'clickhouse-native': 84, 'cockroachdb-native': 145, 'dolt-native': 98, 'duckdb-native': 60, 'firebird-embedded': 160, 'firebird-native': 182, 'foundationdb-native': 40, 'immudb-native': 57, 'influxdb-native': 30, 'mariadb-native': 126, 'milvus-native': 54, 'mongodb-native': 74, 'mysql-native': 191, 'neo4j-native': 75, 'opensearch-native': 86, 'opensearch-sql-ppl': 50, 'postgresql-native': 241, 'redis-native': 151, 'sqlite-native': 54, 'tidb-native': 108, 'tikv-native': 56, 'vitess-native': 92, 'xtdb-native': 32, 'yugabytedb-native': 190, 'yugabytedb-ycql': 37},
+            {'apache-ignite-native': 57, 'cassandra-native': 67, 'clickhouse-native': 84, 'cockroachdb-native': 145, 'dolt-native': 98, 'duckdb-native': 60, 'firebird-embedded': 178, 'firebird-native': 182, 'foundationdb-native': 40, 'immudb-native': 57, 'influxdb-native': 30, 'mariadb-native': 146, 'milvus-native': 54, 'mongodb-native': 74, 'mysql-native': 191, 'neo4j-native': 75, 'opensearch-native': 86, 'opensearch-sql-ppl': 50, 'postgresql-native': 241, 'redis-native': 151, 'sqlite-native': 54, 'tidb-native': 108, 'tikv-native': 56, 'vitess-native': 92, 'xtdb-native': 32, 'yugabytedb-native': 190, 'yugabytedb-ycql': 37},
             {key: value['graphical_interface']['graphical_operation_count']
              for key, value in result['profiles'].items()},
         )

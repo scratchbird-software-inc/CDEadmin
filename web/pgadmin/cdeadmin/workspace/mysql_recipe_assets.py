@@ -9,7 +9,7 @@ from .assets import (ProjectAssetError, ProjectAssetForbidden,
 
 LOCK = threading.RLock()
 ENGINE_NAMES = {'mysql': 'MySQL', 'mariadb': 'MariaDB', 'postgresql': 'PostgreSQL',
-                'duckdb': 'DuckDB', 'sqlite': 'SQLite'}
+                'duckdb': 'DuckDB', 'sqlite': 'SQLite', 'firebird': 'Firebird'}
 
 
 class MySQLRecipeAssets:

@@ -163,6 +163,1013 @@
           ]
         }
       ]
+    },
+    {
+      "operation_id": "editor_attachment_inventory",
+      "resource_kind": "database",
+      "title": "Inspect attached catalogs",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_review_attach",
+      "resource_kind": "database",
+      "title": "Review catalog attachment",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "alias",
+          "label": "Catalog alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Database path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "read_only",
+          "label": "Read only",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "conflict",
+          "label": "Existing alias",
+          "control": "select",
+          "options": [
+            {
+              "value": "ERROR",
+              "label": "ERROR"
+            },
+            {
+              "value": "IGNORE",
+              "label": "IGNORE"
+            },
+            {
+              "value": "REPLACE",
+              "label": "REPLACE"
+            }
+          ],
+          "default": "ERROR"
+        },
+        {
+          "field_id": "create_if_missing",
+          "label": "Create missing database",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "block_size",
+          "label": "Block size",
+          "control": "text",
+          "help": "Exact unsigned decimal text; native file creation/open rules apply."
+        },
+        {
+          "field_id": "row_group_size",
+          "label": "Row group size",
+          "control": "text",
+          "help": "Exact unsigned decimal text."
+        },
+        {
+          "field_id": "storage_version",
+          "label": "Storage version",
+          "control": "text"
+        },
+        {
+          "field_id": "compress_mode",
+          "label": "Memory compression",
+          "control": "select",
+          "options": [
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            },
+            {
+              "value": "ENABLED",
+              "label": "ENABLED"
+            },
+            {
+              "value": "DISABLED",
+              "label": "DISABLED"
+            }
+          ],
+          "default": "NATIVE"
+        },
+        {
+          "field_id": "key_mode",
+          "label": "Encryption key",
+          "control": "select",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "NONE"
+            },
+            {
+              "value": "SUPPLIED",
+              "label": "SUPPLIED"
+            }
+          ],
+          "default": "NONE"
+        },
+        {
+          "field_id": "encryption_key",
+          "label": "Private encryption key",
+          "control": "password"
+        },
+        {
+          "field_id": "encryption_cipher",
+          "label": "Encryption cipher",
+          "control": "select",
+          "options": [
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            },
+            {
+              "value": "GCM",
+              "label": "GCM"
+            },
+            {
+              "value": "CTR",
+              "label": "CTR"
+            }
+          ],
+          "default": "NATIVE"
+        }
+      ],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay. Paths must stay under the registered root; :memory: requires explicit registration permission. Keys bind privately for five minutes, are released after dispatch/discard/expiry/close, and never appear in public SQL or receipts. Storage options do not rewrite existing files. Encrypted writes require a native writable crypto provider (httpfs in this reference runtime); inspect/load it through the extension workflow. No unsafe crypto override is enabled.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_review_detach",
+      "resource_kind": "database",
+      "title": "Review catalog detachment",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "alias",
+          "label": "Catalog alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "if_exists",
+          "label": "Allow missing alias",
+          "control": "boolean",
+          "default": false
+        }
+      ],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_apply",
+      "resource_kind": "database",
+      "title": "Apply reviewed attachment",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Reviewed target name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm reviewed changes",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_receipt",
+      "resource_kind": "database",
+      "title": "Inspect attachment receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_discard",
+      "resource_kind": "database",
+      "title": "Discard attachment review",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay. Discards pending authority and releases any private key.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_extension_inventory",
+      "resource_kind": "database",
+      "title": "Inspect extension capabilities",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Returns native installed/loaded/source/version facts and actual extension admission settings, not credential values.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_extension_review_install",
+      "resource_kind": "database",
+      "title": "Review extension installation",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "extension_name",
+          "label": "Extension name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_kind",
+          "label": "Source kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "NAME",
+              "label": "NAME"
+            },
+            {
+              "value": "FILE",
+              "label": "FILE"
+            },
+            {
+              "value": "URL",
+              "label": "URL"
+            }
+          ],
+          "default": "NAME"
+        },
+        {
+          "field_id": "source",
+          "label": "Source path or URL",
+          "control": "text"
+        },
+        {
+          "field_id": "force",
+          "label": "Force installation",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "repository_kind",
+          "label": "Repository kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "ALIAS",
+              "label": "ALIAS"
+            },
+            {
+              "value": "URL",
+              "label": "URL"
+            },
+            {
+              "value": "DIRECTORY",
+              "label": "DIRECTORY"
+            }
+          ],
+          "default": "DEFAULT"
+        },
+        {
+          "field_id": "repository",
+          "label": "Repository",
+          "control": "text"
+        },
+        {
+          "field_id": "version",
+          "label": "Extension version",
+          "control": "text"
+        },
+        {
+          "field_id": "expected_http_secret",
+          "label": "Expected HTTP secret name",
+          "control": "text"
+        }
+      ],
+      "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. URLs must not contain inline credentials, query or fragment. Files/directories must be under the registered root. Source files supply their own version; repository/version options apply only to named installs. Expected HTTP identity is compared against native which_secret selection; it does not supply credentials or prove authentication.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_extension_review_load",
+      "resource_kind": "database",
+      "title": "Review extension loading",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "extension_name",
+          "label": "Extension name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_kind",
+          "label": "Source kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "NAME",
+              "label": "NAME"
+            },
+            {
+              "value": "FILE",
+              "label": "FILE"
+            }
+          ],
+          "default": "NAME"
+        },
+        {
+          "field_id": "source",
+          "label": "Source path",
+          "control": "text"
+        }
+      ],
+      "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. LOAD has no FORCE/repository/version controls. Remote files must be installed first.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_extension_apply",
+      "resource_kind": "database",
+      "title": "Apply reviewed extension change",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Reviewed target name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm reviewed changes",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Review binds native settings, source identity, extension inventory and original session. Repeat requests return the receipt.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_extension_receipt",
+      "resource_kind": "database",
+      "title": "Inspect extension receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Receipt distinguishes native acknowledgement from rediscovery; neither proves success on untested remote transport variants.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_inventory",
+      "resource_kind": "database",
+      "title": "Inspect copy catalogs",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Native inventory includes storage encryption and cipher; copy eligibility is checked again at review and apply.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_review",
+      "resource_kind": "database",
+      "title": "Review database copy",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "source_catalog",
+          "label": "Source catalog",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "destination_catalog",
+          "label": "Destination catalog",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mode",
+          "label": "Copy mode",
+          "control": "select",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "ALL"
+            },
+            {
+              "value": "SCHEMA",
+              "label": "SCHEMA"
+            },
+            {
+              "value": "DATA",
+              "label": "DATA"
+            }
+          ],
+          "default": "ALL"
+        }
+      ],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. To encrypt/decrypt/change keys, first attach a separate destination with the intended private key and cipher. Copy does not accept an in-place rekey option; after explicit commit/detach, independently reopen before retiring any source.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_apply",
+      "resource_kind": "database",
+      "title": "Apply reviewed database copy",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Reviewed target name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm reviewed changes",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Confirm the destination name. Poll receipt until phase=finished and inspect every step, native acknowledgement, rediscovery and storage observation.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_receipt",
+      "resource_kind": "database",
+      "title": "Inspect database-copy progress",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Progress includes phase, active table and completed native steps; source declarations and values remain private. Acknowledgement is not caller commit.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_cancel",
+      "resource_kind": "database",
+      "title": "Cancel database copy",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Requests interruption of an active review/apply worker. Read its final receipt; cancellation is not proof of rollback.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_copy_discard",
+      "resource_kind": "database",
+      "title": "Discard database-copy review",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Discards unused reviewed authority; it does not remove destination files.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_secret_inventory",
+      "resource_kind": "database",
+      "title": "Inspect session secret identities",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Same-name temporary and persistent secrets have distinct resource/storage identities.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_secret_review_create",
+      "resource_kind": "database",
+      "title": "Review session secret creation",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Secret name",
+          "control": "text",
+          "default": "",
+          "help": "Empty selects the native default name; a TYPE expression requires an explicit name."
+        },
+        {
+          "field_id": "secret_type",
+          "label": "Secret type",
+          "control": "text",
+          "default": "HTTP",
+          "help": "Leave empty when an explicit TYPE expression is supplied."
+        },
+        {
+          "field_id": "persistence_mode",
+          "label": "Persistence",
+          "control": "select",
+          "options": [
+            {
+              "value": "TEMPORARY",
+              "label": "TEMPORARY"
+            },
+            {
+              "value": "PERSISTENT",
+              "label": "PERSISTENT"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            }
+          ],
+          "default": "TEMPORARY"
+        },
+        {
+          "field_id": "storage",
+          "label": "Storage name",
+          "control": "text"
+        },
+        {
+          "field_id": "on_conflict",
+          "label": "Existing secret",
+          "control": "select",
+          "options": [
+            {
+              "value": "ERROR",
+              "label": "ERROR"
+            },
+            {
+              "value": "IF NOT EXISTS",
+              "label": "IF NOT EXISTS"
+            },
+            {
+              "value": "OR REPLACE",
+              "label": "OR REPLACE"
+            }
+          ],
+          "default": "ERROR"
+        },
+        {
+          "field_id": "property_nodes",
+          "label": "Private property constants",
+          "control": "grid",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "node_id",
+              "label": "Node identity",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "parent_id",
+              "label": "Parent node identity",
+              "control": "text"
+            },
+            {
+              "field_id": "key",
+              "label": "Property or map key",
+              "control": "text"
+            },
+            {
+              "field_id": "kind",
+              "label": "Value type",
+              "control": "select",
+              "options": [
+                {
+                  "value": "TEXT",
+                  "label": "TEXT"
+                },
+                {
+                  "value": "INTEGER",
+                  "label": "INTEGER"
+                },
+                {
+                  "value": "DOUBLE",
+                  "label": "DOUBLE"
+                },
+                {
+                  "value": "BOOLEAN",
+                  "label": "BOOLEAN"
+                },
+                {
+                  "value": "NULL",
+                  "label": "NULL"
+                },
+                {
+                  "value": "LIST",
+                  "label": "LIST"
+                },
+                {
+                  "value": "MAP",
+                  "label": "MAP"
+                }
+              ],
+              "required": true
+            },
+            {
+              "field_id": "value",
+              "label": "Private scalar value",
+              "control": "password",
+              "help": "Literal text or exact numeric text. Containers and NULL have no scalar value."
+            },
+            {
+              "field_id": "boolean_value",
+              "label": "Boolean value",
+              "control": "select",
+              "options": [
+                {
+                  "value": "TRUE",
+                  "label": "TRUE"
+                },
+                {
+                  "value": "FALSE",
+                  "label": "FALSE"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "property_expressions",
+          "label": "Private property expressions",
+          "control": "grid",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Property name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "expression",
+              "label": "Private SQL expression",
+              "control": "password",
+              "required": true,
+              "help": "Parsed without execution at review; functions and external access run only when explicitly applied."
+            }
+          ]
+        }
+      ],
+      "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Constants form an ordered typed tree: root keys name properties, LIST children have no key, MAP children have exact string keys. Never infer SQL from literal text.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_secret_review_drop",
+      "resource_kind": "database",
+      "title": "Review session secret removal",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "resource_id",
+          "label": "Observed storage resource identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Secret name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Select the exact identity from native session inventory; the backend captures its public storage metadata again and uses native DROP SECRET ... FROM storage. Identical public-metadata replacements cannot be detected.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_secret_apply",
+      "resource_kind": "database",
+      "title": "Apply reviewed session secret change",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "plan_id",
+          "label": "Plan identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "plan_digest",
+          "label": "Plan fingerprint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm reviewed secret change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Uses the existing common retained operation pipeline and one-use plan; native acknowledgement and caller transaction finality remain separate.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_secret_receipts",
+      "resource_kind": "database",
+      "title": "Inspect session secret operation receipts",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Existing common operation receipts contain public outcomes, not native credential values or reusable saved SQL.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_receipt_list",
+      "resource_kind": "database",
+      "title": "List archived operation receipts",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Page offset",
+          "control": "number",
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Page size",
+          "control": "number",
+          "default": 25
+        }
+      ],
+      "description": "Owner/endpoint/registered-target bound archived observations. Reads require no original native session, send no native SQL and cannot revive native authority. Native acknowledgement, original-session release and transaction finality are separate facts; never automatically replay a saved receipt. Page size is 1..100; rows include family, original-session observation and last persisted state.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_receipt_get",
+      "resource_kind": "database",
+      "title": "Inspect archived operation receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Owner/endpoint/registered-target bound archived observations. Reads require no original native session, send no native SQL and cannot revive native authority. Native acknowledgement, original-session release and transaction finality are separate facts; never automatically replay a saved receipt. Show live_session_observed=false, archived_read_only, outcome_observation and transaction_finality_inferred=false. Persisted applying/unknown states do not establish a final outcome.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_receipt_release",
+      "resource_kind": "database",
+      "title": "Release original query connection",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "confirmed",
+          "label": "Confirm releasing the connection and pending work",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Closes the exact original query connection and releases private bindings. Active workers must finish or be explicitly cancelled first. Native close discards uncommitted database work; persistent secret/file effects and loaded process code can survive. Show native release and durable receipt-release acknowledgement separately. Saved receipts remain read-only and never authorize reopening.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+    },
+    {
+      "operation_id": "editor_attachment_review_rename",
+      "resource_kind": "database",
+      "title": "Review native attached catalog alias change",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "alias",
+          "label": "Current attached catalog alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "new_alias",
+          "label": "New catalog alias",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dependent_sql_confirmed",
+          "label": "Confirm old SQL references may fail and rollback does not restore the alias",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Review ALTER DATABASE old SET ALIAS TO new on the original native session. Exact catalog/transaction/metadata/file fences; no physical rename. Native alias changes survive rollback. Stored and external SQL references are not rewritten and can fail; explicit acknowledgement is required. Apply, receipt and discard use the existing attachment task routes.",
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
     }
   ]
 }

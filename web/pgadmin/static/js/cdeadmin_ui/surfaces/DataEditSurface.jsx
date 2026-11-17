@@ -37,6 +37,7 @@ import {
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
 import SurfaceExportDialog from './SurfaceExportDialog';
+import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
@@ -1198,9 +1199,7 @@ export default function DataEditSurface({
       return true;
     }
 
-    const isFirebird =
-      languageProfile === 'firebird-sql' ||
-      String(engineId).toLowerCase().includes('firebird');
+    const isFirebird = sqlLanguageProfile(languageProfile, engineId).native_transaction_close_warning;
     const objTitle =
       targetResourceRef.current?.display_name ||
       String(targetResourceRef.current?.resource_id || '').split(':').pop() ||

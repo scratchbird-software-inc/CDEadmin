@@ -930,3 +930,21 @@ qualification is reproducible with
 Firebird5.0.4 runtime. Optional browser arguments exercise the production editor.
 The receipts qualify their recorded interfaces and host, not the full Firebird
 inventory, other platforms, human forms or deferred ScratchBird history.
+
+Managed database trace backend progress (2026-11-16)
+--------------------------------------------------
+
+FB-AUD-02 remains partial. The backend now implements a reviewed, one-use,
+database-scoped native user-trace lifecycle with private bounded output,
+separate reader/control Services attachments, native session observations,
+expiry, explicit cleanup retry and durable metadata receipts. The tool entry
+and typed ``firebird_trace`` / ``describe`` API are UI-group handoff hooks.
+This workflow is **not yet surfaced through an accepted family form**; its
+backend evidence does not constitute form presentation acceptance or a new
+implemented UI panel. See ``six_engine_audit_implementation.rst`` for the full
+request/response contract and limits.
+
+Server/service capture, system-audit configuration, externally created native
+session administration and the remaining restricted-account/network/native
+option matrix remain outstanding. Windows/macOS and human UI qualification
+remain with their owning teams. No ScratchBird history qualification was run.

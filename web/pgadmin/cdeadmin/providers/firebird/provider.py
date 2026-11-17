@@ -251,6 +251,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._catalog_pool_lock = threading.RLock()
         self._pooled_catalog_local = threading.local()
         if isinstance(self.client, FirebirdQueryClient):
+            self.client._release_idle_catalog = self._release_idle_catalog_for_service
             _LIVE_FIREBIRD_PROVIDERS.add(self)
             _ensure_firebird_host_keepalive()
 
@@ -304,6 +305,37 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 pass
             finally:
                 state.lock.release()
+
+    def _release_idle_catalog_for_service(self, route):
+        """Release only this file's idle metadata handles before maintenance.
+
+        Borrowed catalog handles and user sessions are outside this pool and
+        remain native blockers. Never rollback unexpected active transactions.
+        Failed detach stays owned by the client for explicit cleanup.
+        """
+        database = route.get('database')
+        with self._catalog_pool_lock:
+            selected = [(key, handle)
+                        for key, bucket in self._catalog_pool.items()
+                        if json.loads(key).get('database') == database
+                        for handle in (bucket if isinstance(bucket, list) else [bucket])]
+            for _key, handle in selected:
+                transaction = getattr(handle, 'main_transaction', None)
+                if transaction is not None and transaction.is_active() is not False:
+                    raise RelationalClientError(
+                        'Catalog transaction is not idle; close it before maintenance')
+            for key, handle in selected:
+                bucket = self._catalog_pool.get(key)
+                if isinstance(bucket, list):
+                    bucket.remove(handle)
+                    if not bucket:
+                        self._catalog_pool.pop(key, None)
+                else:
+                    self._catalog_pool.pop(key, None)
+                with self.client._admission:
+                    if not any(item is handle for item in self.client._connections):
+                        self.client._connections.append(handle)
+                self.client._forget_and_close(handle)
 
     def _visual_admin_session_context(self, payload):
         ctx = super()._visual_admin_session_context(payload)
@@ -1308,7 +1340,7 @@ def _firebird_service_operation(
         backup_files = [options['backup_file'], *(
             options.get('additional_backup_files') or []
         )]
-        if any(isinstance(options.get(field), str) and
+        if options.get('replica_mode') or any(isinstance(options.get(field), str) and
                not options[field].isascii() for field in (
                    'key_holder', 'key_name', 'crypt_plugin')):
             flags = _flag_value(module, 'SrvRestoreFlag', restore_flags)
@@ -3890,7 +3922,8 @@ def _sequence_state(cursor, name):
 
 def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
                    administration=ADMINISTRATION):
-    from .local_services import arguments as local_service_arguments
+    from .local_services import (arguments as local_service_arguments,
+                                 maintenance_probe_active)
     module = load_optional_module('firebird.driver')
     core = (load_optional_module('firebird.driver.core')
             if module is not None else None)
@@ -3959,6 +3992,8 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         if core is not None else None), database_connector=(
         (lambda **kwargs: connect_database(
             module, core, failed_owner=client._retain_failed_attachment,
+            maintenance_probe=(attachment_mode == 'embedded' and
+                               maintenance_probe_active()),
             **kwargs)) if core is not None else None))
     return client
 

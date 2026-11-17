@@ -71,3 +71,18 @@ def test_trigger_sibling_compilation_preserves_native_server_uid_and_parent_iden
     assert preview['ready_for_review'] and preview['server_uid']=='native'
     assert 'FOR EACH ROW PRECEDES `tr2` SET NEW.id=2' in preview['operations'][0]['source']
     assert len(preview['operations'][0]['trigger_order_baseline'])==2
+
+
+def test_sequence_native_type_and_bound_resets_share_ddn_compiler():
+    before=model();desired=deepcopy(before);seq=row(desired,'sequence')
+    intent={'action':'alter-options','integer_type':'BIGINT','unsigned':True}
+    seq['native']['mariadb_change']=intent
+    preview=plan(before,desired,before)
+    assert preview['ready_for_review']
+    assert preview['operations'][0]['source']=='ALTER SEQUENCE `demo`.`seq` AS BIGINT UNSIGNED'
+    intent['minimum_mode']='NATIVE'
+    assert plan(before,desired,before)['blockers']
+    seq['native']['mariadb_change']={'action':'alter-options','minimum_mode':'NATIVE','maximum_mode':'NATIVE','restart_initial':True}
+    assert plan(before,desired,before)['blockers']
+    seq['native']['mariadb_change']['confirmation']='seq'
+    assert plan(before,desired,before)['operations'][0]['source']=='ALTER SEQUENCE `demo`.`seq` NO MINVALUE NO MAXVALUE RESTART'

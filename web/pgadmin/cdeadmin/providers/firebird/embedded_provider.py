@@ -39,13 +39,34 @@ class EmbeddedAdministration(RelationalAdministration):
                 continue
             for operation in resource.get('operations', []):
                 if operation['operation_id'] in local_services.OPERATIONS:
-                    operation.pop('workspace_scope', None)
-                    operation['title'] = 'Local database statistics (gstat)'
+                    if operation['operation_id'] not in {'shutdown_database', 'bring_online', 'fixup_database', 'activate_shadow', 'repair_database', 'upgrade_database', 'backup_logical', 'restore_logical'}:
+                        operation.pop('workspace_scope', None)
+                    # The existing service workspace builds registered-target
+                    # references without opening a SQL attachment. Its name
+                    # does not select transport or acquire network secrets.
+                    operation['title'] = ('Local database statistics (gstat)'
+                        if operation['operation_id'] == 'database_statistics'
+                        else 'Local ' + operation['title'])
                     operation['form']['title'] = operation['title']
-                    operation['form']['notes'] = (
+                    if operation['operation_id'] == 'backup_logical':
+                        for field in operation['form'].get('fields', []):
+                            if field['field_id'] == 'backup_file':
+                                field['label'] = 'Backup filename on the ScratchRobin host'
+                            if field['field_id'] == 'backup_volumes':
+                                field['help'] = ('Ordered absolute application-host filenames inside the approved '
+                                    'filesystem root. Select unused files; existing files are never overwritten. '
+                                    'Set every capacity except the final volume. Partial files remain after failure.')
+                    if operation['operation_id'] == 'restore_logical':
+                        for field in operation['form'].get('fields', []):
+                            if field['field_id'] in {'backup_file','restore_database'}:
+                                field['label'] = ('Backup filename on the ScratchRobin host' if field['field_id']=='backup_file'
+                                                  else 'Destination database on the ScratchRobin host')
+                    operation['form']['notes'] = (operation['form'].get('notes', '') + ' ' +
                         'Runs on the ScratchRobin host against the approved local '
                         'database file. Uses filesystem access, with no network '
-                        'service credentials.')
+                        'service credentials. Native filename-sensitive tasks use '
+                        'the canonical file with a reviewed identity recheck; '
+                        'their result does not claim an OS rename race fence.').strip()
                 if operation['operation_id'] != 'create':
                     continue
                 for field in operation.get('form', {}).get('fields', []):

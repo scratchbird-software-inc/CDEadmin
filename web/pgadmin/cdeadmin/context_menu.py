@@ -1349,6 +1349,16 @@ _SQL_SCRIPT_ENGINES = frozenset({
 })
 
 
+@lru_cache(maxsize=None)
+def _recreate_script_kinds(engine_id):
+    path = _TOOLS_ROOT / engine_id / 'capabilities.json'
+    if not path.is_file():
+        return frozenset()
+    document = json.loads(path.read_text(encoding='utf-8'))
+    return frozenset(kind['resource_kind'] for kind in document.get('kinds', [])
+                     if any(op['operation_id'] == 'recreate' for op in kind.get('operations', [])))
+
+
 def _generate_sql_context_actions(
         engine_id: str, resource_kind: str, base: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
@@ -1368,7 +1378,7 @@ def _generate_sql_context_actions(
             ('ddl_create', 'CREATE Script'),
             ('ddl_alter', 'ALTER Script'),
         ])
-        if engine_id == 'firebird':
+        if resource_kind in _recreate_script_kinds(engine_id):
             specs.append(('ddl_recreate', 'RECREATE Script'))
         specs.extend([
             ('ddl_drop', 'DROP Script'),
@@ -1381,7 +1391,7 @@ def _generate_sql_context_actions(
             ('ddl_create', 'CREATE Script'),
             ('ddl_alter', 'ALTER Script'),
         ])
-        if engine_id == 'firebird' and resource_kind == 'view':
+        if resource_kind in _recreate_script_kinds(engine_id):
             specs.append(('ddl_recreate', 'RECREATE Script'))
         specs.extend([
             ('ddl_drop', 'DROP Script'),

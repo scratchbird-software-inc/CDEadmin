@@ -799,6 +799,114 @@
           "tier": 3,
           "mutation_class": "read",
           "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_access_mode",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_page_cache_size",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_sweep_interval",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_space_reservation",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_write_mode",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_sql_dialect",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_replica_mode",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "remove_linger",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "sweep_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "validate_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "shutdown_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "restore_logical",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "backup_logical",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "upgrade_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "repair_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "activate_shadow",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "fixup_database",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "bring_online",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
         }
       ]
     },

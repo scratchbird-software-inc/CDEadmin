@@ -299,7 +299,9 @@
       "icon": "action.edit",
       "group": "database",
       "arguments": {
-        "tab": "firebird-test-data"
+        "tab": "firebird-test-data",
+        "recipe_read_action": "firebird_recipe_read",
+        "recipe_save_action": "firebird_recipe_save"
       }
     },
     {
@@ -560,6 +562,21 @@
         ],
         "requires_database_target": true,
         "not_system_object": true
+      }
+    },
+    {
+      "command_id": "database.firebird.trace",
+      "scope": "database",
+      "label": "Native trace...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-trace",
+        "workspace_action": "firebird_trace",
+        "describe_action": "describe"
       }
     }
   ]

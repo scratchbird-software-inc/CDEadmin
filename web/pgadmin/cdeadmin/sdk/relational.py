@@ -644,7 +644,9 @@ class RelationalDBAPIClient:
             return dict(self.config.database_dropper(route, database))
         connection = self._connect(request)
         dropped = False
+        failure = None
         try:
+            self._verify_database_drop(connection, request)
             operation = getattr(connection, 'drop_database', None)
             if not callable(operation):
                 raise RelationalDependencyError(
@@ -655,15 +657,26 @@ class RelationalDBAPIClient:
             # Firebird's successful native drop releases its attachment.
             # Retaining this dead handle would block profile synchronization.
             self._forget_connection(connection)
+        except BaseException as error:
+            failure = error
+            raise
         finally:
             if not dropped:
-                self._safe_close(connection)
+                if self.config.session_releaser is not None:
+                    self._finish_temporary_attachment(connection, failure)
+                else:
+                    # Without a provider's verified releaser retain ownership
+                    # for explicit cleanup, including a failed close.
+                    self._safe_close(connection)
         return {
             'driver_operation': driver_operation,
             'driver_returned': True,
             'database': database,
             'transaction_finality_interpreted_by_common_code': False,
         }
+
+    def _verify_database_drop(self, connection, request):
+        """Provider hook for a reviewed native database identity."""
 
     def _server_operation_database(self, database):
         """Provider hook for the native service target's spelling."""

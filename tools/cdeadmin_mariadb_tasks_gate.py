@@ -13,7 +13,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'web')]
-JOBS = ('generic', 'partitions', 'server_objects')
+JOBS = ('generic', 'partitions', 'server_objects', 'server_management')
 
 
 def bindings():

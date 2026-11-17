@@ -947,6 +947,75 @@ class DesignStore:
     # Resource identity and Binding state management (A5, A6)
     # ------------------------------------------------------------------
 
+    def mark_native_catalog_bindings_suspect(
+        self, *, engine: str, endpoint_id: str, database_target_id: str,
+        event_key: str, resource_ids: list[str],
+    ) -> dict[str, Any]:
+        """Record one native catalog-change notice, without replaying it.
+
+        Binding validity changes are runtime observations, not new design
+        versions. A later explicit confirmation must survive receipt reads.
+        """
+        scope = (engine, str(endpoint_id), str(database_target_id), event_key)
+        if any(not isinstance(v, str) or not v or len(v) > 4096 for v in scope):
+            raise DesignStoreError('Select an exact native catalog notice scope')
+        if (not isinstance(resource_ids, list) or not resource_ids
+                or len(resource_ids) > 20000
+                or any(not isinstance(v, str) or not v for v in resource_ids)):
+            raise DesignStoreError('Select a bounded native resource identity inventory')
+        ids = sorted(set(resource_ids))
+        encoded = json.dumps(ids, ensure_ascii=False).encode('utf8')
+        if len(encoded) > 8 * 1024 * 1024:
+            raise DesignStoreError('Native resource identities exceed the notice budget')
+        digest = hashlib.sha256(encoded).hexdigest()
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute('BEGIN IMMEDIATE')
+                old = conn.execute(
+                    'SELECT * FROM catalog_binding_notice WHERE engine=? '
+                    'AND endpoint_id=? AND database_target_id=? AND event_key=?', scope,
+                ).fetchone()
+                if old is not None:
+                    if old['resource_digest'] != digest:
+                        raise DesignStoreConflict('Native notice identity changed')
+                    return {'status': 'recorded', 'notice_id': old['id'],
+                            'affected_bindings': old['affected_bindings']}
+                affected = 0
+                for start in range(0, len(ids), 200):
+                    batch = ids[start:start + 200]
+                    placeholders = ','.join('?' for _ in batch)
+                    identities = conn.execute(
+                        'SELECT id FROM resource_identity WHERE engine=? '
+                        'AND endpoint_id=? AND database_target_id=? AND resource_id IN ('
+                        + placeholders + ')', [*scope[:3], *batch],
+                    ).fetchall()
+                    refs = sorted(set(batch + [row['id'] for row in identities]))
+                    placeholders = ','.join('?' for _ in refs)
+                    changed = conn.execute(
+                        "UPDATE binding SET state='suspect', "
+                        "state_reason='native catalog alias changed or unconfirmed', "
+                        'confirmed_by=NULL, confirmed_at=NULL '
+                        "WHERE target_kind='resource' AND target_ref IN (" + placeholders + ') '
+                        'AND (target_engine IS NULL OR target_engine=?) '
+                        'AND (target_endpoint_id IS NULL OR target_endpoint_id=?) '
+                        'AND (target_database_target_id IS NULL OR target_database_target_id=?)',
+                        [*refs, *scope[:3]],
+                    )
+                    affected += changed.rowcount
+                notice_id = uuid7()
+                conn.execute(
+                    'INSERT INTO catalog_binding_notice '
+                    '(id,engine,endpoint_id,database_target_id,event_key,resource_digest,affected_bindings,created_at) '
+                    'VALUES (?,?,?,?,?,?,?,?)',
+                    [notice_id, *scope, digest, affected, _utc_now()],
+                )
+                conn.commit()
+                return {'status': 'recorded', 'notice_id': notice_id,
+                        'affected_bindings': affected}
+            finally:
+                conn.close()
+
     def register_resource_identity(
         self,
         *,

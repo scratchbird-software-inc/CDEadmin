@@ -1,10 +1,11 @@
 --- a/include/mariadb_python.h
 +++ b/include/mariadb_python.h
-@@ -336,6 +336,7 @@
+@@ -336,6 +336,8 @@
      enum enum_result_format result_format;
      uint8_t is_prepared;
      char is_buffered;
 +    char cdeadmin_exact_temporals;
++    char cdeadmin_lossless_text;
      uint8_t fetched;
      uint8_t closed;
      uint8_t reprepare;
@@ -12,8 +13,8 @@
 +++ b/mariadb/mariadb_cursor.c
 @@ -112,8 +112,16 @@
  static PyObject *MrdbCursor_metadata(MrdbCursor *self);
-
-
+ 
+ 
 +static PyObject *
 +MrdbCursor_checked_fetch_errors(MrdbCursor *self, void *closure)
 +{
@@ -27,7 +28,7 @@
      {"description", (getter)MrdbCursor_description, NULL,
          cursor_description__doc__, NULL},
      {"metadata", (getter)MrdbCursor_metadata, NULL,
-@@ -241,6 +249,11 @@
+@@ -241,6 +249,16 @@
          offsetof(MrdbCursor, cursor_type),
          0,
          MISSING_DOC},
@@ -36,10 +37,15 @@
 +        offsetof(MrdbCursor, cdeadmin_exact_temporals),
 +        0,
 +        "Return exact temporal text for ScratchRobin query cursors."},
++    {"cdeadmin_lossless_text",
++        T_BOOL,
++        offsetof(MrdbCursor, cdeadmin_lossless_text),
++        0,
++        "Return native undecodable UTF-8 text as bytes without replacement."},
      {"buffered",
          T_BOOL,
          offsetof(MrdbCursor, is_buffered),
-@@ -859,11 +872,21 @@
+@@ -859,17 +877,36 @@
          rc= mysql_stmt_fetch(self->stmt);
          if (rc == MYSQL_NO_DATA)
              return 1;
@@ -50,7 +56,7 @@
 +        }
          return 0;
      }
-
+ 
      if (!(row= mysql_fetch_row(self->result)))
      {
 +        if (mysql_errno(self->connection->mysql))
@@ -60,8 +66,23 @@
 +        }
          return 1;
      }
-
-@@ -894,9 +917,12 @@
+ 
+     for (i= 0; i < field_count; i++)
+     {
+         field_fetch_fromtext(self, row[i], i);
++        if (PyErr_Occurred() || !self->values[i])
++        {
++            /* No partially decoded row may reach a Python tuple. */
++            for (unsigned int j= 0; j <= i; j++)
++                Py_CLEAR(self->values[j]);
++            if (!PyErr_Occurred())
++                PyErr_SetString(PyExc_ValueError, "Native field decoding failed");
++            return -1;
++        }
+     }
+     return 0;
+ }
+@@ -894,9 +931,12 @@
                  "Cursor doesn't have a result set");
          return NULL;
      }
@@ -75,12 +96,12 @@
 +        if (fetched > 0)
 +            Py_RETURN_NONE;
      }
-
+ 
      self->row_number++;
-@@ -978,7 +1004,15 @@
+@@ -978,7 +1018,15 @@
          Py_END_ALLOW_THREADS;
      }
-
+ 
 -    if (rc)
 +    if (rc > 0)
 +    {
@@ -94,10 +115,10 @@
      {
          Py_RETURN_NONE;
      }
-@@ -1315,10 +1349,18 @@
+@@ -1315,10 +1363,18 @@
          return NULL;
      }
-
+ 
 -    for (uint64_t i=0; i < row_count && !MrdbCursor_fetchinternal(self); i++)
 +    for (uint64_t i=0; i < row_count; i++)
      {
@@ -111,15 +132,15 @@
 +        }
 +        if (fetched > 0)
 +            break;
-
+ 
          self->row_number++;
-
+ 
 --- a/mariadb/mariadb_codecs.c
 +++ b/mariadb/mariadb_codecs.c
-@@ -502,6 +502,69 @@
+@@ -502,6 +502,82 @@
      return new_value;
  }
-
+ 
 +
 +/* ScratchRobin opt-in: preserve SQL temporal values outside Python's calendar.
 +   This affects only query cursors explicitly opting in, not catalog consumers. */
@@ -183,22 +204,62 @@
 +    return NULL;
 +}
 +
++static PyObject *
++cdeadmin_text_value(MrdbCursor *self, const char *data, Py_ssize_t length)
++{
++    PyObject *result= PyUnicode_FromStringAndSize(data, length);
++    if (!result && self->cdeadmin_lossless_text &&
++        PyErr_ExceptionMatches(PyExc_UnicodeDecodeError))
++    {
++        PyErr_Clear();
++        return PyBytes_FromStringAndSize(data, length);
++    }
++    return result;
++}
++
  void
  field_fetch_fromtext(MrdbCursor *self, char *data, unsigned int column)
  {
-@@ -516,6 +579,11 @@
+@@ -516,6 +592,11 @@
        type= MYSQL_TYPE_NULL;
-
+ 
      length= mysql_fetch_lengths(self->result);
 +    if (data && self->cdeadmin_exact_temporals && cdeadmin_temporal_type(type))
 +    {
 +        self->values[column]= PyUnicode_FromStringAndSize(data, length[column]);
 +        return;
 +    }
-
+ 
      switch (type)
      {
-@@ -690,6 +758,12 @@
+@@ -606,7 +687,7 @@
+             }
+             else {
+                 self->values[column]=
+-                    PyUnicode_FromStringAndSize((const char *)data,
++                    cdeadmin_text_value(self, (const char *)data,
+                                                 (Py_ssize_t)length[column]);
+             }
+             break;
+@@ -634,7 +715,7 @@
+                 len= (unsigned long)length[column];
+             } else {
+                 if ((self->values[column]=
+-                    PyUnicode_FromStringAndSize((const char *)data,
++                    cdeadmin_text_value(self, (const char *)data,
+                                                 (Py_ssize_t)length[column])))
+                     len= (unsigned long)PyUnicode_GET_LENGTH(self->values[column]);
+             }
+@@ -648,6 +729,8 @@
+             break;
+     }
+         /* check if values need to be converted */
++    if (!self->values[column] || PyErr_Occurred())
++        return;
+     if (self->connection->converter)
+     {
+         PyObject *val;
+@@ -690,6 +773,12 @@
      {
          Py_INCREF(Py_None);
          self->values[column]= Py_None;

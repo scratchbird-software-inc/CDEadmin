@@ -29,12 +29,13 @@ def identity(value):
 
 
 class DuckDBSessionReceipts:
-    def __init__(self, path, owner, endpoint, target):
+    def __init__(self, path, owner, endpoint, target, *, catalog_binding_observer=None):
         if type(owner) is not int or owner <= 0 or not isinstance(target, str) or not target or len(target) > 512:
             raise ValueError('Select an owned DuckDB receipt scope')
         identity(endpoint)
         self.binding = (str(Path(path).resolve()), owner, endpoint, target)
         self.root = Path(path).resolve() / str(owner) / endpoint / hashlib.sha256(target.encode('utf8')).hexdigest()
+        self.catalog_binding_observer = catalog_binding_observer
         self.lock = threading.RLock()
         self.process = [os.getpid(), psutil.Process().create_time()]
 
@@ -145,6 +146,10 @@ class BoundDuckDBReceipts:
     def publish(self, family, record):
         if record['session_scope_id'] != self.scope:
             raise ValueError('Original native receipt session changed')
+        if family == 'attachments' and self.archive.catalog_binding_observer is not None:
+            notice = self.archive.catalog_binding_observer(record)
+            if notice is not None:
+                record['binding_notice'] = notice
         self.archive.publish(family, record)
 
     def release(self, state, observation=None):
@@ -157,8 +162,10 @@ def for_workspace(service,server,context,target):
     store=getattr(service.operation_bus,'store',None)
     if not isinstance(store,JsonOperationStore):
         raise ValueError('Native DuckDB operations require durable application receipt storage')
+    from .duckdb_alias_bindings import require_binding_notice
     return DuckDBSessionReceipts(str(store.path)+'.duckdb-session-receipts',
-        service._principal_id(server),context.endpoint_id,target)
+        service._principal_id(server),context.endpoint_id,target,
+        catalog_binding_observer=lambda record: require_binding_notice(service, context, target, record))
 
 
 def action(archive,request):

@@ -169,6 +169,19 @@ PORTABLE_DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS catalog_binding_notice (
+        id                    TEXT PRIMARY KEY,
+        engine                TEXT NOT NULL,
+        endpoint_id           TEXT NOT NULL,
+        database_target_id    TEXT NOT NULL,
+        event_key             TEXT NOT NULL,
+        resource_digest       TEXT NOT NULL,
+        affected_bindings     INTEGER NOT NULL,
+        created_at            TEXT NOT NULL,
+        UNIQUE (engine, endpoint_id, database_target_id, event_key)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS resource_identity (
         id                 TEXT PRIMARY KEY,
         engine             TEXT NOT NULL,

@@ -72,6 +72,22 @@
       ]
     },
     {
+      "permission_id": "backup_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "restore_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
       "permission_id": "maintenance_admin",
       "granted": true,
       "scope": [

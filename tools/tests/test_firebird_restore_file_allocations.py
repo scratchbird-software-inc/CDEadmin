@@ -220,11 +220,12 @@ def test_restore_spb_preserves_all_options_and_unicode_without_phantom_file():
     for tag, value in (('PAGE_SIZE', 8192), ('BUFFERS', 0),
                        ('PARALLEL_WORKERS', 2)):
         builder.insert_int.assert_any_call(core.SrvRestoreOption[tag], value)
-    builder.insert_int.assert_any_call(
-        core.SrvRestoreOption.REPLICA_MODE, driver.ReplicaMode.READ_ONLY.value)
-    builder.insert_bytes.assert_called_once_with(
+    builder.insert_bytes.assert_any_call(
+        core.SrvRestoreOption.REPLICA_MODE, bytes([driver.ReplicaMode.READ_ONLY.value]))
+    builder.insert_bytes.assert_any_call(
         core.SrvRestoreOption.ACCESS_MODE,
         bytes([driver.DbAccessMode.READ_ONLY]))
+    assert builder.insert_bytes.call_count == 2
     builder.insert_int.assert_any_call(core.SPBItem.OPTIONS, 8192)
     builder.insert_int.assert_any_call(core.SPBItem.VERBINT, 500)
     server._svc.start.assert_called_once()
@@ -289,6 +290,23 @@ def test_paired_files_reach_the_standard_driver_without_reordering():
     assert request['db_file_pages'] == [256, 64, 128]
     assert result['server_completed'] is True
     server._svc.start.assert_not_called()
+
+
+@pytest.mark.parametrize('mode', ['NONE','READ_ONLY','READ_WRITE'])
+def test_replica_mode_uses_native_one_byte_restore_parameter(mode):
+    import firebird.driver as driver
+    module, server, builder = native_fixture()
+    module.DbAccessMode = driver.DbAccessMode
+    module.ReplicaMode = driver.ReplicaMode
+    module.SrvRestoreFlag = driver.SrvRestoreFlag
+    result = _firebird_service_operation(server,'restore_logical','destination',{
+        'backup_file':'owned-backup','restore_database':'destination','replica_mode':mode},module)
+    server.database.restore.assert_not_called()
+    builder.insert_bytes.assert_any_call(module.core.SrvRestoreOption.REPLICA_MODE,
+        bytes([driver.ReplicaMode[mode].value]))
+    assert not any(call.args[0] == module.core.SrvRestoreOption.REPLICA_MODE
+                   for call in builder.insert_int.call_args_list)
+    assert result['server_completed']
 
 
 @pytest.mark.parametrize('visual', [True, False])

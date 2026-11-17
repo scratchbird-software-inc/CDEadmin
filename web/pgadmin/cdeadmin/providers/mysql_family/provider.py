@@ -31,6 +31,7 @@ from ..distributed_sql import mysql_route
 from ..form_contracts import provider_form_contract
 from .mariadb_connections import Connector as _MariaDBConnectorFacade
 from .administration import MySQLAdministration, HANDLERS
+from .mariadb_administration import MariaDBAdministration
 from .. import browse_builders
 
 
@@ -284,7 +285,11 @@ def _administration(profile):
         from ..mariadb_partitions import OPERATIONS as partition_operations
         for kind, operations in partition_operations.items():
             common[kind] = common[kind] | operations
-    adapter = MySQLAdministration if profile is MYSQL_PROFILE else RelationalAdministration
+    if profile is MARIADB_PROFILE:
+        from .mariadb_administration import OPERATIONS as maria_diagnostics
+        common['server'] |= frozenset(maria_diagnostics)
+    adapter = (MySQLAdministration if profile is MYSQL_PROFILE else
+               MariaDBAdministration if profile is MARIADB_PROFILE else RelationalAdministration)
     return adapter(RelationalAdminDialect(
         engine_id=profile.engine_id,
         quote_open='`',
@@ -343,6 +348,16 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
                            'autocommit_off')
+
+    def plan_admin_operation(self, request):
+        from .mariadb_administration import MODULES
+        planned = super().plan_admin_operation(request)
+        for module in MODULES:
+            if module.KEY in planned.get('provider_payload', {}).get('compiled', {}):
+                if request.get('session_id') is not None:
+                    raise RelationalClientError('This native MariaDB diagnostic owns an independent observer')
+                return module.bind_review(self, planned)
+        return planned
 
     def __init__(self, config, pool_namespace, module=None, tool_runner=None):
         super().__init__(config, module)
@@ -2284,7 +2299,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 '@@binlog_format, @@gtid_strict_mode, '
                 '(SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_VARIABLES '
                 "WHERE VARIABLE_NAME='WSREP_ON'), "
-                '@@max_connections'
+                '@@max_connections, @@server_uid'
             )
             server_names = (
                 'version', 'hostname', 'port', 'server_id', 'version_comment',
@@ -2293,7 +2308,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'tx_isolation', 'current_user', 'session_user', 'sql_mode',
                 'character_set_server', 'collation_server', 'log_bin',
                 'binlog_format', 'gtid_strict_mode', 'wsrep_on',
-                'max_connections',
+                'max_connections', 'server_uid',
             )
         add('server', [], profile.engine_name, (
             dict(zip(server_names, server_observation[0]))
@@ -3061,11 +3076,17 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 name = record.get('log_name') or record.get('file')
                 if name:
                     add('binary-log', [], name, record)
-                    escaped_name = str(name).replace("'", "''")
-                    for event in optional_records(
-                        "SHOW BINLOG EVENTS IN '" + escaped_name +
-                        "' LIMIT 200"
-                    ):
+                    from .mariadb_binlog_events import read as read_events
+                    event_source = "SHOW BINLOG EVENTS IN " + repr(name)
+                    try:
+                        observation = read_events(cursor, name)
+                    except Exception as error:
+                        record_failure(event_source, error)
+                        observation = {'events': [], 'complete': False, 'truncated': False,
+                                       'limit': 200, 'automatic_retry': False}
+                    resources[resource_key('binary-log', [], name)]['native']['event_observation'] = {
+                        key: value for key, value in observation.items() if key != 'events'}
+                    for event in observation['events']:
                         event_name = (
                             f"{event.get('pos')} / "
                             f"{event.get('event_type')}"

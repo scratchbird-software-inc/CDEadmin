@@ -15,14 +15,7 @@ import {
   useState,
 } from 'react';
 import PropTypes from 'prop-types';
-import {
-  MariaSQL,
-  MySQL,
-  PostgreSQL,
-  SQLDialect,
-  SQLite,
-  StandardSQL,
-} from '@codemirror/lang-sql';
+
 import {format as formatSqlPretty} from 'sql-formatter';
 import gettext from 'sources/gettext';
 import {Box} from '../primitives/Layout';
@@ -46,8 +39,7 @@ import {
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
 import CodeEditor from '../editors/CodeEditor';
-import {firebirdSQLConfig} from '../editors/firebirdSyntax';
-import {duckdbSQLConfig} from '../editors/duckdbSyntax';
+import {sqlLanguageConfig, sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {RobinTiledCanvas} from '../integrations/ddn/RobinTiledCanvas';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import {
@@ -311,40 +303,10 @@ export default function SqlEditorSurface({
     () => String(engineId || languageProfile || 'ansi').split('-')[0].toLowerCase(),
     [engineId, languageProfile]
   );
-  const isFirebird = normEngine.includes('firebird') || languageProfile === 'firebird-sql';
-
-  // CodeMirror SQL syntax dialect configuration
-  const sqlEditorConfig = useMemo(() => {
-    if (isFirebird) {
-      return firebirdSQLConfig(
-        activeLanguage?.editor?.keywords || '',
-        clientSqlDialect,
-        resources,
-        activeLanguage?.editor?.reserved_words
-      );
-    }
-    if (languageProfile === 'duckdb-sql') {
-      return duckdbSQLConfig(activeLanguage?.editor, resources);
-    }
-    const nativeDialect =
-      languageProfile === 'mariadb-sql'
-        ? MariaSQL
-        : /mysql|tidb|vitess|dolt/.test(languageProfile)
-          ? MySQL
-          : /postgres|cockroach|ysql|xtdb/.test(languageProfile)
-            ? PostgreSQL
-            : /sqlite/.test(languageProfile)
-              ? SQLite
-              : StandardSQL;
-    return {
-      dialect: activeLanguage?.editor?.keywords
-        ? SQLDialect.define({
-          ...nativeDialect.spec,
-          keywords: activeLanguage.editor.keywords.toLowerCase(),
-        })
-        : nativeDialect,
-    };
-  }, [activeLanguage?.editor, clientSqlDialect, isFirebird, languageProfile, resources]);
+  const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
+  const isFirebird = languageOptions.native_transaction_close_warning;
+  const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
+    [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
   const callHost = useCallback(
     async (subAction, extra = {}) => {

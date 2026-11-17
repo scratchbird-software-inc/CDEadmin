@@ -3792,6 +3792,4058 @@
         }
       ],
       "notes": "Task sqlite_connection_pragmas, fixed pragma=lock_proxy_file; inspect/review/set_connection_pragma on original handle with registered filesystem authority and filesystem/administer/execute permissions. Requires actual ENABLE_LOCKING_STYLE=1 and native pragma_list entry; unavailable on standard Linux builds. Getter may acquire a VFS conch lock. Review is bound to original source work and file schema; no caller transaction at apply. AUTO requests :auto:, whose observed path is native-selected. Native VFS does not generally allow disabling proxy mode; no OFF workflow offered. Unknown outcome requires closing original session, no automatic replay. macOS native qualification belongs to platform team."
+    },
+    {
+      "operation_id": "editor_extension_inventory",
+      "resource_kind": "database",
+      "title": "Approved extension inventory",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Only operator-approved identities can be loaded. Library paths and dependencies are controlled by the application host; process-wide effects can survive connection closure.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_extension_review",
+      "resource_kind": "database",
+      "title": "Review extension load",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "extension_id",
+          "label": "Approved extension identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Only operator-approved identities can be loaded. Library paths and dependencies are controlled by the application host; process-wide effects can survive connection closure.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_extension_load",
+      "resource_kind": "database",
+      "title": "Load reviewed extension",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm native library initialization",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Native initialization may be irreversible. Pending transactions refuse. Unknown initialization or cleanup outcomes block connection reuse; never automatically retry or reload.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_extension_receipt",
+      "resource_kind": "database",
+      "title": "Extension load receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Read the original connection review and native loader-cleanup outcome. Closing the connection loses these receipts.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_array_inventory",
+      "resource_kind": "database",
+      "title": "Typed array inventory",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Page offset",
+          "control": "number",
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Page size",
+          "control": "number",
+          "default": 25
+        }
+      ],
+      "description": "Uses the selected original query connection. Arrays belong only to the selected original connection. Native helper/runtime and memory-policy admission are required; closing the connection releases arrays. Values and parameter bindings are never database objects.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_array_create",
+      "resource_kind": "database",
+      "title": "Create typed array",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "type",
+          "label": "Element type",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "int32",
+              "label": "int32"
+            },
+            {
+              "value": "int64",
+              "label": "int64"
+            },
+            {
+              "value": "double",
+              "label": "double"
+            },
+            {
+              "value": "text",
+              "label": "text"
+            },
+            {
+              "value": "blob",
+              "label": "blob"
+            }
+          ]
+        },
+        {
+          "field_id": "values",
+          "label": "Elements",
+          "control": "grid",
+          "required": true,
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "encoding",
+              "label": "Representation",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "scalar",
+                  "label": "scalar"
+                },
+                {
+                  "value": "base64",
+                  "label": "base64"
+                },
+                {
+                  "value": "null",
+                  "label": "null"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "help": "Exact decimal integers and float64 text; text is literal Unicode. BLOB and raw TEXT bytes use base64; null has no value."
+            }
+          ]
+        }
+      ],
+      "description": "Uses the selected original query connection. Arrays belong only to the selected original connection. Native helper/runtime and memory-policy admission are required; closing the connection releases arrays. Values and parameter bindings are never database objects. Bind the returned carray binding to a normal query parameter; do not interpolate the array identity into SQL.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_array_status",
+      "resource_kind": "database",
+      "title": "Inspect typed array",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "array_id",
+          "label": "Array identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Arrays belong only to the selected original connection. Native helper/runtime and memory-policy admission are required; closing the connection releases arrays. Values and parameter bindings are never database objects.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_array_close",
+      "resource_kind": "database",
+      "title": "Release typed array",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "array_id",
+          "label": "Array identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm releasing the array and its bindings",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Arrays belong only to the selected original connection. Native helper/runtime and memory-policy admission are required; closing the connection releases arrays. Values and parameter bindings are never database objects.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_inventory",
+      "resource_kind": "database",
+      "title": "Preupdate diagnostics availability",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_start",
+      "resource_kind": "database",
+      "title": "Start preupdate observations",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "max_events",
+          "label": "Maximum retained events",
+          "control": "number",
+          "default": 1000
+        },
+        {
+          "field_id": "max_json_bytes",
+          "label": "Maximum native JSON bytes",
+          "control": "text",
+          "default": "16777216",
+          "help": "Canonical positive decimal text, at most 2147483647."
+        }
+      ],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid. Requires the matching native preupdate helper (runtime >=3.45.1); existing capture/hook ownership must be compatible. The bounded buffer reports dropped events.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_status",
+      "resource_kind": "database",
+      "title": "Preupdate observation status",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_events",
+      "resource_kind": "database",
+      "title": "Read preupdate observations",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "run_id",
+          "label": "Observation generation",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "after_sequence",
+          "label": "After sequence",
+          "control": "text",
+          "default": "0"
+        },
+        {
+          "field_id": "limit",
+          "label": "Page size",
+          "control": "number",
+          "default": 25
+        }
+      ],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid. Sequence numbers and native integers are exact decimal strings; text and blobs may use base64 envelopes.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_stop",
+      "resource_kind": "database",
+      "title": "Stop preupdate observations",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "run_id",
+          "label": "Observation generation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid. Stops collection without committing or clearing retained observations.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_preupdate_clear",
+      "resource_kind": "database",
+      "title": "Clear preupdate observations",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "run_id",
+          "label": "Observation generation",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm discarding observations",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Before-change callbacks can include work later rolled back; they are not commit evidence. Schema, virtual and system-table changes do not invoke the hook. Native rowid fields are undefined for WITHOUT ROWID, old INSERT rowid and new DELETE rowid. Returns a new generation identity; the previous generation is stale.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_capture",
+      "resource_kind": "database",
+      "title": "Capture original-session DDN",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_columns",
+      "resource_kind": "database",
+      "title": "Generate column additions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "baseline",
+          "label": "Original-session baseline DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "resource_id",
+          "label": "Original table identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "columns",
+          "label": "Column additions",
+          "control": "grid",
+          "required": true,
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Column name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "data_type",
+              "label": "Declared type",
+              "control": "text"
+            },
+            {
+              "field_id": "nullable",
+              "label": "Nullable",
+              "control": "boolean",
+              "default": true
+            },
+            {
+              "field_id": "default",
+              "label": "Default expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "check",
+              "label": "CHECK expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "collation",
+              "label": "Collation",
+              "control": "text"
+            },
+            {
+              "field_id": "generated_expression",
+              "label": "Generated expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "generated_storage",
+              "label": "Generated storage",
+              "control": "select",
+              "options": [
+                {
+                  "value": "virtual",
+                  "label": "virtual"
+                },
+                {
+                  "value": "stored",
+                  "label": "stored"
+                }
+              ]
+            },
+            {
+              "field_id": "references_table",
+              "label": "Referenced table",
+              "control": "text"
+            },
+            {
+              "field_id": "references_column",
+              "label": "Referenced column",
+              "control": "text"
+            },
+            {
+              "field_id": "references_on_update",
+              "label": "ON UPDATE",
+              "control": "select",
+              "options": [
+                {
+                  "value": "NO ACTION",
+                  "label": "NO ACTION"
+                },
+                {
+                  "value": "RESTRICT",
+                  "label": "RESTRICT"
+                },
+                {
+                  "value": "SET NULL",
+                  "label": "SET NULL"
+                },
+                {
+                  "value": "SET DEFAULT",
+                  "label": "SET DEFAULT"
+                },
+                {
+                  "value": "CASCADE",
+                  "label": "CASCADE"
+                }
+              ]
+            },
+            {
+              "field_id": "references_on_delete",
+              "label": "ON DELETE",
+              "control": "select",
+              "options": [
+                {
+                  "value": "NO ACTION",
+                  "label": "NO ACTION"
+                },
+                {
+                  "value": "RESTRICT",
+                  "label": "RESTRICT"
+                },
+                {
+                  "value": "SET NULL",
+                  "label": "SET NULL"
+                },
+                {
+                  "value": "SET DEFAULT",
+                  "label": "SET DEFAULT"
+                },
+                {
+                  "value": "CASCADE",
+                  "label": "CASCADE"
+                }
+              ]
+            },
+            {
+              "field_id": "references_match",
+              "label": "MATCH name",
+              "control": "text"
+            },
+            {
+              "field_id": "references_deferrable",
+              "label": "Deferrable",
+              "control": "boolean"
+            },
+            {
+              "field_id": "references_initially",
+              "label": "Initially",
+              "control": "select",
+              "options": [
+                {
+                  "value": "DEFERRED",
+                  "label": "DEFERRED"
+                },
+                {
+                  "value": "IMMEDIATE",
+                  "label": "IMMEDIATE"
+                }
+              ]
+            },
+            {
+              "field_id": "not_null_constraint_name",
+              "label": "Not null constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "default_constraint_name",
+              "label": "Default constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "generated_constraint_name",
+              "label": "Generated constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "check_constraint_name",
+              "label": "Check constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "collation_constraint_name",
+              "label": "Collation constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "references_constraint_name",
+              "label": "References constraint name",
+              "control": "text"
+            }
+          ]
+        }
+      ],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay. Generates a desired design from an empty native prototype; it does not alter caller data. Native eligibility remains authoritative.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_alter",
+      "resource_kind": "database",
+      "title": "Generate table alterations",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "baseline",
+          "label": "Original-session baseline DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "alterations",
+          "label": "Ordered table alterations",
+          "control": "grid",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "action",
+              "label": "Action",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "rename-table",
+                  "label": "rename-table"
+                },
+                {
+                  "value": "rename-column",
+                  "label": "rename-column"
+                },
+                {
+                  "value": "drop-column",
+                  "label": "drop-column"
+                },
+                {
+                  "value": "drop-constraint",
+                  "label": "drop-constraint"
+                },
+                {
+                  "value": "drop-not-null",
+                  "label": "drop-not-null"
+                },
+                {
+                  "value": "set-not-null",
+                  "label": "set-not-null"
+                },
+                {
+                  "value": "add-check",
+                  "label": "add-check"
+                }
+              ]
+            },
+            {
+              "field_id": "resource_id",
+              "label": "Original table identity",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "column",
+              "label": "Column",
+              "control": "text"
+            },
+            {
+              "field_id": "name",
+              "label": "New or constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "expression",
+              "label": "CHECK expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "conflict",
+              "label": "Conflict policy",
+              "control": "select",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Native default"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                }
+              ]
+            }
+          ],
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay. Only fields applicable to the selected action may be supplied. Constraint/nullability alterations require native runtime support.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_preview",
+      "resource_kind": "database",
+      "title": "Preview original-session DDN changes",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "baseline",
+          "label": "Original-session baseline DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "desired",
+          "label": "Desired DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "deletions",
+          "label": "Explicit object deletions",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "resource_id",
+              "label": "Original object identity",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "alterations",
+          "label": "Ordered table alterations",
+          "control": "grid",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "action",
+              "label": "Action",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "rename-table",
+                  "label": "rename-table"
+                },
+                {
+                  "value": "rename-column",
+                  "label": "rename-column"
+                },
+                {
+                  "value": "drop-column",
+                  "label": "drop-column"
+                },
+                {
+                  "value": "drop-constraint",
+                  "label": "drop-constraint"
+                },
+                {
+                  "value": "drop-not-null",
+                  "label": "drop-not-null"
+                },
+                {
+                  "value": "set-not-null",
+                  "label": "set-not-null"
+                },
+                {
+                  "value": "add-check",
+                  "label": "add-check"
+                }
+              ]
+            },
+            {
+              "field_id": "resource_id",
+              "label": "Original table identity",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "column",
+              "label": "Column",
+              "control": "text"
+            },
+            {
+              "field_id": "name",
+              "label": "New or constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "expression",
+              "label": "CHECK expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "conflict",
+              "label": "Conflict policy",
+              "control": "select",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Native default"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay. A missing view is not deletion intent; supply exact deletions explicitly. Compare live/baseline/desired and review every native SQL stage.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_review",
+      "resource_kind": "database",
+      "title": "Review original-session DDN changes",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "baseline",
+          "label": "Original-session baseline DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "desired",
+          "label": "Desired DDN",
+          "control": "code",
+          "language": "ddn",
+          "required": true
+        },
+        {
+          "field_id": "deletions",
+          "label": "Explicit object deletions",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "resource_id",
+              "label": "Original object identity",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "alterations",
+          "label": "Ordered table alterations",
+          "control": "grid",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "action",
+              "label": "Action",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "rename-table",
+                  "label": "rename-table"
+                },
+                {
+                  "value": "rename-column",
+                  "label": "rename-column"
+                },
+                {
+                  "value": "drop-column",
+                  "label": "drop-column"
+                },
+                {
+                  "value": "drop-constraint",
+                  "label": "drop-constraint"
+                },
+                {
+                  "value": "drop-not-null",
+                  "label": "drop-not-null"
+                },
+                {
+                  "value": "set-not-null",
+                  "label": "set-not-null"
+                },
+                {
+                  "value": "add-check",
+                  "label": "add-check"
+                }
+              ]
+            },
+            {
+              "field_id": "resource_id",
+              "label": "Original table identity",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "column",
+              "label": "Column",
+              "control": "text"
+            },
+            {
+              "field_id": "name",
+              "label": "New or constraint name",
+              "control": "text"
+            },
+            {
+              "field_id": "expression",
+              "label": "CHECK expression",
+              "control": "code",
+              "language": "sql"
+            },
+            {
+              "field_id": "conflict",
+              "label": "Conflict policy",
+              "control": "select",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Native default"
+                },
+                {
+                  "value": "ROLLBACK",
+                  "label": "ROLLBACK"
+                },
+                {
+                  "value": "ABORT",
+                  "label": "ABORT"
+                },
+                {
+                  "value": "FAIL",
+                  "label": "FAIL"
+                },
+                {
+                  "value": "IGNORE",
+                  "label": "IGNORE"
+                },
+                {
+                  "value": "REPLACE",
+                  "label": "REPLACE"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "execution_sha256",
+          "label": "Reviewed preview fingerprint",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay. A missing view is not deletion intent; supply exact deletions explicitly. Compare live/baseline/desired and review every native SQL stage.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_start",
+      "resource_kind": "database",
+      "title": "Apply reviewed original-session DDN",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review fingerprint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm reviewed DDL changes",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Uses main, TEMP and attached schemas on the exact original connection. Start requires an open caller transaction. Native stages use an owned savepoint; successful DDL remains pending for the caller to commit or roll back. Never reopen the registered file or automatically replay. Returns a worker receipt; poll it for native acknowledgement, rediscovery, caller-transaction state and connection release. Cancellation is requested separately.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_receipt_list",
+      "resource_kind": "database",
+      "title": "Recent original-session DDN receipts",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Page offset",
+          "control": "number",
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Page size",
+          "control": "number",
+          "default": 25
+        }
+      ],
+      "description": "Uses the selected original query connection. Owner/endpoint/registered-target bound archive access does not require a live query session. Receipt reads send no native SQL and cannot restore native authority. Cancellation is a request, not proof of rollback; show the final native receipt. Active receipts cannot be removed.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_receipt_receipt",
+      "resource_kind": "database",
+      "title": "Inspect original-session DDN receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Owner/endpoint/registered-target bound archive access does not require a live query session. Receipt reads send no native SQL and cannot restore native authority. Cancellation is a request, not proof of rollback; show the final native receipt. Active receipts cannot be removed.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_receipt_cancel",
+      "resource_kind": "database",
+      "title": "Cancel original-session DDN application",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Owner/endpoint/registered-target bound archive access does not require a live query session. Receipt reads send no native SQL and cannot restore native authority. Cancellation is a request, not proof of rollback; show the final native receipt. Active receipts cannot be removed.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_schema_receipt_remove",
+      "resource_kind": "database",
+      "title": "Remove original-session DDN receipt",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "review_id",
+          "label": "Review identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm removing the archived receipt",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "description": "Uses the selected original query connection. Owner/endpoint/registered-target bound archive access does not require a live query session. Receipt reads send no native SQL and cannot restore native authority. Cancellation is a request, not proof of rollback; show the final native receipt. Active receipts cannot be removed.",
+      "notes": "Backend task transport sqlite_editor_operation; request={operation_id, draft}. Discover exact transport and outcome contracts with operation_id=describe. These are original-session tasks, not independent-file provider plan/apply operations. Shared shell routing/presentation remains with the UI team."
+    },
+    {
+      "operation_id": "editor_capture_inventory",
+      "resource_kind": "database",
+      "title": "Capture Inventory",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_open",
+      "resource_kind": "database",
+      "title": "Capture Open",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "estimate_size",
+          "label": "Estimate Size",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "track_rowids",
+          "label": "Track Rowids",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_status",
+      "resource_kind": "database",
+      "title": "Capture Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_close",
+      "resource_kind": "database",
+      "title": "Capture Close",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_attach",
+      "resource_kind": "database",
+      "title": "Capture Attach",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "table_mode",
+          "label": "Table Mode",
+          "control": "select",
+          "required": false,
+          "default": "EXACT",
+          "options": [
+            {
+              "value": "EXACT",
+              "label": "EXACT"
+            },
+            {
+              "value": "ALL",
+              "label": "ALL"
+            }
+          ]
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table Name",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_configure",
+      "resource_kind": "database",
+      "title": "Capture Configure",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "enabled_mode",
+          "label": "Enabled Mode",
+          "control": "select",
+          "required": false,
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "ON",
+              "label": "ON"
+            },
+            {
+              "value": "OFF",
+              "label": "OFF"
+            }
+          ]
+        },
+        {
+          "field_id": "indirect_mode",
+          "label": "Indirect Mode",
+          "control": "select",
+          "required": false,
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "ON",
+              "label": "ON"
+            },
+            {
+              "value": "OFF",
+              "label": "OFF"
+            }
+          ]
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_object_config",
+      "resource_kind": "database",
+      "title": "Capture Object Config",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "option",
+          "label": "Option",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "estimate_size",
+              "label": "estimate_size"
+            },
+            {
+              "value": "track_rowids",
+              "label": "track_rowids"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_diff",
+      "resource_kind": "database",
+      "title": "Capture Diff",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_database",
+          "label": "Source Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table Name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_capture_table_filter",
+      "resource_kind": "database",
+      "title": "Capture Table Filter",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "pattern_mode",
+          "label": "Pattern Mode",
+          "control": "select",
+          "required": false,
+          "default": "EXACT",
+          "options": [
+            {
+              "value": "EXACT",
+              "label": "EXACT"
+            },
+            {
+              "value": "ALL",
+              "label": "ALL"
+            }
+          ]
+        },
+        {
+          "field_id": "pattern",
+          "label": "Pattern",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "exclude",
+          "label": "Exclude",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_list",
+      "resource_kind": "database",
+      "title": "Export List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_status",
+      "resource_kind": "database",
+      "title": "Export Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_cancel",
+      "resource_kind": "database",
+      "title": "Export Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_reconcile",
+      "resource_kind": "database",
+      "title": "Export Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_files",
+      "resource_kind": "database",
+      "title": "Export Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_remove_artifact",
+      "resource_kind": "database",
+      "title": "Export Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_start",
+      "resource_kind": "database",
+      "title": "Export Start",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review Digest",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_list",
+      "resource_kind": "database",
+      "title": "Apply List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_status",
+      "resource_kind": "database",
+      "title": "Apply Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_cancel",
+      "resource_kind": "database",
+      "title": "Apply Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_reconcile",
+      "resource_kind": "database",
+      "title": "Apply Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_files",
+      "resource_kind": "database",
+      "title": "Apply Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_remove_artifact",
+      "resource_kind": "database",
+      "title": "Apply Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_start",
+      "resource_kind": "database",
+      "title": "Apply Start",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review Digest",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_catalog",
+      "resource_kind": "database",
+      "title": "Apply Catalog",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_list",
+      "resource_kind": "database",
+      "title": "Transform List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_status",
+      "resource_kind": "database",
+      "title": "Transform Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_cancel",
+      "resource_kind": "database",
+      "title": "Transform Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_reconcile",
+      "resource_kind": "database",
+      "title": "Transform Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_files",
+      "resource_kind": "database",
+      "title": "Transform Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_remove_artifact",
+      "resource_kind": "database",
+      "title": "Transform Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_start",
+      "resource_kind": "database",
+      "title": "Transform Start",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review Digest",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_catalog",
+      "resource_kind": "database",
+      "title": "Transform Catalog",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_list",
+      "resource_kind": "database",
+      "title": "Inspection List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_status",
+      "resource_kind": "database",
+      "title": "Inspection Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_cancel",
+      "resource_kind": "database",
+      "title": "Inspection Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_reconcile",
+      "resource_kind": "database",
+      "title": "Inspection Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_files",
+      "resource_kind": "database",
+      "title": "Inspection Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_remove_artifact",
+      "resource_kind": "database",
+      "title": "Inspection Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_start",
+      "resource_kind": "database",
+      "title": "Inspection Start",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review Digest",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_catalog",
+      "resource_kind": "database",
+      "title": "Inspection Catalog",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_list",
+      "resource_kind": "database",
+      "title": "Diff List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_status",
+      "resource_kind": "database",
+      "title": "Diff Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_cancel",
+      "resource_kind": "database",
+      "title": "Diff Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_reconcile",
+      "resource_kind": "database",
+      "title": "Diff Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_files",
+      "resource_kind": "database",
+      "title": "Diff Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_remove_artifact",
+      "resource_kind": "database",
+      "title": "Diff Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_start",
+      "resource_kind": "database",
+      "title": "Diff Start",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "review_digest",
+          "label": "Review Digest",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirmed",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_list",
+      "resource_kind": "database",
+      "title": "Upload List",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_status",
+      "resource_kind": "database",
+      "title": "Upload Status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_cancel",
+      "resource_kind": "database",
+      "title": "Upload Cancel",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_reconcile",
+      "resource_kind": "database",
+      "title": "Upload Reconcile",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_files",
+      "resource_kind": "database",
+      "title": "Upload Files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_remove_artifact",
+      "resource_kind": "database",
+      "title": "Upload Remove Artifact",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_catalog",
+      "resource_kind": "database",
+      "title": "Upload Catalog",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_export_review",
+      "resource_kind": "database",
+      "title": "Export Review",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "capture_id",
+          "label": "Capture Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "kind",
+          "label": "Kind",
+          "control": "select",
+          "required": false,
+          "default": "changeset",
+          "options": [
+            {
+              "value": "changeset",
+              "label": "changeset"
+            },
+            {
+              "value": "patchset",
+              "label": "patchset"
+            }
+          ]
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_sources",
+      "resource_kind": "database",
+      "title": "Apply Sources",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "source_database_target_id",
+          "label": "Source Database Target Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_kind",
+          "label": "Source Kind",
+          "control": "select",
+          "required": false,
+          "default": "capture",
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            }
+          ]
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_review",
+      "resource_kind": "database",
+      "title": "Apply Review",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "source_database_target_id",
+          "label": "Source Database Target Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_job_id",
+          "label": "Source Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_kind",
+          "label": "Source Kind",
+          "control": "select",
+          "required": false,
+          "default": "capture",
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            }
+          ]
+        },
+        {
+          "field_id": "invert",
+          "label": "Invert",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.invert"
+        },
+        {
+          "field_id": "ignore_noop",
+          "label": "Ignore Noop",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.ignore_noop"
+        },
+        {
+          "field_id": "fk_no_action",
+          "label": "Fk No Action",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.fk_no_action"
+        },
+        {
+          "field_id": "recursive_triggers",
+          "label": "Recursive Triggers",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.recursive_triggers"
+        },
+        {
+          "field_id": "include_rebase",
+          "label": "Include Rebase",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.include_rebase"
+        },
+        {
+          "field_id": "interactive_conflicts",
+          "label": "Interactive Conflicts",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.interactive_conflicts"
+        },
+        {
+          "field_id": "foreign_keys",
+          "label": "Foreign Keys",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "backend_field_id": "options.foreign_keys"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table Name",
+          "control": "text",
+          "required": false,
+          "backend_field_id": "options.table_name"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "conflict_data",
+          "label": "Conflict Data",
+          "control": "select",
+          "required": false,
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            },
+            {
+              "value": "replace",
+              "label": "replace"
+            }
+          ],
+          "backend_field_id": "options.conflicts.data"
+        },
+        {
+          "field_id": "conflict_not_found",
+          "label": "Conflict Not Found",
+          "control": "select",
+          "required": false,
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            }
+          ],
+          "backend_field_id": "options.conflicts.not_found"
+        },
+        {
+          "field_id": "conflict_conflict",
+          "label": "Conflict Conflict",
+          "control": "select",
+          "required": false,
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            },
+            {
+              "value": "replace",
+              "label": "replace"
+            }
+          ],
+          "backend_field_id": "options.conflicts.conflict"
+        },
+        {
+          "field_id": "conflict_constraint",
+          "label": "Conflict Constraint",
+          "control": "select",
+          "required": false,
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            }
+          ],
+          "backend_field_id": "options.conflicts.constraint"
+        },
+        {
+          "field_id": "conflict_foreign_key",
+          "label": "Conflict Foreign Key",
+          "control": "select",
+          "required": false,
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            }
+          ],
+          "backend_field_id": "options.conflicts.foreign_key"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_conflict",
+      "resource_kind": "database",
+      "title": "Apply Conflict",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "challenge",
+          "label": "Challenge",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_apply_decide",
+      "resource_kind": "database",
+      "title": "Apply Decide",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "challenge",
+          "label": "Challenge",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "response.challenge"
+        },
+        {
+          "field_id": "choice",
+          "label": "Choice",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "abort",
+              "label": "abort"
+            },
+            {
+              "value": "omit",
+              "label": "omit"
+            },
+            {
+              "value": "replace",
+              "label": "replace"
+            }
+          ],
+          "backend_field_id": "response.choice"
+        },
+        {
+          "field_id": "remember_kind",
+          "label": "Remember Kind",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "response.remember_kind"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_review",
+      "resource_kind": "database",
+      "title": "Transform Review",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "inputs",
+          "label": "Inputs",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "database_target_id",
+              "label": "Database Target Id",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "kind",
+              "label": "Kind",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "capture",
+                  "label": "capture"
+                },
+                {
+                  "value": "upload",
+                  "label": "upload"
+                },
+                {
+                  "value": "transform",
+                  "label": "transform"
+                },
+                {
+                  "value": "diff",
+                  "label": "diff"
+                },
+                {
+                  "value": "rebase",
+                  "label": "rebase"
+                }
+              ]
+            },
+            {
+              "field_id": "job_id",
+              "label": "Job Id",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "path",
+              "label": "Path",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "transform_operation",
+          "label": "Transform Operation",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "invert",
+              "label": "invert"
+            },
+            {
+              "value": "concat",
+              "label": "concat"
+            },
+            {
+              "value": "merge",
+              "label": "merge"
+            },
+            {
+              "value": "rebase",
+              "label": "rebase"
+            }
+          ],
+          "backend_field_id": "options.operation"
+        },
+        {
+          "field_id": "schema_database",
+          "label": "Schema Database",
+          "control": "text",
+          "required": false,
+          "backend_field_id": "options.schema_database"
+        },
+        {
+          "field_id": "schema_session_id",
+          "label": "Schema Session Id",
+          "control": "text",
+          "required": false,
+          "backend_field_id": "options.schema_session_id"
+        },
+        {
+          "field_id": "patchset_mode",
+          "label": "Patchset Mode",
+          "control": "select",
+          "required": false,
+          "default": "AUTO",
+          "options": [
+            {
+              "value": "AUTO",
+              "label": "AUTO"
+            },
+            {
+              "value": "CHANGESET",
+              "label": "CHANGESET"
+            },
+            {
+              "value": "PATCHSET",
+              "label": "PATCHSET"
+            }
+          ]
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_schemas",
+      "resource_kind": "database",
+      "title": "Transform Schemas",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "session_id",
+          "label": "Session Id",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_transform_sources",
+      "resource_kind": "database",
+      "title": "Transform Sources",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "source_database_target_id",
+          "label": "Source Database Target Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            },
+            {
+              "value": "rebase",
+              "label": "rebase"
+            }
+          ]
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_review_page",
+      "resource_kind": "database",
+      "title": "Inspection Review Page",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "input_database_target_id",
+          "label": "Database Target Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.database_target_id"
+        },
+        {
+          "field_id": "input_kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            },
+            {
+              "value": "rebase",
+              "label": "rebase"
+            }
+          ],
+          "backend_field_id": "input.kind"
+        },
+        {
+          "field_id": "input_job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.job_id"
+        },
+        {
+          "field_id": "input_path",
+          "label": "Path",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.path"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "text",
+          "required": false,
+          "default": "0",
+          "backend_field_id": "options.offset"
+        },
+        {
+          "field_id": "limit",
+          "label": "Limit",
+          "control": "number",
+          "required": false,
+          "default": 25,
+          "backend_field_id": "options.limit"
+        },
+        {
+          "field_id": "preview_bytes",
+          "label": "Preview Bytes",
+          "control": "number",
+          "required": false,
+          "default": 256,
+          "backend_field_id": "options.preview_bytes"
+        },
+        {
+          "field_id": "max_json_bytes",
+          "label": "Max Json Bytes",
+          "control": "number",
+          "required": false,
+          "default": 1048576,
+          "backend_field_id": "options.max_json_bytes"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_review_cell",
+      "resource_kind": "database",
+      "title": "Inspection Review Cell",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "input_database_target_id",
+          "label": "Database Target Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.database_target_id"
+        },
+        {
+          "field_id": "input_kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            },
+            {
+              "value": "rebase",
+              "label": "rebase"
+            }
+          ],
+          "backend_field_id": "input.kind"
+        },
+        {
+          "field_id": "input_job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.job_id"
+        },
+        {
+          "field_id": "input_path",
+          "label": "Path",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.path"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "record_number",
+          "label": "Record Number",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.record_number"
+        },
+        {
+          "field_id": "column_index",
+          "label": "Column Index",
+          "control": "number",
+          "required": true,
+          "backend_field_id": "options.column_index"
+        },
+        {
+          "field_id": "side",
+          "label": "Side",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "old",
+              "label": "old"
+            },
+            {
+              "value": "new",
+              "label": "new"
+            }
+          ],
+          "backend_field_id": "options.side"
+        },
+        {
+          "field_id": "byte_offset",
+          "label": "Byte Offset",
+          "control": "text",
+          "required": false,
+          "default": "0",
+          "backend_field_id": "options.byte_offset"
+        },
+        {
+          "field_id": "byte_limit",
+          "label": "Byte Limit",
+          "control": "number",
+          "required": false,
+          "default": 65536,
+          "backend_field_id": "options.byte_limit"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_review_extract",
+      "resource_kind": "database",
+      "title": "Inspection Review Extract",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "input_database_target_id",
+          "label": "Database Target Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.database_target_id"
+        },
+        {
+          "field_id": "input_kind",
+          "label": "Kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "capture",
+              "label": "capture"
+            },
+            {
+              "value": "upload",
+              "label": "upload"
+            },
+            {
+              "value": "transform",
+              "label": "transform"
+            },
+            {
+              "value": "diff",
+              "label": "diff"
+            },
+            {
+              "value": "rebase",
+              "label": "rebase"
+            }
+          ],
+          "backend_field_id": "input.kind"
+        },
+        {
+          "field_id": "input_job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.job_id"
+        },
+        {
+          "field_id": "input_path",
+          "label": "Path",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "input.path"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "record_number",
+          "label": "Record Number",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.record_number"
+        },
+        {
+          "field_id": "column_index",
+          "label": "Column Index",
+          "control": "number",
+          "required": true,
+          "backend_field_id": "options.column_index"
+        },
+        {
+          "field_id": "side",
+          "label": "Side",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "old",
+              "label": "old"
+            },
+            {
+              "value": "new",
+              "label": "new"
+            }
+          ],
+          "backend_field_id": "options.side"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_inspection_result",
+      "resource_kind": "database",
+      "title": "Inspection Result",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_catalog",
+      "resource_kind": "database",
+      "title": "Diff Catalog",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_tables",
+      "resource_kind": "database",
+      "title": "Diff Tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_diff_review",
+      "resource_kind": "database",
+      "title": "Diff Review",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Database",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.database"
+        },
+        {
+          "field_id": "source_database",
+          "label": "Source Database",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.source_database"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table Name",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.table_name"
+        },
+        {
+          "field_id": "kind",
+          "label": "Kind",
+          "control": "select",
+          "required": false,
+          "default": "changeset",
+          "options": [
+            {
+              "value": "changeset",
+              "label": "changeset"
+            },
+            {
+              "value": "patchset",
+              "label": "patchset"
+            }
+          ],
+          "backend_field_id": "options.kind"
+        },
+        {
+          "field_id": "estimate_size",
+          "label": "Estimate Size",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.estimate_size"
+        },
+        {
+          "field_id": "track_rowids",
+          "label": "Track Rowids",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "backend_field_id": "options.track_rowids"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_create",
+      "resource_kind": "database",
+      "title": "Upload Create",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "filename",
+          "label": "Filename",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.filename"
+        },
+        {
+          "field_id": "length",
+          "label": "Length",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "options.length"
+        },
+        {
+          "field_id": "kind",
+          "label": "Kind",
+          "control": "select",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "auto"
+            },
+            {
+              "value": "changeset",
+              "label": "changeset"
+            },
+            {
+              "value": "patchset",
+              "label": "patchset"
+            }
+          ],
+          "backend_field_id": "options.kind"
+        },
+        {
+          "field_id": "expected_sha256",
+          "label": "Expected Sha256",
+          "control": "text",
+          "required": false,
+          "backend_field_id": "options.expected_sha256"
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout Seconds",
+          "control": "number",
+          "required": false,
+          "default": 3600,
+          "backend_field_id": "options.timeout_seconds"
+        },
+        {
+          "field_id": "no_deadline",
+          "label": "No Deadline",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_chunk",
+      "resource_kind": "database",
+      "title": "Upload Chunk",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "chunk.offset"
+        },
+        {
+          "field_id": "data_base64",
+          "label": "Data Base64",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "chunk.data_base64"
+        },
+        {
+          "field_id": "sha256",
+          "label": "Sha256",
+          "control": "text",
+          "required": true,
+          "backend_field_id": "chunk.sha256"
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_upload_seal",
+      "resource_kind": "database",
+      "title": "Upload Seal",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job Id",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Typed native SQLite capture/artifact workflow. Owned endpoint, target and session/job admission remains authoritative. Review exact native helper availability, immutable input identities and outcome receipts. No automatic replay or inferred transaction finality."
+    },
+    {
+      "operation_id": "editor_delivery_export",
+      "resource_kind": "database",
+      "title": "Download native export",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_apply",
+      "resource_kind": "database",
+      "title": "Download native apply",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_transform",
+      "resource_kind": "database",
+      "title": "Download native transform",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_inspection",
+      "resource_kind": "database",
+      "title": "Download native inspection",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_diff",
+      "resource_kind": "database",
+      "title": "Download native diff",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_upload",
+      "resource_kind": "database",
+      "title": "Download native upload",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "path",
+          "label": "Receipt-listed artifact path",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "editor_delivery_conflict_value",
+      "resource_kind": "database",
+      "title": "Download native conflict value",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "job_id",
+          "label": "Job identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "challenge",
+          "label": "Native conflict challenge",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "side",
+          "label": "Native value side",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "old",
+              "label": "old"
+            },
+            {
+              "value": "new",
+              "label": "new"
+            },
+            {
+              "value": "current",
+              "label": "current"
+            }
+          ]
+        },
+        {
+          "field_id": "column_index",
+          "label": "Zero-based native column",
+          "control": "number",
+          "required": true
+        }
+      ],
+      "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
     }
   ]
 }

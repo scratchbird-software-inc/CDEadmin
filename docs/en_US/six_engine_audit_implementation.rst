@@ -1658,3 +1658,1650 @@ The descriptor/lint boundary has no new UI implementation: JSON controls remain
 engine branches 14 (before and after). The combined native/validation suite and
 affected PostgreSQL consumers are recorded separately from human form and
 platform acceptance in the work-area receipts.
+
+Four SQLite original-session descriptor contracts (2026-11-15)
+------------------------------------------------------------
+
+Backend scope closes SQ-DESC-01, SQ-DESC-03, SQ-DESC-04 and SQ-DESC-05.
+The native implementations already existed; this change supplies 24 typed
+operation descriptors and a callable descriptor-to-task adapter, rather than
+substituting registered-file operations for original-connection authority.
+SQ-DESC-02 (native session/changeset controls) remains separate. No frontend
+components, family skeletons, descriptor schemas or legacy editor controls
+are changed. The UI team still owns shared task routing and human presentation.
+``draft`` here records that presentation boundary, not a stub native adapter.
+
+Transport and admission
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Use the existing authenticated ``NODE-server.cde_workspace_id`` POST endpoint
+(the registration's ``/cde_workspace`` URL), with ``action`` equal to
+``sqlite_editor_operation``. All responses retain its ``Cache-Control:
+no-store`` and existing success/data or error envelope. The registered server,
+owned ``database_target_id`` and ``session_id`` stay outside the dialog draft.
+The adapter forwards only these identities; client provider IDs, native file
+paths, native helper paths, permissions and arbitrary transport names are
+never accepted as operation fields. A different engine registration refuses.
+
+Fetch the machine-readable contract without opening a native connection::
+
+    {"action": "sqlite_editor_operation",
+     "database_target_id": "<owned target>",
+     "request": {"operation_id": "describe"}}
+
+The result format is ``scratchrobin.sqlite.editor-operations@1``. Each row
+contains the full standard engine operation descriptor, fixed task transport
+and native operation, permissions, native admission, outcome keys, scope and
+``original_session_required``. Fields also appear in SQLite's ordinary
+``ui_descriptors/operations.json`` bundle. This contract is intentionally a
+backend task adapter: do not send these IDs through independent-file provider
+plan/apply. An original query session must already be open for every operation
+except the archive operations below. Existing provider/studio isolation,
+permissions, serialization, busy/uncertain checks and native helper admission
+are applied again by the native task. No metadata declaration grants access.
+
+Submit a typed dialog draft, for example::
+
+    {"action": "sqlite_editor_operation",
+     "database_target_id": "<owned target>", "session_id": "<original session>",
+     "request": {"operation_id": "editor_array_create",
+                 "draft": {"type": "int64",
+                           "values": [{"encoding": "scalar",
+                                       "value": "9007199254740993"}]}}}
+
+Unknown fields, wrong primitive types (including booleans in integer fields),
+unknown choices and incomplete required grids refuse before native dispatch.
+Native bounds, authorization and capabilities remain authoritative. Mutating
+SQL workflows show their actual native preview on the canonical SQL tab; C API
+workflows have no SQL and must not display invented SQL. Extension initialization,
+array allocations and hook state have no SQL-transaction rollback guarantee.
+No workflow automatically reconnects or replays an uncertain native action.
+
+SQ-DESC-01: approved extension loader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_extension_`` prefix provides these exact operations and drafts:
+
+* ``inventory``: no fields; returns approved public identities/digests,
+  ``loader_available``, execution host and current module/function/collation
+  observations. Operator filesystem paths are excluded.
+* ``review``: required ``extension_id`` from that approved inventory; returns
+  ``review_id``, state, approved public library identity, verified byte count,
+  execution host, native version and irreversible/dependency scope.
+* ``load``: required ``review_id`` and boolean ``confirmed=true``; verifies
+  unchanged operator approval and exact staged bytes, then initializes the
+  library on the original handle. Returns state, native additions when
+  observable and ``loader_cleanup_confirmed``.
+* ``receipt``: required ``review_id``; reads the original connection's stored
+  review, including an unknown-outcome receipt. It cannot revive a closed session.
+
+All require ``execute``; review/load additionally require ``administer`` and
+``filesystem``. Loading requires CPython's native loader and db_config APIs,
+operator approval and no pending transaction. SQL ``load_extension()`` stays
+disabled. There is no unload, cancellation or progress API. Reusing a completed
+review returns its receipt without another native initialization. Partial native
+initialization or uncertain cleanup blocks reuse and requires closing the
+connection. Native dependencies resolve on the application host, and their
+side effects may outlive it. Closing releases staged files and local receipts;
+it does not promise to reverse initialization.
+
+SQ-DESC-03: native typed arrays
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_array_`` prefix provides:
+
+* ``inventory``: integer ``offset=0`` and ``limit=25`` (native maximum 100);
+  returns page/total/more, types, actual helper availability, initialized
+  context, operator memory policy and native program identity.
+* ``create``: required ``type`` (``int32``, ``int64``, ``double``, ``text`` or
+  ``blob``) and ordered ``values`` grid. Each row has ``encoding`` and ``value``.
+  ``scalar`` uses a string (canonical decimal integers, float64 text or literal
+  Unicode); ``base64`` represents BLOB or raw TEXT bytes; ``null`` is allowed
+  only for TEXT/BLOB and has no value. Raw TEXT receives the native TEXT storage
+  class. Invalid base64, integer overflow, incompatible representations and
+  embedded-zero TEXT refuse through the existing native value codec.
+* ``status``: required ``array_id``; returns allocation and binding facts.
+* ``close``: required ``array_id`` and ``confirmed=true``; releases its native
+  memory and makes those bindings unusable.
+
+Only ``execute`` is required. Native creation requires the matching CARRAY
+helper and SQLite instance, runtime at least 3.53.0, and the operator's connection
+memory budget. Inventory reports absence without claiming native availability.
+Bind the returned ``array.binding`` (``encoding=carray``, opaque ``data``) as
+an ordinary query parameter; never interpolate it into SQL. Integer values,
+allocation sizes and identities preserve exact native representation. Arrays
+are connection-local, not catalog objects; close/release does not commit pending
+work. There is no job/progress/cancel API or automatic recreation after close.
+
+SQ-DESC-04: standalone preupdate diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_preupdate_`` prefix provides:
+
+* ``inventory``: no fields; reports installed/runtime helper availability,
+  active native captures and current status without taking hook ownership.
+* ``start``: integer ``max_events=1000`` (1..2147483647), exact positive decimal
+  text ``max_json_bytes="16777216"`` (maximum 2147483647).
+* ``status``: no fields; returns the current native observation controller.
+* ``events``: required ``run_id``, canonical decimal ``after_sequence="0"``
+  (maximum 9223372036854775807), integer ``limit=25`` (1..100).
+* ``stop``: required ``run_id``; disables collection and keeps observations.
+* ``clear``: required ``run_id`` and ``confirmed=true``; discards observations
+  and returns a new run generation, invalidating previous paging identities.
+
+``execute`` is always required; everything except inventory also requires
+``administer``. The matching helper/runtime (at least 3.45.1), native hook
+ownership and capture compatibility are checked. Status includes enabled state,
+retained/observed/dropped counts and native result codes; paging includes exact
+sequence strings and typed native cells, with base64 for binary/unrepresentable
+TEXT bytes. Buffers are bounded; never imply a complete history after loss.
+These before-change observations include rolled-back changes and do not prove
+commit. Schema, virtual/system-table changes are outside hook coverage; rowid
+fields have the native undefined cases documented in every descriptor. Clearing
+or stopping does not settle a transaction. There is no asynchronous job or
+cancel endpoint; stop is explicit hook control, not rollback.
+
+SQ-DESC-05: original-session DDN generation, apply and receipts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_schema_`` prefix provides:
+
+* ``capture``: no fields; calls original-session ``source_catalog`` with
+  ``include_system=false`` and returns resources plus ``document.snapshot``
+  (or an explicit export warning if DDN bounds are exceeded). Main, TEMP and
+  attached namespaces retain original-session provenance. This never calls
+  the separate registered-file catalog path.
+* ``columns``: required baseline DDN text, original table ``resource_id`` and
+  ordered ``columns`` grid (native maximum 32). Controls cover name,
+  ``data_type``, nullable, default/CHECK expressions, collation, generated
+  expression/storage, reference table/column/update/delete/MATCH/deferrability/
+  initial timing, and named NOT NULL/default/generated/CHECK/collation/reference
+  constraints. Flat controls map to the existing typed native nested contract;
+  incomplete generated/reference/named definitions refuse. Only an empty native
+  prototype is modified during design generation.
+* ``alter``: required baseline DDN and ordered ``alterations`` grid (native
+  maximum 16). Each row identifies the original table, action and applicable
+  column/name/expression/conflict operands. Actions are ``rename-table``,
+  ``rename-column``, ``drop-column``, ``drop-constraint``, ``drop-not-null``,
+  ``set-not-null`` and ``add-check``. Runtime-specific native syntax and exact
+  constraint-name lookup remain gated by the existing compiler/probe. Unrelated
+  nonempty operands refuse; blank optional grid cells are omitted.
+* ``preview``: required baseline/desired DDN text, optional string-list
+  ``deletions`` and ordered ``alterations`` grid. Returns native stages and
+  ``execution_sha256``. Missing view-filter objects never imply deletion.
+* ``review``: same fields, plus required preview ``execution_sha256``; returns
+  a durable ``review_id``, ``review_digest``, expiry and exact original-context
+  binding. A changed preview must be reviewed again.
+* ``start``: required review ID/digest and ``confirmed=true``. Starts the native
+  worker once; poll its archive receipt. Native rediscovery must match desired
+  DDN before acknowledgement. An owned savepoint contains these stages;
+  success is ``applied_pending_caller_transaction``, with
+  ``commit_dispatched=false``. It does not commit caller work. Changed source
+  context refuses; known failure/cancellation reports its savepoint result;
+  unknown outcomes retain uncertainty. Show worker state, completed statements,
+  native acknowledgement, rediscovery and native-session release separately.
+
+The ``editor_schema_receipt_`` prefix provides archive ``list`` (offset/limit,
+maximum 100), ``receipt`` (review ID), ``cancel`` (review ID) and ``remove``
+(review ID and ``confirmed=true``). It requires an owned registered target and
+``administer``, but no live session. Reads report ``archived_read_only=true``
+and ``native_sql_requested=false``. Cancellation interrupts only an active
+owned worker; read its final outcome rather than claiming immediate rollback.
+Unresolved native dispatch receipts cannot be removed. Saved receipts contain
+no authority to reconnect, replay or settle the original caller transaction.
+After original-session closure or application restart, archive inspection
+remains available while native start authority does not.
+
+Qualification boundary
+~~~~~~~~~~~~~~~~~~~~~~
+
+Native descriptor-draft tests and the authenticated HTTP qualification use owned
+Linux SQLite 3.53.0 fixtures, matching array/preupdate/session helpers and a
+compiled clean-room extension fixture. They verify native effects and refusals,
+exact integer binding, before-change versus commit semantics, original-context
+DDL review/apply/rediscovery, caller rollback and archive access after close.
+The affected native regression suites, descriptor validator/lint and shared
+family render checks are retained in the assigned work area. Native helper
+availability remains per-runtime; version metadata alone never establishes
+availability. Human UI presentation and Windows/macOS acceptance remain external.
+
+Five DuckDB original-session descriptor contracts (2026-11-15)
+------------------------------------------------------------
+
+Backend scope closes DU-AUD-22, DU-AUD-23, DU-AUD-24, DU-AUD-25 and
+DU-AUD-26 in that order. The existing native attachment, extension, database-copy,
+secret and receipt implementations are retained. Twenty-five typed engine
+operation descriptors and a callable descriptor-to-task adapter now carry their
+missing field contracts. This does not close the separate broader object-form
+parity, remote/foreign attachment, extension-transport qualification, runtime
+configuration or native outcome-matrix items. Shared UI routing and human
+presentation remain with the UI group; no renderer, family skeleton, descriptor
+schema or legacy editor panel is changed. Descriptor ``draft`` status records
+that presentation boundary rather than an absent native backend.
+
+Common transport
+~~~~~~~~~~~~~~~~
+
+Use the existing authenticated server workspace POST endpoint
+(``NODE-server.cde_workspace_id``), action ``duckdb_editor_operation``. The
+existing success/data or error envelope and ``Cache-Control: no-store`` remain.
+Both the owned registration and its nonempty registered ``database_target_id``
+are mandatory. All live operations require the exact original ``session_id``
+outside the dialog draft. The adapter never opens a substitute SQL session,
+accepts a client route/native handle, or dispatches a client-supplied transport.
+
+Discover the machine-readable backend contract without native SQL::
+
+    {"action": "duckdb_editor_operation",
+     "database_target_id": "<owned target>",
+     "request": {"operation_id": "describe"}}
+
+The response format is ``scratchrobin.duckdb.editor-operations@1``. Its rows
+include the standard engine descriptor, native task/operation, any fixed native
+action, permissions, admission, outcome keys, scope and whether the original
+session is required. Secret tasks identify their existing common administration
+transports, with authoritative session-catalog preflight for removal. Release
+identifies the existing close-session transport. These mappings are backend
+implementation details: the shared task host submits the typed operation draft
+to this adapter, not to independent-file provider plan/apply::
+
+    {"action": "duckdb_editor_operation", "database_target_id": "<owned target>",
+     "session_id": "<original session>",
+     "request": {"operation_id": "editor_copy_review",
+                 "draft": {"source_catalog": "source",
+                           "destination_catalog": "destination", "mode": "ALL"}}}
+
+Unknown fields, invalid choices and wrong primitive types refuse before native
+dispatch. Native permission, path, version, storage, transaction and capability
+admission remain authoritative and are checked again by the existing task.
+Descriptors have only typed controls/grids; the native preview or common plan
+belongs on the canonical SQL tab. Protected values stay private to the native
+review/plan. Never fabricate a successful readback, commit, rollback, progress,
+cancellation or replay from a saved receipt.
+
+DU-AUD-22: attachment and storage controls
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_attachment_`` operations are:
+
+* ``inventory``: no fields; returns native ``catalogs`` and ``original_catalog``
+  with exact alias/OID/path, access, storage options, encryption and cipher.
+* ``review_attach``: required ``alias`` and absolute registered-root ``path``
+  (or explicitly authorized ``:memory:``); ``read_only=true``,
+  ``conflict=ERROR|IGNORE|REPLACE`` (default ERROR),
+  ``create_if_missing=false``. Optional ``block_size`` and ``row_group_size``
+  are exact unsigned-64-bit decimal strings, and ``storage_version`` is native
+  version text. ``compress_mode=NATIVE|ENABLED|DISABLED`` omits the option or
+  sends the explicit native Boolean, admitted only for memory attachments.
+  ``key_mode=NONE|SUPPLIED`` distinguishes omission from a supplied
+  ``encryption_key`` password control; ``encryption_cipher=NATIVE|GCM|CTR``
+  omits the cipher or selects it explicitly. Unselected but populated encryption
+  controls refuse. Native open/create rules remain decisive: these options do
+  not rewrite an existing store.
+* ``review_detach``: required ``alias`` and ``if_exists=false``. The original
+  registered catalog and native system/temp aliases cannot be detached.
+* ``apply``: required review ID/digest, ``confirmation`` equal to the reviewed
+  native alias, and ``confirmed=true``.
+* ``receipt``: required ``review_id``; reads the original-session receipt,
+  including terminal/uncertain states without native redispatch.
+* ``discard``: required review ID/digest; discards unused review authority and
+  releases a bound private key without creating or deleting a database file.
+
+All require ``execute``. Review/apply/discard additionally require resource
+``administer`` and ``filesystem``. Reviews bind exact original namespace and
+file facts; apply checks them again. Keys remain private, bind for at most the
+existing five-minute review window, and are released after dispatch, discard,
+expiry or original-session close. Public native SQL uses a bound placeholder;
+public digests are not derived from key bytes. Native acknowledgement and
+rediscovery are separate. Native alias reuse after DETACH can require an
+explicit caller transaction decision. Instance-visible attachments, created
+files, detached aliases and registered automatic attachments have their existing
+native lifetime semantics; rollback is not a file cleanup/reattach promise.
+
+DU-AUD-23: extension controls
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_extension_`` operations are:
+
+* ``inventory``: no fields; returns native installed/loaded/source/version facts,
+  current runtime/home/extension-directory context and native admission settings.
+* ``review_install``: required ``extension_name``; ``source_kind=NAME|FILE|URL``
+  (default NAME), optional ``source``, Boolean ``force=false``,
+  ``repository_kind=DEFAULT|ALIAS|URL|DIRECTORY`` (default DEFAULT), optional
+  repository, native extension version and ``expected_http_secret`` name.
+* ``review_load``: required extension name, ``source_kind=NAME|FILE`` and optional
+  source. It has no FORCE, repository, version or remote URL option.
+* ``apply``: required review ID/digest, exact extension-name ``confirmation`` and
+  ``confirmed=true``.
+* ``receipt``: required review ID; separates native dispatch/acknowledgement,
+  last installed inventory and rediscovery availability.
+
+All require ``execute`` and resource ``data_read``; review/apply additionally
+require resource ``administer`` and ``filesystem``. The current native adapter
+requires DuckDB 1.5.2 and binds original-session inventory, settings and source
+identity. Files/directories stay under the registered root; file/URL sources
+supply their own native artifact version rather than accepting repository/version
+modifiers. Public HTTP(S) URLs exclude inline credentials, query and fragment.
+``expected_http_secret`` names an existing native identity selected by
+``which_secret`` for the exact download URL: it never supplies credential values
+or establishes successful authentication. Native HTTP credential use requires
+separate ``secret_read`` authority and actual httpfs availability. Installed
+capability/admission observations are not replacement source availability proofs.
+
+Installation/loading is synchronous; no progress or cancellation endpoint is
+advertised. Native filesystem/process effects are not rolled back with a database
+transaction. Terminal receipts are returned without replay; unknown outcomes
+block reuse according to the native adapter. Existing ``update_extensions``
+descriptors/native workflows remain separate. This batch positively qualifies isolated INSTALL of the existing signed httpfs
+artifact (native version 13e18b3) from an approved-root file, native signature
+admission, and LOAD of httpfs and built-in JSON. Source/repository/version/FORCE/
+HTTP-identity controls are additionally checked through the native compiler and
+refusal tests. It does not claim a successful remote INSTALL, native HTTPS
+transport or TLS/authentication matrix; DU-AUD-33 remains open.
+
+DU-AUD-24: native database copy and encryption
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_copy_`` operations are:
+
+* ``inventory``: no fields; current attached catalogs and native storage facts.
+* ``review``: required ``source_catalog`` and ``destination_catalog`` with
+  ``mode=ALL|SCHEMA|DATA`` (default ALL). Distinct native catalogs, writable
+  destination, registered filesystem/memory authority and native eligibility
+  are required. Review itself uses a worker that reads native metadata and
+  row aggregates within the existing budgets; poll its receipt.
+* ``apply``: required review ID/digest, exact destination-catalog confirmation
+  and ``confirmed=true``. ALL runs native SCHEMA then DATA as separate stages;
+  DATA appends to native existing destination objects.
+* ``receipt``: required review ID. Show ``phase``, active table, native steps,
+  dispatch/acknowledgement, original storage facts, storage observation,
+  rediscovery and session-reuse state. Wait for ``phase=finished`` before
+  considering the worker released.
+* ``cancel``: required review ID; requests interruption of an active worker.
+  Read the final receipt; a request is not a completed rollback.
+* ``discard``: required review ID/digest; discards unused reviewed authority,
+  not destination files or acknowledged native effects.
+
+All require ``execute`` and resource ``data_read``. Review/apply/cancel/discard
+also require resource ``administer``, resource ``data_write`` and ``filesystem``.
+A durable dispatch observation is required before native mutation. The native
+one-writable-database-per-transaction limit, conflicts, partial stages,
+cancellation and uncertain results are preserved; no implicit commit/rollback
+or fallback is introduced. Row-bag aggregate and object/storage postconditions
+are exactly the existing native checks, not a cryptographic equality claim.
+
+Encryption, decryption and key changes use a separately attached destination
+configured through the attachment contract, then native copy, explicit caller
+commit/detach and independent reopening with the intended key/cipher. There is
+no native in-place REKEY field or automatic replacement/cutover. Qualification
+copies real objects/data into an encrypted destination and independently reopens
+it. Native CTR reopening requires an explicit CTR cipher; omitting it is a
+qualified native refusal, not a reason to change cipher or weaken admission.
+Retiring a source remains a separately reviewed owner decision.
+
+An isolated reference-runtime configuration initially has a read-only crypto
+module. Encrypted writes require loading its native writable crypto provider
+(httpfs here). Authenticated qualification records the actual pre-load refusal,
+explicit caller rollback, signed-file INSTALL/LOAD and successful encrypted
+creation/copy afterwards. It never enables ``force_mbedtls_unsafe``. The UI
+handoff must show this dependency and use the extension inventory/workflow;
+a cipher name alone does not prove native write capability.
+
+DU-AUD-25: original-session secret fields
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_secret_`` operations are:
+
+* ``inventory``: no fields; native public secret resources, with storage and
+  persistence included in their distinct resource identities. It never reads
+  native credential strings. Public native type/provider/storage/scope metadata
+  can be present; do not equate that metadata with a secret value.
+* ``review_create``: optional ``name=""`` (native default name),
+  ``secret_type=HTTP`` (or empty with an explicit TYPE expression),
+  ``persistence_mode=TEMPORARY|PERSISTENT|DEFAULT`` (default TEMPORARY), optional
+  native storage name, and ``on_conflict=ERROR|IF NOT EXISTS|OR REPLACE``.
+  ``property_nodes`` is an ordered typed grid: node ID, parent ID, property/map
+  key, kind TEXT/INTEGER/DOUBLE/BOOLEAN/NULL/LIST/MAP, private scalar value and
+  typed TRUE/FALSE choice. Root keys name native properties; LIST children have
+  no keys; MAP children have exact string keys. Scalars, exact decimal integers,
+  finite doubles, Booleans, NULLs and nested containers remain distinct.
+  There is no raw JSON control. Node identities/parents/keys, cycles, unreachable
+  nodes and depth/node budgets are checked; the existing native byte budget and
+  SQL parser remain authoritative. Literal text is never inferred to be SQL.
+  ``property_expressions`` is a separate ordered property-name/private-expression
+  grid. Expressions are parsed without execution during review and evaluated
+  only by the explicitly applied native statement, including original variables.
+  Names are distinct across constants/expressions under native admission.
+* ``review_drop``: required observed secret ``resource_id`` and exact secret-name
+  confirmation. The backend reacquires that resource from the original native
+  session and plans ``DROP SECRET ... FROM <observed storage>``; it never trusts
+  a client-supplied storage/native record.
+* ``apply``: common ``plan_id``, ``plan_digest`` and ``confirmed=true`` on the
+  exact original session and registered target.
+* ``receipts``: no fields; reads/filter the existing common operation receipt
+  list for secret operations in the authorized endpoint/target scope. It is not
+  the attachment/extension/copy archive described below.
+
+The existing common administration pipeline checks native secret operation
+permissions, retained session, verified runtime and one-use plan again. A native
+TYPE expression with an explicit name is now admitted through the legacy
+validation field as well as the native compiler; absence of both literal type
+and TYPE expression still refuses. Private constants/expressions use the native
+form's existing sensitive fields, so public previews/receipts omit them. The
+native public metadata required for scope/storage identity remains observable.
+Native expression functions can contact external systems at apply; a parse does
+not establish execution authority or safety. Persistent native storage writes
+and removals can survive database rollback. Native execution errors may abort
+the caller transaction; the adapter never requests rollback. Identical native
+public-metadata replacement cannot be detected and is not claimed fenced.
+
+DU-AUD-26: receipt paging, finality and original-session release
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``editor_receipt_`` operations are:
+
+* ``list``: integer ``offset=0``, ``limit=25`` (1..100); returns archived pages,
+  total/more, family, last persisted observations and original-session state.
+* ``get``: required ``review_id``; full authorized archived observation, including
+  ``archived_read_only=true``, ``live_session_observed=false``,
+  ``outcome_observation`` and ``transaction_finality_inferred=false``. An old
+  applying/unknown state does not imply a completed native result.
+* ``release``: required ``confirmed=true`` and the live original session ID;
+  delegates to the existing common close-session path. Active workers must
+  finish or be cancelled explicitly. Native close discards uncommitted database
+  work, but cannot reverse persistent file/secret effects or unload process code.
+  Show native close separately from durable ``receipt_release_recorded``;
+  release failure/unconfirmed recording stays explicit.
+
+Archive get/list require ``execute`` and ``data_read`` on the owned target;
+``session_id`` is optional and no native connection/SQL is opened for the read.
+The archive is owner/endpoint/registered-target bound. Original-session release
+requires actual live authority; persisted receipts never reconstruct it.
+Read-only archive reconstruction after close/restart is supported by the existing
+store; no apply/retry/remove action is invented on this archive. Private keys and
+native credential values remain excluded from persisted operation receipts.
+
+Qualification scope
+~~~~~~~~~~~~~~~~~~~
+
+Verification uses owned Linux DuckDB 1.5.2 file/memory fixtures, the real typed
+descriptor-to-task adapter, retained provider/common administration paths and
+authenticated desktop HTTP. It includes encrypted creation/copy/independent
+reopening, original transaction/TEMP state, native JSON loading, private secret
+constant/expression and duplicate-storage workflows, and archived reads after
+release with native-connect-forbidden regression checks. Shared descriptor/lint
+and operation/family render checks are retained in the designated work area.
+No frontend implementation, other-runtime/platform completion, remote-extension
+transport success, ScratchBird history qualification or full-product completion
+is inferred from these scoped results.
+
+MariaDB native diagnostics, live plans, shutdown and binlog events; DuckDB alias (2026-11-15)
+==========================================================================================
+
+This batch implements ``MA-AUDIT-ENGINE-DIAGNOSTICS``,
+``MA-AUDIT-OTHER-SESSION-PLANS``, ``MA-AUDIT-NATIVE-SHUTDOWN``,
+``MA-AUDIT-BINLOG-EVENTS`` and ``DU-AUD-04``. These are scoped backend
+and descriptor contracts. Form presentation, shared UI task routing and
+Windows/macOS acceptance remain with their owners; other audit items remain
+open. MariaDB qualification uses the pinned native 12.2.2 interface and the
+patched 1.1.14 connector; DuckDB qualification uses native 1.5.2. No
+ScratchBird monitoring-history qualification is performed.
+
+MariaDB common native operation hooks
+------------------------------------
+
+The MariaDB dialect inventory retains its existing 88 qualified tasks and adds
+six native server tasks (94 total), backed by successful native compiler
+statements and acknowledgements. This is generated-task coverage, not product
+completion. ``tools/cdeadmin_mariadb_server_management_qualification.py``
+qualifies the added tasks and actual owned-process exit; it is included in
+``tools/cdeadmin_mariadb_tasks_gate.py``.
+
+The common ``visual_admin_catalog``, ``visual_admin_validate``,
+``visual_admin_plan`` and retained ``visual_admin_apply`` routes expose six
+server operations. Use the observed server resource, not an invented MySQL
+identity: ordinary discovery provides ``server:MariaDB`` with display name/path
+``MariaDB`` and native ``server_uid``; native server exchange provides
+``mariadb-server:[server_uid,"server"]`` with its own observed display name/path.
+The server UID is MariaDB's native value, not a UUID. Database target,
+registration/credential and operation authorization remain enforced by the
+common workspace/visual-administration facade. These operations require native
+network connections independent of an editor session; a supplied original
+``session_id`` is refused. Backend-owned SQL is compiled from typed fields;
+there is no arbitrary SQL or client credential field.
+
+All six operations require exact server-name ``confirmation``. Review binds
+native server UID, version, authenticated/effective principals, active role and
+SQL mode. Apply repeats those observations on a new dedicated connection.
+Pooling options are removed. Connect/read/write timeouts are five seconds;
+there is no automatic reconnect/replay. Native privilege enforcement is still
+authoritative. The UI must distinguish common control-operation state from
+``provider_result`` native observations and must retire submitted one-use plans.
+
+* ``inspect_engine_status``, ``inspect_engine_logs``,
+  ``inspect_engine_mutex``: ``engine_scope`` is ``ENGINE`` or ``ALL``;
+  ``engine`` is required only for ENGINE and omitted/empty for ALL;
+  ``private_data_confirmed`` must be true. Native installed/support state is
+  reviewed and rechecked. SQL is one native ``SHOW ENGINE ...`` statement,
+  including ALL. STATUS/MUTEX require PROCESS; LOGS requires FILE. Native
+  denial codes differ: PROCESS is 1227/42000, FILE is 1045/28000 on the qualified
+  runtime. The backend preserves native error number/SQLSTATE; do not label
+  every 1045 as a connection-authentication failure.
+* ``inspect_live_explain``, ``inspect_live_analyze``:
+  ``connection_id`` is exact positive unsigned 64-bit decimal **text**;
+  ``output_format`` is TABULAR or JSON; ``private_data_confirmed`` must be true.
+  The backend issues native SHOW EXPLAIN/ANALYZE, never executes an ANALYZE
+  statement in the target session. PROCESS is needed for another user's
+  sessions; the native own-user exception is supported and qualified. An
+  invisible/missing active query is reported as unavailable or not visible,
+  never as proof that it does not exist.
+* ``shutdown_server``: ``service_disruption_confirmed`` must be true. The
+  native SHUTDOWN privilege is required. Review expires after 60 seconds;
+  native uptime progression is rechecked with two-second granularity tolerance.
+  This is an observation fence, not an atomic process-generation reservation.
+  The backend issues only SHUTDOWN, without host service manipulation or
+  restart. Embedded shutdown is unsupported. Interrupted/lost responses are
+  unconfirmed and never replayed.
+
+Successful engine diagnostics return ``provider_result.engine_diagnostic``:
+``columns`` (Type, Name, Status), ordered ``rows``, ``complete``, ``truncated``,
+row/UTF-8 byte limits and returned bytes, actual engine inventory,
+``execution_identity``, timestamp, ``private_content``, ``native_dispatched``,
+``native_acknowledged`` and ``native_completion``. ENGINE is bounded to
+256 rows/1 MiB, ALL to 4096 rows/8 MiB. Truncated output is not a complete
+acknowledgement; an empty native result does not prove that a handler is implemented.
+Do not parse native output into invented capabilities. Private SQL, paths and
+transaction details can be present; do not persist it to monitoring history.
+
+Live plans return ``provider_result.live_plan`` with native column names and
+ordered typed cells, query identity, execution identity and the same independent
+acknowledgement/completeness observations. Large integers are decimal strings,
+decimals/floats preserve their exact driver representation, binary values use
+base64 envelopes. Native JSON output stays native JSON text. Identity binds
+PROCESSLIST ID, USER, HOST, DB, COMMAND and native QUERY_ID without collecting
+INFO/INFO_BINARY. Review/apply compare it before dispatch and after a complete
+read; changed-query output is withheld. The checks are not an atomic query
+reservation. At 256 rows/1 MiB, unread partial output is discarded and its rows
+withheld because the post-read identity cannot be verified. A native SHOW
+request can wait up to 30 seconds: a five-second client timeout does not prove
+server cancellation. Native refusal/not-explainable errors are not simulated
+with a fresh EXPLAIN against copied SQL.
+
+Shutdown returns ``provider_result.shutdown`` with ``native_completion``
+``shutdown-request-acknowledged``, ``native_acknowledged``,
+``process_exit=not-observed``, ``host_service_control=false`` and
+``restart_requested=false``. Native OK acknowledges the request; it does not
+prove the operating-system process stopped. Qualification separately observes
+the owned Docker process exit/code/OOM state. Do not display an unreachable
+socket as confirmed process exit or report other clients' transaction finality.
+
+All successful responses separately return ``connection_release`` with cursor
+and connection cleanup facts; transaction-decision/retry flags remain false.
+Native exceptions retain errno, SQLSTATE, dispatch/acknowledgement and cleanup
+on the provider exception. The common HTTP failure receipt conservatively
+reports its existing unknown-outcome state and native status codes; it does
+not expose all provider exception attributes or private SQL. UI callers must
+not infer cleanup or rollback from that HTTP error, nor retry its retired plan.
+
+Lossless native binary-log discovery
+-----------------------------------
+
+The ordinary MariaDB catalog reader now uses
+``mysql_family.mariadb_binlog_events.read``. It requires the rebuilt pinned
+connector's checked-fetch and ``cdeadmin_lossless_text`` cursor support.
+No SET NAMES/character_set_results mutation, replacement-character decoding or
+silent fallback occurs. The opt-in flag is restored in ``finally``. Without
+that opt-in, actual UTF-8 decoding failures propagate as UnicodeDecodeError
+from fetchone/fetchmany/fetchall rather than SystemError or end-of-results.
+Native binary fields keep bytes; valid UTF-8 remains text.
+
+Each binary-log-event retains native log/position/type/server/end-position
+facts. ``info`` is text or a base64/data/byte_length envelope;
+``info_representation`` distinguishes native UTF-8 text, native binary and
+undecodable native UTF-8 bytes. ``info_native_field`` retains the driver field
+metadata. Do not render an envelope as a hex/text guess. Event resource IDs
+and ``navigator_parent_resource_id`` remain under the observed binary log.
+Each log's ``event_observation`` separately reports complete/truncated/limit
+(200), retry and charset-change facts. The reader requests 201 rows to detect
+truncation. Query/native-permission failures remain catalog failure
+observations, never a fabricated empty complete section. This is bounded
+catalog observation, not complete binary-log archival/replay. Rebuild the
+connector with ``tools/cdeadmin_build_mariadb_driver.py`` and the reviewed
+patch; its source and wheel provenance are retained with qualification.
+
+DuckDB original-session SET ALIAS hook
+-------------------------------------
+
+``editor_attachment_review_rename`` is an additional typed descriptor in the
+existing ``duckdb_editor_operation`` contract. It maps to fixed transport
+``duckdb_attachments`` with ``operation=review`` and draft
+``{action: rename, alias, new_alias, dependent_sql_confirmed}``.
+Both aliases are exact text and acknowledgement must be true. Existing
+``editor_attachment_apply``/``receipt``/``discard`` routes and exact old-alias
+confirmation/review ID/digest remain in use. The existing execute, administer
+and registered-filesystem permissions and original retained session lock apply.
+The registered original catalog and internal catalogs cannot be renamed;
+foreign attachment types and existing destination aliases are refused. Native
+alias comparison folds ASCII only, preserving non-ASCII distinctions.
+
+The backend compiles native ``ALTER DATABASE old SET ALIAS TO new``; it never
+renames a physical file. Review/apply fence original route/catalog identity,
+full attached namespace, file identity, current native transaction ID, observed
+catalog definitions and native dependency rows. Catalog capture is bounded to
+20,000 resources/dependencies and 8 MiB. A transaction, metadata, dependency,
+namespace or file change refuses the one-use review before dispatch. The
+public ``alias_review`` includes descendant identities, stored SQL source
+hashes and native dependency observations without exporting source text.
+Native dependency tables cannot enumerate every external/dynamic SQL reference.
+
+Native alias changes survive rollback. Stored SQL is not rewritten, so old
+references may fail; some views remain executable. These are native effects,
+not guarantees inferred from SQL text. ``dependent_sql_confirmed`` explicitly
+acknowledges that limitation. Successful receipts expose ``new_alias``,
+``invalidate_resource_ids`` and ``refreshed_descendant_identities`` for the UI
+team to invalidate the complete old subtree and reload its new identities.
+They also report ``physical_file_renamed=false``,
+``stored_sql_rewritten=false``, ``alias_restored_by_rollback=false``, native
+acknowledgement and separate rediscovery verification. A completed/uncertain
+receipt is read without redispatch. Only the caller commits/rolls back its
+pending database work; that decision cannot restore the old alias. Design
+bindings referring to old catalog identities are marked ``suspect`` in the
+authoritative ``designs.db`` binding table, scoped by engine, endpoint and
+database target, including bindings through stable resource-identity UUIDs.
+The native dispatch-receipt publisher records this notice before executing
+SET ALIAS; failure to record the notice prevents native dispatch. Native
+refusal or uncertainty can therefore leave bindings conservatively suspect
+until confirmed. A UUIDv7 ``catalog_binding_notice`` runtime row deduplicates
+the native review ID durably; receipt reads, replay and process recreation
+cannot undo a later explicit binding confirmation. This notice does not create
+or alter DDN design versions or silently reassign target references.
+``binding_notice`` reports its recorded ID and affected-binding count. The UI
+uses the existing explicit binding-confirmation workflow to choose the desired
+new reference; native acknowledgement, binding notice and rediscovery remain
+separate observations. Anonymous volumes owned by the shutdown qualification
+fixture are recorded and their deletion is verified along with container exit.
+
+MariaDB recovery, caches, replication resets and sequence options
+================================================================
+
+This backend increment addresses ``MA-AUDIT-XA-RECOVERY``,
+``MA-AUDIT-KEY-CACHE``, ``MA-AUDIT-ALL-CHANNELS`` and
+``MA-AUDIT-SEQUENCE-FIELDS``. Its native reference is MariaDB 12.2.2 on
+Linux; human presentation and Windows/macOS qualification remain separate.
+Native acknowledgement, handler success, postcondition observation and cleanup
+are separate receipt facts. None establishes an atomic external-writer fence.
+
+The fourteen new server operations are declared in MariaDB's
+``operations.json`` and served by the existing visual-administration
+validate/plan/apply routes. Submit the exact observed server resource and typed
+draft; preserve the returned plan ID/digest and native identity/observation.
+Apply the retained plan once with confirmation. The shared facade retires a
+submitted plan after failure or uncertainty; never reconstruct it for replay.
+These operations own independent, unpooled connections and refuse a borrowed
+query session. They never commit or roll back the caller's pending work.
+
+* ``inspect_prepared_xa`` uses native ``XA RECOVER FORMAT=RAW``. Binary global
+  and branch identifiers are uppercase hexadecimal strings with explicit byte
+  lengths; never decode them as text. ``commit_prepared_xa`` and
+  ``rollback_prepared_xa`` require ``gtrid_hex``, ``bqual_hex`` (possibly empty),
+  canonical decimal-text ``format_id``, the exact server ``confirmation`` and
+  an external coordinator ``decision_reference``. Native SQL admits format IDs
+  0 through 2147483647; recovery can observe externally supplied IDs beyond
+  that range, which this native SQL interface cannot resolve. The decision
+  reference records the instruction, not proof of a global distributed commit
+  decision. Review/apply rechecks branch presence and native execution identity;
+  it cannot prove an XID has not been reused. Show ``xa_observation`` and
+  separate connection-release/native error facts. A still-associated prepared
+  transaction may be refused by native resolution from another connection.
+* ``inspect_key_caches`` reads native ``information_schema.KEY_CACHES``,
+  including configured names, segments and runtime counters;
+  ``inspect_key_cache`` reads a selected prefix's six exact decimal-text values.
+  ``configure_key_cache`` selects one of ``key_buffer_size``,
+  ``key_cache_block_size``, ``key_cache_division_limit``,
+  ``key_cache_age_threshold``, ``key_cache_file_hash_size`` and
+  ``key_cache_segments``, with ``value_mode=VALUE`` plus unsigned decimal-text
+  ``value``, or explicit native ``DEFAULT``. ``release_key_cache`` sets a named
+  buffer to zero; default-cache release is refused. These are runtime settings,
+  not server-configuration persistence or cache-content proof.
+* ``assign_index_cache`` and ``preload_index_cache`` accept a typed ``tables``
+  grid of database/table identities (at most 32), optional ``index_selection``
+  rows with zero-based ``table_index`` and exact ``index_name``, and either
+  exact ``partitions`` or ``all_partitions`` for a single table. Preload alone
+  accepts per-table ``ignore_leaves``. Assignment selects ``cache_name``;
+  preload deliberately has no cache selector because native LOAD uses the
+  existing native assignment. Both compile one native batch statement, rather
+  than an application execution loop. Only visible MyISAM base tables qualify.
+  Show native handler rows and warnings: command acknowledgement alone does
+  not mean every table returned status OK. Native definitions/indexes/partitions
+  are rechecked, without pretending their hashes establish object generations.
+* ``start_all_replicas`` and ``stop_all_replicas`` compile native START/STOP ALL
+  SLAVES with ``threads=ALL|IO_THREAD|SQL_THREAD``. They do not loop through
+  named channels. Before/after topology excludes passwords and mutable health
+  counters; acknowledgement does not prove healthy or caught-up replication.
+  ``reset_default_replica`` explicitly addresses the empty native connection
+  name, independent of default_master_connection, and optionally removes its
+  configuration with ``remove_configuration`` plus
+  ``configuration_loss_confirmed``. Named-channel reset remains separate.
+* ``reset_binary_logs`` issues RESET MASTER, optionally TO an exact positive
+  decimal-text ``next_log_number`` through 2147483647. Require
+  ``history_loss_confirmed`` and typed server confirmation. Show irreversible
+  replica/backup history loss before apply; native gtid_slave_pos is not reset
+  by this operation. ``reset_query_cache`` issues native RESET QUERY CACHE.
+  These global effects cannot be rolled back or automatically retried.
+
+Cache and replication/reset results use ``management_observation`` with
+``before``, ``after``, native result columns/rows, bounded native warnings,
+``native_acknowledged`` and separate ``native_reported_success``. Review
+identity/topology changes refuse mutation before dispatch; observation budgets
+refuse incomplete results instead of manufacturing complete empty lists.
+
+Sequence create/alter now have explicit typed operation descriptors and the
+shared sequence-family form. All integer values use exact decimal text so an
+unsigned BIGINT bound survives JSON/JavaScript transport. ``integer_type``
+selects TINYINT, SMALLINT, MEDIUMINT, INT or BIGINT; ``unsigned`` requires an
+explicit type. Native ALTER AS must be reviewed separately from other sequence
+options, as MariaDB forbids combining them in one ALTER; the compiler refuses
+that combination instead of silently splitting independently committed changes.
+Start, increment, cache and cycle intent remain native options;
+``minimum_mode``/``maximum_mode`` select PRESERVE, VALUE or NATIVE. NATIVE emits
+NO MINVALUE/NO MAXVALUE, rather than a guessed numerical default. Cycle intent
+is PRESERVE/CYCLE/NOCYCLE. Alter can select one exact ``restart`` or
+``restart_initial``, requiring the sequence's exact name as ``confirmation``.
+Native limits, clamping and impossible bound combinations remain native
+admission decisions. In the reference runtime, ALTER AS BIGINT UNSIGNED followed
+by NO MAXVALUE reads back 9223372036854775806; creating an unsigned BIGINT with
+an explicit bound supports 18446744073709551614. Do not infer a reset bound
+from SHOW CREATE's type spelling or emulate a different default: show the native
+readback. No NEXTVAL is used for discovery or verification. DDN
+``mariadb_change`` sequence alters use the same option compiler while retaining
+the unchanged native definition/context precondition; old minvalue/maxvalue
+intent keys remain accepted there. Native DDL has independent commit effects.
+
+SQLite capture and artifact descriptor handoff
+=============================================
+
+``SQ-DESC-02`` supplies typed descriptors for the existing native capture and
+artifact backend. This does not replace it with stubs or implement a new UI.
+The existing ``sqlite_editor_operation`` describe contract now includes:
+
+* ``editor_capture_*``: inventory, open, attach, status, configure,
+  object_config, diff, table_filter and close on the original retained handle.
+  Explicit ALL modes map table/pattern selection to native null; exact mode
+  requires a name/pattern. PRESERVE/ON/OFF switches avoid silently changing
+  unspecified enable/indirect state. Native object configuration must precede
+  attaching the first table. Closing requires confirmation and discards
+  unexported capture state, not pending caller SQL.
+* ``editor_export_*``: review the selected retained capture and native
+  changeset/patchset format, then start/list/status/cancel/files/reconcile/remove
+  the owned durable export. The original session identity is supplied by the
+  envelope at review. No replacement database connection is substituted.
+* ``editor_apply_*``: catalog, sources, review, start, list, status, cancel,
+  files, reconcile, remove_artifact, conflict and decide. Review carries an
+  owned source target/job/path/kind and typed options; independent file apply
+  has its own transaction and commit receipts. Conflict policy has a separate
+  choice per native kind; replacement is offered only for DATA/CONFLICT.
+  Interactive decisions carry the exact callback challenge, bounded native
+  choice and remember-kind Boolean, never arbitrary JSON or SQL.
+* ``editor_transform_*``: catalog, schemas, sources, review and the same
+  durable job controls. A typed ordered input grid identifies native
+  capture/upload/transform/diff/rebase artifacts; no application-host file path
+  is accepted. Native invert/concat/merge/rebase, optional schema basis and
+  automatic/changeset/patchset output preserve their native compatibility rules.
+* ``editor_inspection_*``: catalog, separate review_page/review_cell/
+  review_extract forms, start/list/status/cancel/files/result/reconcile/removal.
+  Exact decimal text preserves record/byte offsets. Each mode sends only its
+  native operands; bounded previews never claim to validate an unvisited suffix
+  or turn byte values into guessed text.
+* ``editor_diff_*``: catalog/tables and review/start/list/status/cancel/files/
+  reconcile/removal. A disposable native capture compares exact attached source
+  and destination tables on the original retained handle, preserving existing
+  captures, pending SQL and savepoints. It does not apply the resulting file.
+* ``editor_upload_*``: catalog, create, checksum-bounded chunk, seal and durable
+  job controls. File lengths/offsets remain decimal text. Native iterator
+  validation and SHA-256 receipts precede eligibility as an apply/transform input.
+* ``editor_delivery_*``: export/apply/transform/inspection/diff/upload and
+  conflict_value typed binary delivery. The adapter returns ``binary_delivery``
+  with a fixed existing workspace form action and bounded payload. POST that
+  action and JSON-encoded payload as form data to the same authenticated
+  workspace URL; never send file bytes through the JSON task response. The
+  existing binary route independently checks owner, endpoint, target, receipt,
+  exact artifact path/hash and conflict challenge/side/column. Delivery is
+  limited to 4096 UTF-8 payload bytes and accepts no host filesystem path.
+
+The 79 added SQLite operations use fixed transports in
+``sqlite_capture_descriptors.py``; the combined editor contract contains 103
+operations including the previous retained schema/receipt, preupdate, array and
+extension tasks. All require an owned registered database target; original
+session actions also require its live session. Native job managers retain
+ownership, permission, runtime-helper, exact source identity and review-digest
+checks. No client-supplied transport, native pointer, opcode or callback code is
+accepted. A separate ``no_deadline`` choice maps to native null only where
+operator runtime policy permits it. Start requires exact job ID, review digest
+and confirmation. Completed/uncertain job receipts never imply replay authority.
+Display native stage/result/worker-release facts and explicit commit-returned
+receipts; cancellation, exported changes and verified files do not establish
+that the original transaction committed. Schema/source compatibility and native
+helper availability remain per-operation admission checks, not descriptor-only
+completion claims. Frontend form integration and human/platform acceptance
+remain with their owning teams.
+
+PostgreSQL native application-host utilities
+==========================================
+
+Five backend utility workflows are supplied for the PostgreSQL 18 native-tool
+interface: ``PG-AUDIT-UTILITY-PG_CONTROLDATA``,
+``PG-AUDIT-UTILITY-PG_WALSUMMARY``, ``PG-AUDIT-UTILITY-PGTESTTIMING``,
+``PG-AUDIT-UTILITY-PGTESTFSYNC`` and ``PG-AUDIT-UTILITY-PG_CHECKSUMS``.
+They are application-host tools, independent of a connected SQL session and
+of the registered server's network location. They do not start, stop or
+implicitly modify the registered remote server. Tool major-version admission
+is explicit; other native major versions and platform qualification must not
+be inferred from this interface's Linux receipts. This work leaves the
+PostgreSQL provider-tree migration and inherited SQL/tool behavior intact.
+
+Operator admission and paths
+----------------------------
+
+The application operator configures
+``CDEADMIN_POSTGRESQL_HOST_BINARY_PATH`` (otherwise the continuity tool
+directory is used), ``CDEADMIN_POSTGRESQL_HOST_TOOL_ROOT`` (durable job files)
+and ``CDEADMIN_POSTGRESQL_HOST_TOOL_MANIFEST`` (an absolute manifest filename).
+The manifest's format is ``scratchrobin.postgresql.host-tools@1``. Its
+``grants`` array contains exactly one matching ``endpoint_id`` for admission;
+that row may contain ``clusters``, ``summary_files`` and ``benchmark_roots``.
+Each entry has a bounded stable ``id`` and an exact absolute ``path``. Cluster
+entries may additionally declare ``tablespaces`` as exact native ``oid`` /
+absolute ``path`` pairs. Browser drafts never supply host paths or executables.
+A minimal operator grant has this shape::
+
+    {
+      "format": "scratchrobin.postgresql.host-tools@1",
+      "grants": [{
+        "endpoint_id": "<registered endpoint UUID>",
+        "clusters": [{"id": "offline_main", "path": "/operator/offline/main"}],
+        "summary_files": [{"id": "summary_1", "path": "/operator/summary.native"}],
+        "benchmark_roots": [{"id": "scratch_disk", "path": "/operator/scratch"}]
+      }]
+    }
+
+Admission requires an owned native PostgreSQL registration, ScratchRobin
+``backup_admin`` permission, and independently computed application-host
+Administrator authority. The HTTP handler derives that authority from the
+current authenticated user and server mode; it is not a draft Boolean. These
+requirements do not replace OS permissions: tools run as the application's
+native OS identity, which must already have access to the granted offline
+files. No implicit elevation, remote-shell command, replacement database
+connection, inherited PGDATA or client executable path is used.
+
+Manifest identity, selected native files, native tool version/hash, execution
+hostname/platform/OS identity and exact options are bound into the server-owned
+review. Replacing input files or changing grants/paths/runtime/configuration
+requires a fresh review. A cluster version marker must match the admitted
+native tool major. Unexpected symbolic links, nonregular inputs and oversized
+observations are refused. Checksum scan roots also refuse hard-linked files;
+external tablespaces require explicit matching OID/path grants. Job storage
+cannot be placed inside the selected database cluster. Snapshots and managed
+resource leases do not establish an atomic fence against unrelated native
+writers, external starts or other application instances using another store.
+
+Typed task transport and outcomes
+---------------------------------
+
+These five ``host_pg_*`` entries in PostgreSQL ``operations.json`` are task
+forms, not generic visual-admin SQL commands. Database-scoped workspace URLs
+and database-target envelopes are refused: these host/whole-cluster operations
+are admitted only from the server workspace. Use the owned server workspace
+HTTP endpoint with ``action=postgresql_host_tools`` and ``request`` containing:
+
+* ``stage=describe``: obtain the typed descriptor inventory, fixed stage names,
+  permissions, host scope and no-retry contract.
+* ``stage=catalog``: obtain only the endpoint-granted cluster, summary-file and
+  scratch-root identities, manifest SHA-256 and actual installed native-tool
+  availability/version/build hash. Missing tools are unavailable, not empty
+  successful results. A granted file's accessibility remains review admission.
+* ``stage=review``, ``operation_id`` and ``draft``: submit one descriptor's
+  typed fields. The backend returns an opaque ``job_id`` and ``review_digest``,
+  native program/host/source observations, expiry and consequences.
+* ``stage=start`` with that ``job_id``, ``review_digest`` and ``confirmed=true``:
+  claim exactly one native dispatch. No draft, SQL, argv or path is accepted at
+  this stage. Repeated submission returns the existing receipt and never
+  repeats the process.
+* ``stage=status`` or ``cancel`` with ``job_id``; ``stage=list`` with bounded
+  ``offset``/``limit``: read owned durable receipts or request cancellation.
+  Revoking a manifest grant does not prevent reading/cancelling an existing
+  receipt; it prevents newly admitted native execution.
+* ``stage=reconcile`` with ``job_id``: after the worker stops, independently
+  inspect the original durable native process reference and release its managed
+  lease/owned temporary input only after confirmed termination. Reconciliation
+  never changes an uncertain native operation into success and never replays it.
+
+The worker records native dispatch admission before invocation. A durable
+resource lease remains after an unknown process outcome, preventing another
+managed invocation on that resource until reconciliation. Independently
+confirmed termination is monotonic even when cancellation races the worker's
+exception write. The native process guardian also protects parent-process
+loss. Receipts distinguish native return code, native success, bounded report
+completeness, process termination, temporary-file cleanup and lease release.
+Terminal states include ``completed``, ``partial`` (native success with incomplete report,
+verification or cleanup), ``failed``, ``cancelled``, ``not_dispatched`` and ``unknown``.
+Native return code zero does not establish application-data correctness.
+Cancellation/timeout or a missing acknowledgement never proves rollback.
+All five workflows report no borrowed SQL session or caller commit/rollback.
+
+Each stdout/stderr stream is bounded to 1 MiB, with separate truncation flags;
+the native process remains supervised while output is drained. The native
+supervisor timeout is 1--3600 seconds and does not purport to bound every
+filesystem metadata preflight. Progress and the original native process
+reference remain in the durable receipt. Native tool/manifest/source observations
+are rechecked at start and immediately before dispatch, under the managed
+resource lease. A submitted uncertain job remains retired even if later
+readback shows the requested effect.
+
+Individual native operations
+----------------------------
+
+``host_pg_controldata`` accepts ``cluster_id``, exact cluster-ID
+``confirmation`` and ``timeout_seconds``. It invokes native pg_controldata
+against the granted cluster, returning the raw report and string-valued
+``control_fields``. Large system identifiers remain exact strings. Inspection
+is read-only; a report is not an atomic live-cluster snapshot or a health /
+recovery certificate. It can inspect a locally available cluster without
+connecting to the registered network server.
+
+``host_pg_walsummary`` accepts a typed string grid ``summary_ids`` (1--100
+ordered distinct identities), ``individual``, ``quiet``,
+``confirmation="WAL summaries"`` and timeout. Every file is regular,
+SHA-256-bound and copied into a private owned snapshot before the one native
+pg_walsummary invocation. Input limits are 64 MiB per file / 256 MiB aggregate.
+Native format errors remain failed native receipts, separate from stale-input
+refusal. Quiet mode is passed to the native tool without rewriting its output:
+the qualified runtime still prints relation-limit records in quiet mode, even
+though block lists are suppressed. Do not infer empty output from the switch.
+Parsed files do not prove producer identity or association with a remote
+registered server. Temporary snapshots are removed only after safe cleanup.
+
+``host_pg_test_timing`` accepts ``duration_seconds`` (1--60), timeout and exact
+application-host hostname confirmation. It runs the native timing loop and
+returns its report, histogram and native execution identity. It measures this
+application host, not database-server timer overhead. There is no SQL or
+engine transaction in this workflow.
+
+``host_pg_test_fsync`` selects an operator-granted ``scratch_id``,
+``seconds_per_test`` (1--60), timeout and exact application-host hostname.
+The backend creates a fresh private subdirectory and native test filename in
+that granted filesystem; existing files are never selected as the native
+output. Native seconds per test is not the total duration: the utility runs
+multiple native test families. The report describes the recorded host and
+scratch filesystem only. Confirmed process termination precedes temporary-file
+cleanup; uncertain native I/O leaves the owned scratch and lease for explicit
+reconciliation. Cleanup checks the recorded directory identity and job marker
+and cannot remove a replacement directory.
+
+``host_pg_checksums`` accepts exact ``cluster_id``/confirmation,
+``mode=CHECK|ENABLE|DISABLE``, optional canonical decimal-text ``filenode``
+(CHECK only, native range 0--2147483647), ``progress``, ``verbose``, ``sync``,
+``sync_method=fsync|syncfs`` and timeout. syncfs is admitted only on the qualified
+Linux host interface; it can synchronize the containing filesystem, not only
+one cluster file. ``offline_quiescence_confirmed`` is mandatory for every mode;
+ENABLE/DISABLE additionally require ``checksum_change_confirmed``. Disabling
+sync for a mutation requires ``unsafe_no_sync_confirmed``. The backend never
+silently stops a server or discards a postmaster PID file.
+
+The selected cluster must have no postmaster.pid and native control-data state
+``shut down`` or ``shut down in recovery``. Control identity plus bounded file /
+directory metadata fingerprints across native global/base/table-space scan
+roots are checked again before dispatch. External table-space links must match
+explicit grants and the native catalog-version directory. Every admitted scan
+file must be regular and unshared; the observation budget is 100000 entries.
+These metadata checks supplement the native utility's own CRC, page-size,
+control-version, shutdown and checksum-state admission; they are not a
+content hash of all database data or an external-writer lock.
+
+The receipt separately reports checksum mutation intent, raw native scan/result
+output, native control-data readback and no rollback availability. Filenode
+selection does not prove that a relation exists: native success after scanning
+zero files is not a table-integrity certificate. ENABLE can write many pages
+before changing the control flag; an error or lost acknowledgement may leave
+partial changes even if that flag is unchanged. Preserve an unknown outcome,
+keep external starts/writers inhibited, reconcile the process and inspect native
+state before deciding what to do next. Reopening and independently reading an
+owned cluster, rather than a flag alone, qualifies the recorded positive cases.
+Human UI integration/presentation and Windows/macOS acceptance remain separate.
+
+Firebird embedded local administration: ten native service adapters
+------------------------------------------------------------------
+
+The following original audit gaps now have explicit local-only adapters:
+``FB-EMB-set_access_mode``, ``FB-EMB-set_page_cache_size``,
+``FB-EMB-set_sweep_interval``, ``FB-EMB-set_space_reservation``,
+``FB-EMB-set_write_mode``, ``FB-EMB-set_sql_dialect``,
+``FB-EMB-set_replica_mode``, ``FB-EMB-remove_linger``,
+``FB-EMB-sweep_database`` and ``FB-EMB-validate_database``.
+They extend the previously qualified ``database_statistics`` adapter; they do
+not enable the remaining network-only Services operations on embedded routes.
+
+Use the existing authenticated server workspace ``visual_admin_catalog``,
+``visual_admin_validate``, ``visual_admin_plan`` and ``visual_admin_apply``
+actions. Select the discovered database resource on a verified
+``firebird-embedded`` registration. The shared Firebird operation descriptors
+and typed fields are reused; the embedded catalog removes ``server_service``
+workspace scope and labels these tasks local. Do not route them through a
+network Services credential form or accept a filesystem filename from a
+separate client field. The provider route owns the approved absolute filename
+and filesystem root. The provider requires ``embedded_runtime`` and
+``filesystem``; the common operation requires ``administer`` and its declared
+``maintenance_admin`` grant. Native Firebird authorization remains decisive.
+No network password, credential reference, wire configuration or remote host
+is acquired or accepted by the local Services adapter.
+
+.. list-table:: Typed local selections and native observation scope
+   :header-rows: 1
+
+   * - Operation
+     - Draft fields (optional ``role`` on each)
+     - Native behavior and qualification
+   * - ``set_access_mode``
+     - ``mode``: ``READ_ONLY`` or ``READ_WRITE``
+     - Native property setter; independently reopened ``DB_READ_ONLY``.
+   * - ``set_page_cache_size``
+     - Required integer ``page_buffers``, 0..2147483647
+     - Native stored cache setting; reopened ``SET_PAGE_BUFFERS``. Do not
+       equate this with a live attachment's actual cache allocation.
+   * - ``set_sweep_interval``
+     - Required integer ``sweep_interval``, 0..2147483647
+     - Native interval setter; reopened ``SWEEP_INTERVAL``.
+   * - ``set_space_reservation``
+     - ``mode``: ``USE_FULL`` or ``RESERVE``
+     - Native header reservation setting; reopened ``NO_RESERVE``.
+   * - ``set_write_mode``
+     - ``mode``: ``ASYNC`` or ``SYNC``
+     - Native write-mode setter; reopened ``FORCED_WRITES``. No claim that
+       application acknowledgement proves hardware durability.
+   * - ``set_sql_dialect``
+     - ``sql_dialect``: exact string ``1`` or ``3``
+     - Native database dialect setter; reopened ``DB_SQL_DIALECT``. Changing
+       this property does not convert existing stored objects or data types.
+   * - ``set_replica_mode``
+     - ``mode``: ``NONE``, ``READ_ONLY`` or ``READ_WRITE``
+     - Native replica property; reopened ``REPLICA_MODE``. This operation
+       does not provision a replication topology or configure its transport.
+   * - ``remove_linger``
+     - No fields other than optional ``role``
+     - Native ``no_linger`` acknowledgement for current runtime linger.
+       Persistent ``RDB$DATABASE.RDB$LINGER`` is preserved. There is no native
+       runtime getter: display effect-unobserved, not a fabricated zero or
+       promise that peer locks have been released. The shared presentation
+       descriptor retains its ``draft`` status for that observation limit;
+       the embedded backend adapter is implemented and natively acknowledged.
+   * - ``sweep_database``
+     - Optional ``parallel_workers``, integer 1..128
+     - Native sweep, including the native Firebird 5 parallel-worker request.
+       A pending original SQL transaction remained pending and invisible to
+       independent attachments; the service never commits it for the caller.
+   * - ``validate_database``
+     - Optional ``include_table``, ``exclude_table``, ``include_index``,
+       ``exclude_index``; optional integer ``lock_timeout``, -1..86400
+     - Native online validation, preserving bounded output and its truncation
+       flag. A completed call is not a declaration that every database page
+       was checked when filters were supplied. It performs no repair action.
+
+For short header operations on a database without LINGER, active physical
+backup or auxiliary files, the Linux adapter pins the reviewed device/inode
+with an application-created private hardlink for the native action and
+service release. A native maintenance attachment checks these conditions,
+using the operation's SQL role and suppressing database triggers. Managed SQL
+attachment admission for that inode is held until the private alias is released.
+Long sweep/validation tasks, unavailable SQL attachments and filename-sensitive
+database states use the canonical filename with a retained file descriptor and
+identity recheck instead. Those results report
+``file_identity_race_fenced=false``: a filesystem administrator can replace a
+filename after its final check. This scope does not promise protection from
+concurrent changes made outside ScratchRobin. Canonical handling preserves
+native default delta filenames and prevents LINGER retaining a deleted alias.
+Engine13
+uses native file identity for database locks. Native qualification verifies
+that a service through this alias preserves an original-path SQL transaction,
+and that replacing the public filename immediately before dispatch changes
+only the pinned original, leaving the replacement database unchanged. The
+alias is removed on normal and interrupted paths. These are administration
+aliases, not backup copies; no user-selectable alias path is accepted.
+Windows/macOS mutations are refused until their file-pinning adapters are
+qualified. Read-only statistics retains its separately documented platform
+behavior. No other platform or Firebird version was qualified by this batch.
+
+Review retains exact typed options, local target identity and application-local
+execution scope. Submit only the returned plan ID/digest and confirmation to
+Apply. Common retained plans are consumed once, including failed or uncertain
+submissions. Native dispatch does not reconnect/replay, commit or roll back an
+unrelated editor transaction. The adapter reports ``native_provider=Engine13``,
+``execution_host=application-local``, ``network_authentication=false``,
+``reviewed_file_identity``, ``file_identity_race_fenced`` and separate
+``service_release`` flags. These Services calls have no native CLI process exit
+code; ``native_utility_exit_code_observed`` remains false. Native output,
+acknowledgement, post-state observation and cleanup are distinct evidence.
+A missing response after native dispatch remains unknown, even when a later
+independent property read observes the requested value. Retire the review;
+never automatically retry it. Refresh the property inspector after a confirmed
+setter response, and show the backend operation record on uncertain responses.
+
+``tools/cdeadmin_firebird_local_administration_qualification.py`` qualifies the
+ten adapters sequentially on owned Engine13-only Firebird 5.0.4 fixtures, using
+an isolated writable runtime capture, immutable input-runtime fingerprint,
+Unicode database filenames and the shared review/apply facade. The original
+network SQL/compiler proof is not transferred into a claim of embedded native
+service qualification. The separate embedded contract gate refreshes attachment,
+SQL-equivalence and monitoring evidence against the current source bindings.
+Human form acceptance and Windows/macOS qualification remain external;
+ScratchBird history qualification remains owner-deferred and is not run.
+
+Embedded availability: shutdown and recovery
+------------------------------------------
+
+The embedded database catalog surfaces ``shutdown_database`` and
+``bring_online`` through the shared Firebird descriptors. They use the local
+Engine13 Services attachment, never a remote server or network credential.
+Shutdown accepts ``mode`` (MULTI, SINGLE, FULL), ``method`` (FORCED,
+DENY_ATTACHMENTS, DENY_TRANSACTIONS), integer ``shutdown_timeout`` (0..32767),
+optional ``role`` and the descriptor's textual ``confirmation`` attention field.
+Bring-online accepts ``mode`` (NORMAL, MULTI, SINGLE) and optional ``role``.
+The shared Apply request still requires confirmation of the retained review.
+
+Both operations retain ``workspace_scope=server_service`` so the generic
+workspace builds a target from an authorized registered database without SQL.
+For embedded registrations this scope describes workspace discovery, not a
+network transport. The UI requests the workspace with ``database_target_id``
+and ``focused_operation_id=bring_online`` (or ``shutdown_database``); the
+returned target has ``extensions.cdeadmin.service_scope_only=true``. Pass that
+target to the existing ``visual_admin_validate`` and ``visual_admin_plan``
+actions, then submit the returned plan ID/digest to ``visual_admin_apply``.
+This path remains reachable after FULL shutdown rejects ordinary SQL. Server
+authorization and stored route configuration remain authoritative.
+
+Show the native availability warning, including forced attachment termination,
+pending-work loss and the need to inspect state after any native failure.
+SINGLE/FULL shutdown during physical backup is refused by the engine; the
+application never silently ends backup or retries shutdown. Successful
+service acknowledgement, independent observed shutdown mode and released
+service handles are separate evidence. Failed dispatched calls remain unknown
+and consume their review. Responses use ``Cache-Control: no-store``.
+
+The local availability qualifier covers all nine shutdown mode/method pairs,
+FULL SQL refusal and read-only header observation, online transitions, pending
+transactions, native physical-backup refusal, valid MULTI shutdown during backup
+and persistent LINGER filename behavior on owned Linux Engine13 5.0.4 fixtures.
+Other versions, human form acceptance and native Windows/macOS qualification
+are not established by that evidence.
+
+Firebird native target review and stale-plan refusal (FB-AUD-01)
+--------------------------------------------------------------
+
+The generic Firebird client now retains an internal native target binding for
+mutations of existing database/catalog objects. It combines the native database
+GUID and file ID with each selected catalog record's DB_KEY and native record
+transaction number; child columns and packaged routines also bind their parent.
+A DB_KEY alone is not treated as a permanent identity. Numbered shadows bind
+all of their native RDB$FILES records. The implementation selects fixed native
+catalogs and binds object names as parameters; it never derives SQL catalogs or
+identifiers from client-supplied guard fields.
+
+Existing ``visual_admin_plan`` and ``visual_admin_apply`` hooks are retained.
+The preview adds ``native_target_revalidation_required=true``. The complete
+binding remains in the server-owned one-use plan, not an editable form field
+or an Apply argument. Apply rechecks the binding on the executing connection.
+An absent/replaced/changed target returns the existing HTTP 409
+``PROVIDER_OPERATION_REJECTED`` receipt, with stage ``provider_rejected``,
+``unknown_outcome=false`` and an explicit refresh/review message. Refresh the
+native catalog and request a new review; do not retry the consumed plan or
+silently select another object with the same name. A native response failure
+after dispatch retains the existing conservative unknown-outcome/no-retry
+receipt and numeric native diagnostics.
+
+Owned metadata operations use an independent SNAPSHOT transaction with native
+autocommit disabled. Borrowed sessions must already provide a compatible native
+SNAPSHOT transaction without endpoint autocommit; the backend never commits,
+rolls back, reconnects or changes the isolation of a caller transaction merely
+to satisfy a metadata precondition. An incompatible borrowed transaction is
+refused before mutation. Offer an explicitly reviewed independent operation
+rather than silently moving a user's work to a different connection. Successful
+borrowed DDL still uses the native task savepoint and remains caller-owned.
+The database-drop driver API also checks the reviewed database identity on the
+actual attachment it will drop, and retains failed release ownership when
+cleanup cannot be confirmed.
+
+``tools/cdeadmin_firebird_metadata_guard_qualification.py`` uses an isolated
+Firebird 5.0.4 runtime, disposable database files and its own loopback network
+listener. It exercises embedded and network native review/apply, same-name table
+replacement before Apply, replacement after the preflight read, unchanged-target
+DROP, all 21 catalog identity selectors, packaged routine parents, pending caller
+DML with transactional DDL/rollback, raced and fresh table grants, and replaced
+and fresh native database drops. Declared external-function/filter fixtures
+qualify catalog record identity only; their library callbacks are not loaded or
+claimed as functional native plugins.
+
+This correction does not close the full FB-AUD-01 investigation by itself.
+The native table DROP and recorded table-grant races are covered; the remaining
+mutation variants still require their native race matrix. A SNAPSHOT catalog
+read is not a universal lock on unrelated catalog writes. User administration
+and global authentication mappings act through external/security-database
+interfaces, so this catalog binding is not represented as their native identity
+protocol. DDN schema application retains its separate review/precondition path.
+Full task completion must retain these limits rather than extrapolate from the
+successful table/drop or selector checks. Human form acceptance and other
+platform qualification remain external.
+
+Embedded copied-database fixup
+-----------------------------
+
+``database.fixup_database`` is surfaced for the embedded profile through the
+shared Firebird operation descriptor. It accepts ``fixup_flags`` (empty or
+``["SEQUENCE"]``), optional ``role`` and textual ``confirmation``. Select the
+registered offline copied database through the attachment-free workspace using
+``focused_operation_id=fixup_database`` and its ``database_target_id``. The
+normal validate/plan/apply actions bind the approved filesystem route and inode.
+No SQL attachment is opened to the copy before native NFIX. The Linux raw-file
+adapter holds a private inode alias and blocks new managed SQL attachments for
+that inode until native completion and service release.
+
+This operation requires an offline filesystem copy made during native backup
+mode. It does not copy a running database, shut down another server or secure
+exclusive access against external processes. The descriptor's offline warning
+must remain visible. Native NFIX resets the GUID/replication identity by default;
+SEQUENCE requests preservation. ``restore_policy_requested`` describes the
+request, not an independently observed replication counter. The owned Linux
+5.0.4 qualifier directly observes default GUID reset and SEQUENCE GUID
+preservation, data retention, one-use reviews and native refusal on a normal
+primary. Nonzero replication-counter qualification remains in the replication
+acceptance work. A native failure is unknown, consumes the review and is never
+retried automatically. A successful response does not qualify the copied
+application's recovery beyond the checks actually performed.
+
+Persistent private Firebird test-data recipes (FB-AUD-08)
+------------------------------------------------------
+
+The test-data tool descriptor publishes ``recipe_read_action=firebird_recipe_read``
+and ``recipe_save_action=firebird_recipe_save``. These workspace actions accept
+an explicit registered ``database_target_id`` for Firebird network or embedded.
+Read accepts optional ``recipe_id`` (default ``default``, 1..64 ASCII letters,
+digits, dots, underscores or hyphens, starting with a letter/digit) and optional
+positive integer ``version``. A missing current recipe returns version zero and
+``recipe=null``. Read returns the server-owned ``scope``; include it unchanged
+inside a saved ``scratchrobin.firebird.test-data@1`` recipe. Existing file recipes
+can add this scope before requesting persistence; do not relabel another format.
+
+Save accepts ``recipe_id``, integer ``expected_version`` (zero for first save)
+and ``recipe``. The recipe has exactly ``format``, ``scope``, uint32 ``seed`` and
+``tables``. It retains the existing Firebird generator sources: default,
+constant, sequential, random-integer, choice, file, existing and generated.
+Bounds are 1 MiB UTF8 JSON, 1..32 tables, 1..1000 rows per table, 5000 total rows,
+1..1000 choice/file values, and 32 nested value levels. Keep fractional and large
+numeric values as exact strings or native typed envelopes; only NULL percentages
+admit fractional JSON numbers. Save checks native user-table/column references
+and insertability without staging rows. Generated references must resolve to
+explicit generated columns with acyclic dependencies. Existing sample values
+and foreign-key validity must be checked again by the native preview/staging
+workflow; a saved draft is not a certificate of current type/FK validity.
+
+Revisions use the existing transactional project-asset repository in the local
+configuration database. Storage keys include owner, engine, endpoint, database
+target and recipe name. Revisions are immutable and historical reads do not
+advance the current revision. A stale expected version returns HTTP409 with
+``info=FIREBIRD_RECIPE_CONFLICT``; refresh before saving again. Other recipe
+refusals return ``FIREBIRD_RECIPE_REFUSED`` and never echo stored sample values.
+All responses are ``Cache-Control: no-store``. Do not replay an uncertain save;
+read the current revision to reconcile it.
+
+Results include ``version``, ``current_version``, ``scope``, ``recipe``,
+``executed=false``, ``requires_native_preview``, ``contains_user_values`` and
+``source_control_eligible=false``. Recipes are private; grants to a different
+project do not share this store. Secret-bearing content is refused, and file,
+choice or constant values remain potentially sensitive personal test data.
+Show that review requirement when loading. Save/load never executes generated
+SQL, opens a test-data transaction, commits an editor transaction or changes the
+existing file import/export workflow. Native row staging and explicit
+commit/rollback continue through the existing dedicated Firebird data session.
+
+Managed Firebird database user trace (FB-AUD-02, partial)
+------------------------------------------------------
+
+The database tool descriptor declares ``database.firebird.trace`` with
+``tab=firebird-trace``, ``workspace_action=firebird_trace`` and
+``describe_action=describe``. The UI group owns that tool's presentation.
+Backend requests use the authenticated workspace endpoint with an explicit
+registered ``database_target_id`` in both the outer workspace payload and
+its ``request``. Every call rechecks ``administer`` on the resource and
+``maintenance_admin`` on the endpoint, plus the provider's transport authority.
+The engine remains authoritative for native trace privileges.
+
+The request's ``action`` selects:
+
+* ``describe``: returns ``scratchrobin.firebird.trace-api@1`` with typed native
+  option fields, bounds, defaults and zero-value meanings. Booleans cover the
+  database trace events, plans, counters, BLR and DYN; UInt32 fields cover the
+  connection filter, duration and native text/argument limits. SQL and GDS-code
+  filters are bounded strings. No file-output or service-audit settings are
+  admitted by this database-scoped workflow.
+* ``review`` with ``operation=start``: accepts optional ``name`` (128 UTF8
+  bytes) and ``options``. The backend observes the native filename, engine
+  version, database GUID and native file ID through an independent read-only
+  SNAPSHOT attachment; it does not borrow the editor transaction. Embedded
+  Linux also compares the approved filesystem inode against the attachment
+  identity to reject stale native filename-cache matches. Only Firebird 5.0.4
+  is admitted by this new configuration profile. The retained payload includes
+  read-only ``native_configuration`` for the operation dialog's SQL/native-plan
+  tab. Apply refuses a review if the current renderer would produce different
+  native configuration; this is a Services plan, not an executable SQL script.
+* ``review`` with ``operation=suspend|resume|stop|release|forget``: accepts an
+  opaque managed ``trace_id``. It never accepts an arbitrary native session ID.
+  These controls do not need a new SQL attachment, so cleanup remains available
+  when the database stops admitting SQL connections.
+* ``apply``: accepts only the returned ``review_id``, ``review_digest`` and
+  ``confirmed=true``. Reviews expire after 300 seconds. A cross-process file
+  lock protects the durable claim before native dispatch. Reusing a review
+  returns its existing receipt and never executes it again. A native target
+  identity change before start is a known rejection without trace dispatch.
+* ``get``: reads an owned review/action receipt by ``review_id``.
+* ``list``: lists this owner's managed traces for this endpoint/target. For
+  live handles it separately observes the native trace session's presence and
+  flags. It does not list or control external native sessions.
+* ``poll``: accepts ``trace_id``, optional nonnegative ``after`` sequence
+  (default zero) and integer ``limit`` (1..200, default 200). Returned lines
+  have ``sequence``, ``text`` and ``truncated``; ``next_sequence`` advances the
+  cursor, while ``delivery_gap`` and ``dropped_lines`` expose overwritten data.
+
+The renderer disables database and service defaults, then enables an escaped
+SIMILAR TO pattern for the observed server-native filename and the verified
+registration attachment selector. Firebird passes an attachment alias to its
+trace plugin even when MON$DATABASE reports a physical filename. The selected
+registration alias is therefore included only after its connection supplied the
+reviewed native GUID/file identity. Unlisted aliases of the same file are not
+guessed or captured automatically; alias case variants are not automatically
+expanded. This is native filename/alias scope, not a permanent inode lock: an
+external administrator can later reassign a filename or alias. Configuration macros, double
+quotes and control characters are refused rather than rendered ambiguously.
+Braces are escaped independently for the native configuration grammar.
+
+Defaults enable connection and initialization events, with SQL/BLR/DYN lengths
+256, argument length 64, argument count 8 and duration threshold zero. Native
+length/count zero means unlimited, not disabled; the backend preserves that
+meaning. All integer options accept the native UInt32 range. Statement,
+routine, trigger, plan, error, warning, context, BLR/DYN or filter capture
+requires ``capture_sensitive=true`` in the reviewed options. Captured SQL,
+arguments and diagnostics can contain sensitive values; no masking guarantee
+is made. Output is private to the authorized owner/target and never published,
+exported to Git or stored as SQL/monitoring history by this workflow.
+
+A private client owns separate reader and control Services connections; driver
+authentication buffers are discarded after attachment and no reconnect occurs.
+The live worker drains timed native output independently of UI polls. Each
+stream retains at most 2000 lines and 1 MiB, clips a single line to 32768 UTF8
+bytes, and stops after 120 seconds without a poll or 3600 seconds total. There
+are at most 16 active traces, four per owner and 32 retained live/finished
+records per process. ``forget`` explicitly discards a finished stream only
+when its owned handles were released. Failed release stays owned and admits
+an explicitly reviewed ``release`` retry; it never replays start or a native
+control to repair an audit write.
+
+Native acknowledgement, observed output, plugin diagnostics, native stop/end
+and handle release are distinct fields. ``capture_success_inferred`` stays
+false: native start can return an ID before a plugin reports configuration
+errors. The worker detects native plugin diagnostic headers and requests stop.
+``native_started``, ``native_stop_acknowledged``, ``native_end_observed`` and
+``cleanup_confirmed`` report only their respective observations. Unknown
+native outcomes remain unknown. The action receipt's ``submitted`` state is
+not a claim of successful native capture; inspect its ``outcome`` and poll.
+
+Only review/settings and lifecycle metadata are written to the private
+``firebird-trace-operations.json`` beside the operation store. Captured text
+never enters that journal. A maximum of 1000 action receipts is retained;
+only expired, never-dispatched reviews are pruned automatically. A missing
+live handle can return an authorized durable session receipt with
+``live_handle_available=false`` and ``output_available=false``. An unconfirmed
+session after process loss is ``unknown_after_process_loss``, never restarted
+or stopped automatically by recycling its native ID. All workspace responses
+use ``Cache-Control: no-store``. Credentials, permission or endpoint-generation
+changes invalidate the live binding; a caller that cannot renew the lease
+cannot keep collection running through polls.
+
+The owning audit item remains open for service/server tracing, system-audit
+configuration, externally created trace-session administration, restricted
+native-account/network failure qualification and the full native option/event
+matrix. Human UI and native Windows/macOS acceptance remain external.
+ScratchBird history qualification remains deferred and is not run here.
+
+Embedded shadow activation recovery
+-----------------------------------
+
+The embedded provider exposes ``activate_shadow`` through the shared Firebird
+operation descriptor. Its required fields are ``shadow_filename``, exact-path
+``confirmation`` and ``original_isolated=true``; ``role`` is optional. The
+original registered database and its parent directory may be unavailable.
+Open the attachment-free workspace with ``focused_operation_id=activate_shadow``
+and the existing ``database_target_id``, then use the normal visual administration
+validate, plan and one-use confirmed apply actions. No SQL connection to the
+original or recovery file is required before native activation.
+
+The recovery filename must be canonical, existing and inside the approved
+filesystem root. Symlinks, a hardlink to an existing primary, mismatched compiled
+targets and replacement of the reviewed inode are refused. Apply retains a file
+handle and rechecks its identity, but passes the canonical filename to Firebird:
+``file_identity_race_fenced=false`` explicitly records that an external process
+can still race that pathname. The isolation checkbox is an operator assertion,
+not proof of exclusive access. The existing destructive recovery warning remains
+part of review. Do not run the recovered database alongside its original.
+
+The native service reads the header without SQL and requires a complete primary
+header identifying an active shadow before activation. Results preserve native
+header verification, service completion and handle-release observations. A lost
+native outcome is not safe to replay. Recovery does not retarget the saved
+registration automatically; the UI must present the actual recovery filename
+and let the user explicitly update the registration separately.
+
+Owned Linux Firebird 5.0.4 qualification covers LINGER 0 and 1, missing originals,
+retained data, canonical MON$DATABASE_NAME and default backup delta handling,
+ordinary-primary refusal and replacement before apply. It does not establish
+external-process exclusivity, older-version support, native Windows/macOS
+qualification or human form acceptance.
+
+Embedded repair and ODS upgrade
+------------------------------
+
+``repair_database`` and ``upgrade_database`` use the local Engine13 Services
+adapter and the shared Firebird operation forms. Open their attachment-free
+workspace using ``focused_operation_id`` and the selected registered
+``database_target_id``. The workspace supplies the database target resource
+for the ordinary visual administration validate, review and confirmed one-use
+apply actions. A failed SQL connection is not required to open these forms.
+
+Repair takes ``repair_action``, optional ``repair_modifiers``, ICU-only
+``parallel_workers``, ``no_linger`` and an optional task ``role``. The provider
+preserves all shared native validation: mend implies full validation; modifiers
+do not remove preset flags; ICU workers are requested, not observed; and zero
+omits the native worker DPB setting. The dedicated ODS upgrade takes only the
+optional role. The embedded filesystem/runtime authority remains required, and
+neither workflow acquires network credentials.
+
+Before dispatch, the provider releases its own idle catalog connections for
+the selected file. It refuses to close a catalog handle with an active or
+unconfirmed transaction; a failed detach remains owned for explicit cleanup.
+Other database caches, borrowed metadata handles and user sessions are not
+released. Native exclusive-access errors therefore remain possible and must
+be presented as returned, rather than forcing other attachments closed.
+
+Both tasks retain and recheck the reviewed file identity and pass its canonical
+filename to Firebird without an SQL preflight. Results explicitly report
+``file_identity_race_fenced=false``. This does not establish exclusive access
+against external processes or disconnect existing attachments. Retain the shared
+repair warnings: mend can discard damaged records, native success does not
+establish recovery, and errors can follow partial changes. Preserve a recoverable
+backup and independently inspect the native state before deciding what to do.
+
+Owned Linux Firebird 5.0.4 qualification observes all seven repair actions,
+including actual unavailable-manual-shadow cleanup and real ODS 13.0 to 13.1
+upgrades through both upgrade entry points. The legacy fixture was created by
+an isolated official Firebird 4.0.5 runtime; its row, primary key and text survive
+upgrade. Validation/mend presets on healthy fixtures retain data; ICU worker
+dispatch does not prove a stale ICU index needed rebuilding. A truncated copy
+produces a native failure with unknown outcome and blocked replay. In the
+missing-shadow case Firebird removes the catalog entry and permits SQL again,
+yet its Services status retains the original file-open error. The backend keeps
+that error and unknown outcome; subsequent inspection proves recovery separately.
+The qualification also covers a replaced inode before dispatch and loss of an
+actual completed native response. Arbitrary corruption recovery, older engine
+versions, other native platforms and human form acceptance are not certified.
+
+Embedded logical backup
+-----------------------
+
+``backup_logical`` is an application-local Engine13 Services operation. Its
+shared typed Firebird form retains single-file and ordered split-volume
+selection, byte capacities, native backup flags, include/skip patterns,
+parallel workers, statistics, verbose settings, key-holder/crypt plugin
+settings and task role. Embedded form labels identify the ScratchRobin host.
+The embedded manifest declares ``backup_admin``; review and apply still require
+the caller's grant, in addition to filesystem and embedded-runtime authority.
+
+Open ``focused_operation_id=backup_logical`` with the selected registered
+``database_target_id`` to obtain the attachment-free database target. Submit
+the ordinary visual validate, plan and confirmed one-use apply requests. The
+single-file ``split_backup=false`` default is honoured by backend conditional
+field validation even when omitted by the caller. Explicit controlling values
+override defaults. The preview includes ``local_backup_outputs`` in native
+volume order, with exact filenames, capacities and reviewed parent identities.
+The same list is retained in ``impact.backup_output_files`` on the operation
+receipt, including after a native failure, so operation lookup can recover the
+reviewed paths without inferring them from file existence.
+
+All destinations must be canonical absolute filenames inside the approved
+filesystem root, with existing parent directories. Existing outputs, aliases
+and source-database paths are refused. Apply rechecks the reviewed source and
+output directory identities, opens each approved parent by descriptor, and
+reserves output files with exclusive creation and mode 0600. No existing file
+is overwritten. Linux Engine13 writes through process-local descriptor aliases
+to those reserved inodes, so a same-name replacement cannot redirect writes.
+The source database keeps its canonical native filename and its existing
+``file_identity_race_fenced=false`` result; output-inode pinning is a separate
+observation and does not establish source-file exclusivity.
+Online backup does not hold managed SQL admission for its duration; new query
+connections remain possible, and existing caller transactions are preserved.
+
+``driver_observation.local_backup_outputs`` reports the requested filename,
+reserved device/inode identity, observed bytes, native descriptor alias and
+``requested_path_still_names_output`` for each volume. Descriptor aliases are
+diagnostics only: they expire when apply releases its handles and must not be
+used as restore paths or download links. The aggregate
+``outputs_at_reviewed_paths`` is false if a requested name or its parent was
+replaced. Native ``server_completed`` and service-handle release remain separate
+observations. ``restore_verified`` stays false: production backup does not
+restore the file merely to infer that it is usable. The UI should retain the
+reviewed destination list and inspect these fields before presenting completion.
+
+Files are visible during the operation. An exception, interruption, failed
+reservation after an earlier volume, or lost native response can leave partial
+files at the reviewed destinations. They are retained for explicit inspection;
+the backend does not automatically delete or replay them. File existence or
+nonzero size does not mean a valid backup. A failure before any output reservation
+can be a known pre-dispatch rejection; once files were created, it must not be
+reported as ``nothing_changed``. A native failure keeps the normal unknown-outcome
+receipt and its one-use review is retired. Installed native encryption plugins
+remain real dependencies; absent plugins produce native errors.
+
+Owned Linux Firebird 5.0.4 qualification independently restores full,
+metadata-only, ZIP, Unicode-filtered and split-volume outputs, checking schema,
+data and binary blobs. It verifies permission refusal, existing-output refusal,
+replacement during dispatch, retained partial output on native plugin failure,
+a lost completed response and preservation of a caller's pending transaction.
+Those restore calls are qualification controls; product restore is qualified
+separately below. Other native platforms, older versions, installed
+encryption-plugin interoperability and human form acceptance remain separate.
+
+FB-Q07: native EDS process-pool qualification
+------------------------------------------
+
+Current-source Linux Firebird 5.0.4 qualification exercises the original-session
+EDS pool API in network and embedded modes, including actual pooled external
+connections. A second attachment observes the same native process ID, pool size
+and lifetime. Native minimum/maximum size and SECOND, MINUTE and HOUR lifetime
+boundaries are read back, rather than inferred from generated SQL. A restricted
+network principal is refused until its exact native system privilege is granted.
+
+The checks retain a pending caller transaction and savepoint across pool
+administration, verify settings outside rollback, observe idle expiry, and verify
+that CLEAR ALL removes active pool tracking without cancelling its external
+transaction. CLEAR database remains refused because native 5.0.4 does not
+implement it. Native settings are process-local; archived receipts do not imply
+that they survive an engine restart.
+
+Authenticated API checks cover original-session control, URL/target scope
+conflicts, foreign receipt scopes, explicit retention confirmation and archive
+reads after session closure without resolving a SQL workspace. A separate fresh
+Python process reads both receipt scopes after the owned native server has
+stopped; the receipts explicitly remain archived observations, without a live
+native connection, replay authority or inferred transaction finality. Unit checks
+also cover expired reviews, adapter/process/role/session changes, durable claims,
+lost responses, failed persistence, cancellation and cleanup failures. Browser
+appearance and native Windows/macOS acceptance remain with their owning teams.
+
+Embedded logical restore
+------------------------
+
+``restore_logical`` uses the local Engine13 Services adapter and shared typed
+Firebird restore form. The embedded manifest grants the workflow capability
+``restore_admin``; the caller must hold that permission as well as embedded
+runtime, filesystem and administration authority. The attachment-free workspace
+uses ``focused_operation_id=restore_logical``. Its registered original database
+may be unavailable: restore does not open it or its destination as a SQL
+preflight. Service-manager attachment alone does not create a database.
+
+The form retains ordered backup volumes, single/multiple native database files
+and page allocations, create/replacement selection, restore flags, page size,
+buffers, access and replica modes, include/skip filters, workers, statistics,
+verbose settings, installed crypt/key-holder options and task role. All selected
+paths are canonical absolute application-host filenames inside the endpoint's
+approved root. Input volumes must be distinct, nonempty regular-file inodes.
+Secondary destination files must be new. Replacing a primary database requires
+``replace_existing=true`` and ``confirmation`` equal to the exact
+``restore_database`` filename, in addition to confirmed one-use apply. Native
+active attachments are not forced closed.
+
+Preview and ``impact.restore_files`` retain input SHA-256 digests and file
+identities, destination identities or expected absence, parent identities and
+ordered page allocations. Apply rechecks those values and hashes each pinned
+input before dispatch. Backup inputs are read through held Linux descriptor
+aliases; filenames cannot redirect those handles. Native database filenames stay
+canonical so stored multi-file metadata remains correct. Output filenames are
+rechecked but explicitly report no OS rename fence or external exclusive-access
+guarantee. No operation automatically retries or deletes partial database files.
+
+``driver_observation.local_restore_files`` reports input-inode pinning, reviewed
+digests, whether names still identify their inputs, whether input metadata stayed
+unchanged, and the observed destination file identities. A rename can change
+ctime even when the pinned input bytes remain intact; that uncertainty is kept.
+``data_readback_verified`` remains false in production. The native service result
+and handle-release observations are separate from later data inspection.
+Native errors or lost responses remain unknown, with reviewed paths available
+through operation lookup. Existing idle catalog handles for the selected target
+are released without closing user sessions or rolling back their transactions.
+
+``provider_result.restored_database_target`` identifies the primary file and
+reports ``registration_changed=false``. The existing registration stays selected.
+After inspecting a known completed restore, the UI can use the existing
+``database_target_attach`` action with ``database`` and ``display_name`` to
+verify/register that file, subject to the normal active-handle rules. Registration
+follow-up is separate from native restore and must never cause it to be replayed.
+
+Native restore replica mode is encoded as a one-byte SPB field. Firebird 5.0.4's
+clumplet schema rejects the installed driver's four-byte encoding before restore;
+the provider uses its corrected action-first native writer whenever a replica
+mode is selected. This correction applies to network and embedded execution.
+The existing UTF-8 plugin-name path uses the same writer and preserves every
+ordered file/page pairing.
+
+Owned Engine13 qualification verifies full, metadata-only, Unicode-filtered,
+read-only/replica, split-input, multiple-database-file and explicit replacement
+restores with independent native row, BLOB and property readback. Stale targets,
+pinned-input filename replacement, corrupt backups, lost completed responses and
+pending caller transactions are also exercised. Authenticated API checks verify
+the readonly replica properties and retained row, no-store responses, one-use
+apply, known stale-target refusal and durable unknown-outcome path lookup.
+Other native versions/platforms, installed crypt-provider interoperability and
+human UI acceptance remain separately recorded.

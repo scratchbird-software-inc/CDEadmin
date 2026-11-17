@@ -75,3 +75,18 @@ name encoders supplied by text subclasses so ScratchRobin can preserve the
 current native source charset. Plain text names retain upstream UTF-8 behavior.
 It also fixes Decimal's indexed binding write and cleans up bindings and owned
 values on non-result acknowledgements and native errors as well as result rows.
+
+Binary-log annotation decoding
+-----------------------------
+The same pinned connector patch exposes an opt-in cursor Boolean,
+``cdeadmin_lossless_text``.  A text-protocol field that fails strict UTF-8
+conversion is returned as its original bytes only when this switch is true;
+valid UTF-8 stays text and native binary fields stay bytes.  The binary-log
+reader restores the previous switch in ``finally`` and does not change the
+session character set.  Undecodable ``Info`` values are base64 envelopes with
+byte length, representation and native field metadata, not replacement text.
+Without the switch the native UnicodeDecodeError is propagated from fetchone,
+fetchmany and fetchall; partially decoded rows cannot become Python tuples or
+be misreported as end-of-results/SystemError.  Native server error numbers and
+SQLSTATE are preserved.  Rebuild the patched connector when updating this
+capture; an older patch is explicitly unavailable for this reader.

@@ -20,6 +20,9 @@ from tools.tests import test_cdeadmin_endpoint_persistence as persistence
 @pytest.fixture
 def rig():
     setup = persistence.EndpointPersistenceModelTests(); setup.setUp()
+    # Credential imports use translated constants, as in the real app.
+    from flask_babel import Babel
+    Babel(setup.app)
     model = setup.model
     try:
         servers = []

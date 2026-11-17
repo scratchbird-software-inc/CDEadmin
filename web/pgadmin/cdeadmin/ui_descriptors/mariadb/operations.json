@@ -1912,6 +1912,1197 @@
         }
       ],
       "notes": "Task mariadb_editor_context, fixed operation=refresh_completion with diagnostics_change_confirmed:true. Bind the owned public query-session ID and registered target; the server substitutes its private session ID. Returns editor_context with observed original sql_mode/default schema/role/character sets and a same-context private committed catalog. It observes once while the source is idle/locked; it is not a live guarantee after later source commands. Routine declarations remain separate from column types and carry available plus required_sql_mode gates. Temporary objects and uncommitted DDL remain explicitly unobserved. Passive source_complete still sends zero original-session commands. Do not silently call this explicit refresh on keystrokes or replay it after a lost response. Unavailable refresh returns accepted:false, outcome=context_refresh_unavailable, close_session_required and no automatic retry."
+    },
+    {
+      "operation_id": "inspect_engine_status",
+      "resource_kind": "server",
+      "title": "Inspect engine status",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "engine_scope",
+          "label": "Engine scope",
+          "control": "select",
+          "default": "ENGINE",
+          "options": [
+            {
+              "value": "ENGINE",
+              "label": "Selected engine"
+            },
+            {
+              "value": "ALL",
+              "label": "All engines"
+            }
+          ]
+        },
+        {
+          "field_id": "engine",
+          "label": "Engine name",
+          "control": "text",
+          "visible_when": {
+            "field": "engine_scope",
+            "equals": "ENGINE"
+          }
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Allow private diagnostic content",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+    },
+    {
+      "operation_id": "inspect_engine_logs",
+      "resource_kind": "server",
+      "title": "Inspect engine logs",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "engine_scope",
+          "label": "Engine scope",
+          "control": "select",
+          "default": "ENGINE",
+          "options": [
+            {
+              "value": "ENGINE",
+              "label": "Selected engine"
+            },
+            {
+              "value": "ALL",
+              "label": "All engines"
+            }
+          ]
+        },
+        {
+          "field_id": "engine",
+          "label": "Engine name",
+          "control": "text",
+          "visible_when": {
+            "field": "engine_scope",
+            "equals": "ENGINE"
+          }
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Allow private diagnostic content",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+    },
+    {
+      "operation_id": "inspect_engine_mutex",
+      "resource_kind": "server",
+      "title": "Inspect engine mutex diagnostics",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "engine_scope",
+          "label": "Engine scope",
+          "control": "select",
+          "default": "ENGINE",
+          "options": [
+            {
+              "value": "ENGINE",
+              "label": "Selected engine"
+            },
+            {
+              "value": "ALL",
+              "label": "All engines"
+            }
+          ]
+        },
+        {
+          "field_id": "engine",
+          "label": "Engine name",
+          "control": "text",
+          "visible_when": {
+            "field": "engine_scope",
+            "equals": "ENGINE"
+          }
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Allow private diagnostic content",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+    },
+    {
+      "operation_id": "inspect_live_explain",
+      "resource_kind": "server",
+      "title": "Inspect running query plan",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "connection_id",
+          "label": "Native connection ID (exact decimal)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "output_format",
+          "label": "Native output format",
+          "control": "select",
+          "default": "TABULAR",
+          "options": [
+            {
+              "value": "TABULAR",
+              "label": "TABULAR"
+            },
+            {
+              "value": "JSON",
+              "label": "JSON"
+            }
+          ]
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Allow private diagnostic content",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native SHOW EXPLAIN / ANALYZE on a dedicated observer. Private output; native own-user visibility or PROCESS authority. Reviewed QUERY_ID is rechecked before and after reading; changed-query output is withheld. Bounded output, no original-session changes, no monitoring history and no automatic replay. A timeout does not prove server cancellation.",
+      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate."
+    },
+    {
+      "operation_id": "inspect_live_analyze",
+      "resource_kind": "server",
+      "title": "Inspect running query execution statistics",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "connection_id",
+          "label": "Native connection ID (exact decimal)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "output_format",
+          "label": "Native output format",
+          "control": "select",
+          "default": "TABULAR",
+          "options": [
+            {
+              "value": "TABULAR",
+              "label": "TABULAR"
+            },
+            {
+              "value": "JSON",
+              "label": "JSON"
+            }
+          ]
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Allow private diagnostic content",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native SHOW EXPLAIN / ANALYZE on a dedicated observer. Private output; native own-user visibility or PROCESS authority. Reviewed QUERY_ID is rechecked before and after reading; changed-query output is withheld. Bounded output, no original-session changes, no monitoring history and no automatic replay. A timeout does not prove server cancellation.",
+      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate."
+    },
+    {
+      "operation_id": "shutdown_server",
+      "resource_kind": "server",
+      "title": "Shut down server",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "service_disruption_confirmed",
+          "label": "Confirm interruption of every connection on this server",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Issues native SHUTDOWN with native SHUTDOWN authority on a dedicated connection after exact server/service-disruption confirmation. Fresh identity/uptime review expires after 60 seconds. Native OK acknowledges the request only; process exit is not inferred from connection loss. No host service control, restart or retry.",
+      "notes": "Native MariaDB12.2.2 network server only. Original sessions retain their own transaction ownership. Independent process lifecycle qualification is separate from command acknowledgement."
+    },
+    {
+      "operation_id": "inspect_prepared_xa",
+      "resource_kind": "server",
+      "title": "Inspect prepared transactions",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+    },
+    {
+      "operation_id": "commit_prepared_xa",
+      "resource_kind": "server",
+      "title": "Commit a prepared transaction",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "gtrid_hex",
+          "label": "Global transaction ID (hex bytes)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "bqual_hex",
+          "label": "Branch ID (hex bytes)",
+          "control": "text",
+          "required": false,
+          "default": ""
+        },
+        {
+          "field_id": "format_id",
+          "label": "Native format ID (exact decimal)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "decision_reference",
+          "label": "Authorized external coordinator decision",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+    },
+    {
+      "operation_id": "rollback_prepared_xa",
+      "resource_kind": "server",
+      "title": "Roll back a prepared transaction",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "gtrid_hex",
+          "label": "Global transaction ID (hex bytes)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "bqual_hex",
+          "label": "Branch ID (hex bytes)",
+          "control": "text",
+          "required": false,
+          "default": ""
+        },
+        {
+          "field_id": "format_id",
+          "label": "Native format ID (exact decimal)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "decision_reference",
+          "label": "Authorized external coordinator decision",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+    },
+    {
+      "operation_id": "inspect_key_cache",
+      "resource_kind": "server",
+      "title": "Inspect named index cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cache_name",
+          "label": "Native cache prefix",
+          "control": "text",
+          "required": true,
+          "default": "default"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+    },
+    {
+      "operation_id": "configure_key_cache",
+      "resource_kind": "server",
+      "title": "Configure named index cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cache_name",
+          "label": "Native cache prefix",
+          "control": "text",
+          "required": true,
+          "default": "default"
+        },
+        {
+          "field_id": "variable",
+          "label": "Native variable",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "key_buffer_size",
+              "label": "key_buffer_size"
+            },
+            {
+              "value": "key_cache_block_size",
+              "label": "key_cache_block_size"
+            },
+            {
+              "value": "key_cache_division_limit",
+              "label": "key_cache_division_limit"
+            },
+            {
+              "value": "key_cache_age_threshold",
+              "label": "key_cache_age_threshold"
+            },
+            {
+              "value": "key_cache_file_hash_size",
+              "label": "key_cache_file_hash_size"
+            },
+            {
+              "value": "key_cache_segments",
+              "label": "key_cache_segments"
+            }
+          ]
+        },
+        {
+          "field_id": "value_mode",
+          "label": "Value source",
+          "control": "select",
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "VALUE"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Exact unsigned decimal value",
+          "control": "text",
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "VALUE"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+    },
+    {
+      "operation_id": "release_key_cache",
+      "resource_kind": "server",
+      "title": "Release named index cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cache_name",
+          "label": "Native cache prefix",
+          "control": "text",
+          "required": true,
+          "default": "default"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+    },
+    {
+      "operation_id": "assign_index_cache",
+      "resource_kind": "server",
+      "title": "Assign indexes to a cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cache_name",
+          "label": "Native cache prefix",
+          "control": "text",
+          "required": true,
+          "default": "default"
+        },
+        {
+          "field_id": "tables",
+          "label": "Native MyISAM tables",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "database",
+              "label": "Database",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "table",
+              "label": "Table",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "index_selection",
+          "label": "Selected indexes (empty means all)",
+          "control": "grid",
+          "default": [],
+          "columns": [
+            {
+              "field_id": "table_index",
+              "label": "Zero-based table row",
+              "control": "number",
+              "required": true
+            },
+            {
+              "field_id": "index_name",
+              "label": "Exact index name",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "partitions",
+          "label": "Selected partitions (one table only)",
+          "control": "grid",
+          "item_kind": "string",
+          "default": []
+        },
+        {
+          "field_id": "all_partitions",
+          "label": "Explicit native PARTITION ALL",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+    },
+    {
+      "operation_id": "preload_index_cache",
+      "resource_kind": "server",
+      "title": "Preload index cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "tables",
+          "label": "Native MyISAM tables",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "database",
+              "label": "Database",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "table",
+              "label": "Table",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "ignore_leaves",
+              "label": "Ignore leaf blocks",
+              "control": "boolean",
+              "default": false
+            }
+          ]
+        },
+        {
+          "field_id": "index_selection",
+          "label": "Selected indexes (empty means all)",
+          "control": "grid",
+          "default": [],
+          "columns": [
+            {
+              "field_id": "table_index",
+              "label": "Zero-based table row",
+              "control": "number",
+              "required": true
+            },
+            {
+              "field_id": "index_name",
+              "label": "Exact index name",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "partitions",
+          "label": "Selected partitions (one table only)",
+          "control": "grid",
+          "item_kind": "string",
+          "default": []
+        },
+        {
+          "field_id": "all_partitions",
+          "label": "Explicit native PARTITION ALL",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+    },
+    {
+      "operation_id": "inspect_key_caches",
+      "resource_kind": "server",
+      "title": "Inspect installed index caches",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Native KEY_CACHES inspection enumerates configured cache names, segments and runtime counters. Configuration/occupancy/counters are observations, not cache-content or data-durability proof."
+    },
+    {
+      "operation_id": "start_all_replicas",
+      "resource_kind": "server",
+      "title": "Start all replication connections",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "threads",
+          "label": "Native threads",
+          "control": "select",
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "ALL"
+            },
+            {
+              "value": "IO_THREAD",
+              "label": "IO_THREAD"
+            },
+            {
+              "value": "SQL_THREAD",
+              "label": "SQL_THREAD"
+            }
+          ]
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+    },
+    {
+      "operation_id": "stop_all_replicas",
+      "resource_kind": "server",
+      "title": "Stop all replication connections",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "threads",
+          "label": "Native threads",
+          "control": "select",
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "ALL"
+            },
+            {
+              "value": "IO_THREAD",
+              "label": "IO_THREAD"
+            },
+            {
+              "value": "SQL_THREAD",
+              "label": "SQL_THREAD"
+            }
+          ]
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+    },
+    {
+      "operation_id": "reset_binary_logs",
+      "resource_kind": "server",
+      "title": "Reset native binary logs",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "next_log_number",
+          "label": "Optional exact next log number",
+          "control": "text"
+        },
+        {
+          "field_id": "history_loss_confirmed",
+          "label": "I have reviewed irreversible log loss and replica/backup dependencies",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+    },
+    {
+      "operation_id": "reset_query_cache",
+      "resource_kind": "server",
+      "title": "Reset query cache",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+    },
+    {
+      "operation_id": "reset_default_replica",
+      "resource_kind": "server",
+      "title": "Reset default replication connection",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "remove_configuration",
+          "label": "Remove connection configuration (ALL)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "configuration_loss_confirmed",
+          "label": "Confirm configuration loss",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+    },
+    {
+      "operation_id": "create",
+      "resource_kind": "sequence",
+      "title": "Create native sequence",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "parent",
+          "label": "Database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "integer_type",
+          "label": "Native integer type",
+          "control": "select",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Preserve"
+            },
+            {
+              "value": "TINYINT",
+              "label": "TINYINT"
+            },
+            {
+              "value": "SMALLINT",
+              "label": "SMALLINT"
+            },
+            {
+              "value": "MEDIUMINT",
+              "label": "MEDIUMINT"
+            },
+            {
+              "value": "INT",
+              "label": "INT"
+            },
+            {
+              "value": "BIGINT",
+              "label": "BIGINT"
+            }
+          ]
+        },
+        {
+          "field_id": "unsigned",
+          "label": "Unsigned (requires explicit type)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "start",
+          "label": "Exact start value",
+          "control": "text"
+        },
+        {
+          "field_id": "increment",
+          "label": "Exact signed increment",
+          "control": "text"
+        },
+        {
+          "field_id": "cache",
+          "label": "Exact signed cache size",
+          "control": "text"
+        },
+        {
+          "field_id": "minimum_mode",
+          "label": "Minimum intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "VALUE",
+              "label": "VALUE"
+            },
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "minimum",
+          "label": "Exact minimum",
+          "control": "text",
+          "visible_when": {
+            "equals": "VALUE",
+            "field": "minimum_mode"
+          }
+        },
+        {
+          "field_id": "maximum_mode",
+          "label": "Maximum intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "VALUE",
+              "label": "VALUE"
+            },
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "maximum",
+          "label": "Exact maximum",
+          "control": "text",
+          "visible_when": {
+            "equals": "VALUE",
+            "field": "maximum_mode"
+          }
+        },
+        {
+          "field_id": "cycle_mode",
+          "label": "Cycle intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "CYCLE",
+              "label": "CYCLE"
+            },
+            {
+              "value": "NOCYCLE",
+              "label": "NOCYCLE"
+            }
+          ]
+        }
+      ],
+      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+    },
+    {
+      "operation_id": "alter",
+      "resource_kind": "sequence",
+      "title": "Alter native sequence",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "integer_type",
+          "label": "Native integer type",
+          "control": "select",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Preserve"
+            },
+            {
+              "value": "TINYINT",
+              "label": "TINYINT"
+            },
+            {
+              "value": "SMALLINT",
+              "label": "SMALLINT"
+            },
+            {
+              "value": "MEDIUMINT",
+              "label": "MEDIUMINT"
+            },
+            {
+              "value": "INT",
+              "label": "INT"
+            },
+            {
+              "value": "BIGINT",
+              "label": "BIGINT"
+            }
+          ],
+          "help": "Native ALTER AS cannot be combined with other sequence options. Review type changes separately; no automatic multi-statement split."
+        },
+        {
+          "field_id": "unsigned",
+          "label": "Unsigned (requires explicit type)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "start",
+          "label": "Exact start value",
+          "control": "text"
+        },
+        {
+          "field_id": "increment",
+          "label": "Exact signed increment",
+          "control": "text"
+        },
+        {
+          "field_id": "cache",
+          "label": "Exact signed cache size",
+          "control": "text"
+        },
+        {
+          "field_id": "minimum_mode",
+          "label": "Minimum intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "VALUE",
+              "label": "VALUE"
+            },
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "minimum",
+          "label": "Exact minimum",
+          "control": "text",
+          "visible_when": {
+            "equals": "VALUE",
+            "field": "minimum_mode"
+          }
+        },
+        {
+          "field_id": "maximum_mode",
+          "label": "Maximum intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "VALUE",
+              "label": "VALUE"
+            },
+            {
+              "value": "NATIVE",
+              "label": "NATIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "maximum",
+          "label": "Exact maximum",
+          "control": "text",
+          "visible_when": {
+            "equals": "VALUE",
+            "field": "maximum_mode"
+          }
+        },
+        {
+          "field_id": "cycle_mode",
+          "label": "Cycle intent",
+          "control": "select",
+          "default": "PRESERVE",
+          "options": [
+            {
+              "value": "PRESERVE",
+              "label": "PRESERVE"
+            },
+            {
+              "value": "CYCLE",
+              "label": "CYCLE"
+            },
+            {
+              "value": "NOCYCLE",
+              "label": "NOCYCLE"
+            }
+          ]
+        },
+        {
+          "field_id": "restart",
+          "label": "Exact next value",
+          "control": "text"
+        },
+        {
+          "field_id": "restart_initial",
+          "label": "Restart at native initial value",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Sequence name (restart only)",
+          "control": "text"
+        }
+      ],
+      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
     }
   ]
 }

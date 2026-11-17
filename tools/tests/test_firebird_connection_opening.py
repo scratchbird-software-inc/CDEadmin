@@ -131,3 +131,20 @@ def test_host_multi_slot_pool_and_keepalive_evict_dead_handles():
     assert remaining == [live_conn]
     assert dead_conn.closed is True
     assert live_conn.closed is False
+
+
+def test_internal_maintenance_probe_uses_native_utility_authority_without_attach_hooks(fixture):
+    module, core, _config, args, _builder, failed, dispatcher = fixture
+    core.a = SimpleNamespace(get_api=MagicMock())
+    core.XpbKind = native.core.XpbKind
+    xpb = core.a.get_api().util.get_xpb_builder().__enter__()
+    xpb.get_buffer.return_value = b'maintenance-dpb'
+    handle = opening.connect(module, core, failed_owner=failed,
+                             maintenance_probe=True, **args)
+    xpb.insert_tag.assert_called_once_with(66)
+    dispatcher.attach_database.assert_called_once_with(
+        '127.0.0.1/53050:/owned.fdb', b'maintenance-dpb', 'utf-8')
+    opening.notify_attached(core, handle)
+    core.get_callbacks.assert_not_called()
+    assert handle._cdeadmin_attached_pending is False
+    failed.assert_not_called()

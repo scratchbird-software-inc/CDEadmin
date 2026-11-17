@@ -556,6 +556,11 @@ def test_all_14_firebird_engine_object_forms_and_promoted_operations_complete():
         assert form_doc['status'] == 'complete', kind_id
         assert len(form_doc['fields']) >= 1, kind_id
 
+    # Retained-session task descriptors have their own native qualification
+    # and human presentation acceptance. This UI migration must preserve
+    # those hooks without relabeling their draft presentation as accepted.
+    from pgadmin.cdeadmin.workspace.duckdb_editor_operations import contract as duck_editor_contract
+    duck_editor_ids = {row['operation_id'] for row in duck_editor_contract()['operations']}
     for engine_id in ('mysql', 'duckdb'):
         ops_doc = json.loads(
             (DESCRIPTORS_DIR / engine_id / 'operations.json').read_text(encoding='utf-8')
@@ -564,6 +569,7 @@ def test_all_14_firebird_engine_object_forms_and_promoted_operations_complete():
             op['operation_id']
             for op in ops_doc['operations']
             if op.get('status') == 'draft'
+            and not (engine_id == 'duckdb' and op['operation_id'] in duck_editor_ids)
         ]
         assert drafts == [], f'{engine_id} still has draft operations: {drafts}'
 
@@ -582,6 +588,9 @@ def test_all_14_firebird_engine_object_forms_and_promoted_operations_complete():
         'set_connection_pragma_parser_trace',
         'set_connection_pragma_lock_proxy_file',
     }
+    from pgadmin.cdeadmin.workspace.sqlite_editor_operations import contract as sqlite_editor_contract
+    allowed_sqlite_gated_drafts.update(
+        row['operation_id'] for row in sqlite_editor_contract()['operations'])
     sqlite_unexpected_drafts = [
         op['operation_id']
         for op in sqlite_ops_doc['operations']
