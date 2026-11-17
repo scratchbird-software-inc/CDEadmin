@@ -435,9 +435,10 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
       screen.getAllByRole('menuitem').map((el) => el.getAttribute('data-menu-index'))
     ).toEqual(['0', '20', '60', '70', '80']);
 
-    // 2. Open two SQL Editor instances (Firebird 5 and MySQL 8) from Area 2 Side Menu
+    // 2. Open two SQL Editor instances (Firebird 5 and MySQL 8) from Applications Top Menu
     teardownSteps.length = 0;
-    fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Applications'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /SQL Editor/i}));
     // Verify Teardown-Before-Activate happened in exact order before activating SQL Editor
     expect(teardownSteps.map((s) => s.step)).toEqual([
       '1.menus_cleared',
@@ -462,7 +463,8 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     expect(screen.getByText('Firebird 5 Inspector (properties)')).toBeInTheDocument();
 
     // Open second SQL Editor (MySQL 8) -> its Left & Right drawers start closed independently, and Area 3b icons swap to MySQL 8!
-    fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Applications'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /SQL Editor/i}));
     expect(screen.getByText('MySQL 8 Query Buffer')).toBeInTheDocument();
     expect(screen.queryByText('MySQL 8 Schema Tree')).not.toBeInTheDocument();
     expect(screen.queryByText(/MySQL 8 Inspector/)).not.toBeInTheDocument();
@@ -529,7 +531,8 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     );
 
     fireEvent.click(screen.getByRole('button', {name: 'Open Data Navigator'}));
-    fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Applications'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /SQL Editor/i}));
 
     const area3 = document.querySelector('[data-cdeadmin-qa-key="project-area-3"]');
     area3.getBoundingClientRect = () => ({left: 100, top: 100, right: 900, bottom: 600});
@@ -745,7 +748,9 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
 
     const topBtn = document.querySelector('[data-cdeadmin-qa-key="side-menu-left-drawer-toggle"]');
     const navAppBtn = document.querySelector('[data-cdeadmin-qa-key="side-menu-app-data-navigator"]');
-    const sqlAppBtn = document.querySelector('[data-cdeadmin-qa-key="side-menu-app-sql-editor"]');
+    // SQL Editor is context-bound on database/catalog nodes, never orphaned on the left quick-launch rail:
+    expect(document.querySelector('[data-cdeadmin-qa-key="side-menu-app-sql-editor"]')).toBeNull();
+    const neighborAppBtn = document.querySelector('[data-cdeadmin-qa-key="side-menu-app-erd-designer"]');
     const gearBtn = document.querySelector('[data-cdeadmin-qa-key="side-menu-settings-gear"]');
     const gearSlot = gearBtn.closest('.sr-vdock-slot');
 
@@ -763,11 +768,11 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     expect(gearBtn).toHaveAttribute('data-target-size', '36');
     expect(gearBtn.style.width).toBe('36px');
 
-    // 2. Hover over middle Data Navigator (y = 80) -> peaks at 58px while neighbor SQL Editor (y = 124) swells proportionally
+    // 2. Hover over middle Data Navigator (y = 80) -> peaks at 58px while neighbor ERD Designer (y = 124) swells proportionally
     fireEvent.mouseMove(dockRail, {clientY: 80});
     expect(navAppBtn).toHaveAttribute('data-target-size', '58');
     expect(navAppBtn.style.width).toBe('58px');
-    const neighborSize = Number(sqlAppBtn.getAttribute('data-target-size'));
+    const neighborSize = Number(neighborAppBtn.getAttribute('data-target-size'));
     expect(neighborSize).toBeGreaterThan(36);
     expect(neighborSize).toBeLessThan(58);
 
@@ -783,17 +788,17 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
     expect(navAppBtn.style.width).toBe('36px');
     expect(navAppBtn).not.toHaveAttribute('data-active');
 
-    // Launch a second SQL Editor instance too — still zero open-application tracking on Area 2
+    // Launch a second neighbor application instance too — still zero open-application tracking on Area 2
     fireEvent.mouseMove(dockRail, {clientY: 124});
-    expect(sqlAppBtn).toHaveAttribute('data-target-size', '58');
-    fireEvent.mouseDown(sqlAppBtn);
-    fireEvent.focus(sqlAppBtn);
-    fireEvent.click(sqlAppBtn);
-    fireEvent.click(sqlAppBtn);
-    expect(sqlAppBtn).toHaveAttribute('data-magnified', 'false');
-    expect(sqlAppBtn).toHaveAttribute('data-target-size', '36');
-    expect(sqlAppBtn.style.width).toBe('36px');
-    expect(sqlAppBtn).not.toHaveAttribute('data-active');
+    expect(neighborAppBtn).toHaveAttribute('data-target-size', '58');
+    fireEvent.mouseDown(neighborAppBtn);
+    fireEvent.focus(neighborAppBtn);
+    fireEvent.click(neighborAppBtn);
+    fireEvent.click(neighborAppBtn);
+    expect(neighborAppBtn).toHaveAttribute('data-magnified', 'false');
+    expect(neighborAppBtn).toHaveAttribute('data-target-size', '36');
+    expect(neighborAppBtn.style.width).toBe('36px');
+    expect(neighborAppBtn).not.toHaveAttribute('data-active');
     expect(dockRail.querySelector('.sr-vdock-pip')).toBeNull();
     expect(dockRail.querySelector('.sr-vdock-badge')).toBeNull();
 
@@ -973,7 +978,8 @@ describe('Standardized ScratchRobin Project Shell & t_actions', () => {
 
     // Open two instances: Data Navigator (inst-1) and SQL Editor (inst-2, currently active)
     fireEvent.click(screen.getByRole('button', {name: 'Open Data Navigator'}));
-    fireEvent.click(screen.getByRole('button', {name: 'Open SQL Editor'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: 'Applications'}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /SQL Editor/i}));
 
     // Switch focus to Data Navigator so SQL Editor is in the background
     const tabList = screen.getByRole('tablist', {name: 'Open Pages'});

@@ -3755,6 +3755,17 @@ class ProviderWorkspaceService:
         except (ValueError, RuntimeError) as exc:
             raise ProviderWorkspaceError(str(exc)) from exc
 
+    def sql_surface_action(self, server, request):
+        if getattr(self, '_sql_surface_host', None) is None:
+            from .sql_surface_host import SqlSurfaceHostService
+            self._sql_surface_host = SqlSurfaceHostService()
+        try:
+            return self._sql_surface_host.dispatch(
+                self, server, request if isinstance(request, dict) else {}
+            )
+        except (ValueError, RuntimeError) as exc:
+            raise ProviderWorkspaceError(str(exc)) from exc
+
     def visual_admin_operation_action(self, server, action, request):
         methods = {
             'visual_admin_operation_list': 'list_visual_admin_operations',

@@ -4028,6 +4028,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.data_surface_action(
                         server, data.get('request') or {}
                     )
+                elif action == 'sql_surface_action':
+                    payload = service.sql_surface_action(
+                        server, data.get('request') or {}
+                    )
                 elif isinstance(action, str) and action.startswith(
                     'visual_admin_operation_'
                 ):

@@ -1343,6 +1343,98 @@ def resource_group_context_actions(profile, resource_kind, visual_catalog,
     )]
 
 
+_SQL_SCRIPT_ENGINES = frozenset({
+    'firebird', 'postgresql', 'mysql', 'mariadb', 'sqlite', 'duckdb',
+    'cockroachdb', 'yugabytedb', 'tidb', 'vitess', 'dolt',
+})
+
+
+def _generate_sql_context_actions(
+        engine_id: str, resource_kind: str, base: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Build universal Generate SQL submenu actions opening Surface 2 without auto-run."""
+    if engine_id not in _SQL_SCRIPT_ENGINES:
+        return []
+    specs: list[tuple[str, str]] = []
+    if resource_kind in {'table', 'foreign-table', 'partitioned-table'}:
+        specs.extend([
+            ('select', 'SELECT Script'),
+            ('insert', 'INSERT Script'),
+            ('update', 'UPDATE Script'),
+            ('delete', 'DELETE Script'),
+            ('upsert', 'UPSERT / MERGE Script'),
+            ('trigger_bi_id', 'Trigger — Before Insert Auto-ID'),
+            ('trigger_stub', 'Trigger — Custom Stub'),
+            ('ddl_create', 'CREATE Script'),
+            ('ddl_alter', 'ALTER Script'),
+        ])
+        if engine_id == 'firebird':
+            specs.append(('ddl_recreate', 'RECREATE Script'))
+        specs.extend([
+            ('ddl_drop', 'DROP Script'),
+            ('grants', 'GRANT / Privilege Script'),
+        ])
+    elif resource_kind in {'view', 'materialized-view'}:
+        specs.extend([
+            ('select', 'SELECT Script'),
+            ('insert', 'INSERT Script'),
+            ('ddl_create', 'CREATE Script'),
+            ('ddl_alter', 'ALTER Script'),
+        ])
+        if engine_id == 'firebird' and resource_kind == 'view':
+            specs.append(('ddl_recreate', 'RECREATE Script'))
+        specs.extend([
+            ('ddl_drop', 'DROP Script'),
+            ('grants', 'GRANT / Privilege Script'),
+        ])
+    elif resource_kind in {'procedure', 'function', 'routine'}:
+        specs.extend([
+            ('execute', 'EXECUTE / SELECT Call Script'),
+            ('ddl_create', 'CREATE Script'),
+            ('ddl_alter', 'CREATE OR ALTER / ALTER Script'),
+            ('ddl_drop', 'DROP Script'),
+        ])
+    elif resource_kind == 'package':
+        specs.extend([
+            ('ddl_create', 'CREATE PACKAGE Header Script'),
+            ('package_body', 'CREATE PACKAGE BODY Script'),
+            ('ddl_drop', 'DROP PACKAGE Script'),
+        ])
+    elif resource_kind in {'sequence', 'generator'}:
+        specs.extend([
+            ('select', 'Next / Current Value Script'),
+            ('ddl_create', 'CREATE Script'),
+            ('ddl_alter', 'ALTER / Restart Script'),
+            ('ddl_drop', 'DROP Script'),
+        ])
+    elif resource_kind in {
+        'domain', 'type', 'trigger', 'index', 'exception', 'role',
+    }:
+        specs.extend([
+            ('ddl_create', 'CREATE Script'),
+            ('ddl_alter', 'ALTER Script'),
+            ('ddl_drop', 'DROP Script'),
+        ])
+    return [
+        _action(
+            f'resource.{engine_id}.{resource_kind}.generate_sql_{kind_key}',
+            label,
+            'open_workspace',
+            icon='action.script',
+            group='generate_sql',
+            priority=10 + idx,
+            mutation='none',
+            arguments={
+                **base,
+                'tab': 'studio',
+                'resource_kind': resource_kind,
+                'generate_sql_kind': kind_key,
+            },
+        )
+        for idx, (kind_key, label) in enumerate(specs)
+    ]
+
+
 def resource_context_actions(
         profile: Mapping[str, Any], resource: Mapping[str, Any],
         visual_catalog: Mapping[str, Any] | None, *,
@@ -1407,6 +1499,9 @@ def resource_context_actions(
         if resource_kind in DIAGRAM_RELATION_KINDS:
             actions.extend(_to_diagram(engine_id, 'resource', {
                 **base, 'resource_kind': resource_kind}))
+        if not resource_native(resource).get('system_object'):
+            actions.extend(_generate_sql_context_actions(
+                engine_id, resource_kind, base))
     descriptor = next((item for item in (
         (visual_catalog or {}).get('objects') or []
     ) if item.get('resource_kind') == resource_kind), None)

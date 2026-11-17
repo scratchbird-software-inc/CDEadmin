@@ -1072,7 +1072,9 @@ class DataSurfaceHostService:
         server: Any,
         request: dict[str, Any],
     ) -> dict[str, Any]:
-        sub_action = str(request.get('surface_action') or 'open').lower()
+        sub_action = str(
+            request.get('surface_action') or request.get('sub_action') or 'open'
+        ).lower()
         user_id = int(getattr(server, 'user_id', 1) or 1)
 
         if sub_action == 'list_templates':
@@ -1444,6 +1446,27 @@ class DataSurfaceHostService:
                     user_id,
                     window_offset=window_offset,
                     window_size=window_size,
+                )
+
+            if sub_action == 'export_formatted':
+                from .sql_surface_host import export_tabular_dataset
+                scope = str((request.get('settings') or {}).get('scope') or 'filtered')
+                export_rows = (
+                    [surface.raw_rows[i] for i in surface.view_indices]
+                    if scope == 'filtered'
+                    else list(surface.raw_rows)
+                )
+                return export_tabular_dataset(
+                    surface.columns,
+                    export_rows,
+                    fmt=str(request.get('format') or 'csv'),
+                    settings=dict(request.get('settings') or {}),
+                    sql_text=surface.server_sql or '',
+                    base_filename=str(
+                        request.get('filename')
+                        or surface.target_resource.get('display_name')
+                        or 'data_export'
+                    ),
                 )
 
             if sub_action == 'column_profile':

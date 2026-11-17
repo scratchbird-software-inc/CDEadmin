@@ -101,11 +101,13 @@ import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../cdeadmin_ui/overlays/UncommittedWorkDialog';
 import SqlBuilderDialog from '../cdeadmin_ui/editors/SqlBuilderDialog';
 import DataEditSurface from '../cdeadmin_ui/surfaces/DataEditSurface';
+import SqlEditorSurface from '../cdeadmin_ui/surfaces/SqlEditorSurface';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'data_surface_action',
+  'sql_surface_action',
   'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal','postgresql_large_object_start',
   'postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
@@ -6309,6 +6311,24 @@ export default function ProviderWorkspaceContent({
   const isDedicatedDataSurface = Boolean(
     inShell && tab === 'data' && !isNonRelationalDataModel
   );
+  const isDedicatedSqlSurface = Boolean(inShell && tab === 'studio');
+  const isDedicatedSurface = isDedicatedDataSurface || isDedicatedSqlSurface;
+  const dedicatedSqlTargetResource = useMemo(() => {
+    const items = resourcePage?.items || [];
+    if (initialContext.resource_id) {
+      const matched = items.find((r) => r.resource_id === initialContext.resource_id);
+      if (matched) return matched;
+      const fallbackName = initialContext.display_name ||
+        String(initialContext.resource_id).split(':').pop() || 'Object';
+      return {
+        resource_id: initialContext.resource_id,
+        resource_kind: initialContext.resource_kind || 'table',
+        display_name: fallbackName,
+        name: fallbackName,
+      };
+    }
+    return selectedResource || null;
+  }, [initialContext.display_name, initialContext.resource_id, initialContext.resource_kind, resourcePage?.items, selectedResource]);
   const dedicatedTargetResource = useMemo(() => {
     const items = resourcePage?.items || [];
     if (initialContext.resource_id) {
@@ -6546,7 +6566,7 @@ export default function ProviderWorkspaceContent({
         {tab !== initialTab && <Button size="small" sx={{ml: 'auto'}}
           onClick={() => setTab(initialTab)}>{gettext('Back')}</Button>}
       </Box>}
-      {!isDedicatedDataSurface && <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+      {!isDedicatedSurface && <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
         {workspace && tab !== 'studio' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('metadata-search')}>Search database metadata</Button>}
         {workspace && tab !== 'studio' && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
@@ -6573,14 +6593,14 @@ export default function ProviderWorkspaceContent({
         targets={workspace.database_targets?.targets || []} post={post} onOpen={onOpenSearchResult} />}
       {workspace && tab === 'firebird-server-catalog' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdServerCatalog endpoint={workspace.endpoint} targets={workspace.database_targets?.targets || []} post={post} />}
-      {!isDedicatedDataSurface && <FormReference formKey="workspace" />}
-      {(error || (workspace && !isDedicatedDataSurface)) && <Box role="region" tabIndex={0}
+      {!isDedicatedSurface && <FormReference formKey="workspace" />}
+      {(error || (workspace && !isDedicatedSurface)) && <Box role="region" tabIndex={0}
         aria-label={gettext('Provider workspace status')}
         sx={{minHeight: 0, maxHeight: '40%', overflow: 'auto', flexShrink: 0}}>
         {error && <Alert severity="error">{error}</Alert>}
-        {workspace && !isDedicatedDataSurface && <EngineContractStatus
+        {workspace && !isDedicatedSurface && <EngineContractStatus
           contract={workspace.engine_contracts} />}
-        {workspace && !isDedicatedDataSurface && <GridActivationStatus hidePassed={tab === 'studio'} contract={workspace.grid_workspace} />}
+        {workspace && !isDedicatedSurface && <GridActivationStatus hidePassed={tab === 'studio'} contract={workspace.grid_workspace} />}
       </Box>}
       {busy && !workspace && <Box p={3}><CircularProgress /></Box>}
       {workspace && tab === 'resources' && <NativeNavigation
@@ -6618,7 +6638,32 @@ export default function ProviderWorkspaceContent({
           </Box>
         </Box>
       </InfoDialog>}
-      {workspace && <QueryToolFrame role="region"
+      {workspace && isDedicatedSqlSurface && (
+        <SqlEditorSurface
+          endpointLabel={
+            [
+              workspace.endpoint?.display_name || workspace.endpoint?.endpoint_id,
+              queryTarget?.display_name || queryDatabaseTargetId,
+            ].filter(Boolean).join(' / ')
+          }
+          engineId={workspace.endpoint?.verified_runtime_family || workspace.endpoint?.profile_id || 'relational'}
+          languageProfile={languageProfile || workspace.languages?.[0]?.language_profile || ''}
+          activeLanguage={activeLanguage}
+          databaseTargetId={queryDatabaseTargetId}
+          targetResource={dedicatedSqlTargetResource}
+          resources={resourcePage?.items || []}
+          initialScriptKind={
+            initialContext.script_kind ||
+            initialContext.generate_sql_kind ||
+            initialContext.script ||
+            (initialContext.browse_data ? 'select' : '')
+          }
+          initialSql={initialContext.initial_sql || (source && source !== defaultSource(activeLanguage) ? source : '')}
+          initialQuickQueryId={initialContext.quick_query_id || ''}
+          post={post}
+        />
+      )}
+      {workspace && !isDedicatedSqlSurface && <QueryToolFrame role="region"
         aria-label={gettext('Provider query workspace')}
         sx={{p: 0, flex: 1, display: tab === 'studio' ? 'flex' : 'none', flexDirection: 'column',
           minHeight: 0, minWidth: 0, overflow: 'auto'}}>

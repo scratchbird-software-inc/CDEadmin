@@ -62,6 +62,7 @@ export const PROVIDER_MENU_CATEGORIES = Object.freeze({
   availability: defineMenuCategory('Availability', 90),
   security: defineMenuCategory('Security and authorization', 100),
   object: defineMenuCategory('Object workspace', 110),
+  generate_sql: defineMenuCategory('Generate SQL', 115),
   operations: defineMenuCategory('Object operations', 120),
   endpoint: defineMenuCategory('Endpoint registration', 130),
   information: defineMenuCategory('Information', 140),

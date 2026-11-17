@@ -371,16 +371,32 @@ export function showProviderWorkspace(
     initialTab === 'studio' &&
     initialContext.browse_data &&
     !initialContext.script &&
+    !initialContext.generate_sql_kind &&
     initialContext.resource_id
   );
   const resolvedTab = isDedicatedBrowseData ? 'data' : initialTab;
+  const isDedicatedSqlSurface = Boolean(
+    resolvedTab === 'studio' &&
+    typeof window !== 'undefined' &&
+    window.__scratchrobinProjectShellRef?.current
+  );
+  const requestedScriptKind =
+    initialContext.generate_sql_kind ||
+    initialContext.script ||
+    (initialContext.browse_data ? 'select' : '');
   const resolvedContext = isDedicatedBrowseData
     ? {
       ...initialContext,
       auto_load_rows: true,
       browse_nonce: initialContext.browse_nonce || `${Date.now()}-${providerWorkspaceSequence}`,
     }
-    : initialContext;
+    : isDedicatedSqlSurface
+      ? {
+        ...initialContext,
+        ...(requestedScriptKind ? {script_kind: requestedScriptKind} : {}),
+        sql_nonce: initialContext.sql_nonce || `${Date.now()}-${providerWorkspaceSequence}`,
+      }
+      : initialContext;
   const resolvedTitle = isDedicatedBrowseData
     ? `data: ${
       initialContext.display_name ||
@@ -389,12 +405,26 @@ export function showProviderWorkspace(
       nodeData?.label ||
       nodeData?._label
     }`
-    : title;
+    : isDedicatedSqlSurface
+      ? `sql: ${
+        initialContext.display_name ||
+        initialContext.resource_label ||
+        (initialContext.resource_id ? String(initialContext.resource_id).split(':').pop() : '') ||
+        databaseTargetId ||
+        nodeData?.label ||
+        nodeData?._label ||
+        title
+      }`
+      : title;
   const panel = {
     id: panelId,
     beforeClose: closeGuards.beforeClose,
     title: resolvedTitle,
-    ...(isDedicatedBrowseData ? {iconKey: 'action.browse_data'} : {}),
+    ...(isDedicatedBrowseData
+      ? {iconKey: 'action.browse_data'}
+      : isDedicatedSqlSurface
+        ? {iconKey: 'tool.query'}
+        : {}),
     closable: true,
     floatable: true,
     content: <ModalCloseGuardContext.Provider value={closeGuards.register}><ErrorBoundary>{serverTool || (resolvedTab === 'firebird-registration' ?
@@ -439,7 +469,7 @@ export function showProviderWorkspace(
           }}
         />)}</ErrorBoundary></ModalCloseGuardContext.Provider>,
   };
-  if (resolvedTab === 'studio') {
+  if (resolvedTab === 'studio' && !isDedicatedSqlSurface) {
     activateSQLConnection({...connection, content: panel.content});
     // Script kinds (insert, update, delete) open in the SQL Studio editor.
     if ((resolvedContext.browse_data || resolvedContext.script) && resolvedContext.resource_id) {
@@ -449,7 +479,12 @@ export function showProviderWorkspace(
     workspace.focus(BROWSER_PANELS.SQL);
     return BROWSER_PANELS.SQL;
   }
-  workspace.openTab(panel, BROWSER_PANELS.MAIN, 'middle', isDedicatedBrowseData);
+  workspace.openTab(
+    panel,
+    BROWSER_PANELS.MAIN,
+    'middle',
+    isDedicatedBrowseData || isDedicatedSqlSurface
+  );
   return panelId;
 }
 

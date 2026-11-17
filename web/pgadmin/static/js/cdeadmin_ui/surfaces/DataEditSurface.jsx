@@ -36,6 +36,7 @@ import {
 } from '../shell/ProjectShell';
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
+import SurfaceExportDialog from './SurfaceExportDialog';
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
@@ -74,7 +75,7 @@ function identityPolicyLabel(editable, policy, resourceKind) {
   return gettext('Read-only (no primary key / row identity)');
 }
 
-function defaultLayoutState() {
+export function defaultLayoutState() {
   return {
     displayMode: DISPLAY_MODES.GRID,
     hybridEditTarget: 'mini_form', // 'mini_form' | 'single_form'
@@ -89,7 +90,7 @@ function defaultLayoutState() {
   };
 }
 
-function orderedColumns(allColumns, orderList, visibleList) {
+export function orderedColumns(allColumns, orderList, visibleList) {
   const byName = new Map((allColumns || []).map((c) => [c.name, c]));
   const ordered = [];
   for (const name of orderList || []) {
@@ -117,7 +118,7 @@ function orderedColumns(allColumns, orderList, visibleList) {
  * Includes left-side hover scrollbars on vertical overflow and strict
  * focus-visibility guarantee (focused field is always scrolled into view).
  */
-function AdaptiveRecordFormCard({
+export function AdaptiveRecordFormCard({
   row,
   rowIndex,
   isCurrent,
@@ -4801,82 +4802,22 @@ export default function DataEditSurface({
         </Box>
       </Dialog>
 
-      {/* Export Dialog */}
-      <Dialog
+      {/* Shared Multi-Format Export Dialog (CSV/TSV, XLSX, ODS, PDF, JSON, SQL) */}
+      <SurfaceExportDialog
         open={exportDialogOpen}
-        title={gettext('Export Surface Rows')}
-        size="medium"
         onClose={() => setExportDialogOpen(false)}
-        actions={
-          <>
-            <Button onClick={() => setExportDialogOpen(false)}>
-              {gettext('Close')}
-            </Button>
-            <Button
-              intent="primary"
-              onClick={() => {
-                const content = formatRowsForExport(
-                  rows,
-                  gridColumns,
-                  exportFormat,
-                  targetResource?.display_name || 'EXPORT_TABLE'
-                );
-                navigator.clipboard?.writeText?.(content).catch(() => {});
-                if (typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
-                  const ext =
-                    exportFormat === 'json'
-                      ? 'json'
-                      : exportFormat.startsWith('sql')
-                        ? 'sql'
-                        : exportFormat;
-                  const blob = new Blob([content], {type: 'text/plain;charset=utf-8'});
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `${targetResource?.display_name || 'rows'}.${ext}`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }
-                setExportDialogOpen(false);
-              }}
-            >
-              {gettext('Download & Copy')}
-            </Button>
-          </>
+        initialFormat={exportFormat}
+        defaultFilename={targetResource?.display_name || 'rows'}
+        defaultTitle={
+          targetResource?.display_name
+            ? `${targetResource.display_name} — Data Export`
+            : 'Data Export'
         }
-      >
-        <Box sx={{display: 'grid', gap: 1.5}}>
-          <div style={{display: 'flex', gap: 6, flexWrap: 'wrap'}}>
-            {[
-              ['csv', 'CSV'],
-              ['tsv', 'TSV'],
-              ['json', 'JSON'],
-              ['sql_insert', 'SQL INSERT'],
-              ['sql_update', 'SQL UPDATE'],
-            ].map(([id, lbl]) => (
-              <Button
-                key={id}
-                size="small"
-                intent={exportFormat === id ? 'primary' : 'neutral'}
-                onClick={() => setExportFormat(id)}
-              >
-                {lbl}
-              </Button>
-            ))}
-          </div>
-          <TextArea
-            rows={8}
-            label={gettext('Preview')}
-            value={formatRowsForExport(
-              rows.slice(0, 15),
-              gridColumns,
-              exportFormat,
-              targetResource?.display_name || 'EXPORT_TABLE'
-            )}
-            onChange={() => {}}
-          />
-        </Box>
-      </Dialog>
+        tableName={targetResource?.display_name || 'EXPORT_TABLE'}
+        rows={rows}
+        columns={gridColumns}
+        onExportHost={(req) => callHost('export_formatted', req)}
+      />
 
       {/* Import Dialog (Stages imported rows into host batch!) */}
       <Dialog

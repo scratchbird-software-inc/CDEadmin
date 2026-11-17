@@ -563,7 +563,9 @@ export function ProjectVerticalDock({
           aria-orientation="vertical"
           aria-label={launchAria}
         >
-          {shell.authorizedApps.map((app) => {
+          {shell.authorizedApps
+            .filter((app) => app.showInSideMenu !== false)
+            .map((app) => {
             const localizedAppTitle = translateShell(
               locale,
               `app.${app.id}.label`,

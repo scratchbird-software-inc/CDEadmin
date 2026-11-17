@@ -116,6 +116,8 @@ export {WorkspaceHost, createWorkspaceHost} from './workspace/WorkspaceHost';
 export {WorkspaceTransferClient} from './workspace/WorkspaceTransferClient';
 export {SurfaceHost} from './workspace/SurfaceHost';
 export {default as DataEditSurface} from './surfaces/DataEditSurface';
+export {default as SqlEditorSurface, SQL_SURFACE_VIEWS} from './surfaces/SqlEditorSurface';
+export {default as SurfaceExportDialog} from './surfaces/SurfaceExportDialog';
 export {
   ProjectAssetClient,
   ProjectAssetClientError,

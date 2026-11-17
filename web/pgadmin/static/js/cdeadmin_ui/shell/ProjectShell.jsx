@@ -111,6 +111,7 @@ export const DEFAULT_PROJECT_APPLICATIONS = Object.freeze([
     supportsRightDrawer: true,
     supportsTabbedIconBar: true,
     defaultLeftOpen: false,
+    showInSideMenu: false,
   }),
   Object.freeze({
     id: 'erd-designer',
