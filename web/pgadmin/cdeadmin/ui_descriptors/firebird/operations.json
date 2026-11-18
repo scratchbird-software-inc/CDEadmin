@@ -606,7 +606,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Embedded Linux Engine13 5.0.4: uses backup_admin plus embedded_runtime/filesystem authority, verifies the approved parent directory via O_DIRECTORY | O_NOFOLLOW and destination absence before dispatch, preserves the canonical filename in RDB$BACKUP_HISTORY, relies on native O_EXCL to prevent overwriting any raced file, and reports file_identity_race_fenced=false without holding SQL admission during online backup."
     },
     {
       "operation_id": "restore_physical",
@@ -669,7 +669,7 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed). Embedded Linux Engine13 5.0.4: uses restore_admin plus embedded_runtime/filesystem authority, hashes and pins ordered backup inputs via /proc/self/fd, keeps the canonical destination database filename, refuses overwriting existing destinations in NEW_DATABASE mode, requires exact destination filename confirmation for IN_PLACE increment application on an offline database (leaving it read-only), and reports rename_race_fenced=false."
     },
     {
       "operation_id": "validate_database",

@@ -879,6 +879,18 @@
           "support_state": "implemented"
         },
         {
+          "operation_id": "backup_physical",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "restore_physical",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
           "operation_id": "upgrade_database",
           "tier": 3,
           "mutation_class": "admin",

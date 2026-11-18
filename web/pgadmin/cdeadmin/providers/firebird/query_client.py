@@ -1444,6 +1444,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                 if operation_id == 'restore_logical':
                     from .local_restore import dispatch_options
                     options = dispatch_options(options)
+                if operation_id == 'restore_physical':
+                    from .local_physical_restore import dispatch_options
+                    options = dispatch_options(options)
             else:
                 native_database = database
             scoped_request, scoped_options = self._service_role_scope(
@@ -1594,28 +1597,46 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         # declared field without replacing the native option validators or
         # silently accepting arbitrary service arguments.
         if (request.get('resource_kind') != 'database' or
-                request.get('operation_id') not in {'shutdown_database', 'fixup_database', 'restore_logical'}):
+                request.get('operation_id') not in {
+                    'shutdown_database', 'fixup_database',
+                    'restore_logical', 'restore_physical'}):
             return None
         fields = copy.deepcopy(request['legacy_fields'])
         if not any(field['field_id'] == 'confirmation' for field in fields):
+            draft = request.get('draft') or {}
+            op_id = request.get('operation_id')
+            embedded_mode = self.config.profile.protocol_id == 'firebird_embedded'
+            restore_flags = draft.get('restore_flags')
+            req_confirm = embedded_mode and (
+                (op_id == 'restore_logical' and draft.get('replace_existing') is True) or
+                (op_id == 'restore_physical' and isinstance(restore_flags, list) and 'IN_PLACE' in restore_flags)
+            )
             fields.append({'field_id': 'confirmation', 'label': 'Confirmation',
-                           'control': 'text', 'required': (
-                               request.get('operation_id') == 'restore_logical' and
-                               self.config.profile.protocol_id == 'firebird_embedded' and
-                               (request.get('draft') or {}).get('replace_existing') is True)})
+                           'control': 'text', 'required': req_confirm})
         return {'fields': fields, 'authority': 'ui_descriptors/firebird/operations.json'}
 
     def validate_admin_operation(self, request):
         result = super().validate_admin_operation(request)
         route = request.get('_provider_route') or {}
+        op_id = request.get('operation_id')
         if (not result.get('errors') and request.get('resource_kind') == 'database' and
-                request.get('operation_id') == 'restore_logical' and route.get('attachment_mode') == 'embedded'):
+                op_id in {'restore_logical', 'restore_physical', 'backup_physical'} and
+                route.get('attachment_mode') == 'embedded'):
             from .local_services import validate_operation
+            draft = request.get('draft', {})
+            target_db = (draft.get('restore_database')
+                         if op_id in {'restore_logical', 'restore_physical'}
+                         else route.get('database'))
             try:
-                validate_operation(route, 'restore_logical', request.get('draft', {}).get('restore_database'), request.get('draft', {}))
+                selected = validate_operation(route, op_id, target_db, draft)
+                if op_id == 'backup_physical':
+                    from .local_physical_backup import selection
+                    selection(selected, draft, require_absent=True)
             except RelationalClientError as error:
-                result.setdefault('errors', []).append({'field_id': None,
-                    'code': 'invalid_local_restore', 'message': str(error)})
+                code = ('invalid_local_backup' if op_id == 'backup_physical'
+                        else 'invalid_local_restore')
+                result.setdefault('errors', []).append({
+                    'field_id': None, 'code': code, 'message': str(error)})
         return result
 
     def plan_admin_operation(self, request):
@@ -1686,6 +1707,23 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                             'Restore can create partial database files or replace the selected primary database. '
                             'Existing native attachments are not disconnected. Canonical output paths have '
                             'no external-process rename fence. Inspect any uncertain result; do not replay automatically.')
+                    elif compiled['operation_id'] == 'restore_physical':
+                        from .local_physical_restore import selection
+                        release_catalog = getattr(self, '_release_idle_catalog', None)
+                        if callable(release_catalog): release_catalog(route)
+                        reviewed = selection(route, compiled.get('options', {}))
+                        compiled['local_physical_restore_selection'] = reviewed
+                        state = reviewed['outputs'][0]['existing']
+                        compiled['local_service_identity'] = ({'path': route['database'], **state} if state else None)
+                        plan['command_preview']['local_physical_restore_selection'] = copy.deepcopy(reviewed)
+                        plan['impact'] = {'scope': 'database', 'execution_host': 'application-local',
+                            'restore_files': copy.deepcopy(reviewed), 'partial_files_may_remain': True,
+                            'canonical_outputs_rename_race_fenced': False}
+                        plan.setdefault('warnings', []).append(
+                            'Physical restore creates a new database file or applies increments in-place to an '
+                            'offline database (leaving it read-only). Existing native attachments are not forced closed. '
+                            'Canonical output paths have no external-process rename fence. Inspect any uncertain result; '
+                            'do not replay automatically.')
                     else:
                         compiled['local_service_identity'] = local_services.file_identity(route)
                     compiled['execution_host'] = 'application-local'
@@ -1706,6 +1744,19 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                             'Files may be partial after any error; retain the review, inspect '
                             'the native outcome and do not replay automatically. '
                             'Native completion is not proof of a tested restore.')
+                    if compiled['operation_id'] == 'backup_physical':
+                        from .local_physical_backup import selection
+                        compiled['local_physical_backup_outputs'] = selection(route, compiled.get('options', {}))
+                        plan['command_preview']['local_physical_backup_outputs'] = copy.deepcopy(compiled['local_physical_backup_outputs'])
+                        plan['impact'] = {**(plan.get('impact') or {}),
+                            'scope': 'database', 'execution_host': 'application-local',
+                            'backup_output_files': copy.deepcopy(compiled['local_physical_backup_outputs']),
+                            'existing_files_overwritten': False, 'partial_files_may_remain': True,
+                            'canonical_outputs_rename_race_fenced': False}
+                        plan.setdefault('warnings', []).append(
+                            'Local physical backup creates the canonical output file exclusively without overwriting '
+                            'existing files and records it in RDB$BACKUP_HISTORY. Files may be partial after any error; '
+                            'inspect the native outcome and do not replay automatically.')
                 # Services credentials may differ from a database attachment.
                 # Obtain them before the visual layer retains the one-shot
                 # plan. A credential refresh can replace the provider binding
@@ -1762,14 +1813,22 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     from .local_restore import selection, metadata_selection
                     if selection(local_route, compiled.get('options', {}), hash_inputs=False) != metadata_selection(compiled.get('local_restore_selection', {})):
                         raise RelationalClientError('Restore files changed since review; refresh and review again')
+                elif compiled['operation_id'] == 'restore_physical':
+                    from .local_physical_restore import selection, metadata_selection
+                    if selection(local_route, compiled.get('options', {}), hash_inputs=False) != metadata_selection(compiled.get('local_physical_restore_selection', {})):
+                        raise RelationalClientError('Physical restore files changed since review; refresh and review again')
                 elif compiled.get('local_service_identity') != local_services.file_identity(local_route):
                     raise RelationalClientError('Local database file changed since review; refresh and review again')
                 if compiled['operation_id'] == 'backup_logical':
                     from .local_backup import selection
                     if selection(local_route, compiled.get('options', {})) != compiled.get('local_backup_outputs'):
                         raise RelationalClientError('Local backup outputs changed since review; refresh and review again')
+                if compiled['operation_id'] == 'backup_physical':
+                    from .local_physical_backup import selection
+                    if selection(local_route, compiled.get('options', {})) != compiled.get('local_physical_backup_outputs'):
+                        raise RelationalClientError('Local physical backup output changed since review; refresh and review again')
                 release_catalog = getattr(self, '_release_idle_catalog', None)
-                if compiled['operation_id'] in {'repair_database', 'upgrade_database', 'restore_logical'} and callable(release_catalog):
+                if compiled['operation_id'] in {'repair_database', 'upgrade_database', 'restore_logical', 'restore_physical'} and callable(release_catalog):
                     release_catalog(local_route)
             except RelationalClientError as error:
                 error.rejected = error.nothing_changed = True
@@ -1812,6 +1871,17 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                         'display_name':local_route['database'].rsplit('/',1)[-1],
                         'registration_changed':False}
                     return result
+            if compiled['operation_id'] == 'restore_physical':
+                from .local_physical_restore import execution, observations
+                reviewed = compiled['local_physical_restore_selection']
+                with self._temporary_operation(), execution(local_route, compiled.get('options', {}), reviewed) as inputs, local_services.restore_target(local_route) as local_file_fenced:
+                    result = dispatch()
+                    result['driver_observation']['local_restore_files'] = observations(inputs, reviewed)
+                    result['restored_database_target'] = {
+                        'database': local_route['database'],
+                        'display_name': local_route['database'].rsplit('/', 1)[-1],
+                        'registration_changed': False}
+                    return result
             with self._temporary_operation(), local_services.service_filename(
                     self, local_route, compiled['local_service_identity'],
                     compiled['operation_id'], compiled.get('options', {})) as local_file_fenced:
@@ -1823,6 +1893,16 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                         result['driver_observation']['local_backup_outputs'] = observed
                         result['driver_observation']['outputs_at_reviewed_paths'] = all(
                             row['requested_path_still_names_output'] for row in observed)
+                        result['driver_observation']['restore_verified'] = False
+                        return result
+                if compiled['operation_id'] == 'backup_physical':
+                    from .local_physical_backup import execution, observations
+                    with execution(local_route, compiled.get('options', {}), compiled['local_physical_backup_outputs']) as outputs:
+                        result = dispatch()
+                        observed = observations(outputs)
+                        result['driver_observation']['local_physical_backup_outputs'] = observed
+                        result['driver_observation']['outputs_at_reviewed_paths'] = all(
+                            row['requested_path_names_regular_file'] for row in observed)
                         result['driver_observation']['restore_verified'] = False
                         return result
                 return dispatch()

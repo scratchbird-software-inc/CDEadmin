@@ -41,6 +41,11 @@ LOCAL_OPTIONS = {
         'restore_flags', 'page_size', 'page_buffers', 'access_mode', 'replica_mode',
         'skip_data', 'include_data', 'parallel_workers', 'statistics', 'verbose',
         'verbose_interval', 'key_holder', 'key_name', 'crypt_plugin', 'confirmation'},
+    'backup_physical': {'backup_file', 'backup_level', 'database_guid',
+        'direct_io_mode', 'direct_io', 'backup_flags', 'clean_history',
+        'history_keep_unit', 'history_keep_value'},
+    'restore_physical': {'backup_files', 'restore_database', 'restore_flags',
+        'direct_io_mode', 'direct_io', 'confirmation'},
 }
 OPERATIONS = frozenset(LOCAL_OPTIONS)
 
@@ -67,7 +72,7 @@ def validate_operation(route, operation, database, options):
         raise RelationalClientError('Select typed local database service options')
     if 'confirmation' in options and not isinstance(options['confirmation'], str):
         raise RelationalClientError('Confirmation must be text')
-    if operation == 'restore_logical':
+    if operation in {'restore_logical', 'restore_physical'}:
         selected = admit_service_route({**route, 'database': options.get('restore_database')})
     elif operation == 'activate_shadow':
         from ..embedded_route import contained_database
@@ -85,15 +90,17 @@ def validate_operation(route, operation, database, options):
             raise RelationalClientError('The shadow target must not be the original database inode')
     else:
         selected = route_for_service(route)
+    normalized_options = options
     if operation == 'database_statistics':
         from .statistics import validate_options
         validate_options(options)
     else:
         from ..relational_admin import RelationalAdministration
-        errors = RelationalAdministration._validate_firebird_service(operation, options)
+        normalized_options = RelationalAdministration._firebird_string_lists(options)
+        errors = RelationalAdministration._validate_firebird_service(operation, normalized_options)
         for field in ({'page_buffers'} if operation == 'set_page_cache_size' else
                       {'sweep_interval'} if operation == 'set_sweep_interval' else set()):
-            if options.get(field) is None:
+            if normalized_options.get(field) is None:
                 raise RelationalClientError('A local service requires ' + field)
         if errors:
             raise RelationalClientError(errors[0]['message'])
@@ -104,10 +111,16 @@ def validate_operation(route, operation, database, options):
         raise RelationalClientError('Local service target differs from the approved database')
     if operation == 'backup_logical':
         from .local_backup import selection
-        selection(selected, options, require_absent=False)
+        selection(selected, normalized_options, require_absent=False)
     if operation == 'restore_logical':
         from .local_restore import selection
-        selection(selected, options, hash_inputs=False)
+        selection(selected, normalized_options, hash_inputs=False)
+    if operation == 'backup_physical':
+        from .local_physical_backup import selection
+        selection(selected, normalized_options, require_absent=False)
+    if operation == 'restore_physical':
+        from .local_physical_restore import selection
+        selection(selected, normalized_options, hash_inputs=False)
     return selected
 
 
@@ -187,10 +200,10 @@ def service_filename(client, route, reviewed, operation, options):
     with no linger or auxiliary files. Canonical operations retain/recheck
     the reviewed descriptor but do not claim an OS rename race fence.
     """
-    if operation == 'backup_logical':
-        # An online gbak must not block new managed SQL attachments for its
-        # full duration. The canonical path cannot introduce a private alias
-        # into a connection's native cache identity.
+    if operation in {'backup_logical', 'backup_physical'}:
+        # An online gbak or nbackup must not block new managed SQL attachments
+        # for its full duration. The canonical path cannot introduce a private
+        # alias into a connection's native cache or RDB$BACKUP_HISTORY identity.
         with pinned_target(route, reviewed, operation, private_alias=False):
             yield False
         return

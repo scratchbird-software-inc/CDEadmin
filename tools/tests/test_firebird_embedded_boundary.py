@@ -39,7 +39,9 @@ def test_embedded_interface_has_no_network_or_remote_service_authority():
                 'set_sweep_interval', 'set_space_reservation', 'set_write_mode',
                 'set_sql_dialect', 'set_replica_mode', 'remove_linger',
                 'sweep_database', 'validate_database',
-                'shutdown_database', 'bring_online', 'fixup_database', 'activate_shadow', 'repair_database', 'upgrade_database', 'backup_logical', 'restore_logical'}
+                'shutdown_database', 'bring_online', 'fixup_database', 'activate_shadow',
+                'repair_database', 'upgrade_database', 'backup_logical', 'restore_logical',
+                'backup_physical', 'restore_physical'}
     assert 'create' in embedded_admin.dialect.supported['table']
 
 

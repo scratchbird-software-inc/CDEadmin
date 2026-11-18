@@ -3305,3 +3305,86 @@ the readonly replica properties and retained row, no-store responses, one-use
 apply, known stale-target refusal and durable unknown-outcome path lookup.
 Other native versions/platforms, installed crypt-provider interoperability and
 human UI acceptance remain separately recorded.
+
+Embedded physical backup
+------------------------
+
+``backup_physical`` uses the application-local Engine13 Services adapter and
+shared typed Firebird ``nbackup`` form. Open its attachment-free workspace via
+``focused_operation_id=backup_physical`` and the selected registered
+``database_target_id``; review and apply require ``backup_admin`` alongside
+embedded-runtime, filesystem and administration authority, with no network
+credential acquisition.
+
+The form admits canonical ``backup_file``, ``backup_level`` (0..2147483647 or
+omitted when ``database_guid`` is supplied), ``database_guid``,
+``direct_io_mode`` (``NATIVE``, ``ON`` or ``OFF``), ``backup_flags``
+(``NO_TRIGGERS``), ``clean_history`` with ``history_keep_unit`` (``ROWS`` or
+``DAYS``) and ``history_keep_value``, and optional SQL ``role``. Unlike
+``gbak``, native Firebird 5.0.4 ``nbackup`` opens its output file with
+``O_CREAT | O_EXCL`` (rejecting pre-opened ``/proc/self/fd`` aliases natively
+with ``337117230``) and records the exact backup filename in
+``RDB$BACKUP_HISTORY``. ``local_physical_backup.py`` therefore validates that
+the destination is an unused canonical filename inside the approved filesystem
+root, pins and rechecks the approved parent directory via
+``O_DIRECTORY | O_NOFOLLOW``, verifies destination absence immediately before
+dispatch, relies on native ``O_EXCL`` against raced file creation, and preserves
+the canonical path for ``RDB$BACKUP_HISTORY``.
+
+Preview and ``impact.backup_output_files`` retain the reviewed output path and
+parent directory identity, including after native failures or lost responses.
+``driver_observation.local_physical_backup_outputs`` reports the observed
+regular-file identity, byte size, ``requested_path_names_regular_file``,
+``parent_identity_unchanged``, ``output_inode_pinned=false``,
+``native_exclusive_create=true``, ``rename_race_fenced=false`` and
+``restore_verified=false``. Online physical backup does not hold managed SQL
+admission during execution; concurrent managed SQL reads remain admitted and
+caller pending transactions remain untouched.
+
+Embedded physical restore
+-------------------------
+
+``restore_physical`` uses the application-local Engine13 Services adapter and
+shared typed Firebird ``nrestore`` form. Open its attachment-free workspace via
+``focused_operation_id=restore_physical``; its registered original database may
+be absent or unavailable, and neither the original nor the destination is opened
+as a SQL preflight. Review and apply require ``restore_admin`` alongside
+embedded-runtime, filesystem and administration authority.
+
+The form admits ordered ``backup_files``, canonical ``restore_database``,
+``restore_flags`` (``IN_PLACE``, ``SEQUENCE``), optional SQL ``role`` and
+conditional ``confirmation``. Firebird 5.0.4 ``nrestore`` does not implement
+direct I/O overrides, so ``direct_io_mode`` remains excluded from the
+``restore_physical`` form contract. Every input in ``backup_files`` must be a
+distinct, nonempty regular-file inode inside the approved filesystem root;
+preview and ``impact.restore_files`` record SHA-256 digests, file metadata and
+destination parent identities. Apply rechecks those identities and hashes and
+passes Linux ``/proc/self/fd`` handles to Engine13 ``nrestore``, preventing
+filename replacement during dispatch from redirecting backup reads.
+
+In ``NEW_DATABASE`` mode (default), ``restore_database`` must not exist; native
+``nrestore`` resets the database GUID and replication sequence by default unless
+``SEQUENCE`` is selected. In ``IN_PLACE`` mode, ``restore_database`` must be an
+existing approved offline database file (distinct from all backup inputs) with
+``confirmation`` equal to the exact canonical ``restore_database`` filename;
+ScratchRobin releases its own idle catalog handles for that target before
+planning and apply without forcing active user sessions closed. Native
+``IN_PLACE`` applies ordered increments, leaves ``MON$READ_ONLY=1``, resets the
+database GUID unless ``SEQUENCE`` is also selected, and rejects duplicate
+increment replay natively with ``337117247``. ``provider_result.restored_database_target``
+reports ``registration_changed=false`` without retargeting existing registrations.
+
+Owned Linux Engine13 5.0.4 qualification (``tools/cdeadmin_firebird_local_physical_qualification.py``)
+exercises 13 native scenarios and 3 authenticated HTTP workflow groups:
+concurrent SQL during online Level 0 backup, ``backup_admin`` and
+``restore_admin`` permission denials, Level 1 and ``database_guid`` incremental
+backups, ``clean_history`` row retention followed by native missing-base refusal
+(``337117235``), read-only source backup refusal (``335544765``), stale output
+and stale destination pre-dispatch refusals, lost completed backup response,
+``NEW_DATABASE`` default GUID reset and ``SEQUENCE`` GUID preservation with
+independent row and binary BLOB readback, ``IN_PLACE`` standby replay and
+duplicate increment refusal (``337117247``), pinned-input filename replacement
+during dispatch, corrupt backup unknown-outcome durable path lookup
+(``337117250``), caller SNAPSHOT transaction preservation, ``no-store`` headers
+and one-use plan retirement. Native Windows/macOS and human UI acceptance remain
+separately tracked.

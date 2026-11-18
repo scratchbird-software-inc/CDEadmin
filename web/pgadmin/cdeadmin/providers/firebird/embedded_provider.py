@@ -39,7 +39,12 @@ class EmbeddedAdministration(RelationalAdministration):
                 continue
             for operation in resource.get('operations', []):
                 if operation['operation_id'] in local_services.OPERATIONS:
-                    if operation['operation_id'] not in {'shutdown_database', 'bring_online', 'fixup_database', 'activate_shadow', 'repair_database', 'upgrade_database', 'backup_logical', 'restore_logical'}:
+                    if operation['operation_id'] not in {
+                        'shutdown_database', 'bring_online', 'fixup_database',
+                        'activate_shadow', 'repair_database', 'upgrade_database',
+                        'backup_logical', 'restore_logical',
+                        'backup_physical', 'restore_physical',
+                    }:
                         operation.pop('workspace_scope', None)
                     # The existing service workspace builds registered-target
                     # references without opening a SQL attachment. Its name
@@ -61,6 +66,14 @@ class EmbeddedAdministration(RelationalAdministration):
                             if field['field_id'] in {'backup_file','restore_database'}:
                                 field['label'] = ('Backup filename on the ScratchRobin host' if field['field_id']=='backup_file'
                                                   else 'Destination database on the ScratchRobin host')
+                    if operation['operation_id'] == 'backup_physical':
+                        for field in operation['form'].get('fields', []):
+                            if field['field_id'] == 'backup_file':
+                                field['label'] = 'Physical backup filename on the ScratchRobin host'
+                    if operation['operation_id'] == 'restore_physical':
+                        for field in operation['form'].get('fields', []):
+                            if field['field_id'] == 'restore_database':
+                                field['label'] = 'Restored database filename on the ScratchRobin host'
                     operation['form']['notes'] = (operation['form'].get('notes', '') + ' ' +
                         'Runs on the ScratchRobin host against the approved local '
                         'database file. Uses filesystem access, with no network '
