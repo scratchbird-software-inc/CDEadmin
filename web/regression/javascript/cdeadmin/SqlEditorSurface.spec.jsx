@@ -336,7 +336,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('radio', {name: 'Mini-Forms'}));
     });
-    expect(document.querySelector('[data-cdeadmin-qa-key="sql-surface-mini-forms"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]')).not.toBeNull();
 
     // Switch back to `Query` under-tab and open Tagged Snippets Drawer
     await act(async () => {
@@ -715,7 +715,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     // 1. Verify adaptive field widths size narrow values (`ID = 1`, `REGION = 'ON'`) much tighter than `NAME = 'Northwind Field Lab'`
     const customerCols = [
       {name: 'CUSTOMER_ID', native_type: 'INTEGER', key: true},
-      {name: 'NAME', native_type: 'VARCHAR', key: false},
+      {name: 'NAME', native_type: 'VARCHAR', key: false, comment: 'Customer display name'},
       {name: 'CITY', native_type: 'VARCHAR', key: false},
       {name: 'REGION', native_type: 'VARCHAR', key: false},
     ];
@@ -802,7 +802,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     await act(async () => {
       fireEvent.click(bookmarkBtn);
     });
-    expect(document.querySelector('[data-cdeadmin-qa-key="sql-bookmark-badge-0"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="grid-bookmark-badge-0"]')).not.toBeNull();
 
     await act(async () => {
       fireEvent.click(navLastBtn);
@@ -813,7 +813,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     await act(async () => {
       fireEvent.click(bookmarkBtn);
     });
-    expect(document.querySelector('[data-cdeadmin-qa-key="sql-bookmark-badge-2"]')).not.toBeNull();
+    expect(document.querySelector('[data-cdeadmin-qa-key="grid-bookmark-badge-2"]')).not.toBeNull();
 
     // Jump to Previous Bookmark (`!<`) -> lands back on row 0!
     await act(async () => {
@@ -847,6 +847,15 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     const cell11 = document.querySelector('[data-grid-nav-cell="1:NAME"]');
     expect(document.activeElement).toBe(cell11);
 
+    await act(async () => {
+      fireEvent.keyDown(cell11, {key: 'PageDown'});
+    });
+    expect(navLastBtn).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => {
+      fireEvent.keyDown(document.querySelector('[data-grid-nav-cell="2:NAME"]'), {key: 'PageUp'});
+    });
+    expect(navFirstBtn).toHaveAttribute('aria-disabled', 'true');
+
     // Switch to Format & Layout -> Mini-Forms and verify `align-content: start` + keyboard navigation across Mini-Forms!
     await act(async () => {
       fireEvent.click(screen.getByRole('tab', {name: 'Format & Layout'}));
@@ -855,9 +864,14 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
       fireEvent.click(screen.getByRole('radio', {name: 'Mini-Forms'}));
     });
 
-    const miniFormsWrap = document.querySelector('[data-cdeadmin-qa-key="sql-surface-mini-forms"]');
+    const miniFormsWrap = document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]');
     expect(miniFormsWrap).not.toBeNull();
-    expect(miniFormsWrap.style.alignContent).toBe('start');
+    expect(miniFormsWrap).toContainElement(document.querySelector('[data-form-nav-cell="1:NAME"]'));
+    const firstNameField = document.querySelector('[data-form-nav-cell="0:NAME"]');
+    fireEvent.focus(firstNameField);
+    expect(screen.getByText('Customer display name')).toHaveAttribute('role', 'note');
+    fireEvent.blur(firstNameField);
+    expect(screen.queryByText('Customer display name')).not.toBeInTheDocument();
     // Bookmark badges carry over into Mini-Form gutters!
     expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-0"]')).not.toBeNull();
     expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-2"]')).not.toBeNull();

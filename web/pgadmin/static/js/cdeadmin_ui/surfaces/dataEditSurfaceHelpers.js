@@ -217,7 +217,8 @@ export function serializeValueForEdit(value) {
   return String(value);
 }
 
-export function coerceEditedValue(rawInput, col, colMeta) {
+export function coerceEditedValue(rawInput, col, colMeta = inferColumnMeta(col)) {
+  if (rawInput === undefined) return undefined;
   if (rawInput === null) return null;
   if (typeof rawInput === 'object') return rawInput;
   const str = String(rawInput);

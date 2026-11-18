@@ -22,7 +22,6 @@ import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {TextArea, TextField} from '../primitives/Field';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
-import {Icon} from '../icons';
 import ContextMenu from '../navigation/ContextMenu';
 import {Dialog} from '../overlays/Dialog';
 import {EmptyState} from '../feedback/EmptyState';
@@ -42,24 +41,21 @@ import CodeEditor from '../editors/CodeEditor';
 import {sqlLanguageConfig, sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {RobinTiledCanvas} from '../integrations/ddn/RobinTiledCanvas';
 import SurfaceExportDialog from './SurfaceExportDialog';
+import RecordDataView from './RecordDataView';
+import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {
-  AdaptiveRecordFormCard,
   defaultLayoutState,
   orderedColumns,
-} from './DataEditSurface';
+} from './RecordForm';
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
   buildFormLayoutPlacements,
   coerceEditedValue,
   formatBytes,
-  formatCellValue,
-  formatRowsForExport,
-  isComplexOrOversizedCell,
   serializeValueForEdit,
 } from './dataEditSurfaceHelpers';
 
-const DEFAULT_COL_WIDTH = 156;
 const GUTTER_WIDTH = 58;
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -210,6 +206,10 @@ export default function SqlEditorSurface({
   const [bookmarksByResult, setBookmarksByResult] = useState({});
   const pendingCellFocusRef = useRef(null);
   const [colPickerOpen, setColPickerOpen] = useState(false);
+  const [columnPickerScope, setColumnPickerScope] = useState('grid');
+  const [selectedCells, setSelectedCells] = useState([]);
+  const gridViewportRef = useRef(null);
+  const [, setScrollRowRange] = useState({start:0,end:30});
   const [viewportWidth, setViewportWidth] = useState(960);
   const workAreaRef = useRef(null);
 
@@ -478,7 +478,7 @@ export default function SqlEditorSurface({
   // Active Result Set & Surface 1 Data Columns / Rows
   const activeResult = hostData?.active_result || null;
   const columns = useMemo(
-    () => activeResult?.columns || EMPTY_ARRAY,
+    () => (activeResult?.columns || EMPTY_ARRAY).map(col => ({...col, editable: col.editable ?? !col.read_only})),
     [activeResult?.columns]
   );
   const rows = useMemo(() => {
@@ -1047,8 +1047,9 @@ export default function SqlEditorSurface({
       const baseRow = !isInsertDraft ? rows[editingRowIndex] : null;
       const changes = {};
       for (const col of columns) {
-        if (col.read_only && !isInsertDraft) continue;
-        const nextVal = rowDraft[col.name];
+        if ((col.read_only || col.editable === false) && !isInsertDraft) continue;
+        if (!isInsertDraft && JSON.stringify(rowDraft[col.name]) === JSON.stringify(baseRow?.values?.[col.name])) continue;
+        const nextVal = coerceEditedValue(rowDraft[col.name], col);
         const origVal = baseRow?.values?.[col.name];
         if (isInsertDraft) {
           if (nextVal !== undefined) changes[col.name] = nextVal;
@@ -1313,7 +1314,7 @@ export default function SqlEditorSurface({
         }
         return;
       }
-      if (action === 'page_up') {
+      if (action === 'page_up' || action === 'prev_page') {
         if (winOff > 0) {
           await navigateResultPage(Math.max(0, winOff - winSz), 0, {kind, colName: colToKeep});
         } else {
@@ -1322,7 +1323,7 @@ export default function SqlEditorSurface({
         }
         return;
       }
-      if (action === 'page_down') {
+      if (action === 'page_down' || action === 'next_page') {
         if (winOff + winSz < totalRows) {
           await navigateResultPage(winOff + winSz, 0, {kind, colName: colToKeep});
         } else {
@@ -3635,692 +3636,69 @@ export default function SqlEditorSurface({
     </div>
   );
 
-  // Render Standard Grid Table (reused in Grid, Hybrid, and Hybrid-When-Editing)
-  const renderGridTable = () => (
-    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
-      <table
-        data-cdeadmin-qa-key="sql-surface-data-grid"
-        style={{
-          width: '100%',
-          borderCollapse: 'separate',
-          borderSpacing: 0,
-          fontSize: '0.8125rem',
-        }}
-      >
-        <thead>
-          <tr>
-            <th
-              style={{
-                position: 'sticky',
-                top: 0,
-                left: 0,
-                zIndex: 5,
-                width: GUTTER_WIDTH,
-                padding: '6px 8px',
-                background: 'var(--sr-surface-subtle, #f8fafc)',
-                borderBottom: '1px solid var(--sr-border-default, #cbd5e1)',
-                borderRight: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                textAlign: 'center',
-              }}
-            >
-              <button
-                type="button"
-                aria-label={gettext('Choose Visible Columns')}
-                data-cdeadmin-qa-key="sql-grid-column-picker-btn"
-                onClick={() => setColPickerOpen((o) => !o)}
-                style={{
-                  border: 0,
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                ☰
-              </button>
-            </th>
-            {gridColumns.map((col) => {
-              const sortSpec = (activeResult?.sort || []).find((s) => s.column === col.name);
-              const filtered = (activeResult?.filters || []).some((f) => f.column === col.name);
-              return (
-                <th
-                  key={col.name}
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 4,
-                    minWidth: layout.gridColPrefs?.[col.name]?.width || DEFAULT_COL_WIDTH,
-                    padding: '6px 10px',
-                    background: 'var(--sr-surface-subtle, #f8fafc)',
-                    borderBottom: '1px solid var(--sr-border-default, #cbd5e1)',
-                    borderRight: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                    textAlign: col.align || 'left',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onClick={(e) => handleToggleSort(col.name, e.shiftKey)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenuState({
-                      open: true,
-                      x: e.clientX,
-                      y: e.clientY,
-                      items: [
-                        {
-                          id: 'col-filter',
-                          label: gettext('Filter on %s…', col.name),
-                          onSelect: () =>
-                            openRightDrawerWith({
-                              panel: 'filter_builder',
-                              filterColumn: col.name,
-                            }),
-                        },
-                        {
-                          id: 'col-profile',
-                          label: gettext('Profile Column %s', col.name),
-                          onSelect: async () => {
-                            const prof = await callHost('column_profile', {column: col.name});
-                            openRightDrawerWith({
-                              panel: 'column_profile',
-                              profileData: prof,
-                            });
-                          },
-                        },
-                      ],
-                    });
-                  }}
-                >
-                  <span>{col.name}</span>
-                  {col.key && <span style={{marginLeft: 4, opacity: 0.7}}>🔑</span>}
-                  {sortSpec && (
-                    <span style={{marginLeft: 4}}>
-                      {sortSpec.dir === 'asc' ? '▲' : '▼'}
-                    </span>
-                  )}
-                  {filtered && <span style={{marginLeft: 4, color: '#2563eb'}}>⧩</span>}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rIdx) => {
-            const isSelected = rIdx === activeRowIndex;
-            const rowEditing = isEditingRow && editingRowIndex === rIdx;
-            const globalRowIdx = (hostData?.window_offset || 0) + rIdx;
-            const isBookmarked = activeBookmarks.has(globalRowIdx);
-            const stageBg =
-              row.stage_state === 'inserted'
-                ? 'rgba(22, 163, 74, 0.09)'
-                : row.stage_state === 'updated'
-                  ? 'rgba(217, 119, 6, 0.09)'
-                  : row.stage_state === 'deleted'
-                    ? 'rgba(220, 38, 38, 0.12)'
-                    : isSelected
-                      ? 'var(--sr-accent-muted, rgba(37, 99, 235, 0.08))'
-                      : 'transparent';
-            return (
-              <tr
-                key={row.identity_token || `r-${rIdx}`}
-                data-cdeadmin-qa-key={`sql-grid-row-${rIdx}`}
-                onClick={async () => {
-                  await selectSqlRowAtIndex(rIdx);
-                }}
-                onDoubleClick={() => beginEditRow(rIdx)}
-                style={{
-                  background: stageBg,
-                  textDecoration: row.stage_state === 'deleted' ? 'line-through' : 'none',
-                }}
-              >
-                <td
-                  title={gettext('Double-click gutter to bookmark record (!)')}
-                  onDoubleClick={(ev) => {
-                    ev.stopPropagation();
-                    toggleSqlBookmark(rIdx);
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    borderBottom: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                    borderRight: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                    textAlign: 'right',
-                    fontVariantNumeric: 'tabular-nums',
-                    whiteSpace: 'nowrap',
-                    opacity: 0.85,
-                  }}
-                >
-                  {isSelected && (
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        color: 'var(--sr-accent-primary, #2563eb)',
-                        marginRight: 4,
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      ▶
-                    </span>
-                  )}
-                  {isBookmarked && (
-                    <span
-                      data-cdeadmin-qa-key={`sql-bookmark-badge-${rIdx}`}
-                      aria-label={gettext('Bookmarked')}
-                      style={{
-                        display: 'inline-block',
-                        marginRight: 4,
-                        padding: '0 4px',
-                        borderRadius: 4,
-                        background: 'rgba(245, 158, 11, 0.22)',
-                        color: '#b45309',
-                        fontWeight: 800,
-                        fontSize: '0.68rem',
-                      }}
-                    >
-                      !
-                    </span>
-                  )}
-                  {row.row_number || globalRowIdx + 1}
-                </td>
-                {gridColumns.map((col, colIdx) => {
-                  const val = rowEditing ? rowDraft?.[col.name] : row.values?.[col.name];
-                  const isNull = val === null || val === undefined;
-                  const complex = isComplexOrOversizedCell(val, col);
-                  const isActiveCell =
-                    isSelected && (activeColName ? activeColName === col.name : colIdx === 0);
-                  const formatted = formatCellValue(val, col, {
-                    booleanFormat: layout.booleanFormat,
-                    localeDateFormat: layout.localeDateFormat,
-                  });
-                  const handleGridCellKeyDown = (e, fromInput = false) => {
-                    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
-                      e.preventDefault();
-                      toggleSqlBookmark(rIdx);
-                      return;
-                    }
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      if (!e.shiftKey) {
-                        if (colIdx < gridColumns.length - 1) {
-                          handleSqlKeyboardCellNavigate(
-                            rIdx,
-                            gridColumns[colIdx + 1].name,
-                            'focus',
-                            'grid'
-                          );
-                        } else {
-                          handleSqlKeyboardCellNavigate(
-                            rIdx + 1,
-                            gridColumns[0]?.name || col.name,
-                            'next_row_boundary',
-                            'grid'
-                          );
-                        }
-                      } else if (colIdx > 0) {
-                        handleSqlKeyboardCellNavigate(
-                          rIdx,
-                          gridColumns[colIdx - 1].name,
-                          'focus',
-                          'grid'
-                        );
-                      } else {
-                        handleSqlKeyboardCellNavigate(
-                          Math.max(0, rIdx - 1),
-                          gridColumns[gridColumns.length - 1]?.name || col.name,
-                          'prev_row_boundary',
-                          'grid'
-                        );
-                      }
-                      return;
-                    }
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(rIdx + 1, col.name, 'next_row_boundary', 'grid');
-                      return;
-                    }
-                    if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(
-                        Math.max(0, rIdx - 1),
-                        col.name,
-                        'prev_row_boundary',
-                        'grid'
-                      );
-                      return;
-                    }
-                    if (!fromInput && e.key === 'ArrowRight') {
-                      e.preventDefault();
-                      if (colIdx < gridColumns.length - 1) {
-                        handleSqlKeyboardCellNavigate(
-                          rIdx,
-                          gridColumns[colIdx + 1].name,
-                          'focus',
-                          'grid'
-                        );
-                      } else {
-                        handleSqlKeyboardCellNavigate(
-                          rIdx + 1,
-                          gridColumns[0]?.name || col.name,
-                          'next_row_boundary',
-                          'grid'
-                        );
-                      }
-                      return;
-                    }
-                    if (!fromInput && e.key === 'ArrowLeft') {
-                      e.preventDefault();
-                      if (colIdx > 0) {
-                        handleSqlKeyboardCellNavigate(
-                          rIdx,
-                          gridColumns[colIdx - 1].name,
-                          'focus',
-                          'grid'
-                        );
-                      } else {
-                        handleSqlKeyboardCellNavigate(
-                          Math.max(0, rIdx - 1),
-                          gridColumns[gridColumns.length - 1]?.name || col.name,
-                          'prev_row_boundary',
-                          'grid'
-                        );
-                      }
-                      return;
-                    }
-                    if (e.key === 'PageDown') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(rows.length - 1, col.name, 'page_down', 'grid');
-                      return;
-                    }
-                    if (e.key === 'PageUp') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(0, col.name, 'page_up', 'grid');
-                      return;
-                    }
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'Home') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(
-                        0,
-                        gridColumns[0]?.name || col.name,
-                        'first_record',
-                        'grid'
-                      );
-                      return;
-                    }
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'End') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(
-                        rows.length - 1,
-                        gridColumns[gridColumns.length - 1]?.name || col.name,
-                        'last_record',
-                        'grid'
-                      );
-                      return;
-                    }
-                    if (!fromInput && e.key === 'Home') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(
-                        rIdx,
-                        gridColumns[0]?.name || col.name,
-                        'focus',
-                        'grid'
-                      );
-                      return;
-                    }
-                    if (!fromInput && e.key === 'End') {
-                      e.preventDefault();
-                      handleSqlKeyboardCellNavigate(
-                        rIdx,
-                        gridColumns[gridColumns.length - 1]?.name || col.name,
-                        'focus',
-                        'grid'
-                      );
-                      return;
-                    }
-                    if (!fromInput && (e.key === 'F2' || e.key === 'Enter')) {
-                      if (isEditableResult) {
-                        e.preventDefault();
-                        beginEditRow(rIdx);
-                      }
-                    }
-                  };
-                  return (
-                    <td
-                      key={col.name}
-                      tabIndex={rowEditing && !col.read_only ? -1 : isActiveCell ? 0 : -1}
-                      data-grid-nav-cell={
-                        rowEditing && !col.read_only ? undefined : `${rIdx}:${col.name}`
-                      }
-                      onClick={() => setActiveColName(col.name)}
-                      onFocus={() => setActiveColName(col.name)}
-                      onKeyDown={
-                        rowEditing && !col.read_only
-                          ? undefined
-                          : (e) => handleGridCellKeyDown(e, false)
-                      }
-                      style={{
-                        padding: '4px 10px',
-                        borderBottom: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                        borderRight: '1px solid var(--sr-border-subtle, #e2e8f0)',
-                        textAlign: col.align || 'left',
-                        maxWidth: 340,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        outline: isActiveCell
-                          ? '2px solid var(--sr-accent-primary, #2563eb)'
-                          : 'none',
-                        outlineOffset: -2,
-                      }}
-                    >
-                      {rowEditing && !col.read_only ? (
-                        <input
-                          className="sr-input"
-                          aria-label={`Edit ${col.name}`}
-                          data-grid-nav-cell={`${rIdx}:${col.name}`}
-                          value={serializeValueForEdit(val)}
-                          onChange={(e) =>
-                            setRowDraft((prev) => ({
-                              ...(prev || {}),
-                              [col.name]: coerceEditedValue(e.target.value, col),
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              acceptCurrentRow();
-                            } else if (e.key === 'Escape') {
-                              setIsEditingRow(false);
-                              setEditingRowIndex(null);
-                              setIsInsertDraft(false);
-                              setRowDraft(null);
-                            } else {
-                              handleGridCellKeyDown(e, true);
-                            }
-                          }}
-                          style={{width: '100%', minHeight: 24, padding: '2px 6px'}}
-                        />
-                      ) : (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            fontStyle: isNull ? 'italic' : 'normal',
-                            opacity: isNull ? 0.58 : 1,
-                          }}
-                        >
-                          <span>{isNull ? '<null>' : formatted.text ?? String(formatted)}</span>
-                          {complex && (
-                            <button
-                              type="button"
-                              className="sr-btn"
-                              aria-label={gettext('Inspect %s in Right Drawer', col.name)}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                openRightDrawerWith({
-                                  panel: 'value_inspector',
-                                  valueRowIndex: rIdx,
-                                  valueColName: col.name,
-                                });
-                              }}
-                              style={{minHeight: 18, padding: '0 5px', fontSize: '0.7rem'}}
-                            >
-                              [...]
-                            </button>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-
-      {/* Column Visibility Popover */}
-      {colPickerOpen && (
-        <div
-          role="dialog"
-          aria-label={gettext('Visible Grid Columns')}
-          style={{
-            position: 'absolute',
-            top: 34,
-            left: 12,
-            zIndex: 30,
-            padding: 10,
-            borderRadius: 8,
-            background: 'var(--sr-island-bg, #ffffff)',
-            border: '1px solid var(--sr-border-default, #cbd5e1)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
-            maxHeight: 280,
-            overflow: 'auto',
-            display: 'grid',
-            gap: 4,
-          }}
-        >
-          <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
-            <strong style={{fontSize: '0.78rem'}}>{gettext('Grid Columns')}</strong>
-            <button
-              type="button"
-              onClick={() => setColPickerOpen(false)}
-              style={{border: 0, background: 'transparent', cursor: 'pointer'}}
-            >
-              ×
-            </button>
-          </div>
-          {columns.map((c) => {
-            const vis =
-              !Array.isArray(layout.gridVisibleCols) || layout.gridVisibleCols.includes(c.name);
-            return (
-              <label key={c.name} style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem'}}>
-                <input
-                  type="checkbox"
-                  checked={vis}
-                  onChange={(e) => {
-                    const curSet = new Set(
-                      Array.isArray(layout.gridVisibleCols)
-                        ? layout.gridVisibleCols
-                        : columns.map((col) => col.name)
-                    );
-                    if (e.target.checked) curSet.add(c.name);
-                    else if (curSet.size > 1) curSet.delete(c.name);
-                    setLayout((prev) => ({...prev, gridVisibleCols: Array.from(curSet)}));
-                  }}
-                />
-                {c.name}
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </ScratchScrollArea>
-  );
-
-  // Render Data Pane across all 5 Surface 1 Display Modes!
-  const renderDataPane = () => {
-    if (!activeResult || columns.length === 0) {
-      return (
-        <Box sx={{p: 3, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-          <EmptyState
-            title={gettext('No Result Set Active')}
-            description={gettext('Execute a SELECT statement (F9) or Script (F5) to view and edit rows.')}
-          />
-        </Box>
-      );
-    }
-
-    const mode = layout.displayMode;
-    const winOff = hostData?.window_offset || 0;
-
-    if (mode === DISPLAY_MODES.MINI_FORMS) {
-      return (
-        <div
-          className="sr-left-hover-scroll"
-          data-cdeadmin-qa-key="sql-surface-mini-forms"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            overflow: 'auto',
-            display: 'grid',
-            alignContent: 'start',
-            gap: 0,
-          }}
-        >
-          {rows.map((row, idx) => (
-            <AdaptiveRecordFormCard
-              key={row.identity_token || `mf-${idx}`}
-              row={row}
-              rowIndex={idx}
-              isCurrent={idx === activeRowIndex}
-              isEditing={isEditingRow && editingRowIndex === idx}
-              isBookmarked={activeBookmarks.has(winOff + idx)}
-              draftValues={rowDraft}
-              columns={formColumns}
-              formLayout={sharedFormLayout}
-              formFieldPrefs={layout.formFieldPrefs}
-              booleanFormat={layout.booleanFormat}
-              localeDateFormat={layout.localeDateFormat}
-              totalRowsInPage={rows.length}
-              onSelectRow={(i) => selectSqlRowAtIndex(i)}
-              onFocusField={(cName) => setActiveColName(cName)}
-              onToggleBookmark={toggleSqlBookmark}
-              onNavigateFormField={(r, c, act) =>
-                handleSqlKeyboardCellNavigate(r, c, act, 'form')
-              }
-              onFieldChange={(cName, val) =>
-                setRowDraft((prev) => ({
-                  ...(prev || {}),
-                  [cName]: coerceEditedValue(
-                    val,
-                    formColumns.find((fc) => fc.name === cName) || {name: cName}
-                  ),
-                }))
-              }
-              onOpenComplexInDrawer={(rIdx, cName) =>
-                openRightDrawerWith({
-                  panel: 'value_inspector',
-                  valueRowIndex: rIdx,
-                  valueColName: cName,
-                })
-              }
-            />
-          ))}
-        </div>
-      );
-    }
-
-    if (mode === DISPLAY_MODES.SINGLE_FORM) {
-      return (
-        <div
-          data-cdeadmin-qa-key="sql-surface-single-form"
-          style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}
-        >
-          {currentRow && (
-            <AdaptiveRecordFormCard
-              row={currentRow}
-              rowIndex={activeRowIndex}
-              isCurrent
-              isEditing={isEditingRow && editingRowIndex === activeRowIndex}
-              isBookmarked={activeBookmarks.has(winOff + activeRowIndex)}
-              draftValues={rowDraft}
-              columns={formColumns}
-              formLayout={sharedFormLayout}
-              formFieldPrefs={layout.formFieldPrefs}
-              booleanFormat={layout.booleanFormat}
-              localeDateFormat={layout.localeDateFormat}
-              fullArea
-              totalRowsInPage={rows.length}
-              onSelectRow={(i) => selectSqlRowAtIndex(i)}
-              onFocusField={(cName) => setActiveColName(cName)}
-              onToggleBookmark={toggleSqlBookmark}
-              onNavigateFormField={(r, c, act) =>
-                handleSqlKeyboardCellNavigate(r, c, act, 'form')
-              }
-              onFieldChange={(cName, val) =>
-                setRowDraft((prev) => ({
-                  ...(prev || {}),
-                  [cName]: coerceEditedValue(
-                    val,
-                    formColumns.find((fc) => fc.name === cName) || {name: cName}
-                  ),
-                }))
-              }
-              onOpenComplexInDrawer={(rIdx, cName) =>
-                openRightDrawerWith({
-                  panel: 'value_inspector',
-                  valueRowIndex: rIdx,
-                  valueColName: cName,
-                })
-              }
-            />
-          )}
-        </div>
-      );
-    }
-
-    if (
-      mode === DISPLAY_MODES.HYBRID ||
-      (mode === DISPLAY_MODES.HYBRID_EDIT && isEditingRow)
-    ) {
-      return (
-        <div
-          data-cdeadmin-qa-key="sql-surface-hybrid"
-          style={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}
-        >
-          {currentRow && (
-            <div style={{borderBottom: '1px solid var(--sr-border-default)', flexShrink: 0}}>
-              <AdaptiveRecordFormCard
-                row={currentRow}
-                rowIndex={activeRowIndex}
-                isCurrent
-                isEditing={isEditingRow && editingRowIndex === activeRowIndex}
-                isBookmarked={activeBookmarks.has(winOff + activeRowIndex)}
-                draftValues={rowDraft}
-                columns={formColumns}
-                formLayout={sharedFormLayout}
-                formFieldPrefs={layout.formFieldPrefs}
-                booleanFormat={layout.booleanFormat}
-                localeDateFormat={layout.localeDateFormat}
-                maxHeight="220px"
-                totalRowsInPage={rows.length}
-                onSelectRow={(i) => selectSqlRowAtIndex(i)}
-                onFocusField={(cName) => setActiveColName(cName)}
-                onToggleBookmark={toggleSqlBookmark}
-                onNavigateFormField={(r, c, act) =>
-                  handleSqlKeyboardCellNavigate(r, c, act, 'form')
-                }
-                onFieldChange={(cName, val) =>
-                  setRowDraft((prev) => ({
-                    ...(prev || {}),
-                    [cName]: coerceEditedValue(
-                      val,
-                      formColumns.find((fc) => fc.name === cName) || {name: cName}
-                    ),
-                  }))
-                }
-                onOpenComplexInDrawer={(rIdx, cName) =>
-                  openRightDrawerWith({
-                    panel: 'value_inspector',
-                    valueRowIndex: rIdx,
-                    valueColName: cName,
-                  })
-                }
-              />
-            </div>
-          )}
-          <div style={{flex: 1, minHeight: 0, position: 'relative', display: 'flex'}}>
-            {renderGridTable()}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{flex: 1, minHeight: 0, position: 'relative', display: 'flex'}}>
-        {renderGridTable()}
-      </div>
-    );
+  const setRecordColumnPref = (name, patch) => setLayout(prev => ({...prev,
+    gridColPrefs: {...prev.gridColPrefs, [name]: {...prev.gridColPrefs[name], ...patch}},
+    formFieldPrefs: {...prev.formFieldPrefs, [name]: {...prev.formFieldPrefs[name], ...patch}},
+  }));
+  const cancelRecordDraft = () => {setIsEditingRow(false); setEditingRowIndex(null); setRowDraft(null); setIsInsertDraft(false);};
+  const recordDrawer = patch => openRightDrawerWith({
+    panel: patch.mode === 'complex_value' ? 'value_inspector' : patch.mode,
+    valueRowIndex: patch.rowIndex, valueColName: patch.column?.name || patch.column,
+  });
+  const recordHeaderMenu = (event, col) => {
+    event.preventDefault();
+    setActiveColName(col.name);
+    setContextMenuState({open:true,x:event.clientX,y:event.clientY,items:[
+      {id:'columns',label:gettext('Visible Columns & Field Order…'),onSelect:()=>{setColumnPickerScope('grid');setColPickerOpen(true);}},
+      {id:'freeze',label:gettext('Freeze / Unfreeze Column'),onSelect:()=>setRecordColumnPref(col.name,{pinned:!layout.gridColPrefs[col.name]?.pinned})},
+      {id:'filter',label:gettext('Filter Options…'),onSelect:()=>openRightDrawerWith({panel:'filter_builder',filterColumn:col.name})},
+      {id:'profile',label:gettext('Column Profile / Distinct Values'),onSelect:async()=>openRightDrawerWith({panel:'column_profile',profileData:await callHost('column_profile',{column:col.name})})},
+    ]});
   };
+  const recordFormMenu = (event) => {
+    event.preventDefault();setContextMenuState({open:true,x:event.clientX,y:event.clientY,items:[
+      {id:'edit',label:isEditingRow?gettext('Accept Row'):gettext('Edit Row'),disabled: !isEditableResult, onSelect:()=>isEditingRow?acceptCurrentRow():beginEditRow()},
+      {id:'columns',label:gettext('Form Fields & Order…'),onSelect:()=>{setColumnPickerScope('form');setColPickerOpen(true);}},
+    ]});
+  };
+  const renderDataPane = () => <RecordDataView model={{
+    acceptCurrentRow,
+    activeColName,
+    activeRowIndex,
+    beginEditRow,
+    bookmarkedGlobals: activeBookmarks,
+    cancelRowDraft: cancelRecordDraft,
+    currentRow,
+    editingRowIndex,
+    effectiveDisplayMode: layout.displayMode === DISPLAY_MODES.HYBRID_EDIT ? (isEditingRow ? (layout.hybridEditTarget === 'single_form' ? DISPLAY_MODES.SINGLE_FORM : DISPLAY_MODES.HYBRID) : DISPLAY_MODES.GRID) : layout.displayMode,
+    formColumns,
+    gridColumns,
+    gridViewportRef,
+    handleKeyboardCellNavigate: handleSqlKeyboardCellNavigate,
+    handleToggleColumnSort: handleToggleSort,
+    hostData: {...hostData,sorts:(activeResult?.sort || []).map(s=>({...s,direction:s.dir||s.direction})),filters:activeResult?.filters||[]},
+    isEditingRow,
+    layout,
+    openFormFieldContextMenu: (event,col,rowIndex)=>{event.preventDefault();openRightDrawerWith({panel:'value_inspector',valueRowIndex:rowIndex,valueColName:col.name});},
+    openHeaderContextMenu: recordHeaderMenu,
+    openMiniFormContextMenu: recordFormMenu,
+    openRightDrawerWith: recordDrawer,
+    quickFindText: '',
+    rowDraft,
+    rows,
+    selectRowAtIndex: selectSqlRowAtIndex,
+    selectedCells,
+    setActiveColName,
+    setColumnPickerOpen: setColPickerOpen,
+    setColumnPickerScope,
+    setColumnPref: setRecordColumnPref,
+    setRowDraft,
+    setScrollRowRange,
+    setSelectedCells,
+    sharedFormLayout,
+    toggleBookmarkAtRow: toggleSqlBookmark,
+    viewportWidth
+  }}/>;
 
   return (
     <Box
@@ -4337,6 +3715,12 @@ export default function SqlEditorSurface({
         position: 'relative',
       }}
     >
+      <ColumnOrderDialog open={colPickerOpen} scope={columnPickerScope} allColumns={columns}
+        visibleNames={columnPickerScope === 'form' ? layout.formVisibleCols : layout.gridVisibleCols}
+        orderNames={columnPickerScope === 'form' ? layout.formColOrder : layout.gridColOrder}
+        onClose={()=>setColPickerOpen(false)} onApply={(order,visible)=>{
+          setLayout(prev=>columnPickerScope==='form'?{...prev,formColOrder:order,formVisibleCols:visible}:{...prev,gridColOrder:order,gridVisibleCols:visible});setColPickerOpen(false);
+        }}/>
       {/* Hidden local .sql file reader */}
       <input
         ref={fileInputRef}

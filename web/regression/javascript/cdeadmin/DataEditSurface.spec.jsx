@@ -376,6 +376,13 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     await act(async () => {});
     expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]')).toBeTruthy();
 
+    const nameField = document.querySelector('[data-form-nav-cell="0:ACCOUNT_NAME"]');
+    expect(screen.queryByText('Ledger account display name')).not.toBeInTheDocument();
+    fireEvent.focus(nameField);
+    expect(screen.getByText('Ledger account display name')).toHaveAttribute('role', 'note');
+    fireEvent.blur(nameField);
+    expect(screen.queryByText('Ledger account display name')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('radio', {name: 'Hybrid (Grid + Current Mini-Form)'}));
     await act(async () => {});
     expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-hybrid-pinned-form"]')).toBeTruthy();
