@@ -469,16 +469,10 @@
     "ddn_toolchain.py": "7cb9fede2af1bd77aabaa16709bd88bdd21076f54236e1afa52531acfad28b78"
   },
   "compiler": {
-    "node": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+    "node": "6f32069480ec14d52b6d7b1f3c7124cfbbc46203abf5ddf5c65b127435f3f329",
     "typescript": "3ae902c92cc44dace175c0e69e13a4b0899f6983c6121d76b9ab8dd5795e7675"
   },
   "tool_artifacts": [
-    {
-      "package": "node-linux-x64",
-      "version": "24.22.1",
-      "integrity": "sha512-ogMoFZRQLCX7VpzQAtfs7q0DVFa7D79LKhmttHZNGJrz0Yp5/LtU0MISM7gvThSo6AbVelac9uVu9Jfm1464ow==",
-      "tarball": "https://registry.npmjs.org/node-linux-x64/-/node-linux-x64-24.22.1.tgz"
-    },
     {
       "package": "typescript",
       "version": "5.9.3",
@@ -486,10 +480,10 @@
       "tarball": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz"
     },
     {
-      "package": "@esbuild/linux-x64",
+      "package": "@esbuild/darwin-arm64",
       "version": "0.28.2",
-      "integrity": "sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==",
-      "tarball": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz"
+      "integrity": "sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw==",
+      "tarball": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.28.2.tgz"
     },
     {
       "package": "@jridgewell/gen-mapping",
