@@ -46,7 +46,8 @@ def test_slot_scope_and_when_filters():
                                         state={'engine_id': 'firebird', 'route_kind': 'network'}, base={}))
     embedded = ids(declared_tool_actions('firebird', 'database', 'pre_lifecycle',
                                          state={'engine_id': 'firebird', 'route_kind': 'embedded_file'}, base={}))
-    assert 'database.firebird.isql' in network and 'database.firebird.isql' not in embedded
+    assert 'database.firebird.backup' in network and 'database.firebird.backup' not in embedded
+    assert 'database.firebird.isql' in network and 'database.firebird.isql' in embedded
 
 
 def test_enablement_reasons_follow_the_declared_conditions():

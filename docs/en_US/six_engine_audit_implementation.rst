@@ -3388,3 +3388,51 @@ during dispatch, corrupt backup unknown-outcome durable path lookup
 (``337117250``), caller SNAPSHOT transaction preservation, ``no-store`` headers
 and one-use plan retirement. Native Windows/macOS and human UI acceptance remain
 separately tracked.
+
+FB-AUD-09: embedded/local external ISQL host contract
+-----------------------------------------------------
+
+``firebird_isql_context`` and ``runtime/src/js/firebirdIsql.js`` now define an
+explicit same-host local-file contract for ``firebird-embedded`` registrations
+alongside the existing network TCP contract, and ``database.firebird.isql`` in
+``ui_descriptors/firebird/tools.json`` is enabled for both network and embedded
+routes.
+
+For ``firebird-native``, the response retains ``dsn``, ``user``, ``role``,
+``charset`` and ``sql_dialect`` (1 or 3), requiring a launch-only password in
+the desktop launcher. For ``firebird-embedded`` on Linux, the server validates
+the registered route through ``admit_service_route`` and ``file_identity``
+(enforcing canonical containment inside ``filesystem_root``, regular-file
+existence and absence of network credential references), releases its own idle
+catalog handles for that target so SuperServer-mode Engine13 file locks are not
+held by idle metadata caches, and returns ``attachment_mode="embedded"``,
+``database``, ``filesystem_root``, ``native_provider="Engine13"``,
+``password_required=false`` and ``same_host_authority`` containing ``platform``,
+``boot_id`` (``/proc/sys/kernel/random/boot_id``), ``hostname``,
+``database_identity`` (``device``, ``inode``) and ``firebird_lock_directory``.
+Client-supplied file paths are never accepted by ``firebird_isql_context``.
+
+Before spawning Konsole or xterm, the desktop launcher verifies that its local
+Linux ``boot_id`` matches ``same_host_authority.boot_id`` (refusing remote
+desktop clients connected to a different ScratchRobin server host), rechecks
+``filesystem_root`` and ``database`` ``realpath`` and ``(device, inode)``
+identity, verifies that the selected Firebird 5 ``isql`` runtime includes
+``plugins/libEngine13.so``, refuses any ``password`` on embedded launches,
+strips ``ISC_*`` variables, stages an isolated ``Providers = Engine13`` runtime
+configuration sharing ``firebird_lock_directory`` when present, and reports
+``execution_host="same-host-local-desktop"``, ``native_connection_confirmed=false``
+and ``transaction_outcome="owned-by-isql"`` (terminal spawn alone does not claim
+native attachment success, particularly if another exclusive SuperServer-mode
+process currently holds the file).
+
+UI handoff for ``web/pgadmin/static/js/Dialogs/FirebirdIsql.jsx``: when
+``connection.attachment_mode === 'embedded'``, display ``connection.database``
+(read-only, labeled as the approved local database filename on this host) in
+place of ``connection.dsn``, omit or disable the password input because
+``connection.password_required === false``, and allow launching without a
+password. Owned Linux 5.0.4 qualification
+(``tools/cdeadmin_firebird_embedded_isql_qualification.py``) verifies
+authenticated HTTP context issuance, actual Engine13 5.0.4 ``isql`` attachment
+(``MON$REMOTE_PROTOCOL`` null) and committed row readback, stripped ``ISC_PASSWORD``,
+cross-host ``boot_id`` refusal and replaced-inode refusal. Windows/macOS host
+launchers and UI presentation acceptance remain with their owning teams.

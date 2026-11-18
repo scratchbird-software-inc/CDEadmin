@@ -3984,22 +3984,82 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(str(error)) from error
 
     def firebird_isql_context(self, server, request):
-        """Describe an owned TCP target; never launch or export its secrets."""
+        """Describe an owned TCP or same-host embedded target; never launch or export secrets."""
+        import os
+        from pathlib import Path
+        import socket
+        import sys
         from ..providers.firebird.connection_strings import database_dsn
+        from ..sdk.relational import RelationalClientError
         if not isinstance(request, dict) or set(request) != {'database_target_id'}:
             raise ProviderWorkspaceError('Select one registered Firebird database')
         target = request['database_target_id']
         if not isinstance(target, str) or not target:
             raise ProviderWorkspaceError('Select one registered Firebird database')
-        if getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None) != 'firebird-native':
-            raise ProviderWorkspaceError('Desktop ISQL requires a Firebird TCP registration')
-        _context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        profile_id = getattr(getattr(server, 'endpoint_profile', None), 'profile_id', None)
+        if profile_id not in {'firebird-native', 'firebird-embedded'}:
+            raise ProviderWorkspaceError('Desktop ISQL requires a Firebird registration')
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
         route = endpoint['route']
-        if not route.get('host') or route.get('protocol') == 'XNET':
-            raise ProviderWorkspaceError('Desktop ISQL requires an explicit TCP host')
         dialect = route.get('sql_dialect', 3)
         if type(dialect) not in (int, str) or str(dialect) not in {'1', '3'}:
             raise ProviderWorkspaceError('Native client SQL dialect must be 1 or 3')
+        if profile_id == 'firebird-embedded':
+            if sys.platform != 'linux':
+                raise ProviderWorkspaceError('Embedded desktop ISQL is qualified on Linux hosts only')
+            from ..providers.firebird.local_services import admit_service_route, file_identity
+            try:
+                admitted = admit_service_route(route)
+                identity = file_identity(admitted)
+                fs_root = str(Path(admitted['filesystem_root']).resolve(strict=True))
+                boot_id = Path('/proc/sys/kernel/random/boot_id').read_text(encoding='utf-8').strip()
+            except (RelationalClientError, OSError, KeyError) as error:
+                raise ProviderWorkspaceError(str(error)) from error
+            if not boot_id:
+                raise ProviderWorkspaceError('Application host boot identity is unavailable')
+            registry = getattr(self.endpoint_service, 'provider_registry', None)
+            if context is not None and registry is not None:
+                try:
+                    provider = registry.resolve(context).instance
+                    release_idle = getattr(getattr(provider, 'client', None), '_release_idle_catalog', None)
+                    if callable(release_idle):
+                        release_idle(admitted)
+                except Exception:
+                    pass
+            lock_env = os.environ.get('FIREBIRD_LOCK') or ''
+            lock_dir = ''
+            if lock_env:
+                try:
+                    resolved_lock = Path(lock_env).resolve(strict=True)
+                    if resolved_lock.is_dir():
+                        lock_dir = str(resolved_lock)
+                except OSError:
+                    lock_dir = ''
+            return {
+                'schema': 'scratchrobin.firebird.isql-context@1',
+                'attachment_mode': 'embedded',
+                'database_target_id': target,
+                'database': identity['path'],
+                'filesystem_root': fs_root,
+                'same_host_authority': {
+                    'platform': 'linux',
+                    'boot_id': boot_id,
+                    'hostname': socket.gethostname(),
+                    'database_identity': {
+                        'device': identity['device'],
+                        'inode': identity['inode'],
+                    },
+                    'firebird_lock_directory': lock_dir,
+                },
+                'native_provider': 'Engine13',
+                'password_required': False,
+                'user': admitted.get('user') or 'SYSDBA',
+                'role': admitted.get('role') or '',
+                'charset': admitted.get('charset') or 'UTF8',
+                'sql_dialect': int(dialect),
+            }
+        if not route.get('host') or route.get('protocol') == 'XNET':
+            raise ProviderWorkspaceError('Desktop ISQL requires an explicit TCP host')
         return {'schema': 'scratchrobin.firebird.isql-context@1',
                 'database_target_id': target,
                 'dsn': database_dsn(route['database'], route['host'], route.get('port'), route.get('protocol') or 'INET'),

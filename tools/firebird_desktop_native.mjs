@@ -9,7 +9,8 @@ import {launchIsql} from '../runtime/src/js/firebirdIsql.js';
 const [mode, input, output] = process.argv.slice(2);
 const selected = JSON.parse(await readFile(input, 'utf8'));
 const password = process.env.CDEADMIN_NATIVE_FIXTURE_PASSWORD;
-assert.ok(password);
+const isEmbeddedIsql = mode === 'isql' && selected?.connection?.attachment_mode === 'embedded';
+if (!isEmbeddedIsql) assert.ok(password);
 if (mode === 'docker') {
   const calls = [];
   const execute = async (executable, args, env, timeout=30000) => {
@@ -46,7 +47,8 @@ if (mode === 'docker') {
   assert.ok(!JSON.stringify(result).includes(password));
   await writeFile(output, JSON.stringify(result, null, 2) + '\n');
 } else if (mode === 'isql') {
-  const receipt = await launchIsql({...selected, password});
+  const launchArg = isEmbeddedIsql ? {...selected} : {...selected, password};
+  const receipt = await launchIsql(launchArg);
   assert.equal(receipt.state, 'process_started');
   assert.equal(receipt.native_connection_confirmed, false);
   assert.equal(receipt.transaction_outcome, 'owned-by-isql');

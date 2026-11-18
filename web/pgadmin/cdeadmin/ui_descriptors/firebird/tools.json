@@ -350,10 +350,8 @@
       "icon": "action.script",
       "group": "database",
       "arguments": {
-        "tab": "firebird-isql"
-      },
-      "when": {
-        "route_kind": "network"
+        "tab": "firebird-isql",
+        "workspace_action": "firebird_isql_context"
       }
     },
     {
