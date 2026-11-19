@@ -4469,6 +4469,91 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def firebird_database_encryption_action(self, server, request):
+        from ..providers.firebird.provider import FirebirdProvider
+        from ..providers.firebird.host_runtime_grant import resolve_admin_host_scope
+        from ..providers.firebird.database_encryption import (
+            descriptor, inspect_encryption_status, wait_for_encryption_settle,
+        )
+        if not isinstance(request, dict) or not isinstance(request.get('action'), str):
+            raise ProviderWorkspaceError('Invalid Firebird database encryption request')
+        target = request.get('database_target_id')
+        context, endpoint, _root = self.endpoint_service.workspace(
+            server,
+            database_target_id=target if isinstance(target, str) and target else Ellipsis,
+        )
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Firebird database encryption requires Firebird')
+        provider._admit_transport({'route': endpoint['route']})
+        provider._require('administer', 'resource')
+        action = request['action']
+        body = {k: v for k, v in request.items() if k not in {'database_target_id', 'action'}}
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            try:
+                host_scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+            except ValueError:
+                host_scope = None
+            if action == 'inspect' and not body:
+                if not endpoint['route'].get('database'):
+                    raise ValueError('Select a registered Firebird database target')
+                return inspect_encryption_status(provider.client, endpoint['route'], host_scope=host_scope)
+            if action == 'wait_settle' and set(body) <= {'expected_state_code', 'timeout_seconds'} and 'expected_state_code' in body:
+                if not endpoint['route'].get('database'):
+                    raise ValueError('Select a registered Firebird database target')
+                return wait_for_encryption_settle(
+                    provider.client,
+                    endpoint['route'],
+                    body['expected_state_code'],
+                    timeout_seconds=body.get('timeout_seconds', 15),
+                    host_scope=host_scope,
+                )
+            raise ValueError('Invalid Firebird database encryption action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def firebird_replication_action(self, server, request):
+        from ..providers.firebird.host_runtime_grant import resolve_admin_host_scope
+        from ..providers.firebird.replication_workflow import (
+            descriptor, inspect_replication_state,
+            prepare_replication_review, apply_replication_operation,
+        )
+        from .firebird_host_actions import HostActions
+        context, endpoint, provider, store, owner, binding, action, body = (
+            self._firebird_host_context(server, request, 'Firebird replication workflow')
+        )
+        journal = HostActions(
+            store.path.with_name('firebird-replication-operations.json'),
+            'firebird_replication_actions',
+            {'configure_primary', 'seed_replica', 'distribute_segments', 'promote_replica'},
+        )
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return journal.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'inspect' and not body:
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+                return inspect_replication_state(scope, provider.client, endpoint['route'])
+            if action == 'review':
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=True)
+                reviewed = prepare_replication_review(scope, body, provider.client, endpoint['route'])
+                return journal.review(owner, binding, reviewed['operation'], reviewed)
+            if action == 'apply':
+                return journal.apply(
+                    owner,
+                    binding,
+                    body,
+                    lambda rec: apply_replication_operation(rec, provider.client, endpoint['route']),
+                )
+            raise ValueError('Invalid Firebird replication workflow action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def firebird_event_action(self, server, request):
         from ..providers.firebird.provider import FirebirdProvider
         from .firebird_schema_plan import digest

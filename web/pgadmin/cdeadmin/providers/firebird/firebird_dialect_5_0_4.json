@@ -30,7 +30,7 @@
       "session_settings": 9,
       "statements": 31
     },
-    "authoritative_task_count": 128,
+    "authoritative_task_count": 130,
     "authoritative_task_ids": [
       "visual_admin.authentication-mapping.alter",
       "visual_admin.authentication-mapping.comment",
@@ -58,7 +58,9 @@
       "visual_admin.database.add_files",
       "visual_admin.database.alter",
       "visual_admin.database.begin_backup",
+      "visual_admin.database.decrypt_database",
       "visual_admin.database.drop_difference_file",
+      "visual_admin.database.encrypt_database",
       "visual_admin.database.end_backup",
       "visual_admin.domain.alter",
       "visual_admin.domain.create",
@@ -161,7 +163,7 @@
       "visual_admin.view.revoke",
       "visual_admin.view.update"
     ],
-    "implemented_task_count": 128,
+    "implemented_task_count": 130,
     "language_acceptance_authority": "engine_parser",
     "scope": "cdeadmin_generated_tasks"
   },
@@ -8925,6 +8927,7 @@
     "firebird-5.0.4-character-metadata-live",
     "firebird-5.0.4-column-alterations-live",
     "firebird-5.0.4-column-order-live",
+    "firebird-5.0.4-database-encryption-live",
     "firebird-5.0.4-database-storage-live",
     "firebird-5.0.4-exceptions-live",
     "firebird-5.0.4-external-functions-live",
@@ -9423,6 +9426,24 @@
       "format": "scratchrobin.firebird.schema-plan-gate@1",
       "license_id": "PostgreSQL",
       "sha256": "1c4e03c8db233c4fe88e018f469aba81bc3e0b94368c4c270ad49b8c5c549a83"
+    },
+    {
+      "artifact": "database-encryption-native.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-database-encryption-live",
+      "evidence_kind": "live_execution",
+      "format": "cdeadmin.firebird-database-encryption.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "5bee1c6a209a38ae0d152eeb86fa382cc40a7e589dfbacf35390cca76813435d"
+    },
+    {
+      "artifact": "database-encryption-native.json",
+      "authority": "Firebird 5.0.4 runtime",
+      "evidence_id": "firebird-5.0.4-database-encryption-parser",
+      "evidence_kind": "parser_acceptance",
+      "format": "cdeadmin.firebird-database-encryption.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "5bee1c6a209a38ae0d152eeb86fa382cc40a7e589dfbacf35390cca76813435d"
     }
   ],
   "provider_id": "org.cdeadmin.firebird",
@@ -9864,6 +9885,21 @@
       "binding_style": "positional_question_mark",
       "proof_ids": [
         "firebird-5.0.4-grammar",
+        "firebird-5.0.4-database-encryption-parser",
+        "firebird-5.0.4-database-encryption-live"
+      ],
+      "required_bindings": [],
+      "source": "ALTER DATABASE DECRYPT",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER DATABASE DECRYPT"
+      ],
+      "task_id": "visual_admin.database.decrypt_database"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "firebird-5.0.4-grammar",
         "firebird-5.0.4-database-storage-parser",
         "firebird-5.0.4-database-storage-live"
       ],
@@ -9874,6 +9910,21 @@
         "ALTER DATABASE DROP DIFFERENCE FILE"
       ],
       "task_id": "visual_admin.database.drop_difference_file"
+    },
+    {
+      "binding_style": "positional_question_mark",
+      "proof_ids": [
+        "firebird-5.0.4-grammar",
+        "firebird-5.0.4-database-encryption-parser",
+        "firebird-5.0.4-database-encryption-live"
+      ],
+      "required_bindings": [],
+      "source": "ALTER DATABASE ENCRYPT WITH \"fbSampleDbCrypt\" KEY \"OWNED\"",
+      "source_format": "ordered_native_statements",
+      "statements": [
+        "ALTER DATABASE ENCRYPT WITH \"fbSampleDbCrypt\" KEY \"OWNED\""
+      ],
+      "task_id": "visual_admin.database.encrypt_database"
     },
     {
       "binding_style": "positional_question_mark",

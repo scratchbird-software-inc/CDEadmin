@@ -1803,6 +1803,65 @@
         }
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py (dialog draft -> validate/plan/apply on a live Firebird 5 server, effect observed)."
+    },
+    {
+      "operation_id": "encrypt_database",
+      "resource_kind": "database",
+      "title": "Encrypt database at rest",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "crypt_plugin",
+          "label": "Database crypt plugin",
+          "control": "text",
+          "required": true,
+          "help": "Installed native DbCrypt plugin name registered in plugins.conf."
+        },
+        {
+          "field_id": "key_name",
+          "label": "Key name (optional)",
+          "control": "text",
+          "required": false,
+          "default": "",
+          "help": "Key identifier supplied by the configured KeyHolderPlugin. Leave empty only when the plugin selects a default key."
+        },
+        {
+          "field_id": "confirm_key_recovery_responsibility",
+          "label": "I confirm key backup and external KeyHolder availability",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Database-at-rest encryption rewrites database pages asynchronously using an external native Firebird DbCrypt plugin and KeyHolder provider. Losing the encryption key or KeyHolder configuration permanently prevents opening the database."
+        }
+      ],
+      "notes": "Round-tripped against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins; ScratchRobin never implements cryptography or stores raw keys."
+    },
+    {
+      "operation_id": "decrypt_database",
+      "resource_kind": "database",
+      "title": "Decrypt database to plaintext",
+      "menu": {
+        "category": "security"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirm_plaintext_storage",
+          "label": "I confirm database pages will be stored unencrypted on disk",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Decrypting rewrites database pages to plaintext asynchronously in the background. Keep the active KeyHolder and DbCrypt plugins installed and configured until MON$CRYPT_STATE reaches 0 (not encrypted)."
+        }
+      ],
+      "notes": "Round-tripped against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins."
     }
   ]
 }

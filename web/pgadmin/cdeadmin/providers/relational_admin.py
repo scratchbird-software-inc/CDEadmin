@@ -59,6 +59,7 @@ from .firebird import users as firebird_users
 from .firebird import table_replacement as firebird_table_replacement
 from .firebird import shadows as firebird_shadows
 from .firebird import database_storage as firebird_database_storage
+from .firebird import database_encryption as firebird_database_encryption
 from .firebird import limbo as firebird_limbo
 from .firebird import availability as firebird_availability
 from .firebird import repair as firebird_repair
@@ -448,9 +449,11 @@ class RelationalAdministration:
             if self.dialect.engine_id == 'firebird' and kind == 'database':
                 additions = firebird_database_storage.OPERATIONS & (
                     self.dialect.supported.get(kind, frozenset()))
+                enc_additions = firebird_database_encryption.OPERATIONS & (
+                    self.dialect.supported.get(kind, frozenset()))
                 resource['operations'] = [
                     item for item in resource.get('operations', [])
-                    if item['operation_id'] not in additions
+                    if item['operation_id'] not in (additions | enc_additions)
                 ] + [{
                     'operation_id': operation,
                     'title': firebird_database_storage.form(
@@ -458,7 +461,14 @@ class RelationalAdministration:
                     'mutation_class': 'admin',
                     'target_required': True,
                     'confirmation_required': True,
-                } for operation in sorted(additions)]
+                } for operation in sorted(additions)] + [{
+                    'operation_id': operation,
+                    'title': firebird_database_encryption.form(
+                        operation, self._field)['title'],
+                    'mutation_class': 'admin',
+                    'target_required': True,
+                    'confirmation_required': True,
+                } for operation in sorted(enc_additions)]
             if self.dialect.engine_id == 'firebird' and kind == 'shadow':
                 resource['operations'] = [{
                     'operation_id': operation,
@@ -935,6 +945,20 @@ class RelationalAdministration:
             except RelationalClientError as error:
                 errors.append({'field_id': None,
                                'code': 'invalid_database_storage',
+                               'message': str(error)})
+            return {'errors': errors}
+        if (self.dialect.engine_id == 'firebird' and
+                resource_kind == 'database' and
+                operation_id in firebird_database_encryption.OPERATIONS):
+            try:
+                route = request.get('_provider_route')
+                firebird_database_encryption.compile_operation(
+                    operation_id, draft,
+                    route.get('database') if isinstance(route, Mapping)
+                    else None)
+            except RelationalClientError as error:
+                errors.append({'field_id': None,
+                               'code': 'invalid_database_encryption',
                                'message': str(error)})
             return {'errors': errors}
         if (self.dialect.engine_id == 'firebird' and
@@ -4070,6 +4094,16 @@ class RelationalAdministration:
                     'warnings': [
                         firebird_database_storage.WARNINGS[operation]]}
         if (self.dialect.engine_id == 'firebird' and
+                request['resource_kind'] == 'database' and
+                operation in firebird_database_encryption.OPERATIONS):
+            statements = firebird_database_encryption.compile_operation(
+                operation, request['draft'],
+                request['_provider_route'].get('database'))
+            return {'statements': [{'source': sql, 'parameters': ()}
+                                   for sql in statements],
+                    'warnings': [
+                        firebird_database_encryption.WARNINGS[operation]]}
+        if (self.dialect.engine_id == 'firebird' and
                 request['resource_kind'] == 'shadow' and
                 operation in {'create', 'drop'}):
             statements = firebird_shadows.compile_operation(
@@ -5304,6 +5338,9 @@ class RelationalAdministration:
                 operation in firebird_database_storage.OPERATIONS):
             return value
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
+                operation in firebird_database_encryption.OPERATIONS):
+            return value
+        if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in {'backup_physical', 'restore_physical'}):
             value = normalize_physical_io(operation, value)
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
@@ -5603,6 +5640,9 @@ class RelationalAdministration:
         if (self.dialect.engine_id == 'firebird' and kind == 'database' and
                 operation in firebird_database_storage.OPERATIONS):
             return firebird_database_storage.form(operation, self._field)
+        if (self.dialect.engine_id == 'firebird' and kind == 'database' and
+                operation in firebird_database_encryption.OPERATIONS):
+            return firebird_database_encryption.form(operation, self._field)
         if (self.dialect.engine_id == 'firebird' and kind == 'shadow' and
                 operation in {'create', 'drop'}):
             return firebird_shadows.form(operation, self._field)

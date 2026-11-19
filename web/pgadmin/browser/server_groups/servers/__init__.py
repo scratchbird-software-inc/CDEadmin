@@ -3561,6 +3561,10 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_plugin_deployment_action(server, data.get('request'))
                 elif action == 'firebird_runtime_lifecycle':
                     payload = service.firebird_runtime_lifecycle_action(server, data.get('request'))
+                elif action == 'firebird_database_encryption':
+                    payload = service.firebird_database_encryption_action(server, data.get('request'))
+                elif action == 'firebird_replication':
+                    payload = service.firebird_replication_action(server, data.get('request'))
                 elif action == 'firebird_events':
                     payload = service.firebird_event_action(server, data.get('request'))
                 elif action == 'firebird_metadata_search':

@@ -3658,3 +3658,69 @@ deployment and SQL execution (``AUDIT_TRIPLE(14) = 42``), dependent-routine
 uninstall refusal, Firebird 4.0.5 ODS ``13.0`` -> ``13.1`` upgrade, and
 Firebird 3.0 ODS ``12.0`` -> ``13.1`` ``gbak`` migration. Native Windows/macOS
 and UI presentation acceptance remain with their owning teams.
+
+FB-AUD-07: database-at-rest encryption, decryption and KeyHolder status
+-----------------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/database_encryption.py``,
+``relational_admin.py``, ``provider.py``, ``embedded_provider.py`` and
+``ui_descriptors/firebird/operations.json`` surface Tier-2 ``encrypt_database``
+(``ALTER DATABASE ENCRYPT WITH <plugin> [KEY <key>]``) and ``decrypt_database``
+(``ALTER DATABASE DECRYPT``) across ``firebird-native`` and
+``firebird-embedded`` with typed target-path confirmation, explicit key-recovery
+and plaintext-storage acknowledgements, and dialect contract bindings
+(``visual_admin.database.encrypt_database`` and
+``visual_admin.database.decrypt_database``).
+
+* ``firebird_database_encryption`` (surfaced in ``ui_descriptors/firebird/tools.json``
+  as ``database.firebird.encryption``) inspects ``MON$CRYPT_STATE``,
+  ``MON$CRYPT_PAGE``, ``MON$PAGES``, ``DbInfoCode.CRYPT_STATE``, lossless
+  ``encryption_plugin`` and ``encryption_key_name``, ``RDB$CONFIG``
+  (``KeyHolderPlugin``, ``WireCrypt``, ``AllowEncryptedSecurityDatabase``), and
+  installed host plugins, keeping database-at-rest page encryption explicitly
+  distinct from ``WireCrypt`` and ``gbak`` stream encryption and reporting
+  ``application_implements_cryptography=false``.
+* Owned Linux Firebird 5.0.4 qualification
+  (``tools/cdeadmin_firebird_encryption_and_replication_qualification.py``)
+  verifies native GDS ``335545039``/``336397313`` refusal on a stock runtime
+  without a DbCrypt plugin, compiles and deploys Firebird 5.0.4's source-available
+  SDK ``fbSampleDbCrypt`` and ``fbSampleKeyHolder`` plugins (explicitly flagged
+  non-secure while recording commercial DbCrypt/HSM plugins as external
+  dependencies), executes ``encrypt_database`` to ``MON$CRYPT_STATE=1`` with
+  independent reopen and UTF-8 row read-back, simulates ``KeyHolder`` key loss
+  and recovery, executes ``decrypt_database`` to ``MON$CRYPT_STATE=0``, and
+  verifies the authenticated desktop HTTP facade.
+
+FB-AUD-04: two-process native journal replication, lag inspection and promotion
+-------------------------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/replication_workflow.py`` and the
+authenticated workspace action ``firebird_replication`` (surfaced in
+``ui_descriptors/firebird/tools.json`` as ``endpoint.firebird.replication`` and
+``database.firebird.replication``) implement reviewed one-use journal
+replication workflows without inventing automatic cluster failover or
+PostgreSQL WAL byte-LSN semantics.
+
+* ``configure_primary`` writes ``replication.conf`` journal and archive settings
+  inside admitted ``journal_directories`` and enables SQL publication
+  (``ALTER DATABASE INCLUDE ALL TO PUBLICATION``, ``ALTER DATABASE ENABLE
+  PUBLICATION``).
+* ``seed_replica`` freezes page writes via ``ALTER DATABASE BEGIN BACKUP`` /
+  ``END BACKUP``, copies the primary database preserving ``DB_GUID``, resets internal
+  replication sequence visibility via ``nbackup -F -SEQ``, writes the replica's
+  ``replication.conf`` ``journal_source_directory``, and sets native
+  ``ReplicaMode.READ_ONLY`` or ``ReplicaMode.READ_WRITE``.
+* ``inspect_replication_state`` reports ``DB_GUID``, ``MON$REPLICA_MODE``,
+  publications, unapplied journal segment counts/sequence numbers (including
+  ``{DB_GUID}/`` archive subdirectories), and bounded ``replication.log`` tails.
+* ``distribute_segments`` verifies contiguous journal sequence numbers (refusing
+  sequence gaps and destination duplicate segments) before atomic segment
+  shipping, and ``promote_replica`` refuses unconfirmed promotion while
+  unapplied segments remain before switching ``ReplicaMode.NONE`` +
+  ``READ_WRITE``.
+* Owned two-daemon Linux Firebird 5.0.4 qualification verifies primary
+  publication, GUID-preserving seeding, read-only user SQL write refusal on the
+  replica, journal archiving and live replica catch-up, sequence-gap and
+  duplicate-segment refusals, stopped-replica lag queue and promotion refusal,
+  daemon restart catch-up, manual promotion with standalone writes, and
+  authenticated HTTP read-only grant refusal and one-use review retirement.
