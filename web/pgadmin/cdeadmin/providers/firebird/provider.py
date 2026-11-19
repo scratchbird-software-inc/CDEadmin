@@ -252,6 +252,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._pooled_catalog_local = threading.local()
         if isinstance(self.client, FirebirdQueryClient):
             self.client._release_idle_catalog = self._release_idle_catalog_for_service
+            self.client._evict_catalog_pool = self._evict_catalog_pool
             _LIVE_FIREBIRD_PROVIDERS.add(self)
             _ensure_firebird_host_keepalive()
 
@@ -462,7 +463,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                             if len(bucket) > _MAX_POOLED_PER_KEY:
                                 evicted = bucket.pop(0)
                             self._catalog_pool[pool_key] = bucket
-                    if evicted is not None and evicted is not conn:
+                    if evicted is not None:
                         try:
                             evicted.close()
                         except Exception:

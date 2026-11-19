@@ -3763,3 +3763,85 @@ reconciles four Firebird 5.0.4 backend/contract items on the current source:
   ``restore_logical`` without extraction, secondary ``add_files`` on a shadowed
   database, ``gstat`` ``HDR_PAGES`` + ``ENCRYPTION`` mutual exclusion, ``Srp256``
   ``gfix`` clumplet probe, and restricted non-owner DDL denial).
+
+FB-Q02, FB-Q03, FB-Q04, FB-Q05, FB-Q06, FB-Q08, FB-Q09 and FB-Q12: full native and HTTP Firebird 5.0.4 qualification closure
+----------------------------------------------------------------------------------------------------------------------------
+
+``tools/cdeadmin_firebird_remaining8_supplement.py`` alongside the owned
+standalone and Docker Firebird 5.0.4 qualification gates closes the final eight
+active Firebird audit items on the merged ``master`` baseline:
+
+* Pooled-catalog attachment cleanup fix: ``FirebirdProvider`` now wires
+  ``self.client._evict_catalog_pool = self._evict_catalog_pool`` and closes
+  evicted catalog handles when ``self.client._closed`` is set, while
+  ``FirebirdQueryClient.close()`` evicts pooled catalog handles before
+  releasing tracked connections so ``client.close()`` never leaves lingering
+  ``Engine13`` or remote catalog attachments open; embedded contracts in
+  ``web/pgadmin/cdeadmin/providers/firebird/`` were regenerated against the
+  updated source bindings.
+* ``FB-Q02`` (Native language/contextual editor matrix): qualified network and
+  embedded editor principal/role/context revision binding, script execution and
+  lost-reply boundaries, SQL Dialects ``1``, ``2`` and ``3``, non-executing
+  ``prepare()`` across CTEs, PSQL, packages, timezones and multi-statement
+  scripts, ``-104`` ``FIREBIRD_SYNTAX`` vs ``-204`` ``FIREBIRD_CONTEXT``
+  diagnostics without table side effects, and authenticated HTTP
+  ``open_session`` / ``source_validate`` / ``source_complete`` /
+  ``firebird_editor_metadata``.
+* ``FB-Q03`` (Typed data, BLOB and array matrix): qualified all ``26`` array
+  element types with wide bounds and portable files across network and embedded
+  modes, ``INT128``, ``NUMERIC(38,18)``, ``DECFLOAT(16/34)`` specials, rounding
+  modes and traps, binary floats, zoned temporals, every Firebird character
+  metadata codec (including ``GB18030`` and ``OCTETS``), multi-megabyte BLOB
+  streaming, custom BLOB subtype ``-7`` and filters, stream lease expiry/cancel,
+  and authenticated HTTP ``query_stream``.
+* ``FB-Q04`` (Whole native DDN/schema/data round trips): executed all ``19``
+  process-isolated DDN exchange scenarios (graphical, embedded, Dialect 1,
+  typed data, SQL replay, unknown commit, column, table, view, package,
+  routine, trigger, constraint, lifecycle, grant, external function, import
+  order, ERD, physical) plus explicit ``filter-not-delete`` sibling
+  preservation, multi-database ``firebird_registered_catalog``, cross-endpoint
+  relational-review rejection, and authenticated HTTP ``firebird_catalog_export``
+  / ``compare`` / ``relational_review`` / ``schema_plan`` / ``schema_review`` /
+  ``schema_apply`` / ``schema_receipt`` with live native rediscovery.
+* ``FB-Q05`` (Network backup/recovery/repair/shadow matrix): qualified network
+  split-volume ``gbak`` and multi-file restore, ``skip_data``/``include_data``
+  table filters, encrypted ``gbak`` with ``fbSampleDbCrypt`` +
+  ``fbSampleKeyHolder``, physical ``nbackup`` levels ``0 -> 1 -> 2``,
+  ``database_guid`` backup and ``clean_history``, ``NEW_DATABASE`` vs
+  ``SEQUENCE`` vs ``IN_PLACE`` restore (retaining duplicate increment GDS
+  ``337117247`` refusal), availability/shutdown/shadow/repair gates, replica
+  restore modes, and real Firebird 4.0.5 ODS ``13.0 -> 13.1`` network
+  ``upgrade_database``.
+* ``FB-Q06`` (Authentication/route/session/transport contract): qualified IPv4
+  and IPv6 literal/alias/``service_mgr``/``isql`` routes, Linux ``XNET``
+  platform refusal without unintended TCP fallback, ``Srp256``/``Srp``/
+  ``Legacy_Auth`` without silent fallback, ``WireCrypt`` and
+  ``WireCompression`` matrices, private DPB cache/parallel/timezone/DECFLOAT/
+  ``no_linger`` options, ``SecretLease`` acquisition, failed-open handle
+  cleanup, session traps, network and embedded lost-reply boundaries, full
+  ``Engine13`` embedded route/privilege isolation, and HTTP
+  ``endpoint_profile_read``.
+* ``FB-Q08`` (Limbo and distributed participant recovery): qualified two-server
+  network and embedded distributed 2PC recovery groups, standalone limbo
+  reconnect/commit/rollback, and authenticated HTTP
+  ``firebird_recovery_targets`` / ``preview`` / ``apply`` / ``status`` on a
+  genuine ``DistributedTransactionManager`` prepared transaction pair with
+  ``global_outcome_inferred=false``.
+* ``FB-Q09`` (Collector/auth/dashboard execution and retention): qualified
+  isolated ``network``, ``host`` and ``embedded`` dashboard collector scenarios,
+  dedicated ``firebird_statement_inspection_native`` SQL/plan truncation and
+  compiled-statement identity checks without disturbing user transactions, and
+  authenticated HTTP ``/cdeadmin/api/monitoring/firebird`` fleet/definition/
+  snapshot access with ``403`` foreign-principal isolation. Persistent
+  ScratchBird monitoring history remains owner-deferred under ``FB-OWN-01`` and
+  was not run.
+* ``FB-Q12`` (Desktop Docker/ISQL and registration workflow receipts):
+  qualified desktop Docker provisioning (normal and ``lose_create_response``)
+  against the active host Docker context and desktop ``isql`` launch (network
+  and embedded) via ``tools/firebird_desktop_native.mjs``, native metadata-only
+  registration clone/move and ``recreate-empty`` (verifying fresh empty state,
+  ``retain_created_database`` alias preservation and duplicate-create overwrite
+  refusal), and authenticated HTTP ``database_target_transfer_catalog`` /
+  ``transfer`` / ``delete`` (stale generation ``409``, active-session handle
+  ``409``, and non-destructive registration removal). Native Windows/macOS
+  qualification and human UI acceptance remain tracked under ``FB-OWN-02``.

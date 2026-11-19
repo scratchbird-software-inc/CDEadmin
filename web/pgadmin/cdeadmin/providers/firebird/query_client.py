@@ -1996,6 +1996,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                         failures.append(exc)
                         protected.update(id(connection) for connection, _ in
                                          recovery.participants)
+                evict_catalog = getattr(self, '_evict_catalog_pool', None)
+                if callable(evict_catalog):
+                    evict_catalog()
                 for handle in tuple(self._connections):
                     if id(handle) in protected:
                         continue
