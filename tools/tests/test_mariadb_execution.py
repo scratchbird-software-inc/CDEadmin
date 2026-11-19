@@ -73,7 +73,7 @@ def harness(sets):
     connection = SimpleNamespace(
         cursor=lambda **kw: native if kw else identity,
         connection_id=7, python_charset='utf8', ping=Mock())
-    client = SimpleNamespace(_uncertain_sessions=set(),
+    client = SimpleNamespace(_uncertain_sessions=set(), _surface_xa={},
                              _require_usable_session=Mock())
     owner = Executions(client)
     owner.sessions.register(connection)

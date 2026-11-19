@@ -17,8 +17,9 @@ class MySQLScriptFramingError(ValueError):
 
 
 class Statements:
-    def __init__(self, source):
+    def __init__(self, source, *, mariadb=False):
         self.source, self.position, self.delimiter = source, 0, ';'
+        self.mariadb = mariadb
 
     def next(self, version, mode):
         source, i, start = self.source, self.position, self.position
@@ -56,7 +57,8 @@ class Statements:
             if pair == '/*':
                 # Executable comments can be the entire native command. They
                 # remain byte-for-byte source, including inactive versions.
-                meaningful |= source[i + 2:i + 3] == '!'
+                meaningful |= source[i + 2:i + 3] == '!' or (
+                    self.mariadb and source.startswith('/*M!', i))
                 end = source.find('*/', i + 2)
                 i = len(source) if end < 0 else end + 2
                 continue
@@ -92,7 +94,7 @@ class Statements:
         return source[start:] if meaningful else None
 
     def has_next(self, version, mode):
-        probe = Statements(self.source)
+        probe = Statements(self.source, mariadb=self.mariadb)
         probe.position, probe.delimiter = self.position, self.delimiter
         try: return probe.next(version, mode) is not None
         except ValueError: return True  # Admission belongs to that command's observed language.

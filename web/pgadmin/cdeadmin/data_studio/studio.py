@@ -304,6 +304,49 @@ class DataStudioService:
         return contribution.complete(binding, request)
 
     @serialized_execution
+    def convert_surface_uuid(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        convert = getattr(binding.instance, 'convert_surface_uuid', None)
+        if not callable(convert):
+            raise DataStudioAccessError('Native UUID conversion is unavailable')
+        return convert({**request, 'session_id': session.session_id})
+
+    @serialized_execution
+    def formatting_context(self, context, session_id, source, *, client_sql_dialect=None):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile == 'mariadb-sql':
+            # Passive completion has no original-session SQL mode. The
+            # explicitly requested native validation observes it directly.
+            observed = self.validate_source(context, session.session_id, source)
+            return {
+                'engine': 'mariadb', 'version': observed.get('parser_version'),
+                'sql_mode': observed.get('sql_mode'),
+            }
+        observe = getattr(binding.instance, 'observe_formatting_context', None)
+        if callable(observe):
+            return observe({'session_id': session.session_id, 'source': source})
+        response = self.complete(
+            context, session.session_id, source, source, client_sql_dialect=client_sql_dialect
+        )
+        return (response.get('editor_context') or {}).get('context')
+
+    @serialized_execution
+    def describe_surface_statement(self, context, session_id, source):
+        session, binding = self._operational_session(context, session_id)
+        describe = getattr(binding.instance, 'describe_surface_statement', None)
+        if not callable(describe):
+            raise DataStudioAccessError('Native statement description is unavailable')
+        return describe({'session_id': session.session_id, 'source': source})
+
+    @serialized_execution
+    def recover_surface_transaction(self, context, session_id, resolution, gid):
+        session, binding = self._operational_session(context, session_id)
+        recover = getattr(binding.instance, 'recover_surface_transaction', None)
+        if not callable(recover):
+            raise DataStudioAccessError('Prepared transaction recovery is unavailable')
+        return recover({'session_id': session.session_id, 'resolution': resolution, 'gid': gid})
+
+    @serialized_execution
     def execute(
         self, context, session_id, source, *, parameters=None,
         deadline=None, output_policy=None,

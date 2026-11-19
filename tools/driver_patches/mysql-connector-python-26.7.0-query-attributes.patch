@@ -427,3 +427,81 @@
 +
      return MODULE_SUCCESS_VALUE(mod);
  }
+--- a/src/mysql_capi.c
++++ b/src/mysql_capi.c
+@@ -3893,6 +3893,53 @@
+     return fetch_fields(self->res, num_fields, &self->cs, self->use_unicode);
+ }
+ 
++/* A fresh native statement already has result metadata before execution. */
++PyObject *
++MySQLPrepStmt_describe(MySQLPrepStmt *self, PyObject *unused)
++{
++    MYSQL_RES *metadata = NULL;
++    MYSQL_FIELD *fields;
++    PyObject *columns = NULL, *result = NULL;
++    unsigned int count, i;
++
++    if (!self->stmt) {
++        PyErr_SetString(PyExc_RuntimeError, "Prepared statement is closed");
++        return NULL;
++    }
++    count = mysql_stmt_field_count(self->stmt);
++    if (count) {
++        metadata = mysql_stmt_result_metadata(self->stmt);
++        if (!metadata) {
++            raise_with_stmt(self->stmt, MySQLInterfaceError);
++            return NULL;
++        }
++    }
++    columns = PyList_New(count);
++    if (!columns)
++        goto done;
++    fields = metadata ? mysql_fetch_fields(metadata) : NULL;
++
++    for (i = 0; i < count; ++i) {
++        MYSQL_FIELD *field = &fields[i];
++        PyObject *name = PyBytes_FromStringAndSize(field->name, field->name_length);
++        PyObject *row;
++        if (!name)
++            goto done;
++        row = Py_BuildValue("(Nikkkk)", name, (int)field->type,
++                            (unsigned long)field->flags, (unsigned long)field->charsetnr,
++                            field->length, (unsigned long)field->decimals);
++        if (!row)
++            goto done;
++        PyList_SET_ITEM(columns, i, row);
++    }
++    result = Py_BuildValue("(kO)", mysql_stmt_param_count(self->stmt), columns);
++done:
++    Py_XDECREF(columns);
++    if (metadata)
++        mysql_free_result(metadata);
++    return result;
++}
++
+ /**
+   Resets the prepared statement.
+ 
+--- a/src/include/mysql_capi.h
++++ b/src/include/mysql_capi.h
+@@ -306,6 +306,9 @@
+ MySQLPrepStmt_fetch_fields(MySQLPrepStmt *self);
+ 
+ PyObject *
++MySQLPrepStmt_describe(MySQLPrepStmt *self, PyObject *unused);
++
++PyObject *
+ MySQLPrepStmt_reset(MySQLPrepStmt *self);
+ 
+ PyObject *
+--- a/src/mysql_connector.c
++++ b/src/mysql_connector.c
+@@ -244,6 +244,7 @@
+ };
+ 
+ static PyMethodDef MySQLPrepStmt_methods[] = {
++    {"cdeadmin_describe", (PyCFunction)MySQLPrepStmt_describe, METH_NOARGS, NULL},
+     {"stmt_execute", (PyCFunction)MySQLPrepStmt_execute, METH_VARARGS | METH_KEYWORDS,
+      "Executes the prepared statement"},
+     {"fetch_fields", (PyCFunction)MySQLPrepStmt_fetch_fields, METH_VARARGS,

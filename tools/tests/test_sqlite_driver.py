@@ -66,6 +66,41 @@ def test_exact_storage_and_bindings(client, tmp_path):
     assert rows(execute(client, handle, 'SELECT ?', [42])) == [[42]]
 
 
+@pytest.mark.skipif(not os.environ.get('CDEADMIN_SQLITE_CONFIG_LIBRARY'),
+                    reason='Native configuration helper not selected')
+def test_describe_native_statement_uses_retained_catalog_without_running_sql(client, tmp_path):
+    handle, _ = open_database(client, tmp_path)
+    handle.execute('CREATE TEMP TABLE owned (id INTEGER, note TEXT)')
+    handle.execute("INSERT INTO owned VALUES (1, 'unchanged')")
+    calls = []
+    handle.create_function('observe_execution', 0, lambda: calls.append(True))
+    handle.set_authorizer(lambda *_: sqlite3.SQLITE_OK)
+    original = handle._cdeadmin_authorizer
+    receipt = client.describe_statement(handle, '''
+        SELECT id AS key, note, observe_execution() AS computed
+          FROM temp.owned WHERE id = :key OR id = :key; -- trailing comment
+    ''')
+    assert [(col['name'], col['native_type']) for col in receipt['columns']] == [
+        ('key', 'INTEGER'), ('note', 'TEXT'), ('computed', ''),
+    ]
+    assert receipt['parameters'] == [{'position': 1, 'name': ':key'}]
+    assert receipt['statement_execution_requested'] is False and calls == []
+    assert not receipt['columns_complete'] and not receipt['parameters_complete']
+
+    from pgadmin.cdeadmin.sdk import RelationalClientError
+    with pytest.raises(RelationalClientError, match='exactly one'):
+        client.describe_statement(handle, 'SELECT 1; /* comment */ SELECT 2')
+    with pytest.raises(ValueError, match='no such column'):
+        client.describe_statement(handle, 'SELECT missing FROM temp.owned')
+    client.describe_statement(handle, "UPDATE owned SET note = 'changed' WHERE id = ?")
+    assert handle.execute('SELECT note FROM temp.owned').fetchone() == ('unchanged',)
+    previous = handle.execute('PRAGMA cache_size').fetchone()
+    pragma = client.describe_statement(handle, 'PRAGMA cache_size = 4321')
+    assert pragma['pragma_preparation_suppressed'] is True
+    assert handle.execute('PRAGMA cache_size').fetchone() == previous
+    assert handle._cdeadmin_authorizer is original
+
+
 def test_native_statement_metrics_report_measured_scope(client, tmp_path):
     handle, _ = open_database(client, tmp_path)
     pages = execute(client, handle, 'SELECT 1 UNION ALL SELECT 2')
@@ -78,6 +113,24 @@ def test_native_statement_metrics_report_measured_scope(client, tmp_path):
     assert metrics['execute_ms'] >= metrics['dispatch_ms']
     assert 'Preparation is not separately measured' in metrics[
         'measurement_scope']
+
+
+def test_grid_cancel_restores_progress_handler_and_blocks_competing_reads(client, tmp_path):
+    from pgadmin.cdeadmin.sdk import RelationalClientError
+    from pgadmin.cdeadmin.workspace.sql_surface_host import SqlSurfaceExecution
+
+    handle, _ = open_database(client, tmp_path)
+    callback = Mock(return_value=0)
+    handle.set_progress_handler(callback, 100)
+    execution = SqlSurfaceExecution('sqlite-row-read')
+    with client.grid_read(handle, execution):
+        with pytest.raises(RelationalClientError, match='operation is active'):
+            with client.grid_read(handle):
+                pytest.fail('Competing row read was admitted')
+        assert execution.request_cancel(None, None, None)['cancel_status'] == 'requested'
+    assert handle._cdeadmin_progress_handler == (callback, 100)
+    with client.grid_read(handle):
+        assert handle.execute('SELECT 1').fetchone() == (1,)
 
 
 def test_unsafe_integer_rejected_before_any_sql():

@@ -259,6 +259,10 @@ class DuckDBAdministration(RelationalAdministration):
 
     def read_rows(self, client, request, connection=None):
         with self._borrow(client, connection):
+            execution = request.get('_row_read_execution')
+            if connection is not None and execution is not None:
+                with execution.cancellable_row_read(connection.interrupt):
+                    return super().read_rows(client, request, connection=connection)
             return super().read_rows(client, request, connection=connection)
 
     def _primary_key(self, connection, path):

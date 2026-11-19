@@ -18,6 +18,7 @@ export default function ColumnOrderDialog({
   open,
   scope,
   allColumns,
+  columnLabels,
   visibleNames,
   orderNames,
   onClose,
@@ -106,13 +107,13 @@ export default function ColumnOrderDialog({
                   setCheckedSet(next);
                 }}
               />
-              <span>{name}</span>
+              <span>{columnLabels?.[name] || name}</span>
             </label>
             <div style={{display: 'flex', gap: 4}}>
               <button
                 type="button"
                 className="sr-btn"
-                aria-label={`Move ${name} up`}
+                aria-label={gettext('Move %s up', columnLabels?.[name] || name)}
                 style={{minHeight: 22, padding: '0 6px'}}
                 disabled={idx === 0}
                 onClick={() => move(idx, -1)}
@@ -122,7 +123,7 @@ export default function ColumnOrderDialog({
               <button
                 type="button"
                 className="sr-btn"
-                aria-label={`Move ${name} down`}
+                aria-label={gettext('Move %s down', columnLabels?.[name] || name)}
                 style={{minHeight: 22, padding: '0 6px'}}
                 disabled={idx === order.length - 1}
                 onClick={() => move(idx, 1)}
@@ -141,6 +142,7 @@ ColumnOrderDialog.propTypes = {
   open: PropTypes.bool.isRequired,
   scope: PropTypes.string,
   allColumns: PropTypes.array,
+  columnLabels: PropTypes.object,
   visibleNames: PropTypes.array,
   orderNames: PropTypes.array,
   onClose: PropTypes.func.isRequired,

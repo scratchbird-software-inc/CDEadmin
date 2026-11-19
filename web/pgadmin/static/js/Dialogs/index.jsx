@@ -306,9 +306,15 @@ export function showProviderWorkspace(
     engine: endpointProfiles.get(nodeData.cde_profile_id)?.display_name ||
       nodeData.cde_engine_id || nodeData.engine_id || (nodeData.cde_endpoint ? 'Unknown engine' : 'PostgreSQL'),
     label: `${nodeData.label || nodeData._label || title} / ${initialContext.display_name || databaseTargetId || 'server'}`};
+  connection.openQuickQuery = (queryId) => showProviderWorkspace(
+    title, nodeObj, nodeData, itemNodeData, 'studio',
+    {database_target_id: databaseTargetId, quick_query_id: queryId}, onEndpointRemoved
+  );
+  connection.open = () => showProviderWorkspace(
+    title, nodeObj, nodeData, itemNodeData, 'studio', initialContext, onEndpointRemoved
+  );
   if (registerOnly) {
-    registerSQLConnection({...connection, open: () => showProviderWorkspace(
-      title, nodeObj, nodeData, itemNodeData, 'studio', initialContext, onEndpointRemoved)});
+    registerSQLConnection(connection);
     return;
   }
   const workspace = pgAdmin.Browser.docker.default_workspace;
@@ -485,6 +491,7 @@ export function showProviderWorkspace(
           }}
         />)}</ErrorBoundary></ModalCloseGuardContext.Provider>,
   };
+  if (isDedicatedSqlSurface) registerSQLConnection(connection);
   if (resolvedTab === 'studio' && !isDedicatedSqlSurface) {
     activateSQLConnection({...connection, content: panel.content});
     // Script kinds (insert, update, delete) open in the SQL Studio editor.

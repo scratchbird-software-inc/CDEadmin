@@ -8,6 +8,7 @@
 #include <sqlite3ext.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 #if defined(__linux__)
 #include <dirent.h>
 #elif defined(_WIN32)
@@ -352,7 +353,57 @@ static PyObject *stop_capture(PyObject *self,PyObject *args){
  if(capture_registered){sqlite3_cancel_auto_extension((void(*)(void))sqlite3_cdeadminconfig_init);capture_registered=0;}
  Py_RETURN_TRUE;
 }
-static PyMethodDef methods[]={{"stop_capture",stop_capture,METH_NOARGS,NULL},{"pragma_names",pragma_names,METH_VARARGS,NULL},{"startup_directories",startup_directories,METH_VARARGS,NULL},{"directory",directory_policy,METH_VARARGS,NULL},{"identity",identity,METH_NOARGS,NULL},{"begin",begin_open,METH_NOARGS,NULL},{"finish",finish_open,METH_VARARGS,NULL},{"cancel",cancel_open,METH_VARARGS,NULL},{"boolean",boolean,METH_VARARGS,NULL},{"integer",integer_policy,METH_VARARGS,NULL},{"alias",alias,METH_VARARGS,NULL},{"lookaside",lookaside,METH_VARARGS,NULL},{"usage",usage,METH_VARARGS,NULL},{"closed",closed,METH_VARARGS,NULL},{NULL,NULL,0,NULL}};
+static PyObject *describe_statement(PyObject *self, PyObject *args) {
+ PyObject *capsule, *columns=NULL, *parameters=NULL, *result=NULL;
+ const char *sql, *tail=NULL;
+ Py_ssize_t length;
+ sqlite3_stmt *statement=NULL;
+ State *s;
+ int rc, count, index;
+ (void)self;
+ if(!PyArg_ParseTuple(args,"Os#",&capsule,&sql,&length))return NULL;
+ if(length<1 || length>=INT_MAX || memchr(sql,0,(size_t)length)){
+  PyErr_SetString(PyExc_ValueError,"Valid SQLite statement source is required");
+  return NULL;
+ }
+ s=state(capsule);
+ if(!s)return NULL;
+ Py_BEGIN_ALLOW_THREADS
+ rc=sqlite3_prepare_v2(s->db,sql,(int)length+1,&statement,&tail);
+ Py_END_ALLOW_THREADS
+ if(rc!=SQLITE_OK || !statement){
+  PyErr_SetString(PyExc_ValueError,rc==SQLITE_OK ? "Select one SQLite statement to prepare" : sqlite3_errmsg(s->db));
+  goto finish;
+ }
+ count=sqlite3_column_count(statement);
+ columns=PyList_New(count);
+ if(!columns)goto finish;
+ for(index=0;index<count;index++){
+  const char *name=sqlite3_column_name(statement,index);
+  const char *type=sqlite3_column_decltype(statement,index);
+  PyObject *field;
+  if(!name){PyErr_NoMemory();goto finish;}
+  field=Py_BuildValue("{s:i,s:s,s:s}","position",index+1,"name",name,"native_type",type ? type : "");
+  if(!field)goto finish;
+  PyList_SET_ITEM(columns,index,field);
+ }
+ count=sqlite3_bind_parameter_count(statement);
+ parameters=PyList_New(count);
+ if(!parameters)goto finish;
+ for(index=0;index<count;index++){
+  const char *name=sqlite3_bind_parameter_name(statement,index+1);
+  PyObject *slot=Py_BuildValue("{s:i,s:s}","position",index+1,"name",name ? name : "");
+  if(!slot)goto finish;
+  PyList_SET_ITEM(parameters,index,slot);
+ }
+ result=Py_BuildValue("(OOs)",columns,parameters,tail);
+finish:
+ sqlite3_finalize(statement);
+ Py_XDECREF(columns);
+ Py_XDECREF(parameters);
+ return result;
+}
+static PyMethodDef methods[]={{"describe_statement",describe_statement,METH_VARARGS,NULL},{"stop_capture",stop_capture,METH_NOARGS,NULL},{"pragma_names",pragma_names,METH_VARARGS,NULL},{"startup_directories",startup_directories,METH_VARARGS,NULL},{"directory",directory_policy,METH_VARARGS,NULL},{"identity",identity,METH_NOARGS,NULL},{"begin",begin_open,METH_NOARGS,NULL},{"finish",finish_open,METH_VARARGS,NULL},{"cancel",cancel_open,METH_VARARGS,NULL},{"boolean",boolean,METH_VARARGS,NULL},{"integer",integer_policy,METH_VARARGS,NULL},{"alias",alias,METH_VARARGS,NULL},{"lookaside",lookaside,METH_VARARGS,NULL},{"usage",usage,METH_VARARGS,NULL},{"closed",closed,METH_VARARGS,NULL},{NULL,NULL,0,NULL}};
 static struct PyModuleDef module={PyModuleDef_HEAD_INIT,
  .m_name="_cdeadmin_dbconfig",.m_size=-1,.m_methods=methods
 };

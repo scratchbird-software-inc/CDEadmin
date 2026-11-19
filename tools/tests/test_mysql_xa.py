@@ -1,9 +1,11 @@
 """Binary XA identities, native resolution requests and ambiguous outcomes."""
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 
 from pgadmin.cdeadmin.providers.mysql_family import mysql_xa as xa
+from pgadmin.cdeadmin.providers.mysql_family import surface_xa
 from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_ADMINISTRATION, MARIADB_ADMINISTRATION
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from pgadmin.cdeadmin.visual_admin.catalog import catalog_for_engine
@@ -13,6 +15,21 @@ from test_mysql_instance import target, UUID
 def draft(**changes):
     return {'gtrid_hex': '0027FF5C', 'bqual_hex': '', 'format_id': '9007199254740993',
         'decision_reference': 'Owned coordinator recovery decision', 'confirmation': 'MySQL', **changes}
+
+
+def test_managed_xa_lost_connection_keeps_recovery_id_and_can_be_released():
+    handle = object()
+    key = id(handle)
+    client = SimpleNamespace(_surface_xa={key: {'gid': 'scratchrobin_owned', 'state': 'active'}},
+                             _uncertain_sessions=set())
+    with pytest.raises(RelationalClientError, match='before closing'):
+        surface_xa.release(client, handle)
+    client._uncertain_sessions.add(key)
+    assert surface_xa.describe(client, handle, {}) == {
+        'xa_state': 'unknown', 'prepare_state': 'unknown', 'prepared_transaction_id': 'scratchrobin_owned',
+    }
+    surface_xa.release(client, handle)
+    assert not client._surface_xa
 
 
 def test_binary_identity_has_no_charset_or_sql_literal_escape_dependency():
@@ -41,13 +58,13 @@ def test_incomplete_or_corrupt_native_xid_is_not_a_resolvable_identity(row):
     with pytest.raises((RelationalClientError, UnicodeError)): xa.decode_row(row)
 
 
-def test_xa_workflows_are_mysql_native_and_inspection_has_no_resolution_fields():
+def test_mysql_and_mariadb_admit_native_xa_and_mysql_inspection_has_no_resolution_fields():
     catalog = MYSQL_ADMINISTRATION.catalog(catalog_for_engine('mysql'))
     operations = {row['operation_id']: row for resource in catalog['objects']
         if resource['resource_kind'] == 'server' for row in resource['operations']}
     for operation in xa.OPERATIONS:
         assert MYSQL_ADMINISTRATION.supports('server', operation)
-        assert not MARIADB_ADMINISTRATION.supports('server', operation)
+        assert MARIADB_ADMINISTRATION.supports('server', operation)
         assert operations[operation]['confirmation_required'] == (operation != 'inspect_prepared_xa')
     assert operations['inspect_prepared_xa']['form']['fields'] == []
     with pytest.raises(RelationalClientError): xa.compile_operation('inspect_prepared_xa', draft(), target())

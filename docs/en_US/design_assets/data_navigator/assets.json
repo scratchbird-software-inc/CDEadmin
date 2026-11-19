@@ -1,0 +1,634 @@
+{
+  "source_revision": "fbee98616cd9cadfb6b21c103bf077a85b141cbf",
+  "status": "historical fixture review; proposals require approval",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "ed6d473320c45fba3b0e1f978a7a15f99a7163fb7d7a09d21af3ad558b4e7c63"
+    },
+    {
+      "path": "data-viewer-tib-overview.png",
+      "sha256": "75a20fc53fc687031911e2b5dc5c5904f5968f191b302a00ecf128eb7b93d1f5"
+    },
+    {
+      "path": "data-viewer.html",
+      "sha256": "700a1bae2bd44e1e442b0d27fbc8ddb3b84d1ac4881272f02b0d155b994084fd"
+    },
+    {
+      "path": "dv-current-forms-contact-sheet.png",
+      "sha256": "52b644dfc5fe871a7a533e0104035a2d659bd705aa5dd10449e337d6644ec989"
+    },
+    {
+      "path": "image-index.json",
+      "sha256": "adaf64afbdef1f980d3dbfa0d6b2db80ffd490e9a9bbd88b4d396719552eb882"
+    },
+    {
+      "path": "images/dv-current-apply-template.png",
+      "sha256": "40f21b95bca3d645bf80e11538b17f46dbd8aa036719f81d8c94081ceda4e32c"
+    },
+    {
+      "path": "images/dv-current-colour-menu.png",
+      "sha256": "7e886f25974b2352a7814b3370cfd24f3144ba47efd0f11130cb6bdf75cdb497"
+    },
+    {
+      "path": "images/dv-current-column-format.png",
+      "sha256": "dccd11a9a1a96bec2a3ec6bee4916da33b4802840b884376c14ee3f571c041ce"
+    },
+    {
+      "path": "images/dv-current-column-profile.png",
+      "sha256": "3840c09c9c378705f8041d45ce90667cad2b1c37c1ecfa8e74baa7f0775cbe38"
+    },
+    {
+      "path": "images/dv-current-content-fields.png",
+      "sha256": "f1220e4704c9a78c88dee6cc737273fc177db4df4d379ada2a5aaacd11931300"
+    },
+    {
+      "path": "images/dv-current-content-messages.png",
+      "sha256": "f02f53748109e0f229dc746568cfbe67ce5467745dc86ffd4d55a202aef5da1c"
+    },
+    {
+      "path": "images/dv-current-content-metrics.png",
+      "sha256": "e02daa183dce3c3267a2ed8e312045ec7d89f8f89a44d2b37c3310ac3785cd24"
+    },
+    {
+      "path": "images/dv-current-content-sql.png",
+      "sha256": "e510818b32369462aa1a17c8e0b59d68f1a500f301f0f41d2c1e097eb1f09186"
+    },
+    {
+      "path": "images/dv-current-dark-scheme.png",
+      "sha256": "2aa8872abbf9a13f89d85c4920598c95ffe4fc47804fc0c3ff9c00fa253d3399"
+    },
+    {
+      "path": "images/dv-current-dialog-columns.png",
+      "sha256": "2034ff115f5ff43c7e6225bc38a20f6c40978fd3e3dedb2d6df620bedf1fd540"
+    },
+    {
+      "path": "images/dv-current-dialog-import.png",
+      "sha256": "bced4fe81d0ce047dbbcc0cdac8ae139090ea3424539632004813857de5bb6bb"
+    },
+    {
+      "path": "images/dv-current-dialog-jump.png",
+      "sha256": "5dadeb25bc062eb5a216150553dfc9fcf50400c698a309440cf8a2546185c3cb"
+    },
+    {
+      "path": "images/dv-current-dialog-layout.png",
+      "sha256": "c1f19d9b2e947847b842705d334627dab8ca322c9285e21c9282f173258bb64d"
+    },
+    {
+      "path": "images/dv-current-dialog-limits.png",
+      "sha256": "127bef665d6fc5aa2cab9498ac73e0b731c8f32646659d5ff8e0c3a1ba0c1c7d"
+    },
+    {
+      "path": "images/dv-current-explorer-reference.png",
+      "sha256": "3eb8950cdca882408688ff35c46eda911658584a4e4a479ace2d9cb1ef5dc4c5"
+    },
+    {
+      "path": "images/dv-current-export-csv.png",
+      "sha256": "4977d8ac47be4397955725355a0b36b5b20dae0c215bce2661653e17b702967b"
+    },
+    {
+      "path": "images/dv-current-export-json.png",
+      "sha256": "4916b46db183a93aa307216e2c4ccd1da6a06fb41c99fe89f35fe428dcbd0ab4"
+    },
+    {
+      "path": "images/dv-current-export-ods.png",
+      "sha256": "031a3776083cc8a941b24bbdfabc6ef9a115c69f12bf0cfb4d946c8d23e77369"
+    },
+    {
+      "path": "images/dv-current-export-pdf.png",
+      "sha256": "5a797fb8fa57ce0496cdcd7a715fddfd0945ffbeb92d3f74ac1ed2553bcc1949"
+    },
+    {
+      "path": "images/dv-current-export-sql-insert.png",
+      "sha256": "41e7f58847925a2f7bbac781afcbe64572377145b8c9028adf3d217ed7679380"
+    },
+    {
+      "path": "images/dv-current-export-sql-update.png",
+      "sha256": "149873a3127611d00d6b69f8bf82e96f5df26405c171c4d7f3fad340e0c36fa4"
+    },
+    {
+      "path": "images/dv-current-export-tsv.png",
+      "sha256": "4bfda5c63bd9c570714e8cc666edee099e02f84e6b717449d88a20a5cb6db387"
+    },
+    {
+      "path": "images/dv-current-export-xlsx.png",
+      "sha256": "667b544c34a91e78ead72368c4bc623aea668de74adce7533f387425d5d94e9b"
+    },
+    {
+      "path": "images/dv-current-extended-sort.png",
+      "sha256": "096f80201626fa82e7be77582073df0ea263d149f680c872835eab9872c18d97"
+    },
+    {
+      "path": "images/dv-current-filter_builder.png",
+      "sha256": "f75e1dde7e7ce63871d868b3b0c866f8bf005ab9e4bc30cb143dc4099eef19c1"
+    },
+    {
+      "path": "images/dv-current-focus-help-hybrid.png",
+      "sha256": "90205d7ebc9d5390be209775ce97fd3c7186c8f0dfbe079e43fec76d561794e2"
+    },
+    {
+      "path": "images/dv-current-focus-help-mini_forms.png",
+      "sha256": "82aab854291287fce9a7855f6147c81e4cb1e4aa2ed0589e3648fc316db9fba8"
+    },
+    {
+      "path": "images/dv-current-focus-help-single_form.png",
+      "sha256": "96d5beba23dc011b6398ff362e2cc668d537cb4828748871da0021a3a6619190"
+    },
+    {
+      "path": "images/dv-current-french-language.png",
+      "sha256": "22425303be1c426b20d54f33cf75268438b760d915dec0a8856290e62f6b88ed"
+    },
+    {
+      "path": "images/dv-current-grid.png",
+      "sha256": "b766d81964b6d644be67111ba186e82764ecf93b7f2a45a69de126174e1544e4"
+    },
+    {
+      "path": "images/dv-current-header-context.png",
+      "sha256": "d62949b24746a0e9351b67413d4af7c6f22a9615c9d064e0948cc6006a6206d0"
+    },
+    {
+      "path": "images/dv-current-hybrid.png",
+      "sha256": "8d7f7db20d70dc27484ff20dee82b1a1822ba6bfb18edf602a3118a26206d40b"
+    },
+    {
+      "path": "images/dv-current-inspect_staged.png",
+      "sha256": "da369b23fa9651c3a70b9085c4cf1b5c7f97f206a030c4bca451cb2bfe930e97"
+    },
+    {
+      "path": "images/dv-current-language-menu.png",
+      "sha256": "ec5908c349d2764dc15a23fe21bf79fa2143f6f20470def60cf857830b501b88"
+    },
+    {
+      "path": "images/dv-current-mini_forms.png",
+      "sha256": "9cc7484d0a326dafcd2afeddf6c21bdd86822d3128bc343ec8aa8806fbef55de"
+    },
+    {
+      "path": "images/dv-current-quick_find.png",
+      "sha256": "b48ac4d5608dbf02f7d99021aa9c8df1296b3045ea468c0f0609bc5f9b9197aa"
+    },
+    {
+      "path": "images/dv-current-save-template.png",
+      "sha256": "f5821ffc0c9811b7348dd9499d81542ee7a60340ab997b0761de013e1bba187e"
+    },
+    {
+      "path": "images/dv-current-single_form.png",
+      "sha256": "b10e83cc8544c0614ee16859b4f2f43a5bcfe115412544e56166d87ba09668c6"
+    },
+    {
+      "path": "images/dv-current-tib-data.png",
+      "sha256": "c4af2aca24f535a0fc22542b284770fedff6ed3ddc887ed64bb6b496f85bfd37"
+    },
+    {
+      "path": "images/dv-current-tib-format-and-layout.png",
+      "sha256": "b97944fa154e3c872940aead5e31f7667911437c6ab3d66cc6f8545e7eaeb0a8"
+    },
+    {
+      "path": "images/dv-current-tib-transfer-and-sql.png",
+      "sha256": "3f8e349fd963e18cead80ec1b25f46b3a680187d2029fc80ddbcb4299d4003d1"
+    },
+    {
+      "path": "images/dv-proposal-content-metadata.png",
+      "sha256": "dcafe272b92ac09909cc053108658d53c6df2b0edecfbbd1e03381d3f2dedb08"
+    },
+    {
+      "path": "images/dv-proposal-content-object-information.png",
+      "sha256": "1cd8321a5789bc0aef67ee350d525af3aa0f1551fa699cd7b6f5f0d84bbb8592"
+    },
+    {
+      "path": "images/dv-proposal-content-query-information.png",
+      "sha256": "53cdad3c8688ecb0bb1cbd5c1e881a8754f64103f1672ba869e70c0e94af1302"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-bookmarks.png",
+      "sha256": "e1df0f6b7edc50e0382e2c67f77183f85e69423d9e17b1c15866f579e96b1aeb"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-conversion.png",
+      "sha256": "14b6ab94850d29151eb03e3285e142c21b1ba5691836116988fdb112b3b0aa7a"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-copyas.png",
+      "sha256": "9fc1fc61f4af3347856b056b2a5de3b214b1216af472277a795219d2ab3c3d9d"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-editor.png",
+      "sha256": "5bd2a84aca1efd383b1dc250fd59fbc696a678a8794f14f79c2eaf8bac4e9c1d"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-export.png",
+      "sha256": "36210b9b41af17762f4512660e95cc8565851b8d51e28e04beabcf5823729087"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-fieldscope.png",
+      "sha256": "079f85089993de49b91b07537caba49e6f7a7ad9c61f4634c560339c719bbb02"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-filter.png",
+      "sha256": "1a5d3a4ce8ed06afe8970a46780523f52b56cfdcc3ce605cf8bb5d83a934035f"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-find.png",
+      "sha256": "e8089b4f621a6cf026062a5b139d9eeea9c0dce65ca2251015ce5cc5a7697393"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-import.png",
+      "sha256": "3bf267adbb9c7daed460300ee1f4bd59a8d90d0dbfd40f54f349b55447bcb107"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-layouts.png",
+      "sha256": "0f49fe6736bebb606307f3f9cf23b45b47e2b41b1366603a6d094ea374044303"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-placement.png",
+      "sha256": "13e4d0a726ccb6b66c6a1de016b8319fffd1875ebedc27a75e0940a435f20a32"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-save.png",
+      "sha256": "593fa46b5f8c6cb569a4245c1ac74f12cdb7c5e412e0f26ff50bd28bf6799b89"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-sort.png",
+      "sha256": "cde2ffd861acf3c71d82f0097ef9ace23cc03f6be053422e7925c7e0ba130b36"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-txprepare.png",
+      "sha256": "a69f830be8af0e1c8d7470753328f7eb43d25090c964c39a5d4bf427a31377b7"
+    },
+    {
+      "path": "images/dv-proposal-dropdown-review-dv-values.png",
+      "sha256": "e025930a6e8ddc4af8b15854e75c1032c4d9f07e5e0ddde8b616e6daddb3afa5"
+    },
+    {
+      "path": "images/dv-proposal-form-field-type-font-and-alignment-defaults.png",
+      "sha256": "bb6e4d0c05162c3ea009b26391ecee0795bf37e6efa1b5e52523523b8f6c8443"
+    },
+    {
+      "path": "images/dv-proposal-form-json-editor.png",
+      "sha256": "fcf4386bf4c0c76bb13b2f46370bd0d5c3bcc67c2f020a74824c8324cf6d58c3"
+    },
+    {
+      "path": "images/dv-proposal-form-markdown-editor.png",
+      "sha256": "41a24a8f0a4522cdd67299af8bf026c7329d1588012229ecfce8e86da7e63aa1"
+    },
+    {
+      "path": "images/dv-proposal-form-prepare-statement-structure.png",
+      "sha256": "fe1b6269a989c0ff2e4205ab3b4372693b73ff4f451648d314052f073679e7e8"
+    },
+    {
+      "path": "images/dv-proposal-form-start-transaction-options.png",
+      "sha256": "cde03f934db469705e60a57fe48b4b3498f5957c0a30c9c558d2b467e983ae05"
+    },
+    {
+      "path": "images/dv-proposal-form-uuid-display-and-reverse-conversion.png",
+      "sha256": "345a675871a0012a5f5f66f041de1f787251efb557db00258f6f0471e1b3a737"
+    },
+    {
+      "path": "images/dv-proposal-menu-applications.png",
+      "sha256": "73f96040a5a48946155d23223850c5deff965ac1868c5369b125c7d78ae70b4e"
+    },
+    {
+      "path": "images/dv-proposal-menu-data.png",
+      "sha256": "991de04059fbafd2c132711bf1a1a361256d97436ac48c2439217410d4ac61a2"
+    },
+    {
+      "path": "images/dv-proposal-menu-edit.png",
+      "sha256": "230a1113a9bdb32398adb85d0c5f62cf43d394857ef654bbdebd2f44bd8b84ba"
+    },
+    {
+      "path": "images/dv-proposal-menu-help.png",
+      "sha256": "e08e70da56f51e1adcf6f4ce23817c31c21fbb38a6ef22b56cbc38fce9080a79"
+    },
+    {
+      "path": "images/dv-proposal-menu-view.png",
+      "sha256": "83bc2f6fe0e43bbc8b26d1e940569d012996925525c645724b86f14aca25dcc9"
+    },
+    {
+      "path": "images/dv-proposal-menu-window.png",
+      "sha256": "07c093a0950f5936415f45a1edc7cc82fef41514fc54722e7ee35c629c3830c5"
+    },
+    {
+      "path": "images/dv-proposal-placement-dual.png",
+      "sha256": "61632b516e20bc962ce5730d0019e17d1fbe787bdaf4023c90b003a3c6798e51"
+    },
+    {
+      "path": "images/dv-proposal-presentation-grid.png",
+      "sha256": "148d9735cfec51a434e6b78a93d002ebd2f174211680b0e302f82cc48fdf2fd4"
+    },
+    {
+      "path": "images/dv-proposal-presentation-hybrid.png",
+      "sha256": "e7f1675875adc25ba839808e120e1b38c542c18adffb89df3661b434e81277e8"
+    },
+    {
+      "path": "images/dv-proposal-presentation-mini_forms.png",
+      "sha256": "08a1618b95a58dd2f335a3ae1f56923d36d155afbcd6ec4eba2bb6a5c0866e4d"
+    },
+    {
+      "path": "images/dv-proposal-presentation-single_form.png",
+      "sha256": "e7573016562c2888959ea56b88aa2b6c7997b565afbed56d08f8ff63492a3e7d"
+    },
+    {
+      "path": "images/dv-proposal-tib-dv-format.png",
+      "sha256": "921f2f5c98e0ed6e3c641afdd4fd0b80683ed8b0649ed03c4bc29b684793428d"
+    },
+    {
+      "path": "images/dv-proposal-tib-dv-primary.png",
+      "sha256": "376804c39d2d1360a4b09a926f0487910b1968dadc2b77f90c9c68f07835f6ba"
+    },
+    {
+      "path": "images/dv-proposal-tib-dv-transfer.png",
+      "sha256": "c75974ddc36b3444a0410dcf2c2418b3b09cb1e6b47251a24205ec6a55ae4d5d"
+    },
+    {
+      "path": "images/sql-current-content-fields.png",
+      "sha256": "70aed333b2706290e71591c4878531564f36579ca3e071597798ff249e575959"
+    },
+    {
+      "path": "images/sql-current-content-messages.png",
+      "sha256": "1eec693119768d62e8e7a6a1e99a06b5909d538ba254666f0fae32984b07a7fa"
+    },
+    {
+      "path": "images/sql-current-content-metrics_plan.png",
+      "sha256": "eef259a6f40bf0840a06167dca74f0b1031c63e7dbf05fe2f833d2814f7492b4"
+    },
+    {
+      "path": "images/sql-current-content-sql.png",
+      "sha256": "0fd947abef9c2e6517a4de2887d8c1a9f0d8bde56dc4f25ff276568d431016f5"
+    },
+    {
+      "path": "images/sql-current-content-sql_data.png",
+      "sha256": "b5913f42e6185ffa1611811d1ce5cda2131af436e85f33f222f2311192c2dd69"
+    },
+    {
+      "path": "images/sql-current-content-visual_builder.png",
+      "sha256": "c3c661fda703963d963055779978be65d0016c875e37d67a2486ea9e369fd2da"
+    },
+    {
+      "path": "images/sql-current-dialog-connection.png",
+      "sha256": "94fa0afba8d26dacb0fbf3e29bb47741c512506bd16c3d2f44c132f70880f0d6"
+    },
+    {
+      "path": "images/sql-current-dialog-limits.png",
+      "sha256": "f841633efd28cb2464b8457ad072ba76d8b1e320c9049170e684e736b39a5abd"
+    },
+    {
+      "path": "images/sql-current-dialog-parameters.png",
+      "sha256": "2cb80039d0d7d08d034d28fb4899722ef908b7dbf5560c008d0b5dfca12499fb"
+    },
+    {
+      "path": "images/sql-current-dialog-save.png",
+      "sha256": "d5b3b88dad322f5ae4454047c2fc4215ca34531f20ac416bdbe7e48dd7685806"
+    },
+    {
+      "path": "images/sql-current-dialog-saved-queries.png",
+      "sha256": "ecb9ae67379dbd8b500fc8bebe7ff42c6576d95e9ec33420c5d137a8f6b68f50"
+    },
+    {
+      "path": "images/sql-current-export-csv.png",
+      "sha256": "1d307a09a4e10fd8d9f3f7ec46c22acc9d7318c33a850ade2b2dbfba6535e5fb"
+    },
+    {
+      "path": "images/sql-current-export-json.png",
+      "sha256": "c127b872827335b93616eb584fee43b8f8ab61e2ccda84a6f11e3b8a3778cfb0"
+    },
+    {
+      "path": "images/sql-current-export-ods.png",
+      "sha256": "8873b3c7a9ac6fd496e434db751604c5ca7953421665fa4ab6a1b8fa7b79497d"
+    },
+    {
+      "path": "images/sql-current-export-pdf.png",
+      "sha256": "9fc9c4daec5c7676c39d291bb632c4e56e033df59687ee603be2bd1fb15a2935"
+    },
+    {
+      "path": "images/sql-current-export-sql-insert.png",
+      "sha256": "c9e3b52db9024a38d4d85efd8baa56aef2ed447f187ca38733ded5f60292eece"
+    },
+    {
+      "path": "images/sql-current-export-sql-update.png",
+      "sha256": "fcd5f9dd84245f15c130475a7cb36e353f55295d2254653e1f6f68688fe7acfa"
+    },
+    {
+      "path": "images/sql-current-export-tsv.png",
+      "sha256": "a3473c4ae2c6f7b0710dfee70cb09383d9213506c713b71f6e999d1be896c1db"
+    },
+    {
+      "path": "images/sql-current-export-xlsx.png",
+      "sha256": "16ee43326794d57d659d3f4450cfb3dfb768b9ab0ce6732e9454defb02f3c559"
+    },
+    {
+      "path": "images/sql-current-grid.png",
+      "sha256": "2f628b43d0919d9f6a1c76ad51719a21ec50a5265c7214fa951b4b0a51ee100b"
+    },
+    {
+      "path": "images/sql-current-history_drawer.png",
+      "sha256": "6bae74ecc5a6e80974d962618c8563f0a4fbdd3c689c5311eb8f729c14603b80"
+    },
+    {
+      "path": "images/sql-current-hybrid.png",
+      "sha256": "703fe2d92fcc20e4df0db7526f01066df082e037ea7404e322cc7673743fa650"
+    },
+    {
+      "path": "images/sql-current-mini_forms.png",
+      "sha256": "71ec0d6ae1308210409c5c6c3f68afbddbfb1d390a4992265eb5db6241b7438a"
+    },
+    {
+      "path": "images/sql-current-single_form.png",
+      "sha256": "d42138aed64fccf823756691c30da386b418466fefb399d2ed1d612e46719d18"
+    },
+    {
+      "path": "images/sql-current-snippets_drawer.png",
+      "sha256": "9a57ebf2c7ff37bf9126c553586e69c0144522e2580255e3c2d370a2a0ddb471"
+    },
+    {
+      "path": "images/sql-current-tib-export-and-files.png",
+      "sha256": "14f489aa4bd894a5afd690335ea0abe3bc291a9222391555b8562bf5de7ada48"
+    },
+    {
+      "path": "images/sql-current-tib-format-and-layout.png",
+      "sha256": "76a92e462e2767bedeb4c253bfeb7643a802a85819653f295e98666c0ae9f9cd"
+    },
+    {
+      "path": "images/sql-current-tib-query.png",
+      "sha256": "9a87a70f40305ba4a0f57e769e92a69bd85352070a99288e3c61b59e33f7441d"
+    },
+    {
+      "path": "images/sql-current-vb_inspector.png",
+      "sha256": "b3be9345eabe4539dad111d96d96e081050918bd4197a3c5dee667b775c9399b"
+    },
+    {
+      "path": "images/sql-proposal-content-metadata.png",
+      "sha256": "ee89c357b04ee46fa01c772ce10d9ed4df408e81438ac7c9d302313f24195839"
+    },
+    {
+      "path": "images/sql-proposal-content-object-information.png",
+      "sha256": "c37844e0737a36b899932aed190ceaceb20b89f5698f23d1c88d08de8ac2f942"
+    },
+    {
+      "path": "images/sql-proposal-content-query-information.png",
+      "sha256": "2b9882a6cd3f2e0c82acce57c3ec7995fe37b9b5000a791b8365bd90b2c1b6a6"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-bookmarks.png",
+      "sha256": "ed25c25ddae4e3fd8016565fea52206adc523e50b645e005d83b8ade561dc512"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-conversion.png",
+      "sha256": "fa12ade7d19dbe75c3a2b3aeaf772bf55ff43f3a4d47622d555439f81c633cca"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-copyas.png",
+      "sha256": "2bd4b11185b54236f28541ff1d4ffd808cc9b39530f3fac52df0d49eef357da0"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-editor.png",
+      "sha256": "3aa18f5c01e24d1142ceb49f2eb2e50e6a746c5dafc9bbce9974432d7711001b"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-export.png",
+      "sha256": "0758fcfb4797e004985407c07a9cbe3743f5588fa08992810e9a677d22081091"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-fieldscope.png",
+      "sha256": "bfb056577eb62bbee083a6808913e7aee525e8fd85d9c4231392796d26efaaa5"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-find.png",
+      "sha256": "54f26c46839983af1e4eaaf3df9d6c67cf9c4875fa859072b80b404975883070"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-import.png",
+      "sha256": "8cd5642122703ed7c172af8886fe56a2dc01d6baf3831989b9ad243b795eb7bc"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-layouts.png",
+      "sha256": "4bfabf841002abb604c8e63417430ad3eefdb2ecd3c6695dfa6a9482026c0a1a"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-placement.png",
+      "sha256": "34fb9a0022027c3f1623e752312eaad52ced4a6b90c272c00592a9d89cc8b35c"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-save.png",
+      "sha256": "73d7bda81df3642beac7b6e6b219eebcd1b25870d80a073dc3c99bf0e4d8d124"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-snippets.png",
+      "sha256": "9c34822a39641574a9b2ff948dc9665ce882a0f62ea8d52d5a600b1d398d4834"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-terminator.png",
+      "sha256": "1883c0a4dd39ed97b16656579f408063b6809528f842c95a6f485c235c95ad4e"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-txprepare.png",
+      "sha256": "f6a6ab938ce7c81d2a45ca046a5ff11e6c8faaeada05618e1bf00a4e4bc1eb66"
+    },
+    {
+      "path": "images/sql-proposal-dropdown-review-sql-values.png",
+      "sha256": "f2a187655443b6f205332173ce6ee2f9e3f25cff2af3bda39e32d74afafef742"
+    },
+    {
+      "path": "images/sql-proposal-form-field-type-font-and-alignment-defaults.png",
+      "sha256": "797c30895ad2bfe29aa97f2a5062e3c6d04a40049b2e14e63e41cff1ac2443a7"
+    },
+    {
+      "path": "images/sql-proposal-form-json-editor.png",
+      "sha256": "8b71f29323e6419edc4c5fb5c3e6b3e1c95dcfaa5619074af07c175ff5e09377"
+    },
+    {
+      "path": "images/sql-proposal-form-markdown-editor.png",
+      "sha256": "b7fe4decbdcc9e8904b4ea237b557ce26c4115a2275610388fb9ea3feed6d20a"
+    },
+    {
+      "path": "images/sql-proposal-form-prepare-statement-structure.png",
+      "sha256": "f36979a35619836d2bf35eeacdd76aab09a574d74b2652d99279c6c47f88973f"
+    },
+    {
+      "path": "images/sql-proposal-form-start-transaction-options.png",
+      "sha256": "174005bedd53d61ed5c58956fd62fec7b83f59f28b4c9960254bff5e8f1c319e"
+    },
+    {
+      "path": "images/sql-proposal-form-uuid-display-and-reverse-conversion.png",
+      "sha256": "fce809b89b419f528ab37936ea13bb3cf5e368e511d86cfff7846e1ec8ab0a67"
+    },
+    {
+      "path": "images/sql-proposal-menu-applications.png",
+      "sha256": "52f1b6754ad6470e015d853202c7075ece33753782718d9c570df53a7251c17d"
+    },
+    {
+      "path": "images/sql-proposal-menu-edit.png",
+      "sha256": "fd86166de3a199b4f160122934c7b402a764024e63481935b327e8bc600959a5"
+    },
+    {
+      "path": "images/sql-proposal-menu-help.png",
+      "sha256": "62c4f3e441a5411a2123491dea4f3f8a6a83a07ffdbf4b95560554a4ef0ff588"
+    },
+    {
+      "path": "images/sql-proposal-menu-query.png",
+      "sha256": "e8532c4661aae2255b29e74be77c4afc8d253a43d1b62fb227d8b0f0c6fe9d97"
+    },
+    {
+      "path": "images/sql-proposal-menu-view.png",
+      "sha256": "9e7d3061fc2a9b0a89e2078ada7456fd3599a826aad31bd62172b11fa284a6b1"
+    },
+    {
+      "path": "images/sql-proposal-menu-window.png",
+      "sha256": "93b6de9711163af3234244e8a82b5a1b00214c26f4fad0d2472687df3e5a87af"
+    },
+    {
+      "path": "images/sql-proposal-placement-side-by-side.png",
+      "sha256": "0b4500207b85fdf2e8b3f18ceaf86ab54c2a92db81c2197695d5bd6ed46b3bf9"
+    },
+    {
+      "path": "images/sql-proposal-placement-stacked.png",
+      "sha256": "16694641347bb3ddc2fb35a54c5e817fb8207c29ffc79826a1b6e10d9ca2dcf3"
+    },
+    {
+      "path": "images/sql-proposal-presentation-grid.png",
+      "sha256": "55bdc5d673b6ecffa1d8104980f3d589e8c51b61221072dab4302133a88ee527"
+    },
+    {
+      "path": "images/sql-proposal-presentation-hybrid.png",
+      "sha256": "f5f94f44b82f70075d3e4b12d90cc9bce95cf276a1212939cc809eeb1cf6d091"
+    },
+    {
+      "path": "images/sql-proposal-presentation-mini_forms.png",
+      "sha256": "2da967bb86b8b97c62193ced3e4cded95b62318d99c631f9152006e0de895cbd"
+    },
+    {
+      "path": "images/sql-proposal-presentation-single_form.png",
+      "sha256": "21254123d2d76992bc829dbabd5d116b976744c9ca912cd4da874e92e6d41d7e"
+    },
+    {
+      "path": "images/sql-proposal-tib-sql-format.png",
+      "sha256": "3c86cba3909a2be1f7c2d6fecb3dfd544cb4865474b4e46cbf99b290c214648b"
+    },
+    {
+      "path": "images/sql-proposal-tib-sql-primary.png",
+      "sha256": "53ff950331afd0dd149eea858e4026bdd5e6b54eee8aec0397dc9887d28e1249"
+    },
+    {
+      "path": "images/sql-proposal-tib-sql-transfer.png",
+      "sha256": "85e651d81870d0b2edd513e7183f69b04537e5de21847be39cb7623102ca46c3"
+    },
+    {
+      "path": "index.html",
+      "sha256": "467001153a6affeb58db9b20142abb9debcd6b7dbdeb89a8176977b8df3d074e"
+    },
+    {
+      "path": "review-findings.md",
+      "sha256": "5ff2d0186fffd503269d5d005b19c80e9a751d5a7b485e26228af281bbe19f8d"
+    },
+    {
+      "path": "sql-current-forms-contact-sheet.png",
+      "sha256": "1718faea6adbb93469b25b9feb895001665f6e27ab28df7450b3a1436f850695"
+    },
+    {
+      "path": "sql-editor-tib-overview.png",
+      "sha256": "63a9520851e6475d12734eea323dfcb66c63477d5423f44146bda45e07d310b9"
+    },
+    {
+      "path": "sql-editor.html",
+      "sha256": "bd8efdd0051e1bf34537ee6706e1b22f3d0716b4035e1ff4e0d36aa5a2898304"
+    }
+  ]
+}

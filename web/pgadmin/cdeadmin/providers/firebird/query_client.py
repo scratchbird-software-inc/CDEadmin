@@ -82,6 +82,7 @@ class _AttachmentState:
     stream_owner: str | None = None
     stream_cancel_lock: object = field(default_factory=threading.RLock)
     stream_running: bool = False
+    grid_read_running: bool = False
     stream_cancel_requested: bool = False
     stream_last_activity: float | None = None
     stream_expired: bool = False
@@ -90,12 +91,15 @@ class _AttachmentState:
     open_request: dict | None = None
     autocommit_enabled: bool = False
     explicit_transaction_open: bool = False
+    prepare_state: str | None = None
     uncommitted_connection_lost: bool = False
     lost_status_codes: tuple = ()
     reconnected_count: int = 0
 
 
 class FirebirdQueryClient(RelationalDBAPIClient):
+    transaction_actions = (*RelationalDBAPIClient.transaction_actions, 'prepare')
+
     def _invoke_connector(self, request, connector, overrides=None, **kwargs):
         route = self._route(request)
         if route.get('attachment_mode') == 'embedded' and (
@@ -405,7 +409,7 @@ class FirebirdQueryClient(RelationalDBAPIClient):
     @contextmanager
     def _exclusive(
         self, handle, *, closing=False, stream_access=False,
-        allow_lost_observation=False,
+        allow_lost_observation=False, allow_prepared=False,
     ):
         if id(handle) in self._failed_initializations and not closing:
             raise RelationalClientError(
@@ -416,6 +420,9 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         try:
             if not any(item is handle for item in self._connections):
                 raise RelationalClientError('Firebird session is unavailable')
+            if state.prepare_state and not (allow_prepared or allow_lost_observation):
+                raise RelationalClientError(
+                    'Resolve the prepared Firebird transaction with Commit or Rollback first')
             if state.query is not None:
                 raise RelationalClientError(
                     'Firebird query is running; cancel or wait before '
@@ -1056,6 +1063,8 @@ class FirebirdQueryClient(RelationalDBAPIClient):
                     'attachment_fields': {},
                 }
             result = super().describe_transaction(handle)
+            if state.prepare_state:
+                result['prepare_state'] = state.prepare_state
             if result.get('attachment_live') is False:
                 if self._can_auto_reconnect(state):
                     try:
@@ -1083,11 +1092,28 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             return result
 
     def control_transaction(self, handle, action):
-        with self._exclusive(handle) as state:
+        with self._exclusive(handle, allow_prepared=action in ('commit', 'rollback')) as state:
             if action not in self.transaction_actions:
                 raise RelationalClientError(
                     'Firebird transaction action is unavailable')
+            if action == 'prepare':
+                transaction = handle.main_transaction
+                if not transaction.is_active() or not callable(getattr(transaction._tra, 'prepare', None)):
+                    raise RelationalClientError('An active Firebird transaction is required for prepare')
+                state.explicit_transaction_open = True
+                state.prepare_state = 'unknown'
+                try:
+                    transaction._tra.prepare()
+                except Exception as exc:
+                    error = RelationalClientError('Firebird transaction prepare outcome is unavailable')
+                    error.gds_codes = status_codes(exc)
+                    raise error from None
+                state.prepare_state = 'prepared'
+                return {'action': 'prepare', 'native_call_made': True}
             receipt = self._finish_transaction(handle, action)
+            if state.prepare_state and not receipt['native_call_made']:
+                raise RelationalClientError('Firebird did not confirm prepared transaction finality')
+            state.prepare_state = None
             state.explicit_transaction_open = False
             state.uncommitted_connection_lost = False
             state.lost_status_codes = ()
@@ -1211,13 +1237,35 @@ class FirebirdQueryClient(RelationalDBAPIClient):
         state = self._state(handle)
         with state.stream_cancel_lock:
             self._check_stream_owner(state, owner)
-            if not state.stream_running:
+            if not state.stream_running or state.grid_read_running:
                 return {'cancel_request_accepted': False,
                         'outcome': 'no native stream call in progress'}
-            state.stream_cancel_requested = True
-            handle._att.cancel_operation(self.module.CancelType.RAISE)
+            self._interrupt_native_call(handle, state)
             return {'cancel_request_accepted': True,
                     'outcome': 'pending native observation'}
+
+    def _interrupt_native_call(self, handle, state):
+        state.stream_cancel_requested = True
+        handle._att.cancel_operation(self.module.CancelType.RAISE)
+
+    @contextmanager
+    def cancellable_grid_read(self, handle, execution):
+        # The caller holds the attachment's grid lock. The stream interrupt
+        # protocol uses a separate lock so Stop can reach a blocking call.
+        state = self._state(handle)
+        def interrupt():
+            with state.stream_cancel_lock:
+                self._interrupt_native_call(handle, state)
+
+        with state.stream_cancel_lock:
+            state.grid_read_running = True
+        try:
+            with self._stream_native_call(handle, state):
+                with execution.cancellable_row_read(interrupt):
+                    yield
+        finally:
+            with state.stream_cancel_lock:
+                state.grid_read_running = False
 
     @staticmethod
     def _check_stream_owner(state, owner):
@@ -1377,6 +1425,10 @@ class FirebirdQueryClient(RelationalDBAPIClient):
             raise RelationalClientError('Unknown streaming action')
 
     def _release_attachment(self, handle):
+        state = self._attachment_states.get(id(handle))
+        if state and state.prepare_state:
+            raise RelationalClientError(
+                'Resolve the prepared Firebird transaction with Commit or Rollback first')
         if id(handle) in self._failed_initializations:
             return self._release_failed_initialization(handle)
         if id(handle) in self._server_handles:

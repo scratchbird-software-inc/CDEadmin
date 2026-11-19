@@ -79,6 +79,13 @@ function normalizeConnectionEntry(connection) {
 export function registerSQLConnection(connection) {
   const normalized = normalizeConnectionEntry(connection);
   if (!entries.some(item => item.id === normalized.id)) entries = [...entries, normalized];
+  else if (normalized.openQuickQuery || normalized.open) {
+    entries = entries.map((item) => item.id === normalized.id ? {
+      ...item,
+      open: normalized.open || item.open,
+      openQuickQuery: normalized.openQuickQuery || item.openQuickQuery,
+    } : item);
+  }
   workbenchContextService.update({connectionState: entries.length ? 'connected' : 'disconnected'});
   notifyAll();
 }

@@ -58,6 +58,7 @@ def harness(sets):
     control = Mock()
     control.cursor.return_value.fetchone.return_value = ('server-one',)
     client = SimpleNamespace(
+        _surface_xa={},
         _uncertain_sessions=set(), _require_usable_session=Mock(),
         module=SimpleNamespace(connect=Mock()),
         _invoke_connector=Mock(return_value=control),
@@ -76,6 +77,27 @@ def drain(executions, token):
         if page['complete']:
             return result
     raise AssertionError('worker did not terminate')
+
+
+def test_owned_row_read_uses_native_cancel_and_blocks_competing_session_work():
+    from pgadmin.cdeadmin.providers.mysql_family.surface_row_read import _borrow
+    from pgadmin.cdeadmin.workspace.sql_surface_host import SqlSurfaceExecution
+
+    owner, connection, _ = harness([])
+    request = {'route': {'host': 'registered'}}
+    owner.client._executions = owner
+    owner.client._session_requests = {id(connection): request}
+    owner.kill_query = Mock()
+    execution = SqlSurfaceExecution('row-read')
+    with _borrow(owner.client, connection, execution):
+        with pytest.raises(RelationalClientError, match='execution is active'):
+            owner.require_idle(connection)
+        assert execution.request_cancel(None, None, None)['cancel_status'] == 'requested'
+        owner.kill_query.assert_called_once_with(connection, request, owner.sessions.get(connection))
+    owner.require_idle(connection)
+    owner.kill_query.reset_mock()
+    execution.request_cancel(None, None, None)
+    owner.kill_query.assert_not_called()
 
 
 def test_multiple_results_keep_metadata_and_empty_set():

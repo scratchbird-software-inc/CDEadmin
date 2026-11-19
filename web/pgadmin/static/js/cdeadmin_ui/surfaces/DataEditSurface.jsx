@@ -16,6 +16,8 @@ import {
 } from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
+import SurfaceLayoutTemplateList from './SurfaceLayoutTemplateList';
+import {dataViewerActionHints} from './surfaceActionHints';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {TextArea, TextField} from '../primitives/Field';
@@ -27,6 +29,7 @@ import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import {
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
+  useLocaleRevision,
 } from '../actions/t_actions';
 import {PROJECT_TOP_MENU_INDICES} from '../commands/MenuStructure';
 import {
@@ -37,15 +40,23 @@ import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
+import SurfaceDisplayAreas from './SurfaceDisplayAreas';
+import {displayAreaControl, presentationChoices} from './displayAreaControls';
+import SurfaceInformation from './SurfaceInformation';
+import FieldTypeDefaultsDialog from './FieldTypeDefaultsDialog';
+import SurfaceMetadata from './SurfaceMetadata';
+import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
+  resolveRecordPresentation,
   SURFACE_VIEWS,
   buildFormLayoutPlacements,
   coerceEditedValue,
+  isValidJsonDraft,
   formatBytes,
   formatRowsForExport,
   inferColumnMeta,
@@ -87,14 +98,19 @@ export default function DataEditSurface({
   onOpenInSqlEditor,
 }) {
   const shell = useProjectShell();
+  const localeRevision = useLocaleRevision();
   const shellRef = useRef(shell);
   shellRef.current = shell;
   const instanceScope = useProjectInstanceScope();
   const instId = instanceScope?.instanceId || 'data-surface';
   const surfaceIdRef = useRef(`ds-${instId}`);
 
+  const [companionView, setCompanionView] = useState('');
+  const [companionMode, setCompanionMode] = useState('');
   const [surfaceView, setSurfaceView] = useState(SURFACE_VIEWS.DATA);
   const [layout, setLayout] = useState(defaultLayoutState);
+  const [fieldDefaultsOpen, setFieldDefaultsOpen] = useState(false);
+  const [formatFieldName, setFormatFieldName] = useState(null);
   const layoutInitializedRef = useRef(false);
 
   const [hostData, setHostData] = useState(null);
@@ -117,6 +133,8 @@ export default function DataEditSurface({
 
   // Viewport tracking (decoupled from activeRowIndex!)
   const gridViewportRef = useRef(null);
+  const companionGridRef = useRef(null);
+  const focusedDisplayAreaRef = useRef(null);
   const areaRef = useRef(null);
   const [viewportWidth, setViewportWidth] = useState(860);
   const [scrollRowRange, setScrollRowRange] = useState({start: 0, end: 30});
@@ -349,6 +367,9 @@ export default function DataEditSurface({
   );
 
   // Accept current row edits (explicit Accept button OR automatic on row-leave!)
+  const conversionPairs = sqlLanguageProfile(languageProfile, engineId).field_conversion_pairs;
+  const conversions = useRecordConversions(rows, columns, layout.formFieldPrefs, conversionPairs, callHost);
+
   const acceptCurrentRow = useCallback(async () => {
     if (!isEditingRow || !rowDraft) {
       setIsEditingRow(false);
@@ -368,6 +389,11 @@ export default function DataEditSurface({
     for (const [colName, val] of Object.entries(rowDraft)) {
       const colDef = columns.find((c) => c.name === colName);
       if (!colDef) continue;
+      if (!isInsertDraft && val === targetRow.values?.[colName]) continue;
+      if (!isValidJsonDraft(val, colDef)) {
+        setSurfaceError(gettext('Enter valid JSON for %s.', colName));
+        return false;
+      }
       const meta = inferColumnMeta(colDef);
       const coerced = coerceEditedValue(val, colDef, meta);
       if (isInsertDraft || coerced !== targetRow.values?.[colName]) {
@@ -392,7 +418,9 @@ export default function DataEditSurface({
         op: isInsertDraft ? 'insert' : 'update',
         base_row_index: isInsertDraft ? null : targetRow.base_row_index,
         identity_token: isInsertDraft ? null : targetRow.identity_token,
-        changes: coercedChanges,
+        changes: Object.fromEntries(await Promise.all(Object.entries(coercedChanges).map(async ([name, value]) => [
+          name, await convertRecordField(callHost, conversionPairs, layout.formFieldPrefs, columns.find((column) => column.name === name), value),
+        ]))),
         window_offset: hostData?.window_offset || 0,
         window_size: hostData?.window_size || 200,
       });
@@ -410,7 +438,7 @@ export default function DataEditSurface({
     } finally {
       setWorking(false);
     }
-  }, [
+  }, [conversionPairs, layout.formFieldPrefs,
     isEditingRow,
     rowDraft,
     editingRowIndex,
@@ -623,7 +651,10 @@ export default function DataEditSurface({
   }, [hostData?.sort_execution, callHost, applyHostResponse]);
 
   const locateCurrentRow = useCallback(() => {
-    const vp = gridViewportRef.current;
+    const viewports = [gridViewportRef.current, companionGridRef.current];
+    const focusedArea = focusedDisplayAreaRef.current;
+    const vp = viewports.find((viewport) => viewport && focusedArea?.contains(viewport))
+      || viewports.find(Boolean);
     if (!vp) return;
     const rowEl = vp.querySelector(`[data-surface-row-idx="${activeRowIndex}"]`);
     if (rowEl && typeof rowEl.scrollIntoView === 'function') {
@@ -801,7 +832,10 @@ export default function DataEditSurface({
     pendingCellFocusRef.current = null;
     const attr = req.kind === 'form' ? 'data-form-nav-cell' : 'data-grid-nav-cell';
     const escCol = String(req.colName || '').replaceAll('"', '\\"');
-    const el = areaRef.current.querySelector(`[${attr}="${req.rowIndex}:${escCol}"]`);
+    const focusedArea = focusedDisplayAreaRef.current;
+    const focusRoot = areaRef.current.contains(focusedArea) ? focusedArea : areaRef.current;
+    const selector = `[${attr}="${req.rowIndex}:${escCol}"]`;
+    const el = focusRoot.querySelector(selector) || areaRef.current.querySelector(selector);
     if (el && typeof el.focus === 'function') {
       el.focus({preventScroll: false});
       el.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
@@ -844,17 +878,7 @@ export default function DataEditSurface({
   );
 
   // Determine effective layout mode (handling (e) Hybrid-When-Editing!)
-  const effectiveDisplayMode = useMemo(() => {
-    if (layout.displayMode !== DISPLAY_MODES.HYBRID_EDIT) {
-      return layout.displayMode;
-    }
-    if (!isEditingRow) {
-      return DISPLAY_MODES.GRID;
-    }
-    return layout.hybridEditTarget === 'single_form'
-      ? DISPLAY_MODES.SINGLE_FORM
-      : DISPLAY_MODES.HYBRID;
-  }, [layout.displayMode, layout.hybridEditTarget, isEditingRow]);
+  const effectiveDisplayMode = resolveRecordPresentation(layout.displayMode, isEditingRow, layout.hybridEditTarget);
 
   const stagedTotal = hostData?.metrics_view?.transaction?.staged_total || 0;
   const isRowDraftDirty = useMemo(() => {
@@ -1551,6 +1575,7 @@ export default function DataEditSurface({
     if (!curShell || !instId) return undefined;
     const pfx = `ds.${instId}`;
     const regActions = [];
+    const actionHints = dataViewerActionHints();
 
     const reg = (
       suffix,
@@ -1562,6 +1587,7 @@ export default function DataEditSurface({
         checked = undefined,
         value = undefined,
         shortcut = undefined,
+        hint = undefined,
       } = {}
     ) => {
       const id = `${pfx}.${suffix}`;
@@ -1570,7 +1596,7 @@ export default function DataEditSurface({
         icon,
         application: 'data-navigator',
         defaultText: text,
-        defaultHint: text,
+        defaultHint: hint || actionHints[suffix] || text,
         focusScoped: true,
         status: enabled ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
         ...(typeof checked === 'boolean' ? {checked} : {}),
@@ -1586,6 +1612,7 @@ export default function DataEditSurface({
       id: `file.save.${instId}`,
       icon: 'action.save',
       defaultText: gettext('Save Surface Layout / Template'),
+      defaultHint: gettext('Save the current display settings or create a shareable template'),
       status: T_ACTION_STATUS.ENABLED,
       target: {
         kind: T_ACTION_TARGET_KIND.CLIENT,
@@ -1602,6 +1629,7 @@ export default function DataEditSurface({
       id: `edit.undo.${instId}`,
       icon: 'action.undo',
       defaultText: gettext('Undo Row Edit'),
+      defaultHint: gettext('Revert changes to the current row'),
       status:
         isEditingRow || undoStack.length > 0
           ? T_ACTION_STATUS.ENABLED
@@ -1615,6 +1643,7 @@ export default function DataEditSurface({
       id: `edit.redo.${instId}`,
       icon: 'action.redo',
       defaultText: gettext('Redo'),
+      defaultHint: gettext('Reapply an undone row edit'),
       status:
         redoStack.length > 0
           ? T_ACTION_STATUS.ENABLED
@@ -1769,18 +1798,21 @@ export default function DataEditSurface({
           handlersRef.current.beginEditRow();
         }
       },
-      {enabled: canMutate || isEditingRow}
+      {
+        enabled: canMutate || isEditingRow,
+        hint: isEditingRow ? gettext('Accept changes to the current row') : gettext('Edit the current row'),
+      }
     );
     const insRowId = reg(
       'insert_row',
-      'action.add',
+      'action.insert',
       gettext('Insert Row'),
       () => handlersRef.current.beginInsertRow(false),
       {enabled: canInsert}
     );
     const dupRowId = reg(
       'duplicate_row',
-      'action.copy',
+      'action.duplicate',
       gettext('Duplicate Current Row'),
       () => handlersRef.current.beginInsertRow(true),
       {enabled: canInsert && Boolean(currentRow)}
@@ -2080,6 +2112,35 @@ export default function DataEditSurface({
       {enabled: rows.length > 0}
     );
 
+    const areaOptions = [
+      [SURFACE_VIEWS.DATA, gettext('Data')],
+      [SURFACE_VIEWS.SQL, gettext('SQL')],
+      [SURFACE_VIEWS.METRICS, gettext('Metrics & Plan')],
+      [SURFACE_VIEWS.FIELDS, gettext('Fields')],
+      [SURFACE_VIEWS.INFORMATION, gettext('Information')],
+      [SURFACE_VIEWS.METADATA, gettext('Metadata')],
+      [SURFACE_VIEWS.MESSAGES, gettext('Messages & Log')],
+    ];
+    const displayAreas = [
+      displayAreaControl(reg, pfx, 'first_area', gettext('First Display Area'), areaOptions,
+        surfaceView, setSurfaceView, 180),
+      displayAreaControl(reg, pfx, 'second_area', gettext('Second Display Area'), [
+        ['off', gettext('Off')],
+        ...areaOptions.filter(([view]) => view !== surfaceView || view === SURFACE_VIEWS.DATA),
+      ], companionView === surfaceView && surfaceView !== SURFACE_VIEWS.DATA ? 'off' : companionView || 'off',
+      (view) => setCompanionView(view === 'off' ? '' : view), 181),
+    ];
+    if (surfaceView === SURFACE_VIEWS.DATA) {
+      displayAreas.push(displayAreaControl(reg, pfx, 'first_presentation', gettext('First Area Presentation'),
+        presentationChoices().slice(1), layout.displayMode,
+        (mode) => setLayout((current) => ({...current, displayMode: mode})), 182));
+    }
+    if (companionView === SURFACE_VIEWS.DATA) {
+      displayAreas.push(displayAreaControl(reg, pfx, 'second_presentation', gettext('Second Area Presentation'),
+        presentationChoices(), companionMode || 'default',
+        (mode) => setCompanionMode(mode === 'default' ? '' : mode), 183));
+    }
+
     const ribbonTabs = [
       {
         id: `${pfx}.tab.data`,
@@ -2098,30 +2159,49 @@ export default function DataEditSurface({
                   {
                     id: SURFACE_VIEWS.DATA,
                     label: gettext('Data'),
+                    tooltip: gettext('Show the rows returned by the query'),
                     icon: 'action.browse_data',
                     checked: surfaceView === SURFACE_VIEWS.DATA,
                   },
                   {
                     id: SURFACE_VIEWS.METRICS,
                     label: gettext('Metrics & Plan'),
+                    tooltip: gettext('Inspect execution statistics and the available plan'),
                     icon: 'action.statistics',
                     checked: surfaceView === SURFACE_VIEWS.METRICS,
                   },
                   {
                     id: SURFACE_VIEWS.SQL,
                     label: gettext('SQL'),
+                    tooltip: gettext('Show the SQL used to retrieve these rows'),
                     icon: 'action.sql_preview',
                     checked: surfaceView === SURFACE_VIEWS.SQL,
                   },
                   {
                     id: SURFACE_VIEWS.FIELDS,
                     label: gettext('Fields'),
+                    tooltip: gettext('Inspect column names and data types'),
                     icon: 'action.section_columns',
                     checked: surfaceView === SURFACE_VIEWS.FIELDS,
                   },
                   {
+                    id: SURFACE_VIEWS.INFORMATION,
+                    label: gettext('Information'),
+                    tooltip: gettext('Review information about the selected object or query'),
+                    icon: 'action.properties',
+                    checked: surfaceView === SURFACE_VIEWS.INFORMATION,
+                  },
+                  {
+                    id: SURFACE_VIEWS.METADATA,
+                    label: gettext('Metadata'),
+                    tooltip: gettext('Inspect the object definition, comment and dependencies'),
+                    icon: 'action.dependencies',
+                    checked: surfaceView === SURFACE_VIEWS.METADATA,
+                  },
+                  {
                     id: SURFACE_VIEWS.MESSAGES,
                     label: gettext('Messages & Log'),
+                    tooltip: gettext('Review execution messages and errors'),
                     icon: 'action.section_comments',
                     badge: errorWarnCount > 0 ? String(errorWarnCount) : undefined,
                     checked: surfaceView === SURFACE_VIEWS.MESSAGES,
@@ -2137,30 +2217,35 @@ export default function DataEditSurface({
                   {
                     id: DISPLAY_MODES.GRID,
                     label: gettext('Standard Grid'),
+                    tooltip: gettext('Show records in a table with one row per record'),
                     icon: 'action.layout_grid',
                     checked: layout.displayMode === DISPLAY_MODES.GRID,
                   },
                   {
                     id: DISPLAY_MODES.MINI_FORMS,
                     label: gettext('Mini-Forms'),
+                    tooltip: gettext('Show each record in a compact form'),
                     icon: 'action.layout_mini_forms',
                     checked: layout.displayMode === DISPLAY_MODES.MINI_FORMS,
                   },
                   {
                     id: DISPLAY_MODES.HYBRID,
                     label: gettext('Hybrid (Grid + Current Mini-Form)'),
+                    tooltip: gettext('Show the current record in a mini-form below the grid'),
                     icon: 'action.layout_hybrid',
                     checked: layout.displayMode === DISPLAY_MODES.HYBRID,
                   },
                   {
                     id: DISPLAY_MODES.SINGLE_FORM,
                     label: gettext('Single Form (100% Area)'),
+                    tooltip: gettext('Fill the data area with a form for the current record'),
                     icon: 'action.layout_single_form',
                     checked: layout.displayMode === DISPLAY_MODES.SINGLE_FORM,
                   },
                   {
                     id: DISPLAY_MODES.HYBRID_EDIT,
                     label: gettext('Hybrid-When-Editing'),
+                    tooltip: gettext('Show the grid while browsing and switch to a form when editing'),
                     icon: 'action.layout_hybrid_edit',
                     checked: layout.displayMode === DISPLAY_MODES.HYBRID_EDIT,
                   },
@@ -2177,12 +2262,14 @@ export default function DataEditSurface({
                       {
                         id: 'mini_form',
                         label: gettext('Edit as Mini-Form'),
+                        tooltip: gettext('Use a compact form while editing'),
                         icon: 'action.layout_mini_forms',
                         checked: layout.hybridEditTarget === 'mini_form',
                       },
                       {
                         id: 'single_form',
                         label: gettext('Edit as Single Form'),
+                        tooltip: gettext('Use a full form while editing'),
                         icon: 'action.layout_single_form',
                         checked: layout.hybridEditTarget === 'single_form',
                       },
@@ -2199,10 +2286,10 @@ export default function DataEditSurface({
               navFirstId,
               navPrevPageId,
               navPrevRowId,
+              bookmarkToggleId,
               navNextRowId,
               navNextPageId,
               navLastId,
-              bookmarkToggleId,
               bookmarkPrevId,
               bookmarkNextId,
               locateId,
@@ -2290,6 +2377,11 @@ export default function DataEditSurface({
         label: gettext('Format & Layout'),
         groups: [
           {
+            id: 'display_areas',
+            label: gettext('Display Areas'),
+            controls: displayAreas.map(({control}) => control),
+          },
+          {
             id: 'alignment',
             label: gettext('Alignment'),
             controls: [
@@ -2299,10 +2391,14 @@ export default function DataEditSurface({
                 type: 'segmented',
                 value: activeColHAlign,
                 items: [
-                  {id: 'left', label: gettext('Align Left'), icon: 'action.align_left', checked: activeColHAlign === 'left'},
-                  {id: 'center', label: gettext('Align Centre'), icon: 'action.align_center', checked: activeColHAlign === 'center'},
-                  {id: 'right', label: gettext('Align Right'), icon: 'action.align_right', checked: activeColHAlign === 'right'},
-                  {id: 'justify', label: gettext('Justified'), icon: 'action.align_justify', checked: activeColHAlign === 'justify'},
+                  {id: 'left', label: gettext('Align Left'), tooltip: gettext('Align values to the left of the selected column'),
+                    icon: 'action.align_left', checked: activeColHAlign === 'left'},
+                  {id: 'center', label: gettext('Align Centre'), tooltip: gettext('Centre values horizontally in the selected column'),
+                    icon: 'action.align_center', checked: activeColHAlign === 'center'},
+                  {id: 'right', label: gettext('Align Right'), tooltip: gettext('Align values to the right of the selected column'),
+                    icon: 'action.align_right', checked: activeColHAlign === 'right'},
+                  {id: 'justify', label: gettext('Justified'), tooltip: gettext('Justify values across the selected column'),
+                    icon: 'action.align_justify', checked: activeColHAlign === 'justify'},
                 ],
               },
               {
@@ -2311,9 +2407,12 @@ export default function DataEditSurface({
                 type: 'segmented',
                 value: activeColVAlign,
                 items: [
-                  {id: 'top', label: gettext('Vertical Top'), icon: 'action.valign_top', checked: activeColVAlign === 'top'},
-                  {id: 'middle', label: gettext('Vertical Centre'), icon: 'action.valign_middle', checked: activeColVAlign === 'middle'},
-                  {id: 'bottom', label: gettext('Vertical Bottom'), icon: 'action.valign_bottom', checked: activeColVAlign === 'bottom'},
+                  {id: 'top', label: gettext('Vertical Top'), tooltip: gettext('Align values to the top of their cells'),
+                    icon: 'action.valign_top', checked: activeColVAlign === 'top'},
+                  {id: 'middle', label: gettext('Vertical Centre'), tooltip: gettext('Centre values vertically in their cells'),
+                    icon: 'action.valign_middle', checked: activeColVAlign === 'middle'},
+                  {id: 'bottom', label: gettext('Vertical Bottom'), tooltip: gettext('Align values to the bottom of their cells'),
+                    icon: 'action.valign_bottom', checked: activeColVAlign === 'bottom'},
                 ],
               },
             ],
@@ -2329,9 +2428,12 @@ export default function DataEditSurface({
                 type: 'segmented',
                 value: activeColWrap,
                 items: [
-                  {id: 'none', label: gettext('Single-Line Scroll'), icon: 'action.wrap_none', checked: activeColWrap === 'none'},
-                  {id: 'clamp', label: gettext('Clamped Multi-Line'), icon: 'action.wrap_clamp', checked: activeColWrap === 'clamp'},
-                  {id: 'full', label: gettext('Full Auto-Wrap'), icon: 'action.wrap_full', checked: activeColWrap === 'full'},
+                  {id: 'none', label: gettext('Single-Line Scroll'), tooltip: gettext('Keep values on one line with scrolling for long text'),
+                    icon: 'action.wrap_none', checked: activeColWrap === 'none'},
+                  {id: 'clamp', label: gettext('Clamped Multi-Line'), tooltip: gettext('Wrap text up to the configured line limit'),
+                    icon: 'action.wrap_clamp', checked: activeColWrap === 'clamp'},
+                  {id: 'full', label: gettext('Full Auto-Wrap'), tooltip: gettext('Wrap text across as many lines as needed'),
+                    icon: 'action.wrap_full', checked: activeColWrap === 'full'},
                 ],
               },
               {
@@ -2490,7 +2592,7 @@ export default function DataEditSurface({
               {id: `${pfx}.mnu.next_row`, actionId: navNextRowId, label: gettext('Next Row'), iconKey: 'action.nav_next_row', index: 50},
               {id: `${pfx}.mnu.next_page`, actionId: navNextPageId, label: gettext('Next Page'), iconKey: 'action.nav_next_page', index: 60},
               {id: `${pfx}.mnu.last`, actionId: navLastId, label: gettext('Last Record (>|)'), iconKey: 'action.nav_last', index: 70},
-              {id: `${pfx}.mnu.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Toggle Bookmark (!)'), iconKey: 'action.bookmark_toggle', shortcut: 'Ctrl+B', index: 72},
+              {id: `${pfx}.mnu.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Toggle Bookmark (!)'), iconKey: 'action.bookmark_toggle', shortcut: 'Ctrl+B', index: 45},
               {id: `${pfx}.mnu.bm_prev`, actionId: bookmarkPrevId, label: gettext('Previous Bookmark (!<)'), iconKey: 'action.bookmark_prev', index: 74},
               {id: `${pfx}.mnu.bm_next`, actionId: bookmarkNextId, label: gettext('Next Bookmark (!>)'), iconKey: 'action.bookmark_next', index: 76},
               {id: `${pfx}.mnu.jump`, actionId: jumpRowId, label: gettext('Jump to Row #…'), iconKey: 'action.search', shortcut: 'Ctrl+G', index: 80},
@@ -2714,6 +2816,7 @@ export default function DataEditSurface({
         label: gettext('View'),
         index: 25,
         items: [
+          ...displayAreas.map(({menu}) => menu),
           {
             id: `${pfx}.mnu.v_data`,
             label: gettext('Data View'),
@@ -2745,6 +2848,26 @@ export default function DataEditSurface({
             checked: surfaceView === SURFACE_VIEWS.FIELDS,
             index: 40,
             callback: () => handlersRef.current.setSurfaceView(SURFACE_VIEWS.FIELDS),
+          },
+          {
+            id: `${pfx}.mnu.information`,
+            label: gettext('Information'),
+            checked: surfaceView === SURFACE_VIEWS.INFORMATION,
+            index: 45,
+            callback: () => handlersRef.current.setSurfaceView(SURFACE_VIEWS.INFORMATION),
+          },
+          {
+            id: `${pfx}.field_type_defaults`,
+            label: gettext('Field Type Defaults…'),
+            index: 110,
+            callback: () => setFieldDefaultsOpen(true),
+          },
+          {
+            id: `${pfx}.mnu.metadata`,
+            label: gettext('Metadata'),
+            checked: surfaceView === SURFACE_VIEWS.METADATA,
+            index: 46,
+            callback: () => handlersRef.current.setSurfaceView(SURFACE_VIEWS.METADATA),
           },
           {
             id: `${pfx}.mnu.v_messages`,
@@ -2905,6 +3028,8 @@ export default function DataEditSurface({
   }, [
     instId,
     surfaceView,
+    companionView,
+    companionMode,
     layout,
     hostData,
     rows,
@@ -2928,6 +3053,7 @@ export default function DataEditSurface({
     undoStack.length,
     redoStack.length,
     bookmarkedGlobals,
+    localeRevision,
     stableRenderRightDrawer,
     stableRenderStatusBar,
   ]);
@@ -3116,7 +3242,27 @@ export default function DataEditSurface({
   const openFormFieldContextMenu = useCallback(
     (ev, col, rIdx) => {
       const curInline = Boolean(layout.formFieldPrefs[col.name]?.inlineBox);
+      const pair = recordConversionPair(col, conversionPairs);
+      const selectedPair = layout.formFieldPrefs[col.name]?.conversionPair;
       setContextMenuItems([
+        ...(pair ? [{
+          label: selectedPair ? gettext('Show Native Binary') : gettext('Display as UUID'),
+          icon: 'action.edit',
+          callback: () => setColumnPref(col.name, {conversionPair: selectedPair ? undefined : pair.id}),
+        }] : []),
+        {
+          label: gettext('Font & Alignment…'),
+          icon: 'action.edit',
+          callback: () => setFormatFieldName(col.name),
+        },
+        ...(inferColumnMeta(col).clientType === 'text' ? [{
+          label: layout.formFieldPrefs[col.name]?.editor === 'markdown'
+            ? gettext('Use Plain Text Editor') : gettext('Use Markdown Editor'),
+          icon: 'action.edit',
+          callback: () => setColumnPref(col.name, {
+            editor: layout.formFieldPrefs[col.name]?.editor === 'markdown' ? 'text' : 'markdown',
+          }),
+        }] : []),
         {
           label: curInline
             ? gettext('Use [...] Right-Drawer Viewer')
@@ -3152,13 +3298,13 @@ export default function DataEditSurface({
       ]);
       setContextPos({x: ev.clientX, y: ev.clientY});
     },
-    [layout.formFieldPrefs, openRightDrawerWith]
+    [conversionPairs, layout.formFieldPrefs, openRightDrawerWith, setColumnPref]
   );
 
   // =========================================================================
   // View Renderers (`Area 3e` = 100% Surface Content!)
   // =========================================================================
-  const renderDataView = () => <RecordDataView model={{
+  const renderDataView = (mode, secondary) => <RecordDataView model={{
     acceptCurrentRow,
     activeColName,
     activeRowIndex,
@@ -3166,11 +3312,12 @@ export default function DataEditSurface({
     bookmarkedGlobals,
     cancelRowDraft,
     currentRow,
+    conversions,
     editingRowIndex,
-    effectiveDisplayMode,
+    effectiveDisplayMode: resolveRecordPresentation(mode || layout.displayMode, isEditingRow, layout.hybridEditTarget),
     formColumns,
     gridColumns,
-    gridViewportRef,
+    gridViewportRef: secondary ? companionGridRef : gridViewportRef,
     handleKeyboardCellNavigate,
     handleToggleColumnSort,
     hostData,
@@ -3559,6 +3706,20 @@ export default function DataEditSurface({
     );
   };
 
+  const renderView = (view, mode, secondary = false) => {
+    switch (view) {
+    case SURFACE_VIEWS.METADATA:
+      return <SurfaceMetadata post={post} resource={targetResource} databaseTargetId={databaseTargetId} />;
+    case SURFACE_VIEWS.INFORMATION:
+      return <SurfaceInformation fields={hostData?.fields_grid || EMPTY_ARRAY} sql={hostData?.sql_view?.server_sql} />;
+    case SURFACE_VIEWS.SQL: return renderSqlView();
+    case SURFACE_VIEWS.METRICS: return renderMetricsView();
+    case SURFACE_VIEWS.FIELDS: return renderFieldsView();
+    case SURFACE_VIEWS.MESSAGES: return renderMessagesView();
+    default: return renderDataView(mode, secondary);
+    }
+  };
+
   return (
     <div
       ref={areaRef}
@@ -3649,18 +3810,39 @@ export default function DataEditSurface({
 
       {loading ? (
         <ProgressOverlay message={gettext('Buffering rows on host…')} />
-      ) : surfaceView === SURFACE_VIEWS.METRICS ? (
-        renderMetricsView()
-      ) : surfaceView === SURFACE_VIEWS.SQL ? (
-        renderSqlView()
-      ) : surfaceView === SURFACE_VIEWS.FIELDS ? (
-        renderFieldsView()
-      ) : surfaceView === SURFACE_VIEWS.MESSAGES ? (
-        renderMessagesView()
-      ) : (
-        renderDataView()
-      )}
+      ) : companionView && (companionView !== surfaceView || surfaceView === SURFACE_VIEWS.DATA) ? (
+        <SurfaceDisplayAreas
+          first={renderView(surfaceView)}
+          second={renderView(companionView, companionMode, true)}
+          onActivate={(event) => { focusedDisplayAreaRef.current = event.currentTarget; }}
+          ratio={46}
+          qaKey="data-surface-split-view"
+        />
+      ) : renderView(surfaceView)}
 
+      {formatFieldName && (
+        <FieldTypeDefaultsDialog
+          fieldName={formatFieldName}
+          types={[formatFieldName]}
+          defaults={{[formatFieldName]: layout.formFieldPrefs[formatFieldName] || {}}}
+          onClose={() => setFormatFieldName(null)}
+          onSave={(values) => {
+            const {font, hAlign} = values[formatFieldName];
+            setColumnPref(formatFieldName, {font: font || undefined, hAlign: hAlign || undefined});
+          }}
+        />
+      )}
+      {fieldDefaultsOpen && (
+        <FieldTypeDefaultsDialog
+          types={[...new Set(['text', ...columns.map((column) => inferColumnMeta(column).clientType)])]}
+          defaults={hostData?.field_type_defaults || {}}
+          onClose={() => setFieldDefaultsOpen(false)}
+          onSave={async (defaults) => {
+            const response = await callHost('save_field_type_defaults', {field_type_defaults: defaults});
+            setHostData((current) => ({...current, field_type_defaults: response.field_type_defaults}));
+          }}
+        />
+      )}
       <ContextMenu
         position={contextPos}
         onClose={() => setContextPos(null)}
@@ -3878,31 +4060,13 @@ export default function DataEditSurface({
             />
           )}
           {layoutSaveScope === 'apply_template' && (
-            <div style={{display: 'grid', gap: 6}}>
-              {availableTemplates.length === 0 ? (
-                <div style={{fontSize: '0.8rem', opacity: 0.75}}>
-                  {gettext('No saved templates yet.')}
-                </div>
-              ) : (
-                availableTemplates.map((tpl) => (
-                  <button
-                    key={tpl.template_id}
-                    type="button"
-                    className="sr-btn"
-                    style={{justifyContent: 'space-between'}}
-                    onClick={() => {
-                      setLayout((prev) => ({...prev, ...(tpl.layout || {})}));
-                      setSaveLayoutDialogOpen(false);
-                    }}
-                  >
-                    <strong>{tpl.name}</strong>
-                    <span style={{fontSize: '0.72rem', opacity: 0.7}}>
-                      {tpl.updated_at}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
+            <SurfaceLayoutTemplateList
+              templates={availableTemplates}
+              onSelect={(template) => {
+                setLayout((previous) => ({...previous, ...(template.layout || {})}));
+                setSaveLayoutDialogOpen(false);
+              }}
+            />
           )}
         </Box>
       </Dialog>

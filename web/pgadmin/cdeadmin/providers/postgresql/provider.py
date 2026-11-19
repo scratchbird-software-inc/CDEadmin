@@ -21,7 +21,7 @@ import re
 import json
 import uuid
 import threading
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from functools import wraps
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -230,6 +230,9 @@ class _SessionState:
     manager: object
     uncertain: bool = False
     attached: bool = False
+    row_page: object = None
+    row_snapshot: object = None
+    prepared_gid: str | None = None
     lock: object = field(default_factory=threading.RLock)
 
 
@@ -1064,7 +1067,7 @@ class PostgreSQLProvider:
                     cls._studio_open_session,
                     cls._studio_describe_transaction,
                     frozenset({'commit', 'rollback',
-                               'autocommit_on', 'autocommit_off'}),
+                               'autocommit_on', 'autocommit_off', 'prepare'}),
                     cls._studio_control_transaction,
                     cls._studio_close_session,
                 ),
@@ -1849,6 +1852,123 @@ class PostgreSQLProvider:
                 'PostgreSQL delegated connection failed'
             )
 
+    @_session_serialized
+    def read_visual_admin_rows(self, request):
+        from .row_page import RowPage
+
+        self.permissions.require('data_read', 'resource')
+        state = self._require_idle_session(request.get('session_id'))
+        self._ensure_native_connection(state)
+        read_execution = request.get('_row_read_execution')
+        native = state.connection.conn
+
+        def native_scope():
+            if read_execution is None:
+                return nullcontext()
+            return read_execution.cancellable_row_read(lambda: native.cancel_safe(timeout=5))
+        target = _mapping(request.get('target_resource'))
+        extension = _extension(target)
+        if (target.get('endpoint_id') != self.context.endpoint_id
+                or extension.get('server_id') != state.server_id
+                or extension.get('database_id') != state.database_id):
+            raise PostgreSQLProviderError('Relation and session database identities do not match')
+        oid = _required_int(extension, 'object_id')
+        limit = request.get('limit', 200)
+        buffer_limit = request.get('buffer_limit', 1000)
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise PostgreSQLProviderError('Row page size must be between 1 and 500')
+        if type(buffer_limit) is not int or not 1 <= buffer_limit <= 100000:
+            raise PostgreSQLProviderError('Row buffer size must be between 1 and 100000')
+        if request.get('continuation'):
+            if (state.row_page is None or state.row_page.token != request['continuation']
+                    or state.row_page.relation_oid != oid):
+                raise PostgreSQLProviderError('Row continuation is unavailable')
+        else:
+            self._close_row_page(state)
+            state.row_snapshot = None
+            state.row_page = RowPage(
+                state.connection.conn, oid, uuid.uuid4().hex, buffer_limit,
+                allow_edit='data_write' in self.context.effective_permissions,
+                native_scope=native_scope,
+            )
+            state.row_snapshot = state.row_page
+        try:
+            result = state.row_page.fetch(limit, native_scope=native_scope)
+            if read_execution is not None:
+                read_execution.check_stop()
+        except Exception:
+            state.row_snapshot = None
+            self._close_row_page(state)
+            raise
+        if not result['continuation']:
+            self._close_row_page(state)
+        return result
+
+    @_session_serialized
+    def cancel_visual_admin_rows(self, request):
+        state = self._require_idle_session(request.get('session_id'))
+        if state.row_page is None or state.row_page.token != request.get('continuation'):
+            raise PostgreSQLProviderError('Row continuation is unavailable')
+        self._close_row_page(state)
+        return {'cancelled': True}
+
+    @staticmethod
+    def _close_row_page(state):
+        if state.row_page is not None:
+            state.row_page.close()
+            state.row_page = None
+
+    @_session_serialized
+    def mutate_surface_rows(self, request):
+        from psycopg import sql
+
+        self.permissions.require('data_write', 'resource')
+        self.permissions.require('execute')
+        state = self._require_idle_session(request.get('session_id'))
+        self._ensure_native_connection(state)
+        snapshot = state.row_snapshot
+        extension = _extension(_mapping(request.get('target_resource')))
+        if (snapshot is None or extension.get('object_id') != snapshot.relation_oid
+                or extension.get('server_id') != state.server_id
+                or extension.get('database_id') != state.database_id):
+            raise PostgreSQLProviderError('PostgreSQL row identity has expired')
+        changes = request.get('changes')
+        if not isinstance(changes, list) or not 1 <= len(changes) <= 1000:
+            raise PostgreSQLProviderError('Invalid PostgreSQL row batch')
+        if any(not isinstance(item, dict) or set(item) != {'operation', 'draft'} for item in changes):
+            raise PostgreSQLProviderError('Invalid PostgreSQL row operation')
+        queries = [snapshot.mutation(item['operation'], item['draft']) for item in changes]
+        native = state.connection.conn
+        if request.get('preview') is True:
+            return {'previews': [statement.as_string(native) for statement, _ in queries]}
+        if request.get('preview') is not False:
+            raise PostgreSQLProviderError('PostgreSQL row request requires a preview flag')
+        self._close_row_page(state)
+        already_active = state.connection.transaction_status() != 0
+        applying = False
+        try:
+            with native.transaction():
+                with native.cursor() as cursor:
+                    cursor.execute(sql.SQL('LOCK TABLE {} IN ROW EXCLUSIVE MODE').format(snapshot.relation))
+                    cursor.execute('SELECT pg_catalog.to_regclass(%s)::oid', (snapshot.relation.as_string(native),))
+                    if cursor.fetchone()[0] != snapshot.relation_oid:
+                        raise PostgreSQLProviderError('PostgreSQL relation identity changed')
+                    for statement, bindings in queries:
+                        cursor.execute(statement, bindings)
+                        if cursor.rowcount != 1:
+                            raise PostgreSQLProviderError('A PostgreSQL row changed or is no longer writable. Refresh before retrying.')
+                applying = True
+            if already_active:
+                committed, status = native_control(native, 'COMMIT')
+                if not committed or status != 'COMMIT':
+                    raise PostgreSQLProviderError('PostgreSQL did not confirm the row batch commit')
+        except Exception:
+            if applying:
+                state.uncertain = True
+            raise
+        state.row_snapshot = None
+        return {'applied': len(queries)}
+
     def browse_source(self, request, catalog=()):
         """Browse data (owner direction 2026-11-06) for the provider tree
         (M6, 2026-11-11): editor text reading every column of one relation,
@@ -1896,13 +2016,15 @@ class PostgreSQLProvider:
         except RuntimeError as error:
             raise PostgreSQLProviderError(str(error)) from None
 
-    def _require_idle_session(self, session_id):
+    def _require_idle_session(self, session_id, *, allow_prepared=False):
         state = self._sessions.get(session_id)
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
         if state.uncertain:
             raise PostgreSQLProviderError(
                 'PostgreSQL connection state is unknown; close this session')
+        if state.prepared_gid and not allow_prepared:
+            raise PostgreSQLProviderError('Resolve the prepared PostgreSQL transaction first')
         if any(op.session_id == session_id and not op.operation['terminal']
                for op in self._operations.values()):
             raise PostgreSQLProviderError(
@@ -1944,6 +2066,8 @@ class PostgreSQLProvider:
                 'autocommit': (None if state.uncertain else
                                getattr(state.connection.conn, 'autocommit', None)),
                 'session_reuse_blocked': state.uncertain,
+                'prepare_state': ('unknown' if state.uncertain else 'prepared') if state.prepared_gid else None,
+                'prepared_transaction_id': state.prepared_gid,
                 'interpretation': 'PostgreSQL provider-owned opaque value',
             },
             'authority_reference': 'provider:org.pgadmin.postgresql',
@@ -1960,14 +2084,21 @@ class PostgreSQLProvider:
         action = payload.get('action')
         statements = {'commit': 'COMMIT;', 'rollback': 'ROLLBACK;'}
         policies = {'autocommit_on': True, 'autocommit_off': False}
-        if action not in statements and action not in policies:
+        if action not in statements and action not in policies and action != 'prepare':
             raise PostgreSQLProviderError(
                 'PostgreSQL transaction action is unavailable'
             )
         self.permissions.require('execute')
         with state.lock:
-            self._require_idle_session(payload.get('session_id'))
+            self._require_idle_session(payload.get('session_id'), allow_prepared=action in statements)
             self._ensure_native_connection(state)
+            self._close_row_page(state)
+            state.row_snapshot = None
+            if action == 'prepare' or state.prepared_gid:
+                command = self._control_prepared_transaction(state, action)
+                observation = self.describe_transaction(payload)
+                observation['provider_payload']['command_status'] = command
+                return observation
             if action in policies:
                 native = state.connection.conn
                 desired = policies[action]
@@ -2007,6 +2138,89 @@ class PostgreSQLProvider:
         observation['provider_payload']['command_status'] = _detail
         return observation
 
+    @staticmethod
+    def _control_prepared_transaction(state, action):
+        from psycopg.pq import ExecStatus, TransactionStatus
+
+        pgconn = state.connection.conn.pgconn
+        if action == 'prepare':
+            if pgconn.transaction_status != TransactionStatus.INTRANS:
+                raise PostgreSQLProviderError('An active PostgreSQL transaction is required to prepare')
+            setting = pgconn.exec_(b'SHOW max_prepared_transactions')
+            if setting.status != ExecStatus.TUPLES_OK or setting.ntuples != 1:
+                raise PostgreSQLProviderError('PostgreSQL prepared transaction capacity is unavailable')
+            if setting.get_value(0, 0) == b'0':
+                raise PostgreSQLProviderError('PostgreSQL prepared transactions are disabled on this instance')
+            state.prepared_gid = f'scratchrobin_{uuid.uuid4().hex}'
+            command = 'PREPARE TRANSACTION'
+        else:
+            if pgconn.transaction_status != TransactionStatus.IDLE:
+                raise PostgreSQLProviderError('PostgreSQL prepared transaction resolution requires an idle connection')
+            command = 'COMMIT PREPARED' if action == 'commit' else 'ROLLBACK PREPARED'
+        gid = state.prepared_gid
+        # The GID is generated above and contains only ASCII letters, digits and underscores.
+        try:
+            result = pgconn.exec_(f"{command} '{gid}'".encode('ascii'))
+        except Exception:
+            result = None
+        if (result is not None and result.status == ExecStatus.COMMAND_OK
+                and result.command_status == command.encode('ascii')
+                and pgconn.transaction_status == TransactionStatus.IDLE):
+            if action != 'prepare':
+                state.prepared_gid = None
+            return command
+        if result is not None:
+            from psycopg.pq import DiagnosticField
+            code = result.error_field(DiagnosticField.SQLSTATE)
+            if (result.status == ExecStatus.FATAL_ERROR and code and not code.startswith(b'08')
+                    and pgconn.transaction_status == TransactionStatus.IDLE
+                    and (action == 'prepare' or code != b'42704')):
+                if action == 'prepare':
+                    state.prepared_gid = None
+                raise PostgreSQLProviderError(
+                    f'PostgreSQL rejected {command}: {code.decode("ascii")}')
+        state.uncertain = True
+        raise PostgreSQLProviderError(
+            f'PostgreSQL outcome is unknown for {gid}; check pg_prepared_xacts before taking further action')
+
+    @_session_serialized
+    def recover_surface_transaction(self, request):
+        self.permissions.require('execute')
+        state = self._require_idle_session(request.get('session_id'))
+        self._ensure_native_connection(state)
+        action = request.get('resolution')
+        gid = request.get('gid')
+        if action not in (None, 'commit', 'rollback') or (
+                action and (not isinstance(gid, str) or not re.fullmatch(r'scratchrobin_[0-9a-f]{32}', gid))):
+            raise PostgreSQLProviderError('Invalid prepared transaction recovery request')
+        native = state.connection.conn
+        if state.connection.transaction_status() != 0:
+            raise PostgreSQLProviderError('Prepared transaction recovery requires an idle connection')
+        native.autocommit = True
+        with native.cursor() as cursor:
+            cursor.execute(
+                "SELECT gid, prepared::text FROM pg_catalog.pg_prepared_xacts "
+                "WHERE database = current_database() AND owner = current_user "
+                "AND gid ~ '^scratchrobin_[0-9a-f]{32}$' "
+                "AND (%s::text IS NULL OR gid = %s) ORDER BY prepared DESC, gid LIMIT 200",
+                (gid if action else None, gid if action else None),
+            )
+            rows = cursor.fetchall()
+        if action is None:
+            return {'transactions': [{'gid': row[0], 'prepared_at': row[1]} for row in rows]}
+        if not rows:
+            raise PostgreSQLProviderError('The prepared transaction is unavailable to this database and role')
+        state.prepared_gid = gid
+        try:
+            command = self._control_prepared_transaction(state, action)
+        finally:
+            # The recovery session never owns the prepared work.
+            state.prepared_gid = None
+        for previous in self._sessions.values():
+            if previous.database_id == state.database_id and previous.prepared_gid == gid:
+                previous.prepared_gid = None
+        return {'gid': gid, 'command_status': command}
+
     @_session_serialized
     def close_session(self, request):
         """Roll back and release one retained PostgreSQL connection."""
@@ -2016,6 +2230,9 @@ class PostgreSQLProvider:
         if state is None:
             raise PostgreSQLProviderError('PostgreSQL session is unavailable')
         with state.lock:
+            if state.prepared_gid:
+                raise PostgreSQLProviderError(
+                    f'Resolve prepared PostgreSQL transaction {state.prepared_gid} before closing')
             for op in self._operations.values():
                 if op.session_id != session_id or op.operation['terminal']:
                     continue
@@ -2033,6 +2250,7 @@ class PostgreSQLProvider:
                 # Keep the final native observation after release for polling.
                 while not op.operation['terminal']:
                     self.describe_result(op.operation)
+            self._close_row_page(state)
             rollback_status = False
             rollback_requested = not state.uncertain and state.attached
             try:
@@ -2107,6 +2325,81 @@ class PostgreSQLProvider:
             raise PostgreSQLProviderError(str(error)) from None
 
     @_session_serialized
+    def convert_surface_uuid(self, request):
+        from ..surface_uuid import convert_postgresql
+        from .editor_context import read_scope
+
+        self.permissions.require('execute')
+        state = self._require_idle_session(request.get('session_id'))
+        self._ensure_native_connection(state)
+        with read_scope(state) as connection:
+            return convert_postgresql(connection, request)
+
+    @_session_serialized
+    def observe_formatting_context(self, request):
+        self.permissions.require('execute')
+        state = self._require_idle_session(request.get('session_id'))
+        self._ensure_native_connection(state)
+        return self._editor_context(state, request.get('source'))
+
+    @_session_serialized
+    def describe_surface_statement(self, request):
+        """Describe a parsed statement on the retained connection without executing it."""
+        from psycopg import adapters
+        from psycopg.pq import ExecStatus
+        from .editor_context import read_scope
+
+        self.permissions.require('execute')
+        session_id = request.get('session_id')
+        state = self._require_idle_session(session_id)
+        self._ensure_native_connection(state)
+        if state.row_page is not None:
+            raise PostgreSQLProviderError('Finish reading the active row page before preparing SQL')
+        source = request.get('source')
+        if not isinstance(source, str) or not source.strip():
+            raise PostgreSQLProviderError('Statement source is required')
+
+        def native_type(oid):
+            info = adapters.types.get(oid)
+            return info.name if info else f'OID {oid}'
+
+        with read_scope(state) as connection:
+            encoding = connection.info.encoding
+            for command in (
+                lambda: connection.pgconn.prepare(b'', source.encode(encoding)),
+                lambda: connection.pgconn.describe_prepared(b''),
+            ):
+                result = command()
+                if result.status != ExecStatus.COMMAND_OK:
+                    raise PostgreSQLProviderError(
+                        result.error_message.decode(encoding, errors='replace').strip()
+                        or 'PostgreSQL could not describe the statement'
+                    )
+            return {
+                'statement_type': 'PostgreSQL Parse / Describe',
+                'statement_execution_requested': False,
+                'columns_complete': True,
+                'parameters_complete': True,
+                'columns': [
+                    {
+                        'position': index + 1,
+                        'name': result.fname(index).decode(encoding),
+                        'native_type': native_type(result.ftype(index)),
+                        'type_oid': result.ftype(index),
+                    }
+                    for index in range(result.nfields)
+                ],
+                'parameters': [
+                    {
+                        'position': index + 1, 'name': f'${index + 1}',
+                        'native_type': native_type(result.param_type(index)),
+                        'type_oid': result.param_type(index),
+                    }
+                    for index in range(result.nparams)
+                ],
+            }
+
+    @_session_serialized
     def execute(self, request):
         self.permissions.require('execute')
         payload = _mapping(request)
@@ -2122,6 +2415,8 @@ class PostgreSQLProvider:
         with state.lock:
             self._require_idle_session(session_id)
             self._ensure_native_connection(state)
+            self._close_row_page(state)
+            state.row_snapshot = None
             if payload.get('output_policy', {}).get('postgresql_plan'):
                 from .execution import validate_plan
                 validate_plan(state.connection.conn, source, bound)

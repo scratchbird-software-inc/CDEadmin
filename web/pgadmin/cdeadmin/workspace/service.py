@@ -3779,9 +3779,37 @@ class ProviderWorkspaceService:
         }
 
     def read_visual_admin_rows(self, server, request):
-        return self._visual_admin_call(
-            server, 'read_visual_admin_rows', request
-        )
+        return self._surface_row_call(server, 'read_visual_admin_rows', request)
+
+    def read_cancellable_surface_rows(self, server, request, execution):
+        return self._surface_row_call(server, 'read_visual_admin_rows', request, execution=execution)
+
+    def mutate_surface_rows(self, server, request):
+        return self._surface_row_call(server, 'mutate_surface_rows', request)
+
+    def _surface_row_call(self, server, method, request, *, execution=None):
+        context, callback, payload = self._prepare_visual_admin_call(server, method, request)
+        payload.pop('_row_read_execution', None)
+        if context.provider_id == 'org.pgadmin.postgresql':
+            target = payload.get('target_resource') or {}
+            resource_id = target.get('resource_id')
+            if not isinstance(resource_id, str) or not resource_id:
+                raise ProviderWorkspaceError('A registered PostgreSQL relation is required')
+            resource = self.resource_service.cache.resource(
+                context, ResourceRef(context.endpoint_id, resource_id)
+            )
+            if not resource or resource.get('resource_kind') not in {
+                'table', 'partitioned-table', 'partition', 'view', 'materialized-view', 'foreign-table',
+            }:
+                raise ProviderWorkspaceError('PostgreSQL relation is unavailable in the current catalog')
+            payload['target_resource'] = resource
+        if execution is not None and context.provider_id in {
+            'org.pgadmin.postgresql', 'org.cdeadmin.firebird', 'org.cdeadmin.firebird.embedded',
+            'org.cdeadmin.sqlite', 'org.cdeadmin.duckdb',
+            'org.cdeadmin.mysql', 'org.cdeadmin.mariadb',
+        }:
+            payload['_row_read_execution'] = execution
+        return callback(payload)
 
     def cancel_visual_admin_rows(self, server, request):
         return self._visual_admin_call(
@@ -4951,6 +4979,14 @@ class ProviderWorkspaceService:
             if action == 'source_catalog':
                 return self.studio_service.session_catalog(context, data.get('session_id'),
                     include_system=data.get('include_system', False))
+            if action == 'source_format_context':
+                source = data.get('source')
+                if not isinstance(source, str) or len(source.encode('utf8')) > 1024 * 1024:
+                    raise ProviderWorkspaceError('Formatting context requires bounded SQL source')
+                return {'context': self.studio_service.formatting_context(
+                    context, data.get('session_id'), source,
+                    client_sql_dialect=data.get('client_sql_dialect'),
+                )}
             if action == 'source_complete':
                 source, prefix = data.get('source'), data.get('source_before_cursor')
                 if (not isinstance(source, str) or not isinstance(prefix, str) or
@@ -5228,6 +5264,40 @@ class ProviderWorkspaceService:
             server, database_target_id=database_target_id
         )
         return self.studio_service.reconnect_session(context, session_id)
+
+    def describe_surface_statement(self, server, session_id, source, database_target_id=None):
+        database_target_id = self._resolve_session_target_id(session_id, database_target_id)
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id
+        )
+        return self.studio_service.describe_surface_statement(context, session_id, source)
+
+    def recover_surface_transaction(self, server, database_target_id, resolution, gid):
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=database_target_id
+        )
+        opened = self.open_session(server, 'postgresql-sql', database_target_id=database_target_id)
+        session_id = opened['session_id']
+        try:
+            return self.studio_service.recover_surface_transaction(context, session_id, resolution, gid)
+        finally:
+            self.close_session(server, session_id, database_target_id)
+
+    def convert_surface_field(self, server, request):
+        if not isinstance(request, dict):
+            raise ProviderWorkspaceError('Field conversion request must be an object')
+        if request.get('pair') != 'postgresql-uuid-binary':
+            return self._visual_admin_call(server, 'convert_surface_field', request)
+        target = request.get('database_target_id')
+        context, _endpoint, _root = self.endpoint_service.workspace(
+            server, database_target_id=target
+        )
+        opened = self.open_session(server, 'postgresql-sql', database_target_id=target)
+        session_id = opened['session_id']
+        try:
+            return self.studio_service.convert_surface_uuid(context, session_id, request)
+        finally:
+            self.close_session(server, session_id, target)
 
     def _visual_admin_call(self, server, method_name, request):
         _context, callback, payload = self._prepare_visual_admin_call(

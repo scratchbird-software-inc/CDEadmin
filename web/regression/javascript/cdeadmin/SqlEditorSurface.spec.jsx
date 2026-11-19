@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import gettext from 'sources/gettext';
 import {useEffect} from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -20,6 +21,8 @@ import {
 import SqlEditorSurface from '../../../pgadmin/static/js/cdeadmin_ui/surfaces/SqlEditorSurface';
 import SurfaceExportDialog from '../../../pgadmin/static/js/cdeadmin_ui/surfaces/SurfaceExportDialog';
 import {buildFormLayoutPlacements} from '../../../pgadmin/static/js/cdeadmin_ui/surfaces/dataEditSurfaceHelpers';
+import {recordConversionPair} from '../../../pgadmin/static/js/cdeadmin_ui/surfaces/recordConversions';
+import {sqlLanguageProfile} from '../../../pgadmin/static/js/cdeadmin_ui/editors/sqlLanguageProfiles';
 
 const TestShell = withTheme(({children}) => (
   <ProjectShellProvider username="dba@scratchrobin.org">
@@ -170,7 +173,7 @@ function makeSqlHostResponse(overrides = {}) {
   };
 }
 
-function SqlSurfaceLauncher({postMock, initialScriptKind = ''}) {
+function SqlSurfaceLauncher({postMock, initialScriptKind = '', engineId = 'firebird', initialSql = ''}) {
   const shell = useProjectShell();
   useEffect(() => {
     shell.openInlineTab({
@@ -183,8 +186,8 @@ function SqlSurfaceLauncher({postMock, initialScriptKind = ''}) {
       renderWorkArea: () => (
         <SqlEditorSurface
           endpointLabel="Local Firebird / cdeadmin_demo.fdb"
-          engineId="firebird"
-          languageProfile="firebird-sql"
+          engineId={engineId}
+          languageProfile={`${engineId}-sql`}
           databaseTargetId="cdeadmin_demo.fdb"
           targetResource={{
             resource_id: 'table:CUSTOMERS',
@@ -199,6 +202,7 @@ function SqlSurfaceLauncher({postMock, initialScriptKind = ''}) {
               columns: [{name: 'ID', native_type: 'INTEGER', primary_key: true}],
             },
           ]}
+          initialSql={initialSql}
           initialScriptKind={initialScriptKind}
           post={postMock}
         />
@@ -212,6 +216,13 @@ function SqlSurfaceLauncher({postMock, initialScriptKind = ''}) {
 describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
   test('enforces zero inline chrome, hides SQL Editor from left quick-launch rail, mounts focus-merged menus & 7 TiB views', async () => {
     const postMock = jest.fn(async ({request}) => {
+      if (request.sub_action === 'list_templates') {
+        return {templates: [{
+          template_id: 'shared-customer-layout',
+          name: 'Shared customer layout',
+          layout: {displayMode: 'mini_forms'},
+        }]};
+      }
       if (request.sub_action === 'visual_builder_from_sql') {
         return {
           ...makeSqlHostResponse(),
@@ -257,12 +268,74 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     expect(screen.getByRole('menuitem', {name: 'Edit'})).toBeInTheDocument();
     expect(screen.getByRole('menuitem', {name: 'View'})).toBeInTheDocument();
 
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', {name: 'View'}));
+    });
+    await act(async () => {
+      const entry = document.querySelector('[data-command-id$=".apply_layout_template"]');
+      expect(entry).toHaveAttribute('aria-label', 'Apply Layout Template…');
+      fireEvent.click(entry);
+    });
+    const menuPicker = await screen.findByRole('dialog', {name: 'Apply Layout Template'});
+    fireEvent.click(within(menuPicker).getByRole('button', {name: 'Close'}));
+
     // 4. TiB mounts 3 under-tabs (`Query`, `Format & Layout`, `Export & Files`) and 7 Pill 1 views
     const underTabs = document.querySelector('[data-cdeadmin-qa-key="notebookbar-undertabs"]');
     expect(underTabs).not.toBeNull();
     expect(within(underTabs).getByRole('tab', {name: 'Query'})).toBeInTheDocument();
     expect(within(underTabs).getByRole('tab', {name: 'Format & Layout'})).toBeInTheDocument();
     expect(within(underTabs).getByRole('tab', {name: 'Export & Files'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Prepare Statement'})
+      .querySelector('[data-icon-key="action.prepare_statement"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Prepare Transaction…'})
+      .querySelector('[data-icon-key="action.prepare_transaction"]')).toBeInTheDocument();
+    expect(screen.getByRole('radio', {name: 'SQL + Data'})
+      .querySelector('[data-icon-key="action.layout_hybrid"]')).toBeInTheDocument();
+
+
+    await act(async () => {
+      fireEvent.click(within(underTabs).getByRole('tab', {name: 'Format & Layout'}));
+    });
+    const secondDisplay = screen.getByRole('button', {name: 'Second Display Area'});
+    expect(secondDisplay.querySelector('[data-icon-key="view.status"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'First Display Area'})
+      .querySelector('[data-icon-key="view.toolbar"]')).toBeInTheDocument();
+    fireEvent.focus(secondDisplay);
+    expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]')).toHaveTextContent('Choose the content in the lower display area or turn it off');
+    fireEvent.blur(secondDisplay);
+    expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Apply Layout Template…'}));
+    const picker = await screen.findByRole('dialog', {name: 'Apply Layout Template'});
+    fireEvent.click(await within(picker).findByRole('button', {name: 'Shared customer layout'}));
+    expect(screen.getByRole('radio', {name: 'Mini-Forms'})).toHaveAttribute('aria-checked', 'true');
+    expect(surfaceEl).toHaveAttribute('data-surface-view', 'sql');
+    fireEvent.click(screen.getByRole('radio', {name: 'Standard Grid'}));
+
+    const selectArea = async (label, choice) => {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', {name: label}));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('menuitemcheckbox', {name: choice, exact: true}));
+      });
+    };
+    await selectArea('Second Display Area', 'Messages');
+    const split = surfaceEl.querySelector('[data-cdeadmin-qa-key="sql-surface-split-view"]');
+    expect(split.style.flexDirection).toBe('column');
+    expect(split.lastElementChild.querySelector('[data-cdeadmin-qa-key="sql-surface-messages"]')).not.toBeNull();
+    expect(within(surfaceEl).queryByRole('button', {name: 'Second Display Area'})).toBeNull();
+
+    await selectArea('Second Display Area', 'Data');
+    await selectArea('First Display Area', 'Data');
+    await selectArea('Second Area Presentation', 'Mini-Forms');
+    expect(screen.getByRole('button', {name: 'First Area Presentation'})).toBeInTheDocument();
+    await selectArea('Second Display Area', 'Off');
+    expect(surfaceEl.querySelector('[data-cdeadmin-qa-key="sql-surface-split-view"]')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(within(underTabs).getByRole('tab', {name: 'Query'}));
+    });
 
     // 5. Switch Pill 1 to `Visual Builder` -> 100% Area 3e is RobinTiledCanvas + Right Drawer opens Visual Inspector!
     const vbBtn = screen.getByRole('radio', {name: 'Visual Builder'});
@@ -272,6 +345,228 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     expect(surfaceEl.getAttribute('data-surface-view')).toBe('visual_builder');
     expect(document.querySelector('[data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"]')).not.toBeNull();
     expect(document.querySelector('[data-cdeadmin-qa-key="sql-surface-3b-visual-inspector"]')).not.toBeNull();
+  });
+
+  test('updates the open SQL Editor, TiB hints and menus on catalog changes', async () => {
+    const postMock = jest.fn(async ({request}) => {
+      if (request.sub_action === 'list_templates') return {templates: []};
+      if (request.sub_action === 'check_parameters') {
+        return {parameters: [{name: 'customer', token: ':customer', index: 1}]};
+      }
+      return makeSqlHostResponse();
+    });
+    const fixture = render(<TestShell><SqlSurfaceLauncher postMock={postMock} /></TestShell>);
+    const underTabs = await screen.findByRole('tab', {name: 'Format & Layout'});
+    try {
+      fireEvent.click(underTabs);
+      await act(async () => {
+        gettext.setCatalog({
+          'Choose the content in the lower display area or turn it off':
+            'Choisir le contenu de la zone inférieure ou la désactiver',
+        }, 'fr');
+      });
+      const secondArea = screen.getByRole('button', {name: 'Seconde zone d’affichage'});
+      expect(secondArea).toBeInTheDocument();
+      fireEvent.focus(secondArea);
+      expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]'))
+        .toHaveTextContent('Choisir le contenu de la zone inférieure ou la désactiver');
+      expect(screen.getByRole('menuitem', {name: 'Vue'})).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('tab', {name: 'Requête'}));
+      expect(screen.getByRole('radio', {name: 'Données'})).toHaveAttribute(
+        'title', 'Afficher les lignes renvoyées par la requête'
+      );
+      const execute = document.querySelector('[data-icon-key="action.execute"]').closest('button');
+      fireEvent.focus(execute);
+      expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]'))
+        .toHaveTextContent('Exécuter la sélection ou l’instruction au curseur');
+      fireEvent.click(screen.getByRole('button', {name: 'Démarrer une transaction…'}));
+      const transaction = await screen.findByRole('dialog', {name: 'Démarrer une transaction'});
+      expect(within(transaction).getByText('Attente de verrou')).toBeInTheDocument();
+      expect(within(transaction).getByRole('option', {name: 'Ne pas attendre'})).toBeInTheDocument();
+      fireEvent.click(within(transaction).getByRole('button', {name: 'Annuler'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Paramètres…'}));
+      const parameters = await screen.findByRole('dialog', {name: 'Lier les paramètres de la requête'});
+      expect(within(parameters).getByRole('combobox', {name: 'Type de customer'})).toBeInTheDocument();
+      expect(within(parameters).getByRole('textbox', {name: 'Valeur de customer'}))
+        .toHaveAttribute('placeholder', 'Saisir une valeur…');
+      expect(within(parameters).getByRole('option', {name: 'Entier'})).toBeInTheDocument();
+      fireEvent.click(within(parameters).getByRole('button', {name: 'Annuler'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Requêtes rapides…'}));
+      const saved = await screen.findByRole('dialog', {name: 'Requêtes rapides enregistrées'});
+      expect(within(saved).getByText('Affichage : Mini-formulaires · Délimiteur : ;')).toBeInTheDocument();
+      expect(within(saved).getByText('Active Customers Mini-Forms')).toBeInTheDocument();
+      fireEvent.click(within(saved).getByRole('button', {name: 'Fermer'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Enregistrer…'}));
+      const save = await screen.findByRole('dialog', {name: 'Enregistrer le SQL, une requête rapide ou un extrait avec étiquettes'});
+      expect(within(save).getByRole('button', {name: 'Requête rapide (+ disposition d’affichage)'})).toBeInTheDocument();
+      fireEvent.click(within(save).getByRole('button', {name: 'Annuler'}));
+      fireEvent.click(screen.getByRole('tab', {name: 'Format et disposition'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Limites de récupération…'}));
+      const limits = await screen.findByRole('dialog', {name: 'Session SQL et limites de récupération'});
+      expect(within(limits).getByRole('combobox', {name: 'Dialecte SQL de Firebird'})).toHaveValue('3');
+      expect(within(limits).getByRole('option', {name: 'Dialecte 1 — ancien SQL'})).toBeInTheDocument();
+      fireEvent.click(within(limits).getByRole('button', {name: 'Annuler'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Détails de la connexion…'}));
+      const connection = await screen.findByRole('dialog', {name: 'Connexion de l’éditeur SQL'});
+      expect(within(connection).getByText('Identifiant de session hôte:')).toBeInTheDocument();
+      fireEvent.click(within(connection).getByRole('button', {name: 'Fermer'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Appliquer un modèle de disposition…'}));
+      expect(await screen.findByText('Aucun modèle enregistré.')).toBeInTheDocument();
+
+      await act(async () => { gettext.setCatalog(null, 'en'); });
+      expect(screen.getByRole('dialog', {name: 'Apply Layout Template'})).toBeInTheDocument();
+      expect(screen.getByText('No saved templates yet.')).toBeInTheDocument();
+    } finally {
+      fixture.unmount();
+      gettext.setCatalog(null, 'en');
+    }
+  });
+
+  test('saves the generated Information query and its original bindings with the layout', async () => {
+    const sql = 'WITH SR_RESULT_VIEW (SR_COL_1) AS (SELECT ? AS ID) SELECT SR_COL_1 AS ID FROM SR_RESULT_VIEW WHERE SR_COL_1 > 2';
+    const parameters = [{name: 'param_1', type: 'integer', value: '7', isNull: false}];
+    const postMock = jest.fn(async ({request}) => {
+      if (request.sub_action === 'save_quick_query') return {};
+      return {
+        ...makeSqlHostResponse({withResult: true}),
+        sql_view: {server_sql: 'SELECT ? AS ID', effective_query: {
+          sql, parameters, client_sql_dialect: 3, buffer_limited: true,
+        }},
+      };
+    });
+    await act(async () => {
+      render(<TestShell><SqlSurfaceLauncher postMock={postMock} /></TestShell>);
+    });
+    fireEvent.click(screen.getByRole('radio', {name: 'Information'}));
+    expect(await screen.findByText(sql)).toBeInTheDocument();
+    expect(screen.getByText(/generated query applies the adjustments to the complete result/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Save Query and Layout…'}));
+    const dialog = await screen.findByRole('dialog', {name: /Save SQL/});
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', {name: 'Save', exact: true})); });
+    expect(postMock).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({
+        sub_action: 'save_quick_query',
+        quick_query: expect.objectContaining({
+          sql_text: sql,
+          parameters,
+          terminator: ';',
+          display_layout: expect.objectContaining({resultView: null, effectiveSqlDialect: 3}),
+        }),
+      }),
+    }));
+  });
+
+  test.each(['mysql', 'mariadb'])('offers %s UUID conversion only for declared 16-byte columns', (engine) => {
+    const pairs = sqlLanguageProfile(`${engine}-sql`, engine).field_conversion_pairs;
+    expect(recordConversionPair({native_type: 'binary(16)'}, pairs)?.id).toBe(`${engine}-uuid-binary`);
+    expect(recordConversionPair({native_type: 'VARBINARY', max_length: 16}, pairs)?.id).toBe(`${engine}-uuid-binary`);
+    expect(recordConversionPair({native_type: 'binary(32)'}, pairs)).toBeUndefined();
+    expect(recordConversionPair({native_type: 'VARBINARY'}, pairs)).toBeUndefined();
+  });
+
+  test.each([['postgresql', 'BYTEA'], ['duckdb', 'BLOB'], ['sqlite', 'BLOB']])(
+    'offers opt-in %s UUID conversion for binary types without a declared width',
+    (engine, nativeType) => {
+      const pairs = sqlLanguageProfile(`${engine}-sql`, engine).field_conversion_pairs;
+      expect(recordConversionPair({native_type: nativeType, internal_size: -1}, pairs)?.id)
+        .toBe(`${engine}-uuid-binary`);
+    }
+  );
+
+  test('uses SQLite transaction modes in the native Start Transaction dialog', async () => {
+    const postMock = jest.fn(async () => makeSqlHostResponse());
+    await act(async () => {
+      render(<TestShell><SqlSurfaceLauncher postMock={postMock} engineId="sqlite" /></TestShell>);
+    });
+    fireEvent.click(screen.getByRole('button', {name: 'Start Transaction…'}));
+    const dialog = await screen.findByRole('dialog', {name: 'Start Transaction'});
+    const mode = within(dialog).getByRole('combobox', {name: 'Transaction Mode'});
+    fireEvent.change(mode, {target: {value: 'immediate'}});
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', {name: 'Start', exact: true}));
+    });
+    expect(postMock).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({
+        sub_action: 'start_transaction',
+        transaction_options: {mode: 'immediate'},
+      }),
+    }));
+  });
+
+  test.each(['mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'])(
+    'formats %s using the retained SQL context and checks the result before replacing text',
+    async (engine) => {
+      const source = "select 'a ; -- b' as code from t where n = 2";
+      const postMock = jest.fn(async ({request}) => {
+        if (request.sub_action === 'format_context') {
+          return {context: {engine, sql_mode: 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'}};
+        }
+        if (request.sub_action === 'validate_format') return {grammar_valid: true};
+        return makeSqlHostResponse({sql_source: source});
+      });
+      await act(async () => {
+        render(<TestShell><SqlSurfaceLauncher postMock={postMock} engineId={engine} initialSql={source} /></TestShell>);
+      });
+      fireEvent.click(screen.getByRole('tab', {name: 'Format & Layout'}));
+      await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Format SQL'})); });
+
+      const calls = postMock.mock.calls.map(([call]) => call.request);
+      expect(calls).toContainEqual(expect.objectContaining({sub_action: 'format_context', sql_source: source}));
+      const validated = calls.find((request) => request.sub_action === 'validate_format');
+      expect(validated).toBeDefined();
+      expect(validated.sql_source).not.toBe(source);
+      expect(validated.sql_source).toContain("'a ; -- b'");
+    },
+  );
+
+  test('reports inconclusive native formatting validation and preserves the source', async () => {
+    const source = 'select 1 from rdb$database';
+    const postMock = jest.fn(async ({request}) => request.sub_action === 'validate_format'
+      ? {grammar_valid: null}
+      : makeSqlHostResponse({sql_source: source}));
+    await act(async () => {
+      render(<TestShell><SqlSurfaceLauncher postMock={postMock} initialSql={source} /></TestShell>);
+    });
+    fireEvent.click(screen.getByRole('tab', {name: 'Format & Layout'}));
+    await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Format SQL'})); });
+    expect(await screen.findByText(/SQL was preserved. Native validation could not confirm/)).toBeInTheDocument();
+    expect(postMock).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({sub_action: 'validate_format', client_sql_dialect: 3, script: false}),
+    }));
+  });
+
+  test('cancels only the running SQL execution and waits for its final result', async () => {
+    let finishExecution;
+    const executionResponse = new Promise((resolve) => { finishExecution = resolve; });
+    const postMock = jest.fn(async ({request}) => {
+      if (request.sub_action === 'check_parameters') return {parameters: []};
+      if (request.sub_action === 'execute') return executionResponse;
+      if (request.sub_action === 'cancel') return {cancel_status: 'requested'};
+      return makeSqlHostResponse();
+    });
+    await act(async () => {
+      render(<TestShell><SqlSurfaceLauncher postMock={postMock} /></TestShell>);
+    });
+    const run = screen.getByRole('button', {name: 'Execute Statement'});
+    const cancel = screen.getByRole('button', {name: 'Cancel'});
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => { fireEvent.click(run); });
+    const request = postMock.mock.calls.find(([call]) => call.request.sub_action === 'execute')[0].request;
+    expect(request.execution_id).toBeTruthy();
+    await act(async () => { fireEvent.click(cancel); });
+    expect(postMock).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({sub_action: 'cancel', execution_id: request.execution_id}),
+    }));
+    expect(run).toHaveAttribute('aria-disabled', 'true');
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+
+    await act(async () => {
+      finishExecution({...makeSqlHostResponse(), last_execution_cancelled: true});
+    });
+    expect(run).not.toHaveAttribute('aria-disabled', 'true');
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+    expect(document.querySelector('[data-cdeadmin-qa-key="sql-editor-surface"]'))
+      .toHaveAttribute('data-surface-view', 'messages');
   });
 
   test('prompts Modal Parameter Dialog on parameterized SQL, renders Surface 1 Data modes & multi-tag snippets', async () => {

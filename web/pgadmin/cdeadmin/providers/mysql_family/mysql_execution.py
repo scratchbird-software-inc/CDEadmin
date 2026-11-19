@@ -36,6 +36,7 @@ class Executions:
     def __init__(self, client):
         self.client = client
         self.tokens = []
+        self.grid_reads = set()
         self.lock = threading.RLock()
         self.closing = False
         self.sessions = SessionIdentities('MySQL')
@@ -45,7 +46,7 @@ class Executions:
                      and not t.finished.is_set()), None)
 
     def require_idle(self, handle):
-        if self.active(handle):
+        if self.active(handle) or id(handle) in self.grid_reads:
             raise RelationalClientError('MySQL session execution is active')
 
     def execute(self, handle, request, session_request):
@@ -60,6 +61,9 @@ class Executions:
                 raise RelationalClientError('MySQL execution owner is closing')
             self.require_idle(handle)
             self.client._require_usable_session(handle)
+            branch = self.client._surface_xa.get(id(handle))
+            if branch and branch['state'] != 'active':
+                raise RelationalClientError('Resolve the prepared MySQL XA transaction first')
             try:
                 identity = self.sessions.get(handle)
             except RelationalClientError:
@@ -263,40 +267,45 @@ class Executions:
             if token.identity is None:
                 raise RelationalClientError(
                     'MySQL cancellation identity is not available yet')
-            control = cursor = None
-            try:
-                def arguments(route):
-                    options = dict(self.client.config.connect_arguments(route))
-                    for name in ('pool_name', 'pool_size',
-                                 'pool_reset_session',
-                                 'failover', 'dns_srv'):
-                        options.pop(name, None)
-                    options.update(host=token.connection.server_host,
-                                   port=token.connection.server_port)
-                    options['unix_socket'] = token.connection.unix_socket
-                    return options
+            self.kill_query(token.connection, token.request, token.identity)
+            token.cancelled = True
+            return True
 
-                control = self.client._invoke_connector(
-                    token.request, self.client.module.connect,
-                    connect_arguments=arguments)
-                cursor = control.cursor()
-                cursor.execute('SELECT @@server_uuid')
-                if str(cursor.fetchone()[0]) != token.identity[0]:
-                    raise RelationalClientError(
-                        'MySQL cancellation server identity changed')
-                cursor.execute(f'KILL QUERY {token.identity[1]}')
-                token.cancelled = True
-                return True
-            except Exception as exc:
+    def kill_query(self, connection, request, identity):
+        control = cursor = None
+        try:
+            def arguments(route):
+                options = dict(self.client.config.connect_arguments(route))
+                for name in ('pool_name', 'pool_size',
+                             'pool_reset_session',
+                             'failover', 'dns_srv'):
+                    options.pop(name, None)
+                options.update(host=connection.server_host,
+                               port=connection.server_port)
+                options['unix_socket'] = connection.unix_socket
+                return options
+
+            control = self.client._invoke_connector(
+                request, self.client.module.connect,
+                connect_arguments=arguments)
+            cursor = control.cursor()
+            cursor.execute('SELECT @@server_uuid')
+            if str(cursor.fetchone()[0]) != identity[0]:
                 raise RelationalClientError(
-                    'MySQL native cancellation failed (' +
-                    type(exc).__name__ + ')') from None
-            finally:
-                self.client._safe_close(cursor)
-                self.client._safe_close(control)
+                    'MySQL cancellation server identity changed')
+            cursor.execute(f'KILL QUERY {identity[1]}')
+        except Exception as exc:
+            raise RelationalClientError(
+                'MySQL native cancellation failed (' +
+                type(exc).__name__ + ')') from None
+        finally:
+            self.client._safe_close(cursor)
+            self.client._safe_close(control)
 
     def close(self):
         with self.lock:
+            if self.grid_reads:
+                raise RelationalClientError('MySQL row read still owns its connection')
             self.closing = True
             tokens = list(self.tokens)
             for token in tokens:

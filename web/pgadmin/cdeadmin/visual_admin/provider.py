@@ -971,6 +971,9 @@ class ProviderVisualAdministration:
                 execution_context['session_handle']
             )
             callback_request['session_id'] = session_id
+            for field in ('_row_read_checkpoint', '_row_read_execution'):
+                if field in execution_context:
+                    callback_request[field] = execution_context[field]
         result = callback(callback_request)
         return normalize_admin_page(
             _mapping(result, 'provider row page'), self.context,

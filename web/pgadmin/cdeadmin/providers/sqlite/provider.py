@@ -335,6 +335,42 @@ class SQLiteProvider(NativeEditorProvider, ActualEnginePilotProvider):
     _browse_text = browse_builders.sqlite
     _sql_builder_names = browse_builders.sqlite_names
 
+    def read_visual_admin_rows(self, request):
+        execution = request.get('_row_read_execution') if isinstance(request, dict) else None
+        if execution is not None:
+            payload = {key: value for key, value in request.items() if key != '_row_read_execution'}
+        else:
+            from pgadmin.cdeadmin.sdk.actual_engine import _mapping
+            payload = _mapping(request)
+        context = self._visual_admin_session_context(payload)
+        if context is None:
+            return self._visual_admin.read_rows(payload)
+        if execution is None:
+            with self.client.grid_read(context['session_handle']):
+                return self._visual_admin.read_rows(payload, context)
+        context['_row_read_checkpoint'] = execution.check_stop
+        try:
+            with self.client.grid_read(context['session_handle'], execution):
+                page = self._visual_admin.read_rows(payload, context)
+            execution.check_stop()
+            return page
+        except Exception:
+            try:
+                execution.check_stop()
+            except RuntimeError:
+                ADMINISTRATION.invalidate_row_session(context['session_id'])
+                self._visual_admin.invalidate_session_plans(context['session_id'])
+                raise
+            raise
+
+    def describe_surface_statement(self, request):
+        self._require('execute')
+        return self.client.describe_statement(self._editor_session(request), request.get('source'))
+
+    def convert_surface_field(self, request):
+        from ..surface_uuid import convert
+        return convert(self, request, 'sqlite')
+
     def browse_runtime_keywords(self):
         """Keywords of the loaded SQLite library, for Browse data quoting.
 

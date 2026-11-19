@@ -238,6 +238,22 @@ def test_icon_registry_resolves_all_referenced_semantic_keys():
     )
 
 
+def test_surface_action_hints_have_translations_in_every_locale():
+    catalog_text = UI_CATALOGS_PATH.read_text(encoding='utf-8')
+    catalogs = json.loads(catalog_text)['gettext']
+    runtime_catalog = UI_CATALOGS_PATH.with_suffix('.js').read_text(encoding='utf-8')
+    assert catalog_text.rstrip() in runtime_catalog
+    hint_source = (JS_ROOT / 'cdeadmin_ui' / 'surfaces' / 'surfaceActionHints.js').read_text(encoding='utf-8')
+    hints = set(re.findall(r"gettext\('([^']+)'\)", hint_source))
+    for filename in ('DataEditSurface.jsx', 'SqlEditorSurface.jsx'):
+        source = (JS_ROOT / 'cdeadmin_ui' / 'surfaces' / filename).read_text(encoding='utf-8')
+        hints.update(re.findall(r"tooltip:\s*gettext\('([^']+)'\)", source))
+    assert hints
+    for locale, catalog in catalogs.items():
+        untranslated = {hint for hint in hints if not catalog.get(hint) or catalog[hint] == hint}
+        assert not untranslated, f'{locale}: {sorted(untranslated)}'
+
+
 def test_i18n_catalogs_15_locale_parity_and_non_empty_strings():
     catalogs = json.loads(UI_CATALOGS_PATH.read_text(encoding='utf-8'))
     assert 'shell' in catalogs and 'gettext' in catalogs

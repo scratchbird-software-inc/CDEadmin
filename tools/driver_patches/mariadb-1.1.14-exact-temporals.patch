@@ -272,3 +272,87 @@
          goto end;
      }
      switch(self->fields[column].type) {
+--- a/mariadb/mariadb_cursor.c
++++ b/mariadb/mariadb_cursor.c
+@@ -129,8 +129,81 @@
+     {NULL}
+ };
+
++/* Prepare a temporary native statement without touching the DB-API cursor result. */
++static PyObject *
++MrdbCursor_cdeadmin_describe(MrdbCursor *self, PyObject *source)
++{
++    MYSQL_STMT *stmt;
++    MYSQL_RES *metadata = NULL;
++    MYSQL_FIELD *fields;
++    PyObject *columns = NULL, *result = NULL;
++    char *sql;
++    Py_ssize_t length;
++    unsigned int count, i;
++    int status;
++
++    if (self->closed || !self->connection || !self->connection->mysql) {
++        PyErr_SetString(PyExc_RuntimeError, "MariaDB cursor is closed");
++        return NULL;
++    }
++    if (PyBytes_AsStringAndSize(source, &sql, &length) < 0)
++        return NULL;
++    stmt = mysql_stmt_init(self->connection->mysql);
++    if (!stmt) {
++        mariadb_throw_exception(self->connection->mysql, NULL, 0, NULL);
++        return NULL;
++    }
++    Py_BEGIN_ALLOW_THREADS
++    status = mysql_stmt_prepare(stmt, sql, (unsigned long)length);
++    Py_END_ALLOW_THREADS
++    if (status) {
++        mariadb_throw_exception(stmt, NULL, 1, NULL);
++        goto done;
++    }
++    count = mysql_stmt_field_count(stmt);
++    if (count) {
++        metadata = mysql_stmt_result_metadata(stmt);
++        if (!metadata) {
++            mariadb_throw_exception(stmt, NULL, 1, NULL);
++            goto done;
++        }
++    }
++    columns = PyList_New(count);
++    if (!columns)
++        goto done;
++    fields = metadata ? mysql_fetch_fields(metadata) : NULL;
++
++    for (i = 0; i < count; ++i) {
++        MYSQL_FIELD *field = &fields[i];
++        PyObject *name = PyBytes_FromStringAndSize(field->name, field->name_length);
++        PyObject *row;
++        if (!name)
++            goto done;
++        row = Py_BuildValue("(Nikkkk)", name, (int)field->type,
++                            (unsigned long)field->flags, (unsigned long)field->charsetnr,
++                            field->length, (unsigned long)field->decimals);
++        if (!row)
++            goto done;
++        PyList_SET_ITEM(columns, i, row);
++    }
++    result = Py_BuildValue("(kO)", mysql_stmt_param_count(stmt), columns);
++done:
++    Py_XDECREF(columns);
++    if (metadata)
++        mysql_free_result(metadata);
++    Py_BEGIN_ALLOW_THREADS
++    status = mysql_stmt_close(stmt);
++    Py_END_ALLOW_THREADS
++    if (status) {
++        Py_CLEAR(result);
++        PyErr_SetString(PyExc_RuntimeError, "MariaDB native statement close was not acknowledged");
++    }
++    return result;
++}
++
+ static PyMethodDef MrdbCursor_Methods[] =
+ {
++    {"cdeadmin_describe", (PyCFunction)MrdbCursor_cdeadmin_describe, METH_O, NULL},
+     /* PEP-249 methods */
+     {"close", (PyCFunction)MrdbCursor_close,
+         METH_NOARGS,

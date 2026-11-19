@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 
 from pgadmin.cdeadmin.sdk import RelationalClientError, RelationalDBAPIClient
 from .values import parameters, value
@@ -313,6 +314,100 @@ class SQLiteClient(RelationalDBAPIClient):
             raise RelationalClientError(
                 'SQLite session state is unknown; close it')
 
+    @contextmanager
+    def grid_read(self, handle, execution=None):
+        with self._lock:
+            self._require_idle(handle)
+            self._busy.add(id(handle))
+        try:
+            if execution is None:
+                yield
+                return
+            previous, interval = handle._cdeadmin_progress_handler
+
+            def progress():
+                try:
+                    execution.check_stop()
+                except RuntimeError:
+                    return 1
+                return previous() if previous is not None else 0
+
+            with execution.cancellable_row_read(handle.interrupt):
+                handle.set_progress_handler(progress, interval or 1000)
+                try:
+                    yield
+                finally:
+                    try:
+                        handle.set_progress_handler(previous, interval)
+                    except Exception:
+                        with self._lock:
+                            self._uncertain.add(id(handle))
+                        raise RelationalClientError(
+                            'SQLite row reader progress handler could not be restored; close this session'
+                        ) from None
+        finally:
+            with self._lock:
+                self._busy.discard(id(handle))
+
+    @contextmanager
+    def _compilation_authorization(self, handle):
+        previous = handle._cdeadmin_authorizer
+        suppressed = False
+
+        def authorize(action, first, second, database, context):
+            nonlocal suppressed
+            admitted = (previous(action, first, second, database, context)
+                        if previous is not None else sqlite3.SQLITE_OK)
+            if admitted == sqlite3.SQLITE_OK and action == sqlite3.SQLITE_PRAGMA:
+                # PRAGMA can mutate settings or call the VFS during compilation.
+                suppressed = True
+                return sqlite3.SQLITE_IGNORE
+            return admitted
+
+        handle.set_authorizer(authorize)
+        try:
+            yield lambda: suppressed
+        finally:
+            try:
+                handle.set_authorizer(previous)
+            except Exception:
+                with self._lock:
+                    self._uncertain.add(id(handle))
+                raise RelationalClientError('SQLite editor authorization cleanup is unconfirmed; close this session') from None
+
+    def describe_statement(self, handle, source):
+        bridge = getattr(handle, '_cdeadmin_config_api', None)
+        native = getattr(bridge.module, 'describe_statement', None) if bridge else None
+        if native is None:
+            receipt = self.validate_parse_only(handle, source)
+            if receipt.get('grammar_valid') is not True:
+                raise RelationalClientError(receipt.get('diagnostic', {}).get('message') or receipt['scope'])
+            columns, parameters = [], []
+            suppressed = receipt['pragma_preparation_suppressed']
+        else:
+            with self._lock:
+                self._require_idle(handle)
+                self._busy.add(id(handle))
+            try:
+                with self._compilation_authorization(handle) as pragma_suppressed:
+                    columns, parameters, tail = native(bridge.capsule, source)
+                    suppressed = pragma_suppressed()
+                remaining = re.sub(r'--[^\n]*|/\*[\s\S]*?(?:\*/|$)', '', tail)
+                if remaining.strip(' \t\r\n\f;'):
+                    raise RelationalClientError('Select exactly one SQLite statement to prepare')
+            finally:
+                with self._lock:
+                    self._busy.discard(id(handle))
+        return {
+            'statement_type': 'SQLite native prepare' if native else 'SQLite EXPLAIN compilation',
+            'statement_execution_requested': False,
+            'columns_complete': bool(native) and not suppressed and all(col['native_type'] for col in columns),
+            'parameters_complete': bool(native) and not suppressed and not parameters,
+            'pragma_preparation_suppressed': suppressed,
+            'columns': columns,
+            'parameters': parameters,
+        }
+
     def validate_parse_only(self, handle, source):
         """Compile on the retained SQLite schema without executing the VM."""
         if not isinstance(source, str) or not source.strip():
@@ -327,28 +422,13 @@ class SQLiteClient(RelationalDBAPIClient):
                 statement = 'EXPLAIN ' + statement
             if not isinstance(handle, SQLiteConnection):
                 return {'grammar_valid': None, 'scope': 'SQLite editor authorization policy is unavailable; compilation was not attempted.'}
-            previous = handle._cdeadmin_authorizer
-            suppressed = False
-            def authorize(action, first, second, database, context):
-                nonlocal suppressed
-                admitted = (previous(action, first, second, database, context)
-                    if previous is not None else sqlite3.SQLITE_OK)
-                if admitted != sqlite3.SQLITE_OK:
-                    return admitted
-                if action == sqlite3.SQLITE_PRAGMA:
-                    # pragma.c checks authorization before settings changes or
-                    # SQLITE_FCNTL_PRAGMA callbacks. IGNORE parses native SQL
-                    # syntax while suppressing those prepare-time effects.
-                    suppressed = True
-                    return sqlite3.SQLITE_IGNORE
-                return sqlite3.SQLITE_OK
             cursor = handle.cursor()
-            handle.set_authorizer(authorize)
             try:
-                cursor.execute(statement)
-                cursor.fetchone()
-                return {'grammar_valid': True, 'pragma_preparation_suppressed': suppressed,
-                    'scope': 'SQLite native EXPLAIN compilation; PRAGMA settings and VFS callbacks are suppressed; no submitted statement VM was executed.'}
+                with self._compilation_authorization(handle) as pragma_suppressed:
+                    cursor.execute(statement)
+                    cursor.fetchone()
+                    return {'grammar_valid': True, 'pragma_preparation_suppressed': pragma_suppressed(),
+                        'scope': 'SQLite native EXPLAIN compilation; PRAGMA settings and VFS callbacks are suppressed; no submitted statement VM was executed.'}
             except sqlite3.ProgrammingError as error:
                 if 'binding' in str(error).lower():
                     return {'grammar_valid': None,
@@ -363,14 +443,7 @@ class SQLiteClient(RelationalDBAPIClient):
                     'diagnostic': {'code': 'SQLITE_NATIVE_SYNTAX' if syntax else 'SQLITE_NATIVE_CONTEXT',
                         'message': message[:400], 'severity': 'error' if syntax else 'warning'}}
             finally:
-                try:
-                    handle.set_authorizer(previous)
-                except Exception:
-                    with self._lock:
-                        self._uncertain.add(id(handle))
-                    raise RelationalClientError('SQLite editor authorization cleanup is unconfirmed; close this session') from None
-                finally:
-                    cursor.close()
+                cursor.close()
         finally:
             with self._lock:
                 self._busy.discard(id(handle))
