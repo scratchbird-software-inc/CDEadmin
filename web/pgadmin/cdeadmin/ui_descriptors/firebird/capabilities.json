@@ -7,7 +7,8 @@
   ],
   "beta_tier": "full",
   "version_range": {
-    "minimum": "3.0.0",
+    "minimum": "5.0.4",
+    "maximum_exclusive": "5.0.5",
     "tested": [
       "5.0.4"
     ]

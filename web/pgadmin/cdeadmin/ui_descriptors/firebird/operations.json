@@ -1839,7 +1839,7 @@
           "help": "Database-at-rest encryption rewrites database pages asynchronously using an external native Firebird DbCrypt plugin and KeyHolder provider. Losing the encryption key or KeyHolder configuration permanently prevents opening the database."
         }
       ],
-      "notes": "Round-tripped against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins; ScratchRobin never implements cryptography or stores raw keys."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins; ScratchRobin never implements cryptography or stores raw keys."
     },
     {
       "operation_id": "decrypt_database",
@@ -1861,7 +1861,7 @@
           "help": "Decrypting rewrites database pages to plaintext asynchronously in the background. Keep the active KeyHolder and DbCrypt plugins installed and configured until MON$CRYPT_STATE reaches 0 (not encrypted)."
         }
       ],
-      "notes": "Round-tripped against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins."
     }
   ]
 }

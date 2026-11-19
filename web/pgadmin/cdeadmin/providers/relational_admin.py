@@ -5083,7 +5083,7 @@ class RelationalAdministration:
             'restore_logical': ('restore_flags', {
                 'METADATA_ONLY', 'DEACTIVATE_IDX', 'NO_SHADOW',
                 'NO_VALIDITY', 'ONE_AT_A_TIME', 'USE_ALL_SPACE',
-                'NO_TRIGGERS', 'DIRECT_IO',
+                'DIRECT_IO',
             }),
             'backup_physical': ('backup_flags', {
                 'NO_TRIGGERS',
@@ -8866,11 +8866,6 @@ class RelationalAdministration:
             if password:
                 clauses.append(f'PASSWORD {self._literal(password)}')
                 previews.append('PASSWORD <redacted>')
-            plugin = changes.get('plugin')
-            if plugin:
-                clause = f'USING PLUGIN {self._quote(plugin)}'
-                clauses.append(clause)
-                previews.append(clause)
             if 'administrator' in changes:
                 clause = (
                     'GRANT ADMIN ROLE' if changes['administrator']

@@ -8987,22 +8987,22 @@
       "sha256": "c41796ab896fc4e675ea0783c3fd8f0bb98380d1fb298fa5fe6339411b58d852"
     },
     {
-      "artifact": "firebird-live-verification.json",
+      "artifact": "firebird-5.0.4-task-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "b3bfa424049c7feaa4cfc20471fea874425e2634e598fc5aac2360683ae701ea"
+      "sha256": "09d6bb3a38e099ac752ae8f0b1fb325350f9df47ca0e04f23357aadb5cb1aa06"
     },
     {
-      "artifact": "firebird-live-verification.json",
+      "artifact": "firebird-5.0.4-task-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "b3bfa424049c7feaa4cfc20471fea874425e2634e598fc5aac2360683ae701ea"
+      "sha256": "09d6bb3a38e099ac752ae8f0b1fb325350f9df47ca0e04f23357aadb5cb1aa06"
     },
     {
       "artifact": "firebird/driver/core.py",
@@ -9014,436 +9014,436 @@
       "sha256": "3024a04558e70629e7dd7980cde953cc068be751ccbf016193bb0c19b6aa5c1b"
     },
     {
-      "artifact": "live-contract.json",
+      "artifact": "firebird-5.0.4-role-membership-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-role-membership-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-role-membership-live.v1",
       "license_id": "PostgreSQL",
-      "sha256": "67d72717e13d115afd2cf2e514aa49a63dccf20de7bbf27bbcae7c7f94079d0e"
+      "sha256": "5ff7131c752bee90e55f68cd80aa25f98de40fb22d49291996883c38df5d3614"
     },
     {
-      "artifact": "live-contract.json",
+      "artifact": "firebird-5.0.4-role-membership-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-role-membership-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-role-membership-live.v1",
       "license_id": "PostgreSQL",
-      "sha256": "67d72717e13d115afd2cf2e514aa49a63dccf20de7bbf27bbcae7c7f94079d0e"
+      "sha256": "5ff7131c752bee90e55f68cd80aa25f98de40fb22d49291996883c38df5d3614"
     },
     {
-      "artifact": "live-5.json",
+      "artifact": "firebird-5.0.4-local-admin-mapping-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-local-admin-mapping-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-admin-mapping-live.v1",
       "license_id": "PostgreSQL",
-      "sha256": "1757d49b7d26f491172732fa11afb26c51c664e4ccf688803d4b4df53c403d2f"
+      "sha256": "6f02eb3ddb469b91ff48ba49fb65813e5988da2b018da8be589143b11859dcd8"
     },
     {
-      "artifact": "live-5.json",
+      "artifact": "firebird-5.0.4-local-admin-mapping-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-local-admin-mapping-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-admin-mapping-live.v1",
       "license_id": "PostgreSQL",
-      "sha256": "1757d49b7d26f491172732fa11afb26c51c664e4ccf688803d4b4df53c403d2f"
+      "sha256": "6f02eb3ddb469b91ff48ba49fb65813e5988da2b018da8be589143b11859dcd8"
     },
     {
-      "artifact": "live-4.json",
+      "artifact": "firebird-5.0.4-authentication-mappings-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-authentication-mappings-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-mapping-matrix.v1",
       "license_id": "PostgreSQL",
-      "sha256": "71dce5bde254bf76f3eca3ea2ae88cc0cf96ad3de1a007358e29317615b862c0"
+      "sha256": "edfc77d51c7b403bf3e47577b6552b770f89c5fcc738e4126cbaaef52f8fda8c"
     },
     {
-      "artifact": "live-4.json",
+      "artifact": "firebird-5.0.4-authentication-mappings-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-authentication-mappings-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-mapping-matrix.v1",
       "license_id": "PostgreSQL",
-      "sha256": "71dce5bde254bf76f3eca3ea2ae88cc0cf96ad3de1a007358e29317615b862c0"
+      "sha256": "edfc77d51c7b403bf3e47577b6552b770f89c5fcc738e4126cbaaef52f8fda8c"
     },
     {
-      "artifact": "table-live-1.json",
+      "artifact": "firebird-5.0.4-column-alterations-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-column-alterations-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-columns.v1",
       "license_id": "PostgreSQL",
-      "sha256": "6598e7bafcf3272c7e8e0e8f4050dd61fbbfb7bfadd529a746e93b9dbc366da0"
+      "sha256": "8f39b31599361633679628497e5aa64379825f246f1f2939037e3049e2e967f8"
     },
     {
-      "artifact": "table-live-1.json",
+      "artifact": "firebird-5.0.4-column-alterations-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-column-alterations-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-columns.v1",
       "license_id": "PostgreSQL",
-      "sha256": "6598e7bafcf3272c7e8e0e8f4050dd61fbbfb7bfadd529a746e93b9dbc366da0"
+      "sha256": "8f39b31599361633679628497e5aa64379825f246f1f2939037e3049e2e967f8"
     },
     {
-      "artifact": "character-metadata-native-14.json",
+      "artifact": "firebird-5.0.4-character-metadata-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-character-metadata-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-character-metadata.v1",
       "license_id": "PostgreSQL",
-      "sha256": "87a1b614140dc4cb3a0b526e447e04ba5436553c75992da1da2321ab133f924e"
+      "sha256": "036054b46053cb8ed90b205f8da87348d80a19a798627664e68fa72933095a8b"
     },
     {
-      "artifact": "character-metadata-native-14.json",
+      "artifact": "firebird-5.0.4-character-metadata-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-character-metadata-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-character-metadata.v1",
       "license_id": "PostgreSQL",
-      "sha256": "87a1b614140dc4cb3a0b526e447e04ba5436553c75992da1da2321ab133f924e"
+      "sha256": "036054b46053cb8ed90b205f8da87348d80a19a798627664e68fa72933095a8b"
     },
     {
-      "artifact": "external-functions-native-11.json",
+      "artifact": "firebird-5.0.4-external-functions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-external-functions-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-external-functions.v1",
       "license_id": "PostgreSQL",
-      "sha256": "402a2a135383e01c066bce0c8f16b8dbc8ee15f9990c5c0bcab1fbd482e735ff"
+      "sha256": "b2596a60a169a9dd333d2586c7ee3e915c89862649071cd5bf98d61309a4edb2"
     },
     {
-      "artifact": "external-functions-native-11.json",
+      "artifact": "firebird-5.0.4-external-functions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-external-functions-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-external-functions.v1",
       "license_id": "PostgreSQL",
-      "sha256": "402a2a135383e01c066bce0c8f16b8dbc8ee15f9990c5c0bcab1fbd482e735ff"
+      "sha256": "b2596a60a169a9dd333d2586c7ee3e915c89862649071cd5bf98d61309a4edb2"
     },
     {
-      "artifact": "blob-filters-native-12.json",
+      "artifact": "firebird-5.0.4-blob-filters-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-blob-filters-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-blob-filters.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a72256445d0e35855437dfcc0afe276dface8d218b05e0804de688d2f8b746fd"
+      "sha256": "1bff428f3ca92ac8df37dcd93b3c2b642a3d0c4cd27c9af1f7060ed4cf838175"
     },
     {
-      "artifact": "blob-filters-native-12.json",
+      "artifact": "firebird-5.0.4-blob-filters-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-blob-filters-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-blob-filters.v1",
       "license_id": "PostgreSQL",
-      "sha256": "a72256445d0e35855437dfcc0afe276dface8d218b05e0804de688d2f8b746fd"
+      "sha256": "1bff428f3ca92ac8df37dcd93b3c2b642a3d0c4cd27c9af1f7060ed4cf838175"
     },
     {
-      "artifact": "object-privileges-native-6.json",
+      "artifact": "firebird-5.0.4-object-privileges-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-object-privileges-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-object-privileges.v1",
       "license_id": "PostgreSQL",
-      "sha256": "0fd9cc0874fdeae6c9db5ae240b83f923c51142d5ff14aececaeb78516084cca"
+      "sha256": "674ba139735594fad657f14fbb7673c39b1ebb70c3e029b3f3d57636daa30f0e"
     },
     {
-      "artifact": "object-privileges-native-6.json",
+      "artifact": "firebird-5.0.4-object-privileges-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-object-privileges-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-object-privileges.v1",
       "license_id": "PostgreSQL",
-      "sha256": "0fd9cc0874fdeae6c9db5ae240b83f923c51142d5ff14aececaeb78516084cca"
+      "sha256": "674ba139735594fad657f14fbb7673c39b1ebb70c3e029b3f3d57636daa30f0e"
     },
     {
-      "artifact": "packages-native-5.json",
+      "artifact": "firebird-5.0.4-packages-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-packages-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-packages.v1",
       "license_id": "PostgreSQL",
-      "sha256": "3925b2686e7e0c1b52072cdd9ed00eef8bb401ea250bdf2a53d1c352942b518f"
+      "sha256": "659f922581d9d9ce46a80b4b0a3a4a42197737bf30a3309b620a49ed098ed5d6"
     },
     {
-      "artifact": "packages-native-5.json",
+      "artifact": "firebird-5.0.4-packages-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-packages-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-packages.v1",
       "license_id": "PostgreSQL",
-      "sha256": "3925b2686e7e0c1b52072cdd9ed00eef8bb401ea250bdf2a53d1c352942b518f"
+      "sha256": "659f922581d9d9ce46a80b4b0a3a4a42197737bf30a3309b620a49ed098ed5d6"
     },
     {
-      "artifact": "sequences-native-5.json",
+      "artifact": "firebird-5.0.4-sequences-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-sequences-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-sequences.v1",
       "license_id": "PostgreSQL",
-      "sha256": "f82fd4dc50d9e01dd657ff8c6deb55948c0cb883854e6d00dad908733a8f93ae"
+      "sha256": "c1a6bfdbb58c85fd9390765c79e1a5a042e36764a895cf3e73705935f0771b34"
     },
     {
-      "artifact": "sequences-native-5.json",
+      "artifact": "firebird-5.0.4-sequences-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-sequences-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-sequences.v1",
       "license_id": "PostgreSQL",
-      "sha256": "f82fd4dc50d9e01dd657ff8c6deb55948c0cb883854e6d00dad908733a8f93ae"
+      "sha256": "c1a6bfdbb58c85fd9390765c79e1a5a042e36764a895cf3e73705935f0771b34"
     },
     {
-      "artifact": "shadows-native-9.json",
+      "artifact": "firebird-5.0.4-shadows-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-shadows-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-shadows.v1",
       "license_id": "PostgreSQL",
-      "sha256": "30665247019aed8166fe119eb0e56b1c930a4352375a0adf733a28c0f6afda84"
+      "sha256": "632818f9df6d0c8e84a86efcf5a3e0c38c0e7778933d1b85b25a6dbaf1708d31"
     },
     {
-      "artifact": "shadows-native-9.json",
+      "artifact": "firebird-5.0.4-shadows-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-shadows-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-shadows.v1",
       "license_id": "PostgreSQL",
-      "sha256": "30665247019aed8166fe119eb0e56b1c930a4352375a0adf733a28c0f6afda84"
+      "sha256": "632818f9df6d0c8e84a86efcf5a3e0c38c0e7778933d1b85b25a6dbaf1708d31"
     },
     {
-      "artifact": "database-storage-native-12.json",
+      "artifact": "firebird-5.0.4-database-storage-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-database-storage-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-database-storage.v1",
       "license_id": "PostgreSQL",
-      "sha256": "92b6519b4d6123dc6024da2d2aeea8471912546988847c97100dbdf9f83bf5b2"
+      "sha256": "3a37726d4477274ba18cf53ac1e4aa1df4d8efa10470d2dcccd3d3bbf9556aa0"
     },
     {
-      "artifact": "database-storage-native-12.json",
+      "artifact": "firebird-5.0.4-database-storage-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-database-storage-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-database-storage.v1",
       "license_id": "PostgreSQL",
-      "sha256": "92b6519b4d6123dc6024da2d2aeea8471912546988847c97100dbdf9f83bf5b2"
+      "sha256": "3a37726d4477274ba18cf53ac1e4aa1df4d8efa10470d2dcccd3d3bbf9556aa0"
     },
     {
-      "artifact": "native-5.json",
+      "artifact": "firebird-5.0.4-views-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-views-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "e04b202236e0708aa351b49c14c75e59ef6650c5918e47b47763d8df6c4a1710"
+      "sha256": "0fb1744687712479d7d1bc5ac0e1d372426924b570af81fa24816c291bce0ee9"
     },
     {
-      "artifact": "native-5.json",
+      "artifact": "firebird-5.0.4-views-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-views-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "e04b202236e0708aa351b49c14c75e59ef6650c5918e47b47763d8df6c4a1710"
+      "sha256": "0fb1744687712479d7d1bc5ac0e1d372426924b570af81fa24816c291bce0ee9"
     },
     {
-      "artifact": "native-4.json",
+      "artifact": "firebird-5.0.4-exceptions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-exceptions-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "9a5141ca6e6993ed265b55226362cbb95eb04a8f871e0d995c9ad172a2600dde"
+      "sha256": "31941980728fab9f0a7e79605c8dc7b59e5a8a59780192bfcca09d8ed95da131"
     },
     {
-      "artifact": "native-4.json",
+      "artifact": "firebird-5.0.4-exceptions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-exceptions-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "9a5141ca6e6993ed265b55226362cbb95eb04a8f871e0d995c9ad172a2600dde"
+      "sha256": "31941980728fab9f0a7e79605c8dc7b59e5a8a59780192bfcca09d8ed95da131"
     },
     {
-      "artifact": "native-6.json",
+      "artifact": "firebird-5.0.4-procedures-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-procedures-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "30912c156a5740e0cdfb3fad942ccf8f5ba5c32314576c9b5ce86b1e4854a05a"
+      "sha256": "16b725123c4bfbf741578d2725ccaca39aed34add09a9db2aed588a22f01c550"
     },
     {
-      "artifact": "native-6.json",
+      "artifact": "firebird-5.0.4-procedures-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-procedures-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "30912c156a5740e0cdfb3fad942ccf8f5ba5c32314576c9b5ce86b1e4854a05a"
+      "sha256": "16b725123c4bfbf741578d2725ccaca39aed34add09a9db2aed588a22f01c550"
     },
     {
-      "artifact": "native-2.json",
+      "artifact": "firebird-5.0.4-functions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-functions-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "2fa4096f1bc99711c13218959d8ee16fdbeebf4569d30f17e8f967169b0dc475"
+      "sha256": "ac2a77f11874aad8954c6b61e4a3ee72ff2ebd721f4d9964a5ec183401014b2f"
     },
     {
-      "artifact": "native-2.json",
+      "artifact": "firebird-5.0.4-functions-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-functions-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "2fa4096f1bc99711c13218959d8ee16fdbeebf4569d30f17e8f967169b0dc475"
+      "sha256": "ac2a77f11874aad8954c6b61e4a3ee72ff2ebd721f4d9964a5ec183401014b2f"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-triggers-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-triggers-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "14e0b7b6208c6685feb8fdb01e52a1f505c9afb0df32438afbe7aa1256c29f99"
+      "sha256": "f95cf1bab543185fc6b14335e9f35425d2a4f5c16aa6f9a92d1ca9b9b3dc6d20"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-triggers-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-triggers-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "14e0b7b6208c6685feb8fdb01e52a1f505c9afb0df32438afbe7aa1256c29f99"
+      "sha256": "f95cf1bab543185fc6b14335e9f35425d2a4f5c16aa6f9a92d1ca9b9b3dc6d20"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-table-replacement-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-table-replacement-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "8ec91f55075da20bee2e2a7521b53f4c1a6e6be957e96813080a6f02e02b1ca8"
+      "sha256": "37ae361ac0984900530659dcdf0056ddab276f76bf9340b8c3a01fe5fda25d70"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-table-replacement-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-table-replacement-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "8ec91f55075da20bee2e2a7521b53f4c1a6e6be957e96813080a6f02e02b1ca8"
+      "sha256": "37ae361ac0984900530659dcdf0056ddab276f76bf9340b8c3a01fe5fda25d70"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-user-replacement-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-user-replacement-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "00e93c4d070d7d824cc8eee510ad56fcccb15a1694fa5e5eff3df5ce313a4734"
+      "sha256": "431a9528bfb61bb67b252f854fc9e9561141fb50e886707e3ff2e781a883400f"
     },
     {
-      "artifact": "native-3.json",
+      "artifact": "firebird-5.0.4-user-replacement-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-user-replacement-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "00e93c4d070d7d824cc8eee510ad56fcccb15a1694fa5e5eff3df5ce313a4734"
+      "sha256": "431a9528bfb61bb67b252f854fc9e9561141fb50e886707e3ff2e781a883400f"
     },
     {
-      "artifact": "native-final.json",
+      "artifact": "firebird-5.0.4-view-grid-update-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-update-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "dfab9b441f1e6d26a4f8d85284d7cfc3ce1e37647e7bf02e1a400efea6611f32"
+      "sha256": "5a868df21288029b572ad321012d185b400b2018306f426ac7de93d8e5924740"
     },
     {
-      "artifact": "native-final.json",
+      "artifact": "firebird-5.0.4-view-grid-update-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-update-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "dfab9b441f1e6d26a4f8d85284d7cfc3ce1e37647e7bf02e1a400efea6611f32"
+      "sha256": "5a868df21288029b572ad321012d185b400b2018306f426ac7de93d8e5924740"
     },
     {
-      "artifact": "native-confirmation-final.json",
+      "artifact": "firebird-5.0.4-view-grid-delete-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-delete-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "74b56b7f42c3a57785cedf5f321dc25bd05a3b66fbe91b9a546e44bbb71c7ca1"
+      "sha256": "aed1450a8b39e5d11da9d93723c162d10750fff7f4db3182da54f37635ccc66f"
     },
     {
-      "artifact": "native-confirmation-final.json",
+      "artifact": "firebird-5.0.4-view-grid-delete-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-delete-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "74b56b7f42c3a57785cedf5f321dc25bd05a3b66fbe91b9a546e44bbb71c7ca1"
+      "sha256": "aed1450a8b39e5d11da9d93723c162d10750fff7f4db3182da54f37635ccc66f"
     },
     {
-      "artifact": "bootstrap-2.json",
+      "artifact": "firebird-5.0.4-view-grid-insert-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-insert-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "2e500fb7abd9aa44acfa342efbb2304a142f962743292da5ea156a2be2165fed"
+      "sha256": "21c6315922e022cf15950bd10508c0e58606a9395dbb48996134893271d59750"
     },
     {
-      "artifact": "bootstrap-2.json",
+      "artifact": "firebird-5.0.4-view-grid-insert-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-view-grid-insert-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-views.v1",
       "license_id": "PostgreSQL",
-      "sha256": "2e500fb7abd9aa44acfa342efbb2304a142f962743292da5ea156a2be2165fed"
+      "sha256": "21c6315922e022cf15950bd10508c0e58606a9395dbb48996134893271d59750"
     },
     {
-      "artifact": "result.json",
+      "artifact": "firebird-5.0.4-column-order-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-column-order-live",
       "evidence_kind": "live_execution",
       "format": "scratchrobin.firebird.schema-plan-gate@1",
       "license_id": "PostgreSQL",
-      "sha256": "1c4e03c8db233c4fe88e018f469aba81bc3e0b94368c4c270ad49b8c5c549a83"
+      "sha256": "9f57fc8fb1df9a2f4b0bdf581f84e0a7fbef8098015292c48c8de5ce65f67117"
     },
     {
-      "artifact": "result.json",
+      "artifact": "firebird-5.0.4-column-order-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-column-order-parser",
       "evidence_kind": "parser_acceptance",
       "format": "scratchrobin.firebird.schema-plan-gate@1",
       "license_id": "PostgreSQL",
-      "sha256": "1c4e03c8db233c4fe88e018f469aba81bc3e0b94368c4c270ad49b8c5c549a83"
+      "sha256": "9f57fc8fb1df9a2f4b0bdf581f84e0a7fbef8098015292c48c8de5ce65f67117"
     },
     {
-      "artifact": "database-encryption-native.json",
+      "artifact": "firebird-5.0.4-database-encryption-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-database-encryption-live",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.firebird-database-encryption.v1",
       "license_id": "PostgreSQL",
-      "sha256": "5bee1c6a209a38ae0d152eeb86fa382cc40a7e589dfbacf35390cca76813435d"
+      "sha256": "459a9647c1bb248afa2a015edafe7181646e9e84c70ecb212ec580e8637df87e"
     },
     {
-      "artifact": "database-encryption-native.json",
+      "artifact": "firebird-5.0.4-database-encryption-current.json",
       "authority": "Firebird 5.0.4 runtime",
       "evidence_id": "firebird-5.0.4-database-encryption-parser",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.firebird-database-encryption.v1",
       "license_id": "PostgreSQL",
-      "sha256": "5bee1c6a209a38ae0d152eeb86fa382cc40a7e589dfbacf35390cca76813435d"
+      "sha256": "459a9647c1bb248afa2a015edafe7181646e9e84c70ecb212ec580e8637df87e"
     }
   ],
   "provider_id": "org.cdeadmin.firebird",

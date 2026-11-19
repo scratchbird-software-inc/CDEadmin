@@ -229,11 +229,26 @@ def wait_for_encryption_settle(client, route, expected_state_code, timeout_secon
         raise ValueError('expected_state_code must be 0 (not_encrypted) or 1 (encrypted)')
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
         raise ValueError('timeout_seconds must be an integer between 1 and 60')
-    deadline = time.monotonic() + timeout_seconds
-    last = None
-    while time.monotonic() < deadline:
+    # Hold one attachment open across the settle window so Classic/SuperClassic
+    # per-attachment background crypt workers run continuously to completion.
+    anchor = client._connect({'route': route})
+    try:
+        deadline = time.monotonic() + timeout_seconds
+        last = None
+        while time.monotonic() < deadline:
+            cur = anchor.cursor()
+            try:
+                cur.execute('SELECT MON$CRYPT_STATE FROM MON$DATABASE')
+                observed = int(cur.fetchone()[0] or 0)
+            finally:
+                cur.close()
+                anchor.rollback()
+            if observed == expected_state_code:
+                last = inspect_encryption_status(client, route, host_scope=host_scope)
+                if last['crypt_state_code'] == expected_state_code and not last['in_transition']:
+                    return {**last, 'settled': True}
+            time.sleep(0.1)
         last = inspect_encryption_status(client, route, host_scope=host_scope)
-        if last['crypt_state_code'] == expected_state_code and not last['in_transition']:
-            return {**last, 'settled': True}
-        time.sleep(0.15)
-    return {**(last or {}), 'settled': False}
+        return {**last, 'settled': last['crypt_state_code'] == expected_state_code and not last['in_transition']}
+    finally:
+        client._forget_and_close(anchor)

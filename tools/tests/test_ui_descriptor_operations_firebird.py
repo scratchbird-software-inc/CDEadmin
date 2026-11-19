@@ -518,6 +518,52 @@ def test_upgrade_is_accepted_but_has_no_observable_effect_on_a_current_ods(env):
     assert (before['ods_major'], before['ods_minor']) == (after['ods_major'], after['ods_minor']) == (13, 1)
 
 
+def test_database_encryption_and_decryption(env):
+    import time
+    path = env.database('dbcrypt')
+    kh_rows = env.query(path, "SELECT RDB$CONFIG_IS_SET FROM RDB$CONFIG WHERE TRIM(RDB$CONFIG_NAME) = 'KeyHolderPlugin'")
+    if kh_rows and bool(kh_rows[0][0]):
+        def _wait_crypt(expected):
+            anchor = env.connect(path)
+            try:
+                deadline = time.monotonic() + 20.0
+                while time.monotonic() < deadline:
+                    with anchor.cursor() as cur:
+                        cur.execute('SELECT MON$CRYPT_STATE FROM MON$DATABASE')
+                        state = int(cur.fetchone()[0] or 0)
+                    anchor.rollback()
+                    if state == expected:
+                        return state
+                    time.sleep(0.1)
+                return state
+            finally:
+                anchor.close()
+
+        env.run('encrypt_database', path, {
+            'crypt_plugin': 'fbSampleDbCrypt',
+            'key_name': 'OWNED',
+            'confirm_key_recovery_responsibility': True,
+        })
+        assert _wait_crypt(1) == 1
+        env.run('decrypt_database', path, {'confirm_plaintext_storage': True})
+        assert _wait_crypt(0) == 0
+    else:
+        operation = OPERATIONS['encrypt_database@database']
+        route = env.route(path)
+        target = env.resource(route, 'database')
+        draft = operation_draft(operation, {
+            'crypt_plugin': 'fbSampleDbCrypt',
+            'key_name': 'OWNED',
+            'confirm_key_recovery_responsibility': True,
+        }, confirmation=path)
+        req = {'resource_kind': 'database', 'operation_id': 'encrypt_database',
+               'target_resource': target, '_provider_route': route, 'draft': draft}
+        assert ADMINISTRATION.validate(req)['errors'] == []
+        planned = ADMINISTRATION.plan(req)
+        with pytest.raises(Exception, match='335545039|336397313'):
+            ADMINISTRATION.apply(env.client, planned)
+
+
 # Operations whose effect this suite observes; everything else declared stays draft with its reason in `notes`.
 OBSERVED = {
     'backup_logical', 'restore_logical', 'backup_physical', 'restore_physical', 'validate_database',
@@ -526,7 +572,7 @@ OBSERVED = {
     'set_sql_dialect', 'activate_shadow', 'fixup_database', 'set_replica_mode', 'inspect_limbo',
     'commit_limbo_local', 'rollback_limbo_local', 'add_difference_file', 'add_files', 'begin_backup',
     'drop_difference_file', 'end_backup', 'reorder_columns', 'set_current', 'create_body', 'replace_body',
-    'drop_body', 'configure_admin_mapping',
+    'drop_body', 'configure_admin_mapping', 'encrypt_database', 'decrypt_database',
 }
 UNOBSERVABLE = {'remove_linger', 'upgrade_database'}
 

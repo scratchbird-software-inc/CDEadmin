@@ -3724,3 +3724,42 @@ PostgreSQL WAL byte-LSN semantics.
   duplicate-segment refusals, stopped-replica lag queue and promotion refusal,
   daemon restart catch-up, manual promotion with standalone writes, and
   authenticated HTTP read-only grant refusal and one-use review retirement.
+
+FB-Q11, FB-Q13, FB-Q10 and FB-Q01: version admission, descriptor parity, proof hashes and 184/182 operation execution
+---------------------------------------------------------------------------------------------------------------------
+
+``tools/cdeadmin_firebird_q01_q10_q11_q13_qualification.py`` qualifies and
+reconciles four Firebird 5.0.4 backend/contract items on the current source:
+
+* ``FB-Q11``: ``web/pgadmin/cdeadmin/ui_descriptors/firebird/capabilities.json``
+  now declares ``{"minimum": "5.0.4", "maximum_exclusive": "5.0.5", "tested":
+  ["5.0.4"]}``, matching the exact ``5.0.4`` runtime admission policy in both
+  ``provider.PROFILE`` and ``embedded_provider.PROFILE`` while keeping legacy
+  Firebird 3.0 (ODS 12.0) and 4.0 (ODS 13.0) databases explicitly scoped to
+  managed ODS migration routes rather than widening active runtime admission.
+* ``FB-Q13``: audited every field and option across all ``184`` network and
+  ``182`` embedded Firebird operations against ``ui_descriptors/firebird/``;
+  removed the obsolete Firebird ``DB_LOG`` statistics option from
+  ``portfolio_catalog.json``, removed the backup-only ``NO_TRIGGERS`` ``gbak``
+  flag (``isc_gbak_option_only_backup = 336331083``) from ``restore_logical`` in
+  ``relational_admin.py`` and ``portfolio_catalog.json``, updated
+  ``wait_for_encryption_settle`` to hold an anchor attachment open so
+  ``SuperClassic`` background crypt workers complete deterministically, and
+  executed all ``26`` live round-trip tests in
+  ``test_ui_descriptor_roundtrip_firebird.py`` and
+  ``test_ui_descriptor_operations_firebird.py`` (``26 passed, 0 skipped``).
+  Human UI presentation acceptance remains tracked under ``FB-OWN-02``.
+* ``FB-Q10``: executed all ``25`` dialect task groups natively against Firebird
+  5.0.4, regenerated current-source proof receipts in
+  ``firebird-remaining25-q10-proofs/``, and verified ``58/58`` (``100%``) exact
+  SHA-256 resolutions across ``firebird_dialect_5_0_4.json`` (``55``) and
+  ``firebird_metrics_5_0_4.json`` (``3``) alongside refreshed embedded contracts.
+* ``FB-Q01``: fixed duplicate ``USING PLUGIN`` SQL generation in Firebird
+  ``user.alter`` (``relational_admin.py``) and executed all ``184`` network and
+  ``182`` embedded operations end-to-end (``validate -> plan -> apply``) against
+  owned Firebird 5.0.4 runtimes plus authenticated desktop HTTP workflows, while
+  explicitly retaining native and validation refusals (obsolete ``DB_LOG``,
+  backup-only ``NO_TRIGGERS`` on ``restore_logical``, raw ``ZIP`` stream
+  ``restore_logical`` without extraction, secondary ``add_files`` on a shadowed
+  database, ``gstat`` ``HDR_PAGES`` + ``ENCRYPTION`` mutual exclusion, ``Srp256``
+  ``gfix`` clumplet probe, and restricted non-owner DDL denial).
