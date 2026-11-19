@@ -576,6 +576,21 @@
         "workspace_action": "firebird_trace",
         "describe_action": "describe"
       }
+    },
+    {
+      "command_id": "database.firebird.lock_print",
+      "scope": "database",
+      "label": "Native lock table diagnostics (fb_lock_print)...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.view",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-lock-print",
+        "workspace_action": "firebird_lock_print",
+        "describe_action": "describe"
+      }
     }
   ]
 }

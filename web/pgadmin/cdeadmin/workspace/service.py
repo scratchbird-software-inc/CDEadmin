@@ -4159,6 +4159,65 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def firebird_lock_print_action(self, server, request):
+        from dataclasses import asdict
+        from pathlib import Path
+        from ..operations.store import JsonOperationStore
+        from ..providers.firebird.provider import FirebirdProvider
+        from ..providers.firebird.lock_print import (
+            descriptor, normalize_options, resolve_host_scope,
+            build_cli_arguments, execute_lock_print,
+        )
+        from .firebird_schema_plan import digest
+        from .firebird_lock_print_actions import LockPrintActions
+        if (not isinstance(request, dict)
+                or not isinstance(request.get('database_target_id'), str)
+                or not request['database_target_id']
+                or not isinstance(request.get('action'), str)):
+            raise ProviderWorkspaceError('Select a registered database and lock-print action')
+        target = request['database_target_id']
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError('Native fb_lock_print requires Firebird')
+        provider._admit_transport({'route': endpoint['route']})
+        provider._require('administer', 'resource')
+        provider._require('maintenance_admin', 'endpoint')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError('Native fb_lock_print requires durable operation storage')
+        journal = LockPrintActions(store.path.with_name('firebird-lock-print-operations.json'))
+        owner = self._operation_principal(server)
+        binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
+        action = request['action']
+        body = {k: v for k, v in request.items() if k not in {'database_target_id', 'action'}}
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return journal.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'review' and set(body) <= {'options'}:
+                scope = resolve_host_scope(context.endpoint_id, endpoint['route'])
+                options = normalize_options(
+                    body.get('options', {}),
+                    database_name=Path(scope['database']).name,
+                )
+                return journal.review(owner, binding, {
+                    'scope': scope,
+                    'options': options,
+                    'cli_arguments': build_cli_arguments(scope['database'], options),
+                })
+            if action == 'apply':
+                return journal.apply(
+                    owner, binding, body,
+                    lambda record: execute_lock_print(record['payload']['scope'], record['payload']['options']),
+                )
+            raise ValueError('Invalid fb_lock_print action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def firebird_event_action(self, server, request):
         from ..providers.firebird.provider import FirebirdProvider
         from .firebird_schema_plan import digest

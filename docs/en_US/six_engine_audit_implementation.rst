@@ -3436,3 +3436,56 @@ authenticated HTTP context issuance, actual Engine13 5.0.4 ``isql`` attachment
 (``MON$REMOTE_PROTOCOL`` null) and committed row readback, stripped ``ISC_PASSWORD``,
 cross-host ``boot_id`` refusal and replaced-inode refusal. Windows/macOS host
 launchers and UI presentation acceptance remain with their owning teams.
+
+FB-AUD-10: native fb_lock_print diagnostic utility
+--------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/lock_print.py``,
+``web/pgadmin/cdeadmin/workspace/firebird_lock_print_actions.py`` and the
+authenticated workspace action ``firebird_lock_print`` (surfaced in
+``ui_descriptors/firebird/tools.json`` as ``database.firebird.lock_print``)
+provide a reviewed, one-use, structured diagnostic adapter around Firebird
+5.0.4 ``fb_lock_print``.
+
+``describe`` returns ``scratchrobin.firebird.lock-print-api@1`` with
+``published_as_default_metric=false`` and ``supported_platforms=["linux"]``.
+Access requires endpoint ownership plus ``administer`` and
+``maintenance_admin`` permissions; lock-table dumps are never published into
+default ``MON$`` monitoring metrics or persisted as raw text in the operation
+store. ``firebird-embedded`` routes validate canonical ``filesystem_root``
+containment and file ``(device, inode)`` identity directly; ``firebird-native``
+routes require an explicit operator grant in
+``CDEADMIN_FIREBIRD_HOST_TOOLS_MANIFEST``
+(``scratchrobin.firebird.host-tools@1``) binding ``endpoint_id``,
+``firebird_runtime_root``, ``firebird_lock_directory`` and allowed canonical
+database paths on the application host, refusing remote TCP servers without a
+local shared-memory grant.
+
+``normalize_options`` validates snapshot flags (``owners``, ``locks``,
+``requests``, ``history``, ``waiting_only``, ``pending_only``,
+``consistent_mutex``, ``series``) and interactive counter sampling
+(``interactive_seconds``, ``interactive_interval``, ``interactive_counters``
+subset of ``aotw``), enforcing native CLI dependencies (``-r`` and ``-w``
+require ``-o``; ``-s`` requires ``-l``; ``-n`` requires ``-o`` or ``-l``;
+interactive sampling is mutually exclusive with snapshot flags) and bounded
+``timeout_seconds`` (1..60). ``execute_lock_print`` revalidates ``boot_id``,
+database ``(device, inode)`` and ``fb_lock_print`` binary SHA-256 before
+spawning a process group without a shell or ``ISC_*`` credentials, kills the
+process group with ``SIGKILL`` on timeout, and parses ``LOCK_HEADER BLOCK``,
+``OWNER BLOCK`` (including ``waits_on_offsets`` and ``is_waiting``),
+``LOCK BLOCK``, ``REQUEST BLOCK``, unmapped idle lock-table state
+(``unmapped_no_active_attachments``) and interactive counter samples/averages.
+Raw ``AST``/``argument`` pointer addresses are always redacted, and raw lock
+``Key`` values are redacted unless ``include_raw_lock_keys=true``,
+``sensitive_lock_data_confirmed=true`` and ``confirmation`` matches the exact
+database filename.
+
+Owned Linux Firebird 5.0.4 qualification
+(``tools/cdeadmin_firebird_lock_print_qualification.py``) verifies unmapped
+idle lock-table detection, real cross-process Classic Engine13 lock-waiter
+contention (observing the blocked ``isql`` PID and redacted lock keys),
+interactive counter sampling, unauthenticated refusal, remote-TCP refusal
+versus same-host grant-manifest admission, stale-inode pre-dispatch refusal,
+one-use review retirement, ``no-store`` headers and absence of raw lock output
+on disk. Native Windows/macOS availability and UI presentation acceptance
+remain with their owning teams.

@@ -3458,7 +3458,7 @@ class ServerNode(PGChildNodeView):
                         'firebird_schema_apply', 'firebird_schema_receipt',
                         'firebird_design_read', 'firebird_design_save',
                         'firebird_relational_review',
-                        'query_history_read', 'query_history_configure', 'query_history_clear', 'firebird_events', 'firebird_trace', 'firebird_object_templates', 'firebird_isql_context'}:
+                        'query_history_read', 'query_history_configure', 'query_history_clear', 'firebird_events', 'firebird_trace', 'firebird_lock_print', 'firebird_object_templates', 'firebird_isql_context'}:
                     resource_request = data.get('request') or {}
                     if not isinstance(resource_request, dict) or (
                             resource_request.get('database_target_id') not in
@@ -3553,6 +3553,8 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_isql_context(server, data.get('request'))
                 elif action == 'firebird_trace':
                     payload = service.firebird_trace_action(server, data.get('request'))
+                elif action == 'firebird_lock_print':
+                    payload = service.firebird_lock_print_action(server, data.get('request'))
                 elif action == 'firebird_events':
                     payload = service.firebird_event_action(server, data.get('request'))
                 elif action == 'firebird_metadata_search':
