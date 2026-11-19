@@ -184,3 +184,109 @@ def test_idle_expiry_and_failed_cleanup_are_owned_for_explicit_release(monkeypat
     assert manager.control('owner', 'target', item.identity, 'release')['cleanup_confirmed']
     assert controller.trace.stop.call_count == 1
     assert manager.close()
+
+
+def test_services_trace_and_system_audit_config_contracts(tmp_path):
+    with pytest.raises(ValueError, match='service_scope_confirmed'):
+        config.render_services({'log_services': True})
+    with pytest.raises(ValueError, match='sensitive-capture'):
+        config.render_services({'service_scope_confirmed': True, 'log_service_query': True})
+    svc_cfg = config.render_services({
+        'service_scope_confirmed': True,
+        'capture_sensitive': True,
+        'log_services': True,
+        'log_service_query': True,
+        'include_filter': 'Database Stats',
+    })
+    assert 'database\n{\nenabled = false\n}' in svc_cfg
+    assert 'services\n{\nenabled = true' in svc_cfg
+    assert 'log_service_query = true' in svc_cfg
+    assert 'include_filter = "Database Stats"' in svc_cfg
+
+    audit_dir = tmp_path / 'audit'
+    audit_dir.mkdir()
+    db_log = audit_dir / 'db_audit.log'
+    svc_log = audit_dir / 'svc_audit.log'
+    rendered_audit = config.render_system_audit({
+        'database': '/owned/db.fdb',
+        'database_log_filename': str(db_log),
+        'database_max_log_size': 50,
+        'database_options': {'log_connections': True, 'log_transactions': True},
+        'enable_services': True,
+        'services_log_filename': str(svc_log),
+        'services_max_log_size': 25,
+        'service_options': {'service_scope_confirmed': True, 'log_services': True},
+    }, audit_dir)
+    assert f'log_filename = "{db_log}"' in rendered_audit
+    assert f'log_filename = "{svc_log}"' in rendered_audit
+    assert 'max_log_size = 50' in rendered_audit
+
+    for bad_path in (
+        str(tmp_path / 'outside.log'),
+        str(audit_dir / r'sub\1.log'),
+        'relative.log',
+        str(audit_dir / 'bad{brace}.log'),
+    ):
+        with pytest.raises(ValueError):
+            config.render_system_audit({
+                'all_databases': True,
+                'database_log_filename': bad_path,
+            }, audit_dir)
+
+    db_log.write_text('line1\nline2\n' + ('x' * 33000) + '\n', encoding='utf-8')
+    tail = config.read_audit_log_tail(str(db_log), audit_dir)
+    assert tail['present'] and len(tail['lines']) == 3
+    assert tail['lines'][2]['truncated'] is True
+    assert tail['output_persisted'] is False
+
+
+def test_external_native_session_inventory_and_reviewed_controls():
+    import datetime
+    manager = streams.TraceSessions()
+    result, _producer, _controller, _release = start(manager)
+    try:
+        server = SimpleNamespace(trace=SimpleNamespace(
+            sessions={
+                17: SimpleNamespace(id=17, name='Owned', user='SYSDBA',
+                                    timestamp=datetime.datetime(2026, 11, 18, 12, 0, 0),
+                                    flags=['active', ' trace']),
+                23: SimpleNamespace(id=23, name='ExtCli', user='SYSDBA',
+                                    timestamp=datetime.datetime(2026, 11, 18, 12, 5, 0),
+                                    flags=['active', ' trace']),
+                31: SimpleNamespace(id=31, name='Audit', user='SYSDBA',
+                                    timestamp=datetime.datetime(2026, 11, 18, 11, 0, 0),
+                                    flags=['active', ' audit']),
+            },
+            suspend=Mock(return_value='Trace session ID 23 paused'),
+            resume=Mock(return_value='Trace session ID 23 resumed'),
+            stop=Mock(return_value='Trace session ID 23 stopped'),
+        ))
+        listing = {row['native_session_id']: row
+                   for row in manager.list_native_sessions('owner', 'target', server)['items']}
+        assert listing[17]['managed_by_workspace'] is True
+        assert listing[17]['managed_trace_id'] == result['trace_id']
+        assert listing[23]['managed_by_workspace'] is False
+        assert listing[31]['system_audit'] is True
+
+        # Managed and system-audit sessions refuse external session controls.
+        with pytest.raises(ValueError, match='managed by this workspace'):
+            manager.observe_external_target('owner', 'target', server, 17)
+        with pytest.raises(ValueError, match='System audit'):
+            manager.observe_external_target('owner', 'target', server, 31)
+
+        observed = manager.observe_external_target('owner', 'target', server, 23)
+        assert manager.control_external('owner', 'target', server, observed, 'suspend_external')['state'] == 'suspended'
+        assert manager.control_external('owner', 'target', server, observed, 'resume_external')['state'] == 'started'
+
+        # Reused numeric ID with different start timestamp is rejected pre-dispatch.
+        stale = {**observed, 'started_at': '2026-11-18T12:06:00'}
+        rejected = manager.control_external('owner', 'target', server, stale, 'stop_external')
+        assert rejected['state'] == 'rejected' and rejected['native_dispatched'] is False
+        server.trace.stop.assert_not_called()
+
+        stopped = manager.control_external('owner', 'target', server, observed, 'stop_external')
+        assert stopped['state'] == 'stopped' and stopped['native_acknowledged'] is True
+        server.trace.stop.assert_called_once_with(session_id=23)
+    finally:
+        assert manager.close()
+

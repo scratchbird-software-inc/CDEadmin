@@ -45,8 +45,13 @@ class TraceActions:
         return {**copy.deepcopy({key: value for key, value in record.items()
                                 if key not in {'owner', 'binding'}}), 'automatic_retry': False}
 
+    ALLOWED_OPERATIONS = frozenset({
+        'start', 'start_services', 'stop', 'suspend', 'resume', 'release', 'forget',
+        'suspend_external', 'resume_external', 'stop_external',
+    })
+
     def review(self, owner, binding, operation, payload):
-        if operation not in {'start', 'stop', 'suspend', 'resume', 'release', 'forget'}:
+        if operation not in self.ALLOWED_OPERATIONS:
             raise ValueError('Unknown native trace action')
         now = time.time()
         record = {'review_id': str(uuid.uuid4()), 'owner': owner, 'binding': binding,

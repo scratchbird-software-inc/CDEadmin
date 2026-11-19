@@ -31,23 +31,25 @@ def qualify(runtime, output):
     from tools.cdeadmin_firebird_object_live_orchestrator import _stage_runtime, _runtime_fingerprint
     runtime = Path(runtime).resolve()
     before = _runtime_fingerprint(runtime)
-    proof = {'complete': False, 'scope': 'Owned Engine13 Firebird5.0.4 authenticated desktop HTTP managed native trace lifecycle; no browser/platform acceptance.', 'checks': [], 'source_sha256': {p: hashlib.sha256((R/p).read_bytes()).hexdigest(
+    proof = {'complete': False, 'scope': (
+        'Owned Engine13 Firebird 5.0.4 authenticated desktop HTTP managed database trace, '
+        'service-scope trace, and external native trace-session controls; no browser/platform acceptance.'
+    ), 'checks': [], 'source_sha256': {p: hashlib.sha256((R/p).read_bytes()).hexdigest(
     )for p in ['web/pgadmin/cdeadmin/providers/firebird/local_services.py', 'web/pgadmin/cdeadmin/providers/firebird/embedded_provider.py', 'web/pgadmin/cdeadmin/providers/firebird/provider.py', 'web/pgadmin/cdeadmin/providers/firebird/query_client.py', 'web/pgadmin/cdeadmin/providers/firebird/service_connection.py', 'web/pgadmin/cdeadmin/providers/firebird/firebird_embedded_dialect_5_0_4.json', 'web/pgadmin/cdeadmin/providers/firebird/firebird_embedded_metrics_5_0_4.json', 'web/pgadmin/cdeadmin/ui_descriptors/firebird/capabilities.json']}}
     for name in ('web/pgadmin/cdeadmin/providers/firebird/trace_config.py', 'web/pgadmin/cdeadmin/providers/firebird/trace_sessions.py', 'web/pgadmin/cdeadmin/workspace/firebird_trace_actions.py', 'web/pgadmin/cdeadmin/workspace/service.py', 'web/pgadmin/browser/server_groups/servers/__init__.py', 'web/pgadmin/cdeadmin/ui_descriptors/firebird/tools.json'):
         proof['source_sha256'][name] = hashlib.sha256((R/name).read_bytes()).hexdigest()
     proof['runner_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     proof['history_tests'] = 'not run'
-    proof['not_qualified'] = ['network transport and native restricted users',
-                              'server/service and system-audit trace',
-                              'external native trace sessions', 'Windows/macOS', 'human UI acceptance']
+    proof['not_qualified'] = ['Windows/macOS', 'human UI acceptance']
     try:
         from contextlib import ExitStack
         with tempfile.TemporaryDirectory(prefix='firebird-trace-http-', dir=W)as area, ExitStack() as owners:
             root = Path(area)
             stage = root/'runtime'
             _stage_runtime(runtime, stage)
-            (stage/'firebird.conf').write_text('Providers = Engine13\nSecurityDatabase = ' +
-                                               str(stage/'security5.fdb')+'\n')
+            (stage/'firebird.conf').write_text(
+                'ServerMode = SuperClassic\nProviders = Engine13\nSecurityDatabase = ' +
+                str(stage/'security5.fdb')+'\n')
             (stage/'databases.conf').write_text('')
             os.environ.update(FIREBIRD=str(stage), FIREBIRD_LOCK=str(stage/'lock'),
                               CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(stage/'lib/libfbclient.so.5.0.4'))
@@ -219,6 +221,82 @@ def qualify(runtime, output):
             assert reviewed('forget', trace_id=identity)['outcome']['state'] == 'forgotten'
             restored = trace('poll', trace_id=identity)
             assert not restored['output_available'] and not restored['live_handle_available'] and restored['cleanup_confirmed']
+
+            # Service-scope trace over HTTP + Engine13
+            post('firebird_trace', {
+                'action': 'review',
+                'operation': 'start_services',
+                'service_options': {'log_services': True},
+            }, denied=True)
+            svc_started = reviewed('start_services', name='Owned service trace', service_options={
+                'service_scope_confirmed': True,
+                'capture_sensitive': True,
+                'log_services': True,
+                'log_service_query': True,
+                'include_filter': 'Database Stats',
+            })
+            assert svc_started['outcome']['native_started'] and svc_started['outcome']['trace_scope'] == 'services'
+            svc_id = svc_started['outcome']['trace_id']
+            svc_probe_client = _create_client(
+                SimpleNamespace(require=lambda *_: None, acquire_secret=None),
+                attachment_mode='embedded', profile=embedded.PROFILE, administration=embedded.ADMINISTRATION,
+            )
+            svc_srv = svc_probe_client._connect_server({'route': route})
+            try:
+                svc_srv.database.get_statistics(
+                    database=str(path),
+                    flags=module.SrvStatFlag.HDR_PAGES,
+                    callback=lambda *_: None,
+                )
+            finally:
+                svc_probe_client._release_server(svc_srv)
+                svc_probe_client.close()
+            svc_lines = []
+            svc_after = 0
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                page = trace('poll', trace_id=svc_id, after=svc_after)
+                svc_lines.extend(x['text'] for x in page['lines'])
+                svc_after = page['next_sequence']
+                if 'Database Stats' in ''.join(svc_lines):
+                    break
+                time.sleep(0.05)
+            assert 'Database Stats' in ''.join(svc_lines), svc_lines
+            svc_stopped = reviewed('stop', trace_id=svc_id)['outcome']
+            assert svc_stopped['native_stop_acknowledged'] and svc_stopped['cleanup_confirmed']
+            assert reviewed('forget', trace_id=svc_id)['outcome']['state'] == 'forgotten'
+            proof['checks'].append('Authenticated HTTP service-scope trace captures filtered native Database Stats service events and cleans up')
+
+            # External native trace-session listing and reviewed suspend/resume/stop over HTTP
+            ext_client = _create_client(
+                SimpleNamespace(require=lambda *_: None, acquire_secret=None),
+                attachment_mode='embedded', profile=embedded.PROFILE, administration=embedded.ADMINISTRATION,
+            )
+            ext_srv = ext_client._connect_server({'route': route})
+            try:
+                ext_native_id = ext_srv.trace.start(
+                    config='database\n{\nenabled = false\n}\nservices\n{\nenabled = true\nlog_services = true\n}\n',
+                    name='ExternalCLI',
+                )
+                native_items = trace('list_native')['items']
+                ext_entry = next(row for row in native_items if row['native_session_id'] == ext_native_id)
+                assert ext_entry['managed_by_workspace'] is False and ext_entry['name'] == 'ExternalCLI'
+                assert reviewed('suspend_external', native_session_id=ext_native_id)['outcome']['state'] == 'suspended'
+                assert reviewed('resume_external', native_session_id=ext_native_id)['outcome']['state'] == 'started'
+                stale_ext_stop = trace('review', operation='stop_external', native_session_id=ext_native_id)
+                stopped_ext = reviewed('stop_external', native_session_id=ext_native_id)['outcome']
+                assert stopped_ext['state'] == 'stopped' and stopped_ext['native_acknowledged'] is True
+                stale_applied = trace(
+                    'apply',
+                    review_id=stale_ext_stop['review_id'],
+                    review_digest=stale_ext_stop['review_digest'],
+                    confirmed=True,
+                )['outcome']
+                assert stale_applied['state'] == 'rejected' and stale_applied['native_dispatched'] is False
+            finally:
+                ext_client._release_server(ext_srv)
+                ext_client.close()
+            proof['checks'].append('Authenticated HTTP list_native and reviewed external native trace suspend/resume/stop + stale rejection qualified')
             stale = trace('review', operation='start', options={})
             retained = data/'Retained original.fdb'
             path.rename(retained)

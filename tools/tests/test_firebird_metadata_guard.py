@@ -72,3 +72,82 @@ def test_guard_does_not_recompile_or_consume_row_selectors(operation):
     assert guard.selection({'resource_kind': 'table', 'operation_id': operation,
                             'target_resource': {}}, administration) is None
     administration._target_path.assert_not_called()
+
+
+def test_security_virtual_projections_hash_state_without_claiming_record_version(connection):
+    cursor = connection.cursor()
+    cursor.fetchall.side_effect = [
+        [('AUD_USER', 'Srp', 'First', None, 'Last', True, False, 'desc')],
+        [('dept', 'ops')],
+        [('AUD_USER', 'Srp', 'First', None, 'Last', True, False, 'desc')],
+        [('dept', 'ops')],
+        [('AUD_USER', 'Srp', 'Changed', None, 'Last', True, False, 'desc')],
+        [('dept', 'ops')],
+    ]
+    administration = Mock(_target_path=Mock(return_value=['AUD_USER']))
+    selected = guard.selection({
+        'resource_kind': 'user',
+        'operation_id': 'recreate',
+        'target_resource': {'resource_kind': 'user', 'display_name': 'AUD_USER',
+                            'native': {'plugin': 'Srp'}},
+        'draft': {'confirmation': 'AUD_USER'},
+    }, administration)
+    assert selected == {'resource_kind': 'user', 'path': ['AUD_USER'], 'plugin': 'Srp'}
+    expected = guard.observe(connection, selected)
+    assert expected['record']['record_version_available'] is False
+    assert 'First' not in str(expected) and 'ops' not in str(expected)
+    guard.verify(connection, expected)
+    with pytest.raises(RelationalClientError, match='changed since review') as failure:
+        guard.verify(connection, expected)
+    assert failure.value.rejected and not failure.value.native_dispatched
+
+
+def test_global_mapping_and_privilege_selection_contracts(connection):
+    cursor = connection.cursor()
+    cursor.fetchall.side_effect = [
+        [('GMAP', 'P', 'Srp', None, 'USER', 'alice', 0, 'ALICE', 'comment')],
+        [('GMAP', 'P', 'Srp', None, 'USER', 'alice', 0, 'ALICE', 'comment')],
+        [(b'87654321', 42)],
+        [(b'87654321', 42)],
+    ]
+    administration = Mock(_target_path=Mock(return_value=['GMAP']))
+    gmap_sel = guard.selection({
+        'resource_kind': 'global-authentication-mapping',
+        'operation_id': 'drop',
+        'target_resource': {'resource_kind': 'global-authentication-mapping', 'display_name': 'GMAP'},
+    }, administration)
+    observed_gmap = guard.observe(connection, gmap_sel)
+    guard.verify(connection, observed_gmap)
+
+    priv_sel = guard.selection({
+        'resource_kind': 'privilege',
+        'operation_id': 'revoke',
+        'target_resource': {
+            'resource_kind': 'privilege',
+            'display_name': 'R:S on T',
+            'native': {
+                'grantee': 'R', 'object_name': 'T', 'field': None,
+                'privilege': 'S', 'grantor': 'SYSDBA',
+                'user_type': 13, 'object_type': 0,
+            },
+        },
+    }, administration)
+    observed_priv = guard.observe(connection, priv_sel)
+    guard.verify(connection, observed_priv)
+
+    # Collection-level object privilege binds its catalog relation target.
+    obj_priv_sel = guard.selection({
+        'resource_kind': 'privilege',
+        'operation_id': 'grant',
+        'draft': {'privilege_scope': 'object', 'object_type': 'TABLE', 'object_name': 'T'},
+    }, administration)
+    assert obj_priv_sel == {'resource_kind': 'table', 'path': ['T']}
+
+    # create_or_alter targeting a different new name does not bind an unrelated inspected row.
+    assert guard.selection({
+        'resource_kind': 'view',
+        'operation_id': 'create_or_alter',
+        'target_resource': {'resource_kind': 'view', 'display_name': 'OLD_V'},
+        'draft': {'name': 'NEW_V'},
+    }, administration) is None
+

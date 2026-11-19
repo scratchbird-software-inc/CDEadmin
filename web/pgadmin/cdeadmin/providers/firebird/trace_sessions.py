@@ -1,11 +1,11 @@
-"""Owned user-trace streams. Captured text is private, bounded and volatile."""
+"""Owned user-trace and service-trace streams plus external session controls."""
 from collections import deque
 from dataclasses import dataclass, field
 import threading
 import time
 import uuid
 
-from .trace_config import normalize, render, text
+from .trace_config import normalize, normalize_service_options, render, render_services, text
 
 MAX_LINES = 2000
 MAX_BYTES = 1024 * 1024
@@ -23,6 +23,7 @@ class Trace:
     connect: object
     release: object
     on_finish: object = None
+    trace_scope: str = 'database'
     identity: str = field(default_factory=lambda: uuid.uuid4().hex)
     state: str = 'starting'
     native_id: int | None = None
@@ -47,16 +48,27 @@ class Trace:
 
     def snapshot(self, after=None, limit=200):
         with self.lock:
-            result = {'trace_id': self.identity, 'native_session_id': self.native_id,
-                      'name': self.name, 'state': self.state, 'native_started': self.native_started,
-                      'native_stop_acknowledged': self.native_stop_acknowledged,
-                      'native_end_observed': self.native_end_observed,
-                      'cleanup_confirmed': self.cleanup_confirmed, 'error_type': self.error_type,
-                      'plugin_diagnostic_observed': self.plugin_diagnostic_observed,
-                      'capture_success_inferred': False, 'automatic_retry': False,
-                      'requires_process_affinity': True, 'output_persisted': False,
-                      'idle_expiry_seconds': IDLE_SECONDS, 'maximum_lifetime_seconds': LIFETIME_SECONDS,
-                      'dropped_lines': self.dropped, 'last_sequence': self.sequence}
+            result = {
+                'trace_id': self.identity,
+                'native_session_id': self.native_id,
+                'name': self.name,
+                'trace_scope': self.trace_scope,
+                'state': self.state,
+                'native_started': self.native_started,
+                'native_stop_acknowledged': self.native_stop_acknowledged,
+                'native_end_observed': self.native_end_observed,
+                'cleanup_confirmed': self.cleanup_confirmed,
+                'error_type': self.error_type,
+                'plugin_diagnostic_observed': self.plugin_diagnostic_observed,
+                'capture_success_inferred': False,
+                'automatic_retry': False,
+                'requires_process_affinity': True,
+                'output_persisted': False,
+                'idle_expiry_seconds': IDLE_SECONDS,
+                'maximum_lifetime_seconds': LIFETIME_SECONDS,
+                'dropped_lines': self.dropped,
+                'last_sequence': self.sequence,
+            }
             if after is not None:
                 first = self.lines[0]['sequence'] if self.lines else self.sequence + 1
                 rows = [dict(row) for row in self.lines if row['sequence'] > after][:limit]
@@ -78,10 +90,9 @@ class TraceSessions:
                 raise ValueError('Trace unavailable for this owner, target or process')
             return item
 
-    def start(self, owner, binding, scope, options, name, connect, release, on_finish=None):
-        options = normalize(options)
+    def _launch(self, owner, binding, scope, options, name, config, connect,
+                release, on_finish=None, trace_scope='database'):
         name = text(name, 128)
-        config = render(scope['database'], options, scope.get('attachment_names', ()))
         with self.lock:
             if self.closed:
                 raise ValueError('Trace service is shutting down')
@@ -89,7 +100,8 @@ class TraceSessions:
             if (len(active) >= 16 or sum(item.owner == owner for item in active) >= 4
                     or len(self.items) >= 32):
                 raise ValueError('Trace capacity reached; stop or forget finished owned traces')
-            item = Trace(owner, binding, dict(scope), options, name, connect, release, on_finish)
+            item = Trace(owner, binding, dict(scope), dict(options), name,
+                         connect, release, on_finish, trace_scope=trace_scope)
             self.items[item.identity] = item
         try:
             # Credentials are resolved on the authenticated request thread.
@@ -113,6 +125,34 @@ class TraceSessions:
             if not isinstance(error, Exception):
                 raise
         return item.snapshot()
+
+    def start(self, owner, binding, scope, options, name, connect, release, on_finish=None):
+        normalized = normalize(options)
+        config = render(scope['database'], normalized, scope.get('attachment_names', ()))
+        return self._launch(
+            owner, binding, scope, normalized, name, config,
+            connect, release, on_finish, trace_scope='database',
+        )
+
+    def start_services(self, owner, binding, scope, service_options, name, connect,
+                       release, on_finish=None, database_options=None):
+        svc_norm = normalize_service_options(service_options)
+        include_db = database_options is not None
+        db_norm = normalize(database_options) if include_db else None
+        config = render_services(
+            svc_norm,
+            database=scope['database'] if include_db else None,
+            database_options=db_norm,
+            attachment_names=scope.get('attachment_names', ()) if include_db else (),
+        )
+        combined = {'service_options': svc_norm}
+        if db_norm is not None:
+            combined['database_options'] = db_norm
+        return self._launch(
+            owner, binding, scope, combined, name, config, connect, release,
+            on_finish,
+            trace_scope='database_and_services' if include_db else 'services',
+        )
 
     def poll(self, owner, binding, identity, after=0, limit=200):
         if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 200:
@@ -141,6 +181,89 @@ class TraceSessions:
                         observed = {'present': None, 'error_type': type(error).__name__}
                 result.append({**item.snapshot(), 'native_list_observation': observed})
         return {'items': result, 'scope': 'managed traces for this owner and registered target'}
+
+    def list_native_sessions(self, owner, binding, server_handle):
+        """List all active native trace sessions visible to the connected Firebird user."""
+        with self.lock:
+            managed_map = {
+                item.native_id: item.identity
+                for item in self.items.values()
+                if (item.owner == owner and item.binding == binding
+                    and not item.done.is_set() and item.native_id is not None)
+            }
+        raw_sessions = server_handle.trace.sessions
+        items = []
+        for session_id in sorted(raw_sessions):
+            session = raw_sessions[session_id]
+            flags = [str(flag).strip() for flag in getattr(session, 'flags', ()) if str(flag).strip()]
+            system_audit = any('audit' in flag.lower() or 'system' in flag.lower() for flag in flags)
+            timestamp = getattr(session, 'timestamp', None)
+            started_at = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp or '')
+            managed_id = managed_map.get(session.id)
+            items.append({
+                'native_session_id': int(session.id),
+                'name': str(getattr(session, 'name', '') or ''),
+                'user': str(getattr(session, 'user', '') or ''),
+                'started_at': started_at,
+                'flags': flags,
+                'system_audit': system_audit,
+                'managed_by_workspace': managed_id is not None,
+                'managed_trace_id': managed_id,
+            })
+        return {
+            'items': items,
+            'scope': 'native trace sessions visible to current Firebird service credentials',
+        }
+
+    def observe_external_target(self, owner, binding, server_handle, native_session_id):
+        if type(native_session_id) is not int or native_session_id <= 0:
+            raise ValueError('External native_session_id must be a positive integer')
+        listing = self.list_native_sessions(owner, binding, server_handle)['items']
+        entry = next((row for row in listing if row['native_session_id'] == native_session_id), None)
+        if entry is None:
+            raise ValueError('Native trace session is absent or not visible to this account')
+        if entry['managed_by_workspace']:
+            raise ValueError(
+                'Session is managed by this workspace; use its trace_id control so handle cleanup is tracked'
+            )
+        if entry['system_audit']:
+            raise ValueError(
+                'System audit trace sessions are controlled by AuditTraceConfigFile, '
+                'not interactive service controls'
+            )
+        return {
+            key: entry[key]
+            for key in ('native_session_id', 'name', 'user', 'started_at')
+        }
+
+    def control_external(self, owner, binding, server_handle, expected_target, operation):
+        if operation not in {'suspend_external', 'resume_external', 'stop_external'}:
+            raise ValueError('Unknown external trace control')
+        session_id = expected_target.get('native_session_id')
+        try:
+            current = self.observe_external_target(owner, binding, server_handle, session_id)
+        except ValueError as error:
+            return {
+                'state': 'rejected',
+                'native_dispatched': False,
+                'reason': str(error),
+            }
+        if current != expected_target:
+            return {
+                'state': 'rejected',
+                'native_dispatched': False,
+                'reason': 'External native trace session changed since review; refresh and review again',
+            }
+        verb = operation.split('_', 1)[0]
+        response = getattr(server_handle.trace, verb)(session_id=session_id)
+        mapped_state = {'suspend': 'suspended', 'resume': 'started', 'stop': 'stopped'}[verb]
+        return {
+            'state': mapped_state,
+            'native_session_id': session_id,
+            'native_dispatched': True,
+            'native_acknowledged': True,
+            'native_response': str(response),
+        }
 
     def control(self, owner, binding, identity, operation):
         item = self._get(owner, binding, identity)

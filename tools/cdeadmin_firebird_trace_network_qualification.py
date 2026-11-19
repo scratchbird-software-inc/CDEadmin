@@ -24,7 +24,11 @@ def qualify(runtime, output):
         raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True, exist_ok=True)
     proof = {'complete': False, 'modes': [], 'history_tests': 'not run',
-             'scope': 'Owned Linux loopback Firebird5.0.4 managed database trace with alias and restricted users; no HTTP, transport-loss, platform or system-audit acceptance'}
+             'scope': (
+                 'Owned Linux loopback Firebird 5.0.4 managed database and service trace, '
+                 'registered aliases, restricted users, external native trace controls, '
+                 'AuditTraceConfigFile system audit, credential revocation, and listener transport loss'
+             )}
     files = ['web/pgadmin/cdeadmin/providers/firebird/' + name for name in (
         'trace_config.py', 'trace_sessions.py', 'query_client.py', 'provider.py',
         'metadata_guard.py', 'service_connection.py', 'connection_opening.py', 'local_services.py')]
@@ -34,18 +38,46 @@ def qualify(runtime, output):
     proof['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                               for name in files}
     before = _runtime_fingerprint(runtime)
-    proof['not_qualified'] = ['transport loss and credential revocation', 'system audit and service trace',
-                              'external trace session administration', 'Windows/macOS and human UI']
+    proof['not_qualified'] = ['Windows/macOS and human UI']
     process = None
     try:
         with tempfile.TemporaryDirectory(prefix='firebird-native-target-', dir=output) as folder:
             area = Path(folder)
             stage = area / 'runtime'
             _stage_runtime(runtime, stage)
+            from pgadmin.cdeadmin.providers.firebird.trace_config import (
+                render_system_audit, read_audit_log_tail,
+            )
+            audit_dir = area / 'audit'
+            audit_dir.mkdir()
+            audit_conf = audit_dir / 'system_audit.conf'
+            audit_db_log = audit_dir / 'db_audit.log'
+            audit_svc_log = audit_dir / 'svc_audit.log'
+            audit_conf.write_text(render_system_audit({
+                'all_databases': True,
+                'database_log_filename': str(audit_db_log),
+                'database_max_log_size': 50,
+                'database_options': {
+                    'capture_sensitive': True,
+                    'log_connections': True,
+                    'log_statement_finish': True,
+                },
+                'enable_services': True,
+                'services_log_filename': str(audit_svc_log),
+                'services_max_log_size': 25,
+                'service_options': {
+                    'service_scope_confirmed': True,
+                    'capture_sensitive': True,
+                    'log_services': True,
+                    'log_service_query': True,
+                },
+            }, audit_dir), encoding='utf-8')
             # Both explicit connection profiles share one exact client library.
             # Network transport is only the owned loopback listener below.
             (stage / 'firebird.conf').write_text(
-                'Providers = Remote,Engine13\nSecurityDatabase = ' + str(stage / 'security5.fdb') + '\n')
+                'Providers = Remote,Engine13\n'
+                'AuditTraceConfigFile = ' + str(audit_conf) + '\n'
+                'SecurityDatabase = ' + str(stage / 'security5.fdb') + '\n')
             (stage / 'databases.conf').write_text('')
             os.environ.update(FIREBIRD=str(stage), FIREBIRD_LOCK=str(stage / 'lock'),
                               CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(stage / 'lib/libfbclient.so.5.0.4'))
@@ -188,9 +220,233 @@ def qualify(runtime, output):
                             user.rollback()
                         finally:
                             reader._forget_and_close(user)
-                        proof['modes'].append({'mode': 'network', 'protocol': protocol, 'wire_encrypted_observed': encrypted, 'owned_listener_pid_observed': True, 'alias_resolved': True, 'restricted_own_capture': True,
-                                              'cross_user_capture_excluded': True, 'foreign_database_excluded': True,
-                                               'native_foreign_stop_denied': True, 'admin_capture_any_observed': True, 'caller_transaction_preserved': True})
+
+                        # 1. System audit (AuditTraceConfigFile) observation & log read-back
+                        adm_srv = admin._connect_server({'route': route})
+                        try:
+                            adm_srv.database.get_statistics(
+                                database='TRACE_ALIAS',
+                                flags=module.SrvStatFlag.HDR_PAGES,
+                                callback=lambda *_: None,
+                            )
+                            native_list = manager.list_native_sessions('admin', 'alias', adm_srv)['items']
+                            audit_sessions = [row for row in native_list if row['system_audit']]
+                            assert audit_sessions, native_list
+                            audit_stopped_denied = False
+                            try:
+                                manager.observe_external_target(
+                                    'admin', 'alias', adm_srv, audit_sessions[0]['native_session_id'],
+                                )
+                            except ValueError as err:
+                                audit_stopped_denied = 'System audit' in str(err)
+                            assert audit_stopped_denied
+                        finally:
+                            admin._release_server(adm_srv)
+                        db_tail = read_audit_log_tail(str(audit_db_log), audit_dir)
+                        svc_tail = read_audit_log_tail(str(audit_svc_log), audit_dir)
+                        assert db_tail['present'] and any('admin_private_marker' in r['text'] for r in db_tail['lines']), db_tail
+                        assert svc_tail['present'] and any('Database Stats' in r['text'] for r in svc_tail['lines']), svc_tail
+
+                        # 2. Network service-scope trace
+                        svc_scope = observe_scope(admin, route)
+                        svc_worker = network._create_client(permissions, attachment_mode='network')
+                        def svc_connect():
+                            h = svc_worker._connect_server({'route': route})
+                            h.spb = b''
+                            return h
+                        def svc_release():
+                            svc_worker.close()
+                            return not svc_worker._connections and not svc_worker._server_handles
+                        svc_trace = manager.start_services(
+                            'admin', 'alias', svc_scope,
+                            {
+                                'service_scope_confirmed': True,
+                                'capture_sensitive': True,
+                                'log_services': True,
+                                'log_service_query': True,
+                                'include_filter': 'Database Stats',
+                            },
+                            'Network Service Trace', svc_connect, svc_release,
+                        )
+                        assert svc_trace['native_started'] and svc_trace['trace_scope'] == 'services'
+                        probe_srv = admin._connect_server({'route': route})
+                        try:
+                            probe_srv.database.get_statistics(
+                                database='TRACE_ALIAS',
+                                flags=module.SrvStatFlag.HDR_PAGES,
+                                callback=lambda *_: None,
+                            )
+                        finally:
+                            admin._release_server(probe_srv)
+                        svc_captured = []
+                        svc_cursor = 0
+                        deadline = time.monotonic() + 10
+                        while time.monotonic() < deadline:
+                            page = manager.poll('admin', 'alias', svc_trace['trace_id'], svc_cursor)
+                            svc_cursor = page['next_sequence']
+                            svc_captured.extend(x['text'] for x in page['lines'])
+                            if 'Database Stats' in ''.join(svc_captured):
+                                break
+                            time.sleep(0.05)
+                        assert 'Database Stats' in ''.join(svc_captured), svc_captured
+                        svc_stop = manager.control('admin', 'alias', svc_trace['trace_id'], 'stop')
+                        assert svc_stop['cleanup_confirmed'] and svc_stop['native_stop_acknowledged']
+
+                        # 3. External native trace session controls & restricted-user foreign refusal
+                        ext_admin_srv = admin._connect_server({'route': route})
+                        ext_admin_ctrl = admin._connect_server({'route': route})
+                        ext_reader_srv = reader._connect_server({'route': reader_route})
+                        try:
+                            ext_id = ext_admin_srv.trace.start(
+                                config='database\n{\nenabled = false\n}\nservices\n{\nenabled = true\nlog_services = true\n}\n',
+                                name='AdminExternalCLI',
+                            )
+                            reader_denied = False
+                            try:
+                                manager.observe_external_target('reader', 'alias', ext_reader_srv, ext_id)
+                            except ValueError:
+                                reader_denied = True
+                            assert reader_denied
+                            observed_ext = manager.observe_external_target('admin', 'alias', ext_admin_ctrl, ext_id)
+                            assert manager.control_external('admin', 'alias', ext_admin_ctrl, observed_ext, 'suspend_external')['state'] == 'suspended'
+                            assert manager.control_external('admin', 'alias', ext_admin_ctrl, observed_ext, 'resume_external')['state'] == 'started'
+                            assert manager.control_external('admin', 'alias', ext_admin_ctrl, observed_ext, 'stop_external')['state'] == 'stopped'
+                        finally:
+                            reader._release_server(ext_reader_srv)
+                            admin._release_server(ext_admin_ctrl)
+                            admin._release_server(ext_admin_srv)
+
+                        # 4. Credential revocation mid-trace without ending independent user transactions
+                        rev_pw = secrets.token_urlsafe(24)
+                        adm_srv = admin._connect_server({'route': route})
+                        try:
+                            adm_srv.user.add(user_name='TR_REVOKED', password=rev_pw)
+                        finally:
+                            admin._release_server(adm_srv)
+                        held.execute_immediate('GRANT SELECT ON T TO TR_REVOKED')
+                        held.commit()
+                        rev_route, rev_perms = provider_access({**base, 'user': 'TR_REVOKED'}, rev_pw)
+                        rev_perms.require = lambda *_: None
+                        rev_perms.allows = lambda *_: True
+                        rev_client = network._create_client(rev_perms, attachment_mode='network')
+                        try:
+                            rev_scope = observe_scope(rev_client, rev_route)
+                            rev_worker = network._create_client(rev_perms, attachment_mode='network')
+                            def rev_connect():
+                                h = rev_worker._connect_server({'route': rev_route})
+                                h.spb = b''
+                                return h
+                            def rev_release():
+                                rev_worker.close()
+                                return not rev_worker._connections and not rev_worker._server_handles
+                            rev_started = manager.start(
+                                'revoked', 'alias', rev_scope,
+                                {'log_connections': True}, 'Revoked Trace', rev_connect, rev_release,
+                            )
+                            assert rev_started['native_started']
+                            adm_srv = admin._connect_server({'route': route})
+                            try:
+                                adm_srv.user.delete(user_name='TR_REVOKED')
+                            finally:
+                                admin._release_server(adm_srv)
+                            reauth_failed = False
+                            try:
+                                bad_srv = rev_client._connect_server({'route': rev_route})
+                                rev_client._release_server(bad_srv)
+                            except Exception as auth_exc:
+                                reauth_failed = rev_pw not in str(auth_exc)
+                            assert reauth_failed
+                            rev_stopped = manager.control('revoked', 'alias', rev_started['trace_id'], 'stop')
+                            assert rev_stopped['cleanup_confirmed']
+                        finally:
+                            rev_client.close()
+
+                        # 5. Owned listener transport loss mid-trace -> conservative non-success state, no retry
+                        loss_port = _free_port()
+                        loss_stage = area / 'loss_runtime'
+                        _stage_runtime(runtime, loss_stage)
+                        (loss_stage / 'firebird.conf').write_text(
+                            'Providers = Remote,Engine13\nSecurityDatabase = ' + str(loss_stage / 'security5.fdb') + '\n'
+                        )
+                        loss_db = str(area / 'loss_target.fdb')
+                        (loss_stage / 'databases.conf').write_text('LOSS_ALIAS = ' + loss_db + '\n')
+                        loss_env = {
+                            **os.environ,
+                            'FIREBIRD': str(loss_stage),
+                            'FIREBIRD_LOCK': str(loss_stage / 'lock'),
+                        }
+                        _initialize_security(loss_stage, password, loss_env)
+                        loss_proc = subprocess.Popen(
+                            [str(loss_stage / 'bin/firebird'), '-d', '-p', str(loss_port),
+                             '-e', str(loss_stage), '-el', str(loss_stage / 'lock'), '-em', str(loss_stage)],
+                            stdout=log, stderr=subprocess.STDOUT, env=loss_env,
+                        )
+                        try:
+                            _wait_for_server(loss_proc, loss_port)
+                            loss_base = {**base, 'port': loss_port, 'database': 'LOSS_ALIAS'}
+                            loss_route, loss_perms = provider_access(loss_base, password)
+                            loss_perms.require = lambda *_: None
+                            loss_perms.allows = lambda *_: True
+                            loss_client = network._create_client(loss_perms, attachment_mode='network')
+                            try:
+                                loss_created = loss_client.config.database_creator(
+                                    **loss_client.config.database_create_arguments(
+                                        {**loss_route, 'database': loss_db}, loss_db, {},
+                                    ),
+                                    password=password,
+                                )
+                                loss_created.close()
+                                loss_scope = observe_scope(loss_client, loss_route)
+                                loss_worker = network._create_client(loss_perms, attachment_mode='network')
+                                def loss_connect():
+                                    h = loss_worker._connect_server({'route': loss_route})
+                                    h.spb = b''
+                                    return h
+                                def loss_release():
+                                    loss_worker.close()
+                                    return not loss_worker._connections and not loss_worker._server_handles
+                                loss_trace = manager.start(
+                                    'admin', 'loss', loss_scope,
+                                    {'log_connections': True}, 'Transport Loss Trace',
+                                    loss_connect, loss_release,
+                                )
+                                assert loss_trace['native_started']
+                                loss_proc.kill()
+                                loss_proc.wait(timeout=10)
+                                loss_item = manager._get('admin', 'loss', loss_trace['trace_id'])
+                                assert loss_item.done.wait(10)
+                                loss_snap = loss_item.snapshot()
+                                assert loss_snap['state'] in {'unknown_outcome', 'ended', 'cleanup_unknown'}, loss_snap
+                                assert loss_snap['capture_success_inferred'] is False
+                                assert loss_snap['automatic_retry'] is False
+                                if not loss_snap['cleanup_confirmed']:
+                                    loss_snap = manager.control('admin', 'loss', loss_trace['trace_id'], 'release')
+                                assert loss_snap['cleanup_confirmed']
+                            finally:
+                                loss_client.close()
+                        finally:
+                            if loss_proc.poll() is None:
+                                loss_proc.kill()
+                                loss_proc.wait(timeout=10)
+
+                        proof['modes'].append({
+                            'mode': 'network',
+                            'protocol': protocol,
+                            'wire_encrypted_observed': encrypted,
+                            'owned_listener_pid_observed': True,
+                            'alias_resolved': True,
+                            'restricted_own_capture': True,
+                            'cross_user_capture_excluded': True,
+                            'foreign_database_excluded': True,
+                            'native_foreign_stop_denied': True,
+                            'admin_capture_any_observed': True,
+                            'caller_transaction_preserved': True,
+                            'system_audit_database_and_services_verified': True,
+                            'service_scope_trace_verified': True,
+                            'external_session_controls_verified': True,
+                            'credential_revocation_handled': True,
+                            'transport_loss_conservative_outcome_verified': True,
+                        })
                     finally:
                         assert manager.close()
                         admin._forget_and_close(held)

@@ -563,6 +563,29 @@
       }
     },
     {
+      "command_id": "endpoint.firebird.trace",
+      "scope": "endpoint",
+      "label": "Native service & session trace...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-trace",
+        "workspace_action": "firebird_trace",
+        "describe_action": "describe",
+        "trace_scope": "services"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
       "command_id": "database.firebird.trace",
       "scope": "database",
       "label": "Native trace...",

@@ -4070,7 +4070,10 @@ class ProviderWorkspaceService:
         from dataclasses import asdict
         from ..operations.store import JsonOperationStore
         from ..providers.firebird.provider import FirebirdProvider, _create_client
-        from ..providers.firebird.trace_config import normalize, observe_scope, text, descriptor, render
+        from ..providers.firebird.trace_config import (
+            normalize, normalize_service_options, observe_scope, text, descriptor,
+            render, render_services, read_audit_log_tail,
+        )
         from .firebird_schema_plan import digest
         from .firebird_trace_actions import TraceActions
         if (not isinstance(request, dict) or not isinstance(request.get('database_target_id'), str)
@@ -4092,11 +4095,47 @@ class ProviderWorkspaceService:
         binding = digest({'context': asdict(context), 'route': endpoint['route'], 'target': target})
         action = request['action']
         body = {key: value for key, value in request.items() if key not in {'database_target_id', 'action'}}
+
+        def temporary_service():
+            temp_client = _create_client(
+                provider.permissions,
+                attachment_mode=endpoint['route'].get('attachment_mode') or 'network',
+                profile=provider.profile,
+                administration=provider.client.config.administration,
+            )
+            handle = temp_client._connect_server({'route': copy.deepcopy(endpoint['route'])})
+            handle.spb = b''
+            return temp_client, handle
+
         try:
             if action == 'describe' and not body:
                 return descriptor()
             if action == 'list' and not body:
                 return self.firebird_traces.listing(owner, binding)
+            if action == 'list_native' and not body:
+                temp_client, handle = temporary_service()
+                try:
+                    return self.firebird_traces.list_native_sessions(owner, binding, handle)
+                finally:
+                    temp_client.close()
+            if action == 'read_audit_log' and not set(body) - {'log_filename', 'allowed_root', 'max_bytes', 'max_lines'}:
+                from pathlib import Path
+                from ..providers.firebird.lock_print import resolve_host_scope
+                host_scope = resolve_host_scope(context.endpoint_id, endpoint['route'])
+                default_root = str(Path(host_scope['database']).parent)
+                allowed_root = body.get('allowed_root') or default_root
+                allowed_path = Path(allowed_root).resolve(strict=True)
+                runtime_root = Path(host_scope['runtime_root']).resolve(strict=True)
+                db_root = Path(host_scope['database']).parent.resolve(strict=True)
+                if (allowed_path != runtime_root and runtime_root not in allowed_path.parents
+                        and allowed_path != db_root and db_root not in allowed_path.parents):
+                    raise ValueError('Audit log root must lie within the admitted host runtime or database root')
+                return read_audit_log_tail(
+                    body.get('log_filename', ''),
+                    str(allowed_path),
+                    max_bytes=body.get('max_bytes', 65536),
+                    max_lines=body.get('max_lines', 200),
+                )
             if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
                 return journal.get(owner, binding, body['review_id'])
             if action == 'poll' and not set(body) - {'trace_id', 'after', 'limit'} and isinstance(body.get('trace_id'), str):
@@ -4113,21 +4152,81 @@ class ProviderWorkspaceService:
                     options = normalize(body.get('options', {}))
                     name = text(body.get('name', 'ScratchRobin native trace'), 128)
                     scope = observe_scope(provider.client, endpoint['route'])
-                    return journal.review(owner, binding, operation, {'scope': scope, 'options': options, 'name': name,
-                        'native_configuration': render(scope['database'], options, scope['attachment_names'])})
+                    return journal.review(owner, binding, operation, {
+                        'scope': scope,
+                        'options': options,
+                        'name': name,
+                        'native_configuration': render(scope['database'], options, scope['attachment_names']),
+                    })
+                if operation == 'start_services' and not set(body) - {'operation', 'service_options', 'database_options', 'name'}:
+                    svc_opts = normalize_service_options(body.get('service_options', {}))
+                    db_opts = (
+                        normalize(body['database_options'])
+                        if body.get('database_options') is not None else None
+                    )
+                    name = text(body.get('name', 'ScratchRobin native service trace'), 128)
+                    scope = observe_scope(provider.client, endpoint['route'])
+                    rendered = render_services(
+                        svc_opts,
+                        database=scope['database'] if db_opts is not None else None,
+                        database_options=db_opts,
+                        attachment_names=scope['attachment_names'] if db_opts is not None else (),
+                    )
+                    return journal.review(owner, binding, operation, {
+                        'scope': scope,
+                        'service_options': svc_opts,
+                        'database_options': db_opts,
+                        'name': name,
+                        'native_configuration': rendered,
+                    })
                 if operation in {'stop', 'suspend', 'resume', 'release', 'forget'} and set(body) == {'operation', 'trace_id'} and isinstance(body['trace_id'], str):
                     self.firebird_traces._get(owner, binding, body['trace_id'])
                     return journal.review(owner, binding, operation, {'trace_id': body['trace_id']})
+                if (operation in {'suspend_external', 'resume_external', 'stop_external'}
+                        and set(body) == {'operation', 'native_session_id'}
+                        and type(body['native_session_id']) is int):
+                    temp_client, handle = temporary_service()
+                    try:
+                        expected = self.firebird_traces.observe_external_target(
+                            owner, binding, handle, body['native_session_id'],
+                        )
+                    finally:
+                        temp_client.close()
+                    return journal.review(owner, binding, operation, {'expected_target': expected})
                 raise ValueError('Invalid trace review')
             if action == 'apply':
                 def execute(record):
                     payload = record['payload']
-                    if record['operation'] != 'start':
-                        return self.firebird_traces.control(owner, binding, payload['trace_id'], record['operation'])
-                    if render(payload['scope']['database'], payload['options'],
-                              payload['scope'].get('attachment_names', ())) != payload.get('native_configuration'):
+                    op = record['operation']
+                    if op in {'stop', 'suspend', 'resume', 'release', 'forget'}:
+                        return self.firebird_traces.control(owner, binding, payload['trace_id'], op)
+                    if op in {'suspend_external', 'resume_external', 'stop_external'}:
+                        temp_client, handle = temporary_service()
+                        try:
+                            return self.firebird_traces.control_external(
+                                owner, binding, handle, payload['expected_target'], op,
+                            )
+                        finally:
+                            temp_client.close()
+                    if op == 'start':
+                        if render(payload['scope']['database'], payload['options'],
+                                  payload['scope'].get('attachment_names', ())) != payload.get('native_configuration'):
+                            return {'state': 'rejected', 'native_dispatched': False,
+                                    'reason': 'Native trace configuration changed; review again'}
+                    elif op == 'start_services':
+                        db_opts = payload.get('database_options')
+                        expected_cfg = render_services(
+                            payload['service_options'],
+                            database=payload['scope']['database'] if db_opts is not None else None,
+                            database_options=db_opts,
+                            attachment_names=payload['scope'].get('attachment_names', ()) if db_opts is not None else (),
+                        )
+                        if expected_cfg != payload.get('native_configuration'):
+                            return {'state': 'rejected', 'native_dispatched': False,
+                                    'reason': 'Native service trace configuration changed; review again'}
+                    else:
                         return {'state': 'rejected', 'native_dispatched': False,
-                                'reason': 'Native trace configuration changed; review again'}
+                                'reason': 'Unknown reviewed trace operation'}
                     try:
                         current_scope = observe_scope(provider.client, endpoint['route'])
                     except Exception as error:
@@ -4137,21 +4236,37 @@ class ProviderWorkspaceService:
                     if current_scope != payload['scope']:
                         return {'state': 'rejected', 'native_dispatched': False,
                                 'reason': 'Native database identity changed; review again'}
-                    client = _create_client(provider.permissions,
+                    client = _create_client(
+                        provider.permissions,
                         attachment_mode=endpoint['route'].get('attachment_mode') or 'network',
-                        profile=provider.profile, administration=provider.client.config.administration)
+                        profile=provider.profile,
+                        administration=provider.client.config.administration,
+                    )
+
                     def connect():
                         handle = client._connect_server({'route': copy.deepcopy(endpoint['route'])})
                         # No reconnect: trace controls keep the native handle,
                         # not an authentication buffer containing credentials.
                         handle.spb = b''
                         return handle
+
                     def release():
                         client.close()
                         return not client._connections and not client._server_handles
-                    result = self.firebird_traces.start(owner, binding, payload['scope'], payload['options'],
-                        payload['name'], connect, release,
-                        lambda snapshot: journal.finish_session(owner, binding, snapshot))
+
+                    if op == 'start':
+                        result = self.firebird_traces.start(
+                            owner, binding, payload['scope'], payload['options'],
+                            payload['name'], connect, release,
+                            lambda snapshot: journal.finish_session(owner, binding, snapshot),
+                        )
+                    else:
+                        result = self.firebird_traces.start_services(
+                            owner, binding, payload['scope'], payload['service_options'],
+                            payload['name'], connect, release,
+                            lambda snapshot: journal.finish_session(owner, binding, snapshot),
+                            database_options=payload.get('database_options'),
+                        )
                     journal.finish_session(owner, binding, result)
                     return result
                 return journal.apply(owner, binding, body, execute)

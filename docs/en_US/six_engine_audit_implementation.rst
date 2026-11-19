@@ -3489,3 +3489,85 @@ versus same-host grant-manifest admission, stale-inode pre-dispatch refusal,
 one-use review retirement, ``no-store`` headers and absence of raw lock output
 on disk. Native Windows/macOS availability and UI presentation acceptance
 remain with their owning teams.
+
+FB-AUD-01: stale destructive and mutation target-identity guard
+---------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/metadata_guard.py`` now covers every
+mutable Firebird resource kind in ``FirebirdProvider`` across both
+``firebird-native`` and ``firebird-embedded``:
+
+* All 21 ``RDB$`` catalog object kinds bind ``(database_guid, database_file_id,
+  RDB$DB_KEY, RDB$RECORD_VERSION)`` plus parent relation/package record identity
+  inside a verified ``SNAPSHOT`` transaction before DDL or ``drop_database``
+  dispatch, including package header and body operations (``replace_body``,
+  ``drop_body``).
+* Inspected ``privilege`` rows from ``RDB$USER_PRIVILEGES`` bind their exact
+  matching ``RDB$USER_PRIVILEGES`` ``(RDB$DB_KEY, RDB$RECORD_VERSION)`` set,
+  and collection-level object ``grant``/``revoke`` plans bind the target
+  ``RDB$`` object record.
+* Security-database virtual projections (``user`` via
+  ``SEC$USERS``/``SEC$USER_ATTRIBUTES`` and ``global-authentication-mapping``
+  via ``SEC$GLOBAL_AUTH_MAPPING``) bind a SHA-256 digest of the non-secret
+  projected state without storing plaintext PII or tag values in plan payloads,
+  marking ``record_version_available=false`` explicitly because ``SEC$``
+  virtual views do not expose ``RDB$RECORD_VERSION`` or password hashes.
+* ``create_or_alter`` requests targeting a newly entered name distinct from an
+  inspected row skip stale-target binding on the unrelated row.
+
+Owned Linux Firebird 5.0.4 qualification
+(``tools/cdeadmin_firebird_metadata_guard_qualification.py``) verifies
+same-name table replacement (``RDB$RELATION_ID`` mismatch), post-preflight
+concurrent DDL conflict conservatism (``unknown_outcome=true``, no replay),
+all 21 ``RDB$`` catalog selectors and packaged routines, package body
+replacement, inspected and collection-scoped privilege target replacement,
+``SEC$USERS`` and ``SEC$GLOBAL_AUTH_MAPPING`` pre-dispatch refusal, database
+replacement refusal, borrowed ``SNAPSHOT`` pending-DML preservation, and
+authenticated HTTP ``409 PROVIDER_OPERATION_REJECTED`` pre-dispatch conflict
+handling with retired-plan replay refusal.
+
+FB-AUD-02: native trace service, external session and system-audit lifecycle
+----------------------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/trace_config.py``,
+``trace_sessions.py``, ``workspace/firebird_trace_actions.py`` and
+``workspace/service.py`` (``firebird_trace``, surfaced in
+``ui_descriptors/firebird/tools.json`` as ``database.firebird.trace`` and
+``endpoint.firebird.trace``) now support the complete Firebird 5.0.4 native
+trace lifecycle:
+
+* **Database-scoped user trace** (``start``) and **engine-instance service
+  trace** (``start_services`` with ``supported_scopes`` covering ``database``,
+  ``services`` and ``database_and_services``), requiring explicit
+  ``service_scope_confirmed=true`` for service-wide observation and
+  ``capture_sensitive=true`` before enabling SQL, plans, arguments, service
+  queries, error/warning text or filters.
+* **External native trace-session inventory and reviewed controls**:
+  ``list_native`` queries ``Server.trace.sessions`` to report active native
+  sessions visible to the current Firebird service account, distinguishing
+  workspace-managed streams (``managed_by_workspace=true``) and system-audit
+  sessions (``system_audit=true``). Reviewed one-use ``suspend_external``,
+  ``resume_external`` and ``stop_external`` operations bind
+  ``(native_session_id, name, user, started_at)`` to reject numeric session-ID
+  reuse before dispatch and refuse stopping workspace-managed or system-audit
+  sessions through external controls.
+* **System-audit trace configuration and bounded tail inspection**:
+  ``render_system_audit`` validates ``AuditTraceConfigFile`` database and
+  service rules (enforcing canonical ``log_filename`` containment inside an
+  admitted host directory, ``max_log_size`` bounds, and rejecting macros,
+  quotes, control characters and sed backreferences), while ``read_audit_log``
+  reads bounded, clipped tail lines without persisting captured SQL in the
+  operation journal.
+
+Owned Linux Firebird 5.0.4 qualification
+(``tools/cdeadmin_firebird_trace_qualification.py`` and
+``tools/cdeadmin_firebird_trace_network_qualification.py``) verifies
+authenticated Engine13 HTTP database and service-scope trace streams, external
+session ``list_native``/``suspend_external``/``resume_external``/``stop_external``
+and stale-ID rejection, encrypted loopback TCP alias resolution, restricted
+user cross-session isolation and foreign-stop refusal, live
+``AuditTraceConfigFile`` database and service audit log capture and audit-stop
+refusal, mid-trace credential revocation, listener transport loss conservative
+outcomes without automatic retry, and caller SQL transaction preservation.
+Native Windows/macOS and UI presentation acceptance remain with their owning
+teams.

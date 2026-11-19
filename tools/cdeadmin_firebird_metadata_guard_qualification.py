@@ -24,7 +24,13 @@ def qualify(runtime, output):
         raise ValueError('Evidence belongs outside source')
     output.mkdir(parents=True, exist_ok=True)
     proof = {'complete': False, 'modes': [], 'history_tests': 'not run',
-             'scope': 'Firebird5.0.4 network/embedded actual table target replacement; not all catalog operation variants or platform acceptance'}
+             'scope': (
+                 'Firebird 5.0.4 network and embedded native target-identity '
+                 'revalidation across all 21 RDB$ catalogs, packaged routines, '
+                 'package body replacement, inspected/object privileges, '
+                 'SEC$USERS/SEC$USER_ATTRIBUTES, SEC$GLOBAL_AUTH_MAPPING, '
+                 'database drop and authenticated HTTP pre-dispatch conflict/no-replay'
+             )}
     files = ['web/pgadmin/cdeadmin/providers/firebird/' + name for name in (
         'metadata_guard.py', 'query_client.py', 'provider.py')]
     files += ['web/pgadmin/cdeadmin/providers/relational_admin.py',
@@ -41,7 +47,8 @@ def qualify(runtime, output):
             # Both explicit connection profiles share one exact client library.
             # Network transport is only the owned loopback listener below.
             (stage / 'firebird.conf').write_text(
-                'Providers = Remote,Engine13\nSecurityDatabase = ' + str(stage / 'security5.fdb') + '\n')
+                'ServerMode = SuperClassic\nProviders = Remote,Engine13\nSecurityDatabase = '
+                + str(stage / 'security5.fdb') + '\n')
             (stage / 'databases.conf').write_text('')
             os.environ.update(FIREBIRD=str(stage), FIREBIRD_LOCK=str(stage / 'lock'),
                 CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(stage / 'lib/libfbclient.so.5.0.4'))
@@ -266,6 +273,173 @@ def qualify(runtime, output):
                             assert visual.apply(grant_review())['provider_result']['commit_requested']
                             assert sql(read_grant) == [(1,)]
                             record['checks'].append('Raced native table grant is refused without granting replacement; fresh reviewed grant commits')
+
+                            # Package body replacement/drop guard via RDB$PACKAGES record version.
+                            sql('CREATE PACKAGE BODY OWNER_PKG AS BEGIN PROCEDURE P AS BEGIN END FUNCTION F RETURNS INTEGER AS BEGIN RETURN 1; END END')
+                            pkg_target = next(
+                                row for row in client.list_resources({'route': route})
+                                if row['resource_kind'] == 'package' and row['display_name'] == 'OWNER_PKG'
+                            )
+                            pkg_plan = visual.plan({
+                                'resource_kind': 'package',
+                                'operation_id': 'drop_body',
+                                'target_resource': pkg_target,
+                                'draft': {'confirmation': 'OWNER_PKG'},
+                                '_provider_route': route,
+                            })
+                            sql('RECREATE PACKAGE BODY OWNER_PKG AS BEGIN PROCEDURE P AS BEGIN END FUNCTION F RETURNS INTEGER AS BEGIN RETURN 2; END END')
+                            try:
+                                visual.apply({'plan_id': pkg_plan['plan_id'], 'plan_digest': pkg_plan['plan_digest'], 'confirmed': True})
+                            except VisualAdminExecutionError as error:
+                                assert error.operation['stage'] == 'provider_rejected' and not error.operation['unknown_outcome']
+                            else:
+                                raise AssertionError('Stale package drop_body dropped a replaced package body')
+                            assert sql('SELECT OWNER_PKG.F() FROM RDB$DATABASE') == [(2,)]
+                            record['checks'].append('Stale package drop_body rejected after independent body replacement; replacement body preserved')
+
+                            # Inspected privilege row and collection object-privilege target guard.
+                            priv_target = next(
+                                row for row in client.list_resources({'route': route})
+                                if row['resource_kind'] == 'privilege'
+                                and row.get('native', {}).get('grantee') == 'OWNER_ROLE'
+                                and row.get('native', {}).get('object_name') == 'GRANT_TARGET'
+                            )
+                            priv_plan = visual.plan({
+                                'resource_kind': 'privilege',
+                                'operation_id': 'revoke',
+                                'target_resource': priv_target,
+                                'draft': {
+                                    'privilege_scope': 'object',
+                                    'principal_kind': 'ROLE',
+                                    'principal': 'OWNER_ROLE',
+                                    'object_type': 'TABLE',
+                                    'object_name': 'GRANT_TARGET',
+                                    'privileges': ['SELECT'],
+                                    'confirmation': 'OWNER_ROLE',
+                                },
+                                '_provider_route': route,
+                            })
+                            assert priv_plan['command_preview']['native_target_revalidation_required']
+                            sql('REVOKE SELECT ON TABLE GRANT_TARGET FROM ROLE OWNER_ROLE')
+                            sql('GRANT SELECT ON TABLE GRANT_TARGET TO ROLE OWNER_ROLE WITH GRANT OPTION')
+                            try:
+                                visual.apply({'plan_id': priv_plan['plan_id'], 'plan_digest': priv_plan['plan_digest'], 'confirmed': True})
+                            except VisualAdminExecutionError as error:
+                                assert error.operation['stage'] == 'provider_rejected' and not error.operation['unknown_outcome']
+                            else:
+                                raise AssertionError('Stale privilege revoke mutated replaced grant row')
+                            assert sql("SELECT RDB$GRANT_OPTION FROM RDB$USER_PRIVILEGES WHERE RDB$USER='OWNER_ROLE' AND RDB$RELATION_NAME='GRANT_TARGET' AND RDB$PRIVILEGE='S'") == [(1,)]
+
+                            coll_priv_plan = visual.plan({
+                                'resource_kind': 'privilege',
+                                'operation_id': 'grant',
+                                'draft': {
+                                    'privilege_scope': 'object',
+                                    'principal_kind': 'ROLE',
+                                    'principal': 'OWNER_ROLE',
+                                    'object_type': 'TABLE',
+                                    'object_name': 'GRANT_TARGET',
+                                    'privileges': ['INSERT'],
+                                },
+                                '_provider_route': route,
+                            })
+                            assert coll_priv_plan['command_preview']['native_target_revalidation_required']
+                            sql('DROP TABLE GRANT_TARGET')
+                            sql('CREATE TABLE GRANT_TARGET(ID INTEGER)')
+                            try:
+                                visual.apply({'plan_id': coll_priv_plan['plan_id'], 'plan_digest': coll_priv_plan['plan_digest'], 'confirmed': True})
+                            except VisualAdminExecutionError as error:
+                                assert error.operation['stage'] == 'provider_rejected' and not error.operation['unknown_outcome']
+                            else:
+                                raise AssertionError('Collection privilege grant applied to replacement table')
+                            assert sql("SELECT COUNT(*) FROM RDB$USER_PRIVILEGES WHERE RDB$USER='OWNER_ROLE' AND RDB$RELATION_NAME='GRANT_TARGET'") == [(0,)]
+                            record['checks'].append('Inspected privilege row and collection object-privilege grant reject replaced targets pre-dispatch')
+
+                            # SEC$USERS + SEC$USER_ATTRIBUTES and SEC$GLOBAL_AUTH_MAPPING target guard.
+                            uname = 'GUARD_USR_' + mode.upper()
+                            gmap_name = 'GUARD_GMAP_' + mode.upper()
+                            user_pw = secrets.token_urlsafe(18)
+                            sql(f"CREATE OR ALTER USER {uname} PASSWORD '{user_pw}' FIRSTNAME 'Initial' TAGS (team = 'alpha') USING PLUGIN Srp")
+                            try:
+                                user_target = next(
+                                    row for row in client.list_resources({'route': route})
+                                    if row['resource_kind'] == 'user' and row['display_name'] == uname
+                                )
+                                user_plan = visual.plan({
+                                    'resource_kind': 'user',
+                                    'operation_id': 'recreate',
+                                    'target_resource': user_target,
+                                    'draft': {
+                                        'confirmation': uname,
+                                        'password': secrets.token_urlsafe(18),
+                                        'first_name': 'Overwritten',
+                                    },
+                                    '_provider_route': route,
+                                })
+                                assert user_plan['command_preview']['native_target_revalidation_required']
+                                raw_plan = client.plan_admin_operation({
+                                    'resource_kind': 'user',
+                                    'operation_id': 'recreate',
+                                    'target_resource': user_target,
+                                    'draft': {
+                                        'confirmation': uname,
+                                        'password': secrets.token_urlsafe(18),
+                                        'first_name': 'Overwritten',
+                                    },
+                                    '_provider_route': route,
+                                })
+                                assert 'Initial' not in json.dumps(raw_plan['provider_payload']['firebird_target_binding'])
+                                assert 'alpha' not in json.dumps(raw_plan['provider_payload']['firebird_target_binding'])
+                                sql(f"ALTER USER {uname} FIRSTNAME 'ExternallyUpdated' USING PLUGIN Srp")
+                                try:
+                                    visual.apply({'plan_id': user_plan['plan_id'], 'plan_digest': user_plan['plan_digest'], 'confirmed': True})
+                                except VisualAdminExecutionError as error:
+                                    assert error.operation['stage'] == 'provider_rejected' and not error.operation['unknown_outcome']
+                                else:
+                                    raise AssertionError('Stale user recreate overwrote externally modified user')
+                                assert sql(f"SELECT TRIM(TRAILING FROM SEC$FIRST_NAME) FROM SEC$USERS WHERE TRIM(TRAILING FROM SEC$USER_NAME)='{uname}'") == [('ExternallyUpdated',)]
+                            finally:
+                                sql(f'DROP USER {uname} USING PLUGIN Srp')
+
+                            sql(f"CREATE OR ALTER GLOBAL MAPPING {gmap_name} USING PLUGIN Srp FROM USER 'ext_alice' TO USER SYSDBA")
+                            try:
+                                gmap_target = next(
+                                    row for row in client.list_resources({'route': route})
+                                    if row['resource_kind'] == 'global-authentication-mapping' and row['display_name'] == gmap_name
+                                )
+                                gmap_plan = visual.plan({
+                                    'resource_kind': 'global-authentication-mapping',
+                                    'operation_id': 'drop',
+                                    'target_resource': gmap_target,
+                                    'draft': {'confirmation': gmap_name},
+                                    '_provider_route': route,
+                                })
+                                assert gmap_plan['command_preview']['native_target_revalidation_required']
+                                sql(f"ALTER GLOBAL MAPPING {gmap_name} USING PLUGIN Srp FROM USER 'ext_bob' TO USER SYSDBA")
+                                try:
+                                    visual.apply({'plan_id': gmap_plan['plan_id'], 'plan_digest': gmap_plan['plan_digest'], 'confirmed': True})
+                                except VisualAdminExecutionError as error:
+                                    assert error.operation['stage'] == 'provider_rejected' and not error.operation['unknown_outcome']
+                                else:
+                                    raise AssertionError('Stale global mapping drop deleted externally modified global mapping')
+                                assert sql(f"SELECT TRIM(TRAILING FROM SEC$MAP_FROM) FROM SEC$GLOBAL_AUTH_MAPPING WHERE TRIM(TRAILING FROM SEC$MAP_NAME)='{gmap_name}'") == [('ext_bob',)]
+                                fresh_gmap = next(
+                                    row for row in client.list_resources({'route': route})
+                                    if row['resource_kind'] == 'global-authentication-mapping' and row['display_name'] == gmap_name
+                                )
+                                fresh_drop = visual.plan({
+                                    'resource_kind': 'global-authentication-mapping',
+                                    'operation_id': 'drop',
+                                    'target_resource': fresh_gmap,
+                                    'draft': {'confirmation': gmap_name},
+                                    '_provider_route': route,
+                                })
+                                assert visual.apply({'plan_id': fresh_drop['plan_id'], 'plan_digest': fresh_drop['plan_digest'], 'confirmed': True})['provider_result']['commit_requested']
+                                assert sql(f"SELECT COUNT(*) FROM SEC$GLOBAL_AUTH_MAPPING WHERE TRIM(TRAILING FROM SEC$MAP_NAME)='{gmap_name}'") == [(0,)]
+                            finally:
+                                if sql(f"SELECT COUNT(*) FROM SEC$GLOBAL_AUTH_MAPPING WHERE TRIM(TRAILING FROM SEC$MAP_NAME)='{gmap_name}'") != [(0,)]:
+                                    sql(f'DROP GLOBAL MAPPING {gmap_name}')
+                            record['checks'].append('SEC$USERS/SEC$USER_ATTRIBUTES and SEC$GLOBAL_AUTH_MAPPING reject modified targets pre-dispatch without storing PII')
                             secondary = {**route, 'database': str(area / (mode + '-disposable.fdb'))}
                             for name in ('disposable', 'replacement'):
                                 selected = {**secondary, 'database': str(area / (mode + '-' + name + '.fdb'))}
@@ -312,11 +486,297 @@ def qualify(runtime, output):
     return proof
 
 
+def qualify_http(runtime, output):
+    import builtins
+    import uuid
+    from contextlib import ExitStack
+    builtins.SERVER_MODE = None
+    import pgadmin  # noqa: F401
+    from tools.cdeadmin_firebird_object_live_orchestrator import _stage_runtime, _runtime_fingerprint
+    runtime, output = Path(runtime).resolve(), Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    before = _runtime_fingerprint(runtime)
+    proof = {
+        'complete': False,
+        'scope': 'Authenticated desktop HTTP Firebird 5.0.4 metadata_guard 409 conflict, no-replay and valid apply',
+        'checks': [],
+        'history_tests': 'not run',
+    }
+    try:
+        with tempfile.TemporaryDirectory(prefix='firebird-guard-http-', dir=output) as folder, ExitStack() as stack:
+            root = Path(folder)
+            stage = root / 'runtime'
+            _stage_runtime(runtime, stage)
+            (stage / 'firebird.conf').write_text(
+                'ServerMode = SuperClassic\nProviders = Engine13\nSecurityDatabase = '
+                + str(stage / 'security5.fdb') + '\n'
+            )
+            (stage / 'databases.conf').write_text('')
+            os.environ.update(
+                FIREBIRD=str(stage),
+                FIREBIRD_LOCK=str(stage / 'lock'),
+                CDEADMIN_FIREBIRD_CLIENT_LIBRARY=str(stage / 'lib/libfbclient.so.5.0.4'),
+            )
+            import firebird.driver as module
+            module.driver_config.fb_client_library.value = str(stage / 'lib/libfbclient.so.5.0.4')
+            from tools.cdeadmin_mysql_dump_verification_qualification import setup_application
+            app = setup_application(root)
+
+            def close_app():
+                from pgadmin.cdeadmin.workspace.service import service_for_app
+                with app.app_context():
+                    service_for_app(app).endpoint_service.provider_registry.close()
+            stack.callback(close_app)
+
+            from pgadmin.cdeadmin.providers.firebird import embedded_provider as embedded
+            from pgadmin.cdeadmin.providers.firebird.provider import _create_client
+            from pgadmin.cdeadmin.endpoints.profiles import registration_profile
+            from pgadmin.model import db, User, ServerGroup, Server, EndpointDatabaseTarget
+            from flask import url_for
+
+            data = root / 'data'
+            data.mkdir()
+            db_path = data / 'http_guard.fdb'
+            route = {
+                'attachment_mode': 'embedded',
+                'database': str(db_path),
+                'filesystem_root': str(data),
+                'user': 'SYSDBA',
+                'charset': 'UTF8',
+            }
+            native_client = _create_client(
+                SimpleNamespace(require=lambda *_: None, acquire_secret=None),
+                attachment_mode='embedded',
+                profile=embedded.PROFILE,
+                administration=embedded.ADMINISTRATION,
+            )
+            created = native_client.config.database_creator(
+                **native_client.config.database_create_arguments(route, str(db_path), {})
+            )
+            try:
+                created.execute_immediate('CREATE TABLE HTTP_OWNED (ID INTEGER)')
+                created.commit()
+                created.execute_immediate('INSERT INTO HTTP_OWNED VALUES (41)')
+                created.commit()
+            finally:
+                created.close()
+                native_client.close()
+
+            with app.test_request_context('/'):
+                user = User.query.first()
+                uid = user.id
+                group = ServerGroup.query.filter_by(user_id=uid).first()
+                for name, pref in app.blueprints['NODE-engine_type'].connector_visibility.items():
+                    if 'firebird' in name:
+                        pref.set(True, user_id=uid)
+                server = Server(
+                    user_id=uid, servergroup_id=group.id, name='HTTP Guard Local',
+                    host=None, port=1, username='SYSDBA', maintenance_db=str(db_path), save_password=0,
+                )
+                server._cde_endpoint_registration = registration_profile('firebird-embedded')
+                server._cde_endpoint_route_configuration = route
+                db.session.add(server)
+                db.session.commit()
+                tid = str(uuid.uuid4())
+                db.session.add(EndpointDatabaseTarget(
+                    id=tid, endpoint_id=server.endpoint_profile.id,
+                    display_name=db_path.name, database=str(db_path), configuration='{}', active=1,
+                ))
+                other = User(username='foreign_owner', email='foreign@example.invalid',
+                             password='x', active=True, fs_uniquifier=uuid.uuid4().hex, auth_source='internal')
+                db.session.add(other)
+                db.session.flush()
+                other_group = ServerGroup(user_id=other.id, name='Foreign')
+                db.session.add(other_group)
+                db.session.flush()
+                foreign_server = Server(
+                    user_id=other.id, servergroup_id=other_group.id, name='Foreign Server',
+                    host=None, port=1, username='SYSDBA', maintenance_db=str(db_path), save_password=0,
+                )
+                db.session.add(foreign_server)
+                db.session.commit()
+                url = url_for('NODE-server.cde_workspace_id', gid=group.id, sid=server.id)
+                foreign_url = url_for('NODE-server.cde_workspace_id', gid=other_group.id, sid=foreign_server.id)
+                verify_url = url_for('NODE-server.verify_endpoint_id', gid=group.id, sid=server.id)
+
+            http = app.test_client()
+            with http.session_transaction() as sess:
+                sess['_user_id'] = str(uid)
+                sess['_fresh'] = True
+            assert http.post(verify_url, json={}).get_json()['success']
+
+            # Foreign endpoint denial
+            denied_resp = http.post(foreign_url, json={'action': 'resource_refresh', 'database_target_id': tid, 'request': {'database_target_id': tid}})
+            assert denied_resp.status_code in (401, 403, 404, 410) or not (denied_resp.get_json() or {}).get('success')
+            proof['checks'].append('Cross-owner server access denied over HTTP')
+
+            def fetch_table_target():
+                initial = http.get(url, query_string={'database_target_id': tid}).get_json()
+                assert initial['success'], initial
+                gen = initial['data']['resource_page']['generation']
+                resp = http.post(url, json={
+                    'action': 'resource_refresh',
+                    'database_target_id': tid,
+                    'request': {'database_target_id': tid, 'generation': gen},
+                })
+                body = resp.get_json()
+                assert resp.status_code == 200 and body['success'], body
+                items = body['data']['items']
+                return next(row for row in items if row['resource_kind'] == 'table' and row['display_name'] == 'HTTP_OWNED')
+
+            target = fetch_table_target()
+            plan_resp = http.post(url, json={
+                'action': 'visual_admin_plan',
+                'database_target_id': tid,
+                'request': {
+                    'database_target_id': tid,
+                    'resource_kind': 'table',
+                    'operation_id': 'drop',
+                    'target_resource': target,
+                    'draft': {'confirmation': 'HTTP_OWNED'},
+                },
+            })
+            plan_body = plan_resp.get_json()
+            assert plan_resp.status_code == 200 and plan_body['success'], plan_body
+            plan = plan_body['data']
+            assert plan['command_preview']['native_target_revalidation_required'] is True
+
+            ext = _create_client(
+                SimpleNamespace(require=lambda *_: None, acquire_secret=None),
+                attachment_mode='embedded',
+                profile=embedded.PROFILE,
+                administration=embedded.ADMINISTRATION,
+            )
+            conn = ext._connect({'route': route})
+            try:
+                q = conn.cursor()
+                q.execute("SELECT RDB$RELATION_ID FROM RDB$RELATIONS WHERE RDB$RELATION_NAME='HTTP_OWNED'")
+                orig_rel_id = q.fetchone()[0]
+                q.close()
+                conn.execute_immediate('DROP TABLE HTTP_OWNED')
+                conn.commit()
+                conn.execute_immediate('CREATE TABLE HTTP_OWNED (ID INTEGER)')
+                conn.commit()
+                conn.execute_immediate('INSERT INTO HTTP_OWNED VALUES (99)')
+                conn.commit()
+                q = conn.cursor()
+                q.execute("SELECT RDB$RELATION_ID FROM RDB$RELATIONS WHERE RDB$RELATION_NAME='HTTP_OWNED'")
+                repl_rel_id = q.fetchone()[0]
+                q.close()
+                conn.rollback()
+                assert orig_rel_id != repl_rel_id
+            finally:
+                ext._forget_and_close(conn)
+                ext.close()
+
+            apply_resp = http.post(url, json={
+                'action': 'visual_admin_apply',
+                'database_target_id': tid,
+                'request': {
+                    'database_target_id': tid,
+                    'plan_id': plan['plan_id'],
+                    'plan_digest': plan['plan_digest'],
+                    'confirmed': True,
+                },
+            })
+            apply_body = apply_resp.get_json()
+            assert apply_resp.status_code == 409 and not apply_body.get('success'), (apply_resp.status_code, apply_body)
+            assert apply_body['info'] == 'PROVIDER_OPERATION_REJECTED'
+            receipt = apply_body['data']['control_operation']
+            assert receipt['stage'] == 'provider_rejected' and receipt['unknown_outcome'] is False
+            assert receipt['automatic_mutation_retry'] is False
+            proof['checks'].append('HTTP visual_admin_apply returns 409 PROVIDER_OPERATION_REJECTED on replaced table and preserves replacement')
+
+            # Replay of retired plan is refused before dispatch
+            replay_resp = http.post(url, json={
+                'action': 'visual_admin_apply',
+                'database_target_id': tid,
+                'request': {
+                    'database_target_id': tid,
+                    'plan_id': plan['plan_id'],
+                    'plan_digest': plan['plan_digest'],
+                    'confirmed': True,
+                },
+            })
+            replay_body = replay_resp.get_json()
+            assert replay_resp.status_code in (400, 409) and not replay_body.get('success')
+            assert replay_body['data']['refusal']['native_dispatched'] is False
+            proof['checks'].append('Retired plan replay refused over HTTP with native_dispatched=False')
+
+            # Fresh plan against replacement succeeds and drops table
+            fresh_target = fetch_table_target()
+            fresh_plan = http.post(url, json={
+                'action': 'visual_admin_plan',
+                'database_target_id': tid,
+                'request': {
+                    'database_target_id': tid,
+                    'resource_kind': 'table',
+                    'operation_id': 'drop',
+                    'target_resource': fresh_target,
+                    'draft': {'confirmation': 'HTTP_OWNED'},
+                },
+            }).get_json()['data']
+            fresh_apply = http.post(url, json={
+                'action': 'visual_admin_apply',
+                'database_target_id': tid,
+                'request': {
+                    'database_target_id': tid,
+                    'plan_id': fresh_plan['plan_id'],
+                    'plan_digest': fresh_plan['plan_digest'],
+                    'confirmed': True,
+                },
+            })
+            assert fresh_apply.status_code == 200 and fresh_apply.get_json()['success'], fresh_apply.get_json()
+
+            ext = _create_client(
+                SimpleNamespace(require=lambda *_: None, acquire_secret=None),
+                attachment_mode='embedded',
+                profile=embedded.PROFILE,
+                administration=embedded.ADMINISTRATION,
+            )
+            conn = ext._connect({'route': route})
+            try:
+                q = conn.cursor()
+                q.execute("SELECT COUNT(*) FROM RDB$RELATIONS WHERE RDB$RELATION_NAME='HTTP_OWNED'")
+                assert q.fetchone() == (0,)
+                q.close()
+                conn.rollback()
+            finally:
+                ext._forget_and_close(conn)
+                ext.close()
+            proof['checks'].append('Fresh reviewed HTTP visual_admin_apply drops target cleanly')
+
+        proof['owned_state_removed'] = not root.exists()
+        proof['source_runtime_unchanged'] = _runtime_fingerprint(runtime) == before
+        proof['complete'] = proof['owned_state_removed'] and proof['source_runtime_unchanged'] and len(proof['checks']) == 4
+    finally:
+        (output / 'http.json').write_text(json.dumps(proof, indent=2) + '\n')
+    return proof
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--mode', choices=('all', 'native', 'http'), default='all')
     args = parser.parse_args()
-    result = qualify(args.runtime, args.output)
-    print(json.dumps({'complete': result['complete'], 'modes': len(result['modes'])}))
-    raise SystemExit(0 if result['complete'] else 1)
+    if args.mode == 'native':
+        result = qualify(args.runtime, args.output)
+        print(json.dumps({'complete': result['complete'], 'modes': len(result['modes'])}))
+        raise SystemExit(0 if result['complete'] else 1)
+    if args.mode == 'http':
+        result = qualify_http(args.runtime, args.output)
+        print(json.dumps({'http_complete': result['complete'], 'checks': len(result['checks'])}))
+        raise SystemExit(0 if result['complete'] else 1)
+    native_res = qualify(args.runtime, args.output)
+    http_proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), '--runtime', str(args.runtime), '--output', str(args.output), '--mode', 'http'],
+        check=False, capture_output=True, text=True,
+    )
+    if http_proc.returncode != 0:
+        sys.stderr.write(http_proc.stdout + http_proc.stderr)
+        raise SystemExit(http_proc.returncode)
+    http_res = json.loads((Path(args.output).resolve() / 'http.json').read_text())
+    both_ok = bool(native_res.get('complete') and http_res.get('complete'))
+    print(json.dumps({'complete': both_ok, 'modes': len(native_res['modes']), 'http_checks': len(http_res['checks'])}))
+    raise SystemExit(0 if both_ok else 1)
