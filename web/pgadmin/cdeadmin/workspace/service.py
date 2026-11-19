@@ -4333,6 +4333,142 @@ class ProviderWorkspaceService:
         except ValueError as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def _firebird_host_context(self, server, request, label):
+        from dataclasses import asdict
+        from ..operations.store import JsonOperationStore
+        from ..providers.firebird.provider import FirebirdProvider
+        from .firebird_schema_plan import digest
+        if not isinstance(request, dict) or not isinstance(request.get('action'), str):
+            raise ProviderWorkspaceError(f'Select a {label} action')
+        target = request.get('database_target_id')
+        target_arg = target if isinstance(target, str) and target else Ellipsis
+        context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target_arg)
+        provider = self.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, FirebirdProvider):
+            raise ProviderWorkspaceError(f'{label} requires a Firebird endpoint')
+        provider._admit_transport({'route': endpoint['route']})
+        provider._require('administer', 'resource')
+        provider._require('maintenance_admin', 'endpoint')
+        store = getattr(self.operation_bus, 'store', None)
+        if not isinstance(store, JsonOperationStore):
+            raise ProviderWorkspaceError(f'{label} requires durable operation storage')
+        owner = self._operation_principal(server)
+        binding = digest({
+            'context': asdict(context),
+            'endpoint_id': context.endpoint_id,
+            'target': target if isinstance(target, str) else None,
+        })
+        body = {k: v for k, v in request.items() if k not in {'database_target_id', 'action'}}
+        return context, endpoint, provider, store, owner, binding, request['action'], body
+
+    def firebird_host_configuration_action(self, server, request):
+        from ..providers.firebird.host_runtime_grant import resolve_admin_host_scope
+        from ..providers.firebird.host_configuration import (
+            descriptor, inspect_host_configuration,
+            prepare_configuration_review, apply_host_configuration,
+        )
+        from .firebird_host_actions import HostActions
+        context, endpoint, provider, store, owner, binding, action, body = (
+            self._firebird_host_context(server, request, 'Firebird host configuration')
+        )
+        journal = HostActions(
+            store.path.with_name('firebird-host-config-operations.json'),
+            'firebird_host_config_actions',
+            {'update_configuration'},
+        )
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return journal.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'inspect' and not body:
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+                return inspect_host_configuration(scope, provider.client, endpoint['route'])
+            if action == 'review':
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=True)
+                reviewed = prepare_configuration_review(scope, body)
+                return journal.review(owner, binding, 'update_configuration', reviewed)
+            if action == 'apply':
+                return journal.apply(owner, binding, body, apply_host_configuration)
+            raise ValueError('Invalid Firebird host configuration action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def firebird_plugin_deployment_action(self, server, request):
+        from ..providers.firebird.host_runtime_grant import resolve_admin_host_scope
+        from ..providers.firebird.plugin_deployment import (
+            descriptor, inspect_plugin_environment,
+            prepare_plugin_review, apply_plugin_operation,
+        )
+        from .firebird_host_actions import HostActions
+        context, endpoint, provider, store, owner, binding, action, body = (
+            self._firebird_host_context(server, request, 'Firebird plugin deployment')
+        )
+        journal = HostActions(
+            store.path.with_name('firebird-plugin-operations.json'),
+            'firebird_plugin_actions',
+            {'deploy_udr_module', 'remove_udr_module', 'deploy_plugin', 'remove_plugin'},
+        )
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return journal.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'inspect' and not body:
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+                return inspect_plugin_environment(scope, provider.client, endpoint['route'])
+            if action == 'review':
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=True)
+                reviewed = prepare_plugin_review(scope, body, provider.client, endpoint['route'])
+                return journal.review(owner, binding, reviewed['operation'], reviewed)
+            if action == 'apply':
+                return journal.apply(owner, binding, body, apply_plugin_operation)
+            raise ValueError('Invalid Firebird plugin deployment action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def firebird_runtime_lifecycle_action(self, server, request):
+        from ..providers.firebird.host_runtime_grant import resolve_admin_host_scope
+        from ..providers.firebird.runtime_lifecycle import (
+            descriptor, inspect_runtime_environment, inspect_database_ods,
+            prepare_runtime_review, apply_runtime_operation,
+        )
+        from .firebird_host_actions import HostActions
+        context, endpoint, _provider, store, owner, binding, action, body = (
+            self._firebird_host_context(server, request, 'Firebird runtime lifecycle')
+        )
+        journal = HostActions(
+            store.path.with_name('firebird-runtime-operations.json'),
+            'firebird_runtime_actions',
+            {'daemon_start', 'daemon_stop', 'daemon_restart', 'stage_runtime_bundle', 'migrate_database'},
+        )
+        try:
+            if action == 'describe' and not body:
+                return descriptor()
+            if action == 'list' and not body:
+                return journal.listing(owner, binding)
+            if action == 'get' and set(body) == {'review_id'} and isinstance(body['review_id'], str):
+                return journal.get(owner, binding, body['review_id'])
+            if action == 'inspect' and not body:
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+                return inspect_runtime_environment(scope)
+            if action == 'inspect_ods' and set(body) == {'database_path'} and isinstance(body['database_path'], str):
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=False)
+                return inspect_database_ods(scope, body['database_path'])
+            if action == 'review':
+                scope = resolve_admin_host_scope(context.endpoint_id, endpoint['route'], require_mutation=True)
+                reviewed = prepare_runtime_review(scope, body)
+                return journal.review(owner, binding, reviewed['operation'], reviewed)
+            if action == 'apply':
+                return journal.apply(owner, binding, body, apply_runtime_operation)
+            raise ValueError('Invalid Firebird runtime lifecycle action')
+        except ValueError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def firebird_event_action(self, server, request):
         from ..providers.firebird.provider import FirebirdProvider
         from .firebird_schema_plan import digest

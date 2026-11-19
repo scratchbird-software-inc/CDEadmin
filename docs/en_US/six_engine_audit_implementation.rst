@@ -3571,3 +3571,90 @@ refusal, mid-trace credential revocation, listener transport loss conservative
 outcomes without automatic retry, and caller SQL transaction preservation.
 Native Windows/macOS and UI presentation acceptance remain with their owning
 teams.
+
+FB-AUD-03: host configuration files and managed daemon reload/rollback
+----------------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/host_configuration.py``,
+``host_runtime_grant.py``, ``workspace/firebird_host_actions.py`` and the
+authenticated workspace action ``firebird_host_configuration`` (surfaced in
+``ui_descriptors/firebird/tools.json`` as
+``endpoint.firebird.host_configuration``) provide reviewed, one-use management
+of ``firebird.conf``, ``databases.conf``, ``replication.conf`` and
+``plugins.conf`` on an operator-admitted Firebird 5.0.4 runtime host.
+
+* **Host authority**: ``resolve_admin_host_scope`` admits ``firebird-embedded``
+  or ``CDEADMIN_FIREBIRD_HOST_TOOLS_MANIFEST`` grants with explicit
+  ``allow_host_administration=true`` (keeping read-only diagnostic grants
+  strictly read-only for mutations).
+* **Typed validation and scope**: ``firebird.conf`` validates all 77 keys in
+  ``configuration_keys_5_0_4.json`` (``integer`` with ``K``/``M``/``G`` suffixes,
+  ``boolean``, ``string``, ``WireCrypt``, ``ServerMode``), rejecting ``include``
+  directives and ``$()`` macros and tracking ``restart_required`` for ``global``
+  settings. ``databases.conf`` enforces ``database-overridable`` scope inside
+  per-alias override blocks while preserving sibling database aliases.
+  ``replication.conf`` forbids inline ``user:password@dsn`` credentials in favor
+  of ``password_file``/``password_env`` and permits only Firebird's three
+  predefined archive macros. ``plugins.conf`` permits only ``$(dir_plugins)/``
+  module paths.
+* **Concurrency, backup, native validation and failed-restart recovery**:
+  ``apply`` enforces ``expected_generation_sha256`` compare-and-set under an
+  exclusive host lock, writes ``0600`` atomic backups, probes native Engine13
+  ``RDB$CONFIG`` parsing in an isolated subprocess, and—when
+  ``lifecycle_action="restart_managed_daemon"`` is selected—restarts the
+  managed daemon, automatically restoring backups and recovering the previous
+  working daemon if validation or listener startup fails.
+
+FB-AUD-06: native plugin and external-engine (UDR) deployment
+-------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/plugin_deployment.py`` and
+``firebird_plugin_deployment`` (surfaced in
+``ui_descriptors/firebird/tools.json`` as
+``endpoint.firebird.plugin_deployment``) inspect and manage native Firebird
+5.0.4 plugins (``plugins/``) and external-engine UDR shared libraries
+(``plugins/udr/``).
+
+* ``inspect_elf_shared_object`` parses the 64-bit ELF header and dynamic symbol
+  table (``.dynsym``/``.dynstr``) to verify host architecture compatibility and
+  exported ``firebird_plugin`` or ``firebird_udr_plugin`` entrypoints before
+  admitting staged binaries.
+* ``inspect_plugin_environment`` classifies core protected modules, marks debug
+  and SDK sample plugins (``Auth_Debug``, ``fbSampleDbCrypt``,
+  ``fbSampleKeyHolder``, ``udrcpp_example``) as non-production, reports
+  ``Win_Sspi`` as Windows-only on Linux without emulation, and cross-checks
+  live ``RDB$FUNCTIONS``/``RDB$PROCEDURES``/``RDB$TRIGGERS`` ``ENGINE UDR``
+  declarations against installed UDR binaries, refusing ``remove_udr_module``
+  while active SQL routines depend on the module.
+
+FB-AUD-05: host runtime installation staging, daemon lifecycle and ODS migration
+--------------------------------------------------------------------------------
+
+``web/pgadmin/cdeadmin/providers/firebird/runtime_lifecycle.py`` and
+``firebird_runtime_lifecycle`` (surfaced in
+``ui_descriptors/firebird/tools.json`` as
+``endpoint.firebird.runtime_lifecycle`` and ``database.firebird.migrate_ods``)
+manage owned Firebird 5.0.4 runtime staging, ``/proc/<pid>/exe``-verified
+daemon ``start``/``stop``/``restart`` (reaping child zombies cleanly), and
+reviewed cross-version ODS migration into Firebird 5.0.4 ODS ``13.1`` while
+explicitly reporting ``network_maintenance_upgrades_runtime=false``.
+
+* ``inspect_database_ods`` inspects ``gstat -h`` / page-0 headers to classify
+  ODS compatibility without mutating source files.
+* ``migrate_database`` supports both ``ods13_minor_upgrade`` (copying an ODS
+  ``13.0`` Firebird 4 database to a new target, preserving the source untouched,
+  and upgrading via native ``UPGRADE_DB``) and ``gbak_backup_restore``
+  (restoring portable ``.fbk`` backups across major ODS boundaries such as
+  Firebird 3.0 ODS ``12.0`` -> ``13.1``), followed by isolated Engine13
+  verification of ``MON$ODS_MAJOR=13``, ``MON$ODS_MINOR=1``, tables, views,
+  procedures, constraints, row counts and ``RDB$DEPENDENCIES``.
+
+Owned Linux Firebird 5.0.4 qualification
+(``tools/cdeadmin_firebird_host_administration_qualification.py``) verifies all
+three workflows natively and over authenticated desktop HTTP, including live
+``RDB$CONFIG`` read-back, failed-restart automatic rollback and recovery
+preserving sibling databases and peer credentials, clean-room compiled C++ UDR
+deployment and SQL execution (``AUDIT_TRIPLE(14) = 42``), dependent-routine
+uninstall refusal, Firebird 4.0.5 ODS ``13.0`` -> ``13.1`` upgrade, and
+Firebird 3.0 ODS ``12.0`` -> ``13.1`` ``gbak`` migration. Native Windows/macOS
+and UI presentation acceptance remain with their owning teams.

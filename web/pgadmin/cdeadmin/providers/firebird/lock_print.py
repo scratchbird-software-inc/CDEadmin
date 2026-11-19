@@ -245,7 +245,8 @@ def _load_network_grant(endpoint_id, database_path):
     if len(matches) != 1:
         raise ValueError('No matching application-host Firebird grant for this endpoint')
     grant = matches[0]
-    if set(grant) - {'endpoint_id', 'firebird_runtime_root', 'firebird_lock_directory', 'databases'}:
+    from .host_runtime_grant import ALLOWED_GRANT_KEYS
+    if set(grant) - ALLOWED_GRANT_KEYS:
         raise ValueError('Firebird host grant contains unexpected fields')
     allowed_dbs = grant.get('databases')
     if not isinstance(allowed_dbs, list) or database_path not in allowed_dbs:

@@ -614,6 +614,88 @@
         "workspace_action": "firebird_lock_print",
         "describe_action": "describe"
       }
+    },
+    {
+      "command_id": "endpoint.firebird.host_configuration",
+      "scope": "endpoint",
+      "label": "Manage Firebird host configuration files...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-host-configuration",
+        "workspace_action": "firebird_host_configuration",
+        "describe_action": "describe"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.plugin_deployment",
+      "scope": "endpoint",
+      "label": "Manage Firebird plugins and UDR modules...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-plugin-deployment",
+        "workspace_action": "firebird_plugin_deployment",
+        "describe_action": "describe"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.runtime_lifecycle",
+      "scope": "endpoint",
+      "label": "Manage Firebird runtime & ODS migration...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.restore",
+      "group": "availability",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-runtime-lifecycle",
+        "workspace_action": "firebird_runtime_lifecycle",
+        "describe_action": "describe"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "database.firebird.migrate_ods",
+      "scope": "database",
+      "label": "Migrate Firebird ODS version...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.restore",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-runtime-lifecycle",
+        "workspace_action": "firebird_runtime_lifecycle",
+        "describe_action": "describe",
+        "default_operation": "migrate_database"
+      }
     }
   ]
 }

@@ -3555,6 +3555,12 @@ class ServerNode(PGChildNodeView):
                     payload = service.firebird_trace_action(server, data.get('request'))
                 elif action == 'firebird_lock_print':
                     payload = service.firebird_lock_print_action(server, data.get('request'))
+                elif action == 'firebird_host_configuration':
+                    payload = service.firebird_host_configuration_action(server, data.get('request'))
+                elif action == 'firebird_plugin_deployment':
+                    payload = service.firebird_plugin_deployment_action(server, data.get('request'))
+                elif action == 'firebird_runtime_lifecycle':
+                    payload = service.firebird_runtime_lifecycle_action(server, data.get('request'))
                 elif action == 'firebird_events':
                     payload = service.firebird_event_action(server, data.get('request'))
                 elif action == 'firebird_metadata_search':
