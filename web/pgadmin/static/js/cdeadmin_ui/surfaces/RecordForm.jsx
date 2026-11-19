@@ -10,7 +10,7 @@
 import {useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import {BOOLEAN_FORMATS, DISPLAY_MODES, buildFormLayoutPlacements, formatCellValue,
+import {FIELD_FONTS, BOOLEAN_FORMATS, DISPLAY_MODES, buildFormLayoutPlacements, formatCellValue,
   inferColumnMeta, serializeValueForEdit} from './dataEditSurfaceHelpers';
 const GUTTER_WIDTH = 58;
 
@@ -67,6 +67,8 @@ export function AdaptiveRecordFormCard({
   columns,
   formLayout,
   formFieldPrefs,
+  fieldTypeDefaults,
+  conversions,
   booleanFormat,
   localeDateFormat,
   maxHeight,
@@ -320,25 +322,35 @@ export function AdaptiveRecordFormCard({
           }}
         >
           {columns.map((col, colIdx) => {
-            const colMeta = inferColumnMeta(col);
-            const fPrefs = formFieldPrefs[col.name] || {};
+            const nativeMeta = inferColumnMeta(col);
+            const fPrefs = {
+              ...fieldTypeDefaults?.[nativeMeta.clientType],
+              ...formFieldPrefs[col.name],
+              font: formFieldPrefs[col.name]?.font || fieldTypeDefaults?.[nativeMeta.clientType]?.font,
+              hAlign: formFieldPrefs[col.name]?.hAlign || fieldTypeDefaults?.[nativeMeta.clientType]?.hAlign,
+            };
             const placement = placementMap.get(col.name) || {
               row: 'auto',
               colStart: 1,
               span: 1,
             };
-            const isFullRow = Boolean(fPrefs.inlineBox || placement.fullRow);
+            const markdownEditor = fPrefs.editor === 'markdown';
+            const useInlineEditor = fPrefs.inlineBox || markdownEditor || (isEditing && nativeMeta.clientType === 'json');
+            const isFullRow = Boolean(useInlineEditor || placement.fullRow);
             const natWidth =
               fPrefs.widthPx ||
               resolvedLayout.adaptiveWidths?.[col.name] ||
               placement.naturalWidth ||
               156;
-            const rawVal =
+            const nativeValue =
               isEditing &&
               draftValues &&
               Object.prototype.hasOwnProperty.call(draftValues, col.name)
                 ? draftValues[col.name]
                 : row.values?.[col.name];
+            const rawVal = conversions?.displayValue(col.name, nativeValue) ?? nativeValue;
+            const colMeta = conversions?.pairFor(col.name) && (typeof rawVal === 'string' || rawVal == null)
+              ? {...nativeMeta, clientType: 'text', isComplex: false} : nativeMeta;
             const formatted = formatCellValue(rawVal, colMeta, {
               booleanFormat,
               localeDateFormat,
@@ -410,7 +422,7 @@ export function AdaptiveRecordFormCard({
                   </span>
                 </label>
 
-                {formatted.isComplex && !fPrefs.inlineBox ? (
+                {formatted.isComplex && !useInlineEditor ? (
                   <div
                     style={{
                       display: 'flex',
@@ -448,12 +460,13 @@ export function AdaptiveRecordFormCard({
                       [...]
                     </button>
                   </div>
-                ) : fPrefs.inlineBox ? (
+                ) : useInlineEditor ? (
                   <textarea
                     aria-label={`${col.name}`}
                     data-form-nav-cell={`${rowIndex}:${col.name}`}
                     readOnly={!canEditField}
-                    rows={fPrefs.rows || 3}
+                    rows={fPrefs.rows || (markdownEditor ? 5 : 3)}
+                    spellCheck={markdownEditor}
                     value={
                       rawVal === null || rawVal === undefined
                         ? canEditField
@@ -461,7 +474,7 @@ export function AdaptiveRecordFormCard({
                           : '<null>'
                         : serializeValueForEdit(rawVal)
                     }
-                    placeholder={rawVal === null ? '<null>' : ''}
+                    placeholder={rawVal === null ? '<null>' : markdownEditor ? gettext('Markdown') : ''}
                     onFocus={() => {
                       setFocusedColName(col.name);
                       onSelectRow?.(rowIndex);
@@ -494,10 +507,10 @@ export function AdaptiveRecordFormCard({
                       fontStyle:
                         rawVal === null && !canEditField ? 'italic' : 'normal',
                       textAlign: hAlign,
-                      fontFamily:
-                        colMeta.clientType === 'json'
+                      fontFamily: FIELD_FONTS[fPrefs.font] || (
+                        colMeta.clientType === 'json' || markdownEditor
                           ? 'var(--sr-font-mono, monospace)'
-                          : 'inherit',
+                          : 'inherit'),
                       fontSize: '0.8rem',
                     }}
                   />
@@ -536,6 +549,7 @@ export function AdaptiveRecordFormCard({
                       background: 'var(--sr-surface-card, transparent)',
                       color: 'inherit',
                       textAlign: hAlign,
+                      fontFamily: FIELD_FONTS[fPrefs.font],
                       fontSize: '0.8rem',
                     }}
                   />
@@ -568,6 +582,7 @@ export function AdaptiveRecordFormCard({
                         : 'inherit',
                       fontStyle: formatted.isNull ? 'italic' : 'normal',
                       textAlign: hAlign,
+                      fontFamily: FIELD_FONTS[fPrefs.font],
                       fontSize: '0.8rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -618,6 +633,8 @@ AdaptiveRecordFormCard.propTypes = {
   columns: PropTypes.array.isRequired,
   formLayout: PropTypes.object,
   formFieldPrefs: PropTypes.object.isRequired,
+  fieldTypeDefaults: PropTypes.object,
+  conversions: PropTypes.object,
   booleanFormat: PropTypes.string,
   localeDateFormat: PropTypes.bool,
   maxHeight: PropTypes.string,

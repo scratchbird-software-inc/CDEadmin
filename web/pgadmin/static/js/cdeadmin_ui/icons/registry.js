@@ -1533,6 +1533,8 @@ const ACTION_COMPONENTS = Object.freeze({
   pin_node: PinNodeIcon,
   play: PlayCircleIcon,
   preferences: CustomizeSlidersIcon,
+  prepare_statement: EyeIcon,
+  prepare_transaction: LockIcon,
   print: PrinterIcon,
   promote_whiteboard: PromoteWhiteboardIcon,
   properties: InformationCircleIcon,

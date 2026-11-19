@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {setQuickQueryShortcut, useQuickQueryShortcuts} from '../editors/QuickQueryShortcuts';
 import {
   useCallback,
   useEffect,
@@ -16,8 +17,12 @@ import {
 } from 'react';
 import PropTypes from 'prop-types';
 
-import {format as formatSqlPretty} from 'sql-formatter';
+import {formatNative} from '../editors/nativeFormatting';
+import {formatFirebird, firebirdTokens} from '../editors/firebirdFormatting';
+import {firebirdFragments} from '../editors/firebirdExecution';
 import gettext from 'sources/gettext';
+import SurfaceLayoutTemplateList from './SurfaceLayoutTemplateList';
+import {sqlEditorActionHints} from './surfaceActionHints';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {TextArea, TextField} from '../primitives/Field';
@@ -29,6 +34,7 @@ import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import {
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
+  useLocaleRevision,
 } from '../actions/t_actions';
 import {PROJECT_TOP_MENU_INDICES} from '../commands/MenuStructure';
 import {
@@ -42,6 +48,12 @@ import {sqlLanguageConfig, sqlLanguageProfile} from '../editors/sqlLanguageProfi
 import {RobinTiledCanvas} from '../integrations/ddn/RobinTiledCanvas';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
+import SurfaceDisplayAreas from './SurfaceDisplayAreas';
+import {displayAreaControl, presentationChoices} from './displayAreaControls';
+import SurfaceInformation from './SurfaceInformation';
+import FieldTypeDefaultsDialog from './FieldTypeDefaultsDialog';
+import SurfaceMetadata from './SurfaceMetadata';
+import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {
   defaultLayoutState,
@@ -50,8 +62,11 @@ import {
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
+  resolveRecordPresentation,
   buildFormLayoutPlacements,
   coerceEditedValue,
+  isValidJsonDraft,
+  inferColumnMeta,
   formatBytes,
   serializeValueForEdit,
 } from './dataEditSurfaceHelpers';
@@ -66,8 +81,60 @@ export const SQL_SURFACE_VIEWS = Object.freeze({
   DATA: 'data',
   METRICS_PLAN: 'metrics_plan',
   FIELDS: 'fields',
+  INFORMATION: 'information',
+  METADATA: 'metadata',
   MESSAGES: 'messages',
 });
+
+function transactionStartOptions(family) {
+  if (family === 'sqlite') {
+    return [['mode', gettext('Transaction Mode'), [
+      ['deferred', gettext('Deferred')], ['immediate', gettext('Immediate')], ['exclusive', gettext('Exclusive')],
+    ]]];
+  }
+  const access = ['access', gettext('Access'), [
+    ['read_write', gettext('Read write')], ['read_only', gettext('Read only')],
+  ]];
+  const readCommitted = ['read_committed', gettext('Read committed')];
+  if (family === 'firebird') {
+    return [
+      access,
+      ['isolation', gettext('Isolation'), [['snapshot', gettext('Snapshot')], readCommitted]],
+      ['wait', gettext('Lock wait'), [['wait', gettext('Wait')], ['no_wait', gettext('No wait')]]],
+    ];
+  }
+  const isolation = [
+    readCommitted, ['repeatable_read', gettext('Repeatable read')], ['serializable', gettext('Serializable')],
+  ];
+  if (family === 'mysql' || family === 'mariadb') {
+    isolation.unshift(['read_uncommitted', gettext('Read uncommitted')]);
+  }
+  return [access, ['isolation', gettext('Isolation'), isolation]];
+}
+
+function quickQueryDisplayLabel(mode) {
+  switch (mode) {
+  case DISPLAY_MODES.MINI_FORMS: return gettext('Mini-Forms');
+  case DISPLAY_MODES.HYBRID: return gettext('Hybrid');
+  case DISPLAY_MODES.SINGLE_FORM: return gettext('Single Form');
+  case DISPLAY_MODES.HYBRID_EDIT: return gettext('Hybrid-When-Editing');
+  default: return gettext('Standard Grid');
+  }
+}
+
+function restoreQuickQueryParameters(parameters) {
+  const restored = {};
+  for (const parameter of Array.isArray(parameters) ? parameters : []) {
+    if (parameter?.name) {
+      restored[parameter.name] = {
+        value: parameter.value ?? '',
+        type: parameter.type || 'text',
+        isNull: Boolean(parameter.isNull),
+      };
+    }
+  }
+  return restored;
+}
 
 function computeCursorOffset(sourceText, cursor) {
   if (!cursor || typeof cursor.line !== 'number') {
@@ -161,6 +228,8 @@ export default function SqlEditorSurface({
   post,
 }) {
   const shell = useProjectShell();
+  const localeRevision = useLocaleRevision();
+  const quickQueryShortcuts = useQuickQueryShortcuts();
   const shellRef = useRef(shell);
   shellRef.current = shell;
 
@@ -176,8 +245,11 @@ export default function SqlEditorSurface({
   postRef.current = post;
 
   const [surfaceView, setSurfaceView] = useState(SQL_SURFACE_VIEWS.SQL);
-  const [splitOrientation, setSplitOrientation] = useState('vertical'); // 'vertical' (top/bottom) | 'horizontal' (left/right)
-  const [splitRatio, setSplitRatio] = useState(46);
+  const [metadataSelection, setMetadataSelection] = useState(null);
+  const [upperView, setUpperView] = useState(SQL_SURFACE_VIEWS.SQL);
+  const [lowerView, setLowerView] = useState(SQL_SURFACE_VIEWS.DATA);
+  const [upperMode, setUpperMode] = useState('');
+  const [lowerMode, setLowerMode] = useState('');
 
   const [sqlText, setSqlText] = useState(initialSql || '');
   const sqlTextRef = useRef(sqlText);
@@ -193,10 +265,22 @@ export default function SqlEditorSurface({
   const [hostData, setHostData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const executionRef = useRef(null);
+  const executionSequence = useRef(0);
+  const [canCancel, setCanCancel] = useState(false);
+  const [cancelPending, setCancelPending] = useState(false);
   const [surfaceError, setSurfaceError] = useState('');
 
   // Surface 1 Display & Live Editing State for Data / SQL+Data
   const [layout, setLayout] = useState(defaultLayoutState);
+  const [fieldDefaultsOpen, setFieldDefaultsOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState(null);
+  const [templateLoadError, setTemplateLoadError] = useState('');
+  const [formatFieldName, setFormatFieldName] = useState(null);
+  const loadedObjectLayoutRef = useRef(null);
+  const explicitLayoutRef = useRef(false);
+  const savedResultViewRef = useRef(null);
   const [activeRowIndex, setActiveRowIndex] = useState(0);
   const [activeColName, setActiveColName] = useState('');
   const [isEditingRow, setIsEditingRow] = useState(false);
@@ -209,6 +293,8 @@ export default function SqlEditorSurface({
   const [columnPickerScope, setColumnPickerScope] = useState('grid');
   const [selectedCells, setSelectedCells] = useState([]);
   const gridViewportRef = useRef(null);
+  const companionGridRef = useRef(null);
+  const focusedDisplayAreaRef = useRef(null);
   const [, setScrollRowRange] = useState({start:0,end:30});
   const [viewportWidth, setViewportWidth] = useState(960);
   const workAreaRef = useRef(null);
@@ -231,6 +317,12 @@ export default function SqlEditorSurface({
 
   // Modal Parameter Binding Dialog State
   const [paramModalOpen, setParamModalOpen] = useState(false);
+  const [preparedStatement, setPreparedStatement] = useState(null);
+  const [startTransactionOpen, setStartTransactionOpen] = useState(false);
+  const [prepareTransactionOpen, setPrepareTransactionOpen] = useState(false);
+  const [recovery, setRecovery] = useState(null);
+  const [transactionOptions, setTransactionOptions] = useState({});
+  const [transactionStartError, setTransactionStartError] = useState('');
   const [detectedParams, setDetectedParams] = useState(EMPTY_ARRAY);
   const [paramDrafts, setParamDrafts] = useState({}); // { [key]: { value: '', type: 'text', isNull: false } }
   const pendingExecRef = useRef(null);
@@ -257,6 +349,7 @@ export default function SqlEditorSurface({
 
   // Save / Snippet / Export / Limits / Connection Modals
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const saveEffectiveQueryRef = useRef(null);
   const [saveKind, setSaveKind] = useState('quick_query'); // 'quick_query' | 'snippet' | 'sql_file' | 'bi_question' | 'layout'
   const [saveTitle, setSaveTitle] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
@@ -347,6 +440,20 @@ export default function SqlEditorSurface({
     [databaseTargetId, engineId, languageProfile]
   );
 
+  useEffect(() => {
+    if (!templatePickerOpen) return undefined;
+    let active = true;
+    setAvailableTemplates(null);
+    setTemplateLoadError('');
+    callHost('list_templates').then((response) => {
+      if (!Array.isArray(response?.templates)) throw new Error(gettext('Invalid template list.'));
+      if (active) setAvailableTemplates(response.templates);
+    }).catch((error) => {
+      if (active) setTemplateLoadError(error?.message || String(error));
+    });
+    return () => { active = false; };
+  }, [callHost, templatePickerOpen]);
+
   const openRightDrawerWith = useCallback(
     (patch) => {
       const merged = {...drawerStateRef.current, ...patch};
@@ -385,9 +492,45 @@ export default function SqlEditorSurface({
     [callHost, selectedTags, snippetAllEngines, snippetFavoritesOnly, snippetSearch, snippetTagMode]
   );
 
+  const restoreNamedLayout = useCallback((savedLayout) => {
+    const {upperArea, lowerArea, upperPresentation, lowerPresentation, surfaceContent, resultView, effectiveSqlDialect, ...recordLayout} = savedLayout || {};
+    explicitLayoutRef.current = Boolean(Object.keys(recordLayout).length);
+    savedResultViewRef.current = resultView || null;
+    if ([1, 2, 3].includes(effectiveSqlDialect)) setClientSqlDialect(effectiveSqlDialect);
+    setLayout({...defaultLayoutState(), ...recordLayout});
+    const views = Object.values(SQL_SURFACE_VIEWS);
+    const validPane = (view) => views.includes(view) && view !== SQL_SURFACE_VIEWS.SQL_DATA;
+    if (validPane(upperArea) && validPane(lowerArea) && (upperArea !== lowerArea || upperArea === SQL_SURFACE_VIEWS.DATA)) {
+      setUpperView(upperArea);
+      setLowerView(lowerArea);
+    } else {
+      setUpperView(SQL_SURFACE_VIEWS.SQL);
+      setLowerView(SQL_SURFACE_VIEWS.DATA);
+    }
+    const modes = Object.values(DISPLAY_MODES);
+    setUpperMode(modes.includes(upperPresentation) ? upperPresentation : '');
+    setLowerMode(modes.includes(lowerPresentation) ? lowerPresentation : '');
+    if (views.includes(surfaceContent)) setSurfaceView(surfaceContent);
+  }, []);
+
+  const saveObjectLayout = async () => {
+    try {
+      await callHost('save_object_layout', {object_layout_key: hostData?.object_layout_key, layout});
+    } catch (error) {
+      setSurfaceError(error?.message || String(error));
+    }
+  };
+
   const applyHostState = useCallback((resp) => {
     if (!resp) return;
     setHostData(resp);
+    const objectKey = resp.object_layout_key || null;
+    if (loadedObjectLayoutRef.current !== objectKey) {
+      loadedObjectLayoutRef.current = objectKey;
+      if (!explicitLayoutRef.current) {
+        setLayout({...defaultLayoutState(), ...resp.saved_specific_layout});
+      }
+    }
     if (resp.terminator) setTerminator(resp.terminator);
     if (typeof resp.autocommit === 'boolean') setAutocommit(resp.autocommit);
     if (Array.isArray(resp.quick_queries)) setQuickQueries(resp.quick_queries);
@@ -438,9 +581,10 @@ export default function SqlEditorSurface({
             setSqlText(qq.sql_text || '');
             editorRef.current?.setValue?.(qq.sql_text || '');
             if (qq.terminator) setTerminator(qq.terminator);
-            if (qq.display_layout && Object.keys(qq.display_layout).length > 0) {
-              setLayout((prev) => ({...prev, ...qq.display_layout}));
-            }
+            setParamDrafts(restoreQuickQueryParameters(qq.parameters));
+            restoreNamedLayout(qq.display_layout);
+          } else {
+            setSurfaceError(gettext('This saved query is unavailable for the current database.'));
           }
           if (qqRes?.state) applyHostState(qqRes.state);
         }
@@ -523,9 +667,10 @@ export default function SqlEditorSurface({
   }, [formColumns, layout.formFieldPrefs, viewportWidth, rows]);
 
   const currentRow = rows[activeRowIndex] || null;
-  const isEditableResult = Boolean(activeResult?.editable);
+  const isEditableResult = Boolean(activeResult?.editable && !hostData?.transaction_prepare_state);
   const canInsertResult = Boolean(
-    activeResult?.editable || (activeResult?.row_operations || []).includes('insert')
+    !hostData?.transaction_prepare_state &&
+    (activeResult?.editable || (activeResult?.row_operations || []).includes('insert'))
   );
 
   // Uncommitted transaction / staged edits close guard (`Yes` Commit / `No` Rollback / `Cancel`)
@@ -538,11 +683,12 @@ export default function SqlEditorSurface({
   hasUncommittedRef.current = hasUncommitted;
 
   const confirmCloseGuard = useCallback(async () => {
-    if (!hasUncommittedRef.current) {
+    if (!hasUncommittedRef.current || hostData?.xa_state === 'unknown') {
       try {
         await callHost('close_surface');
-      } catch {
-        // Ignore teardown error
+      } catch (error) {
+        setSurfaceError(error?.message || String(error));
+        return false;
       }
       return true;
     }
@@ -559,11 +705,12 @@ export default function SqlEditorSurface({
         await callHost('rollback_batch');
       }
       await callHost('close_surface');
-    } catch {
-      // Allow close after best-effort cleanup
+    } catch (error) {
+      setSurfaceError(error?.message || String(error));
+      return false;
     }
     return true;
-  }, [callHost, endpointLabel, hostData?.staged_count, isFirebird]);
+  }, [callHost, endpointLabel, hostData?.staged_count, hostData?.xa_state, isFirebird]);
 
   const confirmCloseGuardRef = useRef(confirmCloseGuard);
   confirmCloseGuardRef.current = confirmCloseGuard;
@@ -848,30 +995,34 @@ export default function SqlEditorSurface({
     [pushVisualModelUpdate, selectedCanvasNodeId]
   );
 
-  const switchSurfaceView = useCallback(
-    async (nextView) => {
-      setSurfaceView(nextView);
-      if (nextView === SQL_SURFACE_VIEWS.VISUAL_BUILDER) {
-        // Ensure Data Navigator (`Area 3a` Left Drawer) is open so the user can immediately
-        // drag Tables, Views, and Selectable Stored Procedures onto the Visual Builder canvas!
-        const curShell = shellRef.current;
-        if (curShell && curShell.shellLeftDrawerOpen === false) {
-          curShell.toggleLeftDrawer?.();
-        }
-        await syncSqlIntoVisualBuilder();
-        openRightDrawerWith({panel: 'visual_inspector'});
-      }
-    },
-    [openRightDrawerWith, syncSqlIntoVisualBuilder]
-  );
+  const activateVisualBuilder = useCallback(async () => {
+    const curShell = shellRef.current;
+    if (curShell && curShell.shellLeftDrawerOpen === false) {
+      curShell.toggleLeftDrawer?.();
+    }
+    await syncSqlIntoVisualBuilder();
+    openRightDrawerWith({panel: 'visual_inspector'});
+  }, [openRightDrawerWith, syncSqlIntoVisualBuilder]);
+
+  const switchSurfaceView = useCallback(async (nextView) => {
+    setSurfaceView(nextView);
+    if (nextView === SQL_SURFACE_VIEWS.VISUAL_BUILDER) {
+      await activateVisualBuilder();
+    }
+  }, [activateVisualBuilder]);
 
   // Core SQL Execution (`statement`, `script`, `explain`) + Automatic Parameter Detection
   const dispatchExecution = useCallback(
     async (execSpec, boundParams = null) => {
+      if (executionRef.current) return;
+      const executionId = `${Date.now()}-${++executionSequence.current}`;
+      executionRef.current = executionId;
+      setCanCancel(true);
       setExecuting(true);
       setSurfaceError('');
       try {
-        const resp = await callHost('execute', {
+        let resp = await callHost('execute', {
+          execution_id: executionId,
           mode: execSpec.mode,
           sql_source: execSpec.sqlSource,
           selection_text: execSpec.selectionText,
@@ -883,6 +1034,20 @@ export default function SqlEditorSurface({
           max_rows: limitsDraft.maxRows,
           parameters: boundParams,
         });
+        const savedView = savedResultViewRef.current;
+        const result = resp?.active_result;
+        if (!resp?.last_execution_cancelled && savedView && result && savedView.statement === resp?.sql_view?.server_sql) {
+          const names = new Set((result.columns || []).map((column) => column.name));
+          try {
+            resp = await callHost('query_view', {
+              active_result_index: resp.active_result_index,
+              sort: (savedView.sort || []).filter((item) => names.has(item.column)),
+              filters: (savedView.filters || []).filter((item) => names.has(item.column)),
+            });
+          } catch (error) {
+            setSurfaceError(error?.message || String(error));
+          }
+        }
         applyHostState(resp);
         setIsEditingRow(false);
         setEditingRowIndex(null);
@@ -896,13 +1061,13 @@ export default function SqlEditorSurface({
             timestamp: new Date().toISOString(),
             mode: execSpec.mode,
             sql: (execSpec.selectionText || execSpec.sqlSource || '').trim(),
-            ok: !resp?.last_execution_had_error,
+            ok: !resp?.last_execution_had_error && !resp?.last_execution_cancelled,
           },
           ...prev.slice(0, 99),
         ]);
 
         // Auto-switch view per Surface 2 specification:
-        if (resp?.last_execution_had_error) {
+        if (resp?.last_execution_had_error || resp?.last_execution_cancelled) {
           setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
         } else if (execSpec.mode === 'explain') {
           setSurfaceView(SQL_SURFACE_VIEWS.METRICS_PLAN);
@@ -917,6 +1082,9 @@ export default function SqlEditorSurface({
         setSurfaceError(err?.message || String(err));
         setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
       } finally {
+        executionRef.current = null;
+        setCanCancel(false);
+        setCancelPending(false);
         setExecuting(false);
       }
     },
@@ -976,13 +1144,17 @@ export default function SqlEditorSurface({
             setParamModalOpen(true);
             return;
           }
-        } catch {
-          // Proceed directly if parameter probe unavailable
+        } catch (error) {
+          if (String(languageProfile || engineId).replace(/-sql$/, '') === 'mysql') {
+            setSurfaceError(error?.message || String(error));
+            setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
+            return;
+          }
         }
       }
       await dispatchExecution(execSpec, null);
     },
-    [callHost, cursorPos.col, cursorPos.line, dispatchExecution, selectionText, terminator]
+    [callHost, cursorPos.col, cursorPos.line, dispatchExecution, engineId, languageProfile, selectionText, terminator]
   );
 
   const openParametersDialog = useCallback(async () => {
@@ -1039,6 +1211,9 @@ export default function SqlEditorSurface({
   }, [detectedParams, dispatchExecution, paramDrafts]);
 
   // Surface 1 Live Row Editing & Batch Staging on Active Result Set
+  const conversionPairs = languageOptions.field_conversion_pairs;
+  const conversions = useRecordConversions(rows, columns, layout.formFieldPrefs, conversionPairs, callHost);
+
   const acceptCurrentRow = useCallback(async () => {
     if (!isEditingRow || !rowDraft) return true;
     setExecuting(true);
@@ -1049,7 +1224,13 @@ export default function SqlEditorSurface({
       for (const col of columns) {
         if ((col.read_only || col.editable === false) && !isInsertDraft) continue;
         if (!isInsertDraft && JSON.stringify(rowDraft[col.name]) === JSON.stringify(baseRow?.values?.[col.name])) continue;
-        const nextVal = coerceEditedValue(rowDraft[col.name], col);
+        if (!isValidJsonDraft(rowDraft[col.name], col)) {
+          setSurfaceError(gettext('Enter valid JSON for %s.', col.name));
+          return false;
+        }
+        const nextVal = await convertRecordField(
+          callHost, conversionPairs, layout.formFieldPrefs, col, coerceEditedValue(rowDraft[col.name], col)
+        );
         const origVal = baseRow?.values?.[col.name];
         if (isInsertDraft) {
           if (nextVal !== undefined) changes[col.name] = nextVal;
@@ -1076,7 +1257,7 @@ export default function SqlEditorSurface({
     } finally {
       setExecuting(false);
     }
-  }, [applyHostState, callHost, columns, editingRowIndex, isEditingRow, isInsertDraft, rowDraft, rows]);
+  }, [applyHostState, callHost, conversionPairs, layout.formFieldPrefs, columns, editingRowIndex, isEditingRow, isInsertDraft, rowDraft, rows]);
 
   const beginEditRow = useCallback(
     (targetIdx = activeRowIndex) => {
@@ -1146,11 +1327,18 @@ export default function SqlEditorSurface({
       const resp = await callHost('commit_batch');
       applyHostState(resp);
     } catch (err) {
+      if (hostData?.prepared_transaction_id) {
+        try {
+          applyHostState(await callHost('read_window'));
+        } catch {
+          // Keep the original transaction error.
+        }
+      }
       setSurfaceError(err?.message || String(err));
     } finally {
       setExecuting(false);
     }
-  }, [acceptCurrentRow, applyHostState, callHost, isEditingRow]);
+  }, [acceptCurrentRow, applyHostState, callHost, hostData?.prepared_transaction_id, isEditingRow]);
 
   const handleRollback = useCallback(async () => {
     setIsEditingRow(false);
@@ -1162,11 +1350,18 @@ export default function SqlEditorSurface({
       const resp = await callHost('rollback_batch');
       applyHostState(resp);
     } catch (err) {
+      if (hostData?.prepared_transaction_id) {
+        try {
+          applyHostState(await callHost('read_window'));
+        } catch {
+          // Keep the original transaction error.
+        }
+      }
       setSurfaceError(err?.message || String(err));
     } finally {
       setExecuting(false);
     }
-  }, [applyHostState, callHost]);
+  }, [applyHostState, callHost, hostData?.prepared_transaction_id]);
 
   const activeResultIdxKey = String(hostData?.active_result_index ?? 0);
   const activeBookmarks = useMemo(
@@ -1378,7 +1573,10 @@ export default function SqlEditorSurface({
     pendingCellFocusRef.current = null;
     const attr = req.kind === 'form' ? 'data-form-nav-cell' : 'data-grid-nav-cell';
     const escCol = String(req.colName || '').replaceAll('"', '\\"');
-    const el = workAreaRef.current.querySelector(`[${attr}="${req.rowIndex}:${escCol}"]`);
+    const focusedArea = focusedDisplayAreaRef.current;
+    const focusRoot = workAreaRef.current.contains(focusedArea) ? focusedArea : workAreaRef.current;
+    const selector = `[${attr}="${req.rowIndex}:${escCol}"]`;
+    const el = focusRoot.querySelector(selector) || workAreaRef.current.querySelector(selector);
     if (el && typeof el.focus === 'function') {
       el.focus({preventScroll: false});
       el.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
@@ -1417,20 +1615,53 @@ export default function SqlEditorSurface({
     [activeResult?.sort, applyHostState, callHost]
   );
 
-  const handleFormatSql = useCallback(() => {
-    const cur = editorRef.current?.getValue?.() ?? sqlTextRef.current;
-    if (!cur.trim()) return;
+  const handleFormatSql = useCallback(async () => {
+    const currentSource = () => editorRef.current?.getValue?.() ?? sqlTextRef.current;
+    const source = currentSource();
+    if (executing || !source.trim()) return;
+    const family = languageOptions.syntax_family;
+    const request = {sql_source: source, client_sql_dialect: clientSqlDialect};
+    setExecuting(true);
     try {
-      const formatted = formatSqlPretty(cur, {
-        language: isFirebird ? 'sql' : 'postgresql',
-        keywordCase: 'upper',
-      });
-      setSqlText(formatted);
-      editorRef.current?.setValue?.(formatted);
-    } catch {
-      // Leave unformatted when dialect uses non-standard procedural syntax
+      let formatted;
+      let script = false;
+      if (family === 'firebird') {
+        const signature = (text) => firebirdFragments(text).map(({source: entry, kind}) => [
+          kind, firebirdTokens(entry).map(({kind: tokenKind, text: value}) => [tokenKind, value]),
+        ]);
+        const entries = signature(source);
+        script = entries.length > 1 || entries.some(([kind]) => kind !== 'sql');
+        formatted = formatFirebird(source);
+        if (JSON.stringify(entries) !== JSON.stringify(signature(formatted))) {
+          throw new Error(gettext('Formatting would change Firebird statement boundaries.'));
+        }
+      } else {
+        if (/^\s*DELIMITER\b/im.test(source)) {
+          throw new Error(gettext('Format statements separately when a script uses DELIMITER.'));
+        }
+        const {context} = await callHost('format_context', request);
+        if (!context || context.engine !== family || context.observation?.available === false) {
+          throw new Error(gettext('The native SQL formatting context is unavailable.'));
+        }
+        formatted = formatNative(source, context);
+      }
+      if (formatted === source || currentSource() !== source) return;
+      const checked = await callHost('validate_format', {...request, sql_source: formatted, script});
+      if (checked?.grammar_valid !== true) {
+        throw new Error(gettext('Native validation could not confirm the formatted SQL.'));
+      }
+      if (currentSource() === source) {
+        setSqlText(formatted);
+        editorRef.current?.setValue?.(formatted);
+        setSurfaceError('');
+      }
+    } catch (error) {
+      setSurfaceError(gettext('SQL was preserved. %s', error?.message || String(error)));
+      setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
+    } finally {
+      setExecuting(false);
     }
-  }, [isFirebird]);
+  }, [callHost, clientSqlDialect, executing, languageOptions.syntax_family]);
 
   const insertSnippetText = useCallback((snippetSql, replaceAll = false) => {
     if (replaceAll || !sqlTextRef.current.trim()) {
@@ -1451,13 +1682,14 @@ export default function SqlEditorSurface({
   }, []);
 
   const openSaveDialog = useCallback(
-    (kind = 'quick_query', fromSelection = false) => {
+    (kind = 'quick_query', fromSelection = false, effectiveQuery = null) => {
+      saveEffectiveQueryRef.current = effectiveQuery;
       setSaveKind(kind);
       setSaveSnippetId('');
       setSaveUseSelection(Boolean(fromSelection && selectionText.trim()));
       setSaveTitle(
         kind === 'quick_query'
-          ? activeQuickQueryName || targetResource?.display_name || 'Quick Query'
+          ? (effectiveQuery ? gettext('Quick Query') : activeQuickQueryName || targetResource?.display_name || 'Quick Query')
           : ''
       );
       setSaveDescription('');
@@ -1470,7 +1702,8 @@ export default function SqlEditorSurface({
 
   const handleConfirmSave = useCallback(async () => {
     const fullSql = editorRef.current?.getValue?.() ?? sqlTextRef.current;
-    const chosenSql = saveUseSelection && selectionText.trim() ? selectionText : fullSql;
+    const effectiveQuery = saveEffectiveQueryRef.current;
+    const chosenSql = effectiveQuery?.sql ?? (saveUseSelection && selectionText.trim() ? selectionText : fullSql);
 
     if (saveKind === 'sql_file') {
       if (typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
@@ -1529,7 +1762,7 @@ export default function SqlEditorSurface({
     }
 
     // Default: 'quick_query' (saves SQL + terminator + parameter defaults + full Surface 1 display layout!)
-    const paramDefaults = Object.entries(paramDrafts).map(([name, d]) => ({
+    const paramDefaults = effectiveQuery?.parameters ?? Object.entries(paramDrafts).map(([name, d]) => ({
       name,
       type: d.type,
       value: d.value,
@@ -1537,13 +1770,25 @@ export default function SqlEditorSurface({
     }));
     const res = await callHost('save_quick_query', {
       quick_query: {
-        ...(activeQuickQueryId ? {query_id: activeQuickQueryId} : {}),
+        ...(activeQuickQueryId && !effectiveQuery ? {query_id: activeQuickQueryId} : {}),
         name: saveTitle || 'Quick Query',
         description: saveDescription,
         sql_text: chosenSql,
-        terminator,
+        terminator: effectiveQuery ? ';' : terminator,
         parameters: paramDefaults,
-        display_layout: layout,
+        display_layout: {
+          ...layout,
+          upperArea: upperView,
+          lowerArea: lowerView,
+          upperPresentation: upperMode,
+          lowerPresentation: lowerMode,
+          surfaceContent: surfaceView,
+          effectiveSqlDialect: effectiveQuery?.client_sql_dialect ?? undefined,
+          resultView: !effectiveQuery && activeResult && hostData?.sql_view?.server_sql
+            ? {statement: hostData.sql_view.server_sql, sort: activeResult.sort || [],
+              filters: activeResult.filters || []}
+            : null,
+        },
       },
     });
     if (res?.saved_quick_query) {
@@ -1564,9 +1809,16 @@ export default function SqlEditorSurface({
     setSaveModalOpen(false);
   }, [
     activeQuickQueryId,
+    activeResult,
+    hostData?.sql_view?.server_sql,
     callHost,
     databaseTargetId,
     layout,
+    lowerMode,
+    lowerView,
+    surfaceView,
+    upperMode,
+    upperView,
     normEngine,
     openRightDrawerWith,
     paramDrafts,
@@ -1598,27 +1850,13 @@ export default function SqlEditorSurface({
         setSqlText(qq.sql_text || '');
         editorRef.current?.setValue?.(qq.sql_text || '');
         if (qq.terminator) setTerminator(qq.terminator);
-        if (qq.display_layout && Object.keys(qq.display_layout).length > 0) {
-          setLayout((prev) => ({...prev, ...qq.display_layout}));
-        }
-        if (Array.isArray(qq.parameters) && qq.parameters.length > 0) {
-          const restored = {};
-          for (const p of qq.parameters) {
-            if (p?.name) {
-              restored[p.name] = {
-                value: p.value ?? '',
-                type: p.type || 'text',
-                isNull: Boolean(p.isNull),
-              };
-            }
-          }
-          setParamDrafts(restored);
-        }
+        restoreNamedLayout(qq.display_layout);
+        setParamDrafts(restoreQuickQueryParameters(qq.parameters));
       }
       if (res?.state) applyHostState(res.state);
       setQuickQueryModalOpen(false);
     },
-    [applyHostState, callHost]
+    [applyHostState, callHost, restoreNamedLayout]
   );
 
   // Jump from Messages log back to SQL Line:Col or Data Row #
@@ -1634,8 +1872,47 @@ export default function SqlEditorSurface({
   }, []);
 
   // Handlers ref so TiB / Top Menu callbacks never trigger stale closures or re-registration loops
+  const prepareStatement = async () => {
+    setExecuting(true);
+    setSurfaceError('');
+    try {
+      const result = await callHost('prepare_statement', {
+        sql_source: editorRef.current?.getValue?.() ?? sqlTextRef.current,
+        selection_text: selectionText,
+        client_sql_dialect: clientSqlDialect,
+      });
+      if (!result?.prepared_statement) throw new Error(gettext('No preparation receipt returned.'));
+      setPreparedStatement(result.prepared_statement);
+    } catch (error) {
+      setSurfaceError(error?.message || String(error));
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   const handlersRef = useRef({});
   handlersRef.current = {
+    selectDisplayArea: (area, view) => {
+      const split = surfaceView === SQL_SURFACE_VIEWS.SQL_DATA;
+      if (area === 'first' && !split) {
+        switchSurfaceView(view);
+        return;
+      }
+      if (view === 'off') {
+        if (split) setSurfaceView(upperView);
+        return;
+      }
+      if (area === 'first') {
+        setUpperView(view);
+      } else {
+        if (!split) setUpperView(surfaceView);
+        setLowerView(view);
+        setSurfaceView(SQL_SURFACE_VIEWS.SQL_DATA);
+      }
+      if (view === SQL_SURFACE_VIEWS.VISUAL_BUILDER) activateVisualBuilder();
+    },
+    saveObjectLayout,
+    prepareStatement,
     switchSurfaceView,
     runSql,
     openParametersDialog,
@@ -1655,21 +1932,36 @@ export default function SqlEditorSurface({
     setConnectionModalOpen,
     setTerminator,
     setAutocommit: async (nextVal) => {
-      setAutocommit(nextVal);
-      const resp = await callHost('set_options', {autocommit: nextVal});
-      applyHostState(resp);
+      setSurfaceError('');
+      try {
+        applyHostState(await callHost('set_options', {autocommit: nextVal}));
+      } catch (error) {
+        setSurfaceError(error?.message || String(error));
+      }
     },
     selectResultIndex: async (idx) => {
       const resp = await callHost('select_result', {result_index: idx});
       applyHostState(resp);
     },
     cancelExecution: async () => {
-      const resp = await callHost('cancel');
-      applyHostState(resp);
+      const executionId = executionRef.current;
+      if (!executionId) return;
+      setCancelPending(true);
+      try {
+        const response = await callHost('cancel', {execution_id: executionId});
+        if (response?.cancel_status === 'idle' && executionRef.current === executionId) {
+          setCancelPending(false);
+        }
+      } catch (error) {
+        if (executionRef.current === executionId) {
+          setSurfaceError(error?.message || String(error));
+          setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
+          setCancelPending(false);
+        }
+      }
     },
     triggerFileOpen: () => fileInputRef.current?.click?.(),
     setLayout,
-    setSplitOrientation,
     pushVisualModelUpdate,
     visualModel,
     isEditingRow,
@@ -2362,10 +2654,9 @@ export default function SqlEditorSurface({
               if (!isEditingRow || editingRowIndex !== ds.valueRowIndex) {
                 beginEditRow(ds.valueRowIndex);
               }
-              const colObj = columns.find((c) => c.name === colName);
               setRowDraft((prev) => ({
                 ...(prev || targetRow?.values || {}),
-                [colName]: coerceEditedValue(e.target.value, colObj),
+                [colName]: e.target.value,
               }));
             }}
           />
@@ -2693,6 +2984,7 @@ export default function SqlEditorSurface({
     snippetsPayload,
     vbInspectorTab,
     vbKindFilter,
+    localeRevision,
     vbTableSearch,
     visualCatalogObjects,
     visualFidelity,
@@ -2725,9 +3017,12 @@ export default function SqlEditorSurface({
       autocommit
         ? gettext('Tx: Auto-Commit')
         : hasUncommitted
-          ? gettext('Tx: Uncommitted (%s staged)', hostData?.staged_count || 0)
+          ? hostData?.transaction_prepare_state === 'prepared'
+            ? gettext('Tx: Prepared')
+            : gettext('Tx: Uncommitted (%s staged)', hostData?.staged_count || 0)
           : gettext('Tx: Idle')
     );
+    if (hostData?.prepared_transaction_id) parts.push(hostData.prepared_transaction_id);
     parts.push(gettext('Term: %s', terminator));
     if ((hostData?.result_count || 0) > 0) {
       parts.push(
@@ -2742,9 +3037,10 @@ export default function SqlEditorSurface({
     if (hostData?.timings_ms?.total_ms) {
       parts.push(`${hostData.timings_ms.total_ms} ms`);
     }
-    parts.push(`Ln ${cursorPos.line}, Col ${cursorPos.col}`);
+    parts.push(gettext('Ln %s, Col %s', cursorPos.line, cursorPos.col));
     return parts.join(' · ');
   }, [
+    localeRevision,
     activeResult?.total_view_rows,
     autocommit,
     cursorPos.col,
@@ -2752,8 +3048,11 @@ export default function SqlEditorSurface({
     endpointLabel,
     hasUncommitted,
     hostData?.active_result_index,
+    hostData?.object_layout_key,
+    hostData?.prepared_transaction_id,
     hostData?.result_count,
     hostData?.staged_count,
+    hostData?.transaction_prepare_state,
     hostData?.timings_ms?.total_ms,
     terminator,
   ]);
@@ -2776,6 +3075,7 @@ export default function SqlEditorSurface({
     if (!curShell || !instanceScope?.instanceId) return undefined;
     const pfx = `sql-surf.${instId}`;
     const regList = [];
+    const actionHints = sqlEditorActionHints();
 
     const reg = (
       suffix,
@@ -2795,7 +3095,7 @@ export default function SqlEditorSurface({
         icon,
         application: 'sql-editor',
         defaultText: text,
-        defaultHint: hint || text,
+        defaultHint: hint || actionHints[suffix] || text,
         focusScoped: true,
         status,
         checked,
@@ -2814,7 +3114,7 @@ export default function SqlEditorSurface({
     // Multi-Result Set Selector (when script returns > 1 result sets)
     const resultMenuId = reg(
       'result_set_menu',
-      'action.layers',
+      'action.section_indexes',
       gettext(
         'Result %s/%s',
         (hostData?.active_result_index ?? 0) + 1,
@@ -2835,33 +3135,40 @@ export default function SqlEditorSurface({
       {
         shortcut: 'F9',
         status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED,
-        hint: gettext('Execute selection or statement at cursor (F9)'),
+        hint: gettext('Execute selection or statement at cursor'),
       }
     );
     const execScriptId = reg(
       'exec_script',
-      'action.script',
+      'action.terminal',
       gettext('Execute Script'),
       () => handlersRef.current.runSql('script'),
       {
         shortcut: 'F5',
         status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED,
-        hint: gettext('Execute full script with active terminator / SET TERM (F5)'),
+        hint: gettext('Execute full script with active terminator / SET TERM'),
       }
     );
     const explainId = reg(
       'explain',
-      'tool.dashboard',
+      'action.explain',
       gettext('Explain Plan'),
       () => handlersRef.current.runSql('explain'),
       {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
     );
+    const prepareId = languageOptions.native_statement_prepare && reg(
+      'prepare_statement',
+      'action.prepare_statement',
+      gettext('Prepare Statement'),
+      () => handlersRef.current.prepareStatement(),
+      {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
+    );
     const cancelId = reg(
       'cancel',
-      'action.close',
+      'action.stop',
       gettext('Cancel'),
       () => handlersRef.current.cancelExecution(),
-      {status: executing ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+      {status: canCancel && !cancelPending ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
     );
     const paramsId = reg(
       'parameters',
@@ -2889,25 +3196,73 @@ export default function SqlEditorSurface({
     );
 
     // Transaction Group
+    const startTransactionId = languageOptions.native_transaction_start && reg(
+      'start_transaction',
+      'action.transaction',
+      gettext('Start Transaction…'),
+      () => {
+        setTransactionStartError('');
+        const fields = transactionStartOptions(languageOptions.syntax_family);
+        setTransactionOptions(Object.fromEntries(fields.map(([key, , values]) => [
+          key, key === 'isolation' && ['mysql', 'mariadb'].includes(languageOptions.syntax_family)
+            ? 'repeatable_read' : values[0][0],
+        ])));
+        setStartTransactionOpen(true);
+      },
+      {status: executing || autocommit || hasUncommitted ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
+    );
+    const prepareTransactionId = languageOptions.native_transaction_prepare && reg(
+      'prepare_transaction',
+      'action.prepare_transaction',
+      gettext('Prepare Transaction…'),
+      () => {
+        setTransactionStartError('');
+        setPrepareTransactionOpen(true);
+      },
+      {status: executing || autocommit || !hostData?.session_id || isEditingRow ||
+        hostData?.staged_count > 0 || hostData?.transaction_prepare_state ||
+        (['mysql', 'mariadb'].includes(languageOptions.syntax_family) && hostData?.xa_state !== 'active')
+        ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
+    );
+    const recoveryId = languageOptions.syntax_family === 'postgresql' &&
+      languageOptions.native_transaction_prepare && reg(
+        'recover_prepared_transaction',
+        'action.prepare_transaction',
+        gettext('Recover Prepared Transaction…'),
+        () => {
+          setTransactionStartError('');
+          setRecovery({transactions: [], gid: ''});
+          setExecuting(true);
+          callHost('recover_prepared_transaction').then((response) => {
+            setRecovery({transactions: response.transactions || [], gid: ''});
+          }).catch((error) => setTransactionStartError(error?.message || String(error)))
+            .finally(() => setExecuting(false));
+        },
+        {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
+      );
     const commitId = reg(
       'commit',
       'action.commit',
       gettext('Commit'),
       () => handlersRef.current.handleCommit(),
-      {status: hasUncommitted && !autocommit ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.ENABLED}
+      {status: hostData?.prepared_transaction_id && hostData?.transaction_prepare_state === 'unknown'
+        ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
     );
     const rollbackId = reg(
       'rollback',
       'action.rollback',
       gettext('Rollback'),
-      () => handlersRef.current.handleRollback()
+      () => handlersRef.current.handleRollback(),
+      {status: hostData?.prepared_transaction_id && hostData?.transaction_prepare_state === 'unknown'
+        ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
     );
     const autocommitId = reg(
       'autocommit',
       'action.check',
       gettext('Auto-Commit'),
       () => handlersRef.current.setAutocommit(!autocommit),
-      {checked: autocommit}
+      {checked: autocommit, status: executing || hostData?.transaction_prepare_state || hostData?.xa_state
+        ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
     );
 
     // Record & Bookmark Navigation Group (|< << < > >> >| ! !< !>) — Surface 1 parity!
@@ -3047,7 +3402,10 @@ export default function SqlEditorSurface({
         handlersRef.current.isEditingRow
           ? handlersRef.current.acceptCurrentRow()
           : handlersRef.current.beginEditRow(),
-      {status: isEditableResult || isEditingRow ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
+      {
+        status: isEditableResult || isEditingRow ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED,
+        hint: isEditingRow ? gettext('Accept changes to the current row') : gettext('Edit the current result row'),
+      }
     );
     const insertRowId = reg(
       'insert_row',
@@ -3058,7 +3416,7 @@ export default function SqlEditorSurface({
     );
     const duplicateRowId = reg(
       'duplicate_row',
-      'action.copy',
+      'action.duplicate',
       gettext('Duplicate Row'),
       () => handlersRef.current.beginInsertRow(true),
       {status: canInsertResult && rows.length > 0 ? T_ACTION_STATUS.ENABLED : T_ACTION_STATUS.DISABLED}
@@ -3075,7 +3433,7 @@ export default function SqlEditorSurface({
     const snippetsDrawerId = reg('snippets_drawer', 'action.script', gettext('Snippets'), () =>
       handlersRef.current.openRightDrawerWith({panel: 'snippets'})
     );
-    const quickQueriesId = reg('quick_queries', 'tool.query', gettext('Quick Queries…'), () =>
+    const quickQueriesId = reg('quick_queries', 'action.savepoint', gettext('Quick Queries…'), () =>
       handlersRef.current.setQuickQueryModalOpen(true)
     );
     const historyDrawerId = reg('history_drawer', 'action.history', gettext('History'), () =>
@@ -3092,30 +3450,29 @@ export default function SqlEditorSurface({
         handlersRef.current.setLayout((prev) => ({...prev, displayMode: chosen}));
       }
     });
-    const splitDirId = reg(
-      'split_dir',
-      'action.columns',
-      splitOrientation === 'vertical' ? gettext('Split: Top/Bottom') : gettext('Split: Left/Right'),
-      () =>
-        handlersRef.current.setSplitOrientation((o) =>
-          o === 'vertical' ? 'horizontal' : 'vertical'
-        )
+    const applyTemplateId = reg(
+      'apply_layout_template',
+      'action.layout_grid',
+      gettext('Apply Layout Template…'),
+      () => setTemplatePickerOpen(true),
+      {hint: gettext('Choose a shared layout for the query results')}
     );
-    const formatSqlId = reg('format_sql', 'action.edit', gettext('Format SQL'), () =>
-      handlersRef.current.handleFormatSql()
+    const formatSqlId = reg('format_sql', 'action.align', gettext('Format SQL'),
+      () => handlersRef.current.handleFormatSql(),
+      {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
     );
     const boolMenuId = reg('bool_menu', 'action.check', gettext('Boolean'), (detail) => {
       const chosen = detail?.item?.id;
       if (chosen) handlersRef.current.setLayout((prev) => ({...prev, booleanFormat: chosen}));
     });
-    const vbInspectorId = reg('vb_inspector', 'tool.erd', gettext('Builder Inspector'), () => {
+    const vbInspectorId = reg('vb_inspector', 'action.inspector_drawer', gettext('Builder Inspector'), () => {
       setVbInspectorTab('tables');
       handlersRef.current.openRightDrawerWith({panel: 'visual_inspector'});
     });
-    const limitsId = reg('limits', 'action.settings', gettext('Fetch Limits…'), () =>
+    const limitsId = reg('limits', 'action.fetch_limits', gettext('Fetch Limits…'), () =>
       handlersRef.current.setLimitsModalOpen(true)
     );
-    const connInfoId = reg('conn_info', 'action.info', gettext('Connection Details…'), () =>
+    const connInfoId = reg('conn_info', 'action.properties', gettext('Connection Details…'), () =>
       handlersRef.current.setConnectionModalOpen(true)
     );
 
@@ -3141,17 +3498,53 @@ export default function SqlEditorSurface({
     });
     const exportSpreadsheetId = reg(
       'export_xlsx_ods',
-      'action.export',
+      'action.accessible_table',
       gettext('Excel / ODS…'),
       () => {
         handlersRef.current.setExportInitialFormat('xlsx');
         handlersRef.current.setExportDialogOpen(true);
       }
     );
-    const exportPdfId = reg('export_pdf', 'tool.report', gettext('PDF Report…'), () => {
+    const exportPdfId = reg('export_pdf', 'action.print', gettext('PDF Report…'), () => {
       handlersRef.current.setExportInitialFormat('pdf');
       handlersRef.current.setExportDialogOpen(true);
     });
+
+    const areaOptions = [
+      [SQL_SURFACE_VIEWS.SQL, gettext('SQL')],
+      [SQL_SURFACE_VIEWS.VISUAL_BUILDER, gettext('Visual Query Builder (DDN)')],
+      [SQL_SURFACE_VIEWS.DATA, gettext('Data')],
+      [SQL_SURFACE_VIEWS.METRICS_PLAN, gettext('Metrics & Plan')],
+      [SQL_SURFACE_VIEWS.FIELDS, gettext('Result Fields')],
+      [SQL_SURFACE_VIEWS.INFORMATION, gettext('Information')],
+      [SQL_SURFACE_VIEWS.METADATA, gettext('Metadata')],
+      [SQL_SURFACE_VIEWS.MESSAGES, gettext('Messages')],
+    ];
+    const split = surfaceView === SQL_SURFACE_VIEWS.SQL_DATA;
+    const firstView = split ? upperView : surfaceView;
+    const displayAreas = [
+      displayAreaControl(reg, pfx, 'first_area', gettext('First Display Area'),
+        areaOptions.filter(([view]) => !split || view !== lowerView || view === SQL_SURFACE_VIEWS.DATA),
+        firstView, (view) => handlersRef.current.selectDisplayArea('first', view), 120),
+      displayAreaControl(reg, pfx, 'second_area', gettext('Second Display Area'), [
+        ['off', gettext('Off')],
+        ...areaOptions.filter(([view]) => view !== firstView || view === SQL_SURFACE_VIEWS.DATA),
+      ], split ? lowerView : 'off', (view) => handlersRef.current.selectDisplayArea('second', view), 121),
+    ];
+    if (firstView === SQL_SURFACE_VIEWS.DATA) {
+      displayAreas.push(displayAreaControl(reg, pfx, 'first_presentation', gettext('First Area Presentation'),
+        split ? presentationChoices() : presentationChoices().slice(1),
+        split ? upperMode || 'default' : layout.displayMode,
+        (mode) => {
+          if (split) setUpperMode(mode === 'default' ? '' : mode);
+          else setLayout((current) => ({...current, displayMode: mode}));
+        }, 122));
+    }
+    if (split && lowerView === SQL_SURFACE_VIEWS.DATA) {
+      displayAreas.push(displayAreaControl(reg, pfx, 'second_presentation', gettext('Second Area Presentation'),
+        presentationChoices(), lowerMode || 'default',
+        (mode) => setLowerMode(mode === 'default' ? '' : mode), 123));
+    }
 
     regList.forEach((a) => curShell.actionsRegistry?.upsert?.(a));
 
@@ -3164,42 +3557,63 @@ export default function SqlEditorSurface({
         {
           id: SQL_SURFACE_VIEWS.SQL,
           label: gettext('SQL'),
-          icon: 'tool.query',
+          tooltip: gettext('Open the SQL text editor'),
+          icon: 'action.sql_preview',
           checked: surfaceView === SQL_SURFACE_VIEWS.SQL,
         },
         {
           id: SQL_SURFACE_VIEWS.VISUAL_BUILDER,
           label: gettext('Visual Builder'),
+          tooltip: gettext('Design a query visually'),
           icon: 'action.sql_builder',
           checked: surfaceView === SQL_SURFACE_VIEWS.VISUAL_BUILDER,
         },
         {
           id: SQL_SURFACE_VIEWS.SQL_DATA,
           label: gettext('SQL + Data'),
-          icon: 'action.columns',
+          tooltip: gettext('Show the SQL editor above the query results'),
+          icon: 'action.layout_hybrid',
           checked: surfaceView === SQL_SURFACE_VIEWS.SQL_DATA,
         },
         {
           id: SQL_SURFACE_VIEWS.DATA,
           label: gettext('Data'),
+          tooltip: gettext('Show the rows returned by the query'),
           icon: 'action.browse_data',
           checked: surfaceView === SQL_SURFACE_VIEWS.DATA,
         },
         {
           id: SQL_SURFACE_VIEWS.METRICS_PLAN,
           label: gettext('Metrics & Plan'),
-          icon: 'tool.dashboard',
+          tooltip: gettext('Inspect execution statistics and the available plan'),
+          icon: 'action.statistics',
           checked: surfaceView === SQL_SURFACE_VIEWS.METRICS_PLAN,
         },
         {
           id: SQL_SURFACE_VIEWS.FIELDS,
           label: gettext('Fields'),
-          icon: 'action.properties',
+          tooltip: gettext('Inspect column names and data types'),
+          icon: 'action.section_columns',
           checked: surfaceView === SQL_SURFACE_VIEWS.FIELDS,
+        },
+        {
+          id: SQL_SURFACE_VIEWS.INFORMATION,
+          label: gettext('Information'),
+          tooltip: gettext('Review information about the selected object or query'),
+          icon: 'action.properties',
+          checked: surfaceView === SQL_SURFACE_VIEWS.INFORMATION,
+        },
+        {
+          id: SQL_SURFACE_VIEWS.METADATA,
+          label: gettext('Metadata'),
+          tooltip: gettext('Inspect the object definition, comment and dependencies'),
+          icon: 'action.dependencies',
+          checked: surfaceView === SQL_SURFACE_VIEWS.METADATA,
         },
         {
           id: SQL_SURFACE_VIEWS.MESSAGES,
           label: gettext('Messages'),
+          tooltip: gettext('Review execution messages and errors'),
           icon: 'action.section_comments',
           checked: surfaceView === SQL_SURFACE_VIEWS.MESSAGES,
         },
@@ -3215,30 +3629,35 @@ export default function SqlEditorSurface({
         {
           id: DISPLAY_MODES.GRID,
           label: gettext('Standard Grid'),
+          tooltip: gettext('Show records in a table with one row per record'),
           icon: 'action.layout_grid',
           checked: layout.displayMode === DISPLAY_MODES.GRID,
         },
         {
           id: DISPLAY_MODES.MINI_FORMS,
           label: gettext('Mini-Forms'),
+          tooltip: gettext('Show each record in a compact form'),
           icon: 'action.layout_mini_forms',
           checked: layout.displayMode === DISPLAY_MODES.MINI_FORMS,
         },
         {
           id: DISPLAY_MODES.HYBRID,
           label: gettext('Hybrid'),
+          tooltip: gettext('Show the current record in a mini-form below the grid'),
           icon: 'action.layout_hybrid',
           checked: layout.displayMode === DISPLAY_MODES.HYBRID,
         },
         {
           id: DISPLAY_MODES.SINGLE_FORM,
           label: gettext('Single Form'),
+          tooltip: gettext('Fill the data area with a form for the current record'),
           icon: 'action.layout_single_form',
           checked: layout.displayMode === DISPLAY_MODES.SINGLE_FORM,
         },
         {
           id: DISPLAY_MODES.HYBRID_EDIT,
           label: gettext('Hybrid-When-Editing'),
+          tooltip: gettext('Show the grid while browsing and switch to a form when editing'),
           icon: 'action.layout_hybrid_edit',
           checked: layout.displayMode === DISPLAY_MODES.HYBRID_EDIT,
         },
@@ -3277,6 +3696,7 @@ export default function SqlEditorSurface({
               execStmtId,
               execScriptId,
               explainId,
+              ...(prepareId ? [prepareId] : []),
               cancelId,
               paramsId,
               {
@@ -3296,7 +3716,11 @@ export default function SqlEditorSurface({
           {
             id: 'transaction',
             label: gettext('Transaction'),
-            controls: [commitId, rollbackId, autocommitId],
+            controls: [
+              ...(startTransactionId ? [startTransactionId] : []),
+              ...(prepareTransactionId ? [prepareTransactionId] : []),
+              commitId, rollbackId, autocommitId,
+            ],
           },
           {
             id: 'navigate',
@@ -3305,10 +3729,10 @@ export default function SqlEditorSurface({
               navFirstId,
               navPrevPageId,
               navPrevRowId,
+              bookmarkToggleId,
               navNextRowId,
               navNextPageId,
               navLastId,
-              bookmarkToggleId,
               bookmarkPrevId,
               bookmarkNextId,
             ],
@@ -3330,9 +3754,14 @@ export default function SqlEditorSurface({
         label: gettext('Format & Layout'),
         groups: [
           {
+            id: 'display_areas',
+            label: gettext('Display Areas'),
+            controls: displayAreas.map(({control}) => control),
+          },
+          {
             id: 'data_display',
             label: gettext('Data Display'),
-            controls: [displayControlSpec, splitDirId],
+            controls: [displayControlSpec, applyTemplateId],
           },
           {
             id: 'formatting',
@@ -3387,8 +3816,23 @@ export default function SqlEditorSurface({
           {id: `${pfx}.m.exec_stmt`, actionId: execStmtId, label: gettext('Execute Statement (F9)'), index: 10},
           {id: `${pfx}.m.exec_script`, actionId: execScriptId, label: gettext('Execute Script (F5)'), index: 20},
           {id: `${pfx}.m.explain`, actionId: explainId, label: gettext('Explain / Plan'), index: 30},
+          ...(prepareId ? [{
+            id: `${pfx}.m.prepare_statement`, actionId: prepareId, label: gettext('Prepare Statement'), index: 35,
+          }] : []),
           {id: `${pfx}.m.params`, actionId: paramsId, label: gettext('Parameters…'), index: 40},
           {id: `${pfx}.m.sep1`, type: 'separator', index: 45},
+          ...(startTransactionId ? [{
+            id: `${pfx}.m.start_transaction`, actionId: startTransactionId,
+            label: gettext('Start Transaction…'), index: 46,
+          }] : []),
+          ...(prepareTransactionId ? [{
+            id: `${pfx}.m.prepare_transaction`, actionId: prepareTransactionId,
+            label: gettext('Prepare Transaction…'), index: 48,
+          }] : []),
+          ...(recoveryId ? [{
+            id: `${pfx}.m.recover_prepared_transaction`, actionId: recoveryId,
+            label: gettext('Recover Prepared Transaction…'), index: 49,
+          }] : []),
           {id: `${pfx}.m.commit`, actionId: commitId, label: gettext('Commit Transaction'), index: 50},
           {id: `${pfx}.m.rollback`, actionId: rollbackId, label: gettext('Rollback Transaction'), index: 60},
           {id: `${pfx}.m.autocommit`, actionId: autocommitId, label: gettext('Auto-Commit'), index: 70},
@@ -3419,7 +3863,7 @@ export default function SqlEditorSurface({
           {id: `${pfx}.m.nav_next_row`, actionId: navNextRowId, label: gettext('Next Row (>)'), index: 66},
           {id: `${pfx}.m.nav_next_page`, actionId: navNextPageId, label: gettext('Next Page (>>)'), index: 68},
           {id: `${pfx}.m.nav_last`, actionId: navLastId, label: gettext('Last Record (>|)'), index: 70},
-          {id: `${pfx}.m.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Bookmark Record (!)'), index: 72},
+          {id: `${pfx}.m.bm_toggle`, actionId: bookmarkToggleId, label: gettext('Bookmark Record (!)'), index: 65},
           {id: `${pfx}.m.bm_prev`, actionId: bookmarkPrevId, label: gettext('Previous Bookmark (!<)'), index: 74},
           {id: `${pfx}.m.bm_next`, actionId: bookmarkNextId, label: gettext('Next Bookmark (!>)'), index: 76},
         ],
@@ -3430,6 +3874,11 @@ export default function SqlEditorSurface({
         index: 25,
         label: gettext('View'),
         items: [
+          ...displayAreas.map(({menu}) => menu),
+          {
+            id: `${pfx}.m.apply_layout_template`, actionId: applyTemplateId,
+            label: gettext('Apply Layout Template…'), index: 115,
+          },
           ...[
             [SQL_SURFACE_VIEWS.SQL, gettext('SQL Editor')],
             [SQL_SURFACE_VIEWS.VISUAL_BUILDER, gettext('Visual Query Builder (DDN)')],
@@ -3437,6 +3886,8 @@ export default function SqlEditorSurface({
             [SQL_SURFACE_VIEWS.DATA, gettext('Data View')],
             [SQL_SURFACE_VIEWS.METRICS_PLAN, gettext('Metrics & Plan')],
             [SQL_SURFACE_VIEWS.FIELDS, gettext('Result Fields')],
+            [SQL_SURFACE_VIEWS.INFORMATION, gettext('Information')],
+            [SQL_SURFACE_VIEWS.METADATA, gettext('Metadata')],
             [SQL_SURFACE_VIEWS.MESSAGES, gettext('Messages')],
           ].map(([vid, lbl], idx) => ({
             id: `${pfx}.m.v.${vid}`,
@@ -3448,6 +3899,19 @@ export default function SqlEditorSurface({
           {id: `${pfx}.m.sep_v1`, type: 'separator', index: 75},
           {id: `${pfx}.m.snips`, actionId: snippetsDrawerId, label: gettext('SQL Snippets Drawer'), index: 80},
           {id: `${pfx}.m.hist`, actionId: historyDrawerId, label: gettext('Query History Drawer'), index: 90},
+          {
+            id: `${pfx}.field_type_defaults`,
+            label: gettext('Field Type Defaults…'),
+            index: 110,
+            callback: () => setFieldDefaultsOpen(true),
+          },
+          {
+            id: `${pfx}.m.save_object_layout`,
+            label: gettext('Save Layout for This Object'),
+            index: 105,
+            disabled: !hostData?.object_layout_key,
+            callback: () => handlersRef.current.saveObjectLayout(),
+          },
           {id: `${pfx}.m.vbi`, actionId: vbInspectorId, label: gettext('Visual Builder Inspector'), index: 100},
         ],
       },
@@ -3491,13 +3955,18 @@ export default function SqlEditorSurface({
       regList.forEach((a) => curShell.actionsRegistry?.unregister?.(a.id));
     };
   }, [
+    localeRevision,
     activeBookmarks,
     activeRowIndex,
     autocommit,
+    canCancel,
+    callHost,
+    cancelPending,
     canInsertResult,
     executing,
     hasUncommitted,
     hostData?.active_result_index,
+    hostData?.object_layout_key,
     hostData?.result_count,
     hostData?.total_view_rows,
     hostData?.window_offset,
@@ -3508,14 +3977,26 @@ export default function SqlEditorSurface({
     isEditingRow,
     layout.booleanFormat,
     layout.displayMode,
+    languageOptions.native_statement_prepare,
+    languageOptions.native_transaction_start,
+    languageOptions.syntax_family,
+    languageOptions.native_transaction_prepare,
+    hostData?.session_id,
+    hostData?.xa_state,
+    hostData?.staged_count,
+    hostData?.prepared_transaction_id,
+    hostData?.transaction_prepare_state,
     limitsDraft.pageSize,
     rows.length,
-    splitOrientation,
     stableConfirmCloseGuard,
     stableRenderRightDrawer,
     stableRenderStatus,
     statusSummaryText,
     surfaceView,
+    upperView,
+    lowerView,
+    upperMode,
+    lowerMode,
     terminator,
   ]);
 
@@ -3661,7 +4142,41 @@ export default function SqlEditorSurface({
       {id:'columns',label:gettext('Form Fields & Order…'),onSelect:()=>{setColumnPickerScope('form');setColPickerOpen(true);}},
     ]});
   };
-  const renderDataPane = () => <RecordDataView model={{
+  const recordFieldMenu = (event, column, rowIndex) => {
+    event.preventDefault();
+    const markdown = layout.formFieldPrefs[column.name]?.editor === 'markdown';
+    const items = [{
+      id: 'inspect',
+      label: gettext('Open in Right Drawer'),
+      onSelect: () => openRightDrawerWith({
+        panel: 'value_inspector', valueRowIndex: rowIndex, valueColName: column.name,
+      }),
+    }];
+    const pair = recordConversionPair(column, conversionPairs);
+    const selectedPair = layout.formFieldPrefs[column.name]?.conversionPair;
+    if (pair) {
+      items.push({
+        id: 'field_conversion',
+        label: selectedPair ? gettext('Show Native Binary') : gettext('Display as UUID'),
+        onSelect: () => setRecordColumnPref(column.name, {conversionPair: selectedPair ? undefined : pair.id}),
+      });
+    }
+    items.push({
+      id: 'field_format',
+      label: gettext('Font & Alignment…'),
+      onSelect: () => setFormatFieldName(column.name),
+    });
+    if (inferColumnMeta(column).clientType === 'text') {
+      items.push({
+        id: 'field_editor',
+        label: markdown ? gettext('Use Plain Text Editor') : gettext('Use Markdown Editor'),
+        onSelect: () => setRecordColumnPref(column.name, {editor: markdown ? 'text' : 'markdown'}),
+      });
+    }
+    setContextMenuState({open: true, x: event.clientX, y: event.clientY, items});
+  };
+
+  const renderDataPane = (mode, secondary) => <RecordDataView model={{
     acceptCurrentRow,
     activeColName,
     activeRowIndex,
@@ -3669,17 +4184,18 @@ export default function SqlEditorSurface({
     bookmarkedGlobals: activeBookmarks,
     cancelRowDraft: cancelRecordDraft,
     currentRow,
+    conversions,
     editingRowIndex,
-    effectiveDisplayMode: layout.displayMode === DISPLAY_MODES.HYBRID_EDIT ? (isEditingRow ? (layout.hybridEditTarget === 'single_form' ? DISPLAY_MODES.SINGLE_FORM : DISPLAY_MODES.HYBRID) : DISPLAY_MODES.GRID) : layout.displayMode,
+    effectiveDisplayMode: resolveRecordPresentation(mode || layout.displayMode, isEditingRow, layout.hybridEditTarget),
     formColumns,
     gridColumns,
-    gridViewportRef,
+    gridViewportRef: secondary ? companionGridRef : gridViewportRef,
     handleKeyboardCellNavigate: handleSqlKeyboardCellNavigate,
     handleToggleColumnSort: handleToggleSort,
     hostData: {...hostData,sorts:(activeResult?.sort || []).map(s=>({...s,direction:s.dir||s.direction})),filters:activeResult?.filters||[]},
     isEditingRow,
     layout,
-    openFormFieldContextMenu: (event,col,rowIndex)=>{event.preventDefault();openRightDrawerWith({panel:'value_inspector',valueRowIndex:rowIndex,valueColName:col.name});},
+    openFormFieldContextMenu: recordFieldMenu,
     openHeaderContextMenu: recordHeaderMenu,
     openMiniFormContextMenu: recordFormMenu,
     openRightDrawerWith: recordDrawer,
@@ -3700,52 +4216,7 @@ export default function SqlEditorSurface({
     viewportWidth
   }}/>;
 
-  return (
-    <Box
-      ref={workAreaRef}
-      data-cdeadmin-qa-key="sql-editor-surface"
-      data-surface-view={surfaceView}
-      sx={{
-        flex: 1,
-        minHeight: 0,
-        minWidth: 0,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-      }}
-    >
-      <ColumnOrderDialog open={colPickerOpen} scope={columnPickerScope} allColumns={columns}
-        visibleNames={columnPickerScope === 'form' ? layout.formVisibleCols : layout.gridVisibleCols}
-        orderNames={columnPickerScope === 'form' ? layout.formColOrder : layout.gridColOrder}
-        onClose={()=>setColPickerOpen(false)} onApply={(order,visible)=>{
-          setLayout(prev=>columnPickerScope==='form'?{...prev,formColOrder:order,formVisibleCols:visible}:{...prev,gridColOrder:order,gridVisibleCols:visible});setColPickerOpen(false);
-        }}/>
-      {/* Hidden local .sql file reader */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".sql,.txt,application/sql,text/plain"
-        style={{display: 'none'}}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            const text = String(reader.result || '');
-            setSqlText(text);
-            editorRef.current?.setValue?.(text);
-          };
-          reader.readAsText(file);
-          e.target.value = '';
-        }}
-      />
-
-      {/* View 1: 100% SQL Code Canvas */}
-      {surfaceView === SQL_SURFACE_VIEWS.SQL && renderSqlEditorPane()}
-
-      {/* View 2: 100% Area 3e Shared DDN Visual Query Builder Canvas */}
-      {surfaceView === SQL_SURFACE_VIEWS.VISUAL_BUILDER && (
+  const renderDesigner = () => (
         <div
           data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"
           onDragEnter={(e) => {
@@ -3966,49 +4437,8 @@ export default function SqlEditorSurface({
             </div>
           )}
         </div>
-      )}
-
-      {/* View 3: SQL + Data Split View */}
-      {surfaceView === SQL_SURFACE_VIEWS.SQL_DATA && (
-        <div
-          data-cdeadmin-qa-key="sql-surface-split-view"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: splitOrientation === 'vertical' ? 'column' : 'row',
-          }}
-        >
-          <div
-            style={{
-              flex: `0 0 ${splitRatio}%`,
-              minHeight: 100,
-              minWidth: 160,
-              display: 'flex',
-              borderBottom:
-                splitOrientation === 'vertical'
-                  ? '2px solid var(--sr-border-default, #cbd5e1)'
-                  : 'none',
-              borderRight:
-                splitOrientation === 'horizontal'
-                  ? '2px solid var(--sr-border-default, #cbd5e1)'
-                  : 'none',
-            }}
-          >
-            {renderSqlEditorPane()}
-          </div>
-          <div style={{flex: 1, minHeight: 100, minWidth: 160, display: 'flex'}}>
-            {renderDataPane()}
-          </div>
-        </div>
-      )}
-
-      {/* View 4: 100% Data View (Surface 1 Engine) */}
-      {surfaceView === SQL_SURFACE_VIEWS.DATA && renderDataPane()}
-
-      {/* View 5: 100% Metrics & Execution Plan */}
-      {surfaceView === SQL_SURFACE_VIEWS.METRICS_PLAN && (
+  );
+  const renderMetrics = () => (
         <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
           <Box
             data-cdeadmin-qa-key="sql-surface-metrics-plan"
@@ -4095,10 +4525,8 @@ export default function SqlEditorSurface({
             )}
           </Box>
         </ScratchScrollArea>
-      )}
-
-      {/* View 6: 100% Result Fields Metadata */}
-      {surfaceView === SQL_SURFACE_VIEWS.FIELDS && (
+  );
+  const renderFields = () => (
         <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
           <Box data-cdeadmin-qa-key="sql-surface-fields" sx={{p: 2}}>
             {columns.length === 0 ? (
@@ -4148,10 +4576,8 @@ export default function SqlEditorSurface({
             )}
           </Box>
         </ScratchScrollArea>
-      )}
-
-      {/* View 7: 100% Structured Chronological Messages Log */}
-      {surfaceView === SQL_SURFACE_VIEWS.MESSAGES && (
+  );
+  const renderMessages = () => (
         <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
           <Box data-cdeadmin-qa-key="sql-surface-messages" sx={{p: 2, display: 'grid', gap: 1}}>
             {surfaceError && (
@@ -4229,13 +4655,149 @@ export default function SqlEditorSurface({
             )}
           </Box>
         </ScratchScrollArea>
-      )}
+  );
 
-      {(loading || executing) && (
-        <ProgressOverlay message={executing ? gettext('Executing SQL…') : gettext('Opening SQL Surface…')} />
+  const metadataResources = activeResult?.metadata_resources || EMPTY_ARRAY;
+  const selectedMetadata = metadataSelection?.result === activeResult?.index
+    && metadataResources.find(({resource_id}) => resource_id === metadataSelection?.id);
+
+  const renderMetadata = () => (
+    <div style={{display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0}}>
+      {!activeResult?.target_resource && metadataResources.length > 0 && (
+        <label style={{padding: 8}}>
+          {gettext('Referenced object')}{' '}
+          <select className="sr-input" value={selectedMetadata?.resource_id || ''}
+            onChange={(event) => setMetadataSelection({result: activeResult.index, id: event.target.value})}>
+            <option value="">{gettext('Select an object')}</option>
+            {metadataResources.map(({resource_id, display_name}) => (
+              <option key={resource_id} value={resource_id}>{display_name}</option>
+            ))}
+          </select>
+        </label>
       )}
+      <SurfaceMetadata post={post} databaseTargetId={databaseTargetId}
+        resource={activeResult?.target_resource || selectedMetadata || null} />
+    </div>
+  );
+
+  const renderView = (view, mode, secondary = false) => {
+    switch (view) {
+    case SQL_SURFACE_VIEWS.METADATA: return renderMetadata();
+    case SQL_SURFACE_VIEWS.INFORMATION: {
+      const effectiveQuery = hostData?.sql_view?.effective_query;
+      return <SurfaceInformation
+        fields={hostData?.object_layout_key ? hostData?.fields_grid || EMPTY_ARRAY : EMPTY_ARRAY}
+        effectiveQuery={effectiveQuery}
+        filters={activeResult?.filters}
+        sorts={activeResult?.sort}
+        onSave={effectiveQuery?.sql ? () => openSaveDialog('quick_query', false, effectiveQuery) : undefined}
+      />;
+    }
+    case SQL_SURFACE_VIEWS.DATA: return renderDataPane(mode, secondary);
+    case SQL_SURFACE_VIEWS.VISUAL_BUILDER: return renderDesigner();
+    case SQL_SURFACE_VIEWS.METRICS_PLAN: return renderMetrics();
+    case SQL_SURFACE_VIEWS.FIELDS: return renderFields();
+    case SQL_SURFACE_VIEWS.MESSAGES: return renderMessages();
+    default: return renderSqlEditorPane();
+    }
+  };
+
+  return (
+    <Box
+      ref={workAreaRef}
+      data-cdeadmin-qa-key="sql-editor-surface"
+      data-surface-view={surfaceView}
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }}
+    >
+      <ColumnOrderDialog open={colPickerOpen} scope={columnPickerScope} allColumns={columns}
+        visibleNames={columnPickerScope === 'form' ? layout.formVisibleCols : layout.gridVisibleCols}
+        orderNames={columnPickerScope === 'form' ? layout.formColOrder : layout.gridColOrder}
+        onClose={()=>setColPickerOpen(false)} onApply={(order,visible)=>{
+          setLayout(prev=>columnPickerScope==='form'?{...prev,formColOrder:order,formVisibleCols:visible}:{...prev,gridColOrder:order,gridVisibleCols:visible});setColPickerOpen(false);
+        }}/>
+      {/* Hidden local .sql file reader */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".sql,.txt,application/sql,text/plain"
+        style={{display: 'none'}}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const text = String(reader.result || '');
+            setSqlText(text);
+            editorRef.current?.setValue?.(text);
+          };
+          reader.readAsText(file);
+          e.target.value = '';
+        }}
+      />
+
+      {surfaceView === SQL_SURFACE_VIEWS.SQL_DATA ? (
+          <SurfaceDisplayAreas
+            first={renderView(upperView, upperMode)}
+            second={renderView(lowerView, lowerMode, true)}
+            onActivate={(event) => { focusedDisplayAreaRef.current = event.currentTarget; }}
+            ratio={46}
+          />
+      ) : renderView(surfaceView)}
 
       {/* Right-Click Context Menu */}
+      {formatFieldName && (
+        <FieldTypeDefaultsDialog
+          fieldName={formatFieldName}
+          types={[formatFieldName]}
+          defaults={{[formatFieldName]: layout.formFieldPrefs[formatFieldName] || {}}}
+          onClose={() => setFormatFieldName(null)}
+          onSave={(values) => {
+            const {font, hAlign} = values[formatFieldName];
+            setRecordColumnPref(formatFieldName, {font: font || undefined, hAlign: hAlign || undefined});
+          }}
+        />
+      )}
+      <Dialog
+        open={templatePickerOpen}
+        title={gettext('Apply Layout Template')}
+        size="medium"
+        onClose={() => setTemplatePickerOpen(false)}
+        actions={<Button onClick={() => setTemplatePickerOpen(false)}>{gettext('Close')}</Button>}
+      >
+        {templateLoadError ? (
+          <p role="alert">{gettext('Could not load layout templates: %s', templateLoadError)}</p>
+        ) : availableTemplates ? (
+          <SurfaceLayoutTemplateList
+            templates={availableTemplates}
+            onSelect={(template) => {
+              explicitLayoutRef.current = true;
+              setLayout((previous) => ({...previous, ...(template.layout || {})}));
+              setUpperMode('');
+              setLowerMode('');
+              setTemplatePickerOpen(false);
+            }}
+          />
+        ) : <p role="status">{gettext('Loading layout templates…')}</p>}
+      </Dialog>
+      {fieldDefaultsOpen && (
+        <FieldTypeDefaultsDialog
+          types={[...new Set(['text', ...columns.map((column) => inferColumnMeta(column).clientType)])]}
+          defaults={hostData?.field_type_defaults || {}}
+          onClose={() => setFieldDefaultsOpen(false)}
+          onSave={async (defaults) => {
+            const response = await callHost('save_field_type_defaults', {field_type_defaults: defaults});
+            setHostData((current) => ({...current, field_type_defaults: response.field_type_defaults}));
+          }}
+        />
+      )}
       <ContextMenu
         open={contextMenuState.open}
         x={contextMenuState.x}
@@ -4244,6 +4806,156 @@ export default function SqlEditorSurface({
         onClose={() => setContextMenuState((prev) => ({...prev, open: false}))}
       />
 
+      {recovery && (
+        <Dialog open title={gettext('Recover Prepared Transaction')} size="medium"
+          onClose={() => { if (!executing) setRecovery(null); }}
+          actions={<>
+            <Button disabled={executing} onClick={() => setRecovery(null)}>{gettext('Close')}</Button>
+            {['commit', 'rollback'].map((resolution) => (
+              <Button key={resolution} disabled={executing || !recovery.gid}
+                onClick={async () => {
+                  setExecuting(true);
+                  setTransactionStartError('');
+                  try {
+                    const response = await callHost('recover_prepared_transaction', {
+                      resolution, gid: recovery.gid,
+                    });
+                    applyHostState(response.state);
+                    setRecovery(null);
+                  } catch (error) {
+                    setTransactionStartError(error?.message || String(error));
+                    setRecovery((current) => ({...current, transactions: [], gid: ''}));
+                  } finally {
+                    setExecuting(false);
+                  }
+                }}>{resolution === 'commit' ? gettext('Commit') : gettext('Rollback')}</Button>
+            ))}
+          </>}>
+          <label>
+            {gettext('Prepared Transaction')}
+            <select value={recovery.gid} disabled={executing}
+              onChange={(event) => setRecovery({...recovery, gid: event.target.value})}>
+              <option value="">{gettext('Select a transaction')}</option>
+              {recovery.transactions.map(({gid, prepared_at}) => (
+                <option key={gid} value={gid}>{gid} · {prepared_at}</option>
+              ))}
+            </select>
+          </label>
+          {transactionStartError && <p role="alert">{transactionStartError}</p>}
+        </Dialog>
+      )}
+      {prepareTransactionOpen && (
+        <Dialog open title={gettext('Prepare Transaction')} size="small"
+          onClose={() => { if (!executing) setPrepareTransactionOpen(false); }}
+          actions={<>
+            <Button disabled={executing} onClick={() => setPrepareTransactionOpen(false)}>{gettext('Cancel')}</Button>
+            <Button intent="primary" disabled={executing || Boolean(hostData?.transaction_prepare_state)}
+              onClick={async () => {
+                setExecuting(true);
+                setTransactionStartError('');
+                try {
+                  applyHostState(await callHost('prepare_transaction'));
+                  setPrepareTransactionOpen(false);
+                } catch (error) {
+                  setTransactionStartError(error?.message || String(error));
+                  try {
+                    applyHostState(await callHost('read_window'));
+                  } catch {
+                    // Preserve the provider error.
+                  }
+                } finally {
+                  setExecuting(false);
+                }
+              }}>{gettext('Prepare')}</Button>
+          </>}>
+          <p>{gettext('Prepare the active transaction for two-phase commit. After preparing, use Commit or Rollback to resolve it.')}</p>
+          {transactionStartError && <p role="alert">{transactionStartError}</p>}
+        </Dialog>
+      )}
+      {startTransactionOpen && (
+        <Dialog open title={gettext('Start Transaction')} size="small"
+          onClose={() => { if (!executing) setStartTransactionOpen(false); }}
+          actions={<>
+            <Button disabled={executing} onClick={() => setStartTransactionOpen(false)}>{gettext('Cancel')}</Button>
+            {['mysql', 'mariadb'].includes(languageOptions.syntax_family) && languageOptions.native_transaction_prepare && (
+              <Button disabled={executing} onClick={async () => {
+                setExecuting(true);
+                setTransactionStartError('');
+                try {
+                  applyHostState(await callHost('start_xa_transaction'));
+                  setStartTransactionOpen(false);
+                } catch (error) {
+                  setTransactionStartError(error?.message || String(error));
+                  try {
+                    applyHostState(await callHost('read_window'));
+                  } catch {
+                    // Keep the original XA error.
+                  }
+                } finally {
+                  setExecuting(false);
+                }
+              }}>{gettext('Start XA Transaction')}</Button>
+            )}
+            <Button intent="primary" disabled={executing} onClick={async () => {
+              setExecuting(true);
+              setTransactionStartError('');
+              try {
+                const response = await callHost('start_transaction', {
+                  transaction_options: transactionOptions, client_sql_dialect: clientSqlDialect,
+                });
+                applyHostState(response);
+                setStartTransactionOpen(false);
+              } catch (error) {
+                setTransactionStartError(error?.message || String(error));
+                try {
+                  applyHostState(await callHost('read_window'));
+                } catch {
+                  // Retain the native error when state observation fails.
+                }
+              } finally {
+                setExecuting(false);
+              }
+            }}>{gettext('Start')}</Button>
+          </>}>
+          <div style={{display: 'grid', gap: 8}}>
+            {transactionStartOptions(languageOptions.syntax_family).map(([key, label, values]) => (
+              <label key={key}>{label}{' '}
+                <select className="sr-input" value={transactionOptions[key]} disabled={executing}
+                  onChange={(event) => setTransactionOptions({...transactionOptions, [key]: event.target.value})}>
+                  {values.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
+                </select>
+              </label>
+            ))}
+            {transactionStartError && <p role="alert">{transactionStartError}</p>}
+          </div>
+        </Dialog>
+      )}
+      {preparedStatement && (
+        <Dialog open title={gettext('Prepared Statement')} size="medium"
+          onClose={() => setPreparedStatement(null)}
+          actions={<Button onClick={() => setPreparedStatement(null)}>{gettext('Close')}</Button>}>
+          <div style={{display: 'grid', gap: 8}}>
+            <p>{preparedStatement.statement_type}</p>
+            {[
+              [gettext('Result Columns'), preparedStatement.columns, preparedStatement.columns_complete],
+              [gettext('Parameters'), preparedStatement.parameters, preparedStatement.parameters_complete],
+            ].map(([label, items, complete]) => (
+              <section key={label}>
+                <h3>{label}</h3>
+                {!complete && <p>{gettext('The provider supplied incomplete metadata.')}</p>}
+                <ol>{(items || []).map((item) => (
+                  <li key={item.position}>
+                    {[item.name || item.field, item.native_type].filter(Boolean).join(' · ')}
+                  </li>
+                ))}</ol>
+              </section>
+            ))}
+            <pre style={{whiteSpace: 'pre-wrap'}}>
+              {preparedStatement.detailed?.text || preparedStatement.legacy?.text || gettext('No plan supplied.')}
+            </pre>
+          </div>
+        </Dialog>
+      )}
       {/* Modal Parameter Binding Dialog */}
       <Dialog
         open={paramModalOpen}
@@ -4295,7 +5007,7 @@ export default function SqlEditorSurface({
                   <strong style={{fontSize: '0.82rem'}}>{p.token || `:${key}`}</strong>
                   <select
                     className="sr-input"
-                    aria-label={`Type for ${key}`}
+                    aria-label={gettext('Type for %s', key)}
                     value={draft.type}
                     onChange={(e) =>
                       setParamDrafts((prev) => ({
@@ -4312,7 +5024,7 @@ export default function SqlEditorSurface({
                   </select>
                   <input
                     className="sr-input"
-                    aria-label={`Value for ${key}`}
+                    aria-label={gettext('Value for %s', key)}
                     disabled={draft.isNull}
                     value={draft.isNull ? '' : draft.value}
                     placeholder={draft.isNull ? '<null>' : gettext('Enter value…')}
@@ -4461,7 +5173,7 @@ export default function SqlEditorSurface({
                     <div style={{fontSize: '0.75rem', opacity: 0.78}}>{qq.description}</div>
                   )}
                   <div style={{fontSize: '0.72rem', opacity: 0.68}}>
-                    {gettext('Display: %s · Terminator: %s', qq.display_layout?.displayMode || 'grid', qq.terminator || ';')}
+                    {gettext('Display: %s · Terminator: %s', quickQueryDisplayLabel(qq.display_layout?.displayMode), qq.terminator || ';')}
                   </div>
                 </div>
                 <div style={{display: 'flex', gap: 6, flexShrink: 0}}>
@@ -4473,11 +5185,29 @@ export default function SqlEditorSurface({
                   >
                     {gettext('Load')}
                   </Button>
+                  {qq.server_id > 0 && (
+                    <Button size="small" onClick={() => {
+                      const pinned = quickQueryShortcuts.some((query) => query.query_id === qq.query_id);
+                      try {
+                        setQuickQueryShortcut(qq, !pinned);
+                      } catch (error) {
+                        setSurfaceError(error?.message || String(error));
+                      }
+                    }}>
+                      {quickQueryShortcuts.some((query) => query.query_id === qq.query_id)
+                        ? gettext('Remove from Dashboard') : gettext('Pin to Dashboard')}
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     onClick={async () => {
-                      const res = await callHost('delete_quick_query', {query_id: qq.query_id});
-                      if (Array.isArray(res?.quick_queries)) setQuickQueries(res.quick_queries);
+                      try {
+                        const res = await callHost('delete_quick_query', {query_id: qq.query_id});
+                        if (Array.isArray(res?.quick_queries)) setQuickQueries(res.quick_queries);
+                        setQuickQueryShortcut(qq, false);
+                      } catch (error) {
+                        setSurfaceError(error?.message || String(error));
+                      }
                     }}
                   >
                     {gettext('Delete')}
@@ -4531,8 +5261,11 @@ export default function SqlEditorSurface({
           />
           {isFirebird && (
             <div className="sr-field">
-              <label className="sr-field-label">{gettext('Firebird SQL Dialect')}</label>
+              <label className="sr-field-label" htmlFor={`${surfaceIdRef.current}-sql-dialect`}>
+                {gettext('Firebird SQL Dialect')}
+              </label>
               <select
+                id={`${surfaceIdRef.current}-sql-dialect`}
                 className="sr-input"
                 value={clientSqlDialect}
                 onChange={(e) => setClientSqlDialect(Number(e.target.value) || 3)}

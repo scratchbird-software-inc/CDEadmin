@@ -679,6 +679,20 @@ def test_cancel_acceptance_does_not_claim_cancellation_or_finality(rig):
     assert rig.client.cancel(query) is False
 
 
+def test_grid_read_interrupt_requires_the_editor_execution_and_preserves_transaction(rig):
+    from pgadmin.cdeadmin.workspace.sql_surface_host import SqlSurfaceExecution
+
+    operation = SqlSurfaceExecution('owned-grid')
+    with rig.client._exclusive(rig.handle):
+        with rig.client.cancellable_grid_read(rig.handle, operation):
+            assert not rig.client.cancel_result_stream(rig.handle)['cancel_request_accepted']
+            rig.handle._att.cancel_operation.assert_not_called()
+            assert operation.request_cancel(None, None, None)['cancel_status'] == 'requested'
+    assert rig.handle._att.cancel_operation.call_args_list == [call(3), call(1), call(2)]
+    rig.handle.commit.assert_not_called()
+    rig.handle.rollback.assert_not_called()
+
+
 def test_native_cancellation_observed_with_status_without_query_text(rig):
     error = RuntimeError('private-query-text')
     error.gds_codes = (335544794,)

@@ -27641,3 +27641,332 @@ msgstr ""
 #~ "cannot be a utility binary directory."
 #~ msgstr ""
 
+msgid "Go to the first record"
+msgstr "Aller au premier enregistrement"
+
+msgid "Move back one page of records"
+msgstr "Reculer d’une page d’enregistrements"
+
+msgid "Go to the preceding record"
+msgstr "Aller à l’enregistrement précédent"
+
+msgid "Go to the following record"
+msgstr "Aller à l’enregistrement suivant"
+
+msgid "Move forward one page of records"
+msgstr "Avancer d’une page d’enregistrements"
+
+msgid "Go to the last record"
+msgstr "Aller au dernier enregistrement"
+
+msgid "Add or remove a bookmark on the current record"
+msgstr "Ajouter ou retirer un signet sur l’enregistrement courant"
+
+msgid "Go to the preceding bookmarked record"
+msgstr "Aller à l’enregistrement marqué précédent"
+
+msgid "Go to the following bookmarked record"
+msgstr "Aller à l’enregistrement marqué suivant"
+
+msgid "Open an empty form for a new record"
+msgstr "Ouvrir un formulaire vide pour un nouvel enregistrement"
+
+msgid "Start a new record using values from the current record"
+msgstr "Créer un enregistrement à partir des valeurs de l’enregistrement courant"
+
+msgid "Stage the current record for deletion"
+msgstr "Mettre l’enregistrement courant en attente de suppression"
+
+msgid "Commit pending changes to the database"
+msgstr "Valider les modifications en attente dans la base de données"
+
+msgid "Discard uncommitted changes"
+msgstr "Annuler les modifications non validées"
+
+msgid "Toggle automatic commit of changes"
+msgstr "Activer ou désactiver la validation automatique des modifications"
+
+msgid "Choose an export format and which data to include"
+msgstr "Choisir le format d’exportation et les données à inclure"
+
+msgid "Scroll the current row into view"
+msgstr "Faire défiler jusqu’à la ligne courante"
+
+msgid "Go to a record by its row number"
+msgstr "Aller à un enregistrement par son numéro de ligne"
+
+msgid "Set the selected editable field to SQL NULL"
+msgstr "Affecter SQL NULL au champ modifiable sélectionné"
+
+msgid "Undo changes to the current row"
+msgstr "Annuler les modifications de la ligne courante"
+
+msgid "Review the SQL for pending edits in the right drawer"
+msgstr "Consulter dans le panneau droit le SQL des modifications en attente"
+
+msgid "Copy the selected data to the clipboard"
+msgstr "Copier les données sélectionnées dans le presse-papiers"
+
+msgid "Copy the selected cell value and clear it"
+msgstr "Copier la valeur de la cellule sélectionnée, puis l’effacer"
+
+msgid "Paste the clipboard value into the selected cell"
+msgstr "Coller le contenu du presse-papiers dans la cellule sélectionnée"
+
+msgid "Choose how to format selected data for the clipboard"
+msgstr "Choisir le format des données sélectionnées pour le presse-papiers"
+
+msgid "Reload rows from the database"
+msgstr "Recharger les lignes de la base de données"
+
+msgid "Choose whether the database or the local host sorts rows"
+msgstr "Choisir où trier les lignes : dans la base de données ou sur l’hôte local"
+
+msgid "Search for matching values in the data"
+msgstr "Rechercher des valeurs correspondantes dans les données"
+
+msgid "Build conditions to restrict the rows shown"
+msgstr "Créer des conditions pour limiter les lignes affichées"
+
+msgid "Remove active filters and sorting"
+msgstr "Supprimer les filtres et le tri actifs"
+
+msgid "Configure the maximum fetched rows and rows per page"
+msgstr "Configurer le nombre maximal de lignes récupérées et le nombre de lignes par page"
+
+msgid "Resize columns to fit their content"
+msgstr "Ajuster la largeur des colonnes à leur contenu"
+
+msgid "Keep the selected column visible when scrolling horizontally"
+msgstr "Maintenir la colonne sélectionnée visible lors du défilement horizontal"
+
+msgid "Choose which columns to show and their order"
+msgstr "Choisir les colonnes à afficher et leur ordre"
+
+msgid "Restore the default display settings"
+msgstr "Rétablir les paramètres d’affichage par défaut"
+
+msgid "Load a file into the staged row changes"
+msgstr "Ajouter le contenu d’un fichier aux modifications de lignes en attente"
+
+msgid "Open the browse query in the SQL Editor"
+msgstr "Ouvrir la requête de consultation dans l’éditeur SQL"
+
+msgid "Copy generated INSERT statements to the clipboard"
+msgstr "Copier les instructions INSERT générées dans le presse-papiers"
+
+msgid "Copy generated UPDATE statements to the clipboard"
+msgstr "Copier les instructions UPDATE générées dans le presse-papiers"
+
+msgid "Choose which result set from the script to display"
+msgstr "Choisir le jeu de résultats du script à afficher"
+
+msgid "Request the database execution plan for the statement"
+msgstr "Demander à la base de données le plan d’exécution de l’instruction"
+
+msgid "Enter values for the statement parameters"
+msgstr "Saisir les valeurs des paramètres de l’instruction"
+
+msgid "Choose the delimiter used to split SQL statements"
+msgstr "Choisir le délimiteur des instructions SQL"
+
+msgid "Choose options and start a database transaction"
+msgstr "Choisir les options et démarrer une transaction"
+
+msgid "Browse SQL snippets in the right drawer"
+msgstr "Parcourir les extraits SQL dans le panneau droit"
+
+msgid "Browse and open named saved queries"
+msgstr "Parcourir et ouvrir les requêtes enregistrées"
+
+msgid "Browse previous SQL executions in the right drawer"
+msgstr "Consulter les exécutions SQL précédentes dans le panneau droit"
+
+msgid "Save SQL as a file, a named query, or a snippet"
+msgstr "Enregistrer le SQL dans un fichier, une requête nommée ou un extrait"
+
+msgid "Reformat the SQL text in the editor"
+msgstr "Reformater le texte SQL dans l’éditeur"
+
+msgid "Choose how Boolean result values are displayed"
+msgstr "Choisir l’affichage des valeurs booléennes du résultat"
+
+msgid "Open the Visual Builder controls in the right drawer"
+msgstr "Ouvrir les commandes du concepteur visuel dans le panneau droit"
+
+msgid "Configure result fetch limits and page size"
+msgstr "Configurer les limites de récupération des résultats et la taille des pages"
+
+msgid "Inspect the database connection bound to this editor"
+msgstr "Examiner la connexion à la base de données de cet éditeur"
+
+msgid "Load SQL text from a file"
+msgstr "Charger du texte SQL depuis un fichier"
+
+msgid "Save the selected SQL as a tagged snippet"
+msgstr "Enregistrer la sélection SQL comme extrait avec des étiquettes"
+
+msgid "Save the current query as a BI question"
+msgstr "Enregistrer la requête courante comme question BI"
+
+msgid "Export results as an Excel or OpenDocument spreadsheet"
+msgstr "Exporter les résultats dans une feuille de calcul Excel ou OpenDocument"
+
+msgid "Export results as a PDF report"
+msgstr "Exporter les résultats dans un rapport PDF"
+
+msgid "Show the rows returned by the query"
+msgstr "Afficher les lignes renvoyées par la requête"
+
+msgid "Inspect execution statistics and the available plan"
+msgstr "Examiner les statistiques d’exécution et le plan disponible"
+
+msgid "Show the SQL used to retrieve these rows"
+msgstr "Afficher le SQL utilisé pour récupérer ces lignes"
+
+msgid "Inspect column names and data types"
+msgstr "Examiner les noms et les types de données des colonnes"
+
+msgid "Review information about the selected object or query"
+msgstr "Consulter les informations sur l’objet ou la requête sélectionnée"
+
+msgid "Inspect the object definition, comment and dependencies"
+msgstr "Examiner la définition, le commentaire et les dépendances de l’objet"
+
+msgid "Review execution messages and errors"
+msgstr "Consulter les messages et les erreurs d’exécution"
+
+msgid "Show records in a table with one row per record"
+msgstr "Afficher les enregistrements dans un tableau, à raison d’une ligne par enregistrement"
+
+msgid "Show each record in a compact form"
+msgstr "Afficher chaque enregistrement dans un formulaire compact"
+
+msgid "Show the current record in a mini-form below the grid"
+msgstr "Afficher l’enregistrement courant dans un mini-formulaire sous la grille"
+
+msgid "Fill the data area with a form for the current record"
+msgstr "Remplir la zone de données avec un formulaire pour l’enregistrement courant"
+
+msgid "Show the grid while browsing and switch to a form when editing"
+msgstr "Afficher la grille en consultation et passer à un formulaire en édition"
+
+msgid "Use a compact form while editing"
+msgstr "Utiliser un formulaire compact pendant l’édition"
+
+msgid "Use a full form while editing"
+msgstr "Utiliser un formulaire complet pendant l’édition"
+
+msgid "Open the SQL text editor"
+msgstr "Ouvrir l’éditeur de texte SQL"
+
+msgid "Design a query visually"
+msgstr "Concevoir une requête visuellement"
+
+msgid "Show the SQL editor above the query results"
+msgstr "Afficher l’éditeur SQL au-dessus des résultats de la requête"
+
+msgid "Execute selection or statement at cursor"
+msgstr "Exécuter la sélection ou l’instruction au niveau du curseur"
+
+msgid "Execute full script with active terminator / SET TERM"
+msgstr "Exécuter le script complet avec le délimiteur actif ou SET TERM"
+
+msgid "Accept changes to the current row"
+msgstr "Accepter les modifications de la ligne courante"
+
+msgid "Edit the current row"
+msgstr "Modifier la ligne courante"
+
+msgid "Edit the current result row"
+msgstr "Modifier la ligne courante du résultat"
+
+msgid "Save the current display settings or create a shareable template"
+msgstr "Enregistrer les paramètres d’affichage courants ou créer un modèle partageable"
+
+msgid "Revert changes to the current row"
+msgstr "Annuler les modifications de la ligne courante"
+
+msgid "Reapply an undone row edit"
+msgstr "Rétablir une modification de ligne annulée"
+
+msgid "Tx: Auto-Commit"
+msgstr "Tx : validation automatique"
+
+msgid "Tx: Prepared"
+msgstr "Tx : préparée"
+
+msgid "Tx: Uncommitted (%s staged)"
+msgstr "Tx : non validée (%s en attente)"
+
+msgid "Result %s/%s: %s rows"
+msgstr "Résultat %s/%s : %s lignes"
+
+msgid "Term: %s"
+msgstr "Délimiteur : %s"
+
+msgid "Choose an object to inspect its metadata."
+msgstr "Choisissez un objet pour examiner ses métadonnées."
+
+msgid "Field Name"
+msgstr "Nom du champ"
+
+msgid "Server Native Type"
+msgstr "Type natif du serveur"
+
+msgid "Client Type"
+msgstr "Type côté client"
+
+msgid "Could not load layout templates: %s"
+msgstr "Impossible de charger les modèles de disposition : %s"
+
+msgid "Invalid template list."
+msgstr "Liste de modèles incorrecte."
+
+msgid "Format Field: %s"
+msgstr "Mettre en forme le champ : %s"
+
+msgid "Field type"
+msgstr "Type de champ"
+
+msgid "Field type default"
+msgstr "Valeur par défaut du type de champ"
+
+msgid "Application default"
+msgstr "Valeur par défaut de l’application"
+
+msgid "Show Native Binary"
+msgstr "Afficher la valeur binaire native"
+
+msgid "Display as UUID"
+msgstr "Afficher comme UUID"
+
+msgid "Font & Alignment…"
+msgstr "Police et alignement…"
+
+msgid "Use Plain Text Editor"
+msgstr "Utiliser l’éditeur de texte brut"
+
+msgid "Use Markdown Editor"
+msgstr "Utiliser l’éditeur Markdown"
+
+msgid "Prepare the active transaction for two-phase commit. After preparing, use Commit or Rollback to resolve it."
+msgstr "Préparez la transaction active pour une validation en deux phases. Après la préparation, validez ou annulez la transaction."
+
+msgid "The provider supplied incomplete metadata."
+msgstr "Le fournisseur a renvoyé des métadonnées incomplètes."
+
+msgid "No plan supplied."
+msgstr "Aucun plan fourni."
+
+msgid "Hybrid (Grid + Current Mini-Form)"
+msgstr "Hybride (grille et mini-formulaire courant)"
+
+msgid "Single Form (100% Area)"
+msgstr "Formulaire unique (zone entière)"
+
+msgid "Quick Queries…"
+msgstr "Requêtes enregistrées…"
+
+msgid "Visual Query Builder (DDN)"
+msgstr "Concepteur visuel de requêtes (DDN)"

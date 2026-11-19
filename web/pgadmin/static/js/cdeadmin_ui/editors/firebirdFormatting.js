@@ -45,6 +45,11 @@ export function firebirdTokens(source) {
 
 export function formatFirebird(source) {
   const tokens = firebirdTokens(source);
+  const wordStarts = new Set(tokens.filter((token) => token.kind === 'word').map((token) => token.start));
+  const directives = [...source.matchAll(/^([ \t]*)SET[ \t]+(?:TERM(?:INATOR)?|SQL[ \t]+DIALECT|BAIL|AUTODDL)\b[^\r\n]*/gim)]
+    .filter((match) => wordStarts.has(match.index + match[1].length))
+    .map((match) => ({start: match.index, end: match.index + match[0].length}));
+  let directiveIndex = 0;
   let output = '', depth = 0;
   const breaks = new Set(['SELECT', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'UNION', 'JOIN', 'BEGIN', 'END', 'ELSE']);
   tokens.forEach((token, index) => {
@@ -53,7 +58,11 @@ export function formatFirebird(source) {
     const previous = tokens[index-1];
     if(previous) {
       const gap = source.slice(previous.end, token.start);
-      if(previous.kind === 'line-comment' || previous.text === ';' ||
+      while(directives[directiveIndex]?.end < previous.end) directiveIndex++;
+      const directive = directives[directiveIndex];
+      if(directive && token.start >= directive.start && previous.end <= directive.end) {
+        output += gap;
+      } else if(previous.kind === 'line-comment' || previous.text === ';' ||
           breaks.has(word) || ['BEGIN', 'THEN', 'ELSE'].includes(previous.text.toUpperCase())) {
         output += '\n' + '  '.repeat(Math.min(depth, 32));
       } else if(gap) output += ' ';

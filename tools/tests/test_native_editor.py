@@ -8,7 +8,53 @@ import threading
 import pytest
 
 from pgadmin.cdeadmin.providers.native_editor import metadata, mysql_bind_markers, validate_mysql, session_access
+from pgadmin.cdeadmin.providers.mysql_family import mariadb_statement_description
 from pgadmin.cdeadmin.sdk.relational import RelationalClientError
+
+
+def test_mariadb_surface_description_binds_source_and_releases_native_statement(monkeypatch):
+    monkeypatch.setattr(mariadb_statement_description, 'observe', lambda *_: {
+        'version': '12.2.2-MariaDB', 'sql_mode': 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES',
+    })
+    handle = Mock()
+    cursor = handle.cursor.return_value
+    cursor.cdeadmin_describe = None
+    client = SimpleNamespace(_uncertain_sessions=set())
+    source = """SELECT "a;b", 'text;value', ?"""
+    with pytest.raises(RelationalClientError, match='exactly one'):
+        mariadb_statement_description.describe(client, handle, source + '; SELECT 2')
+    cursor.execute.assert_not_called()
+
+    receipt = mariadb_statement_description.describe(client, handle, source + ';')
+    assert receipt['statement_execution_requested'] is False
+    assert not receipt['columns_complete'] and not receipt['parameters_complete']
+    setup, prepare, release, clear = [call.args for call in cursor.execute.call_args_list]
+    name = prepare[0].split()[1]
+    assert setup == (f'SET @{name} = CONVERT(? USING utf8mb4)', (source.encode(),))
+    assert prepare == (f'PREPARE {name} FROM @{name}',)
+    assert release == (f'DEALLOCATE PREPARE {name}',)
+    assert clear == (f'SET @{name} = NULL',)
+    cursor.close.assert_called_once_with()
+
+
+def test_mariadb_binary_description_exposes_column_details_and_native_parameter_slots(monkeypatch):
+    monkeypatch.setattr(mariadb_statement_description, 'observe', lambda *_: {
+        'version': '12.2.2-MariaDB', 'sql_mode': '',
+        'character_set_client': 'utf8mb4', 'character_set_results': 'utf8mb4',
+    })
+    handle = Mock()
+    cursor = handle.cursor.return_value
+    cursor.cdeadmin_describe.return_value = (1, [('金額'.encode(), 246, 0, 63, 14, 2)])
+    client = SimpleNamespace(_uncertain_sessions=set())
+    receipt = mariadb_statement_description.describe(client, handle, 'SELECT amount AS 金額 WHERE id=?')
+    assert receipt['columns'] == [{
+        'position': 1, 'name': '金額', 'native_type': 'NEWDECIMAL', 'type_code': 246,
+        'flags': 0, 'charset_id': 63, 'length': 14, 'decimals': 2,
+    }]
+    assert receipt['parameters'] == [{'position': 1, 'name': '?'}]
+    assert receipt['columns_complete'] and not receipt['parameters_complete']
+    cursor.execute.assert_not_called()
+    cursor.close.assert_called_once_with()
 
 
 @pytest.mark.parametrize('engine', ['sqlite', 'duckdb'])

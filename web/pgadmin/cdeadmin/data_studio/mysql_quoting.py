@@ -4,6 +4,7 @@ import re
 TAG = re.compile(r'\$[A-Za-z0-9_\u0080-\U0010ffff]*\$')
 IDENTIFIER = re.compile(r'[A-Za-z0-9_$\u0080-\U0010ffff]')
 PARAMETER = re.compile(r'%(?:s|\(([^)]+)\)s)')
+SURFACE_NAMED = re.compile(r'(?<![:\w]):([A-Za-z_][A-Za-z0-9_]*)')
 
 
 def available(version):
@@ -38,7 +39,7 @@ def end_of_quote(source, start, marker):
     return None
 
 
-def parameter_spans(source, modes, *, dollar_quotes=False):
+def parameter_spans(source, modes, *, dollar_quotes=False, surface_markers=False):
     """Locate driver bindings outside native literals, identifiers and comments."""
     i = 0; quote = None; comment = None
     while i < len(source):
@@ -69,9 +70,18 @@ def parameter_spans(source, modes, *, dollar_quotes=False):
                 active = directive is None or int(directive[1]) <= 90700
                 if directive is not None: body_start += directive.end()
                 if active:
-                    for start, stop, name in parameter_spans(source[body_start:end], modes, dollar_quotes=True):
+                    for start, stop, name in parameter_spans(
+                        source[body_start:end], modes, dollar_quotes=True, surface_markers=surface_markers
+                    ):
                         yield body_start + start, body_start + stop, name
             i = end + 2; continue
+        elif surface_markers and char == '?':
+            yield i, i + 1, None
+        elif surface_markers and char == ':':
+            match = SURFACE_NAMED.match(source, i)
+            if match:
+                yield i, match.end(), match[1]
+                i = match.end(); continue
         elif char == '%':
             match = PARAMETER.match(source, i)
             if match:

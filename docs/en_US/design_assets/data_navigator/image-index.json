@@ -1,0 +1,1031 @@
+[
+  {
+    "id": "dv-current-grid",
+    "title": "Data Viewer \u00b7 current grid",
+    "image": "images/dv-current-grid.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-mini_forms",
+    "title": "Data Viewer \u00b7 current mini_forms",
+    "image": "images/dv-current-mini_forms.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-single_form",
+    "title": "Data Viewer \u00b7 current single_form",
+    "image": "images/dv-current-single_form.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-hybrid",
+    "title": "Data Viewer \u00b7 current hybrid",
+    "image": "images/dv-current-hybrid.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-tib-data",
+    "title": "Data \u00b7 current TiB",
+    "image": "images/dv-current-tib-data.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "dv-current-tib-format-and-layout",
+    "title": "Format & Layout \u00b7 current TiB",
+    "image": "images/dv-current-tib-format-and-layout.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "dv-current-tib-transfer-and-sql",
+    "title": "Transfer & SQL \u00b7 current TiB",
+    "image": "images/dv-current-tib-transfer-and-sql.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "dv-current-content-sql",
+    "title": "Current sql",
+    "image": "images/dv-current-content-sql.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-content-metrics",
+    "title": "Current metrics",
+    "image": "images/dv-current-content-metrics.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-content-fields",
+    "title": "Current fields",
+    "image": "images/dv-current-content-fields.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-content-messages",
+    "title": "Current messages",
+    "image": "images/dv-current-content-messages.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-dialog-columns",
+    "title": "Current columns dialog",
+    "image": "images/dv-current-dialog-columns.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-dialog-limits",
+    "title": "Current limits dialog",
+    "image": "images/dv-current-dialog-limits.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-dialog-jump",
+    "title": "Current jump dialog",
+    "image": "images/dv-current-dialog-jump.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-dialog-layout",
+    "title": "Current layout dialog",
+    "image": "images/dv-current-dialog-layout.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-dialog-import",
+    "title": "Current import dialog",
+    "image": "images/dv-current-dialog-import.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-export-csv",
+    "title": "Current export \u00b7 CSV (.csv)",
+    "image": "images/dv-current-export-csv.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-tsv",
+    "title": "Current export \u00b7 TSV (.tsv)",
+    "image": "images/dv-current-export-tsv.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-xlsx",
+    "title": "Current export \u00b7 Excel (.xlsx)",
+    "image": "images/dv-current-export-xlsx.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-ods",
+    "title": "Current export \u00b7 OpenDocument (.ods)",
+    "image": "images/dv-current-export-ods.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-pdf",
+    "title": "Current export \u00b7 PDF Report (.pdf)",
+    "image": "images/dv-current-export-pdf.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-json",
+    "title": "Current export \u00b7 JSON (.json)",
+    "image": "images/dv-current-export-json.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-sql-insert",
+    "title": "Current export \u00b7 SQL INSERT (.sql)",
+    "image": "images/dv-current-export-sql-insert.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-export-sql-update",
+    "title": "Current export \u00b7 SQL UPDATE (.sql)",
+    "image": "images/dv-current-export-sql-update.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "dv-current-filter_builder",
+    "title": "Current filter_builder",
+    "image": "images/dv-current-filter_builder.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-inspect_staged",
+    "title": "Current inspect_staged",
+    "image": "images/dv-current-inspect_staged.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-quick_find",
+    "title": "Current quick_find",
+    "image": "images/dv-current-quick_find.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-current-header-context",
+    "title": "Current column header context menu",
+    "image": "images/dv-current-header-context.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-grid",
+    "title": "SQL Editor \u00b7 current grid",
+    "image": "images/sql-current-grid.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-mini_forms",
+    "title": "SQL Editor \u00b7 current mini_forms",
+    "image": "images/sql-current-mini_forms.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-single_form",
+    "title": "SQL Editor \u00b7 current single_form",
+    "image": "images/sql-current-single_form.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-hybrid",
+    "title": "SQL Editor \u00b7 current hybrid",
+    "image": "images/sql-current-hybrid.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-tib-query",
+    "title": "Query \u00b7 current TiB",
+    "image": "images/sql-current-tib-query.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "sql-current-tib-format-and-layout",
+    "title": "Format & Layout \u00b7 current TiB",
+    "image": "images/sql-current-tib-format-and-layout.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "sql-current-tib-export-and-files",
+    "title": "Export & Files \u00b7 current TiB",
+    "image": "images/sql-current-tib-export-and-files.png",
+    "kind": "current",
+    "group": "Current TiB sub-tabs"
+  },
+  {
+    "id": "sql-current-content-sql",
+    "title": "Current sql",
+    "image": "images/sql-current-content-sql.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-content-visual_builder",
+    "title": "Current visual_builder",
+    "image": "images/sql-current-content-visual_builder.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-content-sql_data",
+    "title": "Current sql_data",
+    "image": "images/sql-current-content-sql_data.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-content-metrics_plan",
+    "title": "Current metrics_plan",
+    "image": "images/sql-current-content-metrics_plan.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-content-fields",
+    "title": "Current fields",
+    "image": "images/sql-current-content-fields.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-content-messages",
+    "title": "Current messages",
+    "image": "images/sql-current-content-messages.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "sql-current-dialog-parameters",
+    "title": "Current parameters dialog",
+    "image": "images/sql-current-dialog-parameters.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-dialog-limits",
+    "title": "Current limits dialog",
+    "image": "images/sql-current-dialog-limits.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-dialog-connection",
+    "title": "Current connection dialog",
+    "image": "images/sql-current-dialog-connection.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-dialog-saved-queries",
+    "title": "Current saved-queries dialog",
+    "image": "images/sql-current-dialog-saved-queries.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-dialog-save",
+    "title": "Current save dialog",
+    "image": "images/sql-current-dialog-save.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-export-csv",
+    "title": "Current export \u00b7 CSV (.csv)",
+    "image": "images/sql-current-export-csv.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-tsv",
+    "title": "Current export \u00b7 TSV (.tsv)",
+    "image": "images/sql-current-export-tsv.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-xlsx",
+    "title": "Current export \u00b7 Excel (.xlsx)",
+    "image": "images/sql-current-export-xlsx.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-ods",
+    "title": "Current export \u00b7 OpenDocument (.ods)",
+    "image": "images/sql-current-export-ods.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-pdf",
+    "title": "Current export \u00b7 PDF Report (.pdf)",
+    "image": "images/sql-current-export-pdf.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-json",
+    "title": "Current export \u00b7 JSON (.json)",
+    "image": "images/sql-current-export-json.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-sql-insert",
+    "title": "Current export \u00b7 SQL INSERT (.sql)",
+    "image": "images/sql-current-export-sql-insert.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-export-sql-update",
+    "title": "Current export \u00b7 SQL UPDATE (.sql)",
+    "image": "images/sql-current-export-sql-update.png",
+    "kind": "current",
+    "group": "Current export-format forms"
+  },
+  {
+    "id": "sql-current-snippets_drawer",
+    "title": "Current snippets_drawer",
+    "image": "images/sql-current-snippets_drawer.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-history_drawer",
+    "title": "Current history_drawer",
+    "image": "images/sql-current-history_drawer.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "sql-current-vb_inspector",
+    "title": "Current vb_inspector",
+    "image": "images/sql-current-vb_inspector.png",
+    "kind": "current",
+    "group": "Current dialogs / drawers / context menus"
+  },
+  {
+    "id": "dv-proposal-tib-dv-primary",
+    "title": "Data \u00b7 proposed compact TiB",
+    "image": "images/dv-proposal-tib-dv-primary.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-placement",
+    "title": "Display area / placement \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-placement.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-bookmarks",
+    "title": "Bookmarks \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-bookmarks.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-find",
+    "title": "Find / locate \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-find.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-txprepare",
+    "title": "Prepare transaction \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-txprepare.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-filter",
+    "title": "Filter \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-filter.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-sort",
+    "title": "Sort \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-sort.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-tib-dv-format",
+    "title": "Format & Layout \u00b7 proposed compact TiB",
+    "image": "images/dv-proposal-tib-dv-format.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-fieldscope",
+    "title": "Formatting scope \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-fieldscope.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-values",
+    "title": "Value display \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-values.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-editor",
+    "title": "Specialized editor \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-editor.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-conversion",
+    "title": "Display / reverse conversion \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-conversion.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-layouts",
+    "title": "Layouts \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-layouts.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-tib-dv-transfer",
+    "title": "Transfer & SQL \u00b7 proposed compact TiB",
+    "image": "images/dv-proposal-tib-dv-transfer.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-copyas",
+    "title": "Copy as \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-copyas.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-export",
+    "title": "Export format \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-export.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-import",
+    "title": "Import format \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-import.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-dropdown-review-dv-save",
+    "title": "Saved work \u00b7 expanded TiB submenu",
+    "image": "images/dv-proposal-dropdown-review-dv-save.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "dv-proposal-menu-data",
+    "title": "Data \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-data.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-menu-edit",
+    "title": "Edit \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-edit.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-menu-view",
+    "title": "View \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-view.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-menu-applications",
+    "title": "Applications \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-applications.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-menu-window",
+    "title": "Window \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-window.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-menu-help",
+    "title": "Help \u00b7 proposed menu",
+    "image": "images/dv-proposal-menu-help.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "dv-proposal-form-field-type-font-and-alignment-defaults",
+    "title": "Field-type font and alignment defaults",
+    "image": "images/dv-proposal-form-field-type-font-and-alignment-defaults.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-form-markdown-editor",
+    "title": "Markdown editor",
+    "image": "images/dv-proposal-form-markdown-editor.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-form-json-editor",
+    "title": "JSON editor",
+    "image": "images/dv-proposal-form-json-editor.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-form-uuid-display-and-reverse-conversion",
+    "title": "UUID display and reverse conversion",
+    "image": "images/dv-proposal-form-uuid-display-and-reverse-conversion.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-form-start-transaction-options",
+    "title": "Start transaction options",
+    "image": "images/dv-proposal-form-start-transaction-options.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-form-prepare-statement-structure",
+    "title": "Prepare statement structure",
+    "image": "images/dv-proposal-form-prepare-statement-structure.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-tib-sql-primary",
+    "title": "Query \u00b7 proposed compact TiB",
+    "image": "images/sql-proposal-tib-sql-primary.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-placement",
+    "title": "Display area / placement \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-placement.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-terminator",
+    "title": "Terminator \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-terminator.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-txprepare",
+    "title": "Prepare transaction \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-txprepare.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-bookmarks",
+    "title": "Bookmarks \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-bookmarks.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-find",
+    "title": "Find / locate \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-find.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-tib-sql-format",
+    "title": "Format & Layout \u00b7 proposed compact TiB",
+    "image": "images/sql-proposal-tib-sql-format.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-fieldscope",
+    "title": "Formatting scope \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-fieldscope.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-values",
+    "title": "Value display \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-values.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-editor",
+    "title": "Specialized editor \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-editor.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-conversion",
+    "title": "Display / reverse conversion \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-conversion.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-layouts",
+    "title": "Layouts \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-layouts.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-tib-sql-transfer",
+    "title": "Export & Files \u00b7 proposed compact TiB",
+    "image": "images/sql-proposal-tib-sql-transfer.png",
+    "kind": "proposal",
+    "group": "Proposed TiB sub-tabs"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-copyas",
+    "title": "Copy as \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-copyas.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-export",
+    "title": "Export format \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-export.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-import",
+    "title": "Import format \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-import.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-save",
+    "title": "Saved work \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-save.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-dropdown-review-sql-snippets",
+    "title": "Snippets \u00b7 expanded TiB submenu",
+    "image": "images/sql-proposal-dropdown-review-sql-snippets.png",
+    "kind": "proposal",
+    "group": "Proposed expanded TiB submenus"
+  },
+  {
+    "id": "sql-proposal-menu-query",
+    "title": "Query \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-query.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-menu-edit",
+    "title": "Edit \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-edit.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-menu-view",
+    "title": "View \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-view.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-menu-applications",
+    "title": "Applications \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-applications.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-menu-window",
+    "title": "Window \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-window.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-menu-help",
+    "title": "Help \u00b7 proposed menu",
+    "image": "images/sql-proposal-menu-help.png",
+    "kind": "proposal",
+    "group": "Proposed top menus"
+  },
+  {
+    "id": "sql-proposal-form-field-type-font-and-alignment-defaults",
+    "title": "Field-type font and alignment defaults",
+    "image": "images/sql-proposal-form-field-type-font-and-alignment-defaults.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-form-markdown-editor",
+    "title": "Markdown editor",
+    "image": "images/sql-proposal-form-markdown-editor.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-form-json-editor",
+    "title": "JSON editor",
+    "image": "images/sql-proposal-form-json-editor.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-form-uuid-display-and-reverse-conversion",
+    "title": "UUID display and reverse conversion",
+    "image": "images/sql-proposal-form-uuid-display-and-reverse-conversion.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-form-start-transaction-options",
+    "title": "Start transaction options",
+    "image": "images/sql-proposal-form-start-transaction-options.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "sql-proposal-form-prepare-statement-structure",
+    "title": "Prepare statement structure",
+    "image": "images/sql-proposal-form-prepare-statement-structure.png",
+    "kind": "proposal",
+    "group": "Proposed specialized / database forms"
+  },
+  {
+    "id": "dv-proposal-presentation-grid",
+    "title": "Shared Data Viewer component design \u00b7 grid",
+    "image": "images/dv-proposal-presentation-grid.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-presentation-mini_forms",
+    "title": "Shared Data Viewer component design \u00b7 mini_forms",
+    "image": "images/dv-proposal-presentation-mini_forms.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-presentation-single_form",
+    "title": "Shared Data Viewer component design \u00b7 single_form",
+    "image": "images/dv-proposal-presentation-single_form.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-presentation-hybrid",
+    "title": "Shared Data Viewer component design \u00b7 hybrid",
+    "image": "images/dv-proposal-presentation-hybrid.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-presentation-grid",
+    "title": "Shared Data Viewer component design \u00b7 grid",
+    "image": "images/sql-proposal-presentation-grid.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-presentation-mini_forms",
+    "title": "Shared Data Viewer component design \u00b7 mini_forms",
+    "image": "images/sql-proposal-presentation-mini_forms.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-presentation-single_form",
+    "title": "Shared Data Viewer component design \u00b7 single_form",
+    "image": "images/sql-proposal-presentation-single_form.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-presentation-hybrid",
+    "title": "Shared Data Viewer component design \u00b7 hybrid",
+    "image": "images/sql-proposal-presentation-hybrid.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-placement-stacked",
+    "title": "Dual display \u00b7 stacked",
+    "image": "images/sql-proposal-placement-stacked.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-placement-side-by-side",
+    "title": "Dual display \u00b7 side-by-side",
+    "image": "images/sql-proposal-placement-side-by-side.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-content-metadata",
+    "title": "Proposed metadata \u00b7 current grid / field styling",
+    "image": "images/dv-proposal-content-metadata.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-content-object-information",
+    "title": "Proposed object-information \u00b7 current grid / field styling",
+    "image": "images/dv-proposal-content-object-information.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-proposal-content-query-information",
+    "title": "Proposed query-information \u00b7 current grid / field styling",
+    "image": "images/dv-proposal-content-query-information.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-content-metadata",
+    "title": "Proposed metadata \u00b7 current grid / field styling",
+    "image": "images/sql-proposal-content-metadata.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-content-object-information",
+    "title": "Proposed object-information \u00b7 current grid / field styling",
+    "image": "images/sql-proposal-content-object-information.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "sql-proposal-content-query-information",
+    "title": "Proposed query-information \u00b7 current grid / field styling",
+    "image": "images/sql-proposal-content-query-information.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-current-extended-sort",
+    "title": "Current Extended Sort\u2026",
+    "image": "images/dv-current-extended-sort.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-column-format",
+    "title": "Current Display Format\u2026",
+    "image": "images/dv-current-column-format.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-column-profile",
+    "title": "Current Column Profile / Distinct Values",
+    "image": "images/dv-current-column-profile.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-save-template",
+    "title": "Current Save Shareable Template",
+    "image": "images/dv-current-save-template.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-current-apply-template",
+    "title": "Current Apply Template (1)",
+    "image": "images/dv-current-apply-template.png",
+    "kind": "current",
+    "group": "Current content / record presentations"
+  },
+  {
+    "id": "dv-proposal-placement-dual",
+    "title": "Data Viewer \u00b7 dual: Data + generated Information",
+    "image": "images/dv-proposal-placement-dual.png",
+    "kind": "proposal",
+    "group": "Proposed content / presentation / placement"
+  },
+  {
+    "id": "dv-current-explorer-reference",
+    "title": "Current explorer \u00b7 native branch guides and circular toggles",
+    "image": "images/dv-current-explorer-reference.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-focus-help-mini_forms",
+    "title": "Focused NAME \u00b7 help below field \u00b7 mini_forms",
+    "image": "images/dv-current-focus-help-mini_forms.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-focus-help-single_form",
+    "title": "Focused NAME \u00b7 help below field \u00b7 single_form",
+    "image": "images/dv-current-focus-help-single_form.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-focus-help-hybrid",
+    "title": "Focused NAME \u00b7 help below field \u00b7 hybrid",
+    "image": "images/dv-current-focus-help-hybrid.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-colour-menu",
+    "title": "Current colour scheme menu",
+    "image": "images/dv-current-colour-menu.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-dark-scheme",
+    "title": "Current dark colour scheme \u00b7 native tree and grid",
+    "image": "images/dv-current-dark-scheme.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-language-menu",
+    "title": "Current language menu",
+    "image": "images/dv-current-language-menu.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  },
+  {
+    "id": "dv-current-french-language",
+    "title": "Current French UI \u00b7 data/identifiers retain stored spelling",
+    "image": "images/dv-current-french-language.png",
+    "kind": "current",
+    "group": "Explorer / focused help / colour / language"
+  }
+]

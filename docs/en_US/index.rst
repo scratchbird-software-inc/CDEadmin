@@ -34,6 +34,8 @@ upstream attribution.
    six_engine_remaining_work
    project_shell_behaviour
    ui_unified_design
+   data_navigator_surfaces
+   data_navigator_outstanding_work
    ui_unification_status
    ui_server_editor_retirement
    robin_master_plan

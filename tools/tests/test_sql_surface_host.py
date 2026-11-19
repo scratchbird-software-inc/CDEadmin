@@ -8,7 +8,10 @@ import base64
 import copy
 import io
 import json
+import sqlite3
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +24,7 @@ from pgadmin.cdeadmin.workspace.data_surface_host import (
 from pgadmin.cdeadmin.workspace.sql_surface_host import (
     QuickQueryStore,
     SqlSnippetsStore,
+    SqlResultSetBuffer,
     SqlSurfaceHostService,
     bind_named_to_positional_if_needed,
     build_visual_query_ddn_scene,
@@ -32,6 +36,9 @@ from pgadmin.cdeadmin.workspace.sql_surface_host import (
     resolve_visual_catalog_object,
     split_sql_statements,
 )
+
+
+from pgadmin.cdeadmin.workspace.surface_effective_sql import build_effective_select
 
 
 class FakeSqlWorkspaceService:
@@ -97,6 +104,8 @@ class FakeSqlWorkspaceService:
 
     def transaction_action(self, server, session_id, action, database_target_id=None):
         self.tx_actions.append((session_id, action))
+        if action in ('autocommit_on', 'autocommit_off'):
+            return {'session_id': session_id, 'provider_payload': {'autocommit': action == 'autocommit_on'}}
         return {'session_id': session_id, 'action': action}
 
     def execute(self, server, session_id, source, parameters=None,
@@ -398,6 +407,10 @@ def test_multi_tag_snippets_and_quick_queries_stores(tmp_path):
     )
     loaded = q_store.get_quick_query(qq['query_id'])
     assert loaded['display_layout']['displayMode'] == 'hybrid'
+    assert q_store.get_quick_query(qq['query_id'], user_id=2) is None
+    with pytest.raises(ValueError, match='unavailable'):
+        q_store.save_quick_query(2, {**qq, 'name': 'Overwrite'})
+    assert q_store.get_quick_query(qq['query_id'], user_id=1)['name'] == qq['name']
     assert len(q_store.list_quick_queries(1, server_id=7, database_target_id='demo.fdb')) == 1
 
 
@@ -665,6 +678,451 @@ def test_visual_builder_selectable_stored_procedures_views_and_fk_auto_joins(tmp
         )
 
 
+@pytest.mark.parametrize('uses_cte', [False, True])
+def test_generated_select_replays_parameterized_join_filters_and_sort(uses_cte):
+    with sqlite3.connect(':memory:') as conn:
+        conn.executescript("""
+            CREATE TABLE a (id INTEGER, label TEXT, n INTEGER);
+            CREATE TABLE b (id INTEGER, n INTEGER);
+            INSERT INTO a VALUES
+                (1, 'A_100% O''Brien', 2), (2, 'a_100% o''brien', 3),
+                (3, 'A_100% O''Brien', 9), (4, 'Ar100X O''Brien', 9),
+                (5, NULL, 9);
+            INSERT INTO b VALUES (1, NULL), (2, 4), (3, 7), (4, 10), (5, 12);
+        """)
+        source = """
+            SELECT a.id, a.label, a.n, b.n
+            FROM a JOIN b ON b.id = a.id
+            WHERE a.n >= :threshold
+            ORDER BY a.id
+        """.strip()
+        if uses_cte:
+            source = 'WITH selected AS (SELECT * FROM a) ' + source.replace('FROM a JOIN', 'FROM selected a JOIN')
+        fields = ['id', 'label', 'n', 'n (2)']
+        parameters = {'threshold': 3}
+        baseline = conn.execute(source, parameters).fetchall()
+        result = SqlResultSetBuffer(
+            0, 'Joined result', source,
+            columns=[{'name': name, 'native_type': 'dynamic'} for name in fields],
+            raw_rows=[{'values': dict(zip(fields, row))} for row in baseline],
+            filters=[{'column': 'label', 'op': 'contains', 'value': "_100% O'Brien"}],
+            sorts=[{'column': 'n (2)', 'dir': 'desc'}],
+        )
+        SqlSurfaceHostService._recompute_rs_view(result)
+        effective = build_effective_select(result, 'sqlite')
+        actual = conn.execute(effective['sql'], parameters)
+        assert [column[0] for column in actual.description] == fields
+        assert actual.fetchall() == [baseline[index] for index in result.view_indices]
+        assert 'ESCAPE' in effective['sql']
+
+
+@pytest.mark.parametrize('source, adjustment, expected', [
+    ('UPDATE a SET n = 2 RETURNING n', {}, 'wrappable SELECT'),
+    ('SELECT n FROM a FOR UPDATE', {}, 'wrappable SELECT'),
+    ('SELECT n FROM a', {'sorts': [{'column': 'other'}]}, 'active result column'),
+    ('SELECT n FROM a', {'sorts': [{'column': 'n'}]}, 'numeric-looking'),
+])
+def test_effective_query_reports_unsupported_shapes(source, adjustment, expected):
+    result = SqlResultSetBuffer(
+        0, 'Result', source, columns=[{'name': 'n', 'client_type': 'text'}],
+        raw_rows=[{'values': {'n': '10'}}], **adjustment,
+    )
+    response = build_effective_select(result, 'sqlite')
+    assert not response['sql']
+    assert expected in response['reason']
+
+
+def test_effective_query_bindings_follow_the_selected_result(tmp_path):
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = FakeSqlWorkspaceService()
+    server = SimpleNamespace(id=5, user_id=1)
+    scope = {'surface_id': 'effective-test', 'engine_id': 'firebird',
+             'language_profile': 'firebird-sql', 'database_target_id': 'owned.fdb'}
+    original = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'execute', 'mode': 'script',
+        'sql_source': 'SELECT :left_id FROM RDB$DATABASE; SELECT :right_id FROM RDB$DATABASE;',
+        'parameters': {'left_id': 100, 'right_id': 200}, 'client_sql_dialect': 3,
+    })
+    assert original['sql_view']['effective_query']['parameters'] == [
+        {'name': 'left_id', 'value': '100', 'type': 'integer', 'isNull': False},
+    ]
+    selected = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'select_result', 'result_index': 1,
+    })
+    query = selected['sql_view']['effective_query']
+    assert query['sql'] == 'SELECT :right_id FROM RDB$DATABASE'
+    assert query['parameters'] == [
+        {'name': 'right_id', 'value': '200', 'type': 'integer', 'isNull': False},
+    ]
+    assert query['client_sql_dialect'] == 3
+
+
+def test_mysql_surface_binds_authored_and_native_names_on_the_retained_session(tmp_path):
+    class MySQLWorkspace(FakeSqlWorkspaceService):
+        def language_tool_action(self, server, action, data):
+            assert action == 'source_format_context'
+            assert data['session_id'] == self.sessions_opened[0]['session_id']
+            return {'context': {'engine': 'mysql', 'sql_mode': 'ANSI_QUOTES', 'version': '9.7.0'}}
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = MySQLWorkspace()
+    scope = {'surface_id': 'mysql-bindings', 'engine_id': 'mysql',
+             'language_profile': 'mysql-sql', 'database_target_id': 'fixture'}
+    server = SimpleNamespace(id=5, user_id=1)
+    source = """SELECT :amount, :amount, %(label)s, ':literal', "column:identifier" /* :comment */"""
+    probe = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'check_parameters', 'sql_source': source,
+    })
+    assert [(item['name'], item['token']) for item in probe['parameters']] == [
+        ('amount', ':amount'), ('label', '%(label)s'),
+    ]
+    state = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'execute', 'sql_source': source,
+        'parameters': {'amount': 42, 'label': 'bound value', 'other_statement': 7},
+    })
+    assert len(workspace.executed) == 1
+    assert workspace.executed[0]['source'] == source.replace(':amount', '%(amount)s')
+    assert workspace.executed[0]['parameters'] == {'amount': 42, 'label': 'bound value'}
+    assert state['sql_view']['effective_query']['sql'] == source
+    assert state['sql_view']['effective_query']['parameters'] == [
+        {'name': 'amount', 'value': '42', 'type': 'integer', 'isNull': False},
+        {'name': 'label', 'value': 'bound value', 'type': 'text', 'isNull': False},
+    ]
+
+
+def test_mysql_script_distributes_positional_bindings_by_statement(tmp_path):
+    class MySQLWorkspace(FakeSqlWorkspaceService):
+        def language_tool_action(self, server, action, data):
+            assert action == 'source_format_context'
+            assert data['session_id'] == self.sessions_opened[0]['session_id']
+            return {'context': {'engine': 'mysql', 'sql_mode': '', 'version': '9.7.0'}}
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = MySQLWorkspace()
+    server = SimpleNamespace(id=5, user_id=1)
+    scope = {'surface_id': 'mysql-script', 'engine_id': 'mysql',
+             'language_profile': 'mysql-sql', 'database_target_id': 'fixture'}
+    source = "SELECT ?, '? %s'; SELECT 7; SELECT %s, ? /* ? */;"
+    request = {**scope, 'mode': 'script', 'sql_source': source}
+    probe = host.dispatch(workspace, server, {**request, 'sub_action': 'check_parameters'})
+    assert [(item['name'], item['token']) for item in probe['parameters']] == [
+        ('param_1', '?'), ('param_2', '%s'), ('param_3', '?'),
+    ]
+    for values in ([], [11, None], [11, None, 'last', 'extra']):
+        with pytest.raises(ValueError, match='one value per positional'):
+            host.dispatch(workspace, server, {
+                **request, 'sub_action': 'execute', 'parameters': values,
+            })
+        assert workspace.executed == []
+
+    host.dispatch(workspace, server, {
+        **request, 'sub_action': 'execute', 'parameters': [11, None, 'last'],
+    })
+    assert [(call['source'], call['parameters']) for call in workspace.executed] == [
+        ("SELECT %s, '? %s'", [11]), ('SELECT 7', []),
+        ('SELECT %s, %s /* ? */', [None, 'last']),
+    ]
+    selected = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'select_result', 'result_index': 2,
+    })
+    assert selected['sql_view']['effective_query']['parameters'] == [
+        {'name': 'param_1', 'value': '', 'type': 'json', 'isNull': True},
+        {'name': 'param_2', 'value': 'last', 'type': 'text', 'isNull': False},
+    ]
+
+
+def test_postgresql_auto_commit_tracks_native_policy_and_preserves_active_work(tmp_path):
+    class TransactionWorkspace(FakeSqlWorkspaceService):
+        autocommit = True
+        active = False
+
+        def transaction(self, server, session_id, database_target_id=None):
+            return {'provider_payload': {
+                'autocommit': self.autocommit,
+                'transaction_status': 2 if self.active else 0,
+            }}
+
+        def transaction_action(self, server, session_id, action, database_target_id=None):
+            self.tx_actions.append((session_id, action))
+            if action in ('autocommit_on', 'autocommit_off'):
+                if self.active:
+                    raise RuntimeError('Complete the native transaction first.')
+                self.autocommit = action == 'autocommit_on'
+            elif action == 'rollback':
+                self.active = False
+            return self.transaction(server, session_id, database_target_id)
+
+        def execute(self, server, session_id, source, **options):
+            self.active |= not self.autocommit or source == 'BEGIN'
+            return super().execute(server, session_id, source, **options)
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = TransactionWorkspace()
+    owner = SimpleNamespace(id=5, user_id=1)
+    scope = {'surface_id': 'auto-commit', 'engine_id': 'postgresql',
+             'language_profile': 'postgresql-sql', 'database_target_id': 'test-db'}
+
+    def action(name, **request):
+        return host.dispatch(workspace, owner, {**scope, 'sub_action': name, **request})
+
+    state = action('execute', sql_source='SELECT 1')
+    assert workspace.tx_actions == [('sql-sess-1', 'autocommit_off')]
+    assert state['has_uncommitted_activity'] and not state['autocommit']
+    with pytest.raises(RuntimeError, match='native transaction first'):
+        action('set_options', autocommit=True)
+    assert not action('read_window')['autocommit']
+    action('rollback_batch')
+    assert action('set_options', autocommit=True)['autocommit']
+    assert action('execute', sql_source='BEGIN')['has_uncommitted_activity']
+    assert [name for _, name in workspace.tx_actions] == [
+        'autocommit_off', 'autocommit_on', 'rollback', 'autocommit_on',
+    ]
+
+
+@pytest.mark.parametrize('engine, options, expected', [
+    ('postgresql', {'access': 'read_only', 'isolation': 'serializable'},
+     ['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY']),
+    ('mysql', {'access': 'read_only', 'isolation': 'read_committed'},
+     ['SET TRANSACTION ISOLATION LEVEL READ COMMITTED', 'START TRANSACTION READ ONLY']),
+    ('mariadb', {'access': 'read_write', 'isolation': 'repeatable_read'},
+     ['SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', 'START TRANSACTION READ WRITE']),
+    ('sqlite', {'mode': 'immediate'}, ['BEGIN IMMEDIATE TRANSACTION']),
+])
+def test_sql_surface_starts_native_transaction_and_refuses_a_second_start(
+    tmp_path, engine, options, expected,
+):
+    class TransactionWorkspace(FakeSqlWorkspaceService):
+        def transaction(self, server, session_id, database_target_id=None):
+            active = len(self.executed) == len(expected)
+            return {'provider_payload': {
+                'transaction_status': 2 if active else 0, 'autocommit': engine != 'postgresql',
+                'in_transaction': active, 'session_reuse_blocked': False,
+            }}
+
+        def poll(self, server, occurrence_id, **options):
+            return {'occurrence': {
+                'operation': {'terminal': True},
+                'result': {'complete': True, 'extensions': {engine: {'payload': {}}}},
+            }}
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = TransactionWorkspace()
+    owner = SimpleNamespace(id=5, user_id=1)
+    request = {
+        'surface_id': 'native-start', 'engine_id': engine, 'language_profile': f'{engine}-sql',
+        'database_target_id': 'test-db', 'sub_action': 'start_transaction',
+    }
+    with pytest.raises(ValueError, match='Invalid native transaction options'):
+        host.dispatch(workspace, owner, {**request, 'transaction_options': {**options, 'other': 'value'}})
+    assert not workspace.executed
+
+    response = host.dispatch(workspace, owner, {**request, 'transaction_options': options})
+    assert response['has_uncommitted_activity']
+    assert [call['source'] for call in workspace.executed] == expected
+    with pytest.raises(ValueError, match='complete pending work'):
+        host.dispatch(workspace, owner, {**request, 'transaction_options': options})
+    assert len(workspace.executed) == len(expected)
+
+
+@pytest.mark.parametrize('engine', ['firebird', 'postgresql', 'sqlite', 'duckdb', 'mysql', 'mariadb'])
+def test_sql_editor_format_uses_retained_non_executing_language_tools(tmp_path, engine):
+    class FormattingWorkspace(FakeSqlWorkspaceService):
+        def __init__(self):
+            super().__init__()
+            self.language_calls = []
+
+        def language_tool_action(self, server, action, data):
+            self.language_calls.append((action, data))
+            if action == 'source_format_context':
+                return {'context': {'engine': engine}}
+            return {'grammar_valid': True}
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = FormattingWorkspace()
+    owner = SimpleNamespace(id=5, user_id=1)
+    scope = {'surface_id': 'format', 'engine_id': engine,
+             'language_profile': f'{engine}-sql', 'database_target_id': 'test-db',
+             'client_sql_dialect': 1}
+    source = 'select 1'
+    assert host.dispatch(workspace, owner, {
+        **scope, 'sub_action': 'format_context', 'sql_source': source,
+    }) == {'context': {'engine': engine}}
+    assert host.dispatch(workspace, owner, {
+        **scope, 'sub_action': 'validate_format', 'sql_source': source, 'script': True,
+    }) == {'grammar_valid': True}
+    first, second = workspace.language_calls
+    assert (first[0], second[0]) == ('source_format_context', 'source_validate')
+    assert first[1]['session_id'] == second[1]['session_id']
+    assert first[1]['database_target_id'] == second[1]['database_target_id'] == 'test-db'
+    assert first[1]['source'] == source
+    assert second[1]['script'] is True
+    assert second[1].get('client_sql_dialect') == (1 if engine == 'firebird' else None)
+    assert workspace.executed == []
+
+
+def test_sql_editor_lists_the_data_viewer_shared_templates(tmp_path):
+    layouts = SurfaceLayoutStore(tmp_path / 'layouts.db')
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=layouts,
+    )
+    viewer = DataSurfaceHostService(layouts)
+    workspace = FakeSqlWorkspaceService()
+    reader = SimpleNamespace(id=5, user_id=2)
+    request = {'sub_action': 'list_templates'}
+    assert host.dispatch(workspace, reader, request) == {'templates': []}
+
+    layout = {'displayMode': 'mini_forms', 'formColOrder': ['TITLE', 'ID']}
+    saved = layouts.save_template(1, 'data-edit-surface', 'Shared rows', layout)
+    layouts.save_template(1, 'unrelated-surface', 'Other template', {})
+    response = host.dispatch(workspace, reader, request)
+
+    assert response == viewer.dispatch(workspace, reader, request)
+    assert len(response['templates']) == 1
+    assert response['templates'][0]['template_id'] == saved['template_id']
+    assert response['templates'][0]['layout'] == layout
+    assert not workspace.sessions_opened
+
+
+def test_sql_editor_cancel_interrupts_an_editable_row_read_without_sql_fallback(tmp_path):
+    class CancellableWorkspace(FakeSqlWorkspaceService):
+        def __init__(self):
+            super().__init__()
+            self.ready = Event()
+            self.interrupted = Event()
+
+        def read_cancellable_surface_rows(self, server, request, execution):
+            with execution.cancellable_row_read(self.interrupted.set):
+                self.ready.set()
+                assert self.interrupted.wait(3)
+                raise RuntimeError('Native read interrupted')
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = CancellableWorkspace()
+    owner = SimpleNamespace(id=5, user_id=1)
+    scope = {'surface_id': 'cancel-row', 'database_target_id': 'target',
+             'engine_id': 'postgresql', 'language_profile': 'postgresql-sql',
+             'execution_id': 'current-row-read'}
+    resource = {'resource_id': 'table:item', 'resource_kind': 'table',
+                'display_name': 'item', 'display_path': ['public', 'item']}
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        running = pool.submit(host.dispatch, workspace, owner, {
+            **scope, 'sub_action': 'execute', 'sql_source': 'SELECT * FROM public.item',
+            'catalog_resources': [resource],
+        })
+        assert workspace.ready.wait(3)
+        cancel = host.dispatch(workspace, owner, {**scope, 'sub_action': 'cancel'})
+        assert cancel == {'cancel_status': 'requested', 'occurrence_id': None}
+        result = running.result(timeout=3)
+    assert result['last_execution_cancelled'] and not result['last_execution_had_error']
+    assert result['result_count'] == 0 and not workspace.executed
+
+
+@pytest.mark.parametrize('cancel_before_occurrence', [False, True])
+def test_sql_editor_cancel_targets_active_run_and_stops_script(tmp_path, cancel_before_occurrence):
+    class CancellableWorkspace(FakeSqlWorkspaceService):
+        def __init__(self):
+            super().__init__()
+            self.ready = Event()
+            self.release = Event()
+            self.cancel_calls = []
+
+        def execute(self, server, **request):
+            occurrence = super().execute(server, **request)
+            if cancel_before_occurrence:
+                self.ready.set()
+                assert self.release.wait(3)
+            return occurrence
+
+        def poll(self, server, occurrence_id, **options):
+            if not cancel_before_occurrence:
+                self.ready.set()
+                assert self.release.wait(3)
+            assert self.cancel_calls
+            return {
+                'occurrence': {
+                    'operation': {'terminal': True},
+                    'result': {'extensions': {'firebird': {'payload': {
+                        'execution_state': 'cancelled',
+                    }}}},
+                },
+            }
+
+        def cancel(self, server, occurrence_id, database_target_id=None):
+            self.cancel_calls.append((occurrence_id, database_target_id))
+            self.release.set()
+            return {'occurrence_id': occurrence_id, 'operation': {'terminal': False}}
+
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    workspace = CancellableWorkspace()
+    owner = SimpleNamespace(id=5, user_id=1)
+    scope = {
+        'surface_id': 'cancel-surface', 'database_target_id': 'owned.fdb',
+        'engine_id': 'firebird', 'language_profile': 'firebird-sql',
+        'execution_id': 'active-run',
+    }
+    cancel = {**scope, 'sub_action': 'cancel'}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        running = pool.submit(host.dispatch, workspace, owner, {
+            **scope, 'sub_action': 'execute', 'mode': 'script',
+            'sql_source': 'SELECT 1; SELECT 2;',
+        })
+        try:
+            assert workspace.ready.wait(3)
+            for actor, request in (
+                (SimpleNamespace(id=5, user_id=9), cancel),
+                (SimpleNamespace(id=9, user_id=1), cancel),
+                (owner, {**cancel, 'database_target_id': 'other.fdb'}),
+                (owner, {**cancel, 'execution_id': 'stale-run'}),
+            ):
+                assert host.dispatch(workspace, actor, request) == {'cancel_status': 'idle'}
+            receipt = pool.submit(host.dispatch, workspace, owner, cancel).result(timeout=2)
+            assert receipt['cancel_status'] == ('pending' if cancel_before_occurrence else 'requested')
+        finally:
+            workspace.release.set()
+        result = running.result(timeout=3)
+
+    assert result['last_execution_cancelled']
+    assert not result['last_execution_had_error']
+    assert len(workspace.executed) == 1
+    assert len(workspace.cancel_calls) == 1
+    assert workspace.cancel_calls[0][1] == 'owned.fdb'
+    assert host.dispatch(workspace, owner, cancel) == {'cancel_status': 'idle'}
+
+
 def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
     host = SqlSurfaceHostService(
         snippets_store=SqlSnippetsStore(tmp_path / 'snips.db'),
@@ -707,10 +1165,12 @@ def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
     st_multi = host.dispatch(ws, srv, {
         'sub_action': 'execute',
         'mode': 'script',
+        'client_sql_dialect': 1,
         'surface_id': 'ss-1',
         'sql_source': 'SELECT 1 FROM RDB$DATABASE; SELECT 2 FROM RDB$DATABASE;',
     })
     assert st_multi['result_count'] == 2
+    assert [call['client_sql_dialect'] for call in ws.executed[-2:]] == [1, 1]
     assert st_multi['active_result']['columns'][0]['key'] is True
     assert st_multi['active_result']['columns'][1]['key'] is False
     assert st_multi['active_result']['columns'][1]['max_length'] == 64
@@ -730,6 +1190,32 @@ def test_sql_surface_host_end_to_end_lifecycle_and_live_editing(tmp_path):
         'resources': [ledger_res],
     })
     assert st_live['active_result']['editable'] is True
+    object_key = st_live['object_layout_key']
+    assert object_key == '5:demo.fdb:table:LEDGER'
+    layout = {'displayMode': 'mini_forms'}
+    host.dispatch(ws, srv, {
+        'sub_action': 'save_object_layout',
+        'surface_id': 'ss-1',
+        'object_layout_key': object_key,
+        'layout': layout,
+    })
+    assert host.layout_store.get_specific_layout(1, 'data-edit-surface', object_key) == layout
+    selected = host.dispatch(ws, srv, {
+        'sub_action': 'select_result', 'surface_id': 'ss-1', 'result_index': 0,
+    })
+    assert selected['saved_specific_layout'] == layout
+    defaults = {'integer': {'font': 'mono', 'hAlign': 'right'}}
+    host.dispatch(ws, srv, {
+        'sub_action': 'save_field_type_defaults', 'field_type_defaults': defaults,
+    })
+    viewer = DataSurfaceHostService(host.layout_store)
+    assert viewer.dispatch(ws, srv, {'sub_action': 'get_field_type_defaults'}) == {
+        'field_type_defaults': defaults,
+    }
+    other_user = SimpleNamespace(id=5, user_id=2)
+    assert host.dispatch(ws, other_user, {'sub_action': 'get_field_type_defaults'}) == {
+        'field_type_defaults': {},
+    }
     assert len(st_live['active_result']['rows']) == 2
 
     # Stage update -> uncommitted activity true -> commit flushes batch & clears dirty state
@@ -855,3 +1341,97 @@ def test_rejected_visual_join_draft_keeps_the_last_valid_surface(tmp_path):
     current = host.dispatch(workspace, server, {**base,'sub_action':'read_window'})
     assert current['sql_source'] == accepted['sql_text']
     assert [t['alias'] for t in current['visual_builder']['model']['tables']] == ['a','b']
+
+
+def test_firebird_surface_native_prepare_and_start_use_distinct_receipts(tmp_path):
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    server = SimpleNamespace(id=12, user_id=1)
+    calls = []
+
+    def execute(_server, **request):
+        calls.append(request)
+        return {'occurrence_id': 'native-control'}
+
+    def poll(_server, _occurrence, **_request):
+        payload = (
+            {'query_plan': {'statement_execution_requested': False, 'columns': [{'name': 'ID'}]}}
+            if calls[-1].get('plan_mode')
+            else {'transaction_action': {'action': 'begin', 'native_call_made': True}}
+        )
+        return {'occurrence': {'operation': {'terminal': True},
+                               'result': {'extensions': {'native': {'payload': payload}}}}}
+
+    workspace = SimpleNamespace(
+        open_session=lambda *_args, **_kwargs: {'session_id': 'retained'},
+        execute=execute, poll=poll, transaction=lambda *_args: {'state': 'active'},
+    )
+    scope = {'surface_id': 'surface', 'language_profile': 'firebird-sql',
+             'engine_id': 'firebird', 'database_target_id': 'test'}
+    prepared = host.dispatch(workspace, server, {
+        **scope, 'sub_action': 'prepare_statement',
+        'sql_source': 'SELECT ID FROM ITEMS WHERE ID = ?;',
+    })
+    assert prepared['prepared_statement']['columns'] == [{'name': 'ID'}]
+    assert calls[0]['plan_mode'] is True and calls[0]['parameters'] == []
+
+    with pytest.raises(ValueError, match='exactly one statement'):
+        host.dispatch(workspace, server, {
+            **scope, 'sub_action': 'prepare_statement', 'sql_source': 'SELECT 1; SELECT 2;',
+        })
+    assert len(calls) == 1
+
+    start = {**scope, 'sub_action': 'start_transaction',
+             'transaction_options': {'access': 'read_only', 'isolation': 'snapshot', 'wait': 'no_wait'}}
+    state = host.dispatch(workspace, server, start)
+    assert calls[1]['source'] == 'SET TRANSACTION READ ONLY SNAPSHOT NO WAIT'
+    assert calls[1]['session_id'] == calls[0]['session_id']
+    assert state['has_uncommitted_activity'] is True
+    with pytest.raises(ValueError, match='pending work'):
+        host.dispatch(workspace, server, start)
+    assert len(calls) == 2
+    with pytest.raises(ValueError, match='integer 1, 2 or 3'):
+        host.dispatch(workspace, server, {
+            **scope, 'sub_action': 'execute', 'sql_source': 'SELECT 1 FROM RDB$DATABASE',
+            'client_sql_dialect': True,
+        })
+    assert len(calls) == 2
+
+
+def test_columnar_pages_survive_empty_terminal_result_and_respect_buffer_limit(tmp_path):
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snippets.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'queries.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'layouts.db'),
+    )
+    columns = [{'key': '0', 'name': 'VALUE', 'native_type': 'INTEGER'}]
+
+    def frame(values, *, terminal=False):
+        return {
+            'occurrence': {'operation': {'terminal': terminal}},
+            'rendered_result': {'view_model': {
+                'family': 'columnar', 'columns': [] if terminal else columns,
+                'rows': [{'0': value} for value in values],
+            }},
+        }
+
+    frames = iter([frame([42]), frame([43, 44]), frame([], terminal=True)])
+
+    def execute(_server, **request):
+        assert 'max_rows' not in request
+        return {'occurrence_id': 'stream'}
+
+    workspace = SimpleNamespace(
+        open_session=lambda *_args, **_kwargs: {'session_id': 'duck'},
+        execute=execute, poll=lambda *_args, **_kwargs: next(frames),
+    )
+    state = host.dispatch(workspace, SimpleNamespace(id=45, user_id=1), {
+        'surface_id': 'duck-test', 'language_profile': 'duckdb-sql', 'engine_id': 'duckdb',
+        'database_target_id': 'fixture', 'sub_action': 'execute', 'sql_source': 'SELECT 42',
+        'max_rows': 2,
+    })
+    assert [row['values']['VALUE'] for row in state['active_result']['rows']] == [42, 43]
+    assert state['retrieval_limited'] is True

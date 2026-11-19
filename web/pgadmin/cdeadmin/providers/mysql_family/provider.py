@@ -32,6 +32,7 @@ from ..form_contracts import provider_form_contract
 from .mariadb_connections import Connector as _MariaDBConnectorFacade
 from .administration import MySQLAdministration, HANDLERS
 from .mariadb_administration import MariaDBAdministration
+from . import surface_row_read, surface_xa
 from .. import browse_builders
 
 
@@ -347,7 +348,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     """Native MariaDB sessions with private pools and ordered result streams."""
 
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
-                           'autocommit_off')
+                           'autocommit_off', 'start_xa', 'prepare')
 
     def plan_admin_operation(self, request):
         from .mariadb_administration import MODULES
@@ -366,6 +367,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         )
         self._connector = self._mariadb_connector
         self._uncertain_sessions = set()
+        self._surface_xa = {}
         from .mariadb_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
@@ -436,8 +438,9 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     def _describe_idle_transaction(self, handle):
         from .session_state import transaction_observation
-        return transaction_observation(handle, 'MariaDB',
-            self._executions.sessions, self._uncertain_sessions)
+        return surface_xa.describe(self, handle, transaction_observation(
+            handle, 'MariaDB', self._executions.sessions, self._uncertain_sessions,
+        ))
 
     def control_transaction(self, handle, action):
         with self._executions.lock:
@@ -446,6 +449,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
 
     def _control_idle_transaction(self, handle, action):
         self._require_usable_session(handle)
+        if surface_xa.control(self, handle, action, 'MariaDB'):
+            return self._describe_idle_transaction(handle)
         if action not in self.transaction_actions:
             return super().control_transaction(handle, action)
         if action in {'autocommit_on', 'autocommit_off'}:
@@ -482,6 +487,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     def close_session(self, handle):
         with self._executions.lock:
             self._executions.require_idle(handle)
+            surface_xa.release(self, handle)
             self._session_requests.pop(id(handle), None)
             self._completion_identities.pop(id(handle), None)
             self._executions.sessions.forget(handle)
@@ -526,6 +532,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             self._completion_identities.clear()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
+            self._surface_xa.clear()
             self._executions.sessions.entries.clear()
             self._executions.sessions.status_unknown.clear()
             self._backup_stage_handles.clear()
@@ -1068,7 +1075,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         return None
 
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
-                           'autocommit_off')
+                           'autocommit_off', 'start_xa', 'prepare')
 
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
@@ -1166,6 +1173,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         self._mysql_connector = Connector(self.module, config.secret_acquirer)
         self._connector = self._mysql_connector
         self._uncertain_sessions = set()
+        self._surface_xa = {}
         from .mysql_execution import Executions
         self._executions = Executions(self)
         self._session_requests = {}
@@ -1291,8 +1299,9 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def _describe_idle_transaction(self, handle):
         from .session_state import transaction_observation
-        return transaction_observation(handle, 'MySQL',
-            self._executions.sessions, self._uncertain_sessions)
+        return surface_xa.describe(self, handle, transaction_observation(
+            handle, 'MySQL', self._executions.sessions, self._uncertain_sessions,
+        ))
 
     def control_transaction(self, handle, action):
         with self._executions.lock:
@@ -1301,6 +1310,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def _control_idle_transaction(self, handle, action):
         self._require_usable_session(handle)
+        if surface_xa.control(self, handle, action, 'MySQL'):
+            return self._describe_idle_transaction(handle)
         if action not in self.transaction_actions:
             return super().control_transaction(handle, action)
         if action in {'autocommit_on', 'autocommit_off'}:
@@ -1337,6 +1348,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def close_session(self, handle):
         with self._executions.lock:
             self._executions.require_idle(handle)
+            surface_xa.release(self, handle)
             from .mysql_session_catalog import invalidate
             invalidate(self, handle)
             from .mysql_session_variables import uninstall
@@ -1365,6 +1377,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         with self._executions.lock:
             if self._native_operations:
                 raise RelationalClientError('MySQL native utility work is active')
+            if self._executions.grid_reads:
+                raise RelationalClientError('MySQL row read still owns its connection')
             self._executions.closing = True
         self._executions.close()
         try:
@@ -1379,6 +1393,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             self._session_catalogs.clear()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
+            self._surface_xa.clear()
             self._executions.sessions.entries.clear()
             self._executions.sessions.status_unknown.clear()
 
@@ -1765,6 +1780,24 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def read_visual_admin_rows(self, request):
+        if not isinstance(self.client, MySQLDBAPIClient):
+            return super().read_visual_admin_rows(request)
+        return surface_row_read.read(self, request, super().read_visual_admin_rows)
+
+    def describe_surface_statement(self, request):
+        from ..native_editor import session_access
+        from .mysql_statement_description import describe
+
+        self._require('execute')
+        handle = self._editor_session(request)
+        with session_access(self.client, handle, 'mysql'):
+            return describe(self.client, handle, request.get('source'))
+
+    def convert_surface_field(self, request):
+        from ..surface_uuid import convert
+        return convert(self, request, 'mysql')
+
     @contextmanager
     def profile_change_guard(self):
         """Preserve native sessions, including idle temporary/prepared state."""
@@ -1910,6 +1943,24 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                            'ORDER BY.'}
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
+
+    def read_visual_admin_rows(self, request):
+        if not isinstance(self.client, MariaDBDBAPIClient):
+            return super().read_visual_admin_rows(request)
+        return surface_row_read.read(self, request, super().read_visual_admin_rows)
+
+    def describe_surface_statement(self, request):
+        from ..native_editor import session_access
+        from .mariadb_statement_description import describe
+
+        self._require('execute')
+        handle = self._editor_session(request)
+        with session_access(self.client, handle, 'mariadb'):
+            return describe(self.client, handle, request.get('source'))
+
+    def convert_surface_field(self, request):
+        from ..surface_uuid import convert
+        return convert(self, request, 'mariadb')
 
     def native_editor_context_action(self, request):
         from .mariadb_editor_context import observe

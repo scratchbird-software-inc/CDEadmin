@@ -58,6 +58,37 @@ MANIFEST_PATH = (
 PROVIDER_ROOT = MANIFEST_PATH.parent
 
 
+class PreparedTransactionTests(unittest.TestCase):
+    def test_disabled_capacity_does_not_dispatch_prepare(self):
+        from psycopg.pq import ExecStatus, TransactionStatus
+
+        pgconn = Mock(transaction_status=TransactionStatus.INTRANS)
+        pgconn.exec_.return_value = Mock(
+            status=ExecStatus.TUPLES_OK, ntuples=1,
+            get_value=Mock(return_value=b'0'),
+        )
+        state = SimpleNamespace(connection=SimpleNamespace(conn=SimpleNamespace(pgconn=pgconn)),
+                                prepared_gid=None, uncertain=False)
+        with self.assertRaisesRegex(PostgreSQLProviderError, 'disabled on this instance'):
+            PostgreSQLProvider._control_prepared_transaction(state, 'prepare')
+        pgconn.exec_.assert_called_once_with(b'SHOW max_prepared_transactions')
+        self.assertIsNone(state.prepared_gid)
+        self.assertFalse(state.uncertain)
+
+    def test_unconfirmed_resolution_keeps_the_native_recovery_id(self):
+        from psycopg.pq import TransactionStatus
+
+        pgconn = Mock(transaction_status=TransactionStatus.IDLE)
+        pgconn.exec_.side_effect = OSError('connection lost')
+        state = SimpleNamespace(connection=SimpleNamespace(conn=SimpleNamespace(pgconn=pgconn)),
+                                prepared_gid='scratchrobin_abc123', uncertain=False)
+        with self.assertRaisesRegex(PostgreSQLProviderError, 'unknown for scratchrobin_abc123'):
+            PostgreSQLProvider._control_prepared_transaction(state, 'commit')
+        pgconn.exec_.assert_called_once_with(b"COMMIT PREPARED 'scratchrobin_abc123'")
+        self.assertEqual(state.prepared_gid, 'scratchrobin_abc123')
+        self.assertTrue(state.uncertain)
+
+
 def endpoint(label='one'):
     endpoint_id = uuid.uuid5(uuid.NAMESPACE_URL, f'postgresql:{label}')
 

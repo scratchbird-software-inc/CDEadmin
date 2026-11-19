@@ -14,6 +14,8 @@ export const SURFACE_VIEWS = Object.freeze({
   METRICS: 'metrics',
   SQL: 'sql',
   FIELDS: 'fields',
+  INFORMATION: 'information',
+  METADATA: 'metadata',
   MESSAGES: 'messages',
 });
 
@@ -24,6 +26,12 @@ export const DISPLAY_MODES = Object.freeze({
   SINGLE_FORM: 'single_form',
   HYBRID_EDIT: 'hybrid_edit',
 });
+
+export function resolveRecordPresentation(mode, isEditing, editTarget) {
+  if (mode !== DISPLAY_MODES.HYBRID_EDIT) return mode;
+  if (!isEditing) return DISPLAY_MODES.GRID;
+  return editTarget === 'single_form' ? DISPLAY_MODES.SINGLE_FORM : DISPLAY_MODES.HYBRID;
+}
 
 export const BOOLEAN_FORMATS = Object.freeze({
   TF: 'T/F',
@@ -48,6 +56,12 @@ export function normalizeUuidText(raw) {
   }
   return str;
 }
+
+export const FIELD_FONTS = {
+  mono: 'var(--sr-font-mono, monospace)',
+  sans: 'sans-serif',
+  serif: 'serif',
+};
 
 export function inferColumnMeta(col = {}) {
   if (col.client_type) {
@@ -215,6 +229,18 @@ export function serializeValueForEdit(value) {
     }
   }
   return String(value);
+}
+
+export function isValidJsonDraft(value, column) {
+  if (inferColumnMeta(column).clientType !== 'json' || typeof value !== 'string' || value === '<null>') {
+    return true;
+  }
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function coerceEditedValue(rawInput, col, colMeta = inferColumnMeta(col)) {

@@ -68,7 +68,17 @@ def prepared(rig, *, active=True):
     metadata.get_scale.return_value = 0
     metadata.get_charset.return_value = 0
     metadata.is_nullable.return_value = True
-    statement.get_output_metadata.return_value.get_count.return_value = 2
+    out = statement.get_output_metadata.return_value
+    out.get_count.return_value = 2
+    out.get_type.return_value = SQLDataType.LONG
+    out.get_field.side_effect = ['ID', 'ID']
+    out.get_alias.side_effect = ['ACCOUNT_ID', 'OTHER_ID']
+    out.get_relation.return_value = 'T'
+    out.get_subtype.return_value = 0
+    out.get_length.return_value = 4
+    out.get_scale.return_value = 0
+    out.get_charset.return_value = 0
+    out.is_nullable.return_value = False
 
     def info(items, buffer):
         data = encoded(items[0], 'PLAN café' if items[0]
@@ -100,6 +110,10 @@ def test_prepare_never_executes_binds_or_finalizes_user_work(rig, active):
     assert plan['transaction_started'] is (not active)
     assert plan['parameter_count'] == 1
     assert plan['column_count'] == 2
+    assert plan['columns_complete'] is True
+    assert [(col['name'], col['native_type']) for col in plan['columns']] == [
+        ('ACCOUNT_ID', 'LONG'), ('OTHER_ID', 'LONG'),
+    ]
     assert plan['client_sql_dialect'] == 1
     assert plan['legacy']['text'] == 'PLAN café'
     statement.execute.assert_not_called()
@@ -210,3 +224,38 @@ def test_large_parameter_metadata_is_explicitly_incomplete_and_released(rig):
     assert result['parameter_count'] == 513 and result['parameters'] == []
     assert result['parameters_complete'] is False
     statement.get_input_metadata.return_value.release.assert_called_once_with()
+
+
+def test_two_phase_prepare_uses_the_active_native_handle_and_requires_explicit_resolution(rig):
+    prepared(rig)
+    transaction = rig.handle.main_transaction._tra
+    result = rig.client.control_transaction(rig.handle, 'prepare')
+    assert result == {'action': 'prepare', 'native_call_made': True}
+    transaction.prepare.assert_called_once_with()
+    rig.handle.commit.assert_not_called()
+    rig.handle.rollback.assert_not_called()
+    assert rig.client._state(rig.handle).prepare_state == 'prepared'
+
+    with pytest.raises(RelationalClientError, match='Commit or Rollback'):
+        rig.client.submit_query(rig.handle, {'source': 'SELECT 1'})
+    with pytest.raises(RelationalClientError, match='Commit or Rollback'):
+        rig.client.close_session(rig.handle)
+    rig.handle.close.assert_not_called()
+
+    rig.client.control_transaction(rig.handle, 'rollback')
+    rig.handle.rollback.assert_called_once_with(retaining=False)
+    assert rig.client._state(rig.handle).prepare_state is None
+
+
+def test_uncertain_native_prepare_keeps_the_resolution_guard(rig):
+    prepared(rig)
+    rig.handle.main_transaction._tra.prepare.side_effect = RuntimeError('lost reply')
+    with pytest.raises(RelationalClientError, match='outcome is unavailable'):
+        rig.client.control_transaction(rig.handle, 'prepare')
+    assert rig.client._state(rig.handle).prepare_state == 'unknown'
+    with pytest.raises(RelationalClientError, match='Commit or Rollback'):
+        rig.client.control_transaction(rig.handle, 'prepare')
+    rig.handle.commit.assert_not_called()
+    rig.handle.rollback.assert_not_called()
+    rig.client.control_transaction(rig.handle, 'rollback')
+    assert rig.client._state(rig.handle).prepare_state is None

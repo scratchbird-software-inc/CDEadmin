@@ -552,9 +552,43 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 context['session_handle'], closing=closing)
         return nullcontext()
 
+    def convert_surface_field(self, request):
+        from .field_conversions import convert
+
+        payload = _mapping(request)
+        connection = self.client.open_session({'route': payload['_provider_route']})
+        try:
+            values = convert(
+                connection, payload.get('pair'), payload.get('direction'), payload.get('values')
+            )
+        finally:
+            self.client.close_session(connection)
+        return {'values': values}
+
     def read_visual_admin_rows(self, request):
+        execution = request.get('_row_read_execution') if isinstance(request, dict) else None
+        if execution is not None:
+            request = {key: value for key, value in request.items() if key != '_row_read_execution'}
         with self._grid_session_guard(request):
-            return super().read_visual_admin_rows(request)
+            if execution is None or not isinstance(self.client, FirebirdQueryClient):
+                return super().read_visual_admin_rows(request)
+            context = self._visual_admin_session_context(request)
+            if not context or not context['session_id']:
+                return super().read_visual_admin_rows(request)
+            handle = context['session_handle']
+            context['_row_read_checkpoint'] = execution.check_stop
+            try:
+                with self.client.cancellable_grid_read(handle, execution):
+                    page = self._visual_admin.read_rows(request, context)
+                execution.check_stop()
+                return page
+            except Exception:
+                try:
+                    execution.check_stop()
+                except RuntimeError:
+                    self._invalidate_grid_session(context['session_id'])
+                    raise
+                raise
 
     def plan_visual_admin(self, request):
         with self._grid_session_guard(request):
@@ -682,7 +716,9 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 session is not None):
             # Keep the explicit action and following native observation in
             # one ownership interval; a new query must not slip between them.
-            with self.client._exclusive(session.handle):
+            with self.client._exclusive(
+                session.handle, allow_prepared=request.get('action') in ('commit', 'rollback')
+            ):
                 if request.get('action') in self.client.transaction_actions:
                     self._invalidate_grid_session(request['session_id'])
                 return super().control_transaction(request)

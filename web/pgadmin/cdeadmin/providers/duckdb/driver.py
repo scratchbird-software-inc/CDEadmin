@@ -50,6 +50,7 @@ class Execution:
         self.finished, self.stop = threading.Event(), threading.Event()
         self.lock = threading.Lock()
         self.error, self.final = None, None
+        self.cancelled_before_execution = False
         self.metrics = None
         self.uncertain = False
         self.index = 0
@@ -98,6 +99,7 @@ class Execution:
                 return
             for self.index, statement in enumerate(statements):
                 if self.stop.is_set():
+                    self.cancelled_before_execution = True
                     break
                 self.metrics = {'prepare_ms': parse_ms if self.index == 0 else None,
                                 'execute_ms': None, 'dispatch_ms': None,
@@ -108,6 +110,9 @@ class Execution:
                 if statement.type != duckdb.StatementType.TRANSACTION:
                     self.connection.execute(
                         'SET arrow_lossless_conversion=true')
+                if self.stop.is_set():
+                    self.cancelled_before_execution = True
+                    break
                 kinds = None
                 if (duckdb.ExpectedResultType.QUERY_RESULT in
                         statement.expected_result_type):
@@ -124,6 +129,9 @@ class Execution:
                     names = list(relation.columns)
                     relation, kinds = project(relation)
                     native = list(zip(names, kinds))
+                    if statement.type == duckdb.StatementType.SELECT and self.stop.is_set():
+                        self.cancelled_before_execution = True
+                        break
                     reader = relation.to_arrow_reader(256)
                 else:
                     self.connection.execute(statement, self.bound)
@@ -201,8 +209,11 @@ class Execution:
                         stream_reference=self.reference)
             page['payload']['cancel_requested'] = self.stop.is_set()
             if complete:
-                page['payload'].update(error=self.error,
-                                       session_reuse_blocked=self.uncertain)
+                page['payload'].update(
+                    error=self.error,
+                    cancelled=self.cancelled_before_execution,
+                    session_reuse_blocked=self.uncertain,
+                )
                 page['payload'].setdefault('statement_metrics', copy.deepcopy(self.metrics))
                 self.final = copy.deepcopy(page)
             return page

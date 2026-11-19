@@ -669,3 +669,13 @@ Owner decisions, 2026-11-13:
   + Authenticode) and frozen `scratchrobin-core` executable inside the existing
   Electron runtime first; migrate the desktop UI shell from Electron to Tauri
   v2 only after everything is working and qualified in Electron.
+
+## Data Navigator surfaces (owner-approved design, 2026-11-17)
+
+Before changing the Data Viewer or SQL Editor, read
+`docs/en_US/data_navigator_surfaces.rst`. It consolidates the approved two-surface
+design, shared components, content/presentation/placement separation, adaptive
+forms, explorer/help/colour/language preservation, formatting precedence and
+conversion requirements. Its open decisions and implementation ledger distinguish
+approval from completion; temporary mockups are not blanket approval. Update the
+ledger with implementation and verification evidence as requirements land.

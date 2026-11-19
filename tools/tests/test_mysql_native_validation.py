@@ -7,6 +7,26 @@ import pytest
 from test_mysql_session_variables import setup
 from pgadmin.cdeadmin.sdk import RelationalClientError
 from pgadmin.cdeadmin.providers.mysql_family.mysql_native_validation import validate
+from pgadmin.cdeadmin.providers.mysql_family import mysql_statement_description
+
+
+def test_surface_description_releases_native_statement_when_metadata_cannot_be_read(monkeypatch):
+    monkeypatch.setattr(mysql_statement_description, 'observed_language', lambda _: ('9.7.0', 'ANSI_QUOTES'))
+    handle = Mock(python_charset='utf8')
+    client = SimpleNamespace(_uncertain_sessions=set())
+    handle.cmd_stmt_prepare.return_value = {
+        'statement_id': 18, 'num_columns': 1, 'num_params': 1, 'columns': [()],
+    }
+    with pytest.raises(IndexError):
+        mysql_statement_description.describe(client, handle, 'SELECT :value AS "a:name"')
+    handle.cmd_stmt_prepare.assert_called_once_with(b'SELECT ?      AS "a:name"')
+    handle.cmd_stmt_close.assert_called_once_with(18)
+    handle.cmd_stmt_execute.assert_not_called()
+
+    handle.cmd_stmt_close.side_effect = RuntimeError('close failed')
+    with pytest.raises(RelationalClientError, match='release is unconfirmed'):
+        mysql_statement_description.describe(client, handle, 'SELECT 1')
+    assert client._uncertain_sessions == {id(handle)}
 
 
 def owned(database='odd`雪'):

@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import collections
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 import copy
 import csv
 import hashlib
@@ -45,6 +46,7 @@ from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
 from .visual_join_plan import VisualJoinPlan
+from .surface_effective_sql import build_effective_select, read_only_select
 from .data_surface_host import (
     AUTO_LOCAL_SORT_THRESHOLD,
     StagedRowMutation,
@@ -946,7 +948,7 @@ class QuickQueryStore:
         now = _now_iso()
 
         with self._lock, self._connect() as conn:
-            conn.execute(
+            result = conn.execute(
                 """
                 INSERT INTO quick_query
                     (query_id, user_id, server_id, database_target_id, engine_id, project_id,
@@ -960,6 +962,9 @@ class QuickQueryStore:
                     parameters_json = excluded.parameters_json,
                     display_layout_json = excluded.display_layout_json,
                     updated_at = excluded.updated_at
+                WHERE quick_query.user_id = excluded.user_id
+                  AND quick_query.server_id = excluded.server_id
+                  AND quick_query.database_target_id = excluded.database_target_id
                 """,
                 (
                     qid,
@@ -977,12 +982,15 @@ class QuickQueryStore:
                     now,
                 ),
             )
-        return self.get_quick_query(qid) or {'query_id': qid}
+            if not result.rowcount:
+                raise ValueError('The saved query is unavailable in this database.')
+        return self.get_quick_query(qid, user_id=int(user_id)) or {'query_id': qid}
 
-    def get_quick_query(self, query_id: str) -> dict[str, Any] | None:
+    def get_quick_query(self, query_id: str, *, user_id: int | None = None) -> dict[str, Any] | None:
         with self._lock, self._connect() as conn:
             r = conn.execute(
-                'SELECT * FROM quick_query WHERE query_id = ?', (query_id,)
+                'SELECT * FROM quick_query WHERE query_id = ? '
+                'AND (? IS NULL OR user_id = ?)', (query_id, user_id, user_id)
             ).fetchone()
         if not r:
             return None
@@ -3212,11 +3220,84 @@ def parse_sql_to_visual_model(
 # ============================================================================
 
 
+def _mysql_parameter_specs(source, spans):
+    if spans and any(name is None for _, _, name in spans) and any(
+        name is not None for _, _, name in spans
+    ):
+        raise ValueError('Use either named or positional MySQL parameters in a SQL run.')
+    specs = {}
+    for start, stop, name in spans:
+        position = len(specs) + 1
+        key = name if name is not None else f'param_{position}'
+        if key not in specs:
+            specs[key] = {
+                'name': key, 'kind': 'named' if name is not None else 'qmark',
+                'position': position, 'data_type': 'text', 'token': source[start:stop],
+            }
+    return list(specs.values())
+
+
+def _bind_mysql_surface_parameters(source, values, spans, specs):
+    if not specs:
+        if isinstance(values, list) and values:
+            raise ValueError('Unused positional MySQL parameters remain for this statement.')
+        return source, []
+    if specs[0]['kind'] == 'named':
+        if not isinstance(values, dict) or any(item['name'] not in values for item in specs):
+            raise ValueError('Supply a value for every named MySQL parameter.')
+        bound = {item['name']: values[item['name']] for item in specs}
+    elif isinstance(values, list) and len(values) == len(specs):
+        bound = values
+    elif isinstance(values, dict) and all(item['name'] in values for item in specs):
+        bound = [values[item['name']] for item in specs]
+    else:
+        raise ValueError('Supply a value for every positional MySQL parameter.')
+
+    parts = []
+    offset = 0
+    for start, stop, name in spans:
+        parts.append(source[offset:start])
+        token = source[start:stop]
+        if token == '?':
+            token = '%s'
+        elif token.startswith(':'):
+            token = f'%({name})s'
+        parts.append(token)
+        offset = stop
+    parts.append(source[offset:])
+    return ''.join(parts), bound
+
+
+def _result_parameter_defaults(source, values, parameters=None):
+    if parameters is None:
+        parameters = extract_query_parameters(source)
+    if isinstance(values, list) and len(values) != len(parameters):
+        return None
+    defaults = []
+    for index, parameter in enumerate(parameters):
+        name = parameter['name']
+        if isinstance(values, dict) and name not in values:
+            return None
+        value = values[index] if isinstance(values, list) else values[name]
+        if type(value) is int and abs(value) > 2**53 - 1:
+            return None
+        kind = {bool: 'boolean', int: 'integer', float: 'numeric', str: 'text'}.get(type(value), 'json')
+        defaults.append({
+            'name': name,
+            'value': '' if value is None else json.dumps(value, ensure_ascii=False) if kind == 'json' else str(value),
+            'type': kind,
+            'isNull': value is None,
+        })
+    return defaults
+
+
 @dataclass
 class SqlResultSetBuffer:
     result_index: int
     title: str
     statement_sql: str
+    parameter_defaults: list[dict[str, Any]] | None = field(default_factory=list)
+    client_sql_dialect: int | None = None
     columns: list[dict[str, Any]] = field(default_factory=list)
     field_catalog: list[dict[str, Any]] = field(default_factory=list)
     raw_rows: list[dict[str, Any]] = field(default_factory=list)
@@ -3227,6 +3308,7 @@ class SqlResultSetBuffer:
     identity_policy: str = 'read-only-query'
     row_operations: list[str] = field(default_factory=list)
     target_resource: dict[str, Any] | None = None
+    metadata_resources: list[dict[str, Any]] = field(default_factory=list)
     insert_identity_token: str | None = None
     sorts: list[dict[str, Any]] = field(default_factory=list)
     filters: list[dict[str, Any]] = field(default_factory=list)
@@ -3238,6 +3320,52 @@ class SqlResultSetBuffer:
     execution_ms: float = 0.0
     plan_text: str = ''
     plan_nodes: list[dict[str, Any]] = field(default_factory=list)
+
+
+class SqlSurfaceExecutionCancelled(RuntimeError):
+    """The provider cancelled a statement or the host stopped before submission."""
+
+
+@dataclass
+class SqlSurfaceExecution:
+    execution_id: str
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    stop_requested: bool = False
+    occurrence_id: str | None = None
+    cancel_receipt: dict | None = None
+    cancel_row_read: Any = None
+
+    def check_stop(self):
+        with self.lock:
+            if self.stop_requested:
+                raise SqlSurfaceExecutionCancelled('Remaining SQL execution stopped.')
+
+    def request_cancel(self, workspace_service, server, target_id):
+        with self.lock:
+            self.stop_requested = True
+            if self.occurrence_id and self.cancel_receipt is None:
+                self.cancel_receipt = workspace_service.cancel(
+                    server, self.occurrence_id, database_target_id=target_id
+                )
+            if self.cancel_row_read and self.cancel_receipt is None:
+                self.cancel_row_read()
+                self.cancel_receipt = {'row_read': True}
+            return {
+                'cancel_status': 'requested' if self.occurrence_id or self.cancel_row_read else 'pending',
+                'occurrence_id': self.occurrence_id,
+            }
+
+    @contextmanager
+    def cancellable_row_read(self, callback):
+        with self.lock:
+            if self.stop_requested:
+                raise SqlSurfaceExecutionCancelled('Remaining SQL execution stopped.')
+            self.cancel_row_read = callback
+        try:
+            yield
+        finally:
+            with self.lock:
+                self.cancel_row_read = None
 
 
 @dataclass
@@ -3285,6 +3413,7 @@ class SqlEditorSurfaceState:
         'total_ms': 0.0,
     })
     lock: threading.RLock = field(default_factory=threading.RLock)
+    execution: SqlSurfaceExecution | None = None
 
 
 class SqlSurfaceHostService:
@@ -3390,7 +3519,16 @@ class SqlSurfaceHostService:
             surface.language_profile,
             database_target_id=surface.database_target_id,
         )
-        surface.session_id = opened.get('session_id')
+        session_id = opened.get('session_id')
+        if surface.language_profile == 'postgresql-sql':
+            try:
+                self._postgresql_autocommit(
+                    workspace_service, server, surface, session_id, surface.autocommit,
+                )
+            except Exception:
+                workspace_service.close_session(server, session_id, surface.database_target_id)
+                raise
+        surface.session_id = session_id
         dt_ms = (time.perf_counter() - t0) * 1000.0
         surface.timings_ms['prepare_ms'] = round(dt_ms, 2)
         self._log(
@@ -3401,6 +3539,17 @@ class SqlSurfaceHostService:
             elapsed_ms=dt_ms,
         )
         return surface.session_id
+
+    @staticmethod
+    def _postgresql_autocommit(workspace_service, server, surface, session_id, enabled):
+        transaction = workspace_service.transaction_action(
+            server, session_id, 'autocommit_on' if enabled else 'autocommit_off',
+            database_target_id=surface.database_target_id,
+        )
+        if (transaction.get('provider_payload') or {}).get('autocommit') is not enabled:
+            raise RuntimeError('The PostgreSQL connection did not confirm its Auto-Commit setting.')
+        surface.transaction = transaction
+        surface.autocommit = enabled
 
     @staticmethod
     def _recompute_rs_view(rs: SqlResultSetBuffer) -> dict[str, float]:
@@ -3466,6 +3615,7 @@ class SqlSurfaceHostService:
         surface: SqlEditorSurfaceState,
         stmt_sql: str,
         catalog_resources: list[dict[str, Any]],
+        execution: SqlSurfaceExecution | None = None,
     ) -> SqlResultSetBuffer | None:
         """When a simple `SELECT * FROM <table>` matches a single updatable table/view
         and has no WHERE/JOIN/GROUP BY, load via `read_visual_admin_rows` so the query
@@ -3485,31 +3635,54 @@ class SqlSurfaceHostService:
         if not re.match(r'^\s*SELECT\s+\*\s+FROM\b', stmt_sql, re.IGNORECASE):
             return None
 
-        raw_tbl = m.group(1).split('.')[-1].strip('"` ')
-        matched_res = next(
-            (
-                r for r in catalog_resources
-                if str(r.get('display_name') or r.get('name') or '').upper()
-                == raw_tbl.upper()
-                and r.get('resource_kind') in ('table', 'view')
-            ),
-            None,
-        )
+        if surface.language_profile == 'postgresql-sql':
+            identifier = r'(?:[A-Za-z_][A-Za-z0-9_$]*|"(?:[^"]|"")+")'
+            relation = re.fullmatch(
+                rf'\s*SELECT\s+\*\s+FROM\s+({identifier})\.({identifier})\s*;?\s*',
+                stmt_sql, re.IGNORECASE | re.ASCII,
+            )
+            if not relation:
+                return None
+            names = [
+                item[1:-1].replace('""', '"') if item.startswith('"') else item.lower()
+                for item in relation.groups()
+            ]
+            raw_tbl = names[-1]
+            matches = {
+                resource['resource_id']: resource for resource in catalog_resources
+                if resource.get('resource_id')
+                and resource.get('resource_kind') in ('table', 'view')
+                and list(resource.get('display_path') or ())[-2:] == names
+            }
+            matched_res = next(iter(matches.values())) if len(matches) == 1 else None
+        else:
+            raw_tbl = m.group(1).split('.')[-1].strip('"` ')
+            matched_res = next(
+                (
+                    r for r in catalog_resources
+                    if str(r.get('display_name') or r.get('name') or '').upper()
+                    == raw_tbl.upper()
+                    and r.get('resource_kind') in ('table', 'view')
+                ),
+                None,
+            )
         if not matched_res or not hasattr(workspace_service, 'read_visual_admin_rows'):
             return None
 
         try:
             session_id = self._ensure_session(workspace_service, server, surface)
             t0 = time.perf_counter()
-            page = workspace_service.read_visual_admin_rows(
-                server,
-                {
-                    'target_resource': copy.deepcopy(matched_res),
-                    'limit': min(500, surface.max_rows),
-                    'database_target_id': surface.database_target_id,
-                    **({'session_id': session_id} if session_id else {}),
-                },
-            )
+            request = {
+                'target_resource': copy.deepcopy(matched_res),
+                'limit': min(500, surface.max_rows),
+                'database_target_id': surface.database_target_id,
+                **({'session_id': session_id} if session_id else {}),
+            }
+            read = getattr(workspace_service, 'read_cancellable_surface_rows', None)
+            if execution is not None and callable(read):
+                page = read(server, request, execution)
+            else:
+                page = workspace_service.read_visual_admin_rows(server, request)
             if page.get('continuation') and hasattr(
                 workspace_service, 'cancel_visual_admin_rows'
             ):
@@ -3517,6 +3690,7 @@ class SqlSurfaceHostService:
                     server,
                     {
                         'continuation': page['continuation'],
+                        **({'session_id': session_id} if session_id else {}),
                         'database_target_id': surface.database_target_id,
                     },
                 )
@@ -3539,8 +3713,8 @@ class SqlSurfaceHostService:
                 target_resource=copy.deepcopy(matched_res),
                 insert_identity_token=page.get('insert_identity_token'),
                 execution_ms=round(dt_ms, 2),
-                plan_text=f'PLAN ({raw_tbl} LIVE IDENTITY)',
-                plan_nodes=[{
+                plan_text='' if surface.language_profile == 'postgresql-sql' else f'PLAN ({raw_tbl} LIVE IDENTITY)',
+                plan_nodes=[] if surface.language_profile == 'postgresql-sql' else [{
                     'id': 'plan-1',
                     'operation': 'LIVE TABLE SCAN',
                     'target': raw_tbl,
@@ -3553,7 +3727,217 @@ class SqlSurfaceHostService:
             self._recompute_rs_view(rs)
             return rs
         except Exception:
+            if execution:
+                try:
+                    execution.check_stop()
+                except SqlSurfaceExecutionCancelled:
+                    for result in surface.result_sets:
+                        result.editable = False
+                        result.row_operations = []
+                    raise
             return None
+
+    def _start_transaction(self, workspace_service, server, surface, request):
+        profile = surface.language_profile
+        if profile not in {'firebird-sql', 'postgresql-sql', 'mysql-sql', 'mariadb-sql', 'sqlite-sql'}:
+            raise ValueError('Native transaction options are unavailable for this language.')
+        if surface.autocommit or surface.tx_dirty_since_boundary or any(
+            result.staged_mutations for result in surface.result_sets
+        ):
+            raise ValueError('Turn off autocommit and complete pending work before starting a transaction.')
+
+        access = {'read_only': 'READ ONLY', 'read_write': 'READ WRITE'}
+        isolation = {
+            'read_committed': 'READ COMMITTED',
+            'repeatable_read': 'REPEATABLE READ',
+            'serializable': 'SERIALIZABLE',
+        }
+        if profile == 'firebird-sql':
+            choices = {
+                'access': access,
+                'isolation': {'snapshot': 'SNAPSHOT', 'read_committed': 'READ COMMITTED'},
+                'wait': {'wait': 'WAIT', 'no_wait': 'NO WAIT'},
+            }
+        elif profile == 'sqlite-sql':
+            choices = {'mode': {'deferred': 'DEFERRED', 'immediate': 'IMMEDIATE', 'exclusive': 'EXCLUSIVE'}}
+        else:
+            if profile in {'mysql-sql', 'mariadb-sql'}:
+                isolation['read_uncommitted'] = 'READ UNCOMMITTED'
+            choices = {'access': access, 'isolation': isolation}
+        options = request.get('transaction_options')
+        if not isinstance(options, dict) or set(options) != set(choices):
+            raise ValueError('Invalid native transaction options.')
+        clauses = {}
+        for name, admitted in choices.items():
+            value = options[name]
+            if not isinstance(value, str) or value not in admitted:
+                raise ValueError(f'Invalid transaction {name} option.')
+            clauses[name] = admitted[value]
+
+        session_id = self._ensure_session(workspace_service, server, surface)
+        if profile == 'firebird-sql':
+            surface.tx_dirty_since_boundary = True
+            self._native_control_receipt(
+                workspace_service, server, surface, 'transaction_action',
+                lambda receipt: receipt.get('action') == 'begin' and receipt.get('native_call_made') is True,
+                session_id=session_id, source='SET TRANSACTION ' + ' '.join(clauses.values()),
+                parameters=[], client_sql_dialect=request.get('client_sql_dialect'),
+            )
+        else:
+            observe = lambda: workspace_service.transaction(server, session_id, surface.database_target_id)
+            before = observe()
+            state = before.get('provider_payload') or {}
+            surface.transaction = before
+            if state.get('session_reuse_blocked') or state.get('connection_usable') is False:
+                raise ValueError('The retained session state is unavailable.')
+            if profile == 'postgresql-sql':
+                if state.get('transaction_status') != 0:
+                    raise ValueError('Commit or roll back the active transaction before starting another.')
+                start = 'BEGIN' if state.get('autocommit') is True else 'SET TRANSACTION'
+                commands = [f"{start} ISOLATION LEVEL {clauses['isolation']}, {clauses['access']}"]
+            else:
+                if state.get('in_transaction') is not False:
+                    raise ValueError('Commit or roll back the active transaction before starting another.')
+                if profile == 'sqlite-sql':
+                    commands = [f"BEGIN {clauses['mode']} TRANSACTION"]
+                else:
+                    commands = [
+                        f"SET TRANSACTION ISOLATION LEVEL {clauses['isolation']}",
+                        f"START TRANSACTION {clauses['access']}",
+                    ]
+            # Once a native start is submitted, retain the close guard
+            # until the provider confirms what happened to the transaction.
+            surface.tx_dirty_since_boundary = True
+            try:
+                for command in commands:
+                    self._native_control_receipt(
+                        workspace_service, server, surface, None, None,
+                        session_id=session_id, source=command, parameters=[],
+                    )
+            finally:
+                session_state = observe()
+                surface.transaction = session_state
+                observed = session_state.get('provider_payload') or {}
+                active = (
+                    observed.get('transaction_status') in (2, 3) if profile == 'postgresql-sql'
+                    else observed.get('in_transaction') is True
+                )
+                surface.tx_dirty_since_boundary = active or bool(observed.get('session_reuse_blocked'))
+            if not active or (profile == 'postgresql-sql' and observed.get('transaction_status') != 2):
+                raise RuntimeError('The provider did not confirm a usable active transaction.')
+            return
+
+        surface.transaction = workspace_service.transaction(
+            server, surface.session_id, surface.database_target_id
+        )
+
+    def _postgresql_result_batch(self, workspace_service, server, surface, result, changes, *, preview):
+        response = workspace_service.mutate_surface_rows(server, {
+            'database_target_id': surface.database_target_id,
+            'session_id': surface.session_id,
+            'target_resource': result.target_resource,
+            'changes': changes,
+            'preview': preview,
+        })
+        if not preview:
+            result.staged_mutations.clear()
+            result.editable = False
+            result.row_operations = []
+            refreshed = self._try_resolve_live_editable_rows(
+                workspace_service, server, surface, result.statement_sql, [result.target_resource],
+            )
+            if refreshed is not None:
+                refreshed.result_index = result.result_index
+                refreshed.sorts = result.sorts
+                refreshed.filters = result.filters
+                self._recompute_rs_view(refreshed)
+                surface.result_sets[result.result_index] = refreshed
+        return response
+
+    def _prepare_statement(self, workspace_service, server, surface, request):
+        if surface.language_profile not in (
+            'firebird-sql', 'postgresql-sql', 'duckdb-sql', 'mysql-sql', 'mariadb-sql', 'sqlite-sql',
+        ):
+            raise ValueError('Native statement description is unavailable for this language.')
+        source = request.get('selection_text') or request.get('sql_source')
+        if not isinstance(source, str):
+            raise ValueError('Statement source is required.')
+        if surface.language_profile in ('mysql-sql', 'mariadb-sql', 'sqlite-sql'):
+            session_id = self._ensure_session(workspace_service, server, surface)
+            return {'prepared_statement': workspace_service.describe_surface_statement(
+                server, session_id, source, surface.database_target_id
+            )}
+        segments = split_sql_statements(source, surface.terminator, surface.engine_id)
+        if len(segments) != 1:
+            raise ValueError('Select exactly one statement to prepare.')
+        sql = segments[0].sql
+        if surface.language_profile in ('postgresql-sql', 'duckdb-sql'):
+            session_id = self._ensure_session(workspace_service, server, surface)
+            receipt = workspace_service.describe_surface_statement(
+                server, session_id, sql, surface.database_target_id
+            )
+            return {'prepared_statement': receipt}
+        parameters = extract_query_parameters(sql)
+        if any(item['kind'] != 'qmark' for item in parameters):
+            raise ValueError('Use native positional question marks when preparing a statement.')
+        session_id = self._ensure_session(workspace_service, server, surface)
+        receipt = self._native_control_receipt(
+            workspace_service, server, surface, 'query_plan',
+            lambda value: value.get('statement_execution_requested') is False,
+            session_id=session_id, source=sql, parameters=[], plan_mode=True,
+            client_sql_dialect=request.get('client_sql_dialect'),
+        )
+        return {'prepared_statement': receipt}
+
+    @staticmethod
+    def _native_control_receipt(workspace_service, server, surface, receipt_key, accepts, **request):
+        occurrence = workspace_service.execute(
+            server, database_target_id=surface.database_target_id, **request
+        )
+        occurrence_id = occurrence.get('occurrence_id')
+        deadline = time.perf_counter() + 60
+        while time.perf_counter() < deadline:
+            response = workspace_service.poll(
+                server, occurrence_id, buffer_rows=2,
+                database_target_id=surface.database_target_id,
+            )
+            state = response.get('occurrence') or {}
+            if not (state.get('operation') or {}).get('terminal'):
+                time.sleep(0.03)
+                continue
+            result = state.get('result') or {}
+            extensions = result.get('extensions') or {}
+            for extension in extensions.values():
+                payload = (extension or {}).get('payload') or {}
+                receipt = payload.get(receipt_key)
+                if isinstance(receipt, dict) and accepts(receipt):
+                    return receipt
+                if payload.get('error'):
+                    error = payload['error']
+                    raise RuntimeError(error.get('message') or error.get('type') or 'Native SQL control failed.')
+            if receipt_key is None and result.get('complete') is True and extensions:
+                return result
+            raise RuntimeError('The provider returned no confirmation for this native operation.')
+        raise TimeoutError('The native operation is still running.')
+
+    def _mysql_surface_parameter_spans(self, workspace_service, server, surface, source):
+        from ..data_studio.mysql_quoting import available, parameter_spans
+
+        if not re.search(r'\?|%(?:s|\()|(?<![:\w]):[A-Za-z_]', source):
+            return []
+        session_id = self._ensure_session(workspace_service, server, surface)
+        response = workspace_service.language_tool_action(server, 'source_format_context', {
+            'session_id': session_id, 'source': source,
+            'database_target_id': surface.database_target_id,
+        })
+        context = response.get('context') or {}
+        mode = context.get('sql_mode')
+        if context.get('engine') != 'mysql' or not isinstance(mode, str):
+            raise ValueError('MySQL parameter detection requires the retained session SQL mode.')
+        return list(parameter_spans(
+            source, set(mode.split(',')), dollar_quotes=available(context.get('version')),
+            surface_markers=True,
+        ))
 
     def _execute_single_statement(
         self,
@@ -3565,19 +3949,44 @@ class SqlSurfaceHostService:
         catalog_resources: list[dict[str, Any]],
         result_idx: int,
         plan_only: bool = False,
+        single_statement: bool = True,
+        client_sql_dialect: int | None = None,
+        execution: SqlSurfaceExecution | None = None,
     ) -> SqlResultSetBuffer | None:
         t0 = time.perf_counter()
+        if execution:
+            execution.check_stop()
         session_id = self._ensure_session(workspace_service, server, surface)
+
+        if execution:
+            execution.check_stop()
+
+        mysql_specs = None
+        if surface.language_profile == 'mysql-sql':
+            spans = self._mysql_surface_parameter_spans(workspace_service, server, surface, seg.sql)
+            mysql_specs = _mysql_parameter_specs(seg.sql, spans)
+            bound_sql, bound_params = _bind_mysql_surface_parameters(
+                seg.sql, param_values, spans, mysql_specs
+            )
+        else:
+            bound_sql, bound_params = bind_named_to_positional_if_needed(
+                seg.sql, param_values, surface.parameter_shape
+            )
 
         # Check if simple `SELECT * FROM <table>` without params can attach live row identity!
         if (
             not plan_only
-            and not extract_query_parameters(seg.sql)
+            and not ((surface.transaction or {}).get('provider_payload') or {}).get('xa_state')
+            and client_sql_dialect in (None, 3)
+            and (surface.language_profile != 'postgresql-sql' or single_statement)
+            and not (mysql_specs if mysql_specs is not None else extract_query_parameters(seg.sql))
             and re.match(r'^\s*SELECT\s+\*\s+FROM\b', seg.sql, re.IGNORECASE)
         ):
             live_rs = self._try_resolve_live_editable_rows(
-                workspace_service, server, surface, seg.sql, catalog_resources
+                workspace_service, server, surface, seg.sql, catalog_resources, execution
             )
+            if execution:
+                execution.check_stop()
             if live_rs is not None:
                 live_rs.result_index = result_idx
                 live_rs.title = f'Result {result_idx + 1}'
@@ -3590,10 +3999,6 @@ class SqlSurfaceHostService:
                 )
                 return live_rs
 
-        bound_sql, bound_params = bind_named_to_positional_if_needed(
-            seg.sql, param_values, surface.parameter_shape
-        )
-
         # Mark Firebird / non-autocommit mutating activity!
         is_readonly_stmt = bool(
             re.match(
@@ -3601,6 +4006,7 @@ class SqlSurfaceHostService:
                 seg.sql,
                 re.IGNORECASE,
             )
+            or (re.match(r'^\s*WITH\b', seg.sql, re.IGNORECASE) and read_only_select(seg.sql))
         )
         if not plan_only and not surface.autocommit and not is_readonly_stmt:
             surface.tx_dirty_since_boundary = True
@@ -3609,36 +4015,94 @@ class SqlSurfaceHostService:
             'session_id': session_id,
             'source': bound_sql,
             'parameters': bound_params,
-            'max_rows': surface.max_rows,
             'database_target_id': surface.database_target_id,
         }
         if plan_only:
             exec_payload['plan_mode'] = True
         if surface.language_profile == 'firebird-sql':
-            exec_payload['client_sql_dialect'] = 3
+            if client_sql_dialect is not None:
+                exec_payload['client_sql_dialect'] = client_sql_dialect
+            exec_payload['max_rows'] = surface.max_rows
 
+        if execution:
+            execution.check_stop()
         occurrence = workspace_service.execute(server, **exec_payload)
         occ_id = occurrence.get('occurrence_id')
 
+        if execution:
+            with execution.lock:
+                if not (occurrence.get('operation') or {}).get('terminal'):
+                    execution.occurrence_id = occ_id
+                cancel_pending = execution.stop_requested and execution.occurrence_id
+            if cancel_pending:
+                try:
+                    execution.request_cancel(workspace_service, server, surface.database_target_id)
+                except Exception as error:
+                    self._log(surface, 'warning', 'Cancel', str(error), line=seg.start_line)
+
         # Poll synchronously on host until terminal (bounded safety timeout)
         poll_resp: dict[str, Any] = {}
+        stream_columns = []
+        stream_rows = []
+        stream_limited = False
         deadline = time.perf_counter() + 60.0
-        while time.perf_counter() < deadline:
-            poll_resp = workspace_service.poll(
-                server,
-                occ_id,
-                buffer_rows=min(500, surface.page_size),
-                database_target_id=surface.database_target_id,
-            )
-            if poll_resp.get('occurrence', {}).get('operation', {}).get('terminal'):
-                break
-            time.sleep(0.03)
+        try:
+            while time.perf_counter() < deadline:
+                poll_resp = workspace_service.poll(
+                    server,
+                    occ_id,
+                    buffer_rows=min(500, surface.max_rows),
+                    database_target_id=surface.database_target_id,
+                )
+                frame = poll_resp.get('rendered_result') or {}
+                view = frame.get('view_model') or {}
+                terminal = poll_resp.get('occurrence', {}).get('operation', {}).get('terminal')
+                if view.get('family') == 'columnar' and (not terminal or stream_columns):
+                    columns = view.get('columns') or []
+                    if columns:
+                        if stream_columns and columns != stream_columns:
+                            raise RuntimeError('The streamed result changed its column schema.')
+                        stream_columns = columns
+                    rows = view.get('rows') or []
+                    remaining = max(0, surface.max_rows - len(stream_rows))
+                    stream_rows.extend(rows[:remaining])
+                    stream_limited |= len(rows) > remaining or bool(
+                        (frame.get('page') or {}).get('next_cursor')
+                    )
+                if terminal:
+                    break
+                time.sleep(0.03)
+            else:
+                raise TimeoutError('The query is still running.')
+        finally:
+            if execution:
+                with execution.lock:
+                    execution.occurrence_id = None
+                    execution.cancel_receipt = None
 
         dt_ms = (time.perf_counter() - t0) * 1000.0
         occ = poll_resp.get('occurrence') or {}
         res_obj = occ.get('result') or {}
         exts = res_obj.get('extensions') or {}
         rendered = poll_resp.get('rendered_result') or {}
+        if stream_columns:
+            rendered = {
+                'view_model': {'columns': stream_columns, 'rows': stream_rows},
+                'page': {'next_cursor': stream_limited},
+            }
+
+        if execution and execution.stop_requested:
+            for extension in exts.values():
+                payload = (extension or {}).get('payload') or {}
+                error = payload.get('error') or {}
+                if (
+                    payload.get('cancelled') or payload.get('canceled')
+                    or payload.get('execution_state') == 'cancelled'
+                    or error.get('sqlstate') == '57014'
+                    or error.get('sqlite_errorname') == 'SQLITE_INTERRUPT'
+                    or error.get('type') == 'InterruptException'
+                ):
+                    raise SqlSurfaceExecutionCancelled('The provider cancelled the statement.')
 
         # Check for provider-reported errors across extensions
         for ext_val in exts.values():
@@ -3700,6 +4164,7 @@ class SqlSurfaceHostService:
                 cols.append({
                     'name': name,
                     'source_name': original_name,
+                    'source_type_code': c.get('type_code', c.get('native_type_code')),
                     'native_type': str(c.get('native_type') or c.get('type_name') or c.get('data_type') or 'TEXT'),
                     'nullable': bool(c.get('nullable', True)),
                     'key': bool(
@@ -3758,7 +4223,8 @@ class SqlSurfaceHostService:
                 'values': vals,
             })
 
-        if surface.autocommit and session_id and not is_readonly_stmt and not plan_only:
+        if (surface.autocommit and session_id and not is_readonly_stmt and not plan_only
+                and surface.language_profile != 'postgresql-sql'):
             try:
                 surface.transaction = workspace_service.transaction_action(
                     server,
@@ -3806,18 +4272,40 @@ class SqlSurfaceHostService:
                 return rs_plan
             return None
 
+        model, fidelity = parse_sql_to_visual_model(seg.sql)
+        metadata_resources = {}
+        if model and fidelity == 'exact':
+            for relation in model['tables']:
+                name = relation['name'].casefold()
+                matches = {
+                    resource['resource_id']: resource
+                    for resource in catalog_resources
+                    if resource.get('resource_id')
+                    and resource.get('resource_kind') in ('table', 'view', 'procedure', 'function')
+                    and str(resource.get('name') or resource.get('display_name') or '').casefold() == name
+                }
+                if len(matches) == 1:
+                    metadata_resources.update(matches)
+
         fcat = self._build_field_catalog_from_columns(cols, False)
         has_more = bool((rendered.get('page') or {}).get('next_cursor'))
         rs = SqlResultSetBuffer(
             result_index=result_idx,
             title=f'Result {result_idx + 1}',
             statement_sql=seg.sql,
+            parameter_defaults=_result_parameter_defaults(seg.sql, param_values, mysql_specs),
+            client_sql_dialect=client_sql_dialect,
             columns=cols,
             field_catalog=fcat,
             raw_rows=normalized_rows,
             complete_in_buffer=not has_more,
             retrieval_limited=has_more,
             editable=False,
+            metadata_resources=[
+                {'resource_id': resource_id,
+                 'display_name': resource.get('display_name') or resource.get('name') or resource_id}
+                for resource_id, resource in metadata_resources.items()
+            ],
             identity_policy='read-only-query',
             row_operations=[],
             execution_ms=round(dt_ms, 2),
@@ -3843,6 +4331,16 @@ class SqlSurfaceHostService:
         )
         return rs
 
+    @staticmethod
+    def _object_layout_key(surface, result):
+        target = result.target_resource if result else None
+        if not target or target.get('resource_kind') not in ('table', 'view'):
+            return None
+        resource_id = target.get('resource_id')
+        if not resource_id:
+            return None
+        return f"{surface.server_id}:{surface.database_target_id or 'default'}:{resource_id}"
+
     def _serialize_state(
         self,
         surface: SqlEditorSurfaceState,
@@ -3858,11 +4356,27 @@ class SqlSurfaceHostService:
             else None
         )
 
+        effective_query = None
+        if active_rs:
+            effective_query = build_effective_select(
+                active_rs, surface.engine_id, client_sql_dialect=active_rs.client_sql_dialect
+            )
+            if effective_query.get('sql'):
+                if active_rs.parameter_defaults is None:
+                    effective_query = {'sql': '', 'reason': 'The original parameter bindings are unavailable.'}
+                else:
+                    effective_query['parameters'] = active_rs.parameter_defaults
+                    effective_query['client_sql_dialect'] = active_rs.client_sql_dialect
+
         staged_total = sum(len(rs.staged_mutations) for rs in surface.result_sets)
-        has_uncommitted = bool(
-            not surface.autocommit
-            and (surface.tx_dirty_since_boundary or staged_total > 0)
+        native_transaction = ((surface.transaction or {}).get('provider_payload') or {})
+        pg_active = surface.language_profile == 'postgresql-sql' and (
+            native_transaction.get('transaction_status') in (2, 3)
+            or native_transaction.get('prepare_state') or native_transaction.get('session_reuse_blocked')
         )
+        has_uncommitted = bool(pg_active or (
+            not surface.autocommit and (surface.tx_dirty_since_boundary or staged_total > 0)
+        ))
 
         window_rows: list[dict[str, Any]] = []
         staged_sql: list[dict[str, Any]] = []
@@ -3972,11 +4486,17 @@ class SqlSurfaceHostService:
                     for mut in active_rs.staged_mutations.values()
                 ],
                 'target_resource': active_rs.target_resource,
+                'metadata_resources': active_rs.metadata_resources,
             }
             if active_rs is not None
             else None
         )
 
+        object_key = self._object_layout_key(surface, active_rs)
+        saved_layout = (
+            self.layout_store.get_specific_layout(user_id, 'data-edit-surface', object_key)
+            if object_key else None
+        )
         return {
             'surface_id': surface.surface_id,
             'has_uncommitted_activity': has_uncommitted,
@@ -3984,6 +4504,13 @@ class SqlSurfaceHostService:
             'engine_id': surface.engine_id,
             'language_profile': surface.language_profile,
             'database_target_id': surface.database_target_id,
+            'transaction_prepare_state': (
+                ((surface.transaction or {}).get('provider_payload') or {}).get('prepare_state')
+            ),
+            'prepared_transaction_id': (
+                ((surface.transaction or {}).get('provider_payload') or {}).get('prepared_transaction_id')
+            ),
+            'xa_state': native_transaction.get('xa_state'),
             'session_id': surface.session_id,
             'autocommit': surface.autocommit,
             'terminator': surface.terminator,
@@ -3994,6 +4521,9 @@ class SqlSurfaceHostService:
             'result_summaries': result_summaries,
             'result_sets_summary': result_summaries,
             'active_result_index': surface.active_result_index,
+            'object_layout_key': object_key,
+            'saved_specific_layout': saved_layout,
+            'field_type_defaults': self.layout_store.get_field_type_defaults(user_id),
             'active_result': active_result_obj,
             'editable': bool(active_rs.editable) if active_rs else False,
             'identity_policy': active_rs.identity_policy if active_rs else 'no-result',
@@ -4015,6 +4545,7 @@ class SqlSurfaceHostService:
             'timings_ms': surface.timings_ms,
             'plan_text': active_rs.plan_text if active_rs else '',
             'statement_summaries': getattr(surface, 'last_statement_summaries', []),
+            'last_execution_cancelled': bool(getattr(surface, 'last_execution_cancelled', False)),
             'last_execution_had_error': bool(getattr(surface, 'last_execution_had_error', False)),
             'quick_queries': self.quick_query_store.list_quick_queries(
                 user_id,
@@ -4027,6 +4558,7 @@ class SqlSurfaceHostService:
             ),
             'sql_view': {
                 'server_sql': active_rs.statement_sql if active_rs else surface.sql_source,
+                'effective_query': effective_query,
                 'parameters': surface.bound_parameters,
                 'sort_execution': active_rs.sort_execution if active_rs else 'local',
                 'sort_mode': active_rs.sort_mode if active_rs else 'auto',
@@ -4351,9 +4883,9 @@ class SqlSurfaceHostService:
 
         if sub_action in ('quick_queries_save', 'save_quick_query'):
             q_payload = dict(request.get('quick_query') or {})
-            q_payload.setdefault('server_id', server_id)
-            q_payload.setdefault('database_target_id', request.get('database_target_id') or '')
-            q_payload.setdefault('engine_id', request.get('engine_id') or '')
+            q_payload['server_id'] = server_id
+            q_payload['database_target_id'] = request.get('database_target_id') or ''
+            q_payload['engine_id'] = request.get('engine_id') or ''
             saved = self.quick_query_store.save_quick_query(user_id, q_payload)
             return {
                 'quick_query': saved,
@@ -4378,6 +4910,24 @@ class SqlSurfaceHostService:
                 ),
             }
 
+        if sub_action == 'convert_field':
+            return workspace_service.convert_surface_field(server, {
+                'database_target_id': request.get('database_target_id'),
+                'pair': request.get('pair'),
+                'direction': request.get('direction'),
+                'values': request.get('values'),
+            })
+
+        if sub_action == 'list_templates':
+            return {'templates': self.layout_store.list_templates('data-edit-surface')}
+
+        if sub_action == 'get_field_type_defaults':
+            return {'field_type_defaults': self.layout_store.get_field_type_defaults(user_id)}
+        if sub_action == 'save_field_type_defaults':
+            return self.layout_store.save_field_type_defaults(
+                user_id, request.get('field_type_defaults')
+            )
+
         if sub_action == 'generate_object_script':
             return generate_universal_object_sql(
                 workspace_service,
@@ -4388,14 +4938,93 @@ class SqlSurfaceHostService:
                 script_kind=str(request.get('script_kind') or 'select'),
             )
 
+        if sub_action == 'cancel':
+            with self._lock:
+                owner = self._surfaces.get(str(request.get('surface_id') or ''))
+                execution = (
+                    owner.execution if owner and owner.user_id == user_id
+                    and owner.server_id == server_id
+                    and owner.database_target_id == (request.get('database_target_id') or None)
+                    else None
+                )
+            if not execution or execution.execution_id != request.get('execution_id'):
+                return {'cancel_status': 'idle'}
+            return execution.request_cancel(workspace_service, server, owner.database_target_id)
+
         surface = self._get_or_create_surface(server, request)
         with surface.lock:
             if 'page_size' in request and request['page_size']:
                 surface.page_size = max(10, min(1000, int(request['page_size'])))
             if 'max_rows' in request and request['max_rows']:
                 surface.max_rows = max(1, min(100000, int(request['max_rows'])))
+            window_offset = int(request.get('window_offset') or 0)
+            window_size = int(request.get('window_size') or surface.page_size)
+            prepared = ((surface.transaction or {}).get('provider_payload') or {}).get('prepare_state')
+            xa_state = ((surface.transaction or {}).get('provider_payload') or {}).get('xa_state')
+            if xa_state and request.get('autocommit') is True:
+                raise ValueError('Resolve the managed XA transaction before changing Auto-Commit.')
+            if sub_action == 'recover_prepared_transaction':
+                if surface.language_profile != 'postgresql-sql':
+                    raise ValueError('Prepared transaction recovery is unavailable for this engine.')
+                receipt = workspace_service.recover_surface_transaction(
+                    server, surface.database_target_id, request.get('resolution'), request.get('gid'),
+                )
+                if prepared and receipt.get('gid') and surface.session_id:
+                    surface.transaction = workspace_service.transaction(
+                        server, surface.session_id, surface.database_target_id,
+                    )
+                    surface.tx_dirty_since_boundary = bool(
+                        (surface.transaction.get('provider_payload') or {}).get('prepare_state')
+                    )
+                return {**receipt, 'state': self._serialize_state(
+                    surface, user_id, window_offset=window_offset, window_size=window_size,
+                )}
+            if prepared and (request.get('autocommit') is True or sub_action in (
+                'execute', 'execute_statement', 'execute_script', 'explain_plan',
+                'prepare_statement', 'start_transaction',
+            )):
+                raise ValueError('Commit or roll back the prepared transaction first.')
+            if prepared and sub_action == 'close_surface' and xa_state != 'unknown':
+                raise ValueError('Commit or roll back the prepared transaction first.')
+            if (((prepared and surface.language_profile == 'postgresql-sql') or xa_state)
+                    and sub_action in ('commit_batch', 'rollback_batch')):
+                if not xa_state:
+                    current = workspace_service.transaction(server, surface.session_id, surface.database_target_id)
+                    if not (current.get('provider_payload') or {}).get('prepare_state'):
+                        surface.transaction = current
+                        surface.tx_dirty_since_boundary = False
+                        raise ValueError('The prepared transaction was resolved from another session.')
+                try:
+                    surface.transaction = workspace_service.transaction_action(
+                        server, surface.session_id, sub_action.removesuffix('_batch'),
+                        database_target_id=surface.database_target_id,
+                    )
+                except Exception:
+                    try:
+                        surface.transaction = workspace_service.transaction(
+                            server, surface.session_id, surface.database_target_id
+                        )
+                    except Exception:
+                        pass
+                    raise
+                surface.tx_dirty_since_boundary = False
+                return self._serialize_state(
+                    surface, user_id, window_offset=window_offset, window_size=window_size
+                )
             if 'autocommit' in request and request['autocommit'] is not None:
-                surface.autocommit = bool(request['autocommit'])
+                enabled = bool(request['autocommit'])
+                if (surface.language_profile == 'postgresql-sql' and surface.session_id
+                        and enabled != surface.autocommit):
+                    if any(result.staged_mutations for result in surface.result_sets):
+                        raise ValueError('Complete staged row changes before changing Auto-Commit.')
+                    self._postgresql_autocommit(
+                        workspace_service, server, surface, surface.session_id, enabled,
+                    )
+                    for result in surface.result_sets:
+                        result.editable = False
+                        result.row_operations = []
+                else:
+                    surface.autocommit = enabled
             if 'terminator' in request and request['terminator']:
                 surface.terminator = str(request['terminator']).strip() or ';'
             if 'active_result_index' in request and request['active_result_index'] is not None:
@@ -4403,8 +5032,21 @@ class SqlSurfaceHostService:
                 if 0 <= idx_req < len(surface.result_sets):
                     surface.active_result_index = idx_req
 
-            window_offset = int(request.get('window_offset') or 0)
-            window_size = int(request.get('window_size') or surface.page_size)
+            if sub_action == 'save_object_layout':
+                active = (
+                    surface.result_sets[surface.active_result_index]
+                    if surface.result_sets else None
+                )
+                object_key = self._object_layout_key(surface, active)
+                if not object_key or request.get('object_layout_key') != object_key:
+                    raise ValueError('The active result no longer matches this object layout.')
+                layout = request.get('layout')
+                if not isinstance(layout, dict):
+                    raise ValueError('An object layout must be a mapping.')
+                return self.layout_store.save_specific_layout(
+                    user_id, 'data-edit-surface', object_key, layout
+                )
+
             catalog_resources = list(
                 request.get('catalog_resources') or request.get('resources') or []
             )
@@ -4483,7 +5125,14 @@ class SqlSurfaceHostService:
                 }
 
             if sub_action == 'load_quick_query':
-                qq = self.quick_query_store.get_quick_query(str(request.get('query_id') or ''))
+                qq = self.quick_query_store.get_quick_query(
+                    str(request.get('query_id') or ''), user_id=user_id
+                )
+                if qq and (
+                    qq['server_id'] not in (0, surface.server_id)
+                    or qq['database_target_id'] not in ('', surface.database_target_id)
+                ):
+                    qq = None
                 if qq:
                     surface.sql_source = qq.get('sql_text') or ''
                     surface.terminator = qq.get('terminator') or ';'
@@ -4494,13 +5143,11 @@ class SqlSurfaceHostService:
                     ),
                 }
 
-            if sub_action in ('set_options', 'select_result', 'cancel'):
+            if sub_action in ('set_options', 'select_result'):
                 if sub_action == 'select_result':
                     idx_sel = int(request.get('result_index') or 0)
                     if 0 <= idx_sel < len(surface.result_sets):
                         surface.active_result_index = idx_sel
-                elif sub_action == 'cancel':
-                    self._log(surface, 'warning', 'Cancel', 'Execution cancel requested.')
                 return self._serialize_state(
                     surface, user_id, window_offset=window_offset, window_size=window_size
                 )
@@ -4520,13 +5167,17 @@ class SqlSurfaceHostService:
                         raw_src, cursor_off, surface.terminator, surface.engine_id
                     )
                     target_sql = seg_one.sql if seg_one else raw_src
-                detected = extract_query_parameters(target_sql)
+                if surface.language_profile == 'mysql-sql':
+                    spans = self._mysql_surface_parameter_spans(workspace_service, server, surface, target_sql)
+                    detected = _mysql_parameter_specs(target_sql, spans)
+                else:
+                    detected = extract_query_parameters(target_sql)
                 return {
                     'parameters': [
                         {
                             **d,
                             'index': d.get('position', idx + 1),
-                            'token': (
+                            'token': d.get('token') or (
                                 f":{d['name']}"
                                 if d['kind'] == 'named'
                                 else d['name']
@@ -4634,7 +5285,88 @@ class SqlSurfaceHostService:
                     'catalog_objects': surface.visual_catalog_objects,
                 }
 
+            if sub_action in ('prepare_transaction', 'start_xa_transaction'):
+                starting_xa = sub_action == 'start_xa_transaction'
+                mysql_family = surface.language_profile in ('mysql-sql', 'mariadb-sql')
+                if starting_xa and (not mysql_family or surface.autocommit
+                                    or xa_state or surface.tx_dirty_since_boundary):
+                    raise ValueError('An idle MySQL or MariaDB editor with manual commit is required to start XA.')
+                if not starting_xa and ((not mysql_family and surface.language_profile not in ('firebird-sql', 'postgresql-sql'))
+                                        or not surface.session_id or surface.autocommit):
+                    raise ValueError('A retained transaction with manual commit is required.')
+                if not starting_xa and mysql_family and xa_state != 'active':
+                    raise ValueError('Start an XA transaction before preparing it.')
+                if any(result.staged_mutations for result in surface.result_sets):
+                    raise ValueError('Complete staged row changes before using native transaction controls.')
+                session_id = self._ensure_session(workspace_service, server, surface)
+                surface.tx_dirty_since_boundary = True
+                try:
+                    surface.transaction = workspace_service.transaction_action(
+                        server, session_id, 'start_xa' if starting_xa else 'prepare',
+                        database_target_id=surface.database_target_id,
+                    )
+                    if mysql_family or surface.language_profile == 'postgresql-sql':
+                        for result in surface.result_sets:
+                            result.editable = False
+                            result.row_operations = []
+                except Exception:
+                    try:
+                        surface.transaction = workspace_service.transaction(
+                            server, surface.session_id, surface.database_target_id
+                        )
+                        if surface.language_profile == 'postgresql-sql':
+                            state = surface.transaction.get('provider_payload') or {}
+                            surface.tx_dirty_since_boundary = bool(
+                                state.get('transaction_status') in (2, 3)
+                                or state.get('prepare_state') or state.get('session_reuse_blocked')
+                            )
+                        if mysql_family:
+                            state = surface.transaction.get('provider_payload') or {}
+                            surface.tx_dirty_since_boundary = bool(
+                                state.get('xa_state') or state.get('in_transaction')
+                            )
+                    except Exception:
+                        pass
+                    raise
+                return self._serialize_state(
+                    surface, user_id, window_offset=window_offset, window_size=window_size
+                )
+
+            if sub_action == 'start_transaction':
+                self._start_transaction(workspace_service, server, surface, request)
+                return self._serialize_state(
+                    surface, user_id, window_offset=window_offset, window_size=window_size
+                )
+
+            if sub_action in ('format_context', 'validate_format'):
+                source = request.get('sql_source')
+                if not isinstance(source, str) or not source.strip() or len(source.encode()) > 1024 * 1024:
+                    raise ValueError('Formatting requires nonempty SQL source of at most 1 MiB.')
+                session_id = self._ensure_session(workspace_service, server, surface)
+                language_request = {
+                    'session_id': session_id, 'source': source,
+                    'database_target_id': surface.database_target_id,
+                }
+                if surface.language_profile == 'firebird-sql' and request.get('client_sql_dialect') is not None:
+                    language_request['client_sql_dialect'] = request['client_sql_dialect']
+                if sub_action == 'format_context':
+                    return workspace_service.language_tool_action(
+                        server, 'source_format_context', language_request
+                    )
+                return workspace_service.language_tool_action(
+                    server, 'source_validate', {
+                        **language_request, 'script': request.get('script', False),
+                    },
+                )
+
+            if sub_action == 'prepare_statement':
+                return self._prepare_statement(workspace_service, server, surface, request)
+
             if sub_action in ('execute', 'execute_statement', 'execute_script', 'explain_plan'):
+                if surface.language_profile == 'postgresql-sql' and any(
+                    result.staged_mutations for result in surface.result_sets
+                ):
+                    raise ValueError('Commit or roll back the staged result edits before executing.')
                 t_all = time.perf_counter()
                 if 'sql_source' in request and request['sql_source'] is not None:
                     surface.sql_source = str(request['sql_source'])
@@ -4691,54 +5423,107 @@ class SqlSurfaceHostService:
                 if not segments:
                     raise ValueError('No SQL statement found to execute.')
 
+                client_sql_dialect = None
+                if surface.language_profile == 'firebird-sql':
+                    client_sql_dialect = request.get('client_sql_dialect')
+                    if client_sql_dialect is not None and (
+                        type(client_sql_dialect) is not int or client_sql_dialect not in (1, 2, 3)
+                    ):
+                        raise ValueError('Firebird client SQL dialect must be integer 1, 2 or 3.')
+
                 new_results: list[SqlResultSetBuffer] = []
                 stmt_summaries: list[dict[str, Any]] = []
                 had_error = False
-                for ordinal, seg in enumerate(segments, start=1):
-                    t_seg = time.perf_counter()
-                    try:
-                        rs = self._execute_single_statement(
-                            workspace_service,
-                            server,
-                            surface,
-                            seg,
-                            exec_params,
-                            catalog_resources,
-                            len(new_results),
-                            plan_only=plan_only,
-                        )
-                        dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
-                        if rs is not None:
-                            new_results.append(rs)
-                        stmt_summaries.append({
-                            'ordinal': ordinal,
-                            'start_line': seg.start_line,
-                            'status': 'ok',
-                            'rows_returned': len(rs.raw_rows) if rs is not None else 0,
-                            'elapsed_ms': dt_seg,
-                            'sql_preview': seg.sql.splitlines()[0][:80] if seg.sql else '',
-                        })
-                    except RuntimeError as err:
-                        had_error = True
-                        dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
-                        stmt_summaries.append({
-                            'ordinal': ordinal,
-                            'start_line': seg.start_line,
-                            'status': f'error: {err}',
-                            'rows_returned': 0,
-                            'elapsed_ms': dt_seg,
-                            'sql_preview': seg.sql.splitlines()[0][:80] if seg.sql else '',
-                        })
-                        if sub_action != 'execute':
-                            raise
-                        break
+                cancelled = False
+                execution_id = request.get('execution_id')
+                if execution_id is not None and (
+                    not isinstance(execution_id, str) or not 1 <= len(execution_id) <= 80
+                ):
+                    raise ValueError('Invalid SQL surface execution ID.')
+                execution = SqlSurfaceExecution(execution_id or str(uuid.uuid4()))
+                with self._lock:
+                    surface.execution = execution
+                try:
+                    statement_params = [exec_params] * len(segments)
+                    if (surface.language_profile == 'mysql-sql' and exec_mode == 'script'
+                            and isinstance(exec_params, list)):
+                        # Verify the entire binding count before a statement can change data.
+                        statement_params = []
+                        offset = 0
+                        for seg in segments:
+                            spans = self._mysql_surface_parameter_spans(
+                                workspace_service, server, surface, seg.sql
+                            )
+                            if any(name is not None for _, _, name in spans):
+                                raise ValueError('A positional MySQL script cannot contain named parameters.')
+                            end = offset + len(spans)
+                            statement_params.append(exec_params[offset:end])
+                            offset = end
+                        if offset != len(exec_params):
+                            raise ValueError('Supply one value per positional MySQL parameter in the script.')
+
+                    for ordinal, (seg, values) in enumerate(zip(segments, statement_params), start=1):
+                        t_seg = time.perf_counter()
+                        try:
+                            rs = self._execute_single_statement(
+                                workspace_service,
+                                server,
+                                surface,
+                                seg,
+                                values,
+                                catalog_resources,
+                                len(new_results),
+                                plan_only=plan_only,
+                                single_statement=len(segments) == 1,
+                                client_sql_dialect=client_sql_dialect,
+                                execution=execution,
+                            )
+                            dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
+                            if rs is not None:
+                                new_results.append(rs)
+                            stmt_summaries.append({
+                                'ordinal': ordinal,
+                                'start_line': seg.start_line,
+                                'status': 'ok',
+                                'rows_returned': len(rs.raw_rows) if rs is not None else 0,
+                                'elapsed_ms': dt_seg,
+                                'sql_preview': seg.sql.splitlines()[0][:80] if seg.sql else '',
+                            })
+                        except SqlSurfaceExecutionCancelled as err:
+                            cancelled = True
+                            self._log(surface, 'warning', 'Cancel', str(err), line=seg.start_line)
+                            stmt_summaries.append({
+                                'ordinal': ordinal, 'start_line': seg.start_line,
+                                'status': 'cancelled', 'rows_returned': 0,
+                                'elapsed_ms': round((time.perf_counter() - t_seg) * 1000.0, 2),
+                                'sql_preview': seg.sql.splitlines()[0][:80],
+                            })
+                            break
+                        except RuntimeError as err:
+                            had_error = True
+                            dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
+                            stmt_summaries.append({
+                                'ordinal': ordinal,
+                                'start_line': seg.start_line,
+                                'status': f'error: {err}',
+                                'rows_returned': 0,
+                                'elapsed_ms': dt_seg,
+                                'sql_preview': seg.sql.splitlines()[0][:80] if seg.sql else '',
+                            })
+                            if sub_action != 'execute':
+                                raise
+                            break
+                finally:
+                    with self._lock:
+                        surface.execution = None
 
                 total_ms = (time.perf_counter() - t_all) * 1000.0
                 surface.timings_ms['execute_ms'] = round(total_ms, 2)
                 surface.timings_ms['total_ms'] = round(total_ms, 2)
                 surface.last_statement_summaries = stmt_summaries
                 surface.last_execution_had_error = had_error
-                if new_results or not had_error:
+                surface.last_execution_cancelled = cancelled
+                if new_results or not (had_error or cancelled):
                     surface.result_sets = new_results
                     surface.active_result_index = 0
                 surface.query_history.append({
@@ -4755,12 +5540,23 @@ class SqlSurfaceHostService:
                         surface.transaction = workspace_service.transaction(
                             server, surface.session_id, surface.database_target_id
                         )
+                        if surface.language_profile == 'postgresql-sql':
+                            native = surface.transaction.get('provider_payload') or {}
+                            if native.get('transaction_status') == 0 and not native.get('prepare_state'):
+                                surface.tx_dirty_since_boundary = False
                     except Exception:
                         pass
 
                 return self._serialize_state(surface, user_id, window_offset=0, window_size=window_size)
 
             if sub_action in ('read_window', 'sort_filter', 'query_view'):
+                if prepared and surface.language_profile == 'postgresql-sql' and surface.session_id:
+                    surface.transaction = workspace_service.transaction(
+                        server, surface.session_id, surface.database_target_id,
+                    )
+                    surface.tx_dirty_since_boundary = bool(
+                        (surface.transaction.get('provider_payload') or {}).get('prepare_state')
+                    )
                 active_rs = (
                     surface.result_sets[surface.active_result_index]
                     if 0 <= surface.active_result_index < len(surface.result_sets)
@@ -4779,6 +5575,11 @@ class SqlSurfaceHostService:
                 )
 
             if sub_action == 'stage_row':
+                transaction = surface.transaction or {}
+                if xa_state:
+                    raise ValueError('Use SQL statements for changes in a managed XA transaction.')
+                if (transaction.get('provider_payload') or {}).get('prepare_state'):
+                    raise ValueError('Resolve the prepared transaction before staging changes.')
                 active_rs = (
                     surface.result_sets[surface.active_result_index]
                     if 0 <= surface.active_result_index < len(surface.result_sets)
@@ -4788,6 +5589,8 @@ class SqlSurfaceHostService:
                     raise RuntimeError('Current query result set is read-only.')
 
                 op = str(request.get('op') or 'update').lower()
+                if op not in active_rs.row_operations:
+                    raise ValueError('This operation is unavailable for the active result.')
                 base_idx = request.get('base_row_index')
                 base_idx = int(base_idx) if base_idx is not None else None
                 changes = dict(request.get('changes') or {})
@@ -4800,7 +5603,9 @@ class SqlSurfaceHostService:
                 elif op in ('update', 'delete'):
                     if base_idx is None or not (0 <= base_idx < len(active_rs.raw_rows)):
                         raise ValueError('Row index out of bounds')
-                    id_tok = request.get('identity_token') or active_rs.raw_rows[base_idx].get('identity_token')
+                    id_tok = active_rs.raw_rows[base_idx].get('identity_token')
+                    if request.get('identity_token') is not None and request['identity_token'] != id_tok:
+                        raise ValueError('The selected row identity has changed. Refresh before editing.')
                     draft = (
                         {
                             'selector': {'identity_token': id_tok},
@@ -4826,29 +5631,41 @@ class SqlSurfaceHostService:
                     'session_id': session_id,
                     'database_target_id': surface.database_target_id,
                 }
-                val_res = workspace_service.validate_visual_admin(server, plan_req)
-                if not val_res.get('valid'):
-                    raise RuntimeError('Row validation failed.')
-                plan = workspace_service.plan_visual_admin(server, plan_req)
-                if plan.get('state') != 'ready' or not plan.get('execution_available'):
-                    raise RuntimeError('Row mutation plan blocked.')
-                preview_sql = _plan_sql_text(plan)
+                native_postgresql = surface.language_profile == 'postgresql-sql'
+                native_changes = [{'operation': op, 'draft': draft}]
+                if native_postgresql:
+                    preview_sql = self._postgresql_result_batch(
+                        workspace_service, server, surface, active_rs, native_changes, preview=True,
+                    )['previews'][0]
+                else:
+                    val_res = workspace_service.validate_visual_admin(server, plan_req)
+                    if not val_res.get('valid'):
+                        raise RuntimeError('Row validation failed.')
+                    plan = workspace_service.plan_visual_admin(server, plan_req)
+                    if plan.get('state') != 'ready' or not plan.get('execution_available'):
+                        raise RuntimeError('Row mutation plan blocked.')
+                    preview_sql = _plan_sql_text(plan)
 
                 if surface.autocommit:
-                    workspace_service.apply_visual_admin(
-                        server,
-                        {
-                            'plan_id': plan['plan_id'],
-                            'plan_digest': plan['plan_digest'],
-                            'confirmed': op == 'delete',
-                            'session_id': session_id,
-                            'database_target_id': surface.database_target_id,
-                        },
-                    )
-                    if session_id:
-                        surface.transaction = workspace_service.transaction_action(
-                            server, session_id, 'commit', database_target_id=surface.database_target_id
+                    if native_postgresql:
+                        self._postgresql_result_batch(
+                            workspace_service, server, surface, active_rs, native_changes, preview=False,
                         )
+                    else:
+                        workspace_service.apply_visual_admin(
+                            server,
+                            {
+                                'plan_id': plan['plan_id'],
+                                'plan_digest': plan['plan_digest'],
+                                'confirmed': op == 'delete',
+                                'session_id': session_id,
+                                'database_target_id': surface.database_target_id,
+                            },
+                        )
+                        if session_id:
+                            surface.transaction = workspace_service.transaction_action(
+                                server, session_id, 'commit', database_target_id=surface.database_target_id
+                            )
                     surface.tx_dirty_since_boundary = False
                 else:
                     existing_m = active_rs.staged_mutations.get(row_key)
@@ -4884,6 +5701,21 @@ class SqlSurfaceHostService:
             if sub_action == 'commit_batch':
                 t0 = time.perf_counter()
                 session_id = self._ensure_session(workspace_service, server, surface)
+                native_results = [rs for rs in surface.result_sets if rs.staged_mutations]
+                if surface.language_profile == 'postgresql-sql' and native_results:
+                    if len(native_results) != 1:
+                        raise ValueError('Commit one PostgreSQL row result at a time')
+                    result = native_results[0]
+                    self._postgresql_result_batch(
+                        workspace_service, server, surface, result,
+                        [{'operation': mutation.op, 'draft': mutation.draft}
+                         for mutation in result.staged_mutations.values()],
+                        preview=False,
+                    )
+                    surface.tx_dirty_since_boundary = False
+                    return self._serialize_state(
+                        surface, user_id, window_offset=window_offset, window_size=window_size
+                    )
                 applied = 0
                 for rs in surface.result_sets:
                     if not rs.target_resource:
@@ -4939,18 +5771,17 @@ class SqlSurfaceHostService:
             if sub_action == 'rollback_batch':
                 t0 = time.perf_counter()
                 discarded = sum(len(rs.staged_mutations) for rs in surface.result_sets)
+                if surface.session_id:
+                    surface.transaction = workspace_service.transaction_action(
+                        server, surface.session_id, 'rollback',
+                        database_target_id=surface.database_target_id,
+                    )
                 for rs in surface.result_sets:
                     rs.staged_mutations.clear()
-                if surface.session_id:
-                    try:
-                        surface.transaction = workspace_service.transaction_action(
-                            server,
-                            surface.session_id,
-                            'rollback',
-                            database_target_id=surface.database_target_id,
-                        )
-                    except Exception:
-                        pass
+                if surface.language_profile == 'postgresql-sql':
+                    for rs in surface.result_sets:
+                        rs.editable = False
+                        rs.row_operations = []
                 surface.tx_dirty_since_boundary = False
                 self._log(
                     surface,
@@ -5013,15 +5844,12 @@ class SqlSurfaceHostService:
                 }
 
             if sub_action == 'close_surface':
+                if surface.session_id:
+                    workspace_service.close_session(
+                        server, surface.session_id, surface.database_target_id
+                    )
                 with self._lock:
                     self._surfaces.pop(surface.surface_id, None)
-                if surface.session_id:
-                    try:
-                        workspace_service.close_session(
-                            server, surface.session_id, surface.database_target_id
-                        )
-                    except Exception:
-                        pass
                 return {'closed': True, 'surface_id': surface.surface_id}
 
             raise ValueError(f'Unknown SQL surface action: {sub_action}')

@@ -7,12 +7,14 @@
 //
 //////////////////////////////////////////////////////////////
 
+import QuickQueryShortcuts from '../editors/QuickQueryShortcuts';
 import {
   Component,
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -647,6 +649,7 @@ export function ProjectShellProvider({
 
   const [languages, setLanguages] = useState(DEFAULT_SUPPORTED_LANGUAGES);
   const [locale, setLocaleState] = useState('en');
+  const languageRequest = useRef(0);
 
   useEffect(() => {
     syncShellActionStrings(actionsRegistry);
@@ -1957,6 +1960,7 @@ export function ProjectShellProvider({
   const changeLanguage = useCallback(
     async (langCode) => {
       const code = String(langCode || 'en').trim();
+      const request = ++languageRequest.current;
       setLocaleState(code);
       actionsRegistry.setLocale(code);
       gettext.setCatalog?.(null, code);
@@ -1969,7 +1973,7 @@ export function ProjectShellProvider({
         }).catch(() => null);
         if (res && typeof res.json === 'function' && res.ok) {
           const payload = await res.json().catch(() => null);
-          if (payload?.catalog && typeof payload.catalog === 'object') {
+          if (request === languageRequest.current && payload?.catalog && typeof payload.catalog === 'object') {
             gettext.setCatalog?.(payload.catalog, payload.current || code);
           }
         }
@@ -3319,12 +3323,31 @@ export function ProjectSideMenu() {
  * Mounted on the Main Form across the full width of Area 3 for the focused
  * application (docked or floating), NEVER shown on User Dashboard.
  */
+function NotebookBarHint({ref}) {
+  const [hint, setHint] = useState(null);
+  useImperativeHandle(ref, () => ({setHint}), []);
+
+  return hint && typeof document !== 'undefined' && document.body
+    ? createPortal(
+      <div
+        role="tooltip"
+        className="sr-3b-hover-hint"
+        data-cdeadmin-qa-key="notebookbar-icon-hint"
+        style={{left: `${hint.left}px`, top: `${hint.top}px`}}
+      >
+        {hint.text}
+      </div>,
+      document.body
+    )
+    : null;
+}
+
 export function ProjectApplicationNotebookBar() {
   const shell = useProjectShell();
   useTActions(shell?.actionsRegistry);
   const [, bumpPlacements] = useState(0);
   const draggedTabOutsideRef = useRef(false);
-  const [hoverHint, setHoverHint] = useState(null);
+  const hintRef = useRef(null);
   const [underTabByInstance, setUnderTabByInstance] = useState({});
   const [tabContextMenu, setTabContextMenu] = useState(null);
 
@@ -3533,14 +3556,14 @@ export function ProjectApplicationNotebookBar() {
   };
 
   const showControlHint = (target) => {
-    const controlEl = target?.closest?.('.snb-control');
+    const controlEl = target?.closest?.('.snb-control, .snb-segment');
     if (!controlEl) {
-      if (hoverHint) setHoverHint(null);
+      hintRef.current?.setHint(null);
       return;
     }
     const text =
-      controlEl.getAttribute('data-sr-hint') ||
       controlEl.getAttribute('title') ||
+      controlEl.getAttribute('data-sr-hint') ||
       controlEl.getAttribute('aria-label') ||
       '';
     if (!text) return;
@@ -3550,7 +3573,7 @@ export function ProjectApplicationNotebookBar() {
     }
     const rect = controlEl.getBoundingClientRect?.();
     if (!rect) return;
-    setHoverHint({
+    hintRef.current?.setHint({
       text,
       left: Math.max(8, Math.round(rect.left + rect.width / 2)),
       top: Math.round(rect.bottom + 6),
@@ -3585,10 +3608,10 @@ export function ProjectApplicationNotebookBar() {
       onDragOver={handleBar3bDragOver}
       onDrop={handleBar3bDrop}
       onMouseOver={(e) => showControlHint(e.target)}
-      onMouseLeave={() => setHoverHint(null)}
+      onMouseLeave={() => hintRef.current?.setHint(null)}
       onFocus={(e) => showControlHint(e.target)}
-      onBlur={() => setHoverHint(null)}
-      onPointerDown={() => setHoverHint(null)}
+      onBlur={() => hintRef.current?.setHint(null)}
+      onPointerDown={() => hintRef.current?.setHint(null)}
     >
       <NotebookBar
         model={bar.model}
@@ -3627,12 +3650,12 @@ export function ProjectApplicationNotebookBar() {
           ) : null
         }
         onSelectTab={(tabId) => {
-          setHoverHint(null);
+          hintRef.current?.setHint(null);
           const instId = instanceIdByTabId.get(tabId) || tabId;
           shell.focusInstance(instId);
         }}
         onCloseTab={(tabId) => {
-          setHoverHint(null);
+          hintRef.current?.setHint(null);
           const instId = instanceIdByTabId.get(tabId) || tabId;
           shell.closeInstance(instId);
         }}
@@ -3670,7 +3693,7 @@ export function ProjectApplicationNotebookBar() {
               if (isDash) return;
               e.preventDefault();
               e.stopPropagation();
-              setHoverHint(null);
+              hintRef.current?.setHint(null);
               setTabContextMenu({
                 instanceId: instId,
                 safeTabId: tab.id,
@@ -3734,7 +3757,7 @@ export function ProjectApplicationNotebookBar() {
         label={gettext('Open Pages')}
         messages={COMMAND_BAR_MESSAGES}
         onCommand={(commandId, detail) => {
-          setHoverHint(null);
+          hintRef.current?.setHint(null);
           bar.onCommand(commandId, detail);
         }}
         end={
@@ -3848,20 +3871,7 @@ export function ProjectApplicationNotebookBar() {
           </div>,
           document.body
         )}
-      {hoverHint &&
-        typeof document !== 'undefined' &&
-        document.body &&
-        createPortal(
-          <div
-            role="tooltip"
-            className="sr-3b-hover-hint"
-            data-cdeadmin-qa-key="notebookbar-icon-hint"
-            style={{left: `${hoverHint.left}px`, top: `${hoverHint.top}px`}}
-          >
-            {hoverHint.text}
-          </div>,
-          document.body
-        )}
+      <NotebookBarHint ref={hintRef} />
     </div>
   );
 }
@@ -4198,6 +4208,7 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                           </Box>
                         </Box>
                       )}
+                      <QuickQueryShortcuts />
                     </Box>
                   )}
                   {activeDockedItem && !activeDockedItem.isDashboard && (

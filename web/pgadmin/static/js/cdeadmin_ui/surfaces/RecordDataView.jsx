@@ -12,7 +12,7 @@ import gettext from 'sources/gettext';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {EmptyState} from '../feedback/EmptyState';
 import {AdaptiveRecordFormCard} from './RecordForm';
-import {DISPLAY_MODES, formatCellValue, inferColumnMeta,
+import {FIELD_FONTS, DISPLAY_MODES, formatCellValue, inferColumnMeta,
   isComplexOrOversizedCell, serializeValueForEdit} from './dataEditSurfaceHelpers';
 const DEFAULT_COL_WIDTH = 156;
 const GUTTER_WIDTH = 58;
@@ -27,6 +27,7 @@ export default function RecordDataView({model}) {
     bookmarkedGlobals,
     cancelRowDraft,
     currentRow,
+    conversions,
     editingRowIndex,
     effectiveDisplayMode,
     formColumns,
@@ -143,10 +144,15 @@ export default function RecordDataView({model}) {
         </div>
 
         {gridColumns.map((col) => {
-          const colMeta = inferColumnMeta(col);
-          const cPrefs = layout.gridColPrefs[col.name] || {};
+          const nativeMeta = inferColumnMeta(col);
+          const cPrefs = {
+            ...hostData?.field_type_defaults?.[nativeMeta.clientType],
+            ...layout.gridColPrefs[col.name],
+            font: layout.gridColPrefs[col.name]?.font || hostData?.field_type_defaults?.[nativeMeta.clientType]?.font,
+            hAlign: layout.gridColPrefs[col.name]?.hAlign || hostData?.field_type_defaults?.[nativeMeta.clientType]?.hAlign,
+          };
           const w = cPrefs.width || DEFAULT_COL_WIDTH;
-          const hAlign = cPrefs.hAlign || colMeta.defaultAlignment || 'left';
+          const hAlign = cPrefs.hAlign || nativeMeta.defaultAlignment || 'left';
           const vAlign = cPrefs.vAlign || 'middle';
           const wrapMode = cPrefs.wrapMode || 'none';
           const isPinned = Boolean(cPrefs.pinned);
@@ -154,12 +160,16 @@ export default function RecordDataView({model}) {
           if (isPinned) pinnedLeftAcc += w;
 
           const isActiveCell = isCurrent && activeColName === col.name;
-          const rawVal =
+          const nativeValue =
             isRowEdit &&
             rowDraft &&
             Object.prototype.hasOwnProperty.call(rowDraft, col.name)
               ? rowDraft[col.name]
               : row.values?.[col.name];
+          const rawVal = conversions?.displayValue(col.name, nativeValue) ?? nativeValue;
+          const colMeta = conversions?.pairFor(col.name) &&
+            (typeof rawVal === 'string' || rawVal == null)
+            ? {...nativeMeta, clientType: 'text', isComplex: false} : nativeMeta;
           const formatted = formatCellValue(rawVal, colMeta, {
             booleanFormat: layout.booleanFormat,
             localeDateFormat: layout.localeDateFormat,
@@ -167,7 +177,7 @@ export default function RecordDataView({model}) {
           });
           const canEditCell =
             isRowEdit &&
-            layout.displayMode === DISPLAY_MODES.GRID &&
+            effectiveDisplayMode === DISPLAY_MODES.GRID &&
             (row.stage_state === 'inserted'
               ? col.insertable !== false
               : col.editable !== false) &&
@@ -313,6 +323,7 @@ export default function RecordDataView({model}) {
                       ? 'center'
                       : 'flex-start',
                 textAlign: hAlign,
+                fontFamily: FIELD_FONTS[cPrefs.font],
                 borderRight:
                   '1px solid var(--sr-border-subtle, rgba(128,128,128,0.16))',
                 outline: isActiveCell
@@ -424,6 +435,8 @@ export default function RecordDataView({model}) {
           columns={formColumns}
           formLayout={sharedFormLayout}
           formFieldPrefs={layout.formFieldPrefs}
+          fieldTypeDefaults={hostData?.field_type_defaults}
+          conversions={conversions}
           booleanFormat={layout.booleanFormat}
           localeDateFormat={layout.localeDateFormat}
           fullArea
@@ -468,6 +481,8 @@ export default function RecordDataView({model}) {
                     columns={formColumns}
                     formLayout={sharedFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
+          fieldTypeDefaults={hostData?.field_type_defaults}
+          conversions={conversions}
                     booleanFormat={layout.booleanFormat}
                     localeDateFormat={layout.localeDateFormat}
                     totalRowsInPage={rows.length}
@@ -738,6 +753,8 @@ export default function RecordDataView({model}) {
                       columns={formColumns}
                       formLayout={sharedFormLayout}
                       formFieldPrefs={layout.formFieldPrefs}
+          fieldTypeDefaults={hostData?.field_type_defaults}
+          conversions={conversions}
                       booleanFormat={layout.booleanFormat}
                       localeDateFormat={layout.localeDateFormat}
                       maxHeight="46vh"
@@ -773,6 +790,11 @@ export default function RecordDataView({model}) {
   };
 
 
-  return renderDataView();
+  return conversions?.error ? (
+    <div style={{display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0}}>
+      <div role="alert">{conversions.error}</div>
+      {renderDataView()}
+    </div>
+  ) : renderDataView();
 }
 RecordDataView.propTypes = {model: PropTypes.object.isRequired};

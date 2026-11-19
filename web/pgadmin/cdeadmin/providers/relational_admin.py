@@ -3589,6 +3589,8 @@ class RelationalAdministration:
         return copy.deepcopy(values)
 
     def read_rows(self, client, request, connection=None):
+        checkpoint = request.get('_row_read_checkpoint', lambda: None)
+        checkpoint()
         route = request.get('_provider_route')
         target = request.get('target_resource')
         session_id = request.get('session_id')
@@ -3691,6 +3693,7 @@ class RelationalAdministration:
                     f'SELECT * FROM {self._qualified(path)}{order} '
                     f'LIMIT {limit + 1} OFFSET {offset}'
                 )
+            checkpoint()
             cursor.execute(source)
             hidden = 2 if physical_identity else 0
             description = (getattr(cursor, 'description', None) or ())[hidden:]
@@ -3721,6 +3724,7 @@ class RelationalAdministration:
                 writable_columns = tuple(table_operations['update'])
                 insert_columns = tuple(table_operations['insert'])
                 delete_allowed = table_operations['delete']
+            checkpoint()
             raw_rows = list(cursor.fetchall())
             has_more = len(raw_rows) > limit
             raw_rows = raw_rows[:limit]
@@ -3730,6 +3734,7 @@ class RelationalAdministration:
                 native_row_owner = owner(connection)
             result_rows = []
             for raw_row in raw_rows:
+                checkpoint()
                 native_db_key = native_version = None
                 if physical_identity:
                     native_db_key, native_version = raw_row[:hidden]

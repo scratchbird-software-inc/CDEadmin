@@ -447,11 +447,12 @@ def metadata(handle, engine, transaction=None, dialect=None):
             cursor.close()
 
 
-def mysql_bind_markers(source, modes, *, dollar_quotes=False):
+def mysql_bind_markers(source, modes, *, dollar_quotes=False, surface_markers=False):
     """Replace driver placeholders outside quoted/comment spans without values."""
     from ..data_studio.mysql_quoting import parameter_spans
     output = list(source)
-    for start, end, _name in parameter_spans(source, modes, dollar_quotes=dollar_quotes):
+    for start, end, _name in parameter_spans(
+            source, modes, dollar_quotes=dollar_quotes, surface_markers=surface_markers):
         output[start:end] = '?' + ' ' * (end - start - 1)
     return ''.join(output)
 

@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import gettext from 'sources/gettext';
 import {useEffect} from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -364,6 +365,15 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     expect(within(underTabs).getByRole('tab', {name: 'Format & Layout'})).toBeInTheDocument();
     expect(within(underTabs).getByRole('tab', {name: 'Transfer & SQL'})).toBeInTheDocument();
 
+    fireEvent.mouseOver(screen.getByRole('radio', {name: 'Mini-Forms'}));
+    expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]')).toHaveTextContent('Show each record in a compact form');
+    const metadata = screen.getByRole('radio', {name: 'Metadata'});
+    expect(metadata.querySelector('[data-icon-key="action.dependencies"]')).toBeInTheDocument();
+    expect(screen.getByRole('radio', {name: 'Information'})
+      .querySelector('[data-icon-key="action.properties"]')).toBeInTheDocument();
+    fireEvent.focus(metadata);
+    expect(document.querySelector('[data-cdeadmin-qa-key="notebookbar-icon-hint"]')).toHaveTextContent('Inspect the object definition, comment and dependencies');
+
     // Clicking [...] opens Right Drawer 3b in Viewing Mode with JSON payload
     const complexBtn = screen.getByRole('button', {name: 'PAYLOAD_BLOB [...]'});
     fireEvent.click(complexBtn);
@@ -415,6 +425,39 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-standard-grid"]')).toBeTruthy();
   });
 
+  it('updates the open Data Viewer and its TiB on catalog changes', async () => {
+    const post = jest.fn(async ({action}) => action === 'resource_inspect'
+      ? {resource: {native: {ddl: 'CREATE TABLE ACCOUNT (ID INTEGER)', comment: 'Account data'}}}
+      : makeHostFixture());
+    const fixture = render(<TestShell><ShellLauncher post={post} /></TestShell>);
+    try {
+      expect(await screen.findByText('Cash On Hand')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('radio', {name: 'Metadata'}));
+      expect(await screen.findByText('CREATE TABLE ACCOUNT (ID INTEGER)')).toBeInTheDocument();
+
+      fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="top-menu-language"]'));
+      fireEvent.click(await screen.findByRole('menuitemradio', {name: 'Français'}));
+      expect(screen.getByRole('radio', {name: 'Métadonnées'})).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByRole('radio', {name: 'Métadonnées'})).toHaveAttribute(
+        'title', 'Examiner la définition, le commentaire et les dépendances de l’objet'
+      );
+      expect(screen.getByRole('heading', {name: 'Instruction de création'})).toBeInTheDocument();
+      expect(screen.getByText('Account data')).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', {name: 'Vue'})).toBeInTheDocument();
+
+      fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="top-menu-language"]'));
+      fireEvent.click(await screen.findByRole('menuitemradio', {name: 'Deutsch'}));
+      expect(screen.getByRole('radio', {name: 'Metadaten'})).toHaveAttribute(
+        'title', 'Definition, Kommentar und Abhängigkeiten des Objekts prüfen'
+      );
+      expect(screen.getByRole('heading', {name: 'Erstellungsanweisung'})).toBeInTheDocument();
+      expect(screen.getByText('CREATE TABLE ACCOUNT (ID INTEGER)')).toBeInTheDocument();
+    } finally {
+      fixture.unmount();
+      gettext.setCatalog(null, 'en');
+    }
+  });
+
   it('merges Surface 1 menus (Data 15, Edit 20, View 25, Window 70) on focus and removes them when focus leaves', async () => {
     let shellRef = null;
     const post = jest.fn(async () => makeHostFixture());
@@ -433,6 +476,20 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     expect(within(topMenuBar).getByText('Edit')).toBeInTheDocument();
     expect(within(topMenuBar).getByText('View')).toBeInTheDocument();
     expect(within(topMenuBar).getByText('Window')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(within(topMenuBar).getByRole('menuitem', {name: 'View'}));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('menuitem', {name: 'Second Display Area'}));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitemcheckbox', {name: 'SQL', exact: true}));
+    });
+    const split = document.querySelector('[data-cdeadmin-qa-key="data-surface-split-view"]');
+    expect(split).not.toBeNull();
+    expect(split.style.flexDirection).toBe('column');
+    expect(within(split).queryByLabelText('Second display area')).toBeNull();
 
     // Open a second Surface without Data/Edit/View menus -> outgoing Surface menus unmerge!
     act(() => {

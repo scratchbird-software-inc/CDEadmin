@@ -419,6 +419,24 @@ class SurfaceLayoutStore:
             )
         return {'saved': 'specific', 'object_key': object_key, 'updated_at': now}
 
+    def get_field_type_defaults(self, user_id):
+        return self.get_specific_layout(user_id, 'shared-field-format', 'defaults') or {}
+
+    def save_field_type_defaults(self, user_id, defaults):
+        if not isinstance(defaults, dict) or len(defaults) > 64:
+            raise ValueError('Field type defaults must be a mapping.')
+        for field_type, preferences in defaults.items():
+            if not isinstance(field_type, str) or len(field_type) > 64:
+                raise ValueError('Invalid field type.')
+            if not isinstance(preferences, dict) or set(preferences) - {'font', 'hAlign'}:
+                raise ValueError('Invalid field formatting preferences.')
+            if preferences.get('font', '') not in ('', 'mono', 'sans', 'serif'):
+                raise ValueError('Invalid font preference.')
+            if preferences.get('hAlign', '') not in ('', 'left', 'center', 'right'):
+                raise ValueError('Invalid alignment preference.')
+        self.save_specific_layout(user_id, 'shared-field-format', 'defaults', defaults)
+        return {'field_type_defaults': defaults}
+
     def save_template(
         self,
         user_id: int,
@@ -770,6 +788,7 @@ class DataSurfaceHostService:
             req_payload: dict[str, Any] = {
                 'target_resource': copy.deepcopy(surface.target_resource),
                 'limit': req_limit,
+                'buffer_limit': surface.max_rows,
                 'continuation': continuation,
                 'database_target_id': surface.database_target_id,
             }
@@ -795,6 +814,7 @@ class DataSurfaceHostService:
                             server,
                             {
                                 'continuation': continuation,
+                                **({'session_id': session_id} if session_id else {}),
                                 'database_target_id': surface.database_target_id,
                             },
                         )
@@ -1067,7 +1087,18 @@ class DataSurfaceHostService:
             },
             'messages': list(reversed(surface.messages)),
             'saved_specific_layout': saved_layout,
+            'field_type_defaults': self.layout_store.get_field_type_defaults(user_id),
         }
+
+    @staticmethod
+    def _postgresql_row_batch(workspace_service, server, surface, changes, *, preview):
+        return workspace_service.mutate_surface_rows(server, {
+            'database_target_id': surface.database_target_id,
+            'session_id': surface.session_id,
+            'target_resource': copy.deepcopy(surface.target_resource),
+            'changes': changes,
+            'preview': preview,
+        })
 
     def dispatch(
         self,
@@ -1079,6 +1110,21 @@ class DataSurfaceHostService:
             request.get('surface_action') or request.get('sub_action') or 'open'
         ).lower()
         user_id = int(getattr(server, 'user_id', 1) or 1)
+
+        if sub_action == 'convert_field':
+            return workspace_service.convert_surface_field(server, {
+                'database_target_id': request.get('database_target_id'),
+                'pair': request.get('pair'),
+                'direction': request.get('direction'),
+                'values': request.get('values'),
+            })
+
+        if sub_action == 'get_field_type_defaults':
+            return {'field_type_defaults': self.layout_store.get_field_type_defaults(user_id)}
+        if sub_action == 'save_field_type_defaults':
+            return self.layout_store.save_field_type_defaults(
+                user_id, request.get('field_type_defaults')
+            )
 
         if sub_action == 'list_templates':
             return {
@@ -1190,6 +1236,9 @@ class DataSurfaceHostService:
             if sub_action == 'stage_row':
                 t0 = time.perf_counter()
                 op = str(request.get('op') or 'update').lower()
+                if (not surface.editable
+                        or op not in surface.row_operations):
+                    raise ValueError('This row operation is unavailable for the current relation.')
                 base_idx = request.get('base_row_index')
                 base_idx = int(base_idx) if base_idx is not None else None
                 changes = dict(request.get('changes') or {})
@@ -1197,6 +1246,11 @@ class DataSurfaceHostService:
                 session_id = self._ensure_host_session(
                     workspace_service, server, surface
                 )
+
+                if op in ('update', 'delete') and base_idx is not None and 0 <= base_idx < len(surface.raw_rows):
+                    expected_identity = surface.raw_rows[base_idx].get('identity_token')
+                    if identity_token is not None and identity_token != expected_identity:
+                        raise ValueError('The selected row identity has changed. Refresh before editing.')
 
                 if op == 'insert':
                     draft = {
@@ -1244,57 +1298,69 @@ class DataSurfaceHostService:
                     'session_id': session_id,
                     'database_target_id': surface.database_target_id,
                 }
-                validation = workspace_service.validate_visual_admin(server, plan_req)
-                if not validation.get('valid'):
-                    err_msg = ' '.join(
-                        str(e.get('message') or e) for e in (validation.get('errors') or [])
-                    ) or 'Row validation failed.'
-                    dt_ms = (time.perf_counter() - t0) * 1000.0
-                    first_col = next(iter(changes.keys()), '')
-                    self._log(
-                        surface,
-                        'error',
-                        f'Validate {op.upper()}',
-                        err_msg,
-                        elapsed_ms=dt_ms,
-                        row_index=base_idx,
-                        column_name=first_col,
-                    )
-                    raise RuntimeError(err_msg)
+                native_postgresql = surface.language_profile == 'postgresql-sql'
+                native_changes = [{'operation': op, 'draft': draft}]
+                if native_postgresql:
+                    preview_sql = self._postgresql_row_batch(
+                        workspace_service, server, surface, native_changes, preview=True,
+                    )['previews'][0]
+                else:
+                    validation = workspace_service.validate_visual_admin(server, plan_req)
+                    if not validation.get('valid'):
+                        err_msg = ' '.join(
+                            str(e.get('message') or e) for e in (validation.get('errors') or [])
+                        ) or 'Row validation failed.'
+                        dt_ms = (time.perf_counter() - t0) * 1000.0
+                        first_col = next(iter(changes.keys()), '')
+                        self._log(
+                            surface,
+                            'error',
+                            f'Validate {op.upper()}',
+                            err_msg,
+                            elapsed_ms=dt_ms,
+                            row_index=base_idx,
+                            column_name=first_col,
+                        )
+                        raise RuntimeError(err_msg)
 
-                plan = workspace_service.plan_visual_admin(server, plan_req)
-                if plan.get('state') != 'ready' or not plan.get('execution_available'):
-                    err_msg = ', '.join(plan.get('blockers') or []) or 'Row plan blocked.'
-                    dt_ms = (time.perf_counter() - t0) * 1000.0
-                    self._log(
-                        surface,
-                        'error',
-                        f'Plan {op.upper()}',
-                        err_msg,
-                        elapsed_ms=dt_ms,
-                        row_index=base_idx,
-                    )
-                    raise RuntimeError(err_msg)
+                    plan = workspace_service.plan_visual_admin(server, plan_req)
+                    if plan.get('state') != 'ready' or not plan.get('execution_available'):
+                        err_msg = ', '.join(plan.get('blockers') or []) or 'Row plan blocked.'
+                        dt_ms = (time.perf_counter() - t0) * 1000.0
+                        self._log(
+                            surface,
+                            'error',
+                            f'Plan {op.upper()}',
+                            err_msg,
+                            elapsed_ms=dt_ms,
+                            row_index=base_idx,
+                        )
+                        raise RuntimeError(err_msg)
 
-                preview_sql = _plan_sql_text(plan)
+                    preview_sql = _plan_sql_text(plan)
 
                 if surface.autocommit:
-                    workspace_service.apply_visual_admin(
-                        server,
-                        {
-                            'plan_id': plan['plan_id'],
-                            'plan_digest': plan['plan_digest'],
-                            'confirmed': op == 'delete',
-                            'session_id': session_id,
-                            'database_target_id': surface.database_target_id,
-                        },
-                    )
-                    surface.transaction = workspace_service.transaction_action(
-                        server,
-                        session_id,
-                        'commit',
-                        database_target_id=surface.database_target_id,
-                    )
+                    if native_postgresql:
+                        self._postgresql_row_batch(
+                            workspace_service, server, surface, native_changes, preview=False
+                        )
+                    else:
+                        workspace_service.apply_visual_admin(
+                            server,
+                            {
+                                'plan_id': plan['plan_id'],
+                                'plan_digest': plan['plan_digest'],
+                                'confirmed': op == 'delete',
+                                'session_id': session_id,
+                                'database_target_id': surface.database_target_id,
+                            },
+                        )
+                        surface.transaction = workspace_service.transaction_action(
+                            server,
+                            session_id,
+                            'commit',
+                            database_target_id=surface.database_target_id,
+                        )
                     dt_ms = (time.perf_counter() - t0) * 1000.0
                     self._log(
                         surface,
@@ -1357,6 +1423,19 @@ class DataSurfaceHostService:
                 session_id = self._ensure_host_session(
                     workspace_service, server, surface
                 )
+                if surface.language_profile == 'postgresql-sql' and surface.staged_mutations:
+                    self._postgresql_row_batch(
+                        workspace_service, server, surface,
+                        [{'operation': item.op, 'draft': item.draft}
+                         for item in surface.staged_mutations.values()],
+                        preview=False,
+                    )
+                    surface.staged_mutations.clear()
+                    surface.tx_dirty_since_boundary = False
+                    self._fetch_into_host_buffer(workspace_service, server, surface)
+                    return self._serialize_window(
+                        surface, user_id, window_offset=window_offset, window_size=window_size
+                    )
                 applied_count = 0
                 for row_key, mut in list(surface.staged_mutations.items()):
                     try:

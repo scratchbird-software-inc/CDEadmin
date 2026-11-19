@@ -3,6 +3,15 @@
   "profiles": {
     "firebird-sql": {
       "syntax_family": "firebird",
+      "native_statement_prepare": true,
+      "native_transaction_start": true,
+      "native_transaction_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "firebird-uuid-octets",
+          "native_types": ["CHAR CHARACTER SET OCTETS", "VARCHAR CHARACTER SET OCTETS"]
+        }
+      ],
       "native_transaction_close_warning": true,
       "identifier_quote": "\""
     },
@@ -17,6 +26,13 @@
       "identifier_quote": "\""
     },
     "duckdb-sql": {
+      "native_statement_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "duckdb-uuid-binary",
+          "native_types": ["BLOB"]
+        }
+      ],
       "syntax_family": "duckdb",
       "native_transaction_close_warning": false,
       "identifier_quote": "\""
@@ -27,21 +43,45 @@
       "identifier_quote": "\""
     },
     "mariadb-sql": {
+      "native_transaction_prepare": true,
+      "native_statement_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "mariadb-uuid-binary",
+          "native_types": ["BINARY", "VARBINARY"],
+          "require_width": true
+        }
+      ],
+      "native_transaction_start": true,
       "syntax_family": "mariadb",
       "native_transaction_close_warning": false,
       "identifier_quote": "`"
     },
     "mariadb": {
+      "native_transaction_prepare": true,
+      "native_statement_prepare": true,
       "syntax_family": "mariadb",
       "native_transaction_close_warning": false,
       "identifier_quote": "`"
     },
     "mysql-sql": {
+      "native_transaction_prepare": true,
+      "native_statement_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "mysql-uuid-binary",
+          "native_types": ["BINARY", "VARBINARY"],
+          "require_width": true
+        }
+      ],
+      "native_transaction_start": true,
       "syntax_family": "mysql",
       "native_transaction_close_warning": false,
       "identifier_quote": "`"
     },
     "mysql": {
+      "native_transaction_prepare": true,
+      "native_statement_prepare": true,
       "syntax_family": "mysql",
       "native_transaction_close_warning": false,
       "identifier_quote": "`"
@@ -77,11 +117,21 @@
       "identifier_quote": "`"
     },
     "postgresql-sql": {
+      "native_transaction_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "postgresql-uuid-binary",
+          "native_types": ["BYTEA"]
+        }
+      ],
+      "native_statement_prepare": true,
+      "native_transaction_start": true,
       "syntax_family": "postgresql",
       "native_transaction_close_warning": false,
       "identifier_quote": "\""
     },
     "postgresql": {
+      "native_transaction_prepare": true,
       "syntax_family": "postgresql",
       "native_transaction_close_warning": false,
       "identifier_quote": "\""
@@ -122,11 +172,20 @@
       "identifier_quote": "\""
     },
     "sqlite-sql": {
+      "native_statement_prepare": true,
+      "field_conversion_pairs": [
+        {
+          "id": "sqlite-uuid-binary",
+          "native_types": ["BLOB"]
+        }
+      ],
+      "native_transaction_start": true,
       "syntax_family": "sqlite",
       "native_transaction_close_warning": false,
       "identifier_quote": "\""
     },
     "sqlite": {
+      "native_statement_prepare": true,
       "syntax_family": "sqlite",
       "native_transaction_close_warning": false,
       "identifier_quote": "\""

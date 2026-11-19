@@ -150,6 +150,86 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     # Browse data (owner direction 2026-11-06).
     _browse_text = browse_builders.duckdb
     _sql_builder_names = browse_builders.duckdb_names
+
+    def read_visual_admin_rows(self, request):
+        execution = request.get('_row_read_execution') if isinstance(request, dict) else None
+        if execution is None:
+            return super().read_visual_admin_rows(request)
+        payload = {key: value for key, value in request.items() if key != '_row_read_execution'}
+        context = self._visual_admin_session_context(payload)
+        if context is None:
+            return super().read_visual_admin_rows(payload)
+        context['_row_read_execution'] = execution
+        context['_row_read_checkpoint'] = execution.check_stop
+        try:
+            page = self._visual_admin.read_rows(payload, context)
+            execution.check_stop()
+            return page
+        except Exception:
+            try:
+                execution.check_stop()
+            except RuntimeError:
+                ADMINISTRATION.invalidate_row_session(context['session_id'])
+                self._visual_admin.invalidate_session_plans(context['session_id'])
+                raise
+            raise
+
+    def describe_surface_statement(self, request):
+        from uuid import uuid4
+        from duckdb import StatementType
+        from ..native_editor import session_access
+
+        self._require('execute')
+        handle = self._editor_session(request)
+        source = request.get('source')
+        if not isinstance(source, str) or not source.strip():
+            raise RelationalClientError('Statement source is required')
+        with session_access(self.client, handle, 'duckdb'):
+            statements = handle.extract_statements(source)
+            if len(statements) != 1:
+                raise RelationalClientError('Select exactly one DuckDB statement to prepare')
+            statement = statements[0]
+            name = f'sr_describe_{uuid4().hex}'
+            handle.execute(f'PREPARE {name} AS {statement.query}')
+            try:
+                metadata = handle.execute(
+                    'SELECT parameter_types, result_types FROM duckdb_prepared_statements() WHERE name = ?',
+                    [name],
+                ).fetchone()
+                if metadata is None:
+                    raise RelationalClientError('DuckDB returned no prepared statement metadata')
+                parameter_types, result_types = metadata
+                result_types = result_types or []
+                parameter_types = parameter_types or []
+                names = []
+                if not statement.named_parameters and statement.type == StatementType.SELECT:
+                    names = [row[0] for row in handle.execute(f'DESCRIBE {statement.query}').fetchall()]
+                return {
+                    'statement_type': statement.type.name,
+                    'statement_execution_requested': False,
+                    'columns_complete': len(names) == len(result_types),
+                    'parameters_complete': all(item != 'UNKNOWN' for item in parameter_types),
+                    'columns': [
+                        {'position': index + 1, 'name': names[index] if index < len(names) else '',
+                         'native_type': native_type}
+                        for index, native_type in enumerate(result_types)
+                    ],
+                    'parameters': [
+                        {'position': index + 1, 'name': f'Parameter {index + 1}', 'native_type': native_type}
+                        for index, native_type in enumerate(parameter_types)
+                    ],
+                }
+            finally:
+                try:
+                    handle.execute(f'DEALLOCATE {name}')
+                except Exception:
+                    self.client._states[id(handle)]['session_reuse_blocked'] = True
+                    raise RelationalClientError('DuckDB prepared statement cleanup is unconfirmed') from None
+
+    def convert_surface_field(self, request):
+        from ..surface_uuid import convert
+        return convert(self, request, 'duckdb')
+
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, PROFILE)
 

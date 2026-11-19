@@ -66,14 +66,7 @@ class PreparedPlan:
         connection._statements.append(weakref.ref(
             self, connection._Connection__stmt_deleted))
 
-    def count(self, metadata):
-        self.metadata.append(metadata)
-        count = metadata.get_count()
-        metadata.release()
-        self.metadata.remove(metadata)
-        return count
-
-    def parameters(self, metadata):
+    def describe_metadata(self, metadata, *, output=False):
         self.metadata.append(metadata)
         count = metadata.get_count()
         descriptors = []
@@ -86,6 +79,8 @@ class PreparedPlan:
                     'subtype': metadata.get_subtype(position),
                     'length': metadata.get_length(position), 'scale': metadata.get_scale(position),
                     'charset': metadata.get_charset(position), 'nullable': bool(metadata.is_nullable(position))})
+                if output:
+                    descriptors[-1]['name'] = metadata.get_alias(position) or descriptors[-1]['field']
         metadata.release()
         self.metadata.remove(metadata)
         return count, descriptors
@@ -115,13 +110,15 @@ def acquire(client, handle, request, state):
         encoding = getattr(handle._att, 'encoding', None)
         if not isinstance(encoding, str):
             encoding = handle._encoding
-        parameter_count, parameters = owner.parameters(statement.get_input_metadata())
+        parameter_count, parameters = owner.describe_metadata(statement.get_input_metadata())
+        column_count, columns = owner.describe_metadata(statement.get_output_metadata(), output=True)
         native = {
             'source_sha256': hashlib.sha256(request['source'].encode('utf-8')).hexdigest(),
             'parameters': parameters, 'parameters_complete': len(parameters) == parameter_count,
             'statement_type': statement.get_type().name,
             'parameter_count': parameter_count,
-            'column_count': owner.count(statement.get_output_metadata()),
+            'column_count': column_count, 'columns': columns,
+            'columns_complete': len(columns) == column_count,
             'legacy': read_plan(statement, 22, encoding),
             'detailed': read_plan(statement, 26, encoding),
             'client_sql_dialect': dialect,

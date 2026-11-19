@@ -16,6 +16,13 @@ describe('Firebird source formatting and completion', () => {
     expect(signature(formatFirebird(source))).toEqual(signature(source));
     expect(formatFirebird(formatFirebird(source))).toBe(formatFirebird(source));
   });
+  it('preserves line-start SET TERM directives around a PSQL block', () => {
+    const source = 'SET TERM ^ ;\nEXECUTE BLOCK AS BEGIN EXIT; END^\nSET TERM ; ^';
+    const formatted = formatFirebird(source);
+    expect(formatted).toMatch(/(?:^|\n)SET TERM \^ ;\n/);
+    expect(formatted).toMatch(/\nSET TERM ; \^$/);
+    expect(formatFirebird(formatted)).toBe(formatted);
+  });
   it.each(['select \'unterminated', 'select "unterminated', 'select /* missing', 'select q\'{unclosed\''])(
     'refuses malformed lexical source %s', source => expect(() => formatFirebird(source)).toThrow());
   it('uses native names and does not invent missing columns', () => {

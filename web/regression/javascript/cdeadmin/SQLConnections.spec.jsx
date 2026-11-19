@@ -1,3 +1,4 @@
+import QuickQueryShortcuts, {setQuickQueryShortcut} from 'sources/cdeadmin_ui/editors/QuickQueryShortcuts';
 import {withTheme} from '../fake_theme';
 import {useState} from 'react';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
@@ -72,4 +73,28 @@ it('shows the connection selector inside a connection toolbar that offers a slot
   fireEvent.mouseDown(combos[0]);
   fireEvent.click(screen.getByRole('option',{name:'Firebird / A'}));
   expect(screen.getAllByRole('combobox', {name:'Connection'})).toHaveLength(1);
+});
+
+it('opens a pinned query only through its original database connection', () => {
+  const query = {query_id: 'qq-dashboard', name: 'Monthly totals', server_id: 97, database_target_id: 'db-a'};
+  const open = jest.fn();
+  const otherDatabase = jest.fn();
+  registerSQLConnection({id: 'endpoint', serverId: 97, databaseTargetId: 'db-b', openQuickQuery: otherDatabase});
+  setQuickQueryShortcut(query, true);
+  const Dashboard = withTheme(QuickQueryShortcuts);
+  try {
+    render(<Dashboard />);
+    expect(screen.getByRole('button', {name: query.name})).toBeDisabled();
+    act(() => registerSQLConnection({
+      id: 'endpoint', serverId: 97, databaseTargetId: 'db-a', openQuickQuery: open,
+    }));
+    fireEvent.click(screen.getByRole('button', {name: query.name}));
+    expect(open).toHaveBeenCalledWith(query.query_id);
+    expect(otherDatabase).not.toHaveBeenCalled();
+  } finally {
+    act(() => {
+      removeSQLConnections(97);
+      setQuickQueryShortcut(query, false);
+    });
+  }
 });

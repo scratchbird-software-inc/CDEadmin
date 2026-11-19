@@ -21,6 +21,12 @@ converter callbacks for temporal fields only. SQL NULL remains None. The
 binary-protocol decoder formats native fields with their advertised fractional
 precision. All other cursors and types retain upstream behavior.
 
+The C driver patches also expose native result metadata before execution.
+MariaDB uses a temporary statement on the active cursor's connection.
+MySQL reads metadata from an already prepared native statement. Both
+report the native parameter count. Their client libraries provide no
+parameter-type metadata through the native C API.
+
 Run ``python -m tools.cdeadmin_build_mariadb_driver --archive <sdist>
 --output <external-new-directory>`` with the platform's matching Python headers,
 C compiler, MariaDB Connector/C development package, setuptools, packaging,
