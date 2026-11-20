@@ -3840,6 +3840,12 @@ class ServerNode(PGChildNodeView):
                 elif action in {'mysql_host_peer','mysql_host_catalog','mysql_host_review','mysql_host_start','mysql_host_status','mysql_host_list','mysql_host_cancel','mysql_host_reconcile','mysql_host_cancel_initialization','mysql_host_acknowledge_initialization','mysql_host_acknowledge_upgrade'}:
                     try:payload=service.mysql_host(server,action.removeprefix('mysql_host_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mysql_utility_catalog','mysql_utility_review','mysql_utility_start','mysql_utility_status','mysql_utility_list','mysql_utility_cancel'}:
+                    try:payload=service.mysql_utility(server,action.removeprefix('mysql_utility_'),data.get('request') or {})
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_utility_catalog','mariadb_utility_review','mariadb_utility_start','mariadb_utility_status','mariadb_utility_list','mariadb_utility_cancel'}:
+                    try:payload=service.mariadb_utility(server,action.removeprefix('mariadb_utility_'),data.get('request') or {})
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mysql_router_catalog','mysql_router_peer','mysql_router_review','mysql_router_start','mysql_router_status','mysql_router_list','mysql_router_cancel','mysql_router_reconcile','mysql_router_cancel_original','mysql_router_acknowledge'}:
                     try:payload=service.mysql_router(server,action.removeprefix('mysql_router_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))

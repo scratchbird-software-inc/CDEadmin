@@ -211,6 +211,8 @@ def _administration(profile):
         common['server'] = common['server'] | frozenset(page_tracking_operations)
         from .mysql_engine_diagnostics import OPERATIONS as engine_diagnostic_operations
         common['server'] = common['server'] | frozenset(engine_diagnostic_operations)
+        from .mysql_utilities import OPERATIONS as mysql_utility_operations
+        common['server'] = common['server'] | frozenset(mysql_utility_operations)
         from .mysql_rewriter import OPERATIONS as rewriter_operations
         common['server'] = common['server'] | frozenset(rewriter_operations)
         from .mysql_key_cache_lifecycle import OPERATIONS as cache_lifecycle_operations
@@ -385,6 +387,12 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             'mariadb-upgrade': os.environ.get(
                 'CDEADMIN_MARIADB_UPGRADE_BINARY', 'mariadb-upgrade'
             ),
+            'aria_chk': os.environ.get('CDEADMIN_MARIADB_ARIA_CHK_BINARY', 'aria_chk'),
+            'aria_pack': os.environ.get('CDEADMIN_MARIADB_ARIA_PACK_BINARY', 'aria_pack'),
+            'myisamchk': os.environ.get('CDEADMIN_MARIADB_MYISAMCHK_BINARY', 'myisamchk'),
+            'myisampack': os.environ.get('CDEADMIN_MARIADB_MYISAMPACK_BINARY', 'myisampack'),
+            'innochecksum': os.environ.get('CDEADMIN_MARIADB_INNOCHECKSUM_BINARY', 'innochecksum'),
+            'mariadb-slap': os.environ.get('CDEADMIN_MARIADB_SLAP_BINARY', 'mariadb-slap'),
         })
 
     def open_session(self, request):
@@ -1091,7 +1099,7 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
         if position(compiled):
             return bind_relay(self, planned)
         for suffix in ('failover privilege_change account_change trigger_create routine_create index_create server_control xa '
-                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache engine_diagnostics').split():
+                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache engine_diagnostics utility').split():
             key = 'mysql_'+suffix
             if key in compiled:return HANDLERS[key].bind_review(self, planned)
         if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':
@@ -1186,6 +1194,11 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             'mysql-binlog': os.environ.get('CDEADMIN_MYSQL_BINLOG_BINARY','mysqlbinlog'),
             'mysql-client': os.environ.get('CDEADMIN_MYSQL_CLIENT_BINARY','mysql'),
             'mysql-server': os.environ.get('CDEADMIN_MYSQL_SERVER_BINARY','mysqld'),
+            'myisamchk': os.environ.get('CDEADMIN_MYSQL_MYISAMCHK_BINARY', 'myisamchk'),
+            'myisampack': os.environ.get('CDEADMIN_MYSQL_MYISAMPACK_BINARY', 'myisampack'),
+            'innochecksum': os.environ.get('CDEADMIN_MYSQL_INNOCHECKSUM_BINARY', 'innochecksum'),
+            'ibd2sdi': os.environ.get('CDEADMIN_MYSQL_IBD2SDI_BINARY', 'ibd2sdi'),
+            'mysqlslap': os.environ.get('CDEADMIN_MYSQL_MYSQLSLAP_BINARY', 'mysqlslap'),
         })
 
     def _invoke_connector(self, request, connector, overrides=None, **kwargs):
