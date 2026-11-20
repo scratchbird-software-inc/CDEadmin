@@ -3845,3 +3845,97 @@ active Firebird audit items on the merged ``master`` baseline:
   ``transfer`` / ``delete`` (stale generation ``409``, active-session handle
   ``409``, and non-destructive registration removal). Native Windows/macOS
   qualification and human UI acceptance remain tracked under ``FB-OWN-02``.
+
+MySQL 9.7.0 and MariaDB 12.2.2 full backend implementation and qualification closure (56 items)
+-----------------------------------------------------------------------------------------------
+
+All active MySQL (``24``) and MariaDB (``32``) backend implementation and
+qualification items are closed on ``master`` with declarative UI descriptors
+(``mysql`` ``36`` kinds / ``121`` operations; ``mariadb`` ``36`` kinds / ``90``
+operations) and zero UI lint count increases:
+
+* **Diagnostics, variable scope, completion & server-DDN facade**
+  (``MY-AUDIT-SHOW_ENGINE_STATUS``, ``MY-AUDIT-SHOW_ENGINE_LOGS``,
+  ``MY-AUDIT-SHOW_ENGINE_MUTEX``, ``MA-AUDIT-VARIABLE-SCOPE``,
+  ``MA-AUDIT-COMPLETION-DIAGNOSTICS``, ``MA-AUDIT-INSTALLED-COMPLETION``,
+  ``MA-AUDIT-SERVER-FACADE``): qualified MySQL ``SHOW ENGINE`` across ``9.7.0``
+  and ``8.4`` (pure & C connectors, ``ENGINE``/``ALL``, killed connection,
+  stale ``server_uuid``, truncation bounds, and HTTP); added original-session
+  MariaDB ``SET SESSION`` (``mariadb_session_variables.py``) and qualified
+  ``GLOBAL``/``SESSION``/``SESSION ONLY`` across ``12.2.2`` and ``11.8``;
+  hardened peer metadata completion and snapshot invalidation across scalar and
+  ``AGGREGATE`` UDFs, ``server_audit`` variables, and ``KILL CONNECTION``; and
+  fixed server-scoped ``mariadb_server_*`` workspace dispatch with end-to-end
+  authenticated HTTP qualification.
+* **Guarded DROP identity, typed FLUSH, EXPLAIN FOR CONNECTION, component
+  metrics, language semantics, X Collections & NDB Cluster**
+  (``MY-AUDIT-IDENTITY-01``, ``MA-AUDIT-IDENTITY``, ``MY-AUDIT-FLUSH``,
+  ``MA-AUDIT-FLUSH``, ``MY-AUDIT-EXPLAIN_FOR_CONNECTION``,
+  ``MY-AUDIT-COMPONENT-METRICS``, ``MY-AUDIT-LANGUAGE-SEMANTICS``,
+  ``MY-AUDIT-XCOLLECTIONS``, ``MY-AUDIT-NDB``): bound ``server_uuid``/
+  ``server_uid`` and InnoDB ``TABLE_ID`` under ``LOCK TABLES ... WRITE`` before
+  ``DROP TABLE`` (``destructive_identity.py``); added typed ``server.flush`` and
+  ``table.flush`` (``mysql_flush.py``, ``mariadb_flush.py``); added dedicated
+  observer ``EXPLAIN FORMAT={TRADITIONAL|JSON|TREE} FOR CONNECTION``
+  (``mysql_live_plans.py``); integrated ``replication_applier_metrics`` and
+  ``Gr_flow_control_throttle_*`` collectors and DDN bindings; exposed distinct
+  non-executing ``grammar_valid``, ``context_mode``, ``catalog_binding_status``,
+  ``privilege_evaluation``, and ``execution_verified`` fields; implemented a
+  pure-Python MySQL X Protocol client on port ``33060`` and ``x-collection``
+  lifecycle (``mysql_xprotocol.py``, ``mysql_xcollections.py``); and implemented
+  capability-gated MySQL NDB Cluster ``logfile-group``, NDB ``tablespace``,
+  ``ndbinfo``, and ``NdbMgmClient`` port ``1186`` adapters (``mysql_ndb.py``),
+  qualified live against ``community-cluster:9.7.0``.
+* **Offline & benchmark native host utilities**
+  (``MY-AUDIT-UTILITY-MYISAMCHK``, ``MY-AUDIT-UTILITY-MYISAMPACK``,
+  ``MY-AUDIT-UTILITY-INNOCHECKSUM``, ``MY-AUDIT-UTILITY-IBD2SDI``,
+  ``MY-AUDIT-UTILITY-MYSQLSLAP``, ``MA-AUDIT-UTILITY-ARIA_CHK``,
+  ``MA-AUDIT-UTILITY-ARIA_PACK``, ``MA-AUDIT-UTILITY-MYISAMCHK``,
+  ``MA-AUDIT-UTILITY-MYISAMPACK``, ``MA-AUDIT-UTILITY-INNOCHECKSUM``,
+  ``MA-AUDIT-UTILITY-MARIADB-SLAP``): implemented ``utility_host_worker.py``,
+  ``mysql_utilities.py``, and ``mariadb_utilities.py`` over local, container,
+  and SSH host sessions with 5-layer offline daemon/open-fd/lock precondition
+  checks, ``0600`` backup staging and zero-wiped credential files, bounded
+  cancellation, and post-restart SQL verification against real MySQL ``9.7.0``
+  and MariaDB ``12.2.2`` binaries.
+* **MariaDB temporary shadowing, VECTOR indexes/DDN, table fields, temporal
+  lifecycle, object editors, ALL_PLUGINS & Aria/wsrep monitoring**
+  (``MA-AUDIT-TEMPORARY``, ``MA-AUDIT-NATIVE-INDEXES``,
+  ``MA-AUDIT-TABLE-FIELDS``, ``MA-AUDIT-TEMPORAL-LIFECYCLE``,
+  ``MA-AUDIT-OBJECT-EDITOR-PARITY``, ``MA-AUDIT-AVAILABLE-PLUGINS``,
+  ``MA-AUDIT-MARIA-MONITORING``): separated ``temporary-table`` identities and
+  session shadowing plus ``table.drop_temporary``; added ``VECTOR KEY`` /
+  ``VECTOR INDEX`` DDN parsing/round-trip and full MariaDB index/table forms;
+  added reviewed ``SYSTEM VERSIONING`` and ``PERIOD FOR`` lifecycle operations;
+  surfaced standalone ``view``/``procedure``/``function``/``trigger``
+  ``alter`` and ``create_or_replace``; added ``information_schema.ALL_PLUGINS``
+  ``available-plugin`` discovery; and expanded ``MariaDBMonitor`` + DDN
+  bindings for ``Aria_pagecache_*``, ``Key_*``, and ``wsrep`` status.
+* **MariaDB continuity, physical backup/prepare/cutover, archive retention,
+  host config/service, upgrade & Galera** (``MA-AUDIT-PHYSICAL-BACKUP``,
+  ``MA-AUDIT-INCREMENTAL-PREPARE``, ``MA-AUDIT-RECOVERY-CUTOVER``,
+  ``MA-AUDIT-ARCHIVE-RECOVERY-RETENTION``, ``MA-AUDIT-HOST-CONFIG-SERVICE``,
+  ``MA-AUDIT-HOST-UPGRADE``, ``MA-AUDIT-GALERA``): implemented
+  ``mariadb_physical.py``, ``mariadb_archive_retention.py``,
+  ``mariadb_host_services.py``, ``mariadb_host_upgrade.py``, and
+  ``mariadb_galera.py``, qualified natively and over HTTP including a live
+  ``11.8 -> 12.2.2`` system-table/datadir upgrade and a live 2-node
+  ``libgalera_smm.so`` Galera cluster.
+* **MySQL & MariaDB proof provenance, DDN load gate & full current-source
+  qualification matrices** (``MY-AUDIT-PROOF-PROVENANCE``, ``8``
+  ``MY-AUDIT-QUAL-*`` items, ``MA-AUDIT-PROOF-PROVENANCE``,
+  ``MA-AUDIT-DDN-TIMEOUT``, and ``4`` ``MA-AUDIT-QUAL-*`` items): resolved
+  ``81/81`` (``100%``) MySQL ``9.7.0`` proof declarations and ``129/129``
+  (``100%``) MariaDB ``12.2.2`` SQL task proof declarations to exact current-source
+  SHA-256 matches; verified ``2,075``-resource / ``3.77 MB`` MariaDB server-DDN
+  reads in ``~2.24s`` within the unmodified ``15s`` / 2-slot backpressure
+  contract; and qualified connections/TLS/mTLS/failover, runtime & persisted
+  variables, all declared descriptor operations, typed/spatial/vector/temporal/
+  LOB/binlog data encodings, DDN ``filter-not-delete`` & drift gates, MySQL
+  XtraBackup/InnoDB Cluster/Router/host recovery lifecycles, editor diagnostics
+  & query attributes, and monitoring/alert workflows. Persistent ScratchBird
+  monitoring history (``MY-AUDIT-HISTORY``, ``MA-AUDIT-HISTORY``) remains
+  ``owner_deferred`` and was not run; native Windows/macOS and human UI
+  acceptance remain ``external_acceptance_pending``; MySQL Enterprise masking/
+  MLE/primary-attributes remain ``post_beta``; and raw user-key export remains
+  ``owner_excluded``.
