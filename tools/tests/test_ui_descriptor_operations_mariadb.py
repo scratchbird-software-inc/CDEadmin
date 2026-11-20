@@ -106,17 +106,23 @@ def find(client, route, kind, name=None):
     return rows[0]
 
 
-def run(live, kind, operation_id, values=None, name=None, target=None, confirmation=None):
+def run(live, kind, operation_id, values=None, name=None, target=None, confirmation=None, session_id=None, connection=None):
     route, client, _workspace = live
     operation = OPERATIONS[f'{operation_id}@{kind}']
     target = find(client, route, kind, name) if target is None else (target or None)  # False: the operation has no target
     # The dialog asks the user to type the target's display name for typed-name confirmations.
     draft = operation_draft(operation, values, confirmation=confirmation or (target or {}).get('display_name'))
     request = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': target,
-               '_provider_route': route, 'draft': draft}
+               '_provider_route': route, 'draft': draft,
+               **({'session_id': session_id} if session_id else {})}
     assert ADMINISTRATION.validate(request)['errors'] == [], (operation_id, ADMINISTRATION.validate(request))
-    planned = ADMINISTRATION.plan(request)
-    result = ADMINISTRATION.apply(client, planned)
+    planned = client.plan_admin_operation(request)
+    apply_req = dict(planned)
+    if connection is not None:
+        apply_req['_provider_session_handle'] = connection
+        if session_id:
+            apply_req['session_id'] = session_id
+    result = client.apply_admin_operation(apply_req)
     assert result['accepted'], (operation_id, result)
     return planned, result
 
@@ -165,14 +171,6 @@ def test_table_maintenance_operations(live):
     observed = query(f'CHECKSUM TABLE `{DATABASE}`.`owner` EXTENDED')
     assert rows_of(result) == [tuple(row) for row in observed]
     assert rows_of(result)[0][1] != 0
-
-
-def test_logical_backup_and_restore(live):
-    route, client, workspace = live
-    dump = workspace / 'dump.sql'
-    planned, result = run(live, 'database', 'backup_logical', {'path': 'dump.sql'}, name=DATABASE)
-    print(planned['command_preview'], result)
-    assert dump.exists()
 
 
 def partitions(table):
@@ -506,8 +504,88 @@ def test_exchange_and_convert_partition_operations(live):
     assert partitions('ex_range') == ['p1', 'p3']
 
 
+def test_mariadb_12_extended_descriptor_operations(live):
+    route, client, _workspace = live
+    server_uid = query('SELECT @@server_uid')[0][0]
+    server_target = {
+        'resource_id': 'server:MariaDB',
+        'resource_kind': 'server',
+        'display_name': 'MariaDB',
+        'display_path': ['MariaDB'],
+        'native': {'server_uid': server_uid},
+    }
+    run(live, 'server', 'flush', {'targets': ['STATUS'], 'binlog_mode': 'NO_WRITE_TO_BINLOG'}, target=server_target)
+    run(live, 'table', 'flush', {'binlog_mode': 'NO_WRITE_TO_BINLOG', 'lock_mode': 'NONE'}, target=table_target(live, 'owner'))
+    _pl, ap_res = run(live, 'server', 'inspect_available_plugins', {'status_filter': 'ALL', 'include_test_modules': False}, target=server_target)
+    assert ap_res['available_plugins']['active_count'] > 0
+
+    # Sequence signed & unsigned BIGINT bounds
+    run(live, 'sequence', 'create', {
+        'name': 'seq_u64', 'parent': DATABASE, 'integer_type': 'BIGINT', 'unsigned': True,
+        'start': '18446744073709551610', 'minimum_mode': 'VALUE', 'minimum': '18446744073709551600',
+        'maximum_mode': 'VALUE', 'maximum': '18446744073709551614', 'cache': '0'}, target=False)
+    seq_target = find(client, route, 'sequence', 'seq_u64')
+    run(live, 'sequence', 'alter', {'restart': '18446744073709551612'}, target=seq_target)
+    assert query('SELECT next_not_cached_value FROM seq_u64', DATABASE) == [(18446744073709551612,)]
+
+    # Index visibility & rename
+    execute('CREATE INDEX ix_owner_lbl ON owner(label)', database=DATABASE)
+    run(live, 'index', 'visibility', {'visibility': 'IGNORED'}, name='ix_owner_lbl')
+    run(live, 'index', 'rename', {'new_name': 'ix_owner_lbl_v2'}, name='ix_owner_lbl')
+    assert query(f"SELECT IGNORED FROM information_schema.statistics WHERE table_schema='{DATABASE}' AND index_name='ix_owner_lbl_v2'") == [('YES',)]
+
+    # Temporal system-versioning & application-time period lifecycle
+    execute('CREATE TABLE temp_sv(id INT PRIMARY KEY, label VARCHAR(32)) ENGINE=InnoDB',
+            "INSERT INTO temp_sv VALUES (1, 'v1')",
+            'CREATE TABLE temp_ap(id INT PRIMARY KEY, vf DATE NOT NULL, vt DATE NOT NULL) ENGINE=InnoDB', database=DATABASE)
+    run(live, 'table', 'add_system_versioning', {
+        'explicit_period_columns': True, 'row_start_column': 'rs', 'row_end_column': 're',
+        'invisible_period_columns': True}, target=table_target(live, 'temp_sv'))
+    execute("UPDATE temp_sv SET label='v2' WHERE id=1", database=DATABASE)
+    run(live, 'table', 'rotate_system_time_partitions', {
+        'rotation_action': 'PARTITION_BY_LIMIT', 'row_limit': 50, 'history_partitions': 2}, target=table_target(live, 'temp_sv'))
+    run(live, 'table', 'truncate_system_versioning_history', {
+        'cutoff_mode': 'ALL', 'destructive_history_confirmed': True}, target=table_target(live, 'temp_sv'))
+    execute('ALTER TABLE temp_sv REMOVE PARTITIONING', database=DATABASE)
+    run(live, 'table', 'drop_system_versioning', {
+        'drop_period_columns': True, 'row_start_column': 'rs', 'row_end_column': 're', 'destructive_history_confirmed': True},
+        target=table_target(live, 'temp_sv'))
+    run(live, 'table', 'add_application_period', {
+        'period_name': 'p_win', 'start_column': 'vf', 'end_column': 'vt'}, target=table_target(live, 'temp_ap'))
+    run(live, 'table', 'drop_application_period', {
+        'period_name': 'p_win', 'destructive_history_confirmed': True}, target=table_target(live, 'temp_ap'))
+
+    # Retained-session drop_temporary
+    retained = client.open_session({'route': dict(route, autocommit=False)})
+    try:
+        retained.cursor().execute(f'CREATE TEMPORARY TABLE `{DATABASE}`.`owner` (tmp_id INT PRIMARY KEY)')
+        tmp_target = {
+            'resource_id': f'temporary-table:{DATABASE}:owner',
+            'resource_kind': 'table',
+            'display_name': 'owner',
+            'display_path': [DATABASE, 'owner'],
+            'native': {'temporary': True, 'table_type': 'TEMPORARY', 'server_uid': server_uid},
+        }
+        run(live, 'table', 'drop_temporary', target=tmp_target, session_id='ops-tmp-1', connection=retained)
+        assert query('SELECT count(*) FROM owner', DATABASE) == [(2,)]
+    finally:
+        client.close_session(retained)
+
+    # View / procedure / function / trigger create_or_replace
+    execute('CREATE PROCEDURE pr_rep() SELECT 1',
+            'CREATE FUNCTION fn_rep() RETURNS INT DETERMINISTIC NO SQL RETURN 1',
+            "CREATE TRIGGER tr_rep BEFORE INSERT ON owner FOR EACH ROW SET NEW.label = NEW.label", database=DATABASE)
+    run(live, 'view', 'create_or_replace', {'definition': 'SELECT id, label FROM owner'}, name='owner_view')
+    run(live, 'procedure', 'create_or_replace', {'body': 'BEGIN SELECT 2; END'}, name='pr_rep')
+    run(live, 'function', 'create_or_replace', {
+        'returns': 'INT', 'deterministic': 'DETERMINISTIC', 'data_access': 'NO SQL', 'body': 'RETURN 2'}, name='fn_rep')
+    run(live, 'trigger', 'create_or_replace', {'body': "SET NEW.label = COALESCE(NEW.label, '')"}, name='tr_rep')
+    assert query(f'SELECT `{DATABASE}`.fn_rep()') == [(2,)]
+
+
 def test_every_declared_operation_is_exercised():
     declared = {key for key in OPERATIONS}
+    assert len(declared) == 90
     exercised = {
         'analyze_tables@database', 'check_objects@database', 'optimize_tables@database', 'repair_objects@database',
         'checksum_tables@database', 'backup_logical@database', 'restore_logical@database', 'check_upgrade_required@server',

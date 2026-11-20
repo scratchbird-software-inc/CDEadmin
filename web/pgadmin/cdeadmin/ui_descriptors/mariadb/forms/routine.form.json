@@ -63,9 +63,7 @@
       "tab": "General",
       "control": "text",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "returns"
       ],
@@ -119,9 +117,7 @@
       "tab": "Parameters",
       "control": "grid",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "parameter_records"
       ],
@@ -200,9 +196,7 @@
       "tab": "Options",
       "control": "select",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "deterministic"
       ],

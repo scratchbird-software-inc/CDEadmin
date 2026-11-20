@@ -228,7 +228,8 @@ def compile_column_clause(admin, column, base_column_fn=None):
     if not isinstance(column, Mapping):
         raise RelationalClientError('Column definition must be an object')
     allowed = {
-        'name', 'type', 'nullable', 'default', 'unique', 'primary_key',
+        'name', 'type', 'data_type', 'table', 'parent',
+        'nullable', 'default', 'unique', 'primary_key',
         'generation_kind', 'generation_expression',
         'generated_storage', 'generated_expression',
         'invisible',
@@ -237,6 +238,15 @@ def compile_column_clause(admin, column, base_column_fn=None):
     }
     if set(column) - allowed:
         raise RelationalClientError('Unknown MariaDB column property: ' + ', '.join(sorted(set(column) - allowed)))
+    if (
+        'type' in column
+        and 'data_type' in column
+        and column['type'] not in (None, '')
+        and column['data_type'] not in (None, '')
+        and column['type'] != column['data_type']
+    ):
+        raise RelationalClientError('Conflicting MariaDB column type and data_type properties')
+    raw_type = column.get('type') if column.get('type') not in (None, '') else column.get('data_type')
 
     raw_gen_kind = column.get('generated_storage') if column.get('generated_storage') not in (None, '') else column.get('generation_kind')
     gen_kind = str(raw_gen_kind or 'NONE').upper()
@@ -260,7 +270,7 @@ def compile_column_clause(admin, column, base_column_fn=None):
             raise RelationalClientError('Generated columns cannot declare a DEFAULT expression')
         expr = safe_expression(gen_expr, '', 'generated column expression')
         col_name = admin._identifier(column.get('name'))
-        col_type = admin._safe_type(column.get('type'), 'Column type')
+        col_type = admin._safe_type(raw_type, 'Column type')
         parts = [col_name, f'{col_type} GENERATED ALWAYS AS ({expr}) {gen_kind}']
         if column.get('nullable') is False or column.get('primary_key') is True:
             parts.append('NOT NULL')
@@ -272,7 +282,7 @@ def compile_column_clause(admin, column, base_column_fn=None):
         if column.get('default') not in (None, ''):
             raise RelationalClientError('System-time ROW START/END columns cannot declare a DEFAULT expression')
         col_name = admin._identifier(column.get('name'))
-        col_type = admin._safe_type(column.get('type') or 'TIMESTAMP(6)', 'Column type')
+        col_type = admin._safe_type(raw_type or 'TIMESTAMP(6)', 'Column type')
         role_sql = 'ROW START' if sys_role == 'ROW_START' else 'ROW END'
         parts = [col_name, f'{col_type} GENERATED ALWAYS AS {role_sql}']
         if column.get('nullable') is False:
@@ -280,7 +290,9 @@ def compile_column_clause(admin, column, base_column_fn=None):
     else:
         if gen_expr not in (None, ''):
             raise RelationalClientError('Select VIRTUAL, PERSISTENT or STORED for a generated column expression')
-        base_col = {k: v for k, v in column.items() if k in {'name', 'type', 'nullable', 'default', 'unique', 'primary_key'}}
+        base_col = {k: v for k, v in column.items() if k in {'name', 'type', 'data_type', 'nullable', 'default', 'unique', 'primary_key'}}
+        if raw_type not in (None, '') and 'type' not in base_col:
+            base_col['type'] = raw_type
         render_base = base_column_fn or getattr(admin, '_base_column_definition', None)
         if render_base is None:
             from ..relational_admin import RelationalAdministration

@@ -49,7 +49,11 @@ def admin():
 def live():
     seed = admin()
     seed.cursor().execute(f'CREATE DATABASE `{DATABASE}`')
-    seed.cursor().execute(f'CREATE TABLE `{DATABASE}`.owner(id INT PRIMARY KEY, label VARCHAR(40))')
+    seed.cursor().execute(
+        f'CREATE TABLE `{DATABASE}`.owner('
+        'id INT PRIMARY KEY, label VARCHAR(40), doc TEXT, emb VECTOR(4) NOT NULL'
+        ') ENGINE=InnoDB'
+    )
     seed.close()
     route = {'host': SETTINGS['host'], 'port': int(SETTINGS['port']), 'database': DATABASE, 'user': SETTINGS['user'],
              'credential_reference_id': 'ui-roundtrip', 'principal_reference': 'ui-roundtrip'}
@@ -61,7 +65,9 @@ def live():
         client.close()
         cleanup = admin()
         for statement in (f'DROP DATABASE IF EXISTS `{DATABASE}`', f'DROP DATABASE IF EXISTS `{DATABASE}_child`',
-                          f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'", f'DROP ROLE IF EXISTS rt_role_{UNIQUE}'):
+                          f"DROP USER IF EXISTS 'rt_user_{UNIQUE}'@'localhost'",
+                          f"DROP USER IF EXISTS 'rt_or_{UNIQUE}'@'%'",
+                          f'DROP ROLE IF EXISTS rt_role_{UNIQUE}'):
             cleanup.cursor().execute(statement)
         cleanup.close()
 
@@ -75,12 +81,13 @@ def resources(client, route):
 
 
 def run(client, route, kind, operation, draft, target=None):
+    """Validate, plan (with the client's native review step) and apply, as the app does."""
     request = {'resource_kind': kind, 'operation_id': operation, 'target_resource': target,
                '_provider_route': route, 'draft': draft}
     assert ADMINISTRATION.validate(request)['errors'] == []
-    planned = ADMINISTRATION.plan(request)
+    planned = client.plan_admin_operation(request)
     sql = '\n'.join(statement['source'] for statement in planned['command_preview']['statements'])
-    assert ADMINISTRATION.apply(client, planned)['accepted'], sql
+    assert client.apply_admin_operation(planned)['accepted'], sql
     return sql
 
 
@@ -132,14 +139,38 @@ def test_table_form_create_prefill_and_alter(live):
 
 def test_view_index_trigger_forms(live):
     route, client = live
-    run(client, route, 'view', 'create', backend_draft(resolved_form('mariadb', 'view'),
+    view_form = resolved_form('mariadb', 'view')
+    run(client, route, 'view', 'create', backend_draft(view_form,
                                                       {'name': 'rt_v', 'parent': DATABASE, 'query': 'SELECT id FROM owner'}))
-    _view, view_record = record(client, route, 'view', 'rt_v', 'view')
+    view_res, view_record = record(client, route, 'view', 'rt_v', 'view')
     assert view_record['query'].lower().startswith('select')
-    run(client, route, 'index', 'create', backend_draft(resolved_form('mariadb', 'index'), {
-        'name': 'rt_ix', 'parent': DATABASE, 'table': 'owner', 'columns': [{'value': 'label'}], 'unique': True}))
-    _index, index_record = record(client, route, 'index', 'rt_ix', 'index')
-    assert index_record['table'] == 'owner' and index_record['unique'] is True
+    view_alter = backend_draft(view_form, {**view_record, 'query': 'SELECT id, label FROM owner'}, mode='alter', baseline=view_record)
+    run(client, route, 'view', 'alter', view_alter, target=view_res)
+
+    index_form = resolved_form('mariadb', 'index')
+    run(client, route, 'index', 'create', backend_draft(index_form, {
+        'name': 'rt_ix', 'parent': DATABASE, 'table': 'owner',
+        'columns': [{'name': 'label', 'prefix_length': 12, 'direction': 'DESC'}],
+        'unique': True, 'ignored': True}))
+    ix_res, index_record = record(client, route, 'index', 'rt_ix', 'index')
+    assert index_record['table'] == 'owner' and index_record['unique'] is True and index_record['ignored'] is True
+    ix_alter = backend_draft(index_form, {**index_record, 'ignored': False}, mode='alter', baseline=index_record)
+    run(client, route, 'index', 'alter', ix_alter, target=ix_res)
+
+    run(client, route, 'index', 'create', backend_draft(index_form, {
+        'name': 'rt_ft_ix', 'parent': DATABASE, 'table': 'owner', 'index_kind': 'FULLTEXT',
+        'columns': [{'name': 'doc'}]}))
+    _ft_res, ft_record = record(client, route, 'index', 'rt_ft_ix', 'index')
+    assert ft_record['index_kind'] == 'FULLTEXT'
+
+    if int(query('SELECT @@version')[0][0].split('.')[0]) >= 12:
+        vec_sql = run(client, route, 'index', 'create', backend_draft(index_form, {
+            'name': 'rt_vec_ix', 'parent': DATABASE, 'table': 'owner', 'index_kind': 'VECTOR',
+            'columns': [{'name': 'emb'}], 'vector_m': 8, 'vector_distance': 'cosine'}))
+        assert 'VECTOR INDEX' in vec_sql and 'M=8' in vec_sql and 'DISTANCE=cosine' in vec_sql
+        _vec_res, vec_record = record(client, route, 'index', 'rt_vec_ix', 'index')
+        assert vec_record['index_kind'] == 'VECTOR' and vec_record['vector_m'] == 8 and vec_record['vector_distance'] == 'cosine'
+
     trigger_form = resolved_form('mariadb', 'trigger')
     trigger = backend_draft(trigger_form, {
         'name': 'rt_trg', 'parent': DATABASE, 'table': 'owner', 'timing': 'BEFORE', 'events': ['INSERT'],
@@ -213,6 +244,24 @@ def test_role_user_and_database_forms(live):
     run(client, route, 'user', 'alter', alter, target=user)
     _user, after = record(client, route, 'user', f'rt_user_{UNIQUE}@localhost', 'role')
     assert after['account_lock'] == 'LOCK'
+
+    or_user_sql = run(client, route, 'user', 'create', {
+        'name': f'rt_or_{UNIQUE}',
+        'host': '%',
+        'authentication_mode': 'PLUGIN_PASSWORD',
+        'plugin': 'mysql_native_password',
+        'password': 'pw_primary_1',
+        'additional_authentication': [{'plugin': 'unix_socket'}],
+        'max_queries_per_hour': 120,
+        'max_updates_per_hour': 60,
+        'max_connections_per_hour': 30,
+        'max_user_connections': 5,
+        'max_statement_time': 15.5,
+    })
+    assert 'OR unix_socket' in or_user_sql or 'OR `unix_socket`' in or_user_sql
+    assert query(
+        f"SELECT max_questions, max_user_connections FROM mysql.user WHERE User='rt_or_{UNIQUE}' AND Host='%'"
+    ) == [(120, 5)]
 
     database_form = resolved_form('mariadb', 'database')
     run(client, route, 'database', 'create', backend_draft(database_form, {

@@ -91,11 +91,26 @@ def compile_operation(operation, draft, target):
         )
 
     if operation == 'add_system_versioning':
-        allowed = {'start_column', 'end_column', 'invisible_period_columns', 'confirmation'}
+        allowed = {
+            'explicit_period_columns',
+            'start_column',
+            'end_column',
+            'row_start_column',
+            'row_end_column',
+            'invisible_period_columns',
+            'confirmation',
+        }
         if set(draft) - allowed:
             raise RelationalClientError('Unknown add_system_versioning option')
-        start_col = draft.get('start_column') or ''
-        end_col = draft.get('end_column') or ''
+        explicit = draft.get('explicit_period_columns')
+        if explicit is not None and type(explicit) is not bool:
+            raise RelationalClientError('explicit_period_columns must be boolean')
+        if explicit is False:
+            start_col = draft.get('start_column') or ''
+            end_col = draft.get('end_column') or ''
+        else:
+            start_col = draft.get('start_column') or draft.get('row_start_column') or ''
+            end_col = draft.get('end_column') or draft.get('row_end_column') or ''
         invisible = draft.get('invisible_period_columns', True)
         if type(invisible) is not bool:
             raise RelationalClientError('invisible_period_columns must be boolean')
@@ -116,7 +131,15 @@ def compile_operation(operation, draft, target):
             sql = f'ALTER TABLE {qualified} ADD SYSTEM VERSIONING'
 
     elif operation == 'drop_system_versioning':
-        allowed = {'drop_period_columns', 'start_column', 'end_column', 'destructive_history_confirmed', 'confirmation'}
+        allowed = {
+            'drop_period_columns',
+            'start_column',
+            'end_column',
+            'row_start_column',
+            'row_end_column',
+            'destructive_history_confirmed',
+            'confirmation',
+        }
         if set(draft) - allowed:
             raise RelationalClientError('Unknown drop_system_versioning option')
         drop_cols = draft.get('drop_period_columns', False)
@@ -124,7 +147,8 @@ def compile_operation(operation, draft, target):
             raise RelationalClientError('drop_period_columns must be boolean')
         parts = []
         if drop_cols:
-            s_col, e_col = draft.get('start_column'), draft.get('end_column')
+            s_col = draft.get('start_column') or draft.get('row_start_column')
+            e_col = draft.get('end_column') or draft.get('row_end_column')
             if not s_col or not e_col or s_col == e_col:
                 raise RelationalClientError('Supply distinct start_column and end_column when dropping explicit period columns')
             parts.append(f'DROP COLUMN {identifier(s_col)}')
@@ -133,7 +157,14 @@ def compile_operation(operation, draft, target):
         sql = f"ALTER TABLE {qualified} {', '.join(parts)}"
 
     elif operation == 'truncate_system_versioning_history':
-        allowed = {'cutoff_mode', 'before_timestamp', 'before_transaction', 'destructive_history_confirmed', 'confirmation'}
+        allowed = {
+            'cutoff_mode',
+            'before_timestamp',
+            'before_transaction',
+            'before_transaction_id',
+            'destructive_history_confirmed',
+            'confirmation',
+        }
         if set(draft) - allowed:
             raise RelationalClientError('Unknown truncate_system_versioning_history option')
         mode = draft.get('cutoff_mode', 'ALL')
@@ -147,7 +178,9 @@ def compile_operation(operation, draft, target):
             sql += ' BEFORE SYSTEM_TIME TIMESTAMP %s'
             parameters.append(ts.strip())
         elif mode == 'BEFORE_TRANSACTION':
-            trx = draft.get('before_transaction')
+            trx = draft.get('before_transaction', draft.get('before_transaction_id'))
+            if type(trx) is int:
+                trx = str(trx)
             if not isinstance(trx, str) or not re.fullmatch(r'(?:0|[1-9][0-9]{0,19})', trx) or int(trx) > 2**64 - 1:
                 raise RelationalClientError('Supply exact unsigned decimal transaction ID for BEFORE SYSTEM_TIME TRANSACTION')
             sql += f' BEFORE SYSTEM_TIME TRANSACTION {trx}'

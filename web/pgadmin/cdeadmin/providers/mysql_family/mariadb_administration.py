@@ -114,13 +114,13 @@ def _descriptor_operation_form(kind, operation):
     return None
 
 
-def _descriptor_editor_form(kind, operation):
+def _descriptor_editor_form(kind, operation, legacy_fields=None):
     from ...ui_descriptors import UIDescriptorService
     from ...ui_descriptors.field_contract import descriptor_field_contract
 
     contract = descriptor_field_contract(
         'mariadb',
-        {'resource_kind': kind, 'operation_id': operation, 'legacy_fields': []},
+        {'resource_kind': kind, 'operation_id': operation, 'legacy_fields': list(legacy_fields or ())},
     )
     title = f'{operation.replace("_", " ").capitalize()} {kind}'
     for form in UIDescriptorService().engine('mariadb').get('forms', {}).values():
@@ -134,7 +134,122 @@ def _descriptor_editor_form(kind, operation):
     }
 
 
+_SEQUENCE_SCALAR_INTEGER_FIELDS = frozenset({
+    'start', 'increment', 'minimum', 'maximum', 'cache', 'restart',
+})
+
+
+def field_contract(request):
+    from ...ui_descriptors.field_contract import descriptor_field_contract
+
+    kind, operation = request['resource_kind'], request['operation_id']
+    if kind == 'sequence' and operation in {'create', 'alter'}:
+        contract = descriptor_field_contract('mariadb', request)
+        if contract is None:
+            return None
+        fields = deepcopy(contract['fields'])
+        seen = {f['field_id'] for f in fields}
+        if operation == 'create' and 'cycle' not in seen:
+            fields.append({
+                'field_id': 'cycle',
+                'label': 'Cycle',
+                'control': 'boolean',
+                'required': False,
+            })
+        for item in fields:
+            if item['field_id'] in _SEQUENCE_SCALAR_INTEGER_FIELDS:
+                item.pop('max_length', None)
+                item.pop('pattern', None)
+                item['control'] = 'json'
+                item['json_type'] = 'scalar'
+        return {**contract, 'fields': fields}
+    if (
+        kind in {'table', 'index', 'view', 'procedure', 'function', 'trigger'}
+        or (kind, operation) == ('server', 'inspect_available_plugins')
+    ):
+        contract = descriptor_field_contract('mariadb', request)
+        if contract is not None and (kind, operation) == ('index', 'alter'):
+            seen = {f['field_id'] for f in contract['fields']}
+            if 'active' not in seen:
+                contract = {
+                    **contract,
+                    'fields': [
+                        *contract['fields'],
+                        {
+                            'field_id': 'active',
+                            'label': 'Index active',
+                            'control': 'boolean',
+                            'required': False,
+                        },
+                    ],
+                }
+        return contract
+    return None
+
+
+class _BitValue:
+    __slots__ = ('raw',)
+
+    def __init__(self, raw: bytes):
+        self.raw = bytes(raw)
+
+
+class _MariaDBRowCursor:
+    def __init__(self, native):
+        self._native = native
+
+    def __getattr__(self, name):
+        return getattr(self._native, name)
+
+    def fetchall(self):
+        rows = self._native.fetchall()
+        desc = self._native.description or ()
+        bit_indices = [i for i, col in enumerate(desc) if len(col) > 1 and col[1] == 16]
+        if not bit_indices:
+            return rows
+        bit_set = set(bit_indices)
+        return [
+            tuple(
+                _BitValue(cell) if idx in bit_set and isinstance(cell, (bytes, bytearray, memoryview)) else cell
+                for idx, cell in enumerate(row)
+            )
+            for row in rows
+        ]
+
+
 class MariaDBAdministration(RelationalAdministration):
+    def _row_cursor(self, client, connection):
+        cursor = super()._row_cursor(client, connection)
+        if hasattr(cursor, 'cdeadmin_exact_temporals'):
+            cursor.cdeadmin_exact_temporals = True
+            return _MariaDBRowCursor(cursor)
+        return cursor
+
+    def _public_row_values(self, values):
+        from datetime import date, datetime, time, timedelta
+        from . import mariadb_values
+
+        out = {}
+        for name, item in values.items():
+            if isinstance(item, _BitValue):
+                item = item.raw
+            elif isinstance(item, memoryview):
+                item = bytes(item)
+            elif isinstance(item, (datetime, date, time, timedelta)):
+                item = str(item)
+            out[name] = mariadb_values.value(item)
+        return out
+
+    def _identity_predicate(self, identity):
+        from decimal import Decimal
+
+        where, params = super()._identity_predicate(identity)
+        converted = tuple(
+            Decimal(int.from_bytes(p.raw, 'big')) if isinstance(p, _BitValue) else p
+            for p in params
+        )
+        return where, converted
+
     def requires_dialect(self, resource_kind, operation_id):
         if resource_kind == 'server' and operation_id in utilities.OPERATIONS:
             return False
@@ -283,7 +398,8 @@ class MariaDBAdministration(RelationalAdministration):
             if declared is not None:
                 return declared
         if kind in {'index', 'view', 'procedure', 'function', 'trigger'} and operation == 'alter':
-            return _descriptor_editor_form(kind, operation)
+            legacy = super()._form(kind, operation).get('fields', ())
+            return _descriptor_editor_form(kind, operation, legacy)
         return super()._form(kind, operation)
 
     @staticmethod
@@ -350,7 +466,7 @@ class MariaDBAdministration(RelationalAdministration):
             if not isinstance(options, dict):
                 raise RelationalClientError('Select typed native sequence options')
             from .mariadb_sequence_options import KEYS
-            for key in KEYS:
+            for key in (*KEYS, 'cycle'):
                 if key in value:
                     options[key] = value.pop(key)
             if 'cycle' in options:
@@ -377,17 +493,17 @@ class MariaDBAdministration(RelationalAdministration):
             return normalized
         if kind == 'table' and operation == 'alter' and isinstance(draft, Mapping):
             value = deepcopy(dict(draft))
+            nested = value.pop('changes', None)
+            if isinstance(nested, Mapping):
+                for k, v in nested.items():
+                    value.setdefault(k, v)
             extra = {k: value.pop(k) for k in _TABLE_PASSTHROUGH_ALTER if k in value}
-            # Allow flat alter drafts from declarative UI forms as well as nested {'changes': ...}
-            if 'changes' not in value:
-                known_change_keys = {
-                    'add_columns', 'drop_columns', 'rename_columns', 'alter_columns',
-                    'add_constraints', 'drop_constraints',
-                }
-                nested_changes = {k: value.pop(k) for k in list(value) if k in known_change_keys}
-                if nested_changes or extra:
-                    value['changes'] = nested_changes
+            if 'add_constraints' in value and 'constraints' not in value:
+                value['constraints'] = value.pop('add_constraints')
+            drop_constraints = value.pop('drop_constraints', None)
             normalized = super()._normalize_draft(kind, operation, value)
+            if drop_constraints is not None:
+                normalized.setdefault('changes', {})['drop_constraints'] = drop_constraints
             normalized.setdefault('changes', {}).update(extra)
             return normalized
         return super()._normalize_draft(kind, operation, draft)
