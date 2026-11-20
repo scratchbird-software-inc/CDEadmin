@@ -129,3 +129,47 @@ def test_effective_package_grants_and_grant_only_rows_exclude_authentication():
     assert records[0]['routine_type']=='PACKAGE BODY' and records[0]['grantee_is_role']
     assert records[-1]['privilege_type']=='USAGE'
     assert 'must-not-escape' not in json.dumps(records)
+
+
+def test_workspace_mariadb_server_context_resolves_mariadb_provider_and_refuses_mysql():
+    from types import SimpleNamespace
+    import test_cdeadmin_relational_providers  # noqa: F401
+    from pgadmin.cdeadmin.providers.mysql_family.provider import (
+        MariaDBPilotProvider,
+        MySQLPilotProvider,
+    )
+    from pgadmin.cdeadmin.workspace.service import ProviderWorkspaceError, ProviderWorkspaceService
+
+    maria_inst = MariaDBPilotProvider.__new__(MariaDBPilotProvider)
+    mysql_inst = MySQLPilotProvider.__new__(MySQLPilotProvider)
+
+    def make_service(profile_id, instance):
+        ctx = SimpleNamespace(profile_id=profile_id, endpoint_id='ep-1')
+        return ProviderWorkspaceService.__new__(ProviderWorkspaceService), SimpleNamespace(
+            endpoint_profile=SimpleNamespace(profile_id=profile_id)
+        ), ctx, instance
+
+    svc, srv, ctx, inst = make_service('mariadb-native', maria_inst)
+    svc._principal_id = lambda _s: 1
+    svc.endpoint_service = SimpleNamespace(
+        workspace=lambda _s: (ctx, {'route': {'host': '127.0.0.1'}}, None),
+        provider_registry=SimpleNamespace(resolve=lambda _c: SimpleNamespace(instance=inst)),
+    )
+    resolved_ctx, endpoint, provider = svc._mariadb_server_context(srv)
+    assert resolved_ctx is ctx and provider is maria_inst and endpoint['route']['host'] == '127.0.0.1'
+
+    # Wrong profile_id on server refused
+    svc2, srv2, ctx2, inst2 = make_service('mysql-native', mysql_inst)
+    svc2._principal_id = lambda _s: 1
+    with pytest.raises(ProviderWorkspaceError, match='MariaDB'):
+        svc2._mariadb_server_context(srv2)
+
+    # Mismatched provider instance refused
+    svc3, srv3, ctx3, _ = make_service('mariadb-native', mysql_inst)
+    svc3._principal_id = lambda _s: 1
+    svc3.endpoint_service = SimpleNamespace(
+        workspace=lambda _s: (ctx3, {'route': {}}, None),
+        provider_registry=SimpleNamespace(resolve=lambda _c: SimpleNamespace(instance=mysql_inst)),
+    )
+    with pytest.raises(ProviderWorkspaceError, match='MariaDB'):
+        svc3._mariadb_server_context(srv3)

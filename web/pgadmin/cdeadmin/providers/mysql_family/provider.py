@@ -149,6 +149,7 @@ MARIADB_PROFILE = PilotProfile(
         ('MariaDB JSON execution analysis',
          'ANALYZE FORMAT=JSON {source}'),
     ),
+    minimum_version='10.6.0',
 )
 
 
@@ -296,6 +297,7 @@ def _administration(profile):
         quote_open='`',
         quote_close='`',
         parameter='%s',
+        error_code_attribute='errno',
         supported=common,
         supports_cascade=profile is not MARIADB_PROFILE,
         not_applicable_concepts=frozenset({
@@ -372,6 +374,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._executions = Executions(self)
         self._session_requests = {}
         self._completion_identities = {}
+        self._source_revisions = {}
+        self._editor_context_snapshots = {}
         self._backup_stage_reviews = {}
         self._backup_stage_handles = set()
         self._tool_runner = tool_runner or ProviderToolRunner({
@@ -401,12 +405,19 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
                 self._discard_failed_session(connection)
                 raise
             self._session_requests[id(connection)] = copy.deepcopy(dict(request))
+            self._source_revisions[id(connection)] = 0
+            self._editor_context_snapshots.pop(id(connection), None)
             return connection
+
+    def _invalidate_editor_context(self, handle):
+        self._source_revisions[id(handle)] = self._source_revisions.get(id(handle), 0) + 1
+        self._editor_context_snapshots.pop(id(handle), None)
 
     def execute(self, handle, request):
         session_request = self._session_requests.get(id(handle))
         if session_request is None:
             raise RelationalClientError('MariaDB session route is unavailable')
+        self._invalidate_editor_context(handle)
         return self._executions.execute(handle, request, session_request)
 
     def describe_result(self, token):
@@ -419,6 +430,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         from .mariadb_connections import discard
         self._backup_stage_handles.discard(id(connection))
         self._completion_identities.pop(id(connection), None)
+        self._source_revisions.pop(id(connection), None)
+        self._editor_context_snapshots.pop(id(connection), None)
         self._forget_connection(connection)
         discard(connection)
 
@@ -445,6 +458,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     def control_transaction(self, handle, action):
         with self._executions.lock:
             self._executions.require_idle(handle)
+            self._invalidate_editor_context(handle)
             return self._control_idle_transaction(handle, action)
 
     def _control_idle_transaction(self, handle, action):
@@ -490,6 +504,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             surface_xa.release(self, handle)
             self._session_requests.pop(id(handle), None)
             self._completion_identities.pop(id(handle), None)
+            self._source_revisions.pop(id(handle), None)
+            self._editor_context_snapshots.pop(id(handle), None)
             self._executions.sessions.forget(handle)
             return self._close_idle_session(handle)
 
@@ -530,6 +546,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         finally:
             self._mariadb_connector.close()
             self._completion_identities.clear()
+            self._source_revisions.clear()
+            self._editor_context_snapshots.clear()
             self._uncertain_sessions.clear()
             self._session_requests.clear()
             self._surface_xa.clear()
@@ -1944,6 +1962,19 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MARIADB_PROFILE)
 
+    def _runtime_version_without_session(self):
+        verified = getattr(self.context, 'verified_runtime_version', None)
+        if isinstance(verified, str) and verified and MARIADB_PROFILE.accepts_runtime_version(verified):
+            return verified
+        if getattr(self.context, 'runtime_verification_state', 'unverified') != 'verified':
+            return MARIADB_PROFILE.exact_version
+        return None
+
+    def _dialect_task_proven(self, task_id, observed_version):
+        if isinstance(observed_version, str) and re.match(r'^11\.8\.\d+$', observed_version):
+            return task_id == 'visual_admin.system-variable.set_global'
+        return False
+
     def read_visual_admin_rows(self, request):
         if not isinstance(self.client, MariaDBDBAPIClient):
             return super().read_visual_admin_rows(request)
@@ -1979,7 +2010,13 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':True,
                     'original_session_commands_attempted':1,'original_session_commands_sent':None,
                     'original_diagnostics_preserved':None,'automatic_retry':False}
-            try:return {'editor_context':complete(self.client,handle,source_context=context)}
+            try:
+                completed = complete(self.client, handle, source_context=context)
+                revisions = getattr(self.client, '_source_revisions', None)
+                snapshots = getattr(self.client, '_editor_context_snapshots', None)
+                if isinstance(revisions, dict) and isinstance(snapshots, dict):
+                    snapshots[id(handle)] = revisions.get(id(handle), 0)
+                return {'editor_context': completed}
             except Exception:
                 return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':False,
                     'original_session_commands_sent':1,'original_diagnostics_preserved':False,'automatic_retry':False}
@@ -1993,6 +2030,8 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
             raise RelationalClientError('Native MariaDB session required')
         handle=self._editor_session(request)
         with session_access(self.client,handle,'mariadb'):
+            if request.get('operation') == 'set_session_flags' and callable(getattr(self.client, '_invalidate_editor_context', None)):
+                self.client._invalidate_editor_context(handle)
             try:
                 return action(handle,{key:value for key,value in request.items()
                     if key not in {'session_id','language_profile'}})
@@ -2003,6 +2042,27 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
             except Exception as error:
                 self.client._uncertain_sessions.add(id(handle))
                 raise RelationalClientError('Native session FLAGSET observation failed; close this session') from None
+
+    def native_session_variables_action(self, request):
+        from .mariadb_session_variables import action
+        from ..native_editor import session_access
+        self._require('execute')
+        if request.get('language_profile') != 'mariadb-sql':
+            raise RelationalClientError('Native MariaDB session required')
+        handle = self._editor_session(request)
+        with session_access(self.client, handle, 'mariadb'):
+            if request.get('operation') == 'set_session' and callable(getattr(self.client, '_invalidate_editor_context', None)):
+                self.client._invalidate_editor_context(handle)
+            try:
+                return action(handle, {key: value for key, value in request.items()
+                    if key not in {'session_id', 'language_profile'}})
+            except RelationalClientError as error:
+                if getattr(error, 'native_outcome', None) == 'unknown_outcome':
+                    self.client._uncertain_sessions.add(id(handle))
+                raise
+            except Exception:
+                self.client._uncertain_sessions.add(id(handle))
+                raise RelationalClientError('Native session variable observation failed; close this session') from None
 
     def backup_stage_action(self, request):
         from .mariadb_backup_stages import action

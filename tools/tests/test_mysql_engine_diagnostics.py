@@ -160,3 +160,19 @@ def test_all_output_has_separate_limits_and_explicit_truncation():
     assert result['complete'] and len(result['rows']) == native.MAX_ROWS+1
     result = native.bounded_result(result_cursor([('InnoDB','','row')]*(native.ALL_MAX_ROWS+1)),True)
     assert result['truncated'] and not result['complete'] and result['row_limit'] == native.ALL_MAX_ROWS
+
+
+@pytest.mark.parametrize('version', ['9.7.0', '9.7.0-debug', '8.4.8', '8.4.0-commercial'])
+def test_environment_admits_9_7_and_8_4_runtimes(version):
+    cursor = Mock()
+    cursor.fetchone.return_value = (version, UUID, 'root@%', 'root@127.0.0.1', 'NONE')
+    observed = native.environment(cursor)
+    assert observed['version'] == version and observed['server_uuid'] == UUID
+
+
+@pytest.mark.parametrize('bad_version', ['8.0.36', '5.7.44', '10.11.8-MariaDB', ''])
+def test_environment_refuses_unqualified_versions(bad_version):
+    cursor = Mock()
+    cursor.fetchone.return_value = (bad_version, UUID, 'root@%', 'root@127.0.0.1', 'NONE')
+    with pytest.raises(RelationalClientError):
+        native.environment(cursor)

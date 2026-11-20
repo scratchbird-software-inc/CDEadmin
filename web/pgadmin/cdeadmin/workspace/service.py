@@ -4956,6 +4956,11 @@ class ProviderWorkspaceService:
                     raise ProviderWorkspaceError('Select a typed original-session FLAGSET')
                 return self.studio_service.mariadb_session_flagsets_action(
                     context, data.get('session_id'), data['request'])
+            if action == 'mariadb_session_variables':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-session system variable')
+                return self.studio_service.mariadb_session_variables_action(
+                    context, data.get('session_id'), data['request'])
             if action == 'sqlite_connection_config':
                 if not isinstance(data.get('request'), dict):
                     raise ProviderWorkspaceError('Select a typed original-connection configuration')

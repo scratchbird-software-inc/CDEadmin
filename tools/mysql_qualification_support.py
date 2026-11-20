@@ -10,14 +10,14 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import (
 
 
 @contextmanager
-def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False,binary_logging=True,supervised_restart=False,performance_schema=True):
+def server(output, *, image='mysql:9.7.0', network=None, server_id=101,gtid_mode='ON',keyring=False,restartable=False,binary_logging=True,supervised_restart=False,performance_schema=True):
     if supervised_restart and not restartable:raise ValueError('Native restart supervision requires a retained owned fixture')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     name = 'sr-mysql-' + secrets.token_hex(8)
     if gtid_mode not in {'ON','OFF'}:raise ValueError('Select a native fixture GTID mode')
     if type(performance_schema) is not bool:raise ValueError('Select native Performance Schema startup explicitly')
-    proof = {'image': _image_identity('mysql:9.7.0'), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'binary_logging':binary_logging,'keyring_component':bool(keyring),'restartable':bool(restartable),'supervised_restart':bool(supervised_restart),'performance_schema':performance_schema}
+    proof = {'image': _image_identity(image), 'owned_server_stopped': False,'gtid_mode':gtid_mode,'binary_logging':binary_logging,'keyring_component':bool(keyring),'restartable':bool(restartable),'supervised_restart':bool(supervised_restart),'performance_schema':performance_schema}
     started = False
     try:
         args = ['docker', 'run', '-d', '--rm', '--name', name, '--cap-add=SYS_NICE',
@@ -33,7 +33,7 @@ def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,r
             args += ['--restart=on-failure','-e','MYSQLD_PARENT_PID=0']
         if network:
             args += ['--network', network]
-        args += ['mysql:9.7.0', '--server-id=' + str(server_id), '--gtid-mode='+gtid_mode,
+        args += [image, '--server-id=' + str(server_id), '--gtid-mode='+gtid_mode,
                  '--enforce-gtid-consistency='+gtid_mode, '--log-bin=sr-owned' if binary_logging else '--skip-log-bin', '--log-replica-updates=ON']
         if not performance_schema:args.append('--performance-schema=OFF')
         if keyring:
@@ -69,9 +69,11 @@ def server(output, *, network=None, server_id=101,gtid_mode='ON',keyring=False,r
             with connection.cursor() as cursor:
                 cursor.execute('SELECT VERSION(), @@server_uuid')
                 version, identity = cursor.fetchone()
-                if version.split('-')[0] != '9.7.0':
+                clean_version = version.split('-')[0]
+                expected_prefix = image.split(':', 1)[1]
+                if clean_version != expected_prefix and not clean_version.startswith(expected_prefix + '.'):
                     raise RuntimeError('Owned fixture version mismatch')
-                proof.update(engine_version='9.7.0', server_uuid=identity)
+                proof.update(engine_version=clean_version, server_uuid=identity)
                 if keyring:
                     cursor.execute("SELECT STATUS_VALUE FROM performance_schema.keyring_component_status WHERE STATUS_KEY='Component_status'")
                     if cursor.fetchone()!=('Active',):raise RuntimeError('Owned native keyring component is not active')

@@ -1845,6 +1845,12 @@ class RelationalAdministration:
                 'code': 'invalid_mariadb_system_variable_target',
                 'message': 'The MariaDB system-variable target is invalid.',
             })
+        if not native:
+            errors.append({
+                'field_id': None,
+                'code': 'unknown_mariadb_system_variable',
+                'message': 'MariaDB system-variable metadata is unavailable.',
+            })
         if str(native.get('read_only', '')).upper() != 'NO':
             errors.append({
                 'field_id': None,
@@ -1912,7 +1918,7 @@ class RelationalAdministration:
                 )).upper()
                 try:
                     if variable_type in {
-                            'INT', 'INT UNSIGNED', 'BIGINT UNSIGNED'}:
+                            'INT', 'INT UNSIGNED', 'BIGINT', 'BIGINT UNSIGNED'}:
                         parsed = int(str(value), 10)
                         minimum = native.get('numeric_min_value')
                         maximum = native.get('numeric_max_value')
@@ -3559,6 +3565,10 @@ class RelationalAdministration:
             failure.native_status_codes = codes or (
                 (native_code,) if isinstance(native_code, int) and
                 not isinstance(native_code, bool) else ())
+            failure.errno = (
+                native_code if isinstance(native_code, int) and
+                not isinstance(native_code, bool) else None
+            )
             failure.task_rollback_unconfirmed = task_rollback_failed
             raise failure from None
         finally:
@@ -4290,7 +4300,7 @@ class RelationalAdministration:
                     target
                 ).get('variable_type', '')).upper()
                 if variable_type in {
-                        'INT', 'INT UNSIGNED', 'BIGINT UNSIGNED'}:
+                        'INT', 'INT UNSIGNED', 'BIGINT', 'BIGINT UNSIGNED'}:
                     value = str(int(str(raw_value), 10))
                 elif variable_type == 'DOUBLE':
                     value = str(float(str(raw_value)))
@@ -4301,7 +4311,7 @@ class RelationalAdministration:
                     }[str(raw_value).upper()]
                 else:
                     value = self._literal(str(raw_value))
-            return {'statements': [{
+            return {'mariadb_global_variable': name, 'statements': [{
                 'source': f'SET GLOBAL {self._quote(name)} = {value}',
                 'parameters': (),
             }]}

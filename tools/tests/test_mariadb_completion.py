@@ -81,3 +81,26 @@ def test_aliased_source_handle_is_never_queried_or_closed(monkeypatch):
     source.cursor.assert_not_called()
     client._close_idle_session.assert_not_called()
     metadata.assert_not_called()
+
+
+def test_killed_peer_marks_peer_uncertain_before_release_and_tracks_snapshot_invalidation(monkeypatch):
+    client, source, peer, metadata = harness(monkeypatch)
+    client._uncertain_sessions = set()
+    client._source_revisions = {id(source): 3}
+    client._editor_context_snapshots = {id(source): 3}
+    ok = subject.complete(client, source)
+    assert ok['context']['source_work_revision'] == 3
+    assert ok['context']['explicit_context_snapshot_valid'] is True
+
+    client._source_revisions[id(source)] = 4
+    client._editor_context_snapshots.pop(id(source), None)
+    stale = subject.complete(client, source)
+    assert stale['context']['source_work_revision'] == 4
+    assert stale['context']['explicit_context_snapshot_valid'] is False
+
+    metadata.side_effect = RuntimeError('peer killed')
+    with pytest.raises(RelationalClientError):
+        subject.complete(client, source)
+    assert id(peer) in client._uncertain_sessions
+    assert id(source) not in client._uncertain_sessions
+    source.cursor.assert_not_called()

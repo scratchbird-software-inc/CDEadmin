@@ -77,9 +77,48 @@ class MariaDBAdministration(RelationalAdministration):
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        compiled = (request.get('provider_payload') or {}).get('compiled', {})
         for module in MODULES:
-            if module.KEY in (request.get('provider_payload') or {}).get('compiled', {}):
+            if module.KEY in compiled:
                 return module.apply(client, request, connection)
+        variable = compiled.get('mariadb_global_variable')
+        if variable and getattr(getattr(client, 'module', None), '__name__', '') == 'mariadb':
+            route = dict((request.get('provider_payload') or {}).get('route') or {})
+            probe = client._connect({'route': {**route, 'autocommit': True}})
+            cursor = None
+            try:
+                cursor = probe.cursor()
+                cursor.execute(
+                    'SELECT VARIABLE_SCOPE,READ_ONLY FROM information_schema.SYSTEM_VARIABLES '
+                    'WHERE UPPER(VARIABLE_NAME)=?',
+                    (str(variable).upper(),),
+                )
+                row = cursor.fetchone()
+            finally:
+                if cursor is not None:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+                client._forget_and_close(probe)
+            if not row:
+                error = RelationalClientError('Unknown MariaDB system variable')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
+            if str(row[1] or '').strip().upper() != 'NO':
+                error = RelationalClientError('MariaDB reports this system variable as read-only')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
+            if str(row[0] or '').strip().upper() not in {'GLOBAL', 'SESSION'}:
+                error = RelationalClientError('MariaDB does not expose a global scope for this variable')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
         return super().apply(client, request, connection)
 
     def _compile_create(self, request):

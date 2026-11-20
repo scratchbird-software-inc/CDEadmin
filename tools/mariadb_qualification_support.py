@@ -10,13 +10,13 @@ from tools.cdeadmin_mysql_family_object_live_orchestrator import _run,_wait_unti
 
 
 @contextmanager
-def server(output,*,server_id=173,native_shutdown=False):
+def server(output,*,image='mariadb:12.2.2',server_id=173,native_shutdown=False):
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     name='sr-mariadb-'+secrets.token_hex(8);started=False
-    proof={'image':_image_identity('mariadb:12.2.2'),'owned_server_stopped':False}
+    proof={'image':_image_identity(image),'owned_server_stopped':False}
     try:
         opened=_run(['docker','run',*([] if native_shutdown else ['--rm']),'-d','--name',name,'-p','127.0.0.1::3306','-e','MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1',
-            'mariadb:12.2.2','--server-id='+str(server_id),'--log-bin=sr-owned','--gtid-strict-mode=ON','--binlog-format=ROW'])
+            image,'--server-id='+str(server_id),'--log-bin=sr-owned','--gtid-strict-mode=ON','--binlog-format=ROW'])
         started=True
         proof.update(container_name=name,container_id=opened.stdout.strip())
         inspected=json.loads(_run(['docker','inspect',name]).stdout)[0]
@@ -26,7 +26,8 @@ def server(output,*,server_id=173,native_shutdown=False):
         try:
             with connection.cursor() as cursor:
                 cursor.execute('SELECT VERSION(),@@server_uid');version,identity=cursor.fetchone()
-                if version.split('-')[0]!='12.2.2':raise RuntimeError('Native MariaDB fixture version differs')
+                clean_version=version.split('-')[0];expected_prefix=image.split(':',1)[1]
+                if clean_version!=expected_prefix and not clean_version.startswith(expected_prefix+'.'):raise RuntimeError('Native MariaDB fixture version differs')
                 proof.update(engine_version=version,server_uid=identity)
         finally:connection.close()
         yield {'host':'127.0.0.1','port':port,'user':'root','ssl':False,'ssl_verify_cert':False},name,proof
