@@ -111,6 +111,11 @@ def bound(value, column):
                 raise ValueError('Native VECTOR dimensions or finite float32 values differ')
             return 'CAST(%s AS BINARY)', [raw]
         return '%s', [raw]
+    if value is not None and column['column_type'].split('(')[0].lower() == 'bit':
+        if (isinstance(value, bool) or not isinstance(value, (int, str)) or
+                not re.fullmatch(r'\d{1,20}', str(value)) or int(value) >= (1 << 64)):
+            raise ValueError('Native BIT value must be an unsigned 64-bit integer')
+        return 'CAST(%s AS UNSIGNED)', [str(value)]
     return '%s', [parameter(value)]
 
 

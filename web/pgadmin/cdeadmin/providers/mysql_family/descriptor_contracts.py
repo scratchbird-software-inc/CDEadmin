@@ -41,11 +41,90 @@ def index_contract(operation, legacy_fields):
         fields += [deepcopy(field) for field in legacy_fields
             if field['field_id'] not in names and field['field_id'] in KEYS | {'options'}]
         return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/index.form.json'}
+    if operation == 'alter':
+        descriptor = document('forms/index.form.json')
+        fields = []
+        for field in descriptor['fields']:
+            if 'alter' in field.get('modes', ['create', 'alter']) and not field.get('ui_only'):
+                item = field_contract(field)
+                item['required'] = False
+                item.pop('default', None)
+                fields.append(item)
+        fields.append({'field_id': 'confirmation', 'label': 'Confirmation', 'control': 'text', 'required': False})
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/index.form.json'}
     if operation == 'visibility':
         descriptor = next(value for value in document('operations.json')['operations']
             if value['resource_kind'] == 'index' and value['operation_id'] == operation)
         return {'fields': [field_contract(field) for field in descriptor['fields']],
             'authority': 'ui_descriptors/mysql/operations.json'}
+    return None
+
+
+def view_contract(kind, operation, legacy_fields):
+    if operation not in {'create', 'alter'}:
+        return None
+    variant = 'materialized' if kind == 'materialized-view' else 'default'
+    fields = _variant_fields(variant, operation, 'view')
+    for field in fields:
+        field['required'] = False
+        if operation == 'alter':
+            field.pop('default', None)
+    names = {field['field_id'] for field in fields}
+    for field in legacy_fields:
+        if field['field_id'] not in names and field['field_id'] in {'parent', 'query'}:
+            item = deepcopy(field)
+            item['required'] = False
+            fields.append(item)
+    if 'confirmation' not in names:
+        fields.append({'field_id': 'confirmation', 'label': 'Confirmation', 'control': 'text', 'required': False})
+    return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/view.form.json'}
+
+
+def _extend_constraint_children(children):
+    known = {child['field_id'] for child in children}
+    fk_actions = [{'value': v, 'label': v} for v in ('RESTRICT', 'CASCADE', 'SET NULL', 'NO ACTION', 'SET DEFAULT')]
+    for extra in (
+        {'field_id': 'on_delete', 'label': 'On delete', 'control': 'select', 'required': False,
+         'options': deepcopy(fk_actions), 'visible_when': {'field_id': 'kind', 'equals': 'FOREIGN KEY'}},
+        {'field_id': 'on_update', 'label': 'On update', 'control': 'select', 'required': False,
+         'options': deepcopy(fk_actions), 'visible_when': {'field_id': 'kind', 'equals': 'FOREIGN KEY'}},
+        {'field_id': 'enforced', 'label': 'Enforced', 'control': 'boolean', 'required': False,
+         'visible_when': {'field_id': 'kind', 'equals': 'CHECK'}},
+    ):
+        if extra['field_id'] not in known:
+            children.append(extra)
+
+
+def table_contract(kind, operation, legacy_fields):
+    fields = deepcopy(list(legacy_fields))
+    if kind == 'constraint' and operation == 'create':
+        for item in fields:
+            if item['field_id'] == 'properties' and isinstance((item.get('object_editor') or {}).get('fields'), list):
+                _extend_constraint_children(item['object_editor']['fields'])
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/table.form.json'}
+    if kind == 'table' and operation == 'create':
+        field = field_contract(next(f for f in document('forms/table.form.json')['fields'] if f['field_id'] == 'temporary'))
+        field.pop('default', None)
+        fields.append(field)
+        for item in fields:
+            if item['field_id'] == 'constraints' and isinstance((item.get('array_editor') or {}).get('fields'), list):
+                _extend_constraint_children(item['array_editor']['fields'])
+        for extra in (
+            {'field_id': 'mysql_table_options', 'label': 'MySQL table options', 'control': 'keyvalue', 'required': False},
+            {'field_id': 'mysql_connection', 'label': 'FEDERATED connection', 'control': 'text', 'required': False},
+            {'field_id': 'options', 'label': 'Table options', 'control': 'keyvalue', 'required': False},
+        ):
+            if not any(f['field_id'] == extra['field_id'] for f in fields):
+                fields.append(extra)
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/table.form.json'}
+    if kind == 'table' and operation == 'alter':
+        for extra in (
+            {'field_id': 'mysql_table_options', 'label': 'MySQL table options', 'control': 'keyvalue', 'required': False},
+            {'field_id': 'mysql_connection', 'label': 'FEDERATED connection', 'control': 'text', 'required': False},
+        ):
+            if not any(f['field_id'] == extra['field_id'] for f in fields):
+                fields.append(extra)
+        return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/table.form.json'}
     return None
 
 

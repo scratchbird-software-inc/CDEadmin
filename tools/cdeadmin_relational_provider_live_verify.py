@@ -934,6 +934,8 @@ def _relational_editor_evidence(provider, request, engine):
                         'index.alter', 'index', 'alter', {
                             'comment': 'cde editor index',
                         } if engine in {'cockroachdb', 'yugabytedb'} else {
+                            'visible': False,
+                        } if engine == 'mysql' else {
                             'active': False,
                         }, index,
                     )

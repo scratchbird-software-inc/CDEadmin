@@ -1186,13 +1186,13 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                     if field['field_id'] == 'engine':
                         field.pop('default', None)
             return {'fields': fields, 'authority': 'ui_descriptors/mysql/operations.json'}
-        if kind == 'table' and operation == 'create':
-            from .descriptor_contracts import document, field_contract
-            fields = copy.deepcopy(request['legacy_fields'])
-            field = field_contract(next(field for field in document('forms/table.form.json')['fields'] if field['field_id'] == 'temporary'))
-            field.pop('default', None)  # Preserve explicit legacy options.temporary.
-            fields.append(field)
-            return {'fields': fields, 'authority': 'ui_descriptors/mysql/forms/table.form.json'}
+        if (kind == 'table' and operation in {'create', 'alter'}) or (
+                kind == 'constraint' and operation == 'create'):
+            from .descriptor_contracts import table_contract
+            return table_contract(kind, operation, request['legacy_fields'])
+        if kind in {'view', 'materialized-view'} and operation in {'create', 'alter'}:
+            from .descriptor_contracts import view_contract
+            return view_contract(kind, operation, request['legacy_fields'])
         from .database_inputs import OPERATIONS as database_operations
         if (kind in {'system-variable', 'session'} or
                 kind == 'database' and operation in database_operations or
@@ -2871,7 +2871,8 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     **({'prefix_length': row['sub_part']} if row.get('sub_part') is not None else {}),
                     'direction': {'A': 'ASC', 'D': 'DESC'}.get(row.get('collation'), 'DEFAULT'),
                 } for row in parts]
-                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if name.upper() == 'PRIMARY' else ['inspect', 'drop', 'rename', 'visibility']}
+                native['administration'] = {'allowed_operations': ['inspect', 'drop'] if name.upper() == 'PRIMARY' else (
+                    ['inspect', 'drop', 'alter', 'rename', 'visibility'] if profile is MYSQL_PROFILE else ['inspect', 'drop', 'rename', 'visibility'])}
                 add('index', [database, table], name, native)
             parameter_failures = len(catalog_failures)
             parameter_rows = optional_records(
