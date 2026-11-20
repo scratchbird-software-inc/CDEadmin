@@ -56,6 +56,11 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "flush",
+          "tier": 2,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -473,6 +478,11 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "flush",
+          "tier": 2,
+          "mutation_class": "admin"
         }
       ]
     },

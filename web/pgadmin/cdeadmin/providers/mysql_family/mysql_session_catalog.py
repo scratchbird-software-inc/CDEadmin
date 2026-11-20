@@ -95,7 +95,11 @@ def editor_snapshot(connection, snapshot):
     result['observations'].append({'section': 'retained-session-overlays'})
     overlay(result, snapshot)
     result.update(complete=False, original_session_commands_sent=snapshot['original_session_commands_sent'],
-        original_diagnostics_preserved=False, original_session_catalog_binding_validated=True)
+        original_diagnostics_preserved=False, original_session_catalog_binding_validated=True,
+        context_mode='retained_snapshot',
+        catalog_binding_status='unknown',
+        privilege_evaluation='not_evaluated',
+        execution_verified=False)
     context = result['context']
     context.pop('context_revision', None)
     context['context_revision'] = hashlib.sha256(json.dumps(result, sort_keys=True, default=str).encode()).hexdigest()

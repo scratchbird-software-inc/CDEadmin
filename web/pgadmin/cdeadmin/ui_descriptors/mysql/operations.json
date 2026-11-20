@@ -6068,6 +6068,1598 @@
           "required": true
         }
       ]
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "flush",
+      "title": "Flush server logs, caches, or status",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "targets",
+          "label": "Flush targets",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BINARY LOGS",
+              "label": "BINARY LOGS"
+            },
+            {
+              "value": "ENGINE LOGS",
+              "label": "ENGINE LOGS"
+            },
+            {
+              "value": "ERROR LOGS",
+              "label": "ERROR LOGS"
+            },
+            {
+              "value": "GENERAL LOGS",
+              "label": "GENERAL LOGS"
+            },
+            {
+              "value": "LOGS",
+              "label": "LOGS"
+            },
+            {
+              "value": "OPTIMIZER_COSTS",
+              "label": "OPTIMIZER_COSTS"
+            },
+            {
+              "value": "PRIVILEGES",
+              "label": "PRIVILEGES"
+            },
+            {
+              "value": "RELAY LOGS",
+              "label": "RELAY LOGS"
+            },
+            {
+              "value": "SLOW LOGS",
+              "label": "SLOW LOGS"
+            },
+            {
+              "value": "STATUS",
+              "label": "STATUS"
+            },
+            {
+              "value": "USER_RESOURCES",
+              "label": "USER_RESOURCES"
+            }
+          ],
+          "help": "Host cache flushing uses TRUNCATE TABLE performance_schema.host_cache in version 9.7."
+        },
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary log recording",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "NO_WRITE_TO_BINLOG"
+            },
+            {
+              "value": "LOCAL",
+              "label": "LOCAL"
+            }
+          ]
+        },
+        {
+          "field_id": "relay_channel",
+          "label": "Replication channel (for RELAY LOGS)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "lock_wait_seconds",
+          "label": "Lock wait timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 15,
+          "min": 1,
+          "max": 120
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "flush",
+      "title": "Flush table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary log recording",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "NO_WRITE_TO_BINLOG"
+            },
+            {
+              "value": "LOCAL",
+              "label": "LOCAL"
+            }
+          ]
+        },
+        {
+          "field_id": "lock_mode",
+          "label": "Table lock lifecycle",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "NONE"
+            },
+            {
+              "value": "WITH_READ_LOCK",
+              "label": "WITH_READ_LOCK"
+            },
+            {
+              "value": "FOR_EXPORT",
+              "label": "FOR_EXPORT"
+            },
+            {
+              "value": "UNLOCK",
+              "label": "UNLOCK"
+            }
+          ],
+          "help": "WITH_READ_LOCK, FOR_EXPORT, and UNLOCK run on the selected retained session."
+        },
+        {
+          "field_id": "lock_wait_seconds",
+          "label": "Lock wait timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 15,
+          "min": 1,
+          "max": 120
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "explain_for_connection",
+      "title": "Inspect running connection query plan",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "connection_id",
+          "label": "Target connection identifier",
+          "control": "text",
+          "required": true,
+          "help": "Positive unsigned connection identifier from performance_schema.threads or PROCESSLIST."
+        },
+        {
+          "field_id": "output_format",
+          "label": "Plan output format",
+          "control": "select",
+          "required": true,
+          "default": "TRADITIONAL",
+          "options": [
+            {
+              "value": "TRADITIONAL",
+              "label": "TRADITIONAL"
+            },
+            {
+              "value": "JSON",
+              "label": "JSON"
+            },
+            {
+              "value": "TREE",
+              "label": "TREE"
+            }
+          ]
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Inspect live session query plan details",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "help": "Plan output can include predicates and literal values from the target connection."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "session",
+      "operation_id": "explain_for_connection",
+      "title": "Inspect session query plan",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "connection_id",
+          "label": "Connection identifier override",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "output_format",
+          "label": "Plan output format",
+          "control": "select",
+          "required": true,
+          "default": "TRADITIONAL",
+          "options": [
+            {
+              "value": "TRADITIONAL",
+              "label": "TRADITIONAL"
+            },
+            {
+              "value": "JSON",
+              "label": "JSON"
+            },
+            {
+              "value": "TREE",
+              "label": "TREE"
+            }
+          ]
+        },
+        {
+          "field_id": "private_data_confirmed",
+          "label": "Inspect live session query plan details",
+          "control": "boolean",
+          "required": true,
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Session identifier",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "inspect_ndb_cluster",
+      "title": "Inspect cluster status and ndbinfo",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "mgm_host",
+          "label": "Management server host",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "mgm_port",
+          "label": "Management server port",
+          "control": "number",
+          "required": false,
+          "default": 1186,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "start_ndb_backup",
+      "title": "Start cluster online backup",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mgm_host",
+          "label": "Management server host",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mgm_port",
+          "label": "Management server port",
+          "control": "number",
+          "required": false,
+          "default": 1186,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "wait_mode",
+          "label": "Backup completion wait",
+          "control": "select",
+          "required": false,
+          "default": "WAIT_COMPLETED",
+          "options": [
+            {
+              "value": "NO_WAIT",
+              "label": "NO_WAIT"
+            },
+            {
+              "value": "WAIT_STARTED",
+              "label": "WAIT_STARTED"
+            },
+            {
+              "value": "WAIT_COMPLETED",
+              "label": "WAIT_COMPLETED"
+            }
+          ]
+        },
+        {
+          "field_id": "snapshot_point",
+          "label": "Snapshot consistency point",
+          "control": "select",
+          "required": false,
+          "default": "COMPLETE_TIME",
+          "options": [
+            {
+              "value": "COMPLETE_TIME",
+              "label": "COMPLETE_TIME"
+            },
+            {
+              "value": "START_TIME",
+              "label": "START_TIME"
+            }
+          ]
+        },
+        {
+          "field_id": "backup_id",
+          "label": "Explicit backup identifier",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "abort_ndb_backup",
+      "title": "Abort cluster backup",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mgm_host",
+          "label": "Management server host",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mgm_port",
+          "label": "Management server port",
+          "control": "number",
+          "required": false,
+          "default": 1186,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "backup_id",
+          "label": "Backup identifier to abort",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "logfile-group",
+      "operation_id": "create",
+      "title": "Create logfile group",
+      "menu": {
+        "category": "create"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "name",
+          "label": "Logfile group name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "undofile",
+          "label": "Undofile path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "initial_size",
+          "label": "Initial size (bytes)",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "undo_buffer_size",
+          "label": "Undo buffer size (bytes)",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "nodegroup",
+          "label": "Nodegroup identifier",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "max": 65535
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "resource_kind": "logfile-group",
+      "operation_id": "alter",
+      "title": "Add undofile to logfile group",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "undofile",
+          "label": "Additional undofile path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "initial_size",
+          "label": "Initial size (bytes)",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Logfile group name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "logfile-group",
+      "operation_id": "drop",
+      "title": "Drop logfile group",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Logfile group name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "ndb-node",
+      "operation_id": "restart_ndb_node",
+      "title": "Restart cluster node",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mgm_host",
+          "label": "Management server host",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mgm_port",
+          "label": "Management server port",
+          "control": "number",
+          "required": false,
+          "default": 1186,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "initial_start",
+          "label": "Initial start (recreate node filesystem)",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "nostart",
+          "label": "Leave node in nostart state",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "abort",
+          "label": "Immediate abort without graceful stop",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "force",
+          "label": "Force past safety checks",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Node identifier",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "ndb-node",
+      "operation_id": "stop_ndb_node",
+      "title": "Stop cluster node",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mgm_host",
+          "label": "Management server host",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mgm_port",
+          "label": "Management server port",
+          "control": "number",
+          "required": false,
+          "default": 1186,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "abort",
+          "label": "Immediate abort without graceful stop",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "force",
+          "label": "Force past safety checks",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Node identifier",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "create",
+      "title": "Create document collection",
+      "menu": {
+        "category": "create"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Schema name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "name",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "reuse_existing",
+          "label": "Reuse existing matching collection",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "validation_level",
+          "label": "Schema validation level",
+          "control": "select",
+          "required": false,
+          "default": "OFF",
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "STRICT",
+              "label": "STRICT"
+            }
+          ]
+        },
+        {
+          "field_id": "validation_schema",
+          "label": "JSON Schema definition",
+          "control": "code",
+          "language": "json",
+          "required": false
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name (when targeting an existing collection)",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "ensure",
+      "title": "Ensure document collection",
+      "menu": {
+        "category": "create"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "database",
+          "label": "Schema name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "name",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "validation_level",
+          "label": "Schema validation level",
+          "control": "select",
+          "required": false,
+          "default": "OFF",
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "STRICT",
+              "label": "STRICT"
+            }
+          ]
+        },
+        {
+          "field_id": "validation_schema",
+          "label": "JSON Schema definition",
+          "control": "code",
+          "language": "json",
+          "required": false
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name (when targeting an existing collection)",
+          "control": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "modify_options",
+      "title": "Modify collection schema validation",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "validation_level",
+          "label": "Schema validation level",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "OFF",
+              "label": "OFF"
+            },
+            {
+              "value": "STRICT",
+              "label": "STRICT"
+            }
+          ]
+        },
+        {
+          "field_id": "validation_schema",
+          "label": "JSON Schema definition",
+          "control": "code",
+          "language": "json",
+          "required": false
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "drop",
+      "title": "Drop document collection",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "create_index",
+      "title": "Create collection document index",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "index_name",
+          "label": "Index name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "index_type",
+          "label": "Index type",
+          "control": "select",
+          "required": false,
+          "default": "INDEX",
+          "options": [
+            {
+              "value": "INDEX",
+              "label": "INDEX"
+            },
+            {
+              "value": "SPATIAL",
+              "label": "SPATIAL"
+            },
+            {
+              "value": "FULLTEXT",
+              "label": "FULLTEXT"
+            }
+          ]
+        },
+        {
+          "field_id": "unique",
+          "label": "Unique index",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "with_parser",
+          "label": "Full-text parser",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "fields",
+          "label": "Indexed document fields",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "field",
+              "label": "JSON path ($.field)",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "type",
+              "label": "Projected SQL type",
+              "control": "text",
+              "required": false
+            },
+            {
+              "field_id": "required",
+              "label": "Required",
+              "control": "boolean",
+              "required": false,
+              "default": false
+            },
+            {
+              "field_id": "array",
+              "label": "Multi-valued array",
+              "control": "boolean",
+              "required": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "drop_index",
+      "title": "Drop collection document index",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "index_name",
+          "label": "Index name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "insert_documents",
+      "title": "Insert collection documents",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "documents",
+          "label": "Documents",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "document",
+              "label": "Document JSON",
+              "control": "code",
+              "language": "json",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "upsert",
+          "label": "Upsert on existing _id",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "find_documents",
+      "title": "Find collection documents",
+      "menu": {
+        "category": "open"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "predicates",
+          "label": "Filter predicates",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "path",
+              "label": "Document path",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "operator",
+              "label": "Operator",
+              "control": "select",
+              "required": true,
+              "default": "==",
+              "options": [
+                {
+                  "value": "==",
+                  "label": "=="
+                },
+                {
+                  "value": "!=",
+                  "label": "!="
+                },
+                {
+                  "value": "<",
+                  "label": "<"
+                },
+                {
+                  "value": "<=",
+                  "label": "<="
+                },
+                {
+                  "value": ">",
+                  "label": ">"
+                },
+                {
+                  "value": ">=",
+                  "label": ">="
+                }
+              ]
+            },
+            {
+              "field_id": "value_type",
+              "label": "Value type",
+              "control": "select",
+              "required": true,
+              "default": "STRING",
+              "options": [
+                {
+                  "value": "STRING",
+                  "label": "STRING"
+                },
+                {
+                  "value": "INTEGER",
+                  "label": "INTEGER"
+                },
+                {
+                  "value": "FLOAT",
+                  "label": "FLOAT"
+                },
+                {
+                  "value": "BOOLEAN",
+                  "label": "BOOLEAN"
+                },
+                {
+                  "value": "NULL",
+                  "label": "NULL"
+                },
+                {
+                  "value": "JSON",
+                  "label": "JSON"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "combinator",
+          "label": "Predicate combinator",
+          "control": "select",
+          "required": false,
+          "default": "AND",
+          "options": [
+            {
+              "value": "AND",
+              "label": "AND"
+            },
+            {
+              "value": "OR",
+              "label": "OR"
+            }
+          ]
+        },
+        {
+          "field_id": "limit",
+          "label": "Maximum documents",
+          "control": "number",
+          "required": false,
+          "default": 50,
+          "min": 1,
+          "max": 500
+        },
+        {
+          "field_id": "offset",
+          "label": "Offset",
+          "control": "number",
+          "required": false,
+          "default": 0,
+          "min": 0
+        },
+        {
+          "field_id": "sort_path",
+          "label": "Sort document path",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "sort_direction",
+          "label": "Sort direction",
+          "control": "select",
+          "required": false,
+          "default": "ASC",
+          "options": [
+            {
+              "value": "ASC",
+              "label": "ASC"
+            },
+            {
+              "value": "DESC",
+              "label": "DESC"
+            }
+          ]
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "modify_documents",
+      "title": "Modify collection documents",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "predicates",
+          "label": "Filter predicates",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "path",
+              "label": "Document path",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "operator",
+              "label": "Operator",
+              "control": "select",
+              "required": true,
+              "default": "==",
+              "options": [
+                {
+                  "value": "==",
+                  "label": "=="
+                },
+                {
+                  "value": "!=",
+                  "label": "!="
+                },
+                {
+                  "value": "<",
+                  "label": "<"
+                },
+                {
+                  "value": "<=",
+                  "label": "<="
+                },
+                {
+                  "value": ">",
+                  "label": ">"
+                },
+                {
+                  "value": ">=",
+                  "label": ">="
+                }
+              ]
+            },
+            {
+              "field_id": "value_type",
+              "label": "Value type",
+              "control": "select",
+              "required": true,
+              "default": "STRING",
+              "options": [
+                {
+                  "value": "STRING",
+                  "label": "STRING"
+                },
+                {
+                  "value": "INTEGER",
+                  "label": "INTEGER"
+                },
+                {
+                  "value": "FLOAT",
+                  "label": "FLOAT"
+                },
+                {
+                  "value": "BOOLEAN",
+                  "label": "BOOLEAN"
+                },
+                {
+                  "value": "NULL",
+                  "label": "NULL"
+                },
+                {
+                  "value": "JSON",
+                  "label": "JSON"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "combinator",
+          "label": "Predicate combinator",
+          "control": "select",
+          "required": false,
+          "default": "AND",
+          "options": [
+            {
+              "value": "AND",
+              "label": "AND"
+            },
+            {
+              "value": "OR",
+              "label": "OR"
+            }
+          ]
+        },
+        {
+          "field_id": "updates",
+          "label": "Document update operations",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "operation",
+              "label": "Operation",
+              "control": "select",
+              "required": true,
+              "default": "ITEM_SET",
+              "options": [
+                {
+                  "value": "ITEM_SET",
+                  "label": "ITEM_SET"
+                },
+                {
+                  "value": "ITEM_REMOVE",
+                  "label": "ITEM_REMOVE"
+                },
+                {
+                  "value": "ITEM_REPLACE",
+                  "label": "ITEM_REPLACE"
+                },
+                {
+                  "value": "ARRAY_APPEND",
+                  "label": "ARRAY_APPEND"
+                },
+                {
+                  "value": "MERGE_PATCH",
+                  "label": "MERGE_PATCH"
+                }
+              ]
+            },
+            {
+              "field_id": "path",
+              "label": "Document path",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "value_type",
+              "label": "Value type",
+              "control": "select",
+              "required": false,
+              "default": "STRING",
+              "options": [
+                {
+                  "value": "STRING",
+                  "label": "STRING"
+                },
+                {
+                  "value": "INTEGER",
+                  "label": "INTEGER"
+                },
+                {
+                  "value": "FLOAT",
+                  "label": "FLOAT"
+                },
+                {
+                  "value": "BOOLEAN",
+                  "label": "BOOLEAN"
+                },
+                {
+                  "value": "NULL",
+                  "label": "NULL"
+                },
+                {
+                  "value": "JSON",
+                  "label": "JSON"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "limit",
+          "label": "Maximum documents to modify",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "operation_id": "remove_documents",
+      "title": "Remove collection documents",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "predicates",
+          "label": "Filter predicates",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "path",
+              "label": "Document path",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "operator",
+              "label": "Operator",
+              "control": "select",
+              "required": true,
+              "default": "==",
+              "options": [
+                {
+                  "value": "==",
+                  "label": "=="
+                },
+                {
+                  "value": "!=",
+                  "label": "!="
+                },
+                {
+                  "value": "<",
+                  "label": "<"
+                },
+                {
+                  "value": "<=",
+                  "label": "<="
+                },
+                {
+                  "value": ">",
+                  "label": ">"
+                },
+                {
+                  "value": ">=",
+                  "label": ">="
+                }
+              ]
+            },
+            {
+              "field_id": "value_type",
+              "label": "Value type",
+              "control": "select",
+              "required": true,
+              "default": "STRING",
+              "options": [
+                {
+                  "value": "STRING",
+                  "label": "STRING"
+                },
+                {
+                  "value": "INTEGER",
+                  "label": "INTEGER"
+                },
+                {
+                  "value": "FLOAT",
+                  "label": "FLOAT"
+                },
+                {
+                  "value": "BOOLEAN",
+                  "label": "BOOLEAN"
+                },
+                {
+                  "value": "NULL",
+                  "label": "NULL"
+                },
+                {
+                  "value": "JSON",
+                  "label": "JSON"
+                }
+              ]
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "combinator",
+          "label": "Predicate combinator",
+          "control": "select",
+          "required": false,
+          "default": "AND",
+          "options": [
+            {
+              "value": "AND",
+              "label": "AND"
+            },
+            {
+              "value": "OR",
+              "label": "OR"
+            }
+          ]
+        },
+        {
+          "field_id": "limit",
+          "label": "Maximum documents to remove",
+          "control": "number",
+          "required": false,
+          "min": 1
+        },
+        {
+          "field_id": "mysqlx_port",
+          "label": "X Protocol port override",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535,
+          "help": "Leave empty to use port 33060 or the route X Protocol port."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Collection name",
+          "control": "text",
+          "required": true
+        }
+      ]
     }
   ]
 }

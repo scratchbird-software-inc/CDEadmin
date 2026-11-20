@@ -11,7 +11,7 @@ def test_task_inventory_and_failed_specialized_receipts_cannot_close_coverage():
     # spatial-reference-system tasks; 155 with the index alter (2026-11-05,
     # qualified and added to the contract 2026-11-10). A change here must
     # be a declared task.
-    assert len(declared()) == 155
+    assert len(declared()) == 180
     dialect = json.loads(DIALECT.read_text())
     rows = dialect['task_templates']
     assert len(rows) == len({row['task_id'] for row in rows})

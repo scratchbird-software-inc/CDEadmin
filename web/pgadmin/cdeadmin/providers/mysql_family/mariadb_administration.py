@@ -13,9 +13,12 @@ from . import mariadb_prepared_xa as prepared_xa
 from . import mariadb_key_caches as key_caches
 
 from . import mariadb_all_channels as all_channels
+from . import mariadb_flush as flush
+from . import destructive_identity
 
-MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches)
+MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches, flush)
 OPERATIONS = {operation: module for module in MODULES for operation in module.OPERATIONS}
+TABLE_OPERATIONS = {operation: flush for operation in flush.TABLE_OPERATIONS}
 
 
 class MariaDBAdministration(RelationalAdministration):
@@ -28,6 +31,14 @@ class MariaDBAdministration(RelationalAdministration):
             mutation_class='admin', target_required=True, confirmation_required=True)
             for operation, module in OPERATIONS.items()
             for title, _suffix in [module.OPERATIONS[operation]]]
+        table = next((row for row in value['objects'] if row['resource_kind'] == 'table'), None)
+        if table is not None:
+            table['operations'] = [row for row in table['operations']
+                                   if row['operation_id'] not in TABLE_OPERATIONS]
+            table['operations'] += [dict(operation_id=operation, title=title,
+                mutation_class='admin', target_required=True, confirmation_required=True)
+                for operation, module in TABLE_OPERATIONS.items()
+                for title, _suffix in [module.TABLE_OPERATIONS[operation]]]
         return super().catalog(value)
 
     def _form(self, kind, operation):
@@ -41,6 +52,8 @@ class MariaDBAdministration(RelationalAdministration):
 
         if kind == 'server' and operation in OPERATIONS:
             return OPERATIONS[operation].form(operation)
+        if kind == 'table' and operation in TABLE_OPERATIONS:
+            return TABLE_OPERATIONS[operation].form(operation, 'table')
         return super()._form(kind, operation)
 
     def _normalize_draft(self, kind, operation, draft):
@@ -60,6 +73,8 @@ class MariaDBAdministration(RelationalAdministration):
             return value
         if kind == 'server' and operation in OPERATIONS and isinstance(draft, Mapping):
             return deepcopy(dict(draft))
+        if kind == 'table' and operation in TABLE_OPERATIONS and isinstance(draft, Mapping):
+            return deepcopy(dict(draft))
         return super()._normalize_draft(kind, operation, draft)
 
     def validate(self, request):
@@ -69,16 +84,34 @@ class MariaDBAdministration(RelationalAdministration):
                 return {'errors': []}
             except RelationalClientError as error:
                 return {'errors': [{'field_id': None, 'code': 'invalid_mariadb_native_operation', 'message': str(error)}]}
+        if request.get('resource_kind') == 'table' and request.get('operation_id') in TABLE_OPERATIONS:
+            try:
+                TABLE_OPERATIONS[request['operation_id']].compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
+                return {'errors': []}
+            except RelationalClientError as error:
+                return {'errors': [{'field_id': None, 'code': 'invalid_mariadb_native_operation', 'message': str(error)}]}
         return super().validate(request)
 
     def _compile(self, request):
         if request.get('resource_kind') == 'server' and request.get('operation_id') in OPERATIONS:
             return OPERATIONS[request['operation_id']].compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
+        if request.get('resource_kind') == 'table' and request.get('operation_id') in TABLE_OPERATIONS:
+            return TABLE_OPERATIONS[request['operation_id']].compile_operation(request['operation_id'], request.get('draft'), request.get('target_resource'))
+        if destructive_identity.applies(request):
+            compiled = super()._compile(request)
+            compiled['destructive_identity_required'] = True
+            compiled['resource_kind'] = 'table'
+            compiled['operation_id'] = 'drop'
+            compiled['target_resource'] = deepcopy(dict(request['target_resource']))
+            return compiled
         return super()._compile(request)
 
     def apply(self, client, request, connection=None):
+        compiled = (request.get('provider_payload') or {}).get('compiled', {})
+        if compiled.get('destructive_identity_required'):
+            return destructive_identity.apply(client, request, connection, 'mariadb')
         for module in MODULES:
-            if module.KEY in (request.get('provider_payload') or {}).get('compiled', {}):
+            if module.KEY in compiled:
                 return module.apply(client, request, connection)
         return super().apply(client, request, connection)
 

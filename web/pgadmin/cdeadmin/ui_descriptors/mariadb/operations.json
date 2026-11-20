@@ -3103,6 +3103,219 @@
         }
       ],
       "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "flush",
+      "title": "Flush server logs, caches, or statistics",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "targets",
+          "label": "Flush targets",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "BINARY LOGS",
+              "label": "BINARY LOGS"
+            },
+            {
+              "value": "CLIENT_STATISTICS",
+              "label": "CLIENT_STATISTICS"
+            },
+            {
+              "value": "ENGINE LOGS",
+              "label": "ENGINE LOGS"
+            },
+            {
+              "value": "ERROR LOGS",
+              "label": "ERROR LOGS"
+            },
+            {
+              "value": "GENERAL LOGS",
+              "label": "GENERAL LOGS"
+            },
+            {
+              "value": "GLOBAL STATUS",
+              "label": "GLOBAL STATUS"
+            },
+            {
+              "value": "HOSTS",
+              "label": "HOSTS"
+            },
+            {
+              "value": "INDEX_STATISTICS",
+              "label": "INDEX_STATISTICS"
+            },
+            {
+              "value": "LOGS",
+              "label": "LOGS"
+            },
+            {
+              "value": "PRIVILEGES",
+              "label": "PRIVILEGES"
+            },
+            {
+              "value": "QUERY_RESPONSE_TIME",
+              "label": "QUERY_RESPONSE_TIME"
+            },
+            {
+              "value": "RELAY LOGS",
+              "label": "RELAY LOGS"
+            },
+            {
+              "value": "SLOW LOGS",
+              "label": "SLOW LOGS"
+            },
+            {
+              "value": "SSL",
+              "label": "SSL"
+            },
+            {
+              "value": "STATUS",
+              "label": "STATUS"
+            },
+            {
+              "value": "TABLE_STATISTICS",
+              "label": "TABLE_STATISTICS"
+            },
+            {
+              "value": "THREADS",
+              "label": "THREADS"
+            },
+            {
+              "value": "USER_RESOURCES",
+              "label": "USER_RESOURCES"
+            },
+            {
+              "value": "USER_STATISTICS",
+              "label": "USER_STATISTICS"
+            }
+          ]
+        },
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary log recording",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "NO_WRITE_TO_BINLOG"
+            },
+            {
+              "value": "LOCAL",
+              "label": "LOCAL"
+            }
+          ]
+        },
+        {
+          "field_id": "relay_channel",
+          "label": "Replication connection name (for RELAY LOGS)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "lock_wait_seconds",
+          "label": "Lock wait timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 15,
+          "min": 1,
+          "max": 120
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "flush",
+      "title": "Flush table",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "binlog_mode",
+          "label": "Binary log recording",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "DEFAULT"
+            },
+            {
+              "value": "NO_WRITE_TO_BINLOG",
+              "label": "NO_WRITE_TO_BINLOG"
+            },
+            {
+              "value": "LOCAL",
+              "label": "LOCAL"
+            }
+          ]
+        },
+        {
+          "field_id": "lock_mode",
+          "label": "Table lock lifecycle",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "NONE"
+            },
+            {
+              "value": "WITH_READ_LOCK",
+              "label": "WITH_READ_LOCK"
+            },
+            {
+              "value": "FOR_EXPORT",
+              "label": "FOR_EXPORT"
+            },
+            {
+              "value": "UNLOCK",
+              "label": "UNLOCK"
+            }
+          ]
+        },
+        {
+          "field_id": "lock_wait_seconds",
+          "label": "Lock wait timeout (seconds)",
+          "control": "number",
+          "required": false,
+          "default": 15,
+          "min": 1,
+          "max": 120
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ]
     }
   ]
 }
