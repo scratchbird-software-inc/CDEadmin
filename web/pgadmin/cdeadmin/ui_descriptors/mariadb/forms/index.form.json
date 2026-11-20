@@ -50,9 +50,7 @@
       "tab": "General",
       "control": "reference",
       "required": true,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "reference_kind": "table",
       "record_key": "navigator_parent_resource_id",
       "record_pattern": "^[a-z-]+:(?:[^:]+:)?(.*)$"
@@ -64,9 +62,7 @@
       "control": "select",
       "required": false,
       "default": "NORMAL",
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "index_kind"
       ],
@@ -99,9 +95,7 @@
       "control": "boolean",
       "required": false,
       "default": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "unique"
       ],
@@ -116,9 +110,8 @@
       "tab": "General",
       "control": "grid",
       "required": true,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
+      "record_key": "definition_parts",
       "initial_value_path": [
         "definition_parts"
       ],
@@ -168,9 +161,8 @@
       "tab": "General",
       "control": "text",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
+      "record_key": "index_comment",
       "initial_value_path": [
         "index_comment"
       ]
@@ -182,9 +174,7 @@
       "control": "select",
       "required": false,
       "default": "DEFAULT",
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "initial_value_path": [
         "method"
       ],
@@ -226,9 +216,7 @@
       "tab": "Options",
       "control": "text",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "native_keyword": "KEY_BLOCK_SIZE",
       "help": "Unsigned decimal byte/kilobyte hint."
     },
@@ -239,9 +227,7 @@
       "group": "FULLTEXT",
       "control": "text",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "native_keyword": "WITH PARSER",
       "initial_value_path": [
         "parser"
@@ -260,9 +246,7 @@
       "required": false,
       "min": 3,
       "max": 200,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "native_keyword": "M",
       "initial_value_path": [
         "vector_m"
@@ -279,9 +263,7 @@
       "group": "VECTOR",
       "control": "select",
       "required": false,
-      "modes": [
-        "create"
-      ],
+      "editable_after_create": false,
       "native_keyword": "DISTANCE",
       "initial_value_path": [
         "vector_distance"

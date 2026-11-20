@@ -43,10 +43,16 @@ def run(evidence):
                 cursor.execute('CREATE DATABASE owned_management')
                 cursor.close()
             settings = dict(host=route['host'], port=route['port'], user=route['user'], database='owned_management')
+            py_paths = [str(ROOT / p) for p in ('', 'web', 'tools')]
+            if os.environ.get('PYTHONPATH'):
+                py_paths = [p for p in os.environ['PYTHONPATH'].split(os.pathsep) if p and p not in py_paths] + py_paths
+            driver_rt = Path('/home/dcalford/Sandbox/codex-work-area/cdeadmin-six-engine-implementation/mariadb-driver-runtime')
+            if driver_rt.is_dir() and str(driver_rt) not in py_paths:
+                py_paths.insert(0, str(driver_rt))
             env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1',
                 TMPDIR=str(evidence / 'tmp'),
                 CDEADMIN_SQLITE_STARTUP_POLICY=str(evidence / 'absent-startup-policy.json'),
-                PYTHONPATH=os.pathsep.join(str(ROOT / p) for p in ('', 'web', 'tools')),
+                PYTHONPATH=os.pathsep.join(py_paths),
                 CDEADMIN_MARIADB_MANAGEMENT_TEST=json.dumps(settings),
                 CDEADMIN_MARIADB_SHUTDOWN_RECEIPT=str(receipt),
                 CDEADMIN_MARIADB_MANAGEMENT_EXECUTIONS=str(evidence / 'native/executions.json'))

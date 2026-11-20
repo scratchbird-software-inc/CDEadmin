@@ -25,6 +25,7 @@ INVENTORY = {
     'package': "SELECT ROUTINE_SCHEMA,ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=%s AND ROUTINE_TYPE='PACKAGE'",
     'event': 'SELECT EVENT_SCHEMA,EVENT_NAME FROM information_schema.EVENTS WHERE EVENT_SCHEMA=%s',
     'plugin': 'SELECT PLUGIN_NAME,PLUGIN_TYPE FROM information_schema.PLUGINS',
+    'available-plugin': "SELECT PLUGIN_NAME,PLUGIN_TYPE,COALESCE(PLUGIN_LIBRARY,''),COALESCE(PLUGIN_VERSION,'') FROM information_schema.ALL_PLUGINS",
     'server-link': 'SELECT Server_name FROM mysql.servers',
     'system-variable': "SELECT 'Configuration',VARIABLE_NAME FROM information_schema.SYSTEM_VARIABLES",
     'session': "SELECT 'Sessions',CAST(ID AS CHAR) FROM information_schema.PROCESSLIST",
@@ -123,6 +124,13 @@ def reconcile(connection, database, *, privileged):
             key = (row['display_name'],)
         elif kind == 'plugin':
             key = (native['plugin_name'], native['plugin_type'])
+        elif kind == 'available-plugin':
+            key = (
+                native['plugin_name'],
+                native['plugin_type'],
+                str(native.get('plugin_library') or ''),
+                str(native.get('plugin_version') or ''),
+            )
         elif kind == 'table-storage':
             key = (native['table_schema'], native['table_name'])
         elif kind == 'privilege':

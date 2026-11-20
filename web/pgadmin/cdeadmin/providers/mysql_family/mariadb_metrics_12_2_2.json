@@ -624,7 +624,7 @@
     "authority": "MariaDB 12.2.2 runtime",
     "format": "cdeadmin.engine-metrics-inventory.v1",
     "license_id": "PostgreSQL",
-    "sha256": "af4299f089baf5db580cd22ba2ee29393af27761c5a01d8426f188da02dd01a5"
+    "sha256": "5e7edf54ec3d20a82788ac9506a36f41c70ccd700a491456fa9083035573f7db"
   },
   "classification_evidence": [
     {
@@ -641,15 +641,15 @@
       "evidence_id": "mariadb-12.2.2-runtime-global-status",
       "format": "cdeadmin.engine-metrics-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "af4299f089baf5db580cd22ba2ee29393af27761c5a01d8426f188da02dd01a5"
+      "sha256": "5e7edf54ec3d20a82788ac9506a36f41c70ccd700a491456fa9083035573f7db"
     },
     {
-      "artifact": "MARIADB_DIALECT_QUALIFICATION_GATE.json",
+      "artifact": "mariadb-12.2.2-generic-tasks-current.json",
       "authority": "MariaDB 12.2.2 runtime",
       "evidence_id": "mariadb-12.2.2-live-observation-gate",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "de056461434c3613b6135d65be6489dcbbc8ff29a13ac9c23033c84cd7ac7d2f"
+      "sha256": "8a7ad1870bc93bd3beff004c1c1efa4d9e43fda7c21b7f8e02ac1ea177f9459d"
     }
   ],
   "contract_id": "mariadb.metrics.12.2.2.v1",

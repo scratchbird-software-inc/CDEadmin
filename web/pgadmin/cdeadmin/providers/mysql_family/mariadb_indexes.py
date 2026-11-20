@@ -56,20 +56,21 @@ def _table_path(value):
 def _resolve_ignored(draft):
     has_ignored = 'ignored' in draft
     has_visible = 'visible' in draft
-    if has_ignored and has_visible:
-        if type(draft['ignored']) is not bool or type(draft['visible']) is not bool:
-            raise RelationalClientError('Index ignored/visible flags must be boolean')
-        if draft['ignored'] == draft['visible']:
+    has_active = 'active' in draft
+    for flag_key in ('ignored', 'visible', 'active'):
+        if flag_key in draft and type(draft[flag_key]) is not bool:
+            raise RelationalClientError(f'Index {flag_key} flag must be boolean')
+    if has_visible and has_active and draft['visible'] != draft['active']:
+        raise RelationalClientError('Conflicting MariaDB index visible and active flags')
+    effective_visible = draft['visible'] if has_visible else (draft['active'] if has_active else None)
+    if has_ignored and effective_visible is not None:
+        if draft['ignored'] == effective_visible:
             raise RelationalClientError('Conflicting MariaDB index ignored and visible flags')
         return draft['ignored'], True
     if has_ignored:
-        if type(draft['ignored']) is not bool:
-            raise RelationalClientError('Index ignored flag must be boolean')
         return draft['ignored'], True
-    if has_visible:
-        if type(draft['visible']) is not bool:
-            raise RelationalClientError('Index visibility flag must be boolean')
-        return (not draft['visible']), True
+    if effective_visible is not None:
+        return (not effective_visible), True
     return False, False
 
 
@@ -266,7 +267,7 @@ def compile_change(operation, draft, target):
             'parameters': (),
         })
     else:
-        if set(draft) - {'new_name', 'ignored', 'visible', 'confirmation'}:
+        if set(draft) - {'new_name', 'ignored', 'visible', 'active', 'confirmation'}:
             raise RelationalClientError('Unknown MariaDB index alter option')
         ignored, explicit_vis = _resolve_ignored(draft)
         if explicit_vis:

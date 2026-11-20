@@ -375,14 +375,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
                            'autocommit_off', 'start_xa', 'prepare')
 
     def admin_operation_field_contract(self, request):
-        kind, operation = request['resource_kind'], request['operation_id']
-        if (
-            kind in {'table', 'index', 'view', 'procedure', 'function', 'trigger'}
-            or (kind, operation) == ('server', 'inspect_available_plugins')
-        ):
-            from ...ui_descriptors.field_contract import descriptor_field_contract
-            return descriptor_field_contract('mariadb', request)
-        return None
+        from .mariadb_administration import field_contract
+        return field_contract(request)
 
     def plan_admin_operation(self, request):
         from .mariadb_administration import MODULES

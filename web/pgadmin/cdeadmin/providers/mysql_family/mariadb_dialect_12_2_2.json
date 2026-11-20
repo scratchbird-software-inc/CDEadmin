@@ -148,7 +148,7 @@
     },
     "runtime_catalogs_exhausted": true,
     "runtime_version": "12.2.2",
-    "sha256": "8f1f7457f11423195f661f1d1ea514fa995972711fc09436d9ffdb5834a3da50"
+    "sha256": "8f5e73937a276ce1cac0c9ca86dc81461160999065146d98b46b1179d63ba456"
   },
   "contract_id": "mariadb.dialect.12.2.2.v1",
   "coverage": {
@@ -38162,10 +38162,10 @@
   ],
   "live_evidence_ids": [
     "mariadb-12.2.2-task-live-execution",
-    "mariadb-12.2.2-native-admin-20261013-live_execution",
-    "mariadb-12.2.2-global-objects-20261013-live_execution",
-    "mariadb-12.2.2-server-management-20261115-live_execution",
-    "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+    "mariadb-12.2.2-partitions-live-execution",
+    "mariadb-12.2.2-server-objects-live-execution",
+    "mariadb-12.2.2-server-management-live-execution",
+    "mariadb-12.2.2-extended-tasks-live-execution"
   ],
   "profile_id": "mariadb-native",
   "proof_records": [
@@ -38185,28 +38185,10 @@
       "evidence_kind": "catalog",
       "format": "cdeadmin.engine-dialect-inventory.v1",
       "license_id": "PostgreSQL",
-      "sha256": "8f1f7457f11423195f661f1d1ea514fa995972711fc09436d9ffdb5834a3da50"
+      "sha256": "8f5e73937a276ce1cac0c9ca86dc81461160999065146d98b46b1179d63ba456"
     },
     {
-      "artifact": "mariadb-dialect-qualification-gate.json",
-      "authority": "MariaDB 12.2.2",
-      "evidence_id": "mariadb-12.2.2-task-parser-acceptance",
-      "evidence_kind": "parser_acceptance",
-      "format": "cdeadmin.relational-provider-live-verification.v1",
-      "license_id": "PostgreSQL",
-      "sha256": "253362a1844922c975f5971e1a1fc29fbe66a0dd29fa41caf476740fc2f24231"
-    },
-    {
-      "artifact": "mariadb-dialect-qualification-gate.json",
-      "authority": "MariaDB 12.2.2",
-      "evidence_id": "mariadb-12.2.2-task-live-execution",
-      "evidence_kind": "live_execution",
-      "format": "cdeadmin.relational-provider-live-verification.v1",
-      "license_id": "PostgreSQL",
-      "sha256": "253362a1844922c975f5971e1a1fc29fbe66a0dd29fa41caf476740fc2f24231"
-    },
-    {
-      "artifact": "__init__.py",
+      "artifact": "mariadb/__init__.py",
       "authority": "MariaDB Foundation",
       "evidence_id": "mariadb-connector-python",
       "evidence_kind": "driver",
@@ -38215,94 +38197,94 @@
       "sha256": "2b8bbb0e6d0cebd14c8f4ffa2d9e524cea53e0925596a4d5b53c55ba00e1c704"
     },
     {
-      "artifact": "mariadb-partitions-native-5/native/summary.json",
-      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
-      "evidence_id": "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
+      "artifact": "mariadb-12.2.2-generic-tasks-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 current-source qualification",
+      "evidence_id": "mariadb-12.2.2-task-parser-acceptance",
+      "evidence_kind": "parser_acceptance",
+      "format": "cdeadmin.relational-provider-live-verification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "8a7ad1870bc93bd3beff004c1c1efa4d9e43fda7c21b7f8e02ac1ea177f9459d"
+    },
+    {
+      "artifact": "mariadb-12.2.2-generic-tasks-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 current-source qualification",
+      "evidence_id": "mariadb-12.2.2-task-live-execution",
+      "evidence_kind": "live_execution",
+      "format": "cdeadmin.relational-provider-live-verification.v1",
+      "license_id": "PostgreSQL",
+      "sha256": "8a7ad1870bc93bd3beff004c1c1efa4d9e43fda7c21b7f8e02ac1ea177f9459d"
+    },
+    {
+      "artifact": "mariadb-12.2.2-partitions-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 partitions and Oracle-package qualification",
+      "evidence_id": "mariadb-12.2.2-partitions-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "67e3abd3c529f826eeea84ab614c46b3ea99a27d3c6a7f5896473e446df3a333"
+      "sha256": "97cb7acf0de6fd464750df1766db4aa389ef85322bc515ba020b73e712d99670"
     },
     {
-      "artifact": "mariadb-partitions-native-5/native/summary.json",
-      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
-      "evidence_id": "mariadb-12.2.2-native-admin-20261013-live_execution",
+      "artifact": "mariadb-12.2.2-partitions-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 partitions and Oracle-package qualification",
+      "evidence_id": "mariadb-12.2.2-partitions-live-execution",
       "evidence_kind": "live_execution",
       "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "67e3abd3c529f826eeea84ab614c46b3ea99a27d3c6a7f5896473e446df3a333"
+      "sha256": "97cb7acf0de6fd464750df1766db4aa389ef85322bc515ba020b73e712d99670"
     },
     {
-      "artifact": "mariadb-global-native-5/native/summary.json",
-      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
-      "evidence_id": "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
+      "artifact": "mariadb-12.2.2-server_objects-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 server-link and loadable-function qualification",
+      "evidence_id": "mariadb-12.2.2-server-objects-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "9ba50aacfbeed87bb281c49aa4a2f3a9459ce67513d9980442b615c42d3f7e78"
+      "sha256": "99ba9a21752226121c810ed45aba54f74bb05be0b5ef1c36cf70ae062881703f"
     },
     {
-      "artifact": "mariadb-global-native-5/native/summary.json",
-      "authority": "ScratchRobin native MariaDB 12.2.2 qualification",
-      "evidence_id": "mariadb-12.2.2-global-objects-20261013-live_execution",
+      "artifact": "mariadb-12.2.2-server_objects-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 server-link and loadable-function qualification",
+      "evidence_id": "mariadb-12.2.2-server-objects-live-execution",
       "evidence_kind": "live_execution",
       "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "9ba50aacfbeed87bb281c49aa4a2f3a9459ce67513d9980442b615c42d3f7e78"
+      "sha256": "99ba9a21752226121c810ed45aba54f74bb05be0b5ef1c36cf70ae062881703f"
     },
     {
-      "artifact": "maria-new-task-native.json",
-      "authority": "Owned native MariaDB12.2.2 executions; SHUTDOWN request and independent process exit qualified separately",
-      "evidence_id": "mariadb-12.2.2-server-management-20261115-parser_acceptance",
+      "artifact": "mariadb-12.2.2-server_management-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 server diagnostics, live plans, XA, key-cache, replica and shutdown qualification",
+      "evidence_id": "mariadb-12.2.2-server-management-parser-acceptance",
       "evidence_kind": "parser_acceptance",
-      "format": "Native compiler statements, successful native result metadata, dedicated cleanup and owned fixture receipts; successful execution establishes parser acceptance",
+      "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "4da59ad59b82f611215ba169c7ff885fa76ab6efeb5a0c425acd36e673e59a67"
+      "sha256": "a69daca5fa433007ed35e0ab2cdb4a61ccc1438dd76eae65a395389c1dcaf19a"
     },
     {
-      "artifact": "maria-new-task-native.json",
-      "authority": "Owned native MariaDB12.2.2 executions; SHUTDOWN request and independent process exit qualified separately",
-      "evidence_id": "mariadb-12.2.2-server-management-20261115-live_execution",
+      "artifact": "mariadb-12.2.2-server_management-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 server diagnostics, live plans, XA, key-cache, replica and shutdown qualification",
+      "evidence_id": "mariadb-12.2.2-server-management-live-execution",
       "evidence_kind": "live_execution",
-      "format": "Native compiler statements, successful native result metadata, dedicated cleanup and owned fixture receipts; successful execution establishes parser acceptance",
+      "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "4da59ad59b82f611215ba169c7ff885fa76ab6efeb5a0c425acd36e673e59a67"
+      "sha256": "a69daca5fa433007ed35e0ab2cdb4a61ccc1438dd76eae65a395389c1dcaf19a"
     },
     {
-      "artifact": "maria-next-native/native/summary.json",
-      "authority": "Owned native MariaDB12.2.2 successful executions and independent cleanup qualification",
-      "evidence_id": "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
+      "artifact": "mariadb-12.2.2-extended_tasks-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 flush, ALL_PLUGINS, retained temporary, native index, temporal lifecycle and object parity qualification",
+      "evidence_id": "mariadb-12.2.2-extended-tasks-parser-acceptance",
       "evidence_kind": "parser_acceptance",
-      "format": "Native compiled statement sources, test hashes, complete test outcomes and owned fixture lifecycle; execution establishes parser acceptance",
+      "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "0c901eaddc4456badebb70bf60748feedfcb8abe535e30a0c05a2e9b97abc4b0"
+      "sha256": "5150aa0ed87d38a58aab7008fabab85756a3ddaf2038529a708d54437397c711"
     },
     {
-      "artifact": "maria-next-native/native/summary.json",
-      "authority": "Owned native MariaDB12.2.2 successful executions and independent cleanup qualification",
-      "evidence_id": "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution",
+      "artifact": "mariadb-12.2.2-extended_tasks-current.json",
+      "authority": "ScratchRobin owned native MariaDB 12.2.2 flush, ALL_PLUGINS, retained temporary, native index, temporal lifecycle and object parity qualification",
+      "evidence_id": "mariadb-12.2.2-extended-tasks-live-execution",
       "evidence_kind": "live_execution",
-      "format": "Native compiled statement sources, test hashes, complete test outcomes and owned fixture lifecycle; execution establishes parser acceptance",
+      "format": "JSON native execution and independent observation summary",
       "license_id": "PostgreSQL",
-      "sha256": "0c901eaddc4456badebb70bf60748feedfcb8abe535e30a0c05a2e9b97abc4b0"
-    },
-    {
-      "artifact": "mariadb-batch5-catalog/native-qualification.json",
-      "authority": "Owned native MariaDB 12.2.2 Batch 5 catalog, temporary-table, native-index, table-option, temporal, object-parity, ALL_PLUGINS and monitoring qualification",
-      "evidence_id": "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-      "evidence_kind": "parser_acceptance",
-      "format": "Native compiled statement sources, read-back postconditions, HTTP workspace round-trips and owned fixture cleanup; live execution establishes parser acceptance",
-      "license_id": "PostgreSQL",
-      "sha256": "608bf95337d9b89f6538db90c8fcce18a43b9a9eb3608cbcc074346f944099f7"
-    },
-    {
-      "artifact": "mariadb-batch5-catalog/native-qualification.json",
-      "authority": "Owned native MariaDB 12.2.2 Batch 5 catalog, temporary-table, native-index, table-option, temporal, object-parity, ALL_PLUGINS and monitoring qualification",
-      "evidence_id": "mariadb-12.2.2-batch5-catalog-20261120-live_execution",
-      "evidence_kind": "live_execution",
-      "format": "Native compiled statement sources, read-back postconditions, HTTP workspace round-trips and owned fixture cleanup",
-      "license_id": "PostgreSQL",
-      "sha256": "608bf95337d9b89f6538db90c8fcce18a43b9a9eb3608cbcc074346f944099f7"
+      "sha256": "5150aa0ed87d38a58aab7008fabab85756a3ddaf2038529a708d54437397c711"
     }
   ],
   "provider_id": "org.cdeadmin.mariadb",
@@ -38388,10 +38370,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`qualification` ADD `editor_note` INTEGER",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` ADD `editor_note` INTEGER",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`qualification` ADD `editor_note` INTEGER"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` ADD `editor_note` INTEGER"
       ],
       "task_id": "visual_admin.column.create"
     },
@@ -38402,10 +38384,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`qualification` DROP COLUMN `editor_comment`",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` DROP COLUMN `editor_comment`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`qualification` DROP COLUMN `editor_comment`"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` DROP COLUMN `editor_comment`"
       ],
       "task_id": "visual_admin.column.drop"
     },
@@ -38416,10 +38398,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`qualification` RENAME COLUMN `editor_note` TO `editor_comment`",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` RENAME COLUMN `editor_note` TO `editor_comment`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`qualification` RENAME COLUMN `editor_note` TO `editor_comment`"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` RENAME COLUMN `editor_note` TO `editor_comment`"
       ],
       "task_id": "visual_admin.column.rename"
     },
@@ -38430,10 +38412,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`qualification` ADD CONSTRAINT `cde_editor_unique` UNIQUE (`id`, `value`)",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` ADD CONSTRAINT `cde_editor_unique` UNIQUE (`id`, `value`)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`qualification` ADD CONSTRAINT `cde_editor_unique` UNIQUE (`id`, `value`)"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` ADD CONSTRAINT `cde_editor_unique` UNIQUE (`id`, `value`)"
       ],
       "task_id": "visual_admin.constraint.create"
     },
@@ -38444,10 +38426,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`qualification` DROP CONSTRAINT `cde_editor_unique`",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` DROP CONSTRAINT `cde_editor_unique`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`qualification` DROP CONSTRAINT `cde_editor_unique`"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`qualification` DROP CONSTRAINT `cde_editor_unique`"
       ],
       "task_id": "visual_admin.constraint.drop"
     },
@@ -38472,10 +38454,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ANALYZE LOCAL TABLE `cde_live_80876a555900`.`qualification` PERSISTENT FOR ALL",
+      "source": "ANALYZE LOCAL TABLE `cde_live_3564e1bbfb53`.`qualification` PERSISTENT FOR ALL",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ANALYZE LOCAL TABLE `cde_live_80876a555900`.`qualification` PERSISTENT FOR ALL"
+        "ANALYZE LOCAL TABLE `cde_live_3564e1bbfb53`.`qualification` PERSISTENT FOR ALL"
       ],
       "task_id": "visual_admin.database.analyze_tables"
     },
@@ -38486,10 +38468,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CHECK VIEW `cde_live_80876a555900`.`cde_qualification_view` FOR UPGRADE",
+      "source": "CHECK VIEW `cde_live_3564e1bbfb53`.`cde_qualification_view` FOR UPGRADE",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CHECK VIEW `cde_live_80876a555900`.`cde_qualification_view` FOR UPGRADE"
+        "CHECK VIEW `cde_live_3564e1bbfb53`.`cde_qualification_view` FOR UPGRADE"
       ],
       "task_id": "visual_admin.database.check_objects"
     },
@@ -38500,10 +38482,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CHECKSUM TABLE `cde_live_80876a555900`.`qualification` QUICK",
+      "source": "CHECKSUM TABLE `cde_live_3564e1bbfb53`.`qualification` QUICK",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CHECKSUM TABLE `cde_live_80876a555900`.`qualification` QUICK"
+        "CHECKSUM TABLE `cde_live_3564e1bbfb53`.`qualification` QUICK"
       ],
       "task_id": "visual_admin.database.checksum_tables"
     },
@@ -38542,10 +38524,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "OPTIMIZE LOCAL TABLE `cde_live_80876a555900`.`qualification` NOWAIT",
+      "source": "OPTIMIZE LOCAL TABLE `cde_live_3564e1bbfb53`.`qualification` NOWAIT",
       "source_format": "ordered_native_statements",
       "statements": [
-        "OPTIMIZE LOCAL TABLE `cde_live_80876a555900`.`qualification` NOWAIT"
+        "OPTIMIZE LOCAL TABLE `cde_live_3564e1bbfb53`.`qualification` NOWAIT"
       ],
       "task_id": "visual_admin.database.optimize_tables"
     },
@@ -38556,10 +38538,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "REPAIR LOCAL TABLE `cde_live_80876a555900`.`cde_repair_probe` QUICK",
+      "source": "REPAIR LOCAL TABLE `cde_live_3564e1bbfb53`.`cde_repair_probe` QUICK",
       "source_format": "ordered_native_statements",
       "statements": [
-        "REPAIR LOCAL TABLE `cde_live_80876a555900`.`cde_repair_probe` QUICK"
+        "REPAIR LOCAL TABLE `cde_live_3564e1bbfb53`.`cde_repair_probe` QUICK"
       ],
       "task_id": "visual_admin.database.repair_objects"
     },
@@ -38570,10 +38552,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER EVENT `cde_live_80876a555900`.`cde_editor_event` ON SCHEDULE EVERY 2 DAY ON COMPLETION PRESERVE DISABLE DO SELECT 2",
+      "source": "ALTER EVENT `cde_live_3564e1bbfb53`.`cde_editor_event` ON SCHEDULE EVERY 2 DAY ON COMPLETION PRESERVE DISABLE DO SELECT 2",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER EVENT `cde_live_80876a555900`.`cde_editor_event` ON SCHEDULE EVERY 2 DAY ON COMPLETION PRESERVE DISABLE DO SELECT 2"
+        "ALTER EVENT `cde_live_3564e1bbfb53`.`cde_editor_event` ON SCHEDULE EVERY 2 DAY ON COMPLETION PRESERVE DISABLE DO SELECT 2"
       ],
       "task_id": "visual_admin.event.alter"
     },
@@ -38584,10 +38566,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE EVENT `cde_live_80876a555900`.`cde_editor_event` ON SCHEDULE EVERY 1 DAY ON COMPLETION PRESERVE ENABLE DO SELECT 1",
+      "source": "CREATE EVENT `cde_live_3564e1bbfb53`.`cde_editor_event` ON SCHEDULE EVERY 1 DAY ON COMPLETION PRESERVE ENABLE DO SELECT 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE EVENT `cde_live_80876a555900`.`cde_editor_event` ON SCHEDULE EVERY 1 DAY ON COMPLETION PRESERVE ENABLE DO SELECT 1"
+        "CREATE EVENT `cde_live_3564e1bbfb53`.`cde_editor_event` ON SCHEDULE EVERY 1 DAY ON COMPLETION PRESERVE ENABLE DO SELECT 1"
       ],
       "task_id": "visual_admin.event.create"
     },
@@ -38598,24 +38580,26 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP EVENT `cde_live_80876a555900`.`cde_editor_event`",
+      "source": "DROP EVENT `cde_live_3564e1bbfb53`.`cde_editor_event`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP EVENT `cde_live_80876a555900`.`cde_editor_event`"
+        "DROP EVENT `cde_live_3564e1bbfb53`.`cde_editor_event`"
       ],
       "task_id": "visual_admin.event.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
-      "required_bindings": [],
-      "source": "ALTER FUNCTION `b5_native`.`fn_bonus` SQL SECURITY INVOKER COMMENT %s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER FUNCTION `owned_extended_391eb8296625`.`f_items` SQL SECURITY INVOKER COMMENT %s",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER FUNCTION `b5_native`.`fn_bonus` SQL SECURITY INVOKER COMMENT %s"
+        "ALTER FUNCTION `owned_extended_391eb8296625`.`f_items` SQL SECURITY INVOKER COMMENT %s"
       ],
       "task_id": "visual_admin.function.alter"
     },
@@ -38626,24 +38610,24 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE FUNCTION `cde_live_80876a555900`.`cde_editor_function` () RETURNS INTEGER DETERMINISTIC RETURN 1",
+      "source": "CREATE FUNCTION `cde_live_3564e1bbfb53`.`cde_editor_function` () RETURNS INTEGER DETERMINISTIC RETURN 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE FUNCTION `cde_live_80876a555900`.`cde_editor_function` () RETURNS INTEGER DETERMINISTIC RETURN 1"
+        "CREATE FUNCTION `cde_live_3564e1bbfb53`.`cde_editor_function` () RETURNS INTEGER DETERMINISTIC RETURN 1"
       ],
       "task_id": "visual_admin.function.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE FUNCTION `b5_native`.`fn_bonus`(`base_val` INT) RETURNS INT DETERMINISTIC NO SQL SQL SECURITY INVOKER COMMENT %s RETURN base_val + 25;",
+      "source": "CREATE OR REPLACE FUNCTION `owned_extended_391eb8296625`.`f_items` (`p_id` INT) RETURNS INT DETERMINISTIC READS SQL DATA SQL SECURITY INVOKER COMMENT 'updated fn' RETURN (SELECT COUNT(*) + 10 FROM items WHERE id = p_id)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE FUNCTION `b5_native`.`fn_bonus`(`base_val` INT) RETURNS INT DETERMINISTIC NO SQL SQL SECURITY INVOKER COMMENT %s RETURN base_val + 25;"
+        "CREATE OR REPLACE FUNCTION `owned_extended_391eb8296625`.`f_items` (`p_id` INT) RETURNS INT DETERMINISTIC READS SQL DATA SQL SECURITY INVOKER COMMENT 'updated fn' RETURN (SELECT COUNT(*) + 10 FROM items WHERE id = p_id)"
       ],
       "task_id": "visual_admin.function.create_or_replace"
     },
@@ -38654,25 +38638,25 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP FUNCTION `cde_live_80876a555900`.`cde_editor_function`",
+      "source": "DROP FUNCTION `cde_live_3564e1bbfb53`.`cde_editor_function`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP FUNCTION `cde_live_80876a555900`.`cde_editor_function`"
+        "DROP FUNCTION `cde_live_3564e1bbfb53`.`cde_editor_function`"
       ],
       "task_id": "visual_admin.function.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`idx_lab` ALTER INDEX `idx_tag_renamed` IGNORED;\nALTER TABLE `b5_native`.`idx_lab` RENAME INDEX `idx_tag_renamed` TO `idx_tag_final`",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` ALTER INDEX `ix_items_label_v2` NOT IGNORED\n;\nALTER TABLE `owned_extended_391eb8296625`.`items` RENAME INDEX `ix_items_label_v2` TO `ix_items_label_v3`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`idx_lab` ALTER INDEX `idx_tag_renamed` IGNORED",
-        "ALTER TABLE `b5_native`.`idx_lab` RENAME INDEX `idx_tag_renamed` TO `idx_tag_final`"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` ALTER INDEX `ix_items_label_v2` NOT IGNORED",
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` RENAME INDEX `ix_items_label_v2` TO `ix_items_label_v3`"
       ],
       "task_id": "visual_admin.index.alter"
     },
@@ -38683,10 +38667,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE INDEX `cde_editor_index` ON `cde_live_80876a555900`.`qualification` (`value`)",
+      "source": "CREATE INDEX `cde_editor_index` ON `cde_live_3564e1bbfb53`.`qualification` (`value`)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE INDEX `cde_editor_index` ON `cde_live_80876a555900`.`qualification` (`value`)"
+        "CREATE INDEX `cde_editor_index` ON `cde_live_3564e1bbfb53`.`qualification` (`value`)"
       ],
       "task_id": "visual_admin.index.create"
     },
@@ -38697,46 +38681,46 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP INDEX `cde_editor_index` ON `cde_live_80876a555900`.`qualification`",
+      "source": "DROP INDEX `cde_editor_index` ON `cde_live_3564e1bbfb53`.`qualification`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP INDEX `cde_editor_index` ON `cde_live_80876a555900`.`qualification`"
+        "DROP INDEX `cde_editor_index` ON `cde_live_3564e1bbfb53`.`qualification`"
       ],
       "task_id": "visual_admin.index.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`idx_lab` RENAME INDEX `idx_tag_pref` TO `idx_tag_renamed`",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` RENAME INDEX `ix_items_label` TO `ix_items_label_v2`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`idx_lab` RENAME INDEX `idx_tag_pref` TO `idx_tag_renamed`"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` RENAME INDEX `ix_items_label` TO `ix_items_label_v2`"
       ],
       "task_id": "visual_admin.index.rename"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`idx_lab` ALTER INDEX `idx_tag_pref` NOT IGNORED",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` ALTER INDEX `ix_items_label` IGNORED",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`idx_lab` ALTER INDEX `idx_tag_pref` NOT IGNORED"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` ALTER INDEX `ix_items_label` IGNORED"
       ],
       "task_id": "visual_admin.index.visibility"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
-        "mariadb-12.2.2-global-objects-20261013-live_execution"
+        "mariadb-12.2.2-server-objects-parser-acceptance",
+        "mariadb-12.2.2-server-objects-live-execution"
       ],
       "required_bindings": [
         "parameter_1"
@@ -38751,8 +38735,8 @@
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
-        "mariadb-12.2.2-global-objects-20261013-live_execution"
+        "mariadb-12.2.2-server-objects-parser-acceptance",
+        "mariadb-12.2.2-server-objects-live-execution"
       ],
       "required_bindings": [],
       "source": "DROP FUNCTION `sr_owned_integer`",
@@ -38769,11 +38753,11 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE PACKAGE `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE(); END\n;\nCREATE OR REPLACE PACKAGE BODY `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 2; END; END",
+      "source": "CREATE OR REPLACE PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE(); END\n;\nCREATE OR REPLACE PACKAGE BODY `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 2; END; END",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE PACKAGE `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE(); END",
-        "CREATE OR REPLACE PACKAGE BODY `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 2; END; END"
+        "CREATE OR REPLACE PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE(); END",
+        "CREATE OR REPLACE PACKAGE BODY `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 2; END; END"
       ],
       "task_id": "visual_admin.package.alter"
     },
@@ -38784,45 +38768,45 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE PACKAGE `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE(); END\n;\nCREATE PACKAGE BODY `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 1; END; END",
+      "source": "CREATE PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE(); END\n;\nCREATE PACKAGE BODY `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 1; END; END",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE PACKAGE `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE(); END",
-        "CREATE PACKAGE BODY `cde_live_80876a555900`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 1; END; END"
+        "CREATE PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE(); END",
+        "CREATE PACKAGE BODY `cde_live_3564e1bbfb53`.`cde_editor_package` PROCEDURE VALUE_ONE() BEGIN SELECT 1; END; END"
       ],
       "task_id": "visual_admin.package.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [
-        "sql_mode"
+        "parameter_1"
       ],
-      "source": "SET SESSION sql_mode=%s\nCREATE PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END",
+      "source": "SET SESSION sql_mode=%s\n;\nCREATE PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END",
       "source_format": "ordered_native_statements",
       "statements": [
         "SET SESSION sql_mode=%s",
-        "CREATE PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END"
+        "CREATE PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 42; END; END"
       ],
       "task_id": "visual_admin.package.create_body"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [
-        "sql_mode"
+        "parameter_1"
       ],
-      "source": "SET SESSION sql_mode=%s\nCREATE PACKAGE `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT; END",
+      "source": "SET SESSION sql_mode=%s\n;\nCREATE PACKAGE `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT; END",
       "source_format": "ordered_native_statements",
       "statements": [
         "SET SESSION sql_mode=%s",
-        "CREATE PACKAGE `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT; END"
+        "CREATE PACKAGE `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT; END"
       ],
       "task_id": "visual_admin.package.create_specification"
     },
@@ -38833,198 +38817,198 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP PACKAGE `cde_live_80876a555900`.`cde_editor_package`",
+      "source": "DROP PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP PACKAGE `cde_live_80876a555900`.`cde_editor_package`"
+        "DROP PACKAGE `cde_live_3564e1bbfb53`.`cde_editor_package`"
       ],
       "task_id": "visual_admin.package.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg`",
+      "source": "DROP PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg`"
+        "DROP PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg`"
       ],
       "task_id": "visual_admin.package.drop_body"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [
-        "sql_mode"
+        "parameter_1"
       ],
-      "source": "SET SESSION sql_mode=%s\nCREATE OR REPLACE PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 43; END; END",
+      "source": "SET SESSION sql_mode=%s\n;\nCREATE OR REPLACE PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 43; END; END",
       "source_format": "ordered_native_statements",
       "statements": [
         "SET SESSION sql_mode=%s",
-        "CREATE OR REPLACE PACKAGE BODY `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 43; END; END"
+        "CREATE OR REPLACE PACKAGE BODY `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION answer RETURN INT AS BEGIN RETURN 43; END; END"
       ],
       "task_id": "visual_admin.package.replace_body"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [
-        "sql_mode"
+        "parameter_1"
       ],
-      "source": "SET SESSION sql_mode=%s\nCREATE OR REPLACE PACKAGE `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION replacement RETURN INT; END",
+      "source": "SET SESSION sql_mode=%s\n;\nCREATE OR REPLACE PACKAGE `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION replacement RETURN INT; END",
       "source_format": "ordered_native_statements",
       "statements": [
         "SET SESSION sql_mode=%s",
-        "CREATE OR REPLACE PACKAGE `owned_partitions_14ba469e9667fa6c`.`qualified_pkg` AS FUNCTION replacement RETURN INT; END"
+        "CREATE OR REPLACE PACKAGE `owned_partitions_0fafb08781683214`.`qualified_pkg` AS FUNCTION replacement RETURN INT; END"
       ],
       "task_id": "visual_admin.package.replace_specification"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` ANALYZE PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` ANALYZE PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` ANALYZE PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` ANALYZE PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.analyze"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CHECK PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CHECK PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CHECK PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CHECK PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.check"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CONVERT PARTITION `p1` TO TABLE `owned_partitions_14ba469e9667fa6c`.`detached` WITH VALIDATION",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CONVERT PARTITION `p1` TO TABLE `owned_partitions_0fafb08781683214`.`detached` WITH VALIDATION",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CONVERT PARTITION `p1` TO TABLE `owned_partitions_14ba469e9667fa6c`.`detached` WITH VALIDATION"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CONVERT PARTITION `p1` TO TABLE `owned_partitions_0fafb08781683214`.`detached` WITH VALIDATION"
       ],
       "task_id": "visual_admin.partition.convert_to_table"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` DROP PARTITION `p2`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` DROP PARTITION `p2`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` DROP PARTITION `p2`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` DROP PARTITION `p2`"
       ],
       "task_id": "visual_admin.partition.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` EXCHANGE PARTITION `p0` WITH TABLE `owned_partitions_14ba469e9667fa6c`.`exchange_table` WITH VALIDATION",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` EXCHANGE PARTITION `p0` WITH TABLE `owned_partitions_0fafb08781683214`.`exchange_table` WITH VALIDATION",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` EXCHANGE PARTITION `p0` WITH TABLE `owned_partitions_14ba469e9667fa6c`.`exchange_table` WITH VALIDATION"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` EXCHANGE PARTITION `p0` WITH TABLE `owned_partitions_0fafb08781683214`.`exchange_table` WITH VALIDATION"
       ],
       "task_id": "visual_admin.partition.exchange"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` OPTIMIZE PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` OPTIMIZE PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` OPTIMIZE PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` OPTIMIZE PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.optimize"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REBUILD PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REBUILD PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REBUILD PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REBUILD PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.rebuild"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REORGANIZE PARTITION `p1` INTO (PARTITION p1a VALUES LESS THAN (15),PARTITION p1b VALUES LESS THAN (20))",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REORGANIZE PARTITION `p1` INTO (PARTITION p1a VALUES LESS THAN (15),PARTITION p1b VALUES LESS THAN (20))",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REORGANIZE PARTITION `p1` INTO (PARTITION p1a VALUES LESS THAN (15),PARTITION p1b VALUES LESS THAN (20))"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REORGANIZE PARTITION `p1` INTO (PARTITION p1a VALUES LESS THAN (15),PARTITION p1b VALUES LESS THAN (20))"
       ],
       "task_id": "visual_admin.partition.reorganize"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REPAIR PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REPAIR PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REPAIR PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REPAIR PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.repair"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` TRUNCATE PARTITION `p0`",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` TRUNCATE PARTITION `p0`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` TRUNCATE PARTITION `p0`"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` TRUNCATE PARTITION `p0`"
       ],
       "task_id": "visual_admin.partition.truncate"
     },
@@ -39063,10 +39047,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "GRANT SELECT ON `cde_live_80876a555900`.`qualification` TO 'cde_editor_user'@'%'",
+      "source": "GRANT SELECT ON `cde_live_3564e1bbfb53`.`qualification` TO 'cde_editor_user'@'%'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "GRANT SELECT ON `cde_live_80876a555900`.`qualification` TO 'cde_editor_user'@'%'"
+        "GRANT SELECT ON `cde_live_3564e1bbfb53`.`qualification` TO 'cde_editor_user'@'%'"
       ],
       "task_id": "visual_admin.privilege.grant"
     },
@@ -39077,24 +39061,26 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "REVOKE SELECT ON `cde_live_80876a555900`.`qualification` FROM 'cde_editor_user'@'%'",
+      "source": "REVOKE SELECT ON `cde_live_3564e1bbfb53`.`qualification` FROM 'cde_editor_user'@'%'",
       "source_format": "ordered_native_statements",
       "statements": [
-        "REVOKE SELECT ON `cde_live_80876a555900`.`qualification` FROM 'cde_editor_user'@'%'"
+        "REVOKE SELECT ON `cde_live_3564e1bbfb53`.`qualification` FROM 'cde_editor_user'@'%'"
       ],
       "task_id": "visual_admin.privilege.revoke"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
-      "required_bindings": [],
-      "source": "ALTER PROCEDURE `b5_native`.`sp_adjust` SQL SECURITY INVOKER COMMENT %s",
+      "required_bindings": [
+        "parameter_1"
+      ],
+      "source": "ALTER PROCEDURE `owned_extended_391eb8296625`.`p_items` SQL SECURITY INVOKER COMMENT %s",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER PROCEDURE `b5_native`.`sp_adjust` SQL SECURITY INVOKER COMMENT %s"
+        "ALTER PROCEDURE `owned_extended_391eb8296625`.`p_items` SQL SECURITY INVOKER COMMENT %s"
       ],
       "task_id": "visual_admin.procedure.alter"
     },
@@ -39105,24 +39091,24 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE PROCEDURE `cde_live_80876a555900`.`cde_editor_procedure` () BEGIN SELECT 1; END",
+      "source": "CREATE PROCEDURE `cde_live_3564e1bbfb53`.`cde_editor_procedure` () BEGIN SELECT 1; END",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE PROCEDURE `cde_live_80876a555900`.`cde_editor_procedure` () BEGIN SELECT 1; END"
+        "CREATE PROCEDURE `cde_live_3564e1bbfb53`.`cde_editor_procedure` () BEGIN SELECT 1; END"
       ],
       "task_id": "visual_admin.procedure.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE PROCEDURE `b5_native`.`sp_adjust`(IN `p_in` INT, OUT `p_out` INT) NO SQL BEGIN p_out := p_in * 3; END;",
+      "source": "CREATE OR REPLACE PROCEDURE `owned_extended_391eb8296625`.`p_items` (IN `p_id` INT) NOT DETERMINISTIC READS SQL DATA SQL SECURITY INVOKER COMMENT 'updated proc' BEGIN SELECT id, label FROM items WHERE id = p_id; END",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE PROCEDURE `b5_native`.`sp_adjust`(IN `p_in` INT, OUT `p_out` INT) NO SQL BEGIN p_out := p_in * 3; END;"
+        "CREATE OR REPLACE PROCEDURE `owned_extended_391eb8296625`.`p_items` (IN `p_id` INT) NOT DETERMINISTIC READS SQL DATA SQL SECURITY INVOKER COMMENT 'updated proc' BEGIN SELECT id, label FROM items WHERE id = p_id; END"
       ],
       "task_id": "visual_admin.procedure.create_or_replace"
     },
@@ -39133,10 +39119,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP PROCEDURE `cde_live_80876a555900`.`cde_editor_procedure`",
+      "source": "DROP PROCEDURE `cde_live_3564e1bbfb53`.`cde_editor_procedure`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP PROCEDURE `cde_live_80876a555900`.`cde_editor_procedure`"
+        "DROP PROCEDURE `cde_live_3564e1bbfb53`.`cde_editor_procedure`"
       ],
       "task_id": "visual_admin.procedure.drop"
     },
@@ -39287,10 +39273,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence` RESTART WITH 10 INCREMENT BY 2",
+      "source": "ALTER SEQUENCE `cde_live_3564e1bbfb53`.`cde_editor_sequence` INCREMENT BY 2 RESTART WITH 10",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence` RESTART WITH 10 INCREMENT BY 2"
+        "ALTER SEQUENCE `cde_live_3564e1bbfb53`.`cde_editor_sequence` INCREMENT BY 2 RESTART WITH 10"
       ],
       "task_id": "visual_admin.sequence.alter"
     },
@@ -39301,10 +39287,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence` START WITH 1 INCREMENT BY 1",
+      "source": "CREATE SEQUENCE `cde_editor_sequence` START WITH 1 INCREMENT BY 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence` START WITH 1 INCREMENT BY 1"
+        "CREATE SEQUENCE `cde_editor_sequence` START WITH 1 INCREMENT BY 1"
       ],
       "task_id": "visual_admin.sequence.create"
     },
@@ -39315,10 +39301,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence_renamed`",
+      "source": "DROP SEQUENCE `cde_live_3564e1bbfb53`.`cde_editor_sequence_renamed`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP SEQUENCE `cde_live_80876a555900`.`cde_editor_sequence_renamed`"
+        "DROP SEQUENCE `cde_live_3564e1bbfb53`.`cde_editor_sequence_renamed`"
       ],
       "task_id": "visual_admin.sequence.drop"
     },
@@ -39329,34 +39315,34 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "RENAME TABLE `cde_live_80876a555900`.`cde_editor_sequence` TO `cde_live_80876a555900`.`cde_editor_sequence_renamed`",
+      "source": "RENAME TABLE `cde_live_3564e1bbfb53`.`cde_editor_sequence` TO `cde_live_3564e1bbfb53`.`cde_editor_sequence_renamed`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "RENAME TABLE `cde_live_80876a555900`.`cde_editor_sequence` TO `cde_live_80876a555900`.`cde_editor_sequence_renamed`"
+        "RENAME TABLE `cde_live_3564e1bbfb53`.`cde_editor_sequence` TO `cde_live_3564e1bbfb53`.`cde_editor_sequence_renamed`"
       ],
       "task_id": "visual_admin.sequence.rename"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
-        "mariadb-12.2.2-global-objects-20261013-live_execution"
+        "mariadb-12.2.2-server-objects-parser-acceptance",
+        "mariadb-12.2.2-server-objects-live-execution"
       ],
       "required_bindings": [
         "parameter_1"
       ],
-      "source": "ALTER SERVER `owned_server_e7218c4a9bc4b843` OPTIONS (PASSWORD %s)",
+      "source": "ALTER SERVER `owned_server_637f1190bccb0986` OPTIONS (PASSWORD %s)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER SERVER `owned_server_e7218c4a9bc4b843` OPTIONS (PASSWORD %s)"
+        "ALTER SERVER `owned_server_637f1190bccb0986` OPTIONS (PASSWORD %s)"
       ],
       "task_id": "visual_admin.server-link.alter"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
-        "mariadb-12.2.2-global-objects-20261013-live_execution"
+        "mariadb-12.2.2-server-objects-parser-acceptance",
+        "mariadb-12.2.2-server-objects-live-execution"
       ],
       "required_bindings": [
         "parameter_1",
@@ -39367,109 +39353,90 @@
         "parameter_6",
         "parameter_7"
       ],
-      "source": "CREATE SERVER `owned_server_e7218c4a9bc4b843` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)",
+      "source": "CREATE SERVER `owned_server_637f1190bccb0986` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE SERVER `owned_server_e7218c4a9bc4b843` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)"
+        "CREATE SERVER `owned_server_637f1190bccb0986` FOREIGN DATA WRAPPER `mysql` OPTIONS (HOST %s, DATABASE %s, USER %s, PASSWORD %s, PORT %s, SOCKET %s, OWNER %s)"
       ],
       "task_id": "visual_admin.server-link.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-global-objects-20261013-parser_acceptance",
-        "mariadb-12.2.2-global-objects-20261013-live_execution"
+        "mariadb-12.2.2-server-objects-parser-acceptance",
+        "mariadb-12.2.2-server-objects-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP SERVER `owned_server_e7218c4a9bc4b843`",
+      "source": "DROP SERVER `owned_server_637f1190bccb0986`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP SERVER `owned_server_e7218c4a9bc4b843`"
+        "DROP SERVER `owned_server_637f1190bccb0986`"
       ],
       "task_id": "visual_admin.server-link.drop"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "CACHE INDEX `owned_management`.`cached_a` INDEX (`ix`),`owned_management`.`cached_b` INDEX (`PRIMARY`) IN `owned_d8d01077b6c4`",
-        "CACHE INDEX `owned_management`.`cached_parts` PARTITION (`p0`) IN `owned_d8d01077b6c4`"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "CACHE INDEX `owned_management`.`cached_a` INDEX (`ix`),`owned_management`.`cached_b` INDEX (`PRIMARY`) IN `owned_d8d01077b6c4`",
+      "source": "CACHE INDEX `owned_management`.`cached_a` INDEX (`ix`),`owned_management`.`cached_b` INDEX (`PRIMARY`) IN `owned_d6ee1fa51d53`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CACHE INDEX `owned_management`.`cached_a` INDEX (`ix`),`owned_management`.`cached_b` INDEX (`PRIMARY`) IN `owned_d8d01077b6c4`"
+        "CACHE INDEX `owned_management`.`cached_a` INDEX (`ix`),`owned_management`.`cached_b` INDEX (`PRIMARY`) IN `owned_d6ee1fa51d53`"
       ],
       "task_id": "visual_admin.server.assign_index_cache"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "XA COMMIT X'FF00F3BB41451C3949E9ADE38D43B1D1A643',X'00FE',0",
-        "XA COMMIT X'FF00EDD9664591BC45D1A6781E49EA3D93BC',X'00FE',1",
-        "XA COMMIT X'FF008CA55007317D49AF965D3D43DE737D0E',X'00FE',2147483647"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "XA COMMIT X'FF00F3BB41451C3949E9ADE38D43B1D1A643',X'00FE',0",
+      "source": "XA COMMIT X'FF00039F320C664C432C98B18823D7E99F35',X'00FE',0",
       "source_format": "ordered_native_statements",
       "statements": [
-        "XA COMMIT X'FF00F3BB41451C3949E9ADE38D43B1D1A643',X'00FE',0"
+        "XA COMMIT X'FF00039F320C664C432C98B18823D7E99F35',X'00FE',0"
       ],
       "task_id": "visual_admin.server.commit_prepared_xa"
     },
     {
-      "binding_style": "mariadb_connector_percent_s",
-      "native_qualified_alternatives": [
-        "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_block_size`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_division_limit`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_age_threshold`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_file_hash_size`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_segments`=%s",
-        "SET GLOBAL `owned_e8f3750c7630`.`key_cache_division_limit`=DEFAULT",
-        "SET GLOBAL `owned_d8d01077b6c4`.`key_buffer_size`=%s"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [
-        "native_integer_value"
+        "parameter_1"
       ],
-      "source": "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s",
+      "source": "SET GLOBAL `owned_d2acf4840a73`.`key_buffer_size`=%s",
       "source_format": "ordered_native_statements",
       "statements": [
-        "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s"
+        "SET GLOBAL `owned_d2acf4840a73`.`key_buffer_size`=%s"
       ],
       "task_id": "visual_admin.server.configure_key_cache"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-task-parser-acceptance",
-        "mariadb-12.2.2-task-live-execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "FLUSH NO_WRITE_TO_BINLOG STATUS",
+      "source": "FLUSH NO_WRITE_TO_BINLOG STATUS, HOSTS",
       "source_format": "ordered_native_statements",
       "statements": [
-        "FLUSH NO_WRITE_TO_BINLOG STATUS"
+        "FLUSH NO_WRITE_TO_BINLOG STATUS, HOSTS"
       ],
       "task_id": "visual_admin.server.flush"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
       "source": "SELECT PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_STATUS, PLUGIN_TYPE, PLUGIN_TYPE_VERSION, PLUGIN_LIBRARY, PLUGIN_LIBRARY_VERSION, PLUGIN_AUTHOR, PLUGIN_DESCRIPTION, PLUGIN_LICENSE, LOAD_OPTION, PLUGIN_MATURITY, PLUGIN_AUTH_VERSION FROM information_schema.ALL_PLUGINS ORDER BY PLUGIN_NAME, PLUGIN_TYPE",
@@ -39480,14 +39447,10 @@
       "task_id": "visual_admin.server.inspect_available_plugins"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHOW ENGINE `InnoDB` LOGS",
-        "SHOW ENGINE ALL LOGS"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "SHOW ENGINE `InnoDB` LOGS",
@@ -39498,14 +39461,10 @@
       "task_id": "visual_admin.server.inspect_engine_logs"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHOW ENGINE `InnoDB` MUTEX",
-        "SHOW ENGINE ALL MUTEX"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "SHOW ENGINE `InnoDB` MUTEX",
@@ -39516,14 +39475,10 @@
       "task_id": "visual_admin.server.inspect_engine_mutex"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHOW ENGINE `InnoDB` STATUS",
-        "SHOW ENGINE ALL STATUS"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "SHOW ENGINE `InnoDB` STATUS",
@@ -39534,30 +39489,24 @@
       "task_id": "visual_admin.server.inspect_engine_status"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SELECT @@GLOBAL.`owned_e8f3750c7630`.`key_buffer_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_block_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_division_limit`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_age_threshold`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_file_hash_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_segments`"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "SELECT @@GLOBAL.`owned_e8f3750c7630`.`key_buffer_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_block_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_division_limit`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_age_threshold`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_file_hash_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_segments`",
+      "source": "SELECT @@GLOBAL.`owned_d2acf4840a73`.`key_buffer_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_block_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_division_limit`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_age_threshold`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_file_hash_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_segments`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "SELECT @@GLOBAL.`owned_e8f3750c7630`.`key_buffer_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_block_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_division_limit`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_age_threshold`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_file_hash_size`,@@GLOBAL.`owned_e8f3750c7630`.`key_cache_segments`"
+        "SELECT @@GLOBAL.`owned_d2acf4840a73`.`key_buffer_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_block_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_division_limit`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_age_threshold`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_file_hash_size`,@@GLOBAL.`owned_d2acf4840a73`.`key_cache_segments`"
       ],
       "task_id": "visual_admin.server.inspect_key_cache"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SELECT * FROM information_schema.KEY_CACHES ORDER BY KEY_CACHE_NAME,SEGMENT_NUMBER"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "SELECT * FROM information_schema.KEY_CACHES ORDER BY KEY_CACHE_NAME,SEGMENT_NUMBER",
@@ -39568,49 +39517,38 @@
       "task_id": "visual_admin.server.inspect_key_caches"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHOW ANALYZE FOR 20",
-        "SHOW ANALYZE FORMAT=JSON FOR 20"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "SHOW ANALYZE FOR 20",
+      "source": "SHOW ANALYZE FOR 51",
       "source_format": "ordered_native_statements",
       "statements": [
-        "SHOW ANALYZE FOR 20"
+        "SHOW ANALYZE FOR 51"
       ],
       "task_id": "visual_admin.server.inspect_live_analyze"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHOW EXPLAIN FOR 20",
-        "SHOW EXPLAIN FORMAT=JSON FOR 20"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "SHOW EXPLAIN FOR 20",
+      "source": "SHOW EXPLAIN FOR 47",
       "source_format": "ordered_native_statements",
       "statements": [
-        "SHOW EXPLAIN FOR 20"
+        "SHOW EXPLAIN FOR 47"
       ],
       "task_id": "visual_admin.server.inspect_live_explain"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "XA RECOVER FORMAT=RAW"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "XA RECOVER FORMAT=RAW",
@@ -39621,14 +39559,10 @@
       "task_id": "visual_admin.server.inspect_prepared_xa"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "LOAD INDEX INTO CACHE `owned_management`.`cached_a` INDEX (`ix`) IGNORE LEAVES,`owned_management`.`cached_b` INDEX (`PRIMARY`) IGNORE LEAVES",
-        "LOAD INDEX INTO CACHE `owned_management`.`cached_parts` PARTITION (`p0`)"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "LOAD INDEX INTO CACHE `owned_management`.`cached_a` INDEX (`ix`) IGNORE LEAVES,`owned_management`.`cached_b` INDEX (`PRIMARY`) IGNORE LEAVES",
@@ -39639,32 +39573,26 @@
       "task_id": "visual_admin.server.preload_index_cache"
     },
     {
-      "binding_style": "mariadb_connector_percent_s",
-      "native_qualified_alternatives": [
-        "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [
-        "native_integer_value"
+        "parameter_1"
       ],
-      "source": "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s",
+      "source": "SET GLOBAL `owned_d2acf4840a73`.`key_buffer_size`=%s",
       "source_format": "ordered_native_statements",
       "statements": [
-        "SET GLOBAL `owned_e8f3750c7630`.`key_buffer_size`=%s"
+        "SET GLOBAL `owned_d2acf4840a73`.`key_buffer_size`=%s"
       ],
       "task_id": "visual_admin.server.release_key_cache"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "RESET MASTER TO 9"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "RESET MASTER TO 9",
@@ -39675,13 +39603,10 @@
       "task_id": "visual_admin.server.reset_binary_logs"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "RESET SLAVE '' ALL"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "RESET SLAVE '' ALL",
@@ -39692,13 +39617,10 @@
       "task_id": "visual_admin.server.reset_default_replica"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "RESET QUERY CACHE"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "RESET QUERY CACHE",
@@ -39709,32 +39631,24 @@
       "task_id": "visual_admin.server.reset_query_cache"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "XA ROLLBACK X'FF00C7E0CE1B598F4F5183436AC2A2C77E0D',X'00FE',0",
-        "XA ROLLBACK X'FF00255C1F88D02D42F48D3D8BCE66ECB26C',X'00FE',1",
-        "XA ROLLBACK X'FF005B6BEDD22B5648B6AD24B824828069A3',X'00FE',2147483647"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
-      "source": "XA ROLLBACK X'FF00C7E0CE1B598F4F5183436AC2A2C77E0D',X'00FE',0",
+      "source": "XA ROLLBACK X'FF00D75EEF44B45445DCA92E34E165247D65',X'00FE',0",
       "source_format": "ordered_native_statements",
       "statements": [
-        "XA ROLLBACK X'FF00C7E0CE1B598F4F5183436AC2A2C77E0D',X'00FE',0"
+        "XA ROLLBACK X'FF00D75EEF44B45445DCA92E34E165247D65',X'00FE',0"
       ],
       "task_id": "visual_admin.server.rollback_prepared_xa"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "SHUTDOWN"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-server-management-20261115-parser_acceptance",
-        "mariadb-12.2.2-server-management-20261115-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "SHUTDOWN",
@@ -39745,15 +39659,10 @@
       "task_id": "visual_admin.server.shutdown_server"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "START ALL SLAVES IO_THREAD",
-        "START ALL SLAVES SQL_THREAD",
-        "START ALL SLAVES"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "START ALL SLAVES IO_THREAD",
@@ -39764,15 +39673,10 @@
       "task_id": "visual_admin.server.start_all_replicas"
     },
     {
-      "binding_style": "validated_native_literals",
-      "native_qualified_alternatives": [
-        "STOP ALL SLAVES IO_THREAD",
-        "STOP ALL SLAVES SQL_THREAD",
-        "STOP ALL SLAVES"
-      ],
+      "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-recovery-cache-replication-20261116-parser_acceptance",
-        "mariadb-12.2.2-recovery-cache-replication-20261116-live_execution"
+        "mariadb-12.2.2-server-management-parser-acceptance",
+        "mariadb-12.2.2-server-management-live-execution"
       ],
       "required_bindings": [],
       "source": "STOP ALL SLAVES IO_THREAD",
@@ -39789,10 +39693,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "KILL SOFT CONNECTION 119",
+      "source": "KILL SOFT CONNECTION 146",
       "source_format": "ordered_native_statements",
       "statements": [
-        "KILL SOFT CONNECTION 119"
+        "KILL SOFT CONNECTION 146"
       ],
       "task_id": "visual_admin.session.terminate_connection"
     },
@@ -39803,10 +39707,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "KILL SOFT QUERY 116",
+      "source": "KILL SOFT QUERY 143",
       "source_format": "ordered_native_statements",
       "statements": [
-        "KILL SOFT QUERY 116"
+        "KILL SOFT QUERY 143"
       ],
       "task_id": "visual_admin.session.terminate_query"
     },
@@ -39827,42 +39731,42 @@
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` ADD PERIOD FOR `app_validity` (`app_start`, `app_end`)",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`period_items` ADD COLUMN `valid_from` DATE NOT NULL, ADD COLUMN `valid_to` DATE NOT NULL, ADD PERIOD FOR `valid_window` (`valid_from`, `valid_to`)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` ADD PERIOD FOR `app_validity` (`app_start`, `app_end`)"
+        "ALTER TABLE `owned_extended_391eb8296625`.`period_items` ADD COLUMN `valid_from` DATE NOT NULL, ADD COLUMN `valid_to` DATE NOT NULL, ADD PERIOD FOR `valid_window` (`valid_from`, `valid_to`)"
       ],
       "task_id": "visual_admin.table.add_application_period"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` ADD PARTITION PARTITIONS 2",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` ADD PARTITION PARTITIONS 2",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` ADD PARTITION PARTITIONS 2"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` ADD PARTITION PARTITIONS 2"
       ],
       "task_id": "visual_admin.table.add_partitions"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` ADD SYSTEM VERSIONING",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` ADD COLUMN `row_s` TIMESTAMP(6) GENERATED ALWAYS AS ROW START INVISIBLE, ADD COLUMN `row_e` TIMESTAMP(6) GENERATED ALWAYS AS ROW END INVISIBLE, ADD PERIOD FOR SYSTEM_TIME (`row_s`, `row_e`), ADD SYSTEM VERSIONING",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` ADD SYSTEM VERSIONING"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` ADD COLUMN `row_s` TIMESTAMP(6) GENERATED ALWAYS AS ROW START INVISIBLE, ADD COLUMN `row_e` TIMESTAMP(6) GENERATED ALWAYS AS ROW END INVISIBLE, ADD PERIOD FOR SYSTEM_TIME (`row_s`, `row_e`), ADD SYSTEM VERSIONING"
       ],
       "task_id": "visual_admin.table.add_system_versioning"
     },
@@ -39873,38 +39777,38 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`cde_editor_probe` ADD `note` INTEGER",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` ADD `note` INTEGER",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`cde_editor_probe` ADD `note` INTEGER"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` ADD `note` INTEGER"
       ],
       "task_id": "visual_admin.table.alter"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` COALESCE PARTITION 1",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` COALESCE PARTITION 1",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` COALESCE PARTITION 1"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` COALESCE PARTITION 1"
       ],
       "task_id": "visual_admin.table.coalesce_partitions"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CONVERT TABLE `owned_partitions_14ba469e9667fa6c`.`detached` TO PARTITION p1 VALUES LESS THAN (20) WITH VALIDATION",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CONVERT TABLE `owned_partitions_0fafb08781683214`.`detached` TO PARTITION p1 VALUES LESS THAN (20) WITH VALIDATION",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` CONVERT TABLE `owned_partitions_14ba469e9667fa6c`.`detached` TO PARTITION p1 VALUES LESS THAN (20) WITH VALIDATION"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` CONVERT TABLE `owned_partitions_0fafb08781683214`.`detached` TO PARTITION p1 VALUES LESS THAN (20) WITH VALIDATION"
       ],
       "task_id": "visual_admin.table.convert_from_table"
     },
@@ -39915,10 +39819,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TABLE `cde_live_80876a555900`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)",
+      "source": "CREATE TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TABLE `cde_live_80876a555900`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)"
+        "CREATE TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` (`id` INTEGER NOT NULL PRIMARY KEY, `value` INTEGER)"
       ],
       "task_id": "visual_admin.table.create"
     },
@@ -39932,10 +39836,10 @@
         "parameter_1",
         "parameter_2"
       ],
-      "source": "DELETE FROM `cde_live_80876a555900`.`qualification` WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL",
+      "source": "DELETE FROM `cde_live_3564e1bbfb53`.`qualification` WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DELETE FROM `cde_live_80876a555900`.`qualification` WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL"
+        "DELETE FROM `cde_live_3564e1bbfb53`.`qualification` WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL"
       ],
       "task_id": "visual_admin.table.delete"
     },
@@ -39946,66 +39850,66 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP TABLE `cde_live_80876a555900`.`cde_editor_probe_renamed`",
+      "source": "DROP TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe_renamed`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP TABLE `cde_live_80876a555900`.`cde_editor_probe_renamed`"
+        "DROP TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe_renamed`"
       ],
       "task_id": "visual_admin.table.drop"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` DROP PERIOD FOR `app_validity`",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`period_items` DROP PERIOD FOR `valid_window`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` DROP PERIOD FOR `app_validity`"
+        "ALTER TABLE `owned_extended_391eb8296625`.`period_items` DROP PERIOD FOR `valid_window`"
       ],
       "task_id": "visual_admin.table.drop_application_period"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` DROP SYSTEM VERSIONING",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` DROP COLUMN `row_s`, DROP COLUMN `row_e`, DROP SYSTEM VERSIONING",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` DROP SYSTEM VERSIONING"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` DROP COLUMN `row_s`, DROP COLUMN `row_e`, DROP SYSTEM VERSIONING"
       ],
       "task_id": "visual_admin.table.drop_system_versioning"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP TEMPORARY TABLE `b5_native`.`shadow_pair`",
+      "source": "DROP TEMPORARY TABLE `owned_extended_391eb8296625`.`items`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP TEMPORARY TABLE `b5_native`.`shadow_pair`"
+        "DROP TEMPORARY TABLE `owned_extended_391eb8296625`.`items`"
       ],
       "task_id": "visual_admin.table.drop_temporary"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-task-parser-acceptance",
-        "mariadb-12.2.2-task-live-execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "FLUSH TABLES `cde_live`.`cde_table`",
+      "source": "FLUSH NO_WRITE_TO_BINLOG TABLES `owned_extended_391eb8296625`.`items`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "FLUSH TABLES `cde_live`.`cde_table`"
+        "FLUSH NO_WRITE_TO_BINLOG TABLES `owned_extended_391eb8296625`.`items`"
       ],
       "task_id": "visual_admin.table.flush"
     },
@@ -40019,38 +39923,38 @@
         "parameter_1",
         "parameter_2"
       ],
-      "source": "INSERT INTO `cde_live_80876a555900`.`qualification` (`id`, `value`) VALUES (%s, %s)",
+      "source": "INSERT INTO `cde_live_3564e1bbfb53`.`qualification` (`id`, `value`) VALUES (%s, %s)",
       "source_format": "ordered_native_statements",
       "statements": [
-        "INSERT INTO `cde_live_80876a555900`.`qualification` (`id`, `value`) VALUES (%s, %s)"
+        "INSERT INTO `cde_live_3564e1bbfb53`.`qualification` (`id`, `value`) VALUES (%s, %s)"
       ],
       "task_id": "visual_admin.table.insert"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` PARTITION BY HASH(id) PARTITIONS 2",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` PARTITION BY HASH(id) PARTITIONS 2",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`hashed` PARTITION BY HASH(id) PARTITIONS 2"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`hashed` PARTITION BY HASH(id) PARTITIONS 2"
       ],
       "task_id": "visual_admin.table.partition_by"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-native-admin-20261013-parser_acceptance",
-        "mariadb-12.2.2-native-admin-20261013-live_execution"
+        "mariadb-12.2.2-partitions-parser-acceptance",
+        "mariadb-12.2.2-partitions-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REMOVE PARTITIONING",
+      "source": "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REMOVE PARTITIONING",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `owned_partitions_14ba469e9667fa6c`.`ranged` REMOVE PARTITIONING"
+        "ALTER TABLE `owned_partitions_0fafb08781683214`.`ranged` REMOVE PARTITIONING"
       ],
       "task_id": "visual_admin.table.remove_partitioning"
     },
@@ -40061,38 +39965,38 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `cde_live_80876a555900`.`cde_editor_probe` RENAME TO `cde_editor_probe_renamed`",
+      "source": "ALTER TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` RENAME TO `cde_editor_probe_renamed`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `cde_live_80876a555900`.`cde_editor_probe` RENAME TO `cde_editor_probe_renamed`"
+        "ALTER TABLE `cde_live_3564e1bbfb53`.`cde_editor_probe` RENAME TO `cde_editor_probe_renamed`"
       ],
       "task_id": "visual_admin.table.rename"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` PARTITION BY SYSTEM_TIME LIMIT 100 (PARTITION `p_hist_0` HISTORY, PARTITION `p_hist_1` HISTORY, PARTITION `p_cur` CURRENT)",
+      "source": "ALTER TABLE `owned_extended_391eb8296625`.`items` PARTITION BY SYSTEM_TIME LIMIT 100 PARTITIONS 3",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` PARTITION BY SYSTEM_TIME LIMIT 100 (PARTITION `p_hist_0` HISTORY, PARTITION `p_hist_1` HISTORY, PARTITION `p_cur` CURRENT)"
+        "ALTER TABLE `owned_extended_391eb8296625`.`items` PARTITION BY SYSTEM_TIME LIMIT 100 PARTITIONS 3"
       ],
       "task_id": "visual_admin.table.rotate_system_time_partitions"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER TABLE `b5_native`.`temporal_lifecycle` DELETE HISTORY",
+      "source": "DELETE HISTORY FROM `owned_extended_391eb8296625`.`items`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER TABLE `b5_native`.`temporal_lifecycle` DELETE HISTORY"
+        "DELETE HISTORY FROM `owned_extended_391eb8296625`.`items`"
       ],
       "task_id": "visual_admin.table.truncate_system_versioning_history"
     },
@@ -40107,24 +40011,24 @@
         "parameter_2",
         "parameter_3"
       ],
-      "source": "UPDATE `cde_live_80876a555900`.`qualification` SET `value` = %s WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL",
+      "source": "UPDATE `cde_live_3564e1bbfb53`.`qualification` SET `value` = %s WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL",
       "source_format": "ordered_native_statements",
       "statements": [
-        "UPDATE `cde_live_80876a555900`.`qualification` SET `value` = %s WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL"
+        "UPDATE `cde_live_3564e1bbfb53`.`qualification` SET `value` = %s WHERE `id` = %s AND `value` = %s AND `event_date` IS NULL"
       ],
       "task_id": "visual_admin.table.update"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE TRIGGER `b5_native`.`trg_second` BEFORE INSERT ON `b5_native`.`obj_events` FOR EACH ROW FOLLOWS `trg_first` SET NEW.log_trail = CONCAT(NEW.log_trail, 'B2');",
+      "source": "CREATE OR REPLACE TRIGGER `owned_extended_391eb8296625`.`trg_items` BEFORE INSERT ON `owned_extended_391eb8296625`.`items` FOR EACH ROW FOLLOWS `trg_anchor`\nSET NEW.label = COALESCE(NEW.label, 'altered')",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE TRIGGER `b5_native`.`trg_second` BEFORE INSERT ON `b5_native`.`obj_events` FOR EACH ROW FOLLOWS `trg_first` SET NEW.log_trail = CONCAT(NEW.log_trail, 'B2');"
+        "CREATE OR REPLACE TRIGGER `owned_extended_391eb8296625`.`trg_items` BEFORE INSERT ON `owned_extended_391eb8296625`.`items` FOR EACH ROW FOLLOWS `trg_anchor`\nSET NEW.label = COALESCE(NEW.label, 'altered')"
       ],
       "task_id": "visual_admin.trigger.alter"
     },
@@ -40135,24 +40039,24 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TRIGGER `cde_live_80876a555900`.`cde_editor_trigger` BEFORE INSERT ON `cde_live_80876a555900`.`qualification` FOR EACH ROW SET NEW.value = NEW.value",
+      "source": "CREATE TRIGGER `cde_live_3564e1bbfb53`.`cde_editor_trigger` BEFORE INSERT ON `cde_live_3564e1bbfb53`.`qualification` FOR EACH ROW\nSET NEW.value = NEW.value",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TRIGGER `cde_live_80876a555900`.`cde_editor_trigger` BEFORE INSERT ON `cde_live_80876a555900`.`qualification` FOR EACH ROW SET NEW.value = NEW.value"
+        "CREATE TRIGGER `cde_live_3564e1bbfb53`.`cde_editor_trigger` BEFORE INSERT ON `cde_live_3564e1bbfb53`.`qualification` FOR EACH ROW\nSET NEW.value = NEW.value"
       ],
       "task_id": "visual_admin.trigger.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE TRIGGER `b5_native`.`trg_second` BEFORE INSERT ON `b5_native`.`obj_events` FOR EACH ROW FOLLOWS `trg_first` SET NEW.log_trail = CONCAT(NEW.log_trail, 'B3');",
+      "source": "CREATE OR REPLACE TRIGGER `owned_extended_391eb8296625`.`trg_items` BEFORE INSERT ON `owned_extended_391eb8296625`.`items` FOR EACH ROW FOLLOWS `trg_anchor`\nSET NEW.label = COALESCE(NEW.label, 'replaced')",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE TRIGGER `b5_native`.`trg_second` BEFORE INSERT ON `b5_native`.`obj_events` FOR EACH ROW FOLLOWS `trg_first` SET NEW.log_trail = CONCAT(NEW.log_trail, 'B3');"
+        "CREATE OR REPLACE TRIGGER `owned_extended_391eb8296625`.`trg_items` BEFORE INSERT ON `owned_extended_391eb8296625`.`items` FOR EACH ROW FOLLOWS `trg_anchor`\nSET NEW.label = COALESCE(NEW.label, 'replaced')"
       ],
       "task_id": "visual_admin.trigger.create_or_replace"
     },
@@ -40163,10 +40067,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP TRIGGER `cde_live_80876a555900`.`cde_editor_trigger`",
+      "source": "DROP TRIGGER `cde_live_3564e1bbfb53`.`cde_editor_trigger`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP TRIGGER `cde_live_80876a555900`.`cde_editor_trigger`"
+        "DROP TRIGGER `cde_live_3564e1bbfb53`.`cde_editor_trigger`"
       ],
       "task_id": "visual_admin.trigger.drop"
     },
@@ -40229,14 +40133,14 @@
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "ALTER ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `b5_native`.`v_scores` AS SELECT id, score FROM `b5_native`.`obj_events` WHERE score >= 10\nWITH LOCAL CHECK OPTION",
+      "source": "ALTER ALGORITHM=MERGE DEFINER=`root`@`%` SQL SECURITY INVOKER VIEW `owned_extended_391eb8296625`.`v_items` AS SELECT id, label FROM items WHERE id > 0",
       "source_format": "ordered_native_statements",
       "statements": [
-        "ALTER ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `b5_native`.`v_scores` AS SELECT id, score FROM `b5_native`.`obj_events` WHERE score >= 10\nWITH LOCAL CHECK OPTION"
+        "ALTER ALGORITHM=MERGE DEFINER=`root`@`%` SQL SECURITY INVOKER VIEW `owned_extended_391eb8296625`.`v_items` AS SELECT id, label FROM items WHERE id > 0"
       ],
       "task_id": "visual_admin.view.alter"
     },
@@ -40247,24 +40151,24 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE VIEW `cde_live_80876a555900`.`cde_editor_view` AS SELECT id, value FROM qualification",
+      "source": "CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `cde_live_3564e1bbfb53`.`cde_editor_view` AS SELECT id, value FROM qualification",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE VIEW `cde_live_80876a555900`.`cde_editor_view` AS SELECT id, value FROM qualification"
+        "CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `cde_live_3564e1bbfb53`.`cde_editor_view` AS SELECT id, value FROM qualification"
       ],
       "task_id": "visual_admin.view.create"
     },
     {
       "binding_style": "mariadb_connector_qmark",
       "proof_ids": [
-        "mariadb-12.2.2-batch5-catalog-20261120-parser_acceptance",
-        "mariadb-12.2.2-batch5-catalog-20261120-live_execution"
+        "mariadb-12.2.2-extended-tasks-parser-acceptance",
+        "mariadb-12.2.2-extended-tasks-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE OR REPLACE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `b5_native`.`v_scores` AS SELECT id, score FROM `b5_native`.`obj_events` WHERE score >= 5",
+      "source": "CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`root`@`%` SQL SECURITY DEFINER VIEW `owned_extended_391eb8296625`.`v_items` AS SELECT id, UPPER(label) AS label FROM items",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE OR REPLACE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW `b5_native`.`v_scores` AS SELECT id, score FROM `b5_native`.`obj_events` WHERE score >= 5"
+        "CREATE OR REPLACE ALGORITHM=UNDEFINED DEFINER=`root`@`%` SQL SECURITY DEFINER VIEW `owned_extended_391eb8296625`.`v_items` AS SELECT id, UPPER(label) AS label FROM items"
       ],
       "task_id": "visual_admin.view.create_or_replace"
     },
@@ -40275,10 +40179,10 @@
         "mariadb-12.2.2-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "DROP VIEW `cde_live_80876a555900`.`cde_editor_view`",
+      "source": "DROP VIEW `cde_live_3564e1bbfb53`.`cde_editor_view`",
       "source_format": "ordered_native_statements",
       "statements": [
-        "DROP VIEW `cde_live_80876a555900`.`cde_editor_view`"
+        "DROP VIEW `cde_live_3564e1bbfb53`.`cde_editor_view`"
       ],
       "task_id": "visual_admin.view.drop"
     }
