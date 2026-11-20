@@ -35,6 +35,7 @@ def complete(client, handle, *, source_context=None):
     from .mariadb_connections import POOL_ARGUMENTS
 
     peer = None
+    failed = False
     try:
         # The caller holds session_access: no concurrent user command or close.
         client._executions.sessions.get(handle)
@@ -45,6 +46,7 @@ def complete(client, handle, *, source_context=None):
         for key in POOL_ARGUMENTS:
             request['route'].pop(key, None)
         request['route']['reconnect'] = False
+        request['route']['autocommit'] = True
         if source_context is not None:
             if tuple(source_context.get(key) for key in ('server_uid','principal','version','connection_id')) != entry[1]:
                 raise RelationalClientError('Original context identity is unavailable')
@@ -65,11 +67,20 @@ def complete(client, handle, *, source_context=None):
         context = result['context']
         if context.get('version') != observed[2]:
             raise RelationalClientError('MariaDB private catalog version changed')
+        revisions = getattr(client, '_source_revisions', None)
+        snapshots = getattr(client, '_editor_context_snapshots', None)
+        revision = revisions.get(id(handle), 0) if isinstance(revisions, dict) else 0
+        snapshot_valid = (
+            isinstance(snapshots, dict) and snapshots.get(id(handle)) == revision
+            if source_context is None else True
+        )
         # Peer settings are not observations of the caller's active context.
         context['metadata_peer_context'] = {key: context.pop(key) for key in (
             'default_schema', 'sql_mode', 'character_set_client', 'active_role')
             if key in context}
         context['original_session_context_observed'] = False
+        context['source_work_revision'] = revision
+        context['explicit_context_snapshot_valid'] = snapshot_valid
         for row in context.get('routine_type_candidates', []):
             row['original_session_mode_observed'] = False
             row['availability'] = 'requires-original-session-mode-check'
@@ -94,6 +105,7 @@ def complete(client, handle, *, source_context=None):
                 row['availability']='observed-original-session-mode' if row['available'] else 'requires-other-native-mode'
             result.update(original_session_commands_sent=1,original_diagnostics_preserved=False,
                 original_active_roles_observed=True,
+                snapshot_invalidated_by_next_source_command=True,
                 coverage='Explicit original-session language/role/default-schema observation and same-context private committed catalog. Temporary objects and uncommitted schema remain unobserved.')
             result['observations'][-1]['reason']='source-language-and-role-observed;temporary-and-uncommitted-catalog-unobserved'
         context.pop('context_revision', None)
@@ -104,6 +116,7 @@ def complete(client, handle, *, source_context=None):
             sort_keys=True, default=str).encode()).hexdigest()
         return result
     except Exception:
+        failed = True
         error = RelationalClientError('Private MariaDB completion is unavailable; '
             'no original-session metadata command was substituted')
         error.original_session_commands_sent = 1 if source_context is not None else 0
@@ -111,6 +124,8 @@ def complete(client, handle, *, source_context=None):
         raise error from None
     finally:
         if peer is not None:
+            if failed and isinstance(getattr(client, '_uncertain_sessions', None), set):
+                client._uncertain_sessions.add(id(peer))
             try:
                 released = client._close_idle_session(peer)
                 if not released.get('connection_released'):

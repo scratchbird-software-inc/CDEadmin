@@ -1799,6 +1799,28 @@ class ProviderWorkspaceService:
         except RelationalClientError:raise ProviderWorkspaceError('Native host credential or client admission is unavailable') from None
         except OSError:raise ProviderWorkspaceError('Native host receipt storage is unavailable') from None
 
+    def mysql_utility(self, server, operation, request):
+        from .mysql_utility_service import action
+        from ..providers.mysql_family.utility_host_worker import UtilityHostError
+        from ..sdk.relational import RelationalClientError
+        try:
+            return action(self, server, operation, request)
+        except (UtilityHostError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except OSError:
+            raise ProviderWorkspaceError('MySQL utility job storage is unavailable') from None
+
+    def mariadb_utility(self, server, operation, request):
+        from .mariadb_utility_service import action
+        from ..providers.mysql_family.utility_host_worker import UtilityHostError
+        from ..sdk.relational import RelationalClientError
+        try:
+            return action(self, server, operation, request)
+        except (UtilityHostError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except OSError:
+            raise ProviderWorkspaceError('MariaDB utility job storage is unavailable') from None
+
     def mysql_router(self, server, operation, request):
         from .mysql_router_service import action
         from ..providers.mysql_family.mysql_router_transport import HostError
@@ -4955,6 +4977,11 @@ class ProviderWorkspaceService:
                 if not isinstance(data.get('request'), dict):
                     raise ProviderWorkspaceError('Select a typed original-session FLAGSET')
                 return self.studio_service.mariadb_session_flagsets_action(
+                    context, data.get('session_id'), data['request'])
+            if action == 'mariadb_session_variables':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed original-session system variable')
+                return self.studio_service.mariadb_session_variables_action(
                     context, data.get('session_id'), data['request'])
             if action == 'sqlite_connection_config':
                 if not isinstance(data.get('request'), dict):

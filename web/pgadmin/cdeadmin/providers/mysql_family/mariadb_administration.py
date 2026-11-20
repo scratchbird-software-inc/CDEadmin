@@ -15,13 +15,19 @@ from . import mariadb_key_caches as key_caches
 from . import mariadb_all_channels as all_channels
 from . import mariadb_flush as flush
 from . import destructive_identity
+from . import mariadb_utilities as utilities
 
-MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches, flush)
+MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches, flush, utilities)
 OPERATIONS = {operation: module for module in MODULES for operation in module.OPERATIONS}
 TABLE_OPERATIONS = {operation: flush for operation in flush.TABLE_OPERATIONS}
 
 
 class MariaDBAdministration(RelationalAdministration):
+    def requires_dialect(self, resource_kind, operation_id):
+        if resource_kind == 'server' and operation_id in utilities.OPERATIONS:
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
+
     def catalog(self, catalog):
         value = deepcopy(catalog)
         server = next(row for row in value['objects'] if row['resource_kind'] == 'server')
@@ -113,6 +119,44 @@ class MariaDBAdministration(RelationalAdministration):
         for module in MODULES:
             if module.KEY in compiled:
                 return module.apply(client, request, connection)
+        variable = compiled.get('mariadb_global_variable')
+        if variable and getattr(getattr(client, 'module', None), '__name__', '') == 'mariadb':
+            route = dict((request.get('provider_payload') or {}).get('route') or {})
+            probe = client._connect({'route': {**route, 'autocommit': True}})
+            cursor = None
+            try:
+                cursor = probe.cursor()
+                cursor.execute(
+                    'SELECT VARIABLE_SCOPE,READ_ONLY FROM information_schema.SYSTEM_VARIABLES '
+                    'WHERE UPPER(VARIABLE_NAME)=?',
+                    (str(variable).upper(),),
+                )
+                row = cursor.fetchone()
+            finally:
+                if cursor is not None:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+                client._forget_and_close(probe)
+            if not row:
+                error = RelationalClientError('Unknown MariaDB system variable')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
+            if str(row[1] or '').strip().upper() != 'NO':
+                error = RelationalClientError('MariaDB reports this system variable as read-only')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
+            if str(row[0] or '').strip().upper() not in {'GLOBAL', 'SESSION'}:
+                error = RelationalClientError('MariaDB does not expose a global scope for this variable')
+                error.native_dispatched = False
+                error.native_acknowledged = False
+                error.automatic_retry = False
+                raise error
         return super().apply(client, request, connection)
 
     def _compile_create(self, request):

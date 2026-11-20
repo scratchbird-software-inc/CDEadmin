@@ -252,6 +252,41 @@
           "support_state": "implemented"
         },
         {
+          "operation_id": "run_myisamchk",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "myisamchk",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_myisampack",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "requires_utility": "myisampack",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_innochecksum",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "innochecksum",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_ibd2sdi",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "ibd2sdi",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_mysqlslap",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mysqlslap",
+          "support_state": "implemented"
+        },
+        {
           "operation_id": "flush",
           "tier": 2,
           "mutation_class": "admin",

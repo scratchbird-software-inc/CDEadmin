@@ -30,6 +30,7 @@ from . import mysql_flush
 from . import mysql_live_plans
 from . import mysql_xcollections
 from . import mysql_ndb
+from . import mysql_utilities
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
@@ -42,6 +43,7 @@ HANDLERS['mysql_flush'] = mysql_flush
 HANDLERS['mysql_live_plan'] = mysql_live_plans
 HANDLERS['mysql_xcollection'] = mysql_xcollections
 HANDLERS['mysql_ndb'] = mysql_ndb
+HANDLERS['mysql_utility'] = mysql_utilities
 
 
 TABLE_ALTER_OPTIONS = frozenset({'mysql_table_options', 'mysql_connection'})
@@ -49,6 +51,11 @@ CREATE_ONLY_OPTIONS = frozenset({'data_directory', 'index_directory'})
 
 
 class MySQLAdministration(RelationalAdministration):
+    def requires_dialect(self, resource_kind, operation_id):
+        if resource_kind == 'server' and operation_id in mysql_utilities.OPERATIONS:
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
+
     def catalog(self, catalog):
         value = deepcopy(catalog)
         for resource in value['objects']:
@@ -58,6 +65,7 @@ class MySQLAdministration(RelationalAdministration):
                     (mysql_live_plans, set(), set()),
                     (mysql_flush, set(), set()),
                     (mysql_ndb, mysql_ndb.SERVER_READS, mysql_ndb.SERVER_DESTRUCTIVE),
+                    (mysql_utilities, mysql_utilities.READS, mysql_utilities.DESTRUCTIVE),
                     (mysql_page_tracking, mysql_page_tracking.READS, {'set_page_tracking_backup_id','purge_page_tracking'}),
                     (mysql_rewriter, {'inspect_rewrite_rules'}, {'drop_rewrite_rule'}),
                     (mysql_server_control, set(), set(mysql_server_control.OPERATIONS)),
@@ -239,6 +247,7 @@ class MySQLAdministration(RelationalAdministration):
             (mysql_ndb.LOGFILE_GROUP_KIND,mysql_ndb,'invalid_mysql_ndb'),
             (mysql_ndb.NDB_NODE_KIND,mysql_ndb,'invalid_mysql_ndb'),
             (mysql_xcollections.KIND,mysql_xcollections,'invalid_mysql_xcollection'),
+            ('server',mysql_utilities,'invalid_mysql_utility'),
             ('server',mysql_rewriter,'invalid_mysql_rewriter'),
             ('server',mysql_server_control,'invalid_mysql_server_control'),
             ('server',mysql_xa,'invalid_mysql_xa'),

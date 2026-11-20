@@ -2,9 +2,19 @@
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime, timezone
+import re
 
 from ...sdk import RelationalClientError
-from .mysql_instance import environment, target_uuid
+from .mysql_instance import target_uuid
+
+
+def environment(cursor):
+    cursor.execute('SELECT VERSION(),@@server_uuid,CURRENT_USER(),USER(),CURRENT_ROLE()')
+    row = cursor.fetchone()
+    if (not row or len(row) != 5 or any(not isinstance(value, str) for value in row) or
+            not re.match(r'^(?:9\.7\.0|8\.4\.\d+)(?:-|$)', row[0])):
+        raise RelationalClientError('Exact native MySQL engine diagnostic execution identity is unavailable')
+    return dict(zip(('version', 'server_uuid', 'effective_principal', 'authenticated_principal', 'active_roles'), row))
 
 OPERATIONS = {
     'show_engine_status': 'Inspect native engine status',

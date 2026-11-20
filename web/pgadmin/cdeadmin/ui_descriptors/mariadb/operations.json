@@ -1613,6 +1613,139 @@
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
     },
     {
+      "operation_id": "set_session",
+      "resource_kind": "system-variable",
+      "title": "Set original session system variable",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "variable",
+          "label": "Session variable name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value_mode",
+          "label": "Value source",
+          "control": "select",
+          "required": true,
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Specified value"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Compiled default"
+            },
+            {
+              "value": "BITMASK",
+              "label": "FLAGSET numeric mask"
+            },
+            {
+              "value": "FLAGS",
+              "label": "FLAGSET flag choices"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Session value",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "VALUE"
+          }
+        },
+        {
+          "field_id": "bitmask",
+          "label": "Unsigned decimal FLAGSET mask",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "BITMASK"
+          }
+        },
+        {
+          "field_id": "reset_defaults",
+          "label": "Reset all flags to defaults first",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          }
+        },
+        {
+          "field_id": "flags",
+          "label": "Flag assignments",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "visible_when": {
+            "field": "value_mode",
+            "equals": "FLAGS"
+          },
+          "columns": [
+            {
+              "field_id": "flag",
+              "label": "Flag name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "state",
+              "label": "State",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "on",
+                  "label": "on"
+                },
+                {
+                  "value": "off",
+                  "label": "off"
+                },
+                {
+                  "value": "default",
+                  "label": "default"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "field_id": "expected_value",
+          "label": "Observed original session value",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "diagnostics_change_confirmed",
+          "label": "Allow explicit inspection to change session diagnostics",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmed",
+          "label": "Confirm original session change",
+          "control": "boolean",
+          "required": true
+        }
+      ],
+      "notes": "Original-session task mariadb_session_variables; inspect/review/set_session on the owner-bound query session. Admits writable SESSION and SESSION ONLY variables while refusing GLOBAL-only, read-only and unknown variables. Requires diagnostics_change_confirmed:true before sending SQL to the retained session, preserves caller transactions and savepoints, and leaves global and peer sessions unchanged."
+    },
+    {
       "operation_id": "purge_before",
       "resource_kind": "binary-log",
       "title": "Purge binary logs before selected file",
@@ -3103,6 +3236,1965 @@
         }
       ],
       "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+    },
+    {
+      "operation_id": "run_aria_chk",
+      "resource_kind": "server",
+      "title": "Check or repair offline Aria table files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Target",
+        "Options",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "database_name",
+          "label": "Database",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "mode",
+          "label": "Action mode",
+          "control": "select",
+          "required": true,
+          "default": "check",
+          "group": "Options",
+          "options": [
+            {
+              "value": "check",
+              "label": "Check (--check)"
+            },
+            {
+              "value": "extend_check",
+              "label": "Extended check (--extend-check)"
+            },
+            {
+              "value": "describe",
+              "label": "Describe table (--description)"
+            },
+            {
+              "value": "analyze",
+              "label": "Analyze key distribution (--analyze)"
+            },
+            {
+              "value": "recover",
+              "label": "Recover (--recover)"
+            },
+            {
+              "value": "safe_recover",
+              "label": "Safe recover (--safe-recover)"
+            },
+            {
+              "value": "zerofill",
+              "label": "Zero-fill unused space (--zerofill)"
+            }
+          ]
+        },
+        {
+          "field_id": "include_information",
+          "label": "Include index statistics",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "quick",
+          "label": "Quick index-only mode",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "backup",
+          "label": "Retain .MAD backup before repair",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "destructive_confirmed",
+          "label": "Confirm offline Aria file modification",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Absolute stopped server data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
+    },
+    {
+      "operation_id": "run_aria_pack",
+      "resource_kind": "server",
+      "title": "Compress offline Aria table files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Target",
+        "Options",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "database_name",
+          "label": "Database",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "dry_run_test",
+          "label": "Dry-run compression test (--test)",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "backup",
+          "label": "Retain .OLD table backup",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "force",
+          "label": "Force packing even when size does not shrink",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "rebuild_indexes",
+          "label": "Rebuild indexes after packing (aria_chk -rq)",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "destructive_confirmed",
+          "label": "Confirm offline read-only compression",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Absolute stopped server data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
+    },
+    {
+      "operation_id": "run_myisamchk",
+      "resource_kind": "server",
+      "title": "Check or repair offline MyISAM table files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Target",
+        "Options",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "database_name",
+          "label": "Database",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "mode",
+          "label": "Action mode",
+          "control": "select",
+          "required": true,
+          "default": "check",
+          "group": "Options",
+          "options": [
+            {
+              "value": "check",
+              "label": "Check (--check)"
+            },
+            {
+              "value": "medium_check",
+              "label": "Medium check (--medium-check)"
+            },
+            {
+              "value": "extend_check",
+              "label": "Extended check (--extend-check)"
+            },
+            {
+              "value": "information",
+              "label": "Check with statistics (--information)"
+            },
+            {
+              "value": "describe",
+              "label": "Describe table (--description)"
+            },
+            {
+              "value": "recover",
+              "label": "Recover (--recover)"
+            },
+            {
+              "value": "safe_recover",
+              "label": "Safe recover (--safe-recover)"
+            },
+            {
+              "value": "sort_index",
+              "label": "Sort index blocks (--sort-index)"
+            },
+            {
+              "value": "analyze",
+              "label": "Analyze key distribution (--analyze)"
+            }
+          ]
+        },
+        {
+          "field_id": "include_information",
+          "label": "Include index statistics",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "quick",
+          "label": "Quick index-only mode",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "backup",
+          "label": "Retain .MYD backup before repair",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "destructive_confirmed",
+          "label": "Confirm offline file modification",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Absolute stopped server data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
+    },
+    {
+      "operation_id": "run_myisampack",
+      "resource_kind": "server",
+      "title": "Compress offline MyISAM table files",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Target",
+        "Options",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "database_name",
+          "label": "Database",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table",
+          "control": "text",
+          "required": true,
+          "group": "Target"
+        },
+        {
+          "field_id": "dry_run_test",
+          "label": "Dry-run compression test (--test)",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "backup",
+          "label": "Retain .OLD table backup",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "force",
+          "label": "Force packing even when size does not shrink",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "join_target_table",
+          "label": "Joined destination table",
+          "control": "text",
+          "required": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "source_tables",
+          "label": "Additional tables to join",
+          "control": "grid",
+          "required": false,
+          "default": [],
+          "item_kind": "string",
+          "group": "Options",
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Table",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "rebuild_indexes",
+          "label": "Rebuild indexes after packing (myisamchk -rq)",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "destructive_confirmed",
+          "label": "Confirm offline read-only compression",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Absolute stopped server data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
+    },
+    {
+      "operation_id": "run_innochecksum",
+      "resource_kind": "server",
+      "title": "Inspect or rewrite offline InnoDB page checksums",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Target",
+        "Options",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "tablespace_scope",
+          "label": "Tablespace location",
+          "control": "select",
+          "required": true,
+          "default": "datadir_table",
+          "group": "Target",
+          "options": [
+            {
+              "value": "datadir_table",
+              "label": "Table inside data directory"
+            },
+            {
+              "value": "workspace_staged",
+              "label": "Staged .ibd inside workspace"
+            }
+          ]
+        },
+        {
+          "field_id": "database_name",
+          "label": "Database",
+          "control": "text",
+          "required": false,
+          "group": "Target",
+          "visible_when": {
+            "field": "tablespace_scope",
+            "equals": "datadir_table"
+          }
+        },
+        {
+          "field_id": "table_name",
+          "label": "Table",
+          "control": "text",
+          "required": false,
+          "group": "Target",
+          "visible_when": {
+            "field": "tablespace_scope",
+            "equals": "datadir_table"
+          }
+        },
+        {
+          "field_id": "tablespace_relpath",
+          "label": "Staged .ibd relative path",
+          "control": "text",
+          "required": false,
+          "group": "Target",
+          "visible_when": {
+            "field": "tablespace_scope",
+            "equals": "workspace_staged"
+          }
+        },
+        {
+          "field_id": "count_only",
+          "label": "Count pages only (--count)",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "start_page",
+          "label": "Start page",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "group": "Options"
+        },
+        {
+          "field_id": "end_page",
+          "label": "End page",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "group": "Options"
+        },
+        {
+          "field_id": "page_num",
+          "label": "Single page number",
+          "control": "number",
+          "required": false,
+          "min": 0,
+          "group": "Options"
+        },
+        {
+          "field_id": "no_check",
+          "label": "Skip existing checksum verification on rewrite (--no-check)",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "rewrite_checksum",
+          "label": "Rewrite page checksums (--write)",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "page_type_summary",
+          "label": "Include page-type summary",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "per_page_details",
+          "label": "Include per-page details",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "skip_freed_pages",
+          "label": "Skip freed pages",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Options"
+        },
+        {
+          "field_id": "enable_private_log",
+          "label": "Capture private page log summary",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "group": "Options"
+        },
+        {
+          "field_id": "destructive_confirmed",
+          "label": "Confirm offline checksum rewrite",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Absolute stopped server data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
+    },
+    {
+      "operation_id": "run_mariadb_slap",
+      "resource_kind": "server",
+      "title": "Run concurrency load benchmark",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "groups": [
+        "Workload",
+        "Execution host",
+        "Confirmation"
+      ],
+      "fields": [
+        {
+          "field_id": "benchmark_schema",
+          "label": "Isolated scratch schema",
+          "control": "text",
+          "required": true,
+          "default": "cdeadmin_slap_scratch",
+          "group": "Workload",
+          "help": "Dedicated scratch schema prefixed with cdeadmin_slap_ or mysqlslap."
+        },
+        {
+          "field_id": "concurrency",
+          "label": "Concurrency levels",
+          "control": "text",
+          "required": true,
+          "default": "4",
+          "group": "Workload",
+          "help": "Client count or comma-separated counts such as 1,4,8."
+        },
+        {
+          "field_id": "iterations",
+          "label": "Iterations",
+          "control": "number",
+          "required": true,
+          "default": 2,
+          "min": 1,
+          "max": 1000,
+          "group": "Workload"
+        },
+        {
+          "field_id": "number_of_queries",
+          "label": "Total queries",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 1000000,
+          "group": "Workload"
+        },
+        {
+          "field_id": "workload_mode",
+          "label": "Workload source",
+          "control": "select",
+          "required": true,
+          "default": "auto_generate",
+          "group": "Workload",
+          "options": [
+            {
+              "value": "auto_generate",
+              "label": "Auto-generated SQL"
+            },
+            {
+              "value": "explicit_sql",
+              "label": "Reviewed explicit SQL"
+            }
+          ]
+        },
+        {
+          "field_id": "auto_load_type",
+          "label": "Auto-generated load type",
+          "control": "select",
+          "required": false,
+          "default": "mixed",
+          "group": "Workload",
+          "options": [
+            {
+              "value": "mixed",
+              "label": "Mixed"
+            },
+            {
+              "value": "read",
+              "label": "Read"
+            },
+            {
+              "value": "write",
+              "label": "Write"
+            },
+            {
+              "value": "key",
+              "label": "Primary key"
+            },
+            {
+              "value": "update",
+              "label": "Update"
+            }
+          ],
+          "visible_when": {
+            "field": "workload_mode",
+            "equals": "auto_generate"
+          }
+        },
+        {
+          "field_id": "number_int_cols",
+          "label": "Generated integer columns",
+          "control": "number",
+          "required": false,
+          "default": 2,
+          "min": 1,
+          "max": 64,
+          "group": "Workload",
+          "visible_when": {
+            "field": "workload_mode",
+            "equals": "auto_generate"
+          }
+        },
+        {
+          "field_id": "number_char_cols",
+          "label": "Generated character columns",
+          "control": "number",
+          "required": false,
+          "default": 2,
+          "min": 1,
+          "max": 64,
+          "group": "Workload",
+          "visible_when": {
+            "field": "workload_mode",
+            "equals": "auto_generate"
+          }
+        },
+        {
+          "field_id": "create_sql",
+          "label": "Benchmark table DDL",
+          "control": "code",
+          "language": "sql",
+          "required": false,
+          "group": "Workload",
+          "visible_when": {
+            "field": "workload_mode",
+            "equals": "explicit_sql"
+          }
+        },
+        {
+          "field_id": "query_sql",
+          "label": "Benchmark query SQL",
+          "control": "code",
+          "language": "sql",
+          "required": false,
+          "group": "Workload",
+          "visible_when": {
+            "field": "workload_mode",
+            "equals": "explicit_sql"
+          }
+        },
+        {
+          "field_id": "keep_benchmark_schema",
+          "label": "Retain scratch schema after run",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "group": "Workload"
+        },
+        {
+          "field_id": "isolated_scratch_confirmed",
+          "label": "Confirm isolated scratch schema execution",
+          "control": "boolean",
+          "required": true,
+          "default": false,
+          "group": "Confirmation"
+        },
+        {
+          "field_id": "execution_host_kind",
+          "label": "Execution host",
+          "control": "select",
+          "required": true,
+          "default": "local",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "local",
+              "label": "Application host"
+            },
+            {
+              "value": "container",
+              "label": "Container host"
+            },
+            {
+              "value": "ssh",
+              "label": "Database SSH host"
+            }
+          ]
+        },
+        {
+          "field_id": "executable_path",
+          "label": "Utility executable path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional absolute executable path on the selected execution host."
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional data directory path on the execution host."
+        },
+        {
+          "field_id": "workspace",
+          "label": "Private staging workspace",
+          "control": "text",
+          "required": true,
+          "group": "Execution host",
+          "help": "Private directory on the execution host for backups, logs, and artifacts."
+        },
+        {
+          "field_id": "pid_file",
+          "label": "Server PID file",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional explicit server PID file path checked before offline execution."
+        },
+        {
+          "field_id": "socket_path",
+          "label": "Unix socket path",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "help": "Optional Unix domain socket path."
+        },
+        {
+          "field_id": "container_name",
+          "label": "Container name",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "docker_context",
+          "label": "Container runtime context",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "container"
+          }
+        },
+        {
+          "field_id": "ssh_host",
+          "label": "SSH host",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_port",
+          "label": "SSH port",
+          "control": "number",
+          "required": false,
+          "default": 22,
+          "min": 1,
+          "max": 65535,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_username",
+          "label": "SSH username",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_host_key",
+          "label": "Pinned SSH host public key",
+          "control": "text",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_auth_mode",
+          "label": "SSH authentication",
+          "control": "select",
+          "required": false,
+          "default": "password",
+          "group": "Execution host",
+          "options": [
+            {
+              "value": "password",
+              "label": "Password"
+            },
+            {
+              "value": "private_key",
+              "label": "Private key"
+            }
+          ],
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_password",
+          "label": "SSH password",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_private_key",
+          "label": "SSH private key",
+          "control": "password",
+          "required": false,
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "ssh_python",
+          "label": "Remote Python interpreter",
+          "control": "text",
+          "required": false,
+          "default": "/usr/bin/python3",
+          "group": "Execution host",
+          "visible_when": {
+            "field": "execution_host_kind",
+            "equals": "ssh"
+          }
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "required": true,
+          "default": 120,
+          "min": 1,
+          "max": 3600,
+          "group": "Execution host"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true,
+          "group": "Confirmation",
+          "help": "Type the selected server display name."
+        }
+      ]
     },
     {
       "resource_kind": "server",

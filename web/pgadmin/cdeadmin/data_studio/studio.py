@@ -869,6 +869,24 @@ class DataStudioService:
             raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def mariadb_session_variables_action(self, context, session_id, request):
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'mariadb-sql' or context.provider_id != 'org.cdeadmin.mariadb':
+            raise DataStudioAccessError('Native MariaDB query session required')
+        from ..sdk import RelationalClientError
+        try:
+            return binding.instance.native_session_variables_action({**request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile})
+        except (ValueError, RelationalClientError) as error:
+            if getattr(error, 'native_outcome', None) == 'unknown_outcome':
+                return {'outcome': 'unknown_outcome', 'scope': 'original-session',
+                    'accepted': False, 'effective_value_observed': False,
+                    'close_session_required': True, 'automatic_retry': False,
+                    'native_diagnostics_preserved': False}
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
     def sqlite_connection_config_action(self, context, session_id, request):
         session, binding = self._operational_session(context, session_id)
         if session.language_profile != 'sqlite-sql' or context.provider_id != 'org.cdeadmin.sqlite':
