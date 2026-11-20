@@ -8,6 +8,7 @@
   "version_range": {
     "minimum": "10.6.0",
     "tested": [
+      "11.8.9",
       "12.2.2"
     ]
   },
@@ -473,6 +474,55 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "physical_backup",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-backup",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "prepare_physical_chain",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-backup",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "recover_physical_instance",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-backup",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "evaluate_archive_retention",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-binlog",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "manage_host_service",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadbd",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "upgrade_server_instance",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-upgrade",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "manage_galera_cluster",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "libgalera_smm.so",
+          "support_state": "implemented"
         }
       ]
     },

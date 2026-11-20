@@ -310,6 +310,124 @@
       "enabled_when": [
         "verified"
       ]
+    },
+    {
+      "command_id": "endpoint.{engine_id}.physical",
+      "scope": "endpoint",
+      "label": "Physical backups & recovery...",
+      "description": "Manage physical full and incremental backups, staged prepare, isolated copy-back recovery, PITR catch-up, and one-use cutover.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "priority": 54,
+      "arguments": {
+        "tab": "mariadb-physical",
+        "workspace_action": "mariadb_physical",
+        "describe_action": "inspect"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer physical backups and recovery."
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.archive_retention",
+      "scope": "endpoint",
+      "label": "Archive retention & holds...",
+      "description": "Evaluate physical-chain and recovery-aware binary-log retention, uncertain holds, and receiver checkpoint recovery.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "priority": 55,
+      "arguments": {
+        "tab": "mariadb-archive-retention",
+        "workspace_action": "mariadb_binlog",
+        "describe_action": "hold_list"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can manage binary-log retention and holds."
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.host",
+      "scope": "endpoint",
+      "label": "Host configuration & service...",
+      "description": "Inspect, natively validate, back up and deploy option files, initialize data directories, and control the daemon service.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 56,
+      "arguments": {
+        "tab": "mariadb-host",
+        "workspace_action": "mariadb_host",
+        "describe_action": "service_status"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer host configuration and service lifecycle."
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.upgrade",
+      "scope": "endpoint",
+      "label": "Server upgrade...",
+      "description": "Run pre-upgrade compatibility and backup checks, clean shutdown, binary switchover, system-table upgrade, and rollback.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.restore",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 57,
+      "arguments": {
+        "tab": "mariadb-upgrade",
+        "workspace_action": "mariadb_upgrade",
+        "describe_action": "inspect_source"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run a server upgrade."
+      }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.galera",
+      "scope": "endpoint",
+      "label": "Galera cluster...",
+      "description": "Inspect wsrep membership, quorum, flow control and SST/IST, bootstrap safely via grastate.dat, join/rejoin nodes, and toggle desync.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "availability",
+      "mutation": "admin",
+      "priority": 58,
+      "arguments": {
+        "tab": "mariadb-galera",
+        "workspace_action": "mariadb_galera",
+        "describe_action": "inspect"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer Galera cluster membership."
+      }
     }
   ]
 }

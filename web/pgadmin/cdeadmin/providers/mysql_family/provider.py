@@ -380,6 +380,9 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._backup_stage_handles = set()
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mariadb-binlog': os.environ.get('CDEADMIN_MARIADB_BINLOG_BINARY', 'mariadb-binlog'),
+            'mariadb-backup': os.environ.get(
+                'CDEADMIN_MARIADB_BACKUP_BINARY', 'mariadb-backup'
+            ),
             'mariadb-dump': os.environ.get(
                 'CDEADMIN_MARIADB_DUMP_BINARY', 'mariadb-dump'
             ),

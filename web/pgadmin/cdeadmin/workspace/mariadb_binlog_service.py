@@ -27,9 +27,14 @@ def action(service,server,operation,request):
     if operation=='files':
         if set(request)-{'job_id','offset','limit'} or 'job_id' not in request:raise native.BinlogArchiveError('Select an archive file page')
         return jobs.files(request['job_id'],owner,endpoint.id,request.get('offset',0),request.get('limit',100))
-    if operation=='remove_artifact':
-        if set(request)!={'job_id','confirmation'}:raise native.BinlogArchiveError('Select and confirm one native archive')
-        return jobs.remove_artifact(request['job_id'],owner,endpoint.id,request['confirmation'])
+    if operation in {
+        'pin', 'remove_artifact', 'removal_reconcile',
+        'retention_evaluate', 'retention_list', 'retention_status',
+        'retention_cancel', 'retention_review', 'retention_start', 'retention_reconcile',
+        'hold_list', 'hold_record_uncertain', 'hold_review_retire', 'hold_retire',
+    } or operation.startswith('recovery_chain_'):
+        from .mariadb_archive_retention import action as retention_action
+        return retention_action(service, jobs, owner, endpoint.id, operation, request)
     if operation=='start':
         reviewed=jobs.load(request.get('job_id'),owner,endpoint.id)
         if (reviewed.get('continuation') or {}).get('stopped_receiver_job_id'):

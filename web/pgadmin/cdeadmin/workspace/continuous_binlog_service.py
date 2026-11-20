@@ -160,27 +160,49 @@ def program_identity(native_adapter, client, route, scope):
     return {**result, 'execution_host': {**result['execution_host'], 'hostname': socket.gethostname()}}
 
 
-def recollection_checkpoint(parent,captured,connection):
+def recollection_checkpoint(parent,captured,connection,family='mysql'):
     """Admit a new full read; never convert an unknown cursor into a checkpoint."""
     if parent['source']!=captured['identity']:
         raise BinlogArchiveError('The unresolved receiver belongs to a different native source identity')
-    old_mode=parent['source_state'].get('gtid_mode')
-    mode=captured['state'].get('gtid_mode')
-    if old_mode not in {'ON','ON_PERMISSIVE','OFF','OFF_PERMISSIVE'}:
-        raise BinlogArchiveError('The unresolved receiver has no native GTID-mode observation')
-    if mode!=old_mode:
-        raise BinlogArchiveError('Native GTID mode changed since the unresolved receiver; prepare an independent collection')
     checked=False
-    if mode in {'ON','ON_PERMISSIVE'}:
-        from ..providers.mysql_family.mysql_clone import rows
-        baseline=parent['source_state'].get('gtid_executed')
-        if not isinstance(baseline,str) or rows(connection,'SELECT GTID_SUBSET(%s,@@global.gtid_executed) AS valid',(baseline,))[0]['valid']!=1:
-            raise BinlogArchiveError('Native GTID lineage changed since the unresolved receiver; recollection refused')
+    if family=='mariadb':
+        from ..providers.mysql_family.mariadb_binlog_replay import gtids
+        if captured['state'].get('log_bin') not in (1,True,'ON'):
+            raise BinlogArchiveError('Native MariaDB binary logging is disabled; recollection refused')
+        baseline=gtids(parent['source_state'].get('gtid_binlog_pos') or '')
+        present=gtids(captured['state'].get('gtid_binlog_pos') or '')
+        for domain,(srv,seq) in baseline.items():
+            cur=present.get(domain)
+            if cur is None or cur[1]<seq or (cur[1]==seq and cur[0]!=srv):
+                raise BinlogArchiveError('Native MariaDB GTID lineage changed since the unresolved receiver; recollection refused')
         checked=True
+    else:
+        old_mode=parent['source_state'].get('gtid_mode')
+        mode=captured['state'].get('gtid_mode')
+        if old_mode not in {'ON','ON_PERMISSIVE','OFF','OFF_PERMISSIVE'}:
+            raise BinlogArchiveError('The unresolved receiver has no native GTID-mode observation')
+        if mode!=old_mode:
+            raise BinlogArchiveError('Native GTID mode changed since the unresolved receiver; prepare an independent collection')
+        if mode in {'ON','ON_PERMISSIVE'}:
+            from ..providers.mysql_family.mysql_clone import rows
+            baseline=parent['source_state'].get('gtid_executed')
+            if not isinstance(baseline,str) or rows(connection,'SELECT GTID_SUBSET(%s,@@global.gtid_executed) AS valid',(baseline,))[0]['valid']!=1:
+                raise BinlogArchiveError('Native GTID lineage changed since the unresolved receiver; recollection refused')
+            checked=True
     return {'kind':'full-original-file-recollection','receiver_job_id':parent['job_id'],
         'start_file':parent['options']['start_file'],'unresolved_cursor_used':False,
         'parent_outcome_rewritten':False,'native_gtid_baseline_checked':checked,
         'binary_log_epoch_verified':False,'database_recovery_verified':False}
+
+
+def _checkpoints_module(family):
+    if family=='mysql':
+        from . import mysql_receiver_checkpoints as mod
+    elif family=='mariadb':
+        from . import mariadb_receiver_checkpoints as mod
+    else:
+        raise BinlogArchiveError('Select a native receiver checkpoint family')
+    return mod
 
 
 def action(service, server, operation, request, family):
@@ -188,10 +210,9 @@ def action(service, server, operation, request, family):
     if not isinstance(request, dict): raise BinlogArchiveError('Select a native continuous receiver request')
     jobs, archives, owner, endpoint, _context = manager(service, server, family)
     if operation=='checkpoint_catalog':
-        if family!='mysql':raise BinlogArchiveError('Select a native MySQL receiver checkpoint')
-        from .mysql_receiver_checkpoints import parent,catalog
-        original=parent(jobs,archives,request.get('job_id'),owner,endpoint.id)
-        return catalog(jobs,archives,original,request)
+        mod=_checkpoints_module(family)
+        original=mod.parent(jobs,archives,request.get('job_id'),owner,endpoint.id)
+        return mod.catalog(jobs,archives,original,request)
     if operation in {'cleanup_catalog','cleanup_review','cleanup_start','cleanup_status','cleanup_cancel','cleanup_list','cleanup_reconcile'}:
         from .continuous_binlog_cleanup import action as cleanup_action
         return cleanup_action(service,server,operation,request,family,(jobs,archives,owner,endpoint,_context))
@@ -209,7 +230,7 @@ def action(service, server, operation, request, family):
     previous=None;recollect=False;archive_recover=False;checkpoint_archive_id=None
     if operation == 'review':
         accepted=({'options'},{'options','resume_job_id'})
-        if family=='mysql':accepted+=({'options','recollect_job_id','acknowledge_recollection'},
+        if family in {'mysql','mariadb'}:accepted+=({'options','recollect_job_id','acknowledge_recollection'},
             {'options','recover_job_id','archive_job_id','acknowledge_archive_checkpoint'})
         if set(request) not in accepted: raise BinlogArchiveError('Review exact native receiver options')
         selected = native.options(family, request['options'])
@@ -224,8 +245,7 @@ def action(service, server, operation, request, family):
         if 'recover_job_id' in request:
             if request['acknowledge_archive_checkpoint'] is not True:
                 raise BinlogArchiveError('Acknowledge the retained archive boundary; full archive verification must precede receiver dispatch')
-            from .mysql_receiver_checkpoints import parent
-            previous=parent(jobs,archives,request['recover_job_id'],owner,endpoint.id)
+            previous=_checkpoints_module(family).parent(jobs,archives,request['recover_job_id'],owner,endpoint.id)
             checkpoint_archive_id=request['archive_job_id'];archive_recover=True
     elif operation == 'start':
         reviewed = jobs.load(request.get('job_id'), owner, endpoint.id)
@@ -237,20 +257,18 @@ def action(service, server, operation, request, family):
             if selected['start_file']!=checkpoint:raise BinlogArchiveError('The stopped receiver checkpoint changed; prepare a new review')
         recovered_id=(reviewed.get('continuation') or {}).get('recollected_receiver_job_id')
         if recovered_id:
-            if family!='mysql' or previous_id:raise BinlogArchiveError('Native receiver recollection scope is invalid')
+            if family not in {'mysql','mariadb'} or previous_id:raise BinlogArchiveError('Native receiver recollection scope is invalid')
             previous=jobs.recollection_parent(recovered_id,owner,endpoint.id,archives,selected)
             recollect=True
         archive_recovery_id=(reviewed.get('continuation') or {}).get('recovered_receiver_job_id')
         if archive_recovery_id:
-            if family!='mysql' or previous_id or recovered_id:raise BinlogArchiveError('Native archive checkpoint recovery scope is invalid')
-            from .mysql_receiver_checkpoints import parent
-            previous=parent(jobs,archives,archive_recovery_id,owner,endpoint.id)
+            if family not in {'mysql','mariadb'} or previous_id or recovered_id:raise BinlogArchiveError('Native archive checkpoint recovery scope is invalid')
+            previous=_checkpoints_module(family).parent(jobs,archives,archive_recovery_id,owner,endpoint.id)
             checkpoint_archive_id=reviewed['continuation']['archive_checkpoint']['archive_job_id'];archive_recover=True
     elif operation=='checkpoint_inspect':
-        if family!='mysql' or set(request)!={'job_id','archive_job_id'}:
-            raise BinlogArchiveError('Inspect one native MySQL receiver archive checkpoint')
-        from .mysql_receiver_checkpoints import parent
-        previous=parent(jobs,archives,request['job_id'],owner,endpoint.id)
+        if family not in {'mysql','mariadb'} or set(request)!={'job_id','archive_job_id'}:
+            raise BinlogArchiveError('Inspect one native receiver archive checkpoint')
+        previous=_checkpoints_module(family).parent(jobs,archives,request['job_id'],owner,endpoint.id)
         checkpoint_archive_id=request['archive_job_id'];selected=None
     elif operation == 'catalog':
         if request: raise BinlogArchiveError('Native receiver catalog takes no browser route')
@@ -276,19 +294,19 @@ def action(service, server, operation, request, family):
             captured = adapter.capture(connection)
             if operation == 'catalog': return captured
             if operation=='checkpoint_inspect':
-                from .mysql_receiver_checkpoints import checkpoint
-                return {'source':captured['identity'],'checkpoint':checkpoint(archives,previous,checkpoint_archive_id,captured,connection),
+                mod=_checkpoints_module(family)
+                return {'source':captured['identity'],'checkpoint':mod.checkpoint(archives,previous,checkpoint_archive_id,captured,connection),
                     'native_archive_bytes_verified':False,'scope':'Bounded successor inspection; complete sealed archive verification is required in the receiver worker before native dispatch.'}
             native.admit(captured, selected)
             if previous is not None and previous['source']!=captured['identity']:
                 raise BinlogArchiveError('The stopped receiver belongs to a different native source identity')
-            recollected=recollection_checkpoint(previous,captured,connection) if recollect else None
+            recollected=recollection_checkpoint(previous,captured,connection,family=family) if recollect else None
             if operation=='start' and recollect and recollected!=reviewed['continuation'].get('recollection_checkpoint'):
                 raise BinlogArchiveError('The reviewed recollection admission changed; prepare a new review')
             archive_checkpoint=None
             if archive_recover:
-                from .mysql_receiver_checkpoints import checkpoint
-                archive_checkpoint=checkpoint(archives,previous,checkpoint_archive_id,captured,connection)
+                mod=_checkpoints_module(family)
+                archive_checkpoint=mod.checkpoint(archives,previous,checkpoint_archive_id,captured,connection)
                 if archive_checkpoint['next_file']!=selected['start_file']:
                     raise BinlogArchiveError('Use the exact native successor of the reviewed receiver archive')
                 if operation=='start' and archive_checkpoint!=reviewed['continuation'].get('archive_checkpoint'):
@@ -318,8 +336,11 @@ def action(service, server, operation, request, family):
                     return jobs.get(result['job_id'],owner,endpoint.id)
                 return result
             if archive_recover:
-                from .mysql_receiver_checkpoints import ArchiveCheckpointTransport
-                transport=ArchiveCheckpointTransport(family,client,route,adapter.delegate_credentials(client,route),connection,archives,
+                if family=='mariadb':
+                    from .mariadb_receiver_checkpoints import MariaDBArchiveCheckpointTransport as CheckpointTransport
+                else:
+                    from .mysql_receiver_checkpoints import ArchiveCheckpointTransport as CheckpointTransport
+                transport=CheckpointTransport(family,client,route,adapter.delegate_credentials(client,route),connection,archives,
                     receiver_jobs=jobs,checkpoint_parent=previous)
             else:transport = native.ReceiverTransport(family, client, route, adapter.delegate_credentials(client, route), connection, archives)
             connection = None

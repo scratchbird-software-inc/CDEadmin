@@ -1962,6 +1962,72 @@ class ProviderWorkspaceService:
         except (BinlogArchiveError,BinlogIntegrityError,ProviderToolError) as error:raise ProviderWorkspaceError(str(error)) from None
         except OSError:raise ProviderWorkspaceError('Native archive storage is unavailable') from None
 
+    def mariadb_physical(self, server, operation, request):
+        from .mariadb_physical_service import action
+        from ..providers.mysql_family.mariadb_physical import MariaDBPhysicalError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..sdk.relational import RelationalClientError
+        from mariadb import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except (MariaDBPhysicalError, BinlogArchiveError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError(
+                f'Native MariaDB physical source/recovery SQL failed ({error.errno}, {error.sqlstate})'
+            ) from None
+        except OSError as error:
+            raise ProviderWorkspaceError(f'MariaDB physical storage/host error: {error}') from None
+
+    def mariadb_host(self, server, operation, request):
+        from .mariadb_host_service import action
+        from ..providers.mysql_family.mariadb_host_services import MariaDBHostError
+        from ..sdk.relational import RelationalClientError
+        from mariadb import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except (MariaDBHostError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError(
+                f'Native MariaDB host readiness probe failed ({error.errno}, {error.sqlstate})'
+            ) from None
+        except OSError as error:
+            raise ProviderWorkspaceError(f'MariaDB host file/service error: {error}') from None
+
+    def mariadb_upgrade(self, server, operation, request):
+        from .mariadb_upgrade_service import action
+        from ..providers.mysql_family.mariadb_host_upgrade import MariaDBUpgradeError
+        from ..sdk.relational import RelationalClientError
+        from mariadb import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except (MariaDBUpgradeError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError(
+                f'Native MariaDB upgrade SQL inspection failed ({error.errno}, {error.sqlstate})'
+            ) from None
+        except OSError as error:
+            raise ProviderWorkspaceError(f'MariaDB upgrade storage/host error: {error}') from None
+
+    def mariadb_galera(self, server, operation, request):
+        from .mariadb_galera_service import action
+        from ..providers.mysql_family.mariadb_galera import MariaDBGaleraError
+        from ..providers.mysql_family.mysql_binlog_archives import BinlogArchiveError
+        from ..sdk.relational import RelationalClientError
+        from mariadb import Error as NativeError
+        try:
+            return action(self, server, operation, request)
+        except (MariaDBGaleraError, BinlogArchiveError, RelationalClientError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+        except NativeError as error:
+            raise ProviderWorkspaceError(
+                f'Native MariaDB Galera SQL failed ({error.errno}, {error.sqlstate})'
+            ) from None
+        except OSError as error:
+            raise ProviderWorkspaceError(f'MariaDB Galera storage/host error: {error}') from None
+
     def postgresql_large_object_file(self,server,operation,request):
         from .postgresql_large_object_service import action
         from ..providers.postgresql.large_object_files import LargeObjectFileError

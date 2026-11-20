@@ -3236,6 +3236,468 @@
         }
       ],
       "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+    },
+    {
+      "operation_id": "physical_backup",
+      "resource_kind": "server",
+      "title": "Create physical backup",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "confirm",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "phase",
+          "label": "Backup mode",
+          "control": "select",
+          "required": true,
+          "default": "backup",
+          "options": [
+            {
+              "value": "backup",
+              "label": "Full physical backup"
+            },
+            {
+              "value": "incremental",
+              "label": "Incremental physical backup"
+            }
+          ]
+        },
+        {
+          "field_id": "parent_job_id",
+          "label": "Parent physical backup job ID",
+          "control": "text",
+          "visible_when": {
+            "field": "phase",
+            "equals": "incremental"
+          },
+          "help": "UUID of the verified full or prior incremental physical backup."
+        },
+        {
+          "field_id": "incremental_mode",
+          "label": "Incremental boundary source",
+          "control": "radio",
+          "default": "basedir",
+          "visible_when": {
+            "field": "phase",
+            "equals": "incremental"
+          },
+          "options": [
+            {
+              "value": "basedir",
+              "label": "Parent backup directory (--incremental-basedir)"
+            },
+            {
+              "value": "lsn",
+              "label": "Parent checkpoint LSN (--incremental-lsn)"
+            }
+          ]
+        },
+        {
+          "field_id": "parallel",
+          "label": "Parallel copy threads",
+          "control": "number",
+          "default": 1,
+          "min": 1,
+          "max": 64
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Timeout (seconds)",
+          "control": "number",
+          "default": 3600,
+          "min": 1,
+          "max": 604800
+        }
+      ],
+      "description": "Runs mariadb-backup with a private 0600 credential file, verifies LSN/GTID checkpoints and file digests, and records separate dispatch, acknowledgement and artifact-adoption states."
+    },
+    {
+      "operation_id": "prepare_physical_chain",
+      "resource_kind": "server",
+      "title": "Prepare physical backup chain",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "confirm",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "base_job_id",
+          "label": "Full base backup job ID",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "incremental_job_ids",
+          "label": "Ordered incremental backup jobs",
+          "control": "grid",
+          "item_kind": "string",
+          "reorderable": true,
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Incremental job ID",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "memory_bytes",
+          "label": "Prepare buffer memory (bytes)",
+          "control": "number",
+          "default": 268435456,
+          "min": 67108864,
+          "max": 17179869184
+        }
+      ],
+      "description": "Validates contiguous LSN and server_uid lineage, stages a private working copy leaving original full and incremental artifacts immutable, runs mariadb-backup --prepare, and verifies LSN advancement."
+    },
+    {
+      "operation_id": "recover_physical_instance",
+      "resource_kind": "server",
+      "title": "Recover physical backup and cut over",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "restore_mode",
+          "label": "Restore transfer mode",
+          "control": "radio",
+          "required": true,
+          "default": "copy_back",
+          "options": [
+            {
+              "value": "copy_back",
+              "label": "Copy back (--copy-back)"
+            },
+            {
+              "value": "move_back",
+              "label": "Staged move back (--move-back)"
+            }
+          ]
+        },
+        {
+          "field_id": "prepared_job_id",
+          "label": "Prepared physical backup job ID",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_datadir",
+          "label": "Isolated target data directory",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "recovery_port",
+          "label": "Isolated recovery TCP port",
+          "control": "number",
+          "required": true,
+          "default": 13306,
+          "min": 1024,
+          "max": 65535
+        },
+        {
+          "field_id": "stop_gtid",
+          "label": "Optional point-in-time stop GTID",
+          "control": "text",
+          "help": "Canonical domain-server-seqno GTID for optional binary-log catch-up."
+        },
+        {
+          "field_id": "fence_old_primary",
+          "label": "Fence old primary read-only during cutover",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Restores into an isolated data directory, starts an isolated recovery daemon with --skip-slave-start, optionally replays binary logs to a target GTID or position, verifies schemas/rows/grants independently, and supports one-use cutover with rollback metadata."
+    },
+    {
+      "operation_id": "evaluate_archive_retention",
+      "resource_kind": "server",
+      "title": "Evaluate binary-log archive retention",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "confirm",
+      "execution_host": true,
+      "fields": [
+        {
+          "field_id": "retention_days",
+          "label": "Minimum retention age (days)",
+          "control": "number",
+          "required": true,
+          "default": 7,
+          "min": 0,
+          "max": 36500
+        },
+        {
+          "field_id": "keep_latest",
+          "label": "Minimum latest archives retained per source",
+          "control": "number",
+          "required": true,
+          "default": 2,
+          "min": 1,
+          "max": 10000
+        }
+      ],
+      "description": "Evaluates binary-log archives against age, minimum count, unretired physical backup chains, active recovery holds, and uncertain process/target holds before permitting restart-safe removal."
+    },
+    {
+      "operation_id": "manage_host_service",
+      "resource_kind": "server",
+      "title": "Manage host configuration and service",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "confirm",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "operation",
+          "label": "Host action",
+          "control": "select",
+          "required": true,
+          "default": "deploy_config",
+          "options": [
+            {
+              "value": "deploy_config",
+              "label": "Validate & deploy option file"
+            },
+            {
+              "value": "initialize_data",
+              "label": "Initialize empty data directory"
+            },
+            {
+              "value": "service_start",
+              "label": "Start daemon / service"
+            },
+            {
+              "value": "service_stop",
+              "label": "Stop daemon / service"
+            },
+            {
+              "value": "service_restart",
+              "label": "Restart daemon / service"
+            },
+            {
+              "value": "service_boot_policy",
+              "label": "Set boot policy"
+            }
+          ]
+        },
+        {
+          "field_id": "configuration_file",
+          "label": "Option file path",
+          "control": "text",
+          "help": "Absolute path to my.cnf or 50-server.cnf."
+        },
+        {
+          "field_id": "replacement_text",
+          "label": "Option file content",
+          "control": "code",
+          "language": "ini",
+          "visible_when": {
+            "field": "operation",
+            "equals": "deploy_config"
+          }
+        },
+        {
+          "field_id": "datadir",
+          "label": "Data directory path",
+          "control": "text"
+        },
+        {
+          "field_id": "boot_enabled",
+          "label": "Start service automatically at boot",
+          "control": "boolean",
+          "default": false,
+          "visible_when": {
+            "field": "operation",
+            "equals": "service_boot_policy"
+          }
+        },
+        {
+          "field_id": "disconnect_all_clients",
+          "label": "Confirm disconnecting active clients",
+          "control": "boolean",
+          "default": false
+        }
+      ],
+      "description": "Validates option files via mariadbd --help --verbose without starting the server, deploys atomically with a 0600 backup, initializes empty data directories, and manages daemon lifecycle with independent SQL readiness checks."
+    },
+    {
+      "operation_id": "upgrade_server_instance",
+      "resource_kind": "server",
+      "title": "Upgrade server binaries and system tables",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "datadir",
+          "label": "Data directory path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_mariadbd_binary",
+          "label": "Target server daemon path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_upgrade_binary",
+          "label": "Target upgrade utility path",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "target_port",
+          "label": "Target TCP port",
+          "control": "number",
+          "required": true,
+          "default": 3306,
+          "min": 1024,
+          "max": 65535
+        },
+        {
+          "field_id": "backup_job_id",
+          "label": "Verified physical backup job ID",
+          "control": "text",
+          "help": "Required backup prerequisite before executing in-place upgrade."
+        },
+        {
+          "field_id": "create_rollback_snapshot",
+          "label": "Capture pre-upgrade rollback snapshot",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Server name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Enforces backup and version prerequisites, performs a clean innodb_fast_shutdown=0 stop, switches to the target server binary, executes system-table upgrade, verifies upgrade metadata and readiness, and supports rollback on interruption."
+    },
+    {
+      "operation_id": "manage_galera_cluster",
+      "resource_kind": "server",
+      "title": "Manage Galera synchronous cluster",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "confirm",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "operation",
+          "label": "Cluster action",
+          "control": "select",
+          "required": true,
+          "default": "bootstrap_cluster",
+          "options": [
+            {
+              "value": "bootstrap_cluster",
+              "label": "Bootstrap cluster (grastate.dat verified)"
+            },
+            {
+              "value": "join_node",
+              "label": "Join member via SST/IST"
+            },
+            {
+              "value": "set_desync",
+              "label": "Toggle member maintenance desync"
+            },
+            {
+              "value": "stop_node",
+              "label": "Stop cluster member"
+            },
+            {
+              "value": "rejoin_node",
+              "label": "Rejoin stopped member"
+            },
+            {
+              "value": "recover_quorum",
+              "label": "Promote quorum on surviving partition"
+            }
+          ]
+        },
+        {
+          "field_id": "datadir",
+          "label": "Member data directory (for grastate.dat check)",
+          "control": "text"
+        },
+        {
+          "field_id": "enabled",
+          "label": "Enable maintenance desync (wsrep_desync)",
+          "control": "boolean",
+          "default": false,
+          "visible_when": {
+            "field": "operation",
+            "equals": "set_desync"
+          }
+        },
+        {
+          "field_id": "force_safe_to_bootstrap",
+          "label": "Force safe_to_bootstrap=1 on verified highest-seqno survivor",
+          "control": "boolean",
+          "default": false,
+          "visible_when": {
+            "field": "operation",
+            "equals": "bootstrap_cluster"
+          }
+        },
+        {
+          "field_id": "seed_server_id",
+          "label": "Seed member registration ID",
+          "control": "number",
+          "visible_when": {
+            "field": "operation",
+            "in": [
+              "join_node",
+              "rejoin_node"
+            ]
+          }
+        }
+      ],
+      "description": "Verifies external wsrep_provider (libgalera_smm.so) availability without substituting asynchronous replication, enforces grastate.dat safe_to_bootstrap checks, and manages Galera bootstrap, SST/IST join/rejoin, desync, and quorum recovery."
     }
   ]
 }

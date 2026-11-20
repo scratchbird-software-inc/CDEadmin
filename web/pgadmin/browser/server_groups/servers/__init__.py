@@ -3901,13 +3901,15 @@ class ServerNode(PGChildNodeView):
                                 'mariadb_binlog_capture_start','mariadb_binlog_capture_status','mariadb_binlog_capture_list','mariadb_binlog_capture_cancel',
                                 'mysql_binlog_capture_reconcile_writer','mariadb_binlog_capture_reconcile_writer',
                                 'mysql_binlog_capture_checkpoint_catalog','mysql_binlog_capture_checkpoint_inspect',
+                                'mariadb_binlog_capture_checkpoint_catalog','mariadb_binlog_capture_checkpoint_inspect',
                                 'mysql_binlog_capture_tail_catalog','mysql_binlog_capture_tail_review','mysql_binlog_capture_tail_start',
                                 'mariadb_binlog_capture_tail_catalog','mariadb_binlog_capture_tail_review','mariadb_binlog_capture_tail_start',
                                 'mysql_binlog_capture_cleanup_catalog','mysql_binlog_capture_cleanup_review','mysql_binlog_capture_cleanup_start',
                                 'mysql_binlog_capture_cleanup_status','mysql_binlog_capture_cleanup_cancel','mysql_binlog_capture_cleanup_list',
                                 'mysql_binlog_capture_cleanup_reconcile',
                                 'mariadb_binlog_capture_cleanup_catalog','mariadb_binlog_capture_cleanup_review','mariadb_binlog_capture_cleanup_start',
-                                'mariadb_binlog_capture_cleanup_status','mariadb_binlog_capture_cleanup_cancel','mariadb_binlog_capture_cleanup_list'}:
+                                'mariadb_binlog_capture_cleanup_status','mariadb_binlog_capture_cleanup_cancel','mariadb_binlog_capture_cleanup_list',
+                                'mariadb_binlog_capture_cleanup_reconcile'}:
                     family='mariadb' if action.startswith('mariadb_') else 'mysql'
                     try:payload=service.continuous_binlog(server,action.removeprefix(family+'_binlog_capture_'),data.get('request'),family)
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
@@ -3930,8 +3932,34 @@ class ServerNode(PGChildNodeView):
                     try:payload=service.mariadb_binlog_replay(server,action.removeprefix('mariadb_binlog_replay_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'mariadb_binlog_catalog','mariadb_binlog_review','mariadb_binlog_start','mariadb_binlog_status',
-                                'mariadb_binlog_list','mariadb_binlog_cancel','mariadb_binlog_reconcile','mariadb_binlog_files','mariadb_binlog_remove_artifact'}:
+                                'mariadb_binlog_list','mariadb_binlog_cancel','mariadb_binlog_reconcile','mariadb_binlog_files','mariadb_binlog_remove_artifact',
+                                'mariadb_binlog_pin','mariadb_binlog_removal_reconcile',
+                                'mariadb_binlog_retention_evaluate','mariadb_binlog_retention_list','mariadb_binlog_retention_status',
+                                'mariadb_binlog_retention_cancel','mariadb_binlog_retention_review','mariadb_binlog_retention_start','mariadb_binlog_retention_reconcile',
+                                'mariadb_binlog_hold_list','mariadb_binlog_hold_record_uncertain','mariadb_binlog_hold_review_retire','mariadb_binlog_hold_retire',
+                                'mariadb_binlog_recovery_chain_list','mariadb_binlog_recovery_chain_review','mariadb_binlog_recovery_chain_activate',
+                                'mariadb_binlog_recovery_chain_review_retire','mariadb_binlog_recovery_chain_retire'}:
                     try:payload=service.mariadb_binlog(server,action.removeprefix('mariadb_binlog_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_physical_inspect','mariadb_physical_review','mariadb_physical_start','mariadb_physical_status',
+                                'mariadb_physical_list','mariadb_physical_cancel','mariadb_physical_reconcile','mariadb_physical_stop_recovery',
+                                'mariadb_physical_cutover_review','mariadb_physical_cutover_start','mariadb_physical_cutover_status',
+                                'mariadb_physical_cutover_list','mariadb_physical_cutover_rollback'}:
+                    try:payload=service.mariadb_physical(server,action.removeprefix('mariadb_physical_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_host_inspect_config','mariadb_host_validate_config','mariadb_host_service_status',
+                                'mariadb_host_verify_readiness','mariadb_host_review','mariadb_host_start','mariadb_host_status',
+                                'mariadb_host_list','mariadb_host_rollback_config'}:
+                    try:payload=service.mariadb_host(server,action.removeprefix('mariadb_host_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_upgrade_inspect_source','mariadb_upgrade_preflight','mariadb_upgrade_review',
+                                'mariadb_upgrade_start','mariadb_upgrade_status','mariadb_upgrade_list',
+                                'mariadb_upgrade_reconcile','mariadb_upgrade_rollback','mariadb_upgrade_stop_target'}:
+                    try:payload=service.mariadb_upgrade(server,action.removeprefix('mariadb_upgrade_'),data.get('request'))
+                    except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
+                elif action in {'mariadb_galera_inspect','mariadb_galera_inspect_grastate','mariadb_galera_inspect_cluster',
+                                'mariadb_galera_review','mariadb_galera_start','mariadb_galera_status','mariadb_galera_list'}:
+                    try:payload=service.mariadb_galera(server,action.removeprefix('mariadb_galera_'),data.get('request'))
                     except ProviderWorkspaceError as error:return bad_request(errormsg=str(error))
                 elif action in {'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt'}:
                     payload = service.postgresql_schema_application(server, action, data.get('request'))

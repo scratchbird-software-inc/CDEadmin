@@ -78,6 +78,9 @@ def manager(service,server,family='mysql'):
         if family == 'mysql':
             from .mysql_backup_protection import manager as backup_protection
             jobs.backup_protection = backup_protection(service)
+        elif family == 'mariadb':
+            from .mariadb_archive_retention import protection_manager
+            jobs.backup_protection = protection_manager(service)
     return jobs,owner,endpoint,context
 
 

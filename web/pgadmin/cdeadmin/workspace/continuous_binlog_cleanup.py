@@ -78,7 +78,7 @@ class CleanupTransport:
                 'power_loss_durability_verified':False,'database_recovery_verified':False}
 
 
-def reconcile(cleanups,jobs,archives,request,owner,endpoint):
+def reconcile(cleanups,jobs,archives,request,owner,endpoint,family='mysql'):
     if set(request)!={'job_id','confirmed'} or request['confirmed'] is not True:
         raise BinlogArchiveError('Confirm reconciliation of one interrupted private cleanup receipt')
     selected=cleanups.load(request['job_id'],owner,endpoint)
@@ -104,7 +104,7 @@ def reconcile(cleanups,jobs,archives,request,owner,endpoint):
                     Path(original['execution_host']['filesystem_scope'])!=jobs.scope(owner,endpoint)):
                 raise BinlogArchiveError('The private cleanup filesystem grant changed')
             stopped_parent(jobs,archives,original['job_id'],owner,endpoint)
-            names=native.adapter('mysql').options({'log_names':record['options']['log_names']})['log_names']
+            names=native.adapter(family).options({'log_names':record['options']['log_names']})['log_names']
             expected=record['continuation']['file_postimages'];progress=record.get('progress') or {}
             acknowledged=progress.get('removed_files') or []
             if (not isinstance(expected,dict) or set(expected)!=set(names) or not isinstance(acknowledged,list) or
@@ -170,8 +170,8 @@ def manager(service,jobs,family):
 def action(service,server,operation,request,family,managed):
     jobs,archives,owner,endpoint,_context=managed;cleanups=manager(service,jobs,family)
     if operation=='cleanup_reconcile':
-        if family!='mysql':raise BinlogArchiveError('Select a native MySQL private cleanup receipt')
-        return reconcile(cleanups,jobs,archives,request,owner,endpoint.id)
+        if family not in {'mysql','mariadb'}:raise BinlogArchiveError('Select a native MySQL or MariaDB private cleanup receipt')
+        return reconcile(cleanups,jobs,archives,request,owner,endpoint.id,family)
     if operation=='cleanup_list':
         if set(request)-{'offset','limit'}:raise BinlogArchiveError('Select one private cleanup receipt page')
         return cleanups.list(owner,endpoint.id,**request)
