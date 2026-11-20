@@ -25,6 +25,7 @@ from . import mysql_rewriter
 from . import mysql_server_control
 from . import mysql_key_cache_lifecycle as cache_lifecycle
 from . import mysql_engine_diagnostics
+from . import mysql_utilities
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
@@ -33,6 +34,7 @@ HANDLERS = dict(zip(('mysql_'+key for key in (
     (mysql_session_catalog,mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
 HANDLERS['mysql_engine_diagnostics'] = mysql_engine_diagnostics
+HANDLERS['mysql_utility'] = mysql_utilities
 
 
 TABLE_ALTER_OPTIONS = frozenset({'mysql_table_options', 'mysql_connection'})
@@ -40,12 +42,18 @@ CREATE_ONLY_OPTIONS = frozenset({'data_directory', 'index_directory'})
 
 
 class MySQLAdministration(RelationalAdministration):
+    def requires_dialect(self, resource_kind, operation_id):
+        if resource_kind == 'server' and operation_id in mysql_utilities.OPERATIONS:
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
+
     def catalog(self, catalog):
         value = deepcopy(catalog)
         for resource in value['objects']:
             if resource['resource_kind']=='server':
                 policies = (
                     (mysql_engine_diagnostics, set(), set()),
+                    (mysql_utilities, mysql_utilities.READS, mysql_utilities.DESTRUCTIVE),
                     (mysql_page_tracking, mysql_page_tracking.READS, {'set_page_tracking_backup_id','purge_page_tracking'}),
                     (mysql_rewriter, {'inspect_rewrite_rules'}, {'drop_rewrite_rule'}),
                     (mysql_server_control, set(), set(mysql_server_control.OPERATIONS)),
@@ -164,6 +172,7 @@ class MySQLAdministration(RelationalAdministration):
             ('server',mysql_user_keys,'invalid_user_key'),
             ('server',mysql_page_tracking,'invalid_mysql_page_tracking'),
             ('server',mysql_engine_diagnostics,'invalid_mysql_engine_diagnostic'),
+            ('server',mysql_utilities,'invalid_mysql_utility'),
             ('server',mysql_rewriter,'invalid_mysql_rewriter'),
             ('server',mysql_server_control,'invalid_mysql_server_control'),
             ('server',mysql_xa,'invalid_mysql_xa'),

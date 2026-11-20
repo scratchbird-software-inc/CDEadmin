@@ -473,6 +473,48 @@
           "operation_id": "inspect",
           "tier": 1,
           "mutation_class": "read"
+        },
+        {
+          "operation_id": "run_aria_chk",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "aria_chk",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_aria_pack",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "aria_pack",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_myisamchk",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "myisamchk",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_myisampack",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "myisampack",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_innochecksum",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "innochecksum",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_mariadb_slap",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mariadb-slap",
+          "support_state": "implemented"
         }
       ]
     },

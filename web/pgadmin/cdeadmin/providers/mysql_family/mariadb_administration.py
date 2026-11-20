@@ -13,12 +13,18 @@ from . import mariadb_prepared_xa as prepared_xa
 from . import mariadb_key_caches as key_caches
 
 from . import mariadb_all_channels as all_channels
+from . import mariadb_utilities as utilities
 
-MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches)
+MODULES = (all_channels, diagnostics, live_plans, shutdown, prepared_xa, key_caches, utilities)
 OPERATIONS = {operation: module for module in MODULES for operation in module.OPERATIONS}
 
 
 class MariaDBAdministration(RelationalAdministration):
+    def requires_dialect(self, resource_kind, operation_id):
+        if resource_kind == 'server' and operation_id in utilities.OPERATIONS:
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
+
     def catalog(self, catalog):
         value = deepcopy(catalog)
         server = next(row for row in value['objects'] if row['resource_kind'] == 'server')
