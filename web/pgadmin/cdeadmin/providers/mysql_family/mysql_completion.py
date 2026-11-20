@@ -47,7 +47,11 @@ def complete(client, handle):
             result = deepcopy(snapshot['editor_context'])
             result.update(original_session_commands_sent=0, original_diagnostics_preserved=True,
                 original_diagnostics_preservation_qualified=True,
-                observation_source='explicit-source-session-snapshot', snapshot_invalidated_by_next_source_command=True)
+                observation_source='explicit-source-session-snapshot', snapshot_invalidated_by_next_source_command=True,
+                context_mode='retained_snapshot',
+                catalog_binding_status='unknown',
+                privilege_evaluation='not_evaluated',
+                execution_verified=False)
             return result
     observer = editor_observer(client, handle)
     try:
@@ -65,6 +69,10 @@ def complete(client, handle):
             result.update(complete=False, original_diagnostics_preservation_qualified=True,
                 original_diagnostics_preserved=True, original_session_commands_sent=0,
                 original_session_catalog_binding_validated=False,
+                context_mode='live_session',
+                catalog_binding_status='unknown',
+                privilege_evaluation='not_evaluated',
+                execution_verified=False,
                 metadata_observation={**observation, 'thread_id': str(observation['thread_id']),
                     'connection_id': str(observation['connection_id'])},
                 coverage='Committed native catalog on a private same-instance authenticated peer. Source database, SQL mode and client charset are independently observed. Original active-role and temporary-object overlays are unconfirmed.')

@@ -1,82 +1,1736 @@
 {
- "schema": "cdeadmin.ui-capabilities.v1",
- "engine": "mysql",
- "profiles": ["mysql-native"],
- "beta_tier": "full",
- "version_range": {"minimum":"9.7.0","maximum_exclusive":"9.7.1","tested":["9.7.0"]},
- "kinds": [
-  {"resource_kind":"server","family":"server","form":"forms/server.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"inspect_page_tracking","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"start_page_tracking","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"stop_page_tracking","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"count_tracked_pages","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"set_page_tracking_backup_id","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"export_tracked_pages","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"purge_page_tracking","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"inspect_rewrite_rules","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create_rewrite_rule","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"alter_rewrite_rule","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop_rewrite_rule","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"reload_rewrite_rules","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"shutdown_server","tier":3,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"restart_server","tier":3,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"inspect_prepared_xa","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"commit_prepared_xa","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"rollback_prepared_xa","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"rotate_innodb_master_key","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rotate_binlog_master_key","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"reload_tls","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"reload_keyring","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"enable_innodb_redo","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"disable_innodb_redo","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"import_table_sdi","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"inspect_key_cache","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"configure_key_cache","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"release_key_cache","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"install_user_key_functions","tier":2,"mutation_class":"admin","support_state":"implemented","notes":"Descriptor operation is draft pending shared rendering acceptance."},{"operation_id":"inspect_user_key","tier":2,"mutation_class":"read","support_state":"implemented","notes":"Descriptor operation is draft pending shared rendering acceptance."},{"operation_id":"store_user_key","tier":2,"mutation_class":"admin","support_state":"implemented","notes":"Descriptor operation is draft pending shared rendering acceptance."},{"operation_id":"generate_user_key","tier":2,"mutation_class":"admin","support_state":"implemented","notes":"Descriptor operation is draft pending shared rendering acceptance."},{"operation_id":"remove_user_key","tier":2,"mutation_class":"destructive","support_state":"implemented","notes":"Descriptor operation is draft pending shared rendering acceptance."},{"operation_id":"reset_failover_sources","tier":3,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"refresh_session_metadata","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"show_engine_status","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"show_engine_logs","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"show_engine_mutex","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"database","family":"database","form":"forms/database.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"analyze_tables","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"check_tables","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"optimize_tables","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"repair_tables","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"checksum_tables","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"backup_logical","tier":3,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"verify_logical","tier":3,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"restore_logical","tier":3,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"table","family":"table","form":"forms/table.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"rename","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"insert","tier":2,"mutation_class":"write","support_state":"implemented","notes":"Data-grid operation; not an object DDL field."},{"operation_id":"update","tier":2,"mutation_class":"write","support_state":"implemented","notes":"Data-grid operation; not an object DDL field."},{"operation_id":"delete","tier":2,"mutation_class":"destructive","support_state":"implemented","notes":"Data-grid operation; not an object DDL field."},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"assign_index_cache","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"preload_index_cache","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"add_partitions","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"coalesce_partitions","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"partition_by","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"remove_partitioning","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop_temporary","tier":2,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"column","family":"table","variant":"column","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"rename","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"drop_masking_policy","tier":2,"mutation_class":"admin","support_state":"post_beta_closed_source","notes":"Core reference syntax does not provide the closed object_policy implementation; post beta. Not a beta menu operation."},{"operation_id":"set_masking_policy","tier":2,"mutation_class":"admin","support_state":"post_beta_closed_source","notes":"Core reference syntax does not provide the closed object_policy implementation; post beta. Not a beta menu operation."}]},
-  {"resource_kind":"index","family":"index","form":"forms/index.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rename","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"visibility","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"constraint","family":"table","variant":"constraint","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"enforcement","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"view","family":"view","form":"forms/view.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"materialized-view","family":"view","variant":"materialized","form":"forms/view.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"experimental","notes":"Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."},{"operation_id":"alter","tier":1,"mutation_class":"write","support_state":"experimental","notes":"Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"experimental","notes":"Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."}]},
-  {"resource_kind":"trigger","family":"trigger","form":"forms/trigger.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"event","family":"routine","variant":"scheduled","form":"forms/routine.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rename","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"procedure","family":"routine","variant":"procedure","form":"forms/routine.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"function","family":"routine","variant":"function","form":"forms/routine.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"library","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented","notes":"Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented","notes":"Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented","notes":"Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."}]},
-  {"resource_kind":"loadable-function","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented","notes":"Server DDN retains runtime facts; usage counts are observations, not DDL intent."},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"partition","family":"table","variant":"partition","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"analyze","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"check","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"exchange","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"optimize","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rebuild","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"reorganize","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"truncate","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"tablespace","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rename","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"user","family":"role","variant":"user","form":"forms/role.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"rename","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"role","family":"role","variant":"role","form":"forms/role.form.json","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"grant","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"revoke","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_default","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"privilege","family":"role","variant":"grant","form":"forms/role.form.json","operations":[{"operation_id":"inspect","tier":2,"mutation_class":"read","support_state":"implemented"},{"operation_id":"grant","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"revoke","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"plugin","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented","notes":"All 11 native PLUGINS fields are retained in explorer and server DDN."},{"operation_id":"create","tier":1,"mutation_class":"write","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"component","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"replication-channel","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"filter","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"reset","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"start","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"stop","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"add_failover_source","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"remove_failover_source","tier":2,"mutation_class":"destructive","support_state":"implemented"},{"operation_id":"add_managed_failover","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"remove_managed_failover","tier":2,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"group-replication","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"disable_member_action","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"enable_member_action","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"multi_primary","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"reset_member_actions","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_primary","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_protocol","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_write_concurrency","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"single_primary","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"start","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"stop","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"group-replication-member","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"}]},
-  {"resource_kind":"resource-group","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"assign","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"metric","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"}]},
-  {"resource_kind":"session","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"terminate_connection","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"terminate_query","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"system-variable","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"reset_persist","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_global","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_persist","tier":2,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"set_persist_only","tier":2,"mutation_class":"admin","support_state":"implemented"}]},
-  {"resource_kind":"spatial-reference-system","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"server-link","family":"engine_object","operations":[{"operation_id":"inspect","tier":1,"mutation_class":"read","support_state":"implemented"},{"operation_id":"create","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"alter","tier":1,"mutation_class":"admin","support_state":"implemented"},{"operation_id":"drop","tier":1,"mutation_class":"destructive","support_state":"implemented"}]},
-  {"resource_kind":"character-set","family":"engine_object","title":"Character sets","operations":[]},
-  {"resource_kind":"collation","family":"engine_object","title":"Collations","operations":[]},
-  {"resource_kind":"storage-engine","family":"engine_object","title":"Storage engines","operations":[]}
- ],
- "sql_builder": {
-  "verified": "2026-11-08: each option run on MySQL 9.7.0 (the declared version range); CUBE and GROUPING SETS are refused as not supported (error 6033).",
-  "relation_kinds": ["table","view"],
-  "options": {
-   "cte": {"available":true},
-   "cte.recursive": {"available":true},
-   "cte.materialized": {"available":false,"reason":"MySQL has no MATERIALIZED for common table expressions."},
-   "cte.cycle": {"available":false,"reason":"MySQL has no CYCLE clause for recursive common table expressions."},
-   "distinct": {"available":true},
-   "distinct_on": {"available":false,"reason":"MySQL has no DISTINCT ON."},
-   "join.inner": {"available":true},
-   "join.left": {"available":true},
-   "join.right": {"available":true},
-   "join.full": {"available":false,"reason":"MySQL has no FULL OUTER JOIN."},
-   "join.cross": {"available":true},
-   "join.natural": {"available":true},
-   "join.using": {"available":true},
-   "where": {"available":true},
-   "where.or": {"available":true},
-   "aggregate": {"available":true},
-   "aggregate.distinct": {"available":true},
-   "window": {"available":true},
-   "window.partition_by": {"available":true},
-   "window.order_by": {"available":true},
-   "group_by": {"available":true},
-   "group_by.rollup": {"available":true},
-   "group_by.cube": {"available":false,"reason":"MySQL does not support CUBE."},
-   "group_by.grouping_sets": {"available":false,"reason":"MySQL does not support GROUPING SETS."},
-   "group_by.all": {"available":false,"reason":"MySQL has no GROUP BY ALL."},
-   "having": {"available":true},
-   "order_by": {"available":true},
-   "order_by.nulls": {"available":false,"reason":"MySQL has no NULLS FIRST or NULLS LAST."},
-   "limit": {"available":true},
-   "offset": {"available":true},
-   "set.union": {"available":true},
-   "set.union_all": {"available":true},
-   "set.intersect": {"available":true},
-   "set.except": {"available":true}
+  "schema": "cdeadmin.ui-capabilities.v1",
+  "engine": "mysql",
+  "profiles": [
+    "mysql-native"
+  ],
+  "beta_tier": "full",
+  "version_range": {
+    "minimum": "9.7.0",
+    "maximum_exclusive": "9.7.1",
+    "tested": [
+      "9.7.0"
+    ]
+  },
+  "kinds": [
+    {
+      "resource_kind": "server",
+      "family": "server",
+      "form": "forms/server.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_page_tracking",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "start_page_tracking",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "stop_page_tracking",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "count_tracked_pages",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_page_tracking_backup_id",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "export_tracked_pages",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "purge_page_tracking",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_rewrite_rules",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create_rewrite_rule",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter_rewrite_rule",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop_rewrite_rule",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reload_rewrite_rules",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "shutdown_server",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "restart_server",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_prepared_xa",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "commit_prepared_xa",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rollback_prepared_xa",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rotate_innodb_master_key",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rotate_binlog_master_key",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reload_tls",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reload_keyring",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "enable_innodb_redo",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "disable_innodb_redo",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "import_table_sdi",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_key_cache",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "configure_key_cache",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "release_key_cache",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "install_user_key_functions",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Descriptor operation is draft pending shared rendering acceptance."
+        },
+        {
+          "operation_id": "inspect_user_key",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented",
+          "notes": "Descriptor operation is draft pending shared rendering acceptance."
+        },
+        {
+          "operation_id": "store_user_key",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Descriptor operation is draft pending shared rendering acceptance."
+        },
+        {
+          "operation_id": "generate_user_key",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Descriptor operation is draft pending shared rendering acceptance."
+        },
+        {
+          "operation_id": "remove_user_key",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented",
+          "notes": "Descriptor operation is draft pending shared rendering acceptance."
+        },
+        {
+          "operation_id": "reset_failover_sources",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "refresh_session_metadata",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "show_engine_status",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "show_engine_logs",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "show_engine_mutex",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_myisamchk",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "myisamchk",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_myisampack",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "requires_utility": "myisampack",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_innochecksum",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "innochecksum",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_ibd2sdi",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "ibd2sdi",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "run_mysqlslap",
+          "tier": 3,
+          "mutation_class": "admin",
+          "requires_utility": "mysqlslap",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "flush",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "explain_for_connection",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_ndb_cluster",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "start_ndb_backup",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "abort_ndb_backup",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "database",
+      "family": "database",
+      "form": "forms/database.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "analyze_tables",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "check_tables",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "optimize_tables",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "repair_tables",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "checksum_tables",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "backup_logical",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "verify_logical",
+          "tier": 3,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "restore_logical",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "table",
+      "family": "table",
+      "form": "forms/table.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "insert",
+          "tier": 2,
+          "mutation_class": "write",
+          "support_state": "implemented",
+          "notes": "Data-grid operation; not an object DDL field."
+        },
+        {
+          "operation_id": "update",
+          "tier": 2,
+          "mutation_class": "write",
+          "support_state": "implemented",
+          "notes": "Data-grid operation; not an object DDL field."
+        },
+        {
+          "operation_id": "delete",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented",
+          "notes": "Data-grid operation; not an object DDL field."
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "assign_index_cache",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "preload_index_cache",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "add_partitions",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "coalesce_partitions",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "partition_by",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "remove_partitioning",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop_temporary",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "flush",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "column",
+      "family": "table",
+      "variant": "column",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop_masking_policy",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "post_beta_closed_source",
+          "notes": "Core reference syntax does not provide the closed object_policy implementation; post beta. Not a beta menu operation."
+        },
+        {
+          "operation_id": "set_masking_policy",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "post_beta_closed_source",
+          "notes": "Core reference syntax does not provide the closed object_policy implementation; post beta. Not a beta menu operation."
+        }
+      ]
+    },
+    {
+      "resource_kind": "index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "visibility",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "constraint",
+      "family": "table",
+      "variant": "constraint",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "enforcement",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "view",
+      "family": "view",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "materialized-view",
+      "family": "view",
+      "variant": "materialized",
+      "form": "forms/view.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "experimental",
+          "notes": "Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "experimental",
+          "notes": "Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "experimental",
+          "notes": "Native definition metadata only. Physical materialization requires an installed supporting engine; closed Enterprise execution is post beta."
+        }
+      ]
+    },
+    {
+      "resource_kind": "trigger",
+      "family": "trigger",
+      "form": "forms/trigger.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "event",
+      "family": "routine",
+      "variant": "scheduled",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "procedure",
+      "family": "routine",
+      "variant": "procedure",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "function",
+      "family": "routine",
+      "variant": "function",
+      "form": "forms/routine.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "library",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented",
+          "notes": "Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."
+        }
+      ]
+    },
+    {
+      "resource_kind": "loadable-function",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented",
+          "notes": "Server DDN retains runtime facts; usage counts are observations, not DDL intent."
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "partition",
+      "family": "table",
+      "variant": "partition",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "analyze",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "check",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "exchange",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "optimize",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rebuild",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reorganize",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "truncate",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "tablespace",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "user",
+      "family": "role",
+      "variant": "user",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "role",
+      "family": "role",
+      "variant": "role",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_default",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "privilege",
+      "family": "role",
+      "variant": "grant",
+      "form": "forms/role.form.json",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "grant",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "revoke",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "plugin",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented",
+          "notes": "All 11 native PLUGINS fields are retained in explorer and server DDN."
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "component",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "replication-channel",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "filter",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reset",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "start",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "stop",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "add_failover_source",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "remove_failover_source",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "add_managed_failover",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "remove_managed_failover",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "group-replication",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "disable_member_action",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "enable_member_action",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "multi_primary",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reset_member_actions",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_primary",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_protocol",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_write_concurrency",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "single_primary",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "start",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "stop",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "group-replication-member",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "resource-group",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "assign",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "metric",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "session",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "terminate_connection",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "terminate_query",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "explain_for_connection",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "system-variable",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "reset_persist",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_global",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_persist",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "set_persist_only",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "spatial-reference-system",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "server-link",
+      "family": "engine_object",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "character-set",
+      "family": "engine_object",
+      "title": "Character sets",
+      "operations": []
+    },
+    {
+      "resource_kind": "collation",
+      "family": "engine_object",
+      "title": "Collations",
+      "operations": []
+    },
+    {
+      "resource_kind": "storage-engine",
+      "family": "engine_object",
+      "title": "Storage engines",
+      "operations": []
+    },
+    {
+      "resource_kind": "logfile-group",
+      "family": "engine_object",
+      "title": "Logfile groups",
+      "parent_kinds": [
+        "server"
+      ],
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "ndb-node",
+      "family": "engine_object",
+      "title": "Cluster nodes",
+      "parent_kinds": [
+        "server"
+      ],
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "restart_ndb_node",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "stop_ndb_node",
+          "tier": 3,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    },
+    {
+      "resource_kind": "x-collection",
+      "family": "engine_object",
+      "title": "Document collections",
+      "parent_kinds": [
+        "database"
+      ],
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "ensure",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "modify_options",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "create_index",
+          "tier": 2,
+          "mutation_class": "admin",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "drop_index",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "insert_documents",
+          "tier": 2,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "find_documents",
+          "tier": 2,
+          "mutation_class": "read",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "modify_documents",
+          "tier": 2,
+          "mutation_class": "write",
+          "support_state": "implemented"
+        },
+        {
+          "operation_id": "remove_documents",
+          "tier": 2,
+          "mutation_class": "destructive",
+          "support_state": "implemented"
+        }
+      ]
+    }
+  ],
+  "sql_builder": {
+    "verified": "2026-11-08: each option run on MySQL 9.7.0 (the declared version range); CUBE and GROUPING SETS are refused as not supported (error 6033).",
+    "relation_kinds": [
+      "table",
+      "view"
+    ],
+    "options": {
+      "cte": {
+        "available": true
+      },
+      "cte.recursive": {
+        "available": true
+      },
+      "cte.materialized": {
+        "available": false,
+        "reason": "MySQL has no MATERIALIZED for common table expressions."
+      },
+      "cte.cycle": {
+        "available": false,
+        "reason": "MySQL has no CYCLE clause for recursive common table expressions."
+      },
+      "distinct": {
+        "available": true
+      },
+      "distinct_on": {
+        "available": false,
+        "reason": "MySQL has no DISTINCT ON."
+      },
+      "join.inner": {
+        "available": true
+      },
+      "join.left": {
+        "available": true
+      },
+      "join.right": {
+        "available": true
+      },
+      "join.full": {
+        "available": false,
+        "reason": "MySQL has no FULL OUTER JOIN."
+      },
+      "join.cross": {
+        "available": true
+      },
+      "join.natural": {
+        "available": true
+      },
+      "join.using": {
+        "available": true
+      },
+      "where": {
+        "available": true
+      },
+      "where.or": {
+        "available": true
+      },
+      "aggregate": {
+        "available": true
+      },
+      "aggregate.distinct": {
+        "available": true
+      },
+      "window": {
+        "available": true
+      },
+      "window.partition_by": {
+        "available": true
+      },
+      "window.order_by": {
+        "available": true
+      },
+      "group_by": {
+        "available": true
+      },
+      "group_by.rollup": {
+        "available": true
+      },
+      "group_by.cube": {
+        "available": false,
+        "reason": "MySQL does not support CUBE."
+      },
+      "group_by.grouping_sets": {
+        "available": false,
+        "reason": "MySQL does not support GROUPING SETS."
+      },
+      "group_by.all": {
+        "available": false,
+        "reason": "MySQL has no GROUP BY ALL."
+      },
+      "having": {
+        "available": true
+      },
+      "order_by": {
+        "available": true
+      },
+      "order_by.nulls": {
+        "available": false,
+        "reason": "MySQL has no NULLS FIRST or NULLS LAST."
+      },
+      "limit": {
+        "available": true
+      },
+      "offset": {
+        "available": true
+      },
+      "set.union": {
+        "available": true
+      },
+      "set.union_all": {
+        "available": true
+      },
+      "set.intersect": {
+        "available": true
+      },
+      "set.except": {
+        "available": true
+      }
+    }
   }
- }
 }

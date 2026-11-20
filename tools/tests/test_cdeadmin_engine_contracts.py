@@ -400,7 +400,7 @@ def test_mysql_exact_dialect_inventory_activates_generated_tasks():
     checked_metrics = validate_metrics_contract(
         metrics_document, MYSQL_PROFILE
     )
-    assert checked_metrics['authoritative_observation_count'] == 342
+    assert checked_metrics['authoritative_observation_count'] == 376
     assert checked_metrics['authoritative_metric_count'] == 23
     metrics = {
         item['native_name']: item
@@ -446,7 +446,7 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         document, MARIADB_PROFILE,
         MARIADB_ADMINISTRATION.dialect_task_ids(),
     )
-    assert checked['coverage']['authoritative_task_count'] == 108
+    assert checked['coverage']['authoritative_task_count'] == 110
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 693,
         'statements': 59,

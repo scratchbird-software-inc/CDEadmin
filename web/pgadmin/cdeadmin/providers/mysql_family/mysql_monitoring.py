@@ -20,6 +20,36 @@ STATUS_NAMES = ('Uptime', 'Uptime_since_flush_status', 'Threads_connected', 'Thr
 GAUGES = {'Uptime', 'Uptime_since_flush_status', 'Threads_connected', 'Threads_running',
           'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_dirty'}
 
+APPLIER_METRICS_COMPONENT_URN = 'file://component_replication_applier_metrics'
+APPLIER_METRICS_COLUMNS = (
+    'CHANNEL_NAME', 'TOTAL_ACTIVE_TIME_DURATION', 'LAST_APPLIER_START',
+    'TRANSACTIONS_COMMITTED_COUNT', 'TRANSACTIONS_ONGOING_COUNT', 'TRANSACTIONS_PENDING_COUNT',
+    'TRANSACTIONS_COMMITTED_SIZE_BYTES_SUM', 'TRANSACTIONS_ONGOING_FULL_SIZE_BYTES_SUM',
+    'TRANSACTIONS_ONGOING_PROGRESS_SIZE_BYTES_SUM', 'TRANSACTIONS_PENDING_SIZE_BYTES_SUM',
+    'EVENTS_COMMITTED_COUNT', 'WAITS_FOR_WORK_FROM_SOURCE_COUNT',
+    'WAITS_FOR_WORK_FROM_SOURCE_SUM_TIME', 'WAITS_FOR_AVAILABLE_WORKER_COUNT',
+    'WAITS_FOR_AVAILABLE_WORKER_SUM_TIME', 'WAITS_COMMIT_SCHEDULE_DEPENDENCY_COUNT',
+    'WAITS_COMMIT_SCHEDULE_DEPENDENCY_SUM_TIME', 'WAITS_FOR_WORKER_QUEUE_MEMORY_COUNT',
+    'WAITS_FOR_WORKER_QUEUE_MEMORY_SUM_TIME', 'WAITS_WORKER_QUEUES_FULL_COUNT',
+    'WAITS_WORKER_QUEUES_FULL_SUM_TIME', 'WAITS_DUE_TO_COMMIT_ORDER_COUNT',
+    'WAITS_DUE_TO_COMMIT_ORDER_SUM_TIME', 'TIME_TO_READ_FROM_RELAY_LOG_SUM_TIME',
+)
+APPLIER_WORKER_PROGRESS_COLUMNS = (
+    'CHANNEL_NAME', 'WORKER_ID', 'THREAD_ID', 'ONGOING_TRANSACTION_TYPE',
+    'ONGOING_TRANSACTION_FULL_SIZE_BYTES', 'ONGOING_TRANSACTION_APPLIED_SIZE_BYTES',
+)
+GR_FLOW_CONTROL_COMPONENT_URN = 'file://component_group_replication_flow_control_stats'
+GR_FLOW_CONTROL_STATUS_NAMES = (
+    'Gr_flow_control_throttle_count',
+    'Gr_flow_control_throttle_time_sum',
+    'Gr_flow_control_throttle_active_count',
+    'Gr_flow_control_throttle_last_throttle_timestamp',
+)
+GR_FLOW_CONTROL_COUNTERS = (
+    'Gr_flow_control_throttle_count',
+    'Gr_flow_control_throttle_time_sum',
+)
+
 
 def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
     """Exact native global counter differences; missing fields remain gaps."""
@@ -57,6 +87,32 @@ def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
                 gaps[name] = 'counter-reset'
             else:
                 rates[name] = format(Decimal(after[name] - before[name]) / Decimal(str(elapsed)), 'f')
+        prev_gr = (previous or {}).get('groups', {}).get('component_group_replication_flow_control', {})
+        curr_gr = current.get('groups', {}).get('component_group_replication_flow_control', {})
+        if prev_gr.get('status') == 'available' and curr_gr.get('status') == 'available':
+            gr_before = {
+                r['variable_name']: int(r['variable_value'])
+                for r in prev_gr.get('rows', [])
+                if r.get('variable_name') in GR_FLOW_CONTROL_COUNTERS
+                and isinstance(r.get('variable_value'), str)
+                and r['variable_value'].isascii()
+                and r['variable_value'].isdigit()
+            }
+            gr_after = {
+                r['variable_name']: int(r['variable_value'])
+                for r in curr_gr.get('rows', [])
+                if r.get('variable_name') in GR_FLOW_CONTROL_COUNTERS
+                and isinstance(r.get('variable_value'), str)
+                and r['variable_value'].isascii()
+                and r['variable_value'].isdigit()
+            }
+            for name in GR_FLOW_CONTROL_COUNTERS:
+                if name not in gr_before or name not in gr_after:
+                    gaps[name] = 'counter-unavailable'
+                elif gr_after[name] < gr_before[name]:
+                    gaps[name] = 'counter-reset'
+                else:
+                    rates[name] = format(Decimal(gr_after[name] - gr_before[name]) / Decimal(str(elapsed)), 'f')
     return {'status': 'available', 'scope': 'server', 'elapsed_seconds': elapsed,
             'epoch': current['source_epoch'], 'per_second': rates, 'gaps': gaps}
 
@@ -200,6 +256,7 @@ class MySQLMonitor:
                     self._group(result, 'alert_replication_appliers', 'SELECT CHANNEL_NAME, SERVICE_STATE FROM performance_schema.replication_applier_status ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
                     self._group(result, 'alert_replication_workers', 'SELECT CHANNEL_NAME, WORKER_ID, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_worker ORDER BY CHANNEL_NAME, WORKER_ID LIMIT 101', scope='server')
                     self._group(result, 'alert_replication_coordinators', 'SELECT CHANNEL_NAME, LAST_ERROR_NUMBER FROM performance_schema.replication_applier_status_by_coordinator ORDER BY CHANNEL_NAME LIMIT 101', scope='server')
+                    self._collect_component_metrics(result)
                 if self._transaction_active():
                     raise ValueError('Monitoring probe retained a transaction')
                 result.update(status='partial', transaction_completed=True)
@@ -221,6 +278,101 @@ class MySQLMonitor:
             result.update(last_success_at=self._last_success, ended_at=datetime.now(timezone.utc).isoformat(),
                           elapsed_ms=round((time.monotonic() - start) * 1000, 3))
             return result
+
+    def _collect_component_metrics(self, result):
+        now_iso = datetime.now(timezone.utc).isoformat()
+        pfs_tables = {
+            row['table_name']
+            for row in self._read(
+                "SELECT TABLE_NAME FROM information_schema.TABLES "
+                "WHERE TABLE_SCHEMA = 'performance_schema' "
+                "AND TABLE_NAME IN ('replication_applier_metrics', 'replication_applier_progress_by_worker') "
+                "ORDER BY TABLE_NAME LIMIT 101"
+            )
+        }
+        applier_specs = (
+            (
+                'component_replication_applier_metrics',
+                'replication_applier_metrics',
+                APPLIER_METRICS_COLUMNS,
+                'CHANNEL_NAME',
+            ),
+            (
+                'component_replication_applier_worker_progress',
+                'replication_applier_progress_by_worker',
+                APPLIER_WORKER_PROGRESS_COLUMNS,
+                'CHANNEL_NAME, WORKER_ID',
+            ),
+        )
+        for group_name, table_name, columns, order_by in applier_specs:
+            if table_name not in pfs_tables:
+                result['groups'][group_name] = {
+                    'status': 'not_installed',
+                    'reason': 'component-not-installed',
+                    'component_urn': APPLIER_METRICS_COMPONENT_URN,
+                    'native_table': 'performance_schema.' + table_name,
+                    'scope': 'server',
+                    'rows': [],
+                    'observed_at': now_iso,
+                    'observation_age_seconds': 0,
+                }
+            else:
+                projection = ', '.join(
+                    col if col in {'CHANNEL_NAME', 'ONGOING_TRANSACTION_TYPE'}
+                    else f'CAST({col} AS CHAR) AS {col}'
+                    for col in columns
+                )
+                self._group(
+                    result,
+                    group_name,
+                    f'SELECT {projection} FROM performance_schema.{table_name} ORDER BY {order_by} LIMIT 101',
+                    scope='server',
+                )
+                result['groups'][group_name].update(
+                    component_urn=APPLIER_METRICS_COMPONENT_URN,
+                    native_table='performance_schema.' + table_name,
+                )
+        gr_markers = ','.join(['%s'] * len(GR_FLOW_CONTROL_STATUS_NAMES))
+        try:
+            gr_rows = self._read(
+                'SELECT VARIABLE_NAME, VARIABLE_VALUE FROM performance_schema.global_status '
+                f'WHERE VARIABLE_NAME IN ({gr_markers}) ORDER BY VARIABLE_NAME LIMIT 101',
+                GR_FLOW_CONTROL_STATUS_NAMES,
+            )
+            if not gr_rows:
+                result['groups']['component_group_replication_flow_control'] = {
+                    'status': 'not_installed',
+                    'reason': 'component-not-installed',
+                    'component_urn': GR_FLOW_CONTROL_COMPONENT_URN,
+                    'scope': 'server',
+                    'rows': [],
+                    'observed_at': now_iso,
+                    'observation_age_seconds': 0,
+                }
+            else:
+                result['groups']['component_group_replication_flow_control'] = {
+                    'status': 'available',
+                    'component_urn': GR_FLOW_CONTROL_COMPONENT_URN,
+                    'scope': 'server',
+                    'rows': gr_rows,
+                    'truncated': False,
+                    'limit': 100,
+                    'visibility': 'permission-filtered',
+                    'observed_at': now_iso,
+                    'observation_age_seconds': 0,
+                }
+        except Exception as error:
+            if getattr(error, 'errno', None) not in DENIED:
+                raise
+            result['groups']['component_group_replication_flow_control'] = {
+                'status': 'unavailable',
+                'component_urn': GR_FLOW_CONTROL_COMPONENT_URN,
+                'scope': 'server',
+                'error_code': error.errno,
+                'sqlstate': getattr(error, 'sqlstate', None),
+                'observed_at': now_iso,
+                'observation_age_seconds': 0,
+            }
 
     def close(self):
         with self._lock:

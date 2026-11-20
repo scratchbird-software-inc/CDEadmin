@@ -108,6 +108,20 @@ def reconcile(connection, database, *, privileged):
     group_active = read("SELECT PLUGIN_NAME FROM information_schema.PLUGINS WHERE PLUGIN_NAME='group_replication' AND PLUGIN_STATUS='ACTIVE'")
     expected['group-replication'] = Counter({('Group Replication',): 1}) if group_active else Counter()
     expected['group-replication-member'] = read("SELECT 'Group Replication', MEMBER_ID FROM performance_schema.replication_group_members WHERE MEMBER_ID<>''") if group_active else Counter()
+    from pgadmin.cdeadmin.providers.mysql_family.mysql_xcollections import discover_collections_from_catalog
+    def _raw_records(sql, params=None):
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            names = [str(col[0]).lower() for col in (cursor.description or ())]
+            return [dict(zip(names, row)) for row in cursor.fetchall()]
+    expected['x-collection'] = Counter((c['schema'], c['name']) for c in discover_collections_from_catalog(_raw_records, database))
+    ndb_active = read("SELECT ENGINE FROM information_schema.ENGINES WHERE LOWER(ENGINE)='ndbcluster' AND UPPER(SUPPORT) IN ('YES','DEFAULT')")
+    expected['logfile-group'] = (
+        read("SELECT DISTINCT LOGFILE_GROUP_NAME FROM information_schema.FILES WHERE FILE_TYPE='UNDO LOG' AND LOWER(ENGINE)='ndbcluster' AND LOGFILE_GROUP_NAME IS NOT NULL")
+        if ndb_active else Counter()
+    )
+    ndbinfo_active = read("SELECT ENGINE FROM information_schema.ENGINES WHERE LOWER(ENGINE)='ndbinfo' AND UPPER(SUPPORT) IN ('YES','DEFAULT')") if ndb_active else Counter()
+    expected['ndb-node'] = read('SELECT CAST(node_id AS CHAR) FROM ndbinfo.nodes') if ndbinfo_active else Counter()
     contract = json.loads((ROOT / 'web/pgadmin/cdeadmin/providers/mysql_family/mysql_metrics_9_7_0.json').read_text())
     observations = {row['observation_id']: row for row in contract['native_observations']}
     expected['metric'] = Counter(('Metrics', observations[row['observation_id']]['native_name']) for row in contract['metrics'])

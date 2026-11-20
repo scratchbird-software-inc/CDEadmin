@@ -50,10 +50,11 @@ def native(path, statements):
     return result
 
 
-def validate(path, source, observation, script, canonicalize=None):
+def validate(path, source, observation, script, canonicalize=None, *, context_mode=None):
     if observation['version'].split('-')[0] != '9.7.0':
         raise RelationalClientError('The observed MySQL version differs from the native grammar profile')
     mode = observation['variables']['sql_mode']; modes = set(mode.split(','))
+    effective_context_mode = context_mode or ('script_unconfirmed' if script else 'live_session')
     result = analyze(source, 'mysql-sql', script=script, settings={
         'no_backslash_escapes': 'NO_BACKSLASH_ESCAPES' in modes,
         'ansi_quotes': 'ANSI_QUOTES' in modes, 'mysql_dollar_quotes': True})
@@ -73,9 +74,15 @@ def validate(path, source, observation, script, canonicalize=None):
         original_diagnostics_preservation_qualified=True, original_session_commands_sent=0,
         original_diagnostics_preserved=True, original_session_catalog_binding_validated=False,
         external_language_bodies_parsed=False, sql_executed=False,
+        context_mode=effective_context_mode,
+        catalog_binding_status='unknown',
+        privilege_evaluation='not_evaluated',
+        execution_verified=False,
         parser_observation={**observation, 'thread_id': str(observation['thread_id']), 'connection_id': str(observation['connection_id'])})
     incomplete=bool(result['diagnostics'])
-    if not result['statements'] and script or not script and result['diagnostics']: return result
+    if not result['statements'] and script or not script and result['diagnostics']:
+        result.update(grammar_valid=False if not script else None, syntax_valid=False, script_ready=False)
+        return result
     statements = result['statements'] if script else [{'source': source, 'start': 0, 'end': len(source), 'ordinal': 1}]
     checked = native(path, [{'source': item['source'], 'sql_mode': item.get('sql_mode',mode)} for item in statements])
     valid = True
@@ -97,8 +104,10 @@ def validate(path, source, observation, script, canonicalize=None):
                 'native_byte_offset': diagnostic['byte_offset'], 'native_byte_length': diagnostic['byte_length']})
     valid=None if valid and incomplete else valid
     result.update(grammar_valid=valid, syntax_valid=valid, statements=statements, script_ready=bool(script and valid and statements),
-        native_statements=[{'ordinal': item['ordinal'], 'grammar_valid': value['sql_syntax_valid'],
-            'native_preparation': 'not_attempted', 'native_stage': 'versioned_server_grammar', 'catalog_binding_validated': False}
+        native_statements=[{'ordinal': item['ordinal'], 'grammar_valid': bool(value['sql_syntax_valid']),
+            'native_preparation': 'not_attempted', 'native_stage': 'versioned_server_grammar',
+            'catalog_binding_validated': False, 'catalog_binding_status': 'unknown',
+            'privilege_evaluation': 'not_evaluated', 'execution_verified': False}
             for item, value in zip(statements, checked['statements'])],
         native_parser={key: value for key, value in checked.items() if key != 'statements'})
     if script:

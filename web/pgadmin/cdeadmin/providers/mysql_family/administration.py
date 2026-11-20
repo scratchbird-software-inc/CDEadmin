@@ -25,6 +25,12 @@ from . import mysql_rewriter
 from . import mysql_server_control
 from . import mysql_key_cache_lifecycle as cache_lifecycle
 from . import mysql_engine_diagnostics
+from . import destructive_identity
+from . import mysql_flush
+from . import mysql_live_plans
+from . import mysql_xcollections
+from . import mysql_ndb
+from . import mysql_utilities
 
 
 HANDLERS = dict(zip(('mysql_'+key for key in (
@@ -33,6 +39,11 @@ HANDLERS = dict(zip(('mysql_'+key for key in (
     (mysql_session_catalog,mysql_failover,mysql_privileges,mysql_accounts,mysql_triggers,mysql_routines,mysql_indexes,mysql_user_keys,mysql_page_tracking,
      mysql_rewriter,mysql_server_control,mysql_xa,cache_lifecycle,mysql_instance,mysql_key_cache,column_masking,foreign_servers,srs)))
 HANDLERS['mysql_engine_diagnostics'] = mysql_engine_diagnostics
+HANDLERS['mysql_flush'] = mysql_flush
+HANDLERS['mysql_live_plan'] = mysql_live_plans
+HANDLERS['mysql_xcollection'] = mysql_xcollections
+HANDLERS['mysql_ndb'] = mysql_ndb
+HANDLERS['mysql_utility'] = mysql_utilities
 
 
 TABLE_ALTER_OPTIONS = frozenset({'mysql_table_options', 'mysql_connection'})
@@ -40,12 +51,21 @@ CREATE_ONLY_OPTIONS = frozenset({'data_directory', 'index_directory'})
 
 
 class MySQLAdministration(RelationalAdministration):
+    def requires_dialect(self, resource_kind, operation_id):
+        if resource_kind == 'server' and operation_id in mysql_utilities.OPERATIONS:
+            return False
+        return super().requires_dialect(resource_kind, operation_id)
+
     def catalog(self, catalog):
         value = deepcopy(catalog)
         for resource in value['objects']:
             if resource['resource_kind']=='server':
                 policies = (
                     (mysql_engine_diagnostics, set(), set()),
+                    (mysql_live_plans, set(), set()),
+                    (mysql_flush, set(), set()),
+                    (mysql_ndb, mysql_ndb.SERVER_READS, mysql_ndb.SERVER_DESTRUCTIVE),
+                    (mysql_utilities, mysql_utilities.READS, mysql_utilities.DESTRUCTIVE),
                     (mysql_page_tracking, mysql_page_tracking.READS, {'set_page_tracking_backup_id','purge_page_tracking'}),
                     (mysql_rewriter, {'inspect_rewrite_rules'}, {'drop_rewrite_rule'}),
                     (mysql_server_control, set(), set(mysql_server_control.OPERATIONS)),
@@ -54,17 +74,26 @@ class MySQLAdministration(RelationalAdministration):
                     (cache_lifecycle, {'inspect_key_cache'}, set()),
                 )
                 for module, reads, destructive in policies:
-                    operations = module.OPERATIONS
+                    operations = getattr(module, 'SERVER_OPERATIONS', getattr(module, 'OPERATIONS', {}))
                     resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in operations] + [{
                         'operation_id':operation,'title':title[0] if isinstance(title,tuple) else title,
                         'mutation_class':'read' if operation in reads else 'destructive' if operation in destructive else 'admin',
                         'target_required':True,'confirmation_required':operation not in reads,
                     } for operation,title in operations.items()]
+            if resource['resource_kind'] == 'session':
+                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_live_plans.SESSION_OPERATIONS] + [{
+                    'operation_id': operation,
+                    'title': operation_entry('session', operation)['title'],
+                    'mutation_class': 'admin',
+                    'target_required': True,
+                    'confirmation_required': True,
+                } for operation in sorted(mysql_live_plans.SESSION_OPERATIONS)]
             if resource['resource_kind'] == 'table':
-                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in mysql_key_cache.OPERATIONS] + [{
+                table_ops = set(mysql_key_cache.OPERATIONS) | set(mysql_flush.TABLE_OPERATIONS)
+                resource['operations'] = [row for row in resource['operations'] if row['operation_id'] not in table_ops] + [{
                     'operation_id':operation,'title':operation_entry('table',operation)['title'],
                     'mutation_class':'admin','target_required':True,'confirmation_required':True,
-                } for operation in sorted(mysql_key_cache.OPERATIONS)]
+                } for operation in sorted(table_ops)]
             if resource['resource_kind'] == 'column':
                 resource['operations'] = [row for row in resource['operations']
                     if row['operation_id'] not in column_masking.OPERATIONS] + [{
@@ -89,6 +118,52 @@ class MySQLAdministration(RelationalAdministration):
                 'mutation_class': 'read' if operation == 'inspect' else 'destructive' if operation == 'drop' else 'admin',
                 'target_required': operation != 'create', 'confirmation_required': operation != 'inspect',
             } for operation in ['inspect', 'create', 'alter', 'drop']]})
+        value['objects'] = [row for row in value['objects'] if row['resource_kind'] not in {
+            mysql_xcollections.KIND, mysql_ndb.LOGFILE_GROUP_KIND, mysql_ndb.NDB_NODE_KIND}]
+        value['objects'].append({
+            'resource_kind': mysql_xcollections.KIND,
+            'title': 'Document collections',
+            'navigator_group': 'documents',
+            'parent_kinds': ['database'],
+            'operations': [{'operation_id': 'inspect', 'title': 'Inspect collection', 'mutation_class': 'read',
+                            'target_required': True, 'confirmation_required': False}] + [{
+                'operation_id': op,
+                'title': operation_entry(mysql_xcollections.KIND, op)['title'],
+                'mutation_class': ('read' if op in mysql_xcollections.READ_OPERATIONS else
+                                   'destructive' if op in mysql_xcollections.DESTRUCTIVE_OPERATIONS else
+                                   'write' if op in {'insert_documents', 'modify_documents'} else 'admin'),
+                'target_required': op not in {'create', 'ensure'},
+                'confirmation_required': op not in {'create', 'ensure'} and op not in mysql_xcollections.READ_OPERATIONS,
+            } for op in mysql_xcollections.OPERATIONS],
+        })
+        value['objects'].append({
+            'resource_kind': mysql_ndb.LOGFILE_GROUP_KIND,
+            'title': 'Logfile groups',
+            'navigator_group': 'storage',
+            'parent_kinds': ['server'],
+            'operations': [{'operation_id': 'inspect', 'title': 'Inspect logfile group', 'mutation_class': 'read',
+                            'target_required': True, 'confirmation_required': False}] + [{
+                'operation_id': op,
+                'title': operation_entry(mysql_ndb.LOGFILE_GROUP_KIND, op)['title'],
+                'mutation_class': 'destructive' if op == 'drop' else 'admin',
+                'target_required': op != 'create',
+                'confirmation_required': op != 'create',
+            } for op in mysql_ndb.LOGFILE_GROUP_OPERATIONS],
+        })
+        value['objects'].append({
+            'resource_kind': mysql_ndb.NDB_NODE_KIND,
+            'title': 'Cluster nodes',
+            'navigator_group': 'topology',
+            'parent_kinds': ['server'],
+            'operations': [{'operation_id': 'inspect', 'title': 'Inspect cluster node', 'mutation_class': 'read',
+                            'target_required': True, 'confirmation_required': False}] + [{
+                'operation_id': op,
+                'title': operation_entry(mysql_ndb.NDB_NODE_KIND, op)['title'],
+                'mutation_class': 'destructive',
+                'target_required': True,
+                'confirmation_required': True,
+            } for op in mysql_ndb.NODE_OPERATIONS],
+        })
         value=super().catalog(value)
         for kind, operation in (('server', 'refresh_session_metadata'), ('table', 'drop_temporary')):
             resource = next(row for row in value['objects'] if row['resource_kind'] == kind)
@@ -164,6 +239,15 @@ class MySQLAdministration(RelationalAdministration):
             ('server',mysql_user_keys,'invalid_user_key'),
             ('server',mysql_page_tracking,'invalid_mysql_page_tracking'),
             ('server',mysql_engine_diagnostics,'invalid_mysql_engine_diagnostic'),
+            ('server',mysql_live_plans,'invalid_mysql_live_plan'),
+            ('session',mysql_live_plans,'invalid_mysql_live_plan'),
+            ('server',mysql_flush,'invalid_mysql_flush'),
+            ('table',mysql_flush,'invalid_mysql_flush'),
+            ('server',mysql_ndb,'invalid_mysql_ndb'),
+            (mysql_ndb.LOGFILE_GROUP_KIND,mysql_ndb,'invalid_mysql_ndb'),
+            (mysql_ndb.NDB_NODE_KIND,mysql_ndb,'invalid_mysql_ndb'),
+            (mysql_xcollections.KIND,mysql_xcollections,'invalid_mysql_xcollection'),
+            ('server',mysql_utilities,'invalid_mysql_utility'),
             ('server',mysql_rewriter,'invalid_mysql_rewriter'),
             ('server',mysql_server_control,'invalid_mysql_server_control'),
             ('server',mysql_xa,'invalid_mysql_xa'),
@@ -174,7 +258,17 @@ class MySQLAdministration(RelationalAdministration):
             (foreign_servers.KIND,foreign_servers,'invalid_mysql_foreign_server'),
             (srs.KIND,srs,'invalid_mysql_spatial_reference'),
         ):
-            if kind==family and operation in module.OPERATIONS:
+            if kind != family:
+                continue
+            ops = (
+                mysql_live_plans.SESSION_OPERATIONS if (module is mysql_live_plans and kind == 'session')
+                else mysql_flush.TABLE_OPERATIONS if (module is mysql_flush and kind == 'table')
+                else mysql_ndb.SERVER_OPERATIONS if (module is mysql_ndb and kind == 'server')
+                else mysql_ndb.LOGFILE_GROUP_OPERATIONS if (module is mysql_ndb and kind == mysql_ndb.LOGFILE_GROUP_KIND)
+                else mysql_ndb.NODE_OPERATIONS if (module is mysql_ndb and kind == mysql_ndb.NDB_NODE_KIND)
+                else module.OPERATIONS
+            )
+            if operation in ops:
                 if module is mysql_failover and (kind=='server')!=(operation=='reset_failover_sources'):continue
                 return module.compile_operation,(operation,draft,target),code
 
@@ -226,6 +320,13 @@ class MySQLAdministration(RelationalAdministration):
             return compiled
         if request.get('resource_kind')=='table' and request.get('operation_id')=='alter':
             return self._compile_table_alter(request)
+        if destructive_identity.applies(request):
+            compiled = super()._compile(request)
+            compiled['destructive_identity_required'] = True
+            compiled['resource_kind'] = 'table'
+            compiled['operation_id'] = 'drop'
+            compiled['target_resource'] = deepcopy(dict(request['target_resource']))
+            return compiled
         return super()._compile(request)
 
     def _compile_table_alter(self, request):
@@ -255,6 +356,10 @@ class MySQLAdministration(RelationalAdministration):
     def apply(self, client, request, connection=None):
         from .relay_positions import position, apply as apply_relay
         compiled = (request.get('provider_payload') or {}).get('compiled', {})
+        if compiled.get('destructive_identity_required'):
+            return destructive_identity.apply(client, request, connection, 'mysql')
+        if any(isinstance(s, Mapping) and s.get('ndb_required') for s in compiled.get('statements', [])):
+            return mysql_ndb.apply(client, request, connection)
         if 'mysql_relay_review' in compiled or position(compiled):
             return apply_relay(client, request, connection)
         for key,module in HANDLERS.items():

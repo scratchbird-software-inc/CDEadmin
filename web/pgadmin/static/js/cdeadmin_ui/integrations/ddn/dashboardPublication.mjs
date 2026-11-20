@@ -43,6 +43,34 @@ function mysqlDynamic(id, scope, engine='mysql') {
     return Boolean(match && ['name', 'collector', 'freshness', 'heartbeat', maria ? 'server_uid' : 'server_uuid', 'observed_at'].some(field => hex(field) === match[1]));
   }
   if(!maria && /^mysql_workload_summary_(?:[0-9]|1[01])$/.test(id)) return true;
+  if(!maria && /^mysql_component_summary_[0-2]$/.test(id)) return true;
+  const applierMetrics = !maria && /^mysql_applier_metrics_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(applierMetrics) {
+    return ['channel_name', 'total_active_time_duration', 'last_applier_start',
+      'transactions_committed_count', 'transactions_ongoing_count', 'transactions_pending_count',
+      'transactions_committed_size_bytes_sum', 'transactions_ongoing_full_size_bytes_sum',
+      'transactions_ongoing_progress_size_bytes_sum', 'transactions_pending_size_bytes_sum',
+      'events_committed_count', 'waits_for_work_from_source_count', 'waits_for_work_from_source_sum_time',
+      'waits_for_available_worker_count', 'waits_for_available_worker_sum_time',
+      'waits_commit_schedule_dependency_count', 'waits_commit_schedule_dependency_sum_time',
+      'waits_for_worker_queue_memory_count', 'waits_for_worker_queue_memory_sum_time',
+      'waits_worker_queues_full_count', 'waits_worker_queues_full_sum_time',
+      'waits_due_to_commit_order_count', 'waits_due_to_commit_order_sum_time',
+      'time_to_read_from_relay_log_sum_time'].some(field => hex(field) === applierMetrics[2]);
+  }
+  const applierWorker = !maria && /^mysql_applier_worker_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(applierWorker) {
+    return ['channel_name', 'worker_id', 'thread_id', 'ongoing_transaction_type',
+      'ongoing_transaction_full_size_bytes', 'ongoing_transaction_applied_size_bytes']
+      .some(field => hex(field) === applierWorker[2]);
+  }
+  const grFlow = !maria && /^mysql_gr_flow_control_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(grFlow) {
+    return ['Gr_flow_control_throttle_count', 'Gr_flow_control_throttle_time_sum',
+      'Gr_flow_control_throttle_active_count', 'Gr_flow_control_throttle_last_throttle_timestamp']
+      .some(vname => hex(vname) === grFlow[1]) &&
+      ['variable_name', 'variable_value'].some(field => hex(field) === grFlow[2]);
+  }
   if(!maria && (/^mysql_alert_summary_[01]$/.test(id) ||
       /^mysql_alert_[a-f0-9]{2,128}_(?:state|condition|value|source|observed_at|action|delivery)$/.test(id))) return true;
   const workload = !maria && /^mysql_workload_(settings|consumers|instruments|epoch|digests)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);

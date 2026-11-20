@@ -73,6 +73,38 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
         binding(`mysql_workload_digests_${hex(`${row.schema_name ?? ''}\u0000${row.digest ?? ''}`)}_${hex(key)}`,
           [`${row.schema_name ?? 'NULL'} / ${row.digest ?? 'overflow'}: ${key}`, row[key], key === 'sum_timer_wait' ? 'picoseconds' : 'count']))),
     ]});
+    const applierMetrics = sample?.groups?.component_replication_applier_metrics;
+    const workerMetrics = sample?.groups?.component_replication_applier_worker_progress;
+    const grFlowControl = sample?.groups?.component_group_replication_flow_control;
+    const applierUnit = key => key.endsWith('_duration') || key.endsWith('_sum_time') ? 'nanoseconds'
+      : key.includes('_bytes') ? 'bytes' : key.endsWith('_count') ? 'count'
+      : key === 'last_applier_start' ? 'timestamp' : 'server';
+    panels.push({id: 'component_metrics', title: 'MySQL component metrics', rows: [
+      binding('mysql_component_summary_0', ['component_replication_applier_metrics', applierMetrics?.status || 'Unavailable', applierMetrics?.component_urn || 'file://component_replication_applier_metrics']),
+      binding('mysql_component_summary_1', ['component_replication_applier_worker_progress', workerMetrics?.status || 'Unavailable', workerMetrics?.component_urn || 'file://component_replication_applier_metrics']),
+      binding('mysql_component_summary_2', ['component_group_replication_flow_control', grFlowControl?.status || 'Unavailable', grFlowControl?.component_urn || 'file://component_group_replication_flow_control_stats']),
+      ...(applierMetrics?.status === 'available' ? applierMetrics.rows || [] : []).flatMap(row => {
+        const ch = row.channel_name || 'default';
+        return Object.entries(row).map(([key, value]) =>
+          binding(`mysql_applier_metrics_${hex(ch)}_${hex(key)}`,
+            [`applier ${ch}: ${key}`, value ?? 'NULL', applierUnit(key)]));
+      }),
+      ...(workerMetrics?.status === 'available' ? workerMetrics.rows || [] : []).flatMap(row => {
+        const id = `${row.channel_name ?? ''}\u0000${row.worker_id ?? ''}`;
+        return Object.entries(row).map(([key, value]) =>
+          binding(`mysql_applier_worker_${hex(id)}_${hex(key)}`,
+            [`worker ${row.channel_name || 'default'}#${row.worker_id}: ${key}`, value ?? 'NULL', applierUnit(key)]));
+      }),
+      ...(grFlowControl?.status === 'available' ? grFlowControl.rows || [] : []).flatMap(row => {
+        const vname = row.variable_name;
+        if(!vname) return [];
+        const unit = vname.endsWith('_time_sum') ? 'microseconds' : vname.endsWith('_timestamp') ? 'timestamp' : 'count';
+        return Object.entries(row).map(([key, value]) =>
+          binding(`mysql_gr_flow_control_${hex(vname)}_${hex(key)}`,
+            [`${vname}: ${key}`, value ?? '', key === 'variable_value' ? unit : 'server',
+              key === 'variable_value' ? sample?.rates?.per_second?.[vname] ?? '' : '']));
+      }),
+    ]});
   }
   return dashboardPanelFiles(panels, `${label} ${scope} dashboard`, `scratchrobin.${engine}.monitoring`);
 }

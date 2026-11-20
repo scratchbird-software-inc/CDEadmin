@@ -42,7 +42,8 @@ MYSQL_PROFILE = PilotProfile(
     'mysql-session-autocommit', 'tabular',
     ('server', 'database', 'table', 'column', 'view', 'materialized-view',
      'index', 'constraint', 'trigger', 'event', 'procedure', 'function',
-     'partition', 'tablespace', 'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
+     'partition', 'tablespace', 'logfile-group', 'ndb-node', 'x-collection',
+     'user', 'role', 'privilege', 'plugin', 'component', 'library', 'loadable-function',
      'replication-channel', 'group-replication', 'group-replication-member', 'resource-group', 'system-variable', 'session', 'metric',
      'character-set', 'collation', 'storage-engine', 'spatial-reference-system', 'server-link'),
     ('mysql-shell', 'backup', 'replication', 'account-administration'),
@@ -212,6 +213,8 @@ def _administration(profile):
         common['server'] = common['server'] | frozenset(page_tracking_operations)
         from .mysql_engine_diagnostics import OPERATIONS as engine_diagnostic_operations
         common['server'] = common['server'] | frozenset(engine_diagnostic_operations)
+        from .mysql_utilities import OPERATIONS as mysql_utility_operations
+        common['server'] = common['server'] | frozenset(mysql_utility_operations)
         from .mysql_rewriter import OPERATIONS as rewriter_operations
         common['server'] = common['server'] | frozenset(rewriter_operations)
         from .mysql_key_cache_lifecycle import OPERATIONS as cache_lifecycle_operations
@@ -243,6 +246,20 @@ def _administration(profile):
         common['tablespace'] = frozenset({'inspect', 'create', 'alter', 'rename', 'drop'})
         common['system-variable'] = frozenset({'inspect', 'set_global', 'set_persist', 'set_persist_only', 'reset_persist'})
         common['session'] = frozenset({'inspect', 'terminate_query', 'terminate_connection'})
+        from .mysql_flush import SERVER_OPERATIONS as flush_server_ops, TABLE_OPERATIONS as flush_table_ops
+        from .mysql_live_plans import OPERATIONS as live_plan_ops, SESSION_OPERATIONS as live_plan_session_ops
+        from .mysql_xcollections import OPERATIONS as xcollection_ops
+        from .mysql_ndb import (
+            SERVER_OPERATIONS as ndb_server_ops,
+            LOGFILE_GROUP_OPERATIONS as ndb_lg_ops,
+            NODE_OPERATIONS as ndb_node_ops,
+        )
+        common['server'] |= frozenset(flush_server_ops) | frozenset(live_plan_ops) | frozenset(ndb_server_ops)
+        common['table'] |= frozenset(flush_table_ops)
+        common['session'] |= frozenset(live_plan_session_ops)
+        common['x-collection'] = frozenset({'inspect', *xcollection_ops})
+        common['logfile-group'] = frozenset({'inspect', *ndb_lg_ops})
+        common['ndb-node'] = frozenset({'inspect', *ndb_node_ops})
         common['resource-group'] = frozenset({'inspect', 'create', 'alter', 'assign', 'drop'})
         common['role'] = common['role'] | frozenset({'grant', 'revoke', 'set_default'})
         common.pop('sequence')
@@ -288,8 +305,9 @@ def _administration(profile):
         for kind, operations in partition_operations.items():
             common[kind] = common[kind] | operations
     if profile is MARIADB_PROFILE:
-        from .mariadb_administration import OPERATIONS as maria_diagnostics
+        from .mariadb_administration import OPERATIONS as maria_diagnostics, TABLE_OPERATIONS as maria_table_ops
         common['server'] |= frozenset(maria_diagnostics)
+        common['table'] |= frozenset(maria_table_ops)
     adapter = (MySQLAdministration if profile is MYSQL_PROFILE else
                MariaDBAdministration if profile is MARIADB_PROFILE else RelationalAdministration)
     return adapter(RelationalAdminDialect(
@@ -355,8 +373,20 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         from .mariadb_administration import MODULES
         planned = super().plan_admin_operation(request)
+        compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if compiled.get('destructive_identity_required'):
+            if request.get('session_id') is not None:
+                raise RelationalClientError('Reviewed MariaDB table DROP owns a dedicated administrative connection')
+            from . import destructive_identity
+            return destructive_identity.bind_review(self, planned, 'mariadb')
+        if 'mariadb_flush' in compiled and compiled['mariadb_flush'].get('retained_session_required'):
+            if not request.get('session_id'):
+                raise RelationalClientError('Select a retained session before reviewing MariaDB table FLUSH lock/unlock')
+            compiled['mariadb_flush']['mariadb_session_id'] = request['session_id']
+            from . import mariadb_flush
+            return mariadb_flush.bind_review(self, planned)
         for module in MODULES:
-            if module.KEY in planned.get('provider_payload', {}).get('compiled', {}):
+            if module.KEY in compiled:
                 if request.get('session_id') is not None:
                     raise RelationalClientError('This native MariaDB diagnostic owns an independent observer')
                 return module.bind_review(self, planned)
@@ -392,6 +422,12 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             'mariadb-upgrade': os.environ.get(
                 'CDEADMIN_MARIADB_UPGRADE_BINARY', 'mariadb-upgrade'
             ),
+            'aria_chk': os.environ.get('CDEADMIN_MARIADB_ARIA_CHK_BINARY', 'aria_chk'),
+            'aria_pack': os.environ.get('CDEADMIN_MARIADB_ARIA_PACK_BINARY', 'aria_pack'),
+            'myisamchk': os.environ.get('CDEADMIN_MARIADB_MYISAMCHK_BINARY', 'myisamchk'),
+            'myisampack': os.environ.get('CDEADMIN_MARIADB_MYISAMPACK_BINARY', 'myisampack'),
+            'innochecksum': os.environ.get('CDEADMIN_MARIADB_INNOCHECKSUM_BINARY', 'innochecksum'),
+            'mariadb-slap': os.environ.get('CDEADMIN_MARIADB_SLAP_BINARY', 'mariadb-slap'),
         })
 
     def open_session(self, request):
@@ -1101,6 +1137,11 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
     def plan_admin_operation(self, request):
         planned = super().plan_admin_operation(request)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
+        if compiled.get('destructive_identity_required'):
+            if request.get('session_id') is not None:
+                raise RelationalClientError('Reviewed MySQL table DROP owns a dedicated administrative connection')
+            from . import destructive_identity
+            return destructive_identity.bind_review(self, planned, 'mysql')
         if 'mysql_account_change' in compiled:
             planned['provider_payload']['password_delivery_scope'] = request.get('plan_id')
         if 'mysql_session_catalog' in compiled:
@@ -1108,11 +1149,19 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
                 raise RelationalClientError('Select a retained session before reviewing this operation')
             compiled['mysql_session_id'] = request['session_id']
             return planned
+        if 'mysql_flush' in compiled and compiled['mysql_flush'].get('retained_session_required'):
+            if not request.get('session_id'):
+                raise RelationalClientError('Select a retained session before reviewing MySQL table FLUSH lock/unlock')
+            compiled['mysql_flush']['mysql_session_id'] = request['session_id']
+            return HANDLERS['mysql_flush'].bind_review(self, planned)
+        if any(isinstance(s, dict) and s.get('ndb_required') for s in compiled.get('statements', [])):
+            return HANDLERS['mysql_ndb'].bind_review(self, planned)
         from .relay_positions import position, bind_review as bind_relay
         if position(compiled):
             return bind_relay(self, planned)
         for suffix in ('failover privilege_change account_change trigger_create routine_create index_create server_control xa '
-                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache engine_diagnostics').split():
+                'page_tracking rewriter key_cache_lifecycle instance user_keys key_cache engine_diagnostics utility '
+                'flush live_plan xcollection ndb').split():
             key = 'mysql_'+suffix
             if key in compiled:return HANDLERS[key].bind_review(self, planned)
         if compiled.get('driver_operation') == 'mysql-shell' and compiled.get('operation_id') == 'verify_logical':
@@ -1207,6 +1256,11 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
             'mysql-binlog': os.environ.get('CDEADMIN_MYSQL_BINLOG_BINARY','mysqlbinlog'),
             'mysql-client': os.environ.get('CDEADMIN_MYSQL_CLIENT_BINARY','mysql'),
             'mysql-server': os.environ.get('CDEADMIN_MYSQL_SERVER_BINARY','mysqld'),
+            'myisamchk': os.environ.get('CDEADMIN_MYSQL_MYISAMCHK_BINARY', 'myisamchk'),
+            'myisampack': os.environ.get('CDEADMIN_MYSQL_MYISAMPACK_BINARY', 'myisampack'),
+            'innochecksum': os.environ.get('CDEADMIN_MYSQL_INNOCHECKSUM_BINARY', 'innochecksum'),
+            'ibd2sdi': os.environ.get('CDEADMIN_MYSQL_IBD2SDI_BINARY', 'ibd2sdi'),
+            'mysqlslap': os.environ.get('CDEADMIN_MYSQL_MYSQLSLAP_BINARY', 'mysqlslap'),
         })
 
     def _invoke_connector(self, request, connector, overrides=None, **kwargs):
@@ -1331,6 +1385,8 @@ class MySQLDBAPIClient(RelationalDBAPIClient):
 
     def _control_idle_transaction(self, handle, action):
         self._require_usable_session(handle)
+        from .mysql_session_catalog import invalidate
+        invalidate(self, handle)
         if surface_xa.control(self, handle, action, 'MySQL'):
             return self._describe_idle_transaction(handle)
         if action not in self.transaction_actions:
@@ -2338,7 +2394,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             })
             if native:
                 resource.setdefault('native', {}).update(native)
-            if kind in {'user', 'role', 'tablespace', 'plugin', 'component',
+            if kind in {'user', 'role', 'tablespace', 'logfile-group', 'ndb-node', 'plugin', 'component',
                     'loadable-function', 'resource-group', 'system-variable', 'session', 'metric',
                     'character-set', 'collation', 'storage-engine', 'replication-channel',
                     'group-replication', 'group-replication-member', 'server-link', 'spatial-reference-system', 'lock', 'lock-wait',
@@ -2468,14 +2524,15 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             from .mysql_table_options import catalog_options
             for row in optional(
                 'SELECT t.TABLE_SCHEMA, t.TABLE_NAME, t.ENGINE, t.TABLE_COLLATION, c.CHARACTER_SET_NAME, '
-                't.TABLE_COMMENT, t.CREATE_OPTIONS FROM information_schema.TABLES t '
+                't.TABLE_COMMENT, t.CREATE_OPTIONS, CAST(t.CREATE_TIME AS CHAR) FROM information_schema.TABLES t '
                 'LEFT JOIN information_schema.COLLATIONS c ON c.COLLATION_NAME = t.TABLE_COLLATION '
                 "WHERE t.TABLE_TYPE = 'BASE TABLE' AND t.TABLE_SCHEMA NOT IN ('information_schema', 'mysql', "
                 "'performance_schema', 'sys')"
             ):
                 table_facts[(str(row[0]), str(row[1]))] = {
                     'engine': row[2], 'table_collation': row[3], 'table_character_set': row[4],
-                    'table_comment': row[5], 'table_options': catalog_options(row[6])}
+                    'table_comment': row[5], 'table_options': catalog_options(row[6]),
+                    **(({'create_time': str(row[7])} if len(row) > 7 and row[7] is not None else {}))}
         cursor.execute(catalog_source(
             'SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE '
             'FROM information_schema.TABLES '
@@ -2602,8 +2659,9 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     **record, 'timing': record['action_timing'], 'event': record['event_manipulation'],
                     'table': [record['event_object_schema'], record['event_object_table']],
                     'administration': {'allowed_operations': ['inspect', 'create', 'drop']}})
-            for record in optional_records('SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN '
-                    "('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION"):
+            column_records = optional_records('SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA NOT IN '
+                    "('information_schema', 'mysql', 'performance_schema', 'sys') ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION")
+            for record in column_records:
                 schema, table, column = (record.get(key) for key in ('table_schema', 'table_name', 'column_name'))
                 if not all(isinstance(value, str) for value in (schema, table, column)):
                     continue
@@ -2708,12 +2766,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                              for record in optional_records(
                                  'SELECT CONSTRAINT_SCHEMA,CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS '
                                  "WHERE CONSTRAINT_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys')")}
-            for record in optional_records(
+            constraint_records = optional_records(
                 'SELECT TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,CONSTRAINT_TYPE,ENFORCED '
                 'FROM information_schema.TABLE_CONSTRAINTS '
                 "WHERE TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys') "
                 'ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME'
-            ):
+            )
+            for record in constraint_records:
                 native = {**record, 'enforcement': 'ENFORCED' if record['enforced'] == 'YES' else 'NOT ENFORCED', 'administration': {'allowed_operations':
                     ['inspect', 'create', 'drop'] + (['enforcement'] if record['constraint_type'] == 'CHECK' else [])}}
                 native.update(constraint_facts.get((record['table_schema'], record['table_name'], record['constraint_name']), {}))
@@ -2722,6 +2781,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     if check is not None:
                         native['check_clause'] = check
                 add('constraint', [record['table_schema'], record['table_name']], record['constraint_name'], native)
+            from .mysql_xcollections import KIND as xcollection_kind, discover_collections_from_rows
+            srv_uuid_val = resources.get('server:MySQL', {}).get('native', {}).get('server_uuid')
+            for coll in discover_collections_from_rows(column_records, constraint_records):
+                add(xcollection_kind, [coll['schema']], coll['name'], {
+                    **coll,
+                    **({'server_uuid': srv_uuid_val} if srv_uuid_val else {}),
+                })
             for record in optional_records(
                 'SELECT p.TABLE_SCHEMA, p.TABLE_NAME, p.PARTITION_NAME, p.PARTITION_METHOD, p.PARTITION_EXPRESSION, '
                 'p.PARTITION_ORDINAL_POSITION, p.PARTITION_DESCRIPTION, p.TABLE_ROWS, p.DATA_LENGTH, p.INDEX_LENGTH, '
@@ -3109,7 +3175,16 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             ):
                 record['processlist_id'] = str(record['processlist_id'])
                 record['thread_id'] = str(record['thread_id'])
+                srv_uuid_val = resources.get('server:MySQL', {}).get('native', {}).get('server_uuid')
+                if srv_uuid_val:
+                    record['server_uuid'] = srv_uuid_val
                 add('session', ['Sessions'], record['processlist_id'], record)
+            from .mysql_ndb import discover_ndb_resources
+            discover_ndb_resources(
+                optional_records,
+                add,
+                server_uuid=resources.get('server:MySQL', {}).get('native', {}).get('server_uuid'),
+            )
             from .system_variables import SELECT as variables_select, administration as variable_administration
             for record in optional_records(variables_select):
                 allowed = variable_administration(record)
@@ -3185,6 +3260,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     'table-storage', [record['table_schema']],
                     record['table_name'], record,
                 )
+                tbl_key = resource_key('table', [record['table_schema']], record['table_name'])
+                if tbl_key in resources and str(record.get('temporary', 'N')).upper() != 'Y':
+                    tbl_native = resources[tbl_key].setdefault('native', {})
+                    if record.get('engine') is not None:
+                        tbl_native.setdefault('engine', record['engine'])
+                    if record.get('create_time') is not None:
+                        tbl_native.setdefault('create_time', str(record['create_time']))
             binary_logs = optional_records('SHOW BINARY LOGS')
             for record in binary_logs:
                 name = record.get('log_name') or record.get('file')
@@ -3296,11 +3378,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
+            'logfile-group', 'x-collection',
             'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'spatial-reference-system', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {
-            'server', 'replication-channel', 'group-replication', 'group-replication-member', 'session', 'lock', 'lock-wait',
+            'server', 'replication-channel', 'group-replication', 'group-replication-member', 'ndb-node', 'session', 'lock', 'lock-wait',
             'binary-log-status',
         }
         data_kinds = {
@@ -3308,8 +3391,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'slow-query',
         }
         security_kinds = {'user', 'role', 'privilege'}
+        srv_native_info = resources.get(f'server:{profile.engine_name}', {}).get('native', {})
         for resource in resources.values():
             native = resource.setdefault('native', {})
+            if resource['resource_kind'] == 'table':
+                if profile is MYSQL_PROFILE and srv_native_info.get('server_uuid'):
+                    native.setdefault('server_uuid', srv_native_info['server_uuid'])
+                elif profile is MARIADB_PROFILE and srv_native_info.get('server_uid'):
+                    native.setdefault('server_uid', srv_native_info['server_uid'])
             owner = native.get('navigator_parent_resource_id')
             if (resource['resource_kind'] == 'privilege' and
                     native.get('scope') != 'global' and owner not in resources):
@@ -3364,7 +3453,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'database', 'table', 'view', 'materialized-view', 'column',
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'library',
-            'table-storage',
+            'table-storage', 'x-collection',
         }
         return [
             resource for resource in resources.values()
