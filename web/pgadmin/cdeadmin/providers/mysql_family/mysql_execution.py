@@ -285,8 +285,11 @@ class Executions:
                 options['unix_socket'] = connection.unix_socket
                 return options
 
+            from .mysql_recovery_bridge import native_connection
+            def bridged(*args, **options):
+                return native_connection(self.client.module.connect, args, options)
             control = self.client._invoke_connector(
-                request, self.client.module.connect,
+                request, bridged,
                 connect_arguments=arguments)
             cursor = control.cursor()
             cursor.execute('SELECT @@server_uuid')

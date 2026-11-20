@@ -109,8 +109,8 @@ def qualify(output):
                             'retained_catalog_warnings_row_count_and_savepoint_preserved':True,'shared_delivery_and_ui_qualified':False})
                     finally:
                         client.close();q.execute('DROP USER IF EXISTS %s@%s',('generated_owned','%'))
-                # A normal authenticated application has no receiver until the front-end
-                # stream wires the protected result service. It must refuse before DCL.
+                # When protected-result encryption keys are unavailable, HTTP validate/plan
+                # must refuse before DCL; when unlocked, HTTP plan/apply seals only references.
                 q.execute('CREATE DATABASE sr_osc');password=secrets.token_urlsafe(24)
                 q.execute('ALTER USER CURRENT_USER() IDENTIFIED BY %s',(password,))
                 from cdeadmin_mysql_online_ddl_qualification import registration
@@ -118,16 +118,29 @@ def qualify(output):
                     _sid,_target,post=registration(app,route,password,not pure)
                     request={'resource_kind':'user','operation_id':'create',
                         'draft':{'name':'api_unprotected','host':'%','authentication_mode':'RANDOM_PASSWORD'}}
-                    reply=post.raw('visual_admin_validate',request);result=reply.get_json()
-                    assert reply.status_code==200 and result['success'] and not result['data']['valid']
-                    assert result['data']['errors'][0]['code']=='protected_password_delivery_unavailable'
-                    assert reply.headers['Cache-Control']=='no-store'
-                    reply=post.raw('visual_admin_plan',request);result=reply.get_json()
-                    assert reply.status_code!=200 or not result.get('success') or not result.get('data',{}).get('execution_available')
-                    # The shared route currently maps VisualAdminValidationError to
-                    # its generic failure envelope. Do not claim that UI/error bridge.
-                    q.execute('SELECT COUNT(*) FROM mysql.user WHERE User=%s',('api_unprotected',));assert q.fetchone()==(0,)
+                    app.config['CDEADMIN_GENERATED_PASSWORD_KEYS']={'none':''}
+                    try:
+                        reply=post.raw('visual_admin_validate',request);result=reply.get_json()
+                        assert reply.status_code==200 and result['success'] and not result['data']['valid'],result
+                        assert result['data']['errors'][0]['code']=='protected_password_delivery_unavailable'
+                        assert reply.headers['Cache-Control']=='no-store'
+                        reply=post.raw('visual_admin_plan',request);result=reply.get_json()
+                        assert reply.status_code!=200 or not result.get('success') or not result.get('data',{}).get('execution_available')
+                        q.execute('SELECT COUNT(*) FROM mysql.user WHERE User=%s',('api_unprotected',));assert q.fetchone()==(0,)
+                    finally:
+                        app.config.pop('CDEADMIN_GENERATED_PASSWORD_KEYS',None)
+                    ok_user='api_protected_'+('p' if pure else 'c')
+                    ok_req={'resource_kind':'user','operation_id':'create',
+                        'draft':{'name':ok_user,'host':'%','authentication_mode':'RANDOM_PASSWORD'}}
+                    v_ok=post.raw('visual_admin_validate',ok_req).get_json()
+                    assert v_ok['success'] and v_ok['data']['valid'] is True,v_ok
+                    p_ok=post.raw('visual_admin_plan',ok_req).get_json()['data']
+                    a_ok=post.raw('visual_admin_apply',{'plan_id':p_ok['plan_id'],'plan_digest':p_ok['plan_digest'],'confirmed':True}).get_json()
+                    assert a_ok['success'],a_ok
+                    q.execute('SELECT COUNT(*) FROM mysql.user WHERE User=%s',(ok_user,));assert q.fetchone()==(1,)
+                    q.execute('DROP USER IF EXISTS %s@%s',(ok_user,'%'))
                 proof['authenticated_missing_bridge_refused_before_dcl']=True
+                proof['authenticated_unlocked_bridge_seals_references']=True
                 proof['authenticated_structured_validation_no_store']=True
                 proof['shared_invalid_plan_error_envelope_qualified']=False
             finally:q.close();oracle.close()

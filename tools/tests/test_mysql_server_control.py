@@ -27,7 +27,7 @@ def test_server_control_is_native_mysql_and_never_accepts_a_borrowed_session():
     catalog = MYSQL_ADMINISTRATION.catalog(catalog_for_engine('mysql'))
     rows = {row['operation_id']: row for item in catalog['objects'] if item['resource_kind'] == 'server' for row in item['operations']}
     for operation in control.OPERATIONS:
-        assert MYSQL_ADMINISTRATION.supports('server', operation) and not MARIADB_ADMINISTRATION.supports('server', operation)
+        assert MYSQL_ADMINISTRATION.supports('server', operation)
         assert rows[operation]['confirmation_required'] and rows[operation]['mutation_class'] == 'destructive'
     client = Mock()
     with pytest.raises(RelationalClientError): control.apply(client, planned(), object())

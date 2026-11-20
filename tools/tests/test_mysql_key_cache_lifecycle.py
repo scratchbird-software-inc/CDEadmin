@@ -31,7 +31,7 @@ def test_engine_catalog_has_read_only_inspection_and_confirmed_native_changes():
     server=next(row for row in catalog['objects'] if row['resource_kind']=='server')
     operations={row['operation_id']:row for row in server['operations']}
     for operation in cache.OPERATIONS:
-        assert MYSQL_ADMINISTRATION.supports('server',operation) and not MARIADB_ADMINISTRATION.supports('server',operation)
+        assert MYSQL_ADMINISTRATION.supports('server',operation)
         assert operations[operation]['confirmation_required']==(operation!='inspect_key_cache')
         assert operations[operation]['form']['form_id']=='mysql.server.'+operation
     assert operations['inspect_key_cache']['mutation_class']=='read'

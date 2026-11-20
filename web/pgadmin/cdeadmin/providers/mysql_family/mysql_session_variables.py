@@ -264,7 +264,10 @@ def install(client, handle, request):
             selected['conn_attrs'] = {**dict(selected.get('conn_attrs') or {}),
                                       'scratchrobin_observer': str(connection_id)}
             return selected
-        return client._invoke_connector(session_request, client.module.connect, connect_arguments=arguments)
+        from .mysql_recovery_bridge import native_connection
+        def bridged(*args, **options):
+            return native_connection(client.module.connect, args, options)
+        return client._invoke_connector(session_request, bridged, connect_arguments=arguments)
     observer = SessionVariables(handle, connect, identity, deepcopy(attribute))
     try:
         observer.observe()

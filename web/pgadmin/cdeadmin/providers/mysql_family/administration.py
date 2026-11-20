@@ -353,6 +353,36 @@ class MySQLAdministration(RelationalAdministration):
         from .mysql_tables import constraint
         return constraint(self, item, super()._constraint_definition(item))
 
+    def _public_row_values(self, values):
+        if self.dialect.engine_id != 'mysql':
+            return super()._public_row_values(values)
+        import array
+        import datetime
+        from decimal import Decimal
+        from .mysql_values import SAFE_INTEGER, binary
+        public = {}
+        for name, val in values.items():
+            if isinstance(val, (bytes, bytearray, memoryview)):
+                public[name] = binary(bytes(val))
+            elif isinstance(val, array.array):
+                public[name] = list(val)
+            elif isinstance(val, Decimal):
+                public[name] = str(val)
+            elif isinstance(val, int) and not isinstance(val, bool) and abs(val) > SAFE_INTEGER:
+                public[name] = str(val)
+            elif isinstance(val, datetime.timedelta):
+                total_us = (val.days * 86400 + val.seconds) * 1_000_000 + val.microseconds
+                sign = '-' if total_us < 0 else ''
+                rem_s, us = divmod(abs(total_us), 1_000_000)
+                hrs, rem_s = divmod(rem_s, 3600)
+                mins, secs = divmod(rem_s, 60)
+                public[name] = f'{sign}{hrs:02d}:{mins:02d}:{secs:02d}' + (f'.{us:06d}' if us else '')
+            elif isinstance(val, (set, frozenset)):
+                public[name] = sorted(str(item) for item in val)
+            else:
+                public[name] = deepcopy(val)
+        return public
+
     def apply(self, client, request, connection=None):
         from .relay_positions import position, apply as apply_relay
         compiled = (request.get('provider_payload') or {}).get('compiled', {})
