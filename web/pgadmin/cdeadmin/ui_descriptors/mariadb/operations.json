@@ -5408,6 +5408,1199 @@
           "required": true
         }
       ]
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "drop_temporary",
+      "title": "Drop session temporary table",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "confirmation",
+          "label": "Temporary table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Executes DROP TEMPORARY TABLE on the bound retained session so a same-name committed base table is never dropped."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "add_system_versioning",
+      "title": "Enable system versioning",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "explicit_period_columns",
+          "label": "Add explicit ROW START and ROW END columns",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "row_start_column",
+          "label": "Row start column name",
+          "control": "text",
+          "required": false,
+          "default": "row_start",
+          "visible_when": {
+            "field": "explicit_period_columns",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "row_end_column",
+          "label": "Row end column name",
+          "control": "text",
+          "required": false,
+          "default": "row_end",
+          "visible_when": {
+            "field": "explicit_period_columns",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "invisible_period_columns",
+          "label": "Mark explicit period columns INVISIBLE",
+          "control": "boolean",
+          "required": false,
+          "default": true,
+          "visible_when": {
+            "field": "explicit_period_columns",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Adds SQL:2011 system versioning (WITH SYSTEM VERSIONING) to an existing unversioned table."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "drop_system_versioning",
+      "title": "Drop system versioning and history",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "drop_period_columns",
+          "label": "Also drop explicit ROW START and ROW END columns",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "row_start_column",
+          "label": "Row start column to drop",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "drop_period_columns",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "row_end_column",
+          "label": "Row end column to drop",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "drop_period_columns",
+            "truthy": true
+          }
+        },
+        {
+          "field_id": "destructive_history_confirmed",
+          "label": "Confirm irreversible destruction of all historical row versions",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Irreversibly removes system versioning and destroys historical row versions on the target table."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "truncate_system_versioning_history",
+      "title": "Delete system-versioning history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "cutoff_mode",
+          "label": "History deletion scope",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All historical versions"
+            },
+            {
+              "value": "BEFORE_TIMESTAMP",
+              "label": "Before system timestamp"
+            },
+            {
+              "value": "BEFORE_TRANSACTION",
+              "label": "Before transaction ID"
+            }
+          ]
+        },
+        {
+          "field_id": "before_timestamp",
+          "label": "Cutoff timestamp",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "cutoff_mode",
+            "equals": "BEFORE_TIMESTAMP"
+          }
+        },
+        {
+          "field_id": "before_transaction_id",
+          "label": "Cutoff transaction ID",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "visible_when": {
+            "field": "cutoff_mode",
+            "equals": "BEFORE_TRANSACTION"
+          }
+        },
+        {
+          "field_id": "destructive_history_confirmed",
+          "label": "Confirm irreversible deletion of historical row versions",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Executes ALTER TABLE ... DELETE HISTORY [BEFORE SYSTEM_TIME ...] after revalidating server and table identity."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "rotate_system_time_partitions",
+      "title": "Partition or rotate system-time history",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "rotation_action",
+          "label": "Partition action",
+          "control": "select",
+          "required": true,
+          "default": "ADD_HISTORY_PARTITIONS",
+          "options": [
+            {
+              "value": "ADD_HISTORY_PARTITIONS",
+              "label": "Add history partition(s)"
+            },
+            {
+              "value": "PARTITION_BY_LIMIT",
+              "label": "Configure PARTITION BY SYSTEM_TIME LIMIT"
+            },
+            {
+              "value": "PARTITION_BY_INTERVAL",
+              "label": "Configure PARTITION BY SYSTEM_TIME INTERVAL"
+            }
+          ]
+        },
+        {
+          "field_id": "partitions_to_add",
+          "label": "History partitions to add",
+          "control": "number",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "max": 1024,
+          "visible_when": {
+            "field": "rotation_action",
+            "equals": "ADD_HISTORY_PARTITIONS"
+          }
+        },
+        {
+          "field_id": "row_limit",
+          "label": "Rows per history partition (LIMIT)",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "visible_when": {
+            "field": "rotation_action",
+            "equals": "PARTITION_BY_LIMIT"
+          }
+        },
+        {
+          "field_id": "interval_value",
+          "label": "Interval quantity",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "visible_when": {
+            "field": "rotation_action",
+            "equals": "PARTITION_BY_INTERVAL"
+          }
+        },
+        {
+          "field_id": "interval_unit",
+          "label": "Interval unit",
+          "control": "select",
+          "required": false,
+          "default": "DAY",
+          "options": [
+            {
+              "value": "SECOND",
+              "label": "SECOND"
+            },
+            {
+              "value": "MINUTE",
+              "label": "MINUTE"
+            },
+            {
+              "value": "HOUR",
+              "label": "HOUR"
+            },
+            {
+              "value": "DAY",
+              "label": "DAY"
+            },
+            {
+              "value": "MONTH",
+              "label": "MONTH"
+            },
+            {
+              "value": "YEAR",
+              "label": "YEAR"
+            }
+          ],
+          "visible_when": {
+            "field": "rotation_action",
+            "equals": "PARTITION_BY_INTERVAL"
+          }
+        },
+        {
+          "field_id": "history_partitions",
+          "label": "History partition count",
+          "control": "number",
+          "required": false,
+          "default": 2,
+          "min": 1,
+          "max": 1024,
+          "visible_when": {
+            "field": "rotation_action",
+            "in": [
+              "PARTITION_BY_LIMIT",
+              "PARTITION_BY_INTERVAL"
+            ]
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Configures or adds history partitions for a system-versioned table."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "add_application_period",
+      "title": "Add application-time period",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "period_name",
+          "label": "Application period name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "start_column",
+          "label": "Period start column",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "end_column",
+          "label": "Period end column",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Adds an application-time PERIOD FOR definition on two existing date/datetime/timestamp columns."
+    },
+    {
+      "resource_kind": "table",
+      "operation_id": "drop_application_period",
+      "title": "Drop application-time period",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "period_name",
+          "label": "Application period name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "destructive_history_confirmed",
+          "label": "Confirm removal of application-time period metadata",
+          "control": "boolean",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Table name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Drops an application-time PERIOD FOR definition from the target table."
+    },
+    {
+      "resource_kind": "index",
+      "operation_id": "rename",
+      "title": "Rename index",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "new_name",
+          "label": "New index name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Current index name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Renames a non-PRIMARY index in place via ALTER TABLE ... RENAME INDEX."
+    },
+    {
+      "resource_kind": "index",
+      "operation_id": "visibility",
+      "title": "Set index optimizer visibility",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "visibility",
+          "label": "Optimizer visibility",
+          "control": "select",
+          "required": true,
+          "default": "NOT IGNORED",
+          "options": [
+            {
+              "value": "NOT IGNORED",
+              "label": "NOT IGNORED (visible to optimizer)"
+            },
+            {
+              "value": "IGNORED",
+              "label": "IGNORED (hidden from optimizer)"
+            }
+          ]
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Index name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Sets IGNORED or NOT IGNORED optimizer visibility via ALTER TABLE ... ALTER INDEX."
+    },
+    {
+      "resource_kind": "view",
+      "operation_id": "create_or_replace",
+      "title": "Replace view definition",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "query",
+          "label": "View query",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "columns",
+          "label": "Explicit column aliases",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Column alias",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "algorithm",
+          "label": "Evaluation algorithm",
+          "control": "select",
+          "required": false,
+          "default": "UNDEFINED",
+          "options": [
+            {
+              "value": "UNDEFINED",
+              "label": "UNDEFINED"
+            },
+            {
+              "value": "MERGE",
+              "label": "MERGE"
+            },
+            {
+              "value": "TEMPTABLE",
+              "label": "TEMPTABLE"
+            }
+          ]
+        },
+        {
+          "field_id": "sql_security",
+          "label": "SQL security context",
+          "control": "select",
+          "required": false,
+          "default": "DEFINER",
+          "options": [
+            {
+              "value": "DEFINER",
+              "label": "DEFINER"
+            },
+            {
+              "value": "INVOKER",
+              "label": "INVOKER"
+            }
+          ]
+        },
+        {
+          "field_id": "check_option",
+          "label": "Updatable view check option",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "None"
+            },
+            {
+              "value": "CASCADED",
+              "label": "CASCADED"
+            },
+            {
+              "value": "LOCAL",
+              "label": "LOCAL"
+            }
+          ]
+        },
+        {
+          "field_id": "definer_mode",
+          "label": "Definer assignment",
+          "control": "select",
+          "required": false,
+          "default": "OMIT",
+          "options": [
+            {
+              "value": "OMIT",
+              "label": "Default (current session user)"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Explicit CURRENT_USER"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "Named user@host account"
+            }
+          ]
+        },
+        {
+          "field_id": "definer_user",
+          "label": "Definer user",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "definer_host",
+          "label": "Definer host",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "View name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Replaces a view in place via CREATE OR REPLACE VIEW and reports dependent views."
+    },
+    {
+      "resource_kind": "procedure",
+      "operation_id": "create_or_replace",
+      "title": "Replace stored procedure",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "parameters",
+          "label": "Parameters",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "mode",
+              "label": "Mode",
+              "control": "select",
+              "required": false,
+              "default": "IN",
+              "options": [
+                {
+                  "value": "IN",
+                  "label": "IN"
+                },
+                {
+                  "value": "OUT",
+                  "label": "OUT"
+                },
+                {
+                  "value": "INOUT",
+                  "label": "INOUT"
+                }
+              ]
+            },
+            {
+              "field_id": "name",
+              "label": "Parameter name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "type",
+              "label": "Data type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "body",
+          "label": "Procedure body",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "deterministic",
+          "label": "Determinism",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "NOT DETERMINISTIC",
+              "label": "NOT DETERMINISTIC"
+            },
+            {
+              "value": "DETERMINISTIC",
+              "label": "DETERMINISTIC"
+            }
+          ]
+        },
+        {
+          "field_id": "data_access",
+          "label": "SQL data access",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "CONTAINS SQL",
+              "label": "CONTAINS SQL"
+            },
+            {
+              "value": "NO SQL",
+              "label": "NO SQL"
+            },
+            {
+              "value": "READS SQL DATA",
+              "label": "READS SQL DATA"
+            },
+            {
+              "value": "MODIFIES SQL DATA",
+              "label": "MODIFIES SQL DATA"
+            }
+          ]
+        },
+        {
+          "field_id": "sql_security",
+          "label": "SQL security",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "DEFINER",
+              "label": "DEFINER"
+            },
+            {
+              "value": "INVOKER",
+              "label": "INVOKER"
+            }
+          ]
+        },
+        {
+          "field_id": "comment",
+          "label": "Procedure comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "sql_mode",
+          "label": "Compilation SQL mode (e.g. ORACLE)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "definer_mode",
+          "label": "Definer assignment",
+          "control": "select",
+          "required": false,
+          "default": "OMIT",
+          "options": [
+            {
+              "value": "OMIT",
+              "label": "Default (current session user)"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Explicit CURRENT_USER"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "Named user@host account"
+            }
+          ]
+        },
+        {
+          "field_id": "definer_user",
+          "label": "Definer user",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "definer_host",
+          "label": "Definer host",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Procedure name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Replaces a stored procedure atomically via CREATE OR REPLACE PROCEDURE and reports existing routine grants."
+    },
+    {
+      "resource_kind": "function",
+      "operation_id": "create_or_replace",
+      "title": "Replace stored function",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "parameters",
+          "label": "Input parameters",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Parameter name",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "type",
+              "label": "Data type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "returns",
+          "label": "Return data type",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "body",
+          "label": "Function body",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "deterministic",
+          "label": "Determinism",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "NOT DETERMINISTIC",
+              "label": "NOT DETERMINISTIC"
+            },
+            {
+              "value": "DETERMINISTIC",
+              "label": "DETERMINISTIC"
+            }
+          ]
+        },
+        {
+          "field_id": "data_access",
+          "label": "SQL data access",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "CONTAINS SQL",
+              "label": "CONTAINS SQL"
+            },
+            {
+              "value": "NO SQL",
+              "label": "NO SQL"
+            },
+            {
+              "value": "READS SQL DATA",
+              "label": "READS SQL DATA"
+            },
+            {
+              "value": "MODIFIES SQL DATA",
+              "label": "MODIFIES SQL DATA"
+            }
+          ]
+        },
+        {
+          "field_id": "sql_security",
+          "label": "SQL security",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "DEFINER",
+              "label": "DEFINER"
+            },
+            {
+              "value": "INVOKER",
+              "label": "INVOKER"
+            }
+          ]
+        },
+        {
+          "field_id": "comment",
+          "label": "Function comment",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "sql_mode",
+          "label": "Compilation SQL mode (e.g. ORACLE)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "definer_mode",
+          "label": "Definer assignment",
+          "control": "select",
+          "required": false,
+          "default": "OMIT",
+          "options": [
+            {
+              "value": "OMIT",
+              "label": "Default (current session user)"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Explicit CURRENT_USER"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "Named user@host account"
+            }
+          ]
+        },
+        {
+          "field_id": "definer_user",
+          "label": "Definer user",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "definer_host",
+          "label": "Definer host",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Function name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Replaces a stored function atomically via CREATE OR REPLACE FUNCTION and reports dependent views and routine grants."
+    },
+    {
+      "resource_kind": "trigger",
+      "operation_id": "create_or_replace",
+      "title": "Replace trigger",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "timing",
+          "label": "Timing",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "BEFORE",
+              "label": "BEFORE"
+            },
+            {
+              "value": "AFTER",
+              "label": "AFTER"
+            }
+          ]
+        },
+        {
+          "field_id": "events",
+          "label": "Events",
+          "control": "multiselect",
+          "required": true,
+          "default": [
+            "INSERT"
+          ],
+          "options": [
+            {
+              "value": "INSERT",
+              "label": "INSERT"
+            },
+            {
+              "value": "UPDATE",
+              "label": "UPDATE"
+            },
+            {
+              "value": "DELETE",
+              "label": "DELETE"
+            }
+          ]
+        },
+        {
+          "field_id": "body",
+          "label": "Trigger body",
+          "control": "code",
+          "language": "sql",
+          "required": true
+        },
+        {
+          "field_id": "order_kind",
+          "label": "Sibling trigger order",
+          "control": "select",
+          "required": false,
+          "default": "NONE",
+          "options": [
+            {
+              "value": "NONE",
+              "label": "Preserve / default"
+            },
+            {
+              "value": "FOLLOWS",
+              "label": "FOLLOWS"
+            },
+            {
+              "value": "PRECEDES",
+              "label": "PRECEDES"
+            }
+          ]
+        },
+        {
+          "field_id": "order_trigger",
+          "label": "Sibling trigger name",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "order_kind",
+            "in": [
+              "FOLLOWS",
+              "PRECEDES"
+            ]
+          }
+        },
+        {
+          "field_id": "sql_mode",
+          "label": "Compilation SQL mode",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "definer_mode",
+          "label": "Definer assignment",
+          "control": "select",
+          "required": false,
+          "default": "OMIT",
+          "options": [
+            {
+              "value": "OMIT",
+              "label": "Default (current session user)"
+            },
+            {
+              "value": "CURRENT_USER",
+              "label": "Explicit CURRENT_USER"
+            },
+            {
+              "value": "ACCOUNT",
+              "label": "Named user@host account"
+            }
+          ]
+        },
+        {
+          "field_id": "definer_user",
+          "label": "Definer user",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "definer_host",
+          "label": "Definer host",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "definer_mode",
+            "equals": "ACCOUNT"
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Trigger name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "description": "Replaces a trigger via CREATE OR REPLACE TRIGGER while preserving sibling FOLLOWS/PRECEDES ordering and sql_mode."
+    },
+    {
+      "resource_kind": "server",
+      "operation_id": "inspect_available_plugins",
+      "title": "Inspect available plugin modules",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "status_filter",
+          "label": "Installation state filter",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All plugins (ALL_PLUGINS)"
+            },
+            {
+              "value": "INSTALLED",
+              "label": "Installed (ACTIVE)"
+            },
+            {
+              "value": "UNINSTALLED_AVAILABLE",
+              "label": "Uninstalled but available library"
+            },
+            {
+              "value": "INACTIVE",
+              "label": "INACTIVE"
+            }
+          ]
+        },
+        {
+          "field_id": "plugin_type",
+          "label": "Plugin type filter",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All plugin types"
+            },
+            {
+              "value": "STORAGE ENGINE",
+              "label": "STORAGE ENGINE"
+            },
+            {
+              "value": "AUTHENTICATION",
+              "label": "AUTHENTICATION"
+            },
+            {
+              "value": "ENCRYPTION",
+              "label": "ENCRYPTION"
+            },
+            {
+              "value": "AUDIT",
+              "label": "AUDIT"
+            },
+            {
+              "value": "DAEMON",
+              "label": "DAEMON"
+            },
+            {
+              "value": "INFORMATION SCHEMA",
+              "label": "INFORMATION SCHEMA"
+            },
+            {
+              "value": "FTPARSER",
+              "label": "FTPARSER"
+            },
+            {
+              "value": "PASSWORD VALIDATION",
+              "label": "PASSWORD VALIDATION"
+            },
+            {
+              "value": "DATA TYPE",
+              "label": "DATA TYPE"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "FUNCTION"
+            },
+            {
+              "value": "CLONE",
+              "label": "CLONE"
+            }
+          ]
+        },
+        {
+          "field_id": "include_test_modules",
+          "label": "Include test and example modules",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "description": "Queries information_schema.ALL_PLUGINS on an independent observer connection, distinguishing installed ACTIVE modules from uninstalled-but-available plugin libraries and classifying Community open-source vs test/example modules."
     }
   ]
 }

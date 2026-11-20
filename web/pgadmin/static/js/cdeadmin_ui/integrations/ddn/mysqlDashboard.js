@@ -27,7 +27,7 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
       seen.add(String(identity));
       return Object.entries(row).map(([key, value]) => binding(`${engine}_${name}_${hex(identity)}_${hex(key)}`,
         [`${identity}: ${key}`, typeof value === 'object' && value !== null ? JSON.stringify(value) : value,
-          name === 'storage' ? 'Native estimate; not filesystem usage' : group.scope,
+          name === 'storage' ? 'Native estimate; not filesystem usage' : (name === 'status' && key === 'variable_value' && row.unit ? row.unit : group.scope),
           name === 'status' && key === 'variable_value' ? sample?.rates?.per_second?.[identity] ?? '' : '']));
     });
     panels.push({id: `native_${name}`, title: `${label} ${name}`, rows: [
@@ -103,6 +103,37 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
           binding(`mysql_gr_flow_control_${hex(vname)}_${hex(key)}`,
             [`${vname}: ${key}`, value ?? '', key === 'variable_value' ? unit : 'server',
               key === 'variable_value' ? sample?.rates?.per_second?.[vname] ?? '' : '']));
+      }),
+    ]});
+  } else if(engine === 'mariadb') {
+    const wsrep = sample?.groups?.wsrep;
+    panels.push({id: 'native_wsrep', title: 'MariaDB Galera / wsrep cluster state', rows: [
+      binding('mariadb_wsrep_summary_0', ['Source', wsrep?.status || 'Unavailable', 'server']),
+      binding('mariadb_wsrep_summary_1', ['wsrep_on', wsrep == null ? 'Unavailable' : String(Boolean(wsrep.wsrep_on)), 'boolean']),
+      binding('mariadb_wsrep_summary_2', ['Provider loaded', wsrep == null ? 'Unavailable' : String(Boolean(wsrep.provider_loaded)), 'boolean']),
+      binding('mariadb_wsrep_summary_3', ['Cluster state', wsrep?.cluster_state || 'Unavailable', 'server']),
+      binding('mariadb_wsrep_summary_4', ['Cluster metrics available', wsrep == null ? 'Unavailable' : String(Boolean(wsrep.cluster_metrics_available)), 'boolean']),
+      binding('mariadb_wsrep_summary_5', ['Observed at', wsrep?.observed_at || 'Unavailable', 'timestamp']),
+      ...(wsrep?.status === 'available' ? wsrep.rows || [] : []).flatMap(row => {
+        const vname = row.variable_name;
+        if(!vname) return [];
+        return Object.entries(row).map(([key, value]) =>
+          binding(`mariadb_wsrep_${hex(vname)}_${hex(key)}`, [`wsrep ${vname}: ${key}`, value ?? '', 'server']));
+      }),
+    ]});
+    const enginesGroup = sample?.groups?.engines;
+    panels.push({id: 'native_engines', title: 'MariaDB installed storage engines', rows: [
+      binding('mariadb_engines_summary_0', ['Source', enginesGroup?.status || 'Unavailable', enginesGroup?.scope || scope]),
+      binding('mariadb_engines_summary_1', ['Visibility', enginesGroup?.visibility || 'Unavailable']),
+      binding('mariadb_engines_summary_2', ['Truncated', enginesGroup == null ? 'Unavailable' : String(Boolean(enginesGroup.truncated))]),
+      binding('mariadb_engines_summary_3', ['Observed at', enginesGroup?.observed_at || 'Unavailable']),
+      binding('mariadb_engines_summary_4', ['Observation age', enginesGroup?.observation_age_seconds ?? 'Unavailable', 'seconds']),
+      ...(enginesGroup?.status === 'available' ? enginesGroup.rows || [] : []).flatMap(row => {
+        const eng = row.engine;
+        if(!eng) return [];
+        return Object.entries(row).map(([key, value]) =>
+          binding(`mariadb_engines_${hex(eng)}_${hex(key)}`,
+            [`${eng}: ${key}`, value ?? '', key.endsWith('_bytes') ? 'bytes' : key === 'tables_count' ? 'tables' : (enginesGroup?.scope || scope)]));
       }),
     ]});
   }

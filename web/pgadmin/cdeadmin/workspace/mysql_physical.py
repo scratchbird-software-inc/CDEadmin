@@ -18,7 +18,7 @@ from . import physical_schema as vocab
 from .mysql_relational_fields import tokens
 from .mysql_table_clauses import table_layout
 
-INDEX_WORDS = {'PRIMARY', 'UNIQUE', 'FULLTEXT', 'SPATIAL', 'KEY', 'INDEX'}
+INDEX_WORDS = {'PRIMARY', 'UNIQUE', 'FULLTEXT', 'SPATIAL', 'VECTOR', 'KEY', 'INDEX'}
 ACTIONS = {'mysql': set(vocab.ACTIONS), 'mariadb': set(vocab.ACTIONS) - {'SET DEFAULT'}}
 DEFAULT_ACTION = {'mysql': 'NO ACTION', 'mariadb': 'RESTRICT'}
 INTENT = {'mysql': 'mysql_change', 'mariadb': 'mariadb_change'}
@@ -90,9 +90,11 @@ def describe(clause, mode):
             raise ValueError('Native index clause lacks its key parts')
         result = {'kind': 'primary' if 'PRIMARY' in words else 'index', 'name': 'PRIMARY' if 'PRIMARY' in words else name,
                   'unique': 'UNIQUE' in words or 'PRIMARY' in words,
-                  'index_type': 'FULLTEXT' if 'FULLTEXT' in words else 'SPATIAL' if 'SPATIAL' in words else None,
+                  'index_type': ('FULLTEXT' if 'FULLTEXT' in words else 'SPATIAL' if 'SPATIAL' in words
+                                 else 'VECTOR' if 'VECTOR' in words else None),
                   'columns': [], 'prefix_lengths': [], 'directions': [], 'expression_parts': False,
-                  'method': None, 'visible': True, 'comment': None, 'extra': []}
+                  'method': None, 'visible': True, 'comment': None,
+                  'vector_m': None, 'vector_distance': None, 'extra': []}
         for part in _split(parsed[position][1], mode):
             bits = tokens(part, mode)
             if bits and _is_identifier(bits[0], mode):
@@ -116,6 +118,7 @@ def describe(clause, mode):
         while i < len(options):
             token = options[i]
             word = token[1].upper() if token[0] == 'word' else None
+            opt_ident = word or (_unquote(token[1]).upper() if _is_identifier(token, mode) else None)
             if word == 'USING' and i + 1 < len(options) and options[i + 1][0] == 'word':
                 result['method'] = options[i + 1][1].upper()
                 i += 2
@@ -129,6 +132,28 @@ def describe(clause, mode):
                 i += 1
             elif word == 'NOT' and i + 1 < len(options) and options[i + 1][1].upper() == 'IGNORED':
                 i += 2
+            elif result['index_type'] == 'VECTOR' and opt_ident == 'M' and i + 2 < len(options) and options[i + 1][1] == '=':
+                j = i + 2
+                while (j < len(options) and options[j][0] == 'symbol' and options[j][1].isdigit()
+                       and (j == i + 2 or options[j][2] == options[j - 1][3])):
+                    j += 1
+                if j > i + 2:
+                    m_val = int(''.join(t[1] for t in options[i + 2:j]))
+                    if 3 <= m_val <= 200:
+                        result['vector_m'] = m_val
+                        i = j
+                        continue
+                result['extra'].append(token[1])
+                i += 1
+            elif result['index_type'] == 'VECTOR' and opt_ident == 'DISTANCE' and i + 2 < len(options) and options[i + 1][1] == '=':
+                vt = options[i + 2]
+                dist_val = vt[1].lower() if vt[0] == 'word' else (_unquote(vt[1]).lower() if vt[0] == 'quoted' else None)
+                if dist_val in ('cosine', 'euclidean'):
+                    result['vector_distance'] = dist_val
+                    i += 3
+                    continue
+                result['extra'].append(token[1])
+                i += 1
             else:
                 result['extra'].append(token[1])
                 i += 1
@@ -208,6 +233,10 @@ def values_of(found, engine):
         values['unique'] = False
     if found['index_type']:
         values['index_type'] = found['index_type']
+    if found.get('vector_m') is not None:
+        values['vector_m'] = found['vector_m']
+    if found.get('vector_distance') is not None:
+        values['vector_distance'] = found['vector_distance']
     if found['method'] in ('BTREE', 'HASH'):
         values['method'] = found['method']
     if kind != 'primary':
@@ -313,6 +342,15 @@ def build_index(kind, name, values, available, mode, engine):
         raise ValueError('A UNIQUE constraint cannot be edited to a non-unique index; drop it and add an index')
     if itype and (unique or method):
         raise ValueError(itype + ' indexes are neither unique nor USING-typed')
+    if itype == 'VECTOR':
+        if engine != 'mariadb':
+            raise ValueError('VECTOR indexes are a MariaDB feature')
+        if count != 1:
+            raise ValueError('A MariaDB VECTOR index requires a single VECTOR(N) column')
+        if any(length is not None for length in prefix) or 'DESC' in directions:
+            raise ValueError('VECTOR indexes do not accept column prefix lengths or DESC ordering')
+    elif values.get('vector_m') is not None or values.get('vector_distance') is not None:
+        raise ValueError('vector_m and vector_distance require index_type=VECTOR')
     if kind == 'primary-key':
         if name != 'PRIMARY':
             raise ValueError('A MySQL PRIMARY KEY is always named PRIMARY')
@@ -324,6 +362,10 @@ def build_index(kind, name, values, available, mode, engine):
             raise ValueError('An index name needs 1 to 64 characters and cannot be PRIMARY')
         head = ('UNIQUE KEY ' if unique else (itype + ' KEY ' if itype else 'KEY ')) + quote(name)
     clause = head + ' (' + ', '.join(parts) + ')'
+    if values.get('vector_m') is not None:
+        clause += ' M=' + str(values['vector_m'])
+    if values.get('vector_distance') is not None:
+        clause += ' DISTANCE=' + values['vector_distance']
     if method:
         clause += ' USING ' + method
     if values.get('visible') is False:
@@ -425,9 +467,14 @@ def canonical(key, clause, mode, engine, database, *, visibility=True):
     except ValueError:
         return ('raw', ' '.join(token[1] for token in tokens(clause, mode)))
     if kind in {'index', 'primary'}:
+        vec_m = (found['vector_m'] or 6) if found['index_type'] == 'VECTOR' else None
+        vec_dist = (found['vector_distance'] or 'euclidean') if found['index_type'] == 'VECTOR' else None
+        norm_method = (None if found['method'] in (None, 'BTREE')
+                       or (found['index_type'] == 'SPATIAL' and found['method'] == 'RTREE')
+                       else found['method'])
         return ('index', found['kind'], found['unique'], found['index_type'], tuple(found['columns']),
                 tuple(found['prefix_lengths']), tuple(found['directions']),
-                None if found['method'] in (None, 'BTREE') else found['method'], found['comment'],
+                norm_method, found['comment'], vec_m, vec_dist,
                 tuple(found['extra']), found['visible'] if visibility else None,
                 _expression_parts(clause, mode) if found['expression_parts'] else None)
     if kind == 'check':
@@ -636,6 +683,9 @@ def annotate(operation, before, after, mode, engine, database):
                 {'object': 'table', 'name': before['name'], 'action': 'rename', 'to': intent['rename_table']}])
         else:
             steps = plan_changes(before, after, mode, engine, database)
+            if engine == 'mariadb' and intent.get('drop_system_versioning') is True:
+                steps.append({'object': 'system-versioning', 'name': before['name'], 'action': 'drop', 'destructive': True})
+                operation['destructive_history_confirmed'] = bool(intent.get('destructive_history_confirmed'))
             operation['changes'] = steps
             drops = [step['name'] for step in steps if step.get('destructive')]
             if drops:

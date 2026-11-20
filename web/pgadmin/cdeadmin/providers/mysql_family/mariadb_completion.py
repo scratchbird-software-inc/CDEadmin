@@ -103,11 +103,85 @@ def complete(client, handle, *, source_context=None):
                 row['original_session_mode_observed']=True
                 row['available']=(row['required_sql_mode']=='oracle')==oracle
                 row['availability']='observed-original-session-mode' if row['available'] else 'requires-other-native-mode'
-            result.update(original_session_commands_sent=1,original_diagnostics_preserved=False,
+            commands_sent = int(source_context.get('original_session_commands_sent', 1))
+            has_temp_overlay = 'temporary_tables' in source_context
+            temp_tables = source_context.get('temporary_tables') or []
+            temp_complete = bool(source_context.get('temporary_enumeration_complete', True))
+            if temp_tables:
+                lctn = int(source_context.get('lower_case_table_names') or context.get('lower_case_table_names') or 0)
+                norm = (lambda d, t: (str(d).lower(), str(t).lower())) if lctn else (lambda d, t: (str(d), str(t)))
+                temp_by_key = {norm(item['database'], item['name']): item for item in temp_tables}
+                shadowed_keys = set()
+                rewritten = []
+                for sym in result['resources']:
+                    kind = sym.get('resource_kind')
+                    path = sym.get('display_path') or []
+                    if kind == 'table' and len(path) == 2 and norm(path[0], path[1]) in temp_by_key:
+                        shadowed_keys.add(norm(path[0], path[1]))
+                        rewritten.append({
+                            **sym,
+                            'resource_kind': 'shadowed-table',
+                            'resource_id': f'table:{path[0]}:{path[1]}',
+                            'detail': 'BASE TABLE shadowed by session TEMPORARY table',
+                            'shadowed_by_temporary': True,
+                            'authority_scope': 'committed-catalog',
+                        })
+                    elif kind == 'column' and len(path) == 3 and norm(path[0], path[1]) in temp_by_key:
+                        # Omit shadowed base-table columns from active relation column completion
+                        continue
+                    else:
+                        rewritten.append(sym)
+                for item in temp_tables:
+                    db_name, tbl_name = item['database'], item['name']
+                    shadows_base = norm(db_name, tbl_name) in shadowed_keys
+                    rewritten.append({
+                        'resource_kind': 'table',
+                        'resource_id': f'temporary-table:{db_name}:{tbl_name}',
+                        'display_path': [db_name, tbl_name],
+                        'display_name': tbl_name,
+                        'detail': 'TEMPORARY' + (' (shadows BASE TABLE)' if shadows_base else ''),
+                        'temporary': True,
+                        'authority_scope': 'retained-session',
+                        'shadows_base_table': shadows_base,
+                    })
+                    for col in item.get('columns', []):
+                        col_entry = {
+                            'resource_kind': 'column',
+                            'resource_id': f"temporary-column:{db_name}:{tbl_name}:{col['name']}",
+                            'display_path': [db_name, tbl_name, col['name']],
+                            'display_name': col['name'],
+                            'detail': col['column_type'],
+                            'temporary': True,
+                            'authority_scope': 'retained-session',
+                        }
+                        if col.get('hidden_from_star'):
+                            col_entry['hidden_from_star'] = True
+                        rewritten.append(col_entry)
+                result['resources'] = rewritten
+                result['visible_resource_count'] = len(rewritten)
+            context['temporary_table_count'] = int(source_context.get('temporary_table_count', len(temp_tables)))
+            result.update(
+                complete=False,
+                original_session_commands_sent=commands_sent,
+                original_diagnostics_preserved=False,
                 original_active_roles_observed=True,
+                original_temporary_objects_observed=has_temp_overlay,
+                temporary_enumeration_complete=temp_complete if has_temp_overlay else False,
                 snapshot_invalidated_by_next_source_command=True,
-                coverage='Explicit original-session language/role/default-schema observation and same-context private committed catalog. Temporary objects and uncommitted schema remain unobserved.')
-            result['observations'][-1]['reason']='source-language-and-role-observed;temporary-and-uncommitted-catalog-unobserved'
+                coverage=(
+                    'Explicit original-session language/role/default-schema and session TEMPORARY table '
+                    'observation merged with a same-context private committed catalog. Uncommitted DDL/state remains unobserved.'
+                    if has_temp_overlay else
+                    'Explicit original-session language/role/default-schema observation and same-context private committed catalog. Temporary objects and uncommitted schema remain unobserved.'
+                ),
+            )
+            result['observations'][-1]['reason'] = (
+                'source-language-role-and-temporary-tables-observed;uncommitted-catalog-unobserved'
+                if (has_temp_overlay and temp_complete)
+                else 'source-language-and-role-observed;temporary-tables-truncated-and-uncommitted-catalog-unobserved'
+                if has_temp_overlay
+                else 'source-language-and-role-observed;temporary-and-uncommitted-catalog-unobserved'
+            )
         context.pop('context_revision', None)
         context['context_revision'] = hashlib.sha256(json.dumps({
             'context': context, 'resources': result['resources'],

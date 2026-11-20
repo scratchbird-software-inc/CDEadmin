@@ -39,7 +39,7 @@ def test_native_original_oracle_role_context_and_peer_types_do_not_finalize_pend
         assert context['original_session_context_observed'] and 'ORACLE' in context['sql_mode'].split(',')
         assert context['active_role']==role and metadata['original_active_roles_observed']
         assert metadata['original_session_commands_sent']==1 and not metadata['original_diagnostics_preserved']
-        assert not metadata['original_temporary_objects_observed'] and not metadata['complete']
+        assert metadata['original_temporary_objects_observed'] and not metadata['complete']
         names={row['display_name'] for row in metadata['resources'] if row['resource_kind']=='type'}
         assert {'NUMBER','VARCHAR2','RAW','CLOB'}<=names
         assert any(row['name']=='associative-array-declaration' and row['available'] for row in context['routine_type_candidates'])

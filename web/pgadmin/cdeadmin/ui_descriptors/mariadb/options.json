@@ -43,14 +43,16 @@
       "GEOMETRYCOLLECTION",
       "INET4",
       "INET6",
-      "UUID"
+      "UUID",
+      "VECTOR"
     ],
     "index_methods": [
       "BTREE",
       "HASH",
       "FULLTEXT",
       "SPATIAL",
-      "RTREE"
+      "RTREE",
+      "VECTOR"
     ],
     "routine_languages": [
       "SQL"
