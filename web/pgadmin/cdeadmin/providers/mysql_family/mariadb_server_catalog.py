@@ -3,6 +3,7 @@ import json
 import time
 import uuid
 
+from .mariadb_available_plugins import SERVER_CATALOG_ALL_PLUGINS_SELECT, classify_plugin
 from .mariadb_catalog import _value, DENIED, SYSTEM
 from ..mysql_grants import QUERIES as GRANTS
 
@@ -14,6 +15,7 @@ SECTIONS = (
     ('role-edges', 'role-membership', 'SELECT Host, User, Role, Admin_option FROM mysql.roles_mapping ORDER BY Host, User, Role', ('host', 'user', 'role')),
     ('visible-global-grants', 'privilege', 'SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.USER_PRIVILEGES ORDER BY GRANTEE, PRIVILEGE_TYPE', ('grantee', 'privilege_type')),
     ('plugins', 'plugin', 'SELECT PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_STATUS, PLUGIN_TYPE, PLUGIN_TYPE_VERSION, PLUGIN_LIBRARY, PLUGIN_LIBRARY_VERSION, PLUGIN_LICENSE, LOAD_OPTION FROM information_schema.PLUGINS ORDER BY PLUGIN_NAME', ('plugin_name', 'plugin_type')),
+    ('available-plugins', 'available-plugin', SERVER_CATALOG_ALL_PLUGINS_SELECT, ('plugin_name', 'plugin_type', 'plugin_library_identity', 'plugin_version_identity')),
     ('character-sets', 'character-set', 'SELECT CHARACTER_SET_NAME, DEFAULT_COLLATE_NAME, DESCRIPTION, MAXLEN FROM information_schema.CHARACTER_SETS ORDER BY CHARACTER_SET_NAME', ('character_set_name',)),
     ('collations', 'collation', 'SELECT COLLATION_NAME, CHARACTER_SET_NAME, ID, IS_DEFAULT, IS_COMPILED, SORTLEN FROM information_schema.COLLATIONS ORDER BY COLLATION_NAME', ('collation_name',)),
     ('storage-engines', 'storage-engine', 'SELECT ENGINE, SUPPORT, COMMENT, TRANSACTIONS, XA, SAVEPOINTS FROM information_schema.ENGINES ORDER BY ENGINE', ('engine',)),
@@ -75,10 +77,21 @@ def capture(connection):
             raise ValueError('Native server object identity is unavailable')
         token = json.dumps([server_uid,section,address],ensure_ascii=False,separators=(',',':'))
         name = ' / '.join(str(value) for value in address)
-        system = section in {'character-sets','collations','storage-engines'} or (
+        system = section in {'character-sets','collations','storage-engines','available-plugins'} or (
             section == 'plugins' and row.get('plugin_library') is None) or (
             section == 'databases' and row['schema_name'] in SYSTEM) or (
             section == 'accounts' and row['user'] in {'mariadb.sys'})
+        if section in {'plugins', 'available-plugins'}:
+            classified = classify_plugin(row)
+            row = {
+                **row,
+                'installed': classified['installed'],
+                'available_uninstalled': classified['available_uninstalled'],
+                'module_category': classified['module_category'],
+                'production_supported': classified['production_supported'],
+                'edition_classification': classified['edition_classification'],
+                'mysql_enterprise_reclassified': False,
+            }
         resource = {'resource_id':'mariadb-server:'+token,'resource_kind':kind,'display_name':name,
             'display_path':[server_uid,section,name], 'native':{'system_object':system,
                 'server_uid':server_uid,'section':section,'catalog_row':row}}

@@ -81,10 +81,25 @@ function mysqlDynamic(id, scope, engine='mysql') {
     return fields[workload[1]].some(field => hex(field) === workload[3]) &&
       (workload[1] !== 'settings' || workload[2] === hex('settings'));
   }
+  if(maria && /^mysql_wsrep_summary_[0-5]$/.test(id)) return true;
+  if(maria && /^mysql_engines_summary_[0-4]$/.test(id)) return true;
+  const mariaWsrep = maria && /^mysql_wsrep_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(mariaWsrep) {
+    return ['wsrep_ready', 'wsrep_connected', 'wsrep_cluster_size', 'wsrep_cluster_status',
+      'wsrep_local_state_comment', 'wsrep_local_recv_queue_avg', 'wsrep_flow_control_paused']
+      .some(vname => hex(vname) === mariaWsrep[1]) &&
+      ['variable_name', 'native_variable_name', 'variable_value'].some(field => hex(field) === mariaWsrep[2]);
+  }
+  const mariaEngines = maria && /^mysql_engines_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
+  if(mariaEngines) {
+    return ['engine', 'support', 'transactions', 'xa', 'savepoints', 'tables_count', 'data_bytes', 'index_bytes']
+      .some(field => hex(field) === mariaEngines[2]);
+  }
   const match = /^mysql_(status|settings|storage|activity|replication)_([a-f0-9]{2,1024})_([a-f0-9]{2,128})$/.exec(id);
   if(!match) return false;
-  const fields = {status: ['variable_name', 'variable_value', ...(maria ? ['native_variable_name'] : [])],
-    settings: ['max_connections', 'innodb_page_size', 'innodb_buffer_pool_size', 'read_only', ...(!maria ? ['super_read_only'] : []), 'event_scheduler'],
+  const fields = {status: ['variable_name', 'variable_value', ...(maria ? ['native_variable_name', 'unit', 'metric_kind'] : [])],
+    settings: ['max_connections', 'innodb_page_size', 'innodb_buffer_pool_size', 'read_only',
+      ...(maria ? ['aria_pagecache_buffer_size', 'key_buffer_size', 'wsrep_on'] : ['super_read_only']), 'event_scheduler'],
     storage: ['engine', 'tables_count', 'estimated_rows', 'data_bytes', 'index_bytes'],
     activity: ['processlist_id', 'processlist_user', 'processlist_db', 'processlist_command', 'processlist_time', 'processlist_state'],
     replication: maria ? ['channel_name', 'slave_io_running', 'slave_sql_running', 'last_io_errno', 'last_sql_errno', 'seconds_behind_master', 'gtid_io_pos'] : ['channel_name', 'service_state', 'last_error_number']};
@@ -97,7 +112,14 @@ function mysqlDynamic(id, scope, engine='mysql') {
     'Created_tmp_disk_tables', 'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
     'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_dirty', 'Innodb_data_reads', 'Innodb_data_writes',
     'Innodb_row_lock_waits', 'Innodb_row_lock_time', 'Innodb_rows_read', 'Innodb_rows_inserted',
-    'Innodb_rows_updated', 'Innodb_rows_deleted'].some(field => hex(field) === match[2]);
+    'Innodb_rows_updated', 'Innodb_rows_deleted',
+    ...(maria ? [
+      'Aria_pagecache_blocks_not_flushed', 'Aria_pagecache_blocks_unused', 'Aria_pagecache_blocks_used',
+      'Aria_pagecache_read_requests', 'Aria_pagecache_reads',
+      'Aria_pagecache_write_requests', 'Aria_pagecache_writes', 'Aria_transaction_log_syncs',
+      'Key_blocks_not_flushed', 'Key_blocks_unused', 'Key_blocks_used',
+      'Key_read_requests', 'Key_reads', 'Key_write_requests', 'Key_writes',
+    ] : [])].some(field => hex(field) === match[2]);
 }
 function postgresDynamic(id, scope) {
   const patterns = scope === 'engine' ? [

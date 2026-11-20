@@ -93,7 +93,7 @@ MARIADB_PROFILE = PilotProfile(
     ('server', 'database', 'table', 'column', 'view', 'index', 'constraint',
      'sequence', 'trigger', 'event', 'procedure', 'function', 'package',
      'partition', 'tablespace', 'user', 'role', 'privilege',
-     'plugin', 'replication-channel', 'server-link', 'loadable-function', 'metric', 'session',
+     'plugin', 'available-plugin', 'replication-channel', 'server-link', 'loadable-function', 'metric', 'session',
      'system-variable', 'lock', 'lock-wait', 'table-storage', 'binary-log',
      'binary-log-event', 'binary-log-status', 'log-configuration',
      'general-log-entry', 'slow-query', 'tls-configuration',
@@ -270,9 +270,13 @@ def _administration(profile):
         })
     else:
         common.pop('materialized-view')
-        for kind in ('character-set', 'collation', 'storage-engine'):
+        for kind in ('character-set', 'collation', 'storage-engine', 'available-plugin'):
             common[kind] = frozenset({'inspect'})
         common['server'] = frozenset({'inspect', 'check_upgrade_required'})
+        common['table'] |= frozenset({'drop_temporary'})
+        common['index'] |= frozenset({'alter', 'rename', 'visibility'})
+        for obj_kind in ('view', 'procedure', 'function', 'trigger'):
+            common[obj_kind] |= frozenset({'alter', 'create_or_replace'})
         for resource_kind in (
                 'session', 'system-variable', 'lock', 'lock-wait',
                 'table-storage', 'binary-log', 'binary-log-status',
@@ -370,9 +374,24 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     transaction_actions = ('commit', 'rollback', 'autocommit_on',
                            'autocommit_off', 'start_xa', 'prepare')
 
+    def admin_operation_field_contract(self, request):
+        kind, operation = request['resource_kind'], request['operation_id']
+        if (
+            kind in {'table', 'index', 'view', 'procedure', 'function', 'trigger'}
+            or (kind, operation) == ('server', 'inspect_available_plugins')
+        ):
+            from ...ui_descriptors.field_contract import descriptor_field_contract
+            return descriptor_field_contract('mariadb', request)
+        return None
+
     def plan_admin_operation(self, request):
         from .mariadb_administration import MODULES
-        planned = super().plan_admin_operation(request)
+        plan_req = (
+            {k: v for k, v in request.items() if k != '_provider_session_handle'}
+            if isinstance(request, dict) and '_provider_session_handle' in request
+            else request
+        )
+        planned = super().plan_admin_operation(plan_req)
         compiled = planned.get('provider_payload', {}).get('compiled', {})
         if compiled.get('destructive_identity_required'):
             if request.get('session_id') is not None:
@@ -385,12 +404,62 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             compiled['mariadb_flush']['mariadb_session_id'] = request['session_id']
             from . import mariadb_flush
             return mariadb_flush.bind_review(self, planned)
+        if 'mariadb_temporary_table' in compiled and compiled['mariadb_temporary_table'].get('retained_session_required'):
+            if not request.get('session_id'):
+                raise RelationalClientError('Select a retained MariaDB session before reviewing temporary table DDL')
+            compiled['mariadb_temporary_table']['mariadb_session_id'] = request['session_id']
+            from . import mariadb_temporary_tables
+            return mariadb_temporary_tables.bind_review(self, planned)
         for module in MODULES:
             if module.KEY in compiled:
                 if request.get('session_id') is not None:
-                    raise RelationalClientError('This native MariaDB diagnostic owns an independent observer')
+                    raise RelationalClientError('This native MariaDB operation owns an independent administrative connection')
                 return module.bind_review(self, planned)
         return planned
+
+    def list_resources(self, request):
+        handle = request.get('_provider_session_handle')
+        if handle is None or self._uses_server_scope(request):
+            return super().list_resources(request)
+        peer_ddl = {}
+        try:
+            cur = handle.cursor()
+            try:
+                cur.execute(
+                    "SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE FROM information_schema.TABLES "
+                    "WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')"
+                )
+                rel_rows = cur.fetchall()
+            finally:
+                cur.close()
+            temps = {(str(s), str(n)) for s, n, t in rel_rows if str(t).upper() == 'TEMPORARY'}
+            bases = {(str(s), str(n)) for s, n, t in rel_rows if str(t).upper() == 'BASE TABLE'}
+            shadowed = temps & bases
+            if temps:
+                self._temporary_session_handles.add(id(handle))
+            if shadowed and isinstance(request.get('route'), dict):
+                from .mysql_engine_diagnostics import observer_route, release
+                peer = self._connect({'route': observer_route(request)})
+                pcur = None
+                try:
+                    peer.autocommit = True
+                    pcur = peer.cursor()
+                    for s_name, t_name in sorted(shadowed):
+                        esc_s = s_name.replace('`', '``')
+                        esc_t = t_name.replace('`', '``')
+                        try:
+                            pcur.execute(f'SHOW CREATE TABLE `{esc_s}`.`{esc_t}`')
+                            prow = pcur.fetchone()
+                            if prow and len(prow) >= 2 and isinstance(prow[1], str):
+                                peer_ddl[(s_name, t_name)] = prow[1]
+                        except Exception:
+                            pass
+                finally:
+                    release(self, peer, pcur)
+        except Exception:
+            pass
+        enriched_request = {**request, '_committed_peer_ddl': peer_ddl} if peer_ddl else request
+        return super().list_resources(enriched_request)
 
     def __init__(self, config, pool_namespace, module=None, tool_runner=None):
         super().__init__(config, module)
@@ -408,6 +477,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._editor_context_snapshots = {}
         self._backup_stage_reviews = {}
         self._backup_stage_handles = set()
+        self._temporary_session_handles = set()
         self._tool_runner = tool_runner or ProviderToolRunner({
             'mariadb-binlog': os.environ.get('CDEADMIN_MARIADB_BINLOG_BINARY', 'mariadb-binlog'),
             'mariadb-backup': os.environ.get(
@@ -456,6 +526,8 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         session_request = self._session_requests.get(id(handle))
         if session_request is None:
             raise RelationalClientError('MariaDB session route is unavailable')
+        if 'TEMPORARY' in str(request.get('source') or '').upper():
+            self._temporary_session_handles.add(id(handle))
         self._invalidate_editor_context(handle)
         return self._executions.execute(handle, request, session_request)
 
@@ -468,6 +540,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
     def _discard_failed_session(self, connection):
         from .mariadb_connections import discard
         self._backup_stage_handles.discard(id(connection))
+        self._temporary_session_handles.discard(id(connection))
         self._completion_identities.pop(id(connection), None)
         self._source_revisions.pop(id(connection), None)
         self._editor_context_snapshots.pop(id(connection), None)
@@ -561,6 +634,17 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
                 'native_disconnect_requested': True, 'backup_session_discarded': True,
                 'lock_state_independently_observed': False, 'state': 'unknown',
                 'driver_observation_only': True, 'finality_interpreted_by_common_code': False}
+        if id(handle) in getattr(self, '_temporary_session_handles', set()):
+            # Session TEMPORARY tables belong exclusively to this session;
+            # discard the physical connection so no pool borrower inherits them.
+            self._temporary_session_handles.discard(id(handle))
+            self._forget_connection(handle)
+            discard(handle)
+            self._uncertain_sessions.discard(id(handle))
+            return {'rollback_requested': False, 'connection_released': True,
+                    'native_disconnect_requested': True, 'temporary_session_discarded': True,
+                    'state': 'closed', 'driver_observation_only': True,
+                    'finality_interpreted_by_common_code': False}
         if id(handle) in self._uncertain_sessions:
             self._forget_connection(handle)
             discard(handle)
@@ -579,7 +663,11 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
         self._executions.close()
         try:
             for handle in tuple(self._connections):
-                if id(handle) in self._uncertain_sessions or id(handle) in self._backup_stage_handles:
+                if (
+                    id(handle) in self._uncertain_sessions
+                    or id(handle) in self._backup_stage_handles
+                    or id(handle) in self._temporary_session_handles
+                ):
                     self.close_session(handle)
             super().close()
         finally:
@@ -593,6 +681,7 @@ class MariaDBDBAPIClient(RelationalDBAPIClient):
             self._executions.sessions.entries.clear()
             self._executions.sessions.status_unknown.clear()
             self._backup_stage_handles.clear()
+            self._temporary_session_handles.clear()
 
     @staticmethod
     def _workspace_path(workspace, value):
@@ -2063,7 +2152,7 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 or values['operation']!='refresh_completion' or values['diagnostics_change_confirmed'] is not True):
             raise RelationalClientError('Explicit original-session diagnostics acknowledgement is required')
         with session_access(self.client,handle,'mariadb'):
-            try:context=observe(self.client,handle)
+            try:context=observe(self.client,handle,include_temporary=True)
             except Exception:
                 self.client._uncertain_sessions.add(id(handle))
                 return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':True,
@@ -2078,7 +2167,8 @@ class MariaDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 return {'editor_context': completed}
             except Exception:
                 return {'outcome':'context_refresh_unavailable','accepted':False,'close_session_required':False,
-                    'original_session_commands_sent':1,'original_diagnostics_preserved':False,'automatic_retry':False}
+                    'original_session_commands_sent':context.get('original_session_commands_sent',1),
+                    'original_diagnostics_preserved':False,'automatic_retry':False}
 
     def native_session_flagsets_action(self, request):
         from .mariadb_flagsets import action
@@ -2394,7 +2484,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             })
             if native:
                 resource.setdefault('native', {}).update(native)
-            if kind in {'user', 'role', 'tablespace', 'logfile-group', 'ndb-node', 'plugin', 'component',
+            if kind in {'user', 'role', 'tablespace', 'logfile-group', 'ndb-node', 'plugin', 'available-plugin', 'component',
                     'loadable-function', 'resource-group', 'system-variable', 'session', 'metric',
                     'character-set', 'collation', 'storage-engine', 'replication-channel',
                     'group-replication', 'group-replication-member', 'server-link', 'spatial-reference-system', 'lock', 'lock-wait',
@@ -2540,13 +2630,71 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             "'performance_schema', 'sys') "
             'ORDER BY TABLE_SCHEMA, TABLE_NAME'
         ))
-        for schema_name, object_name, object_type in cursor.fetchall():
+        raw_table_rows = cursor.fetchall()
+        mariadb_temp_pairs = set()
+        mariadb_base_pairs = set()
+        if profile is MARIADB_PROFILE:
+            for s_raw, n_raw, t_raw in raw_table_rows:
+                t_up = str(t_raw).upper()
+                if t_up == 'TEMPORARY':
+                    mariadb_temp_pairs.add((str(s_raw), str(n_raw)))
+                elif t_up == 'BASE TABLE':
+                    mariadb_base_pairs.add((str(s_raw), str(n_raw)))
+        peer_ddl_map = request.get('_committed_peer_ddl') if isinstance(request, dict) else None
+        for schema_name, object_name, object_type in raw_table_rows:
             schema_name = str(schema_name)
             add('database', [], schema_name)
             object_type = str(object_type).upper()
             escaped_schema = schema_name.replace('`', '``')
             escaped_name = str(object_name).replace('`', '``')
+            if object_type == 'TEMPORARY' and profile is MARIADB_PROFILE:
+                from .mariadb_temporary_tables import (
+                    temporary_column_resource_id,
+                    temporary_table_resource_id,
+                )
+                definition = optional(f'SHOW CREATE TABLE `{escaped_schema}`.`{escaped_name}`')
+                temp_ddl = str(definition[0][1]) if definition else ''
+                shadows_base = (schema_name, str(object_name)) in mariadb_base_pairs
+                temp_id = temporary_table_resource_id(schema_name, object_name)
+                temp_native = {
+                    'table_type': 'TEMPORARY',
+                    'temporary': True,
+                    'authority_scope': 'retained-session',
+                    'shadows_base_table': shadows_base,
+                    **({'shadowed_base_resource_id': resource_key('table', [schema_name], object_name)} if shadows_base else {}),
+                    **({'ddl': temp_ddl} if temp_ddl else {}),
+                    'administration': {
+                        'allowed_operations': ['inspect', 'drop_temporary', 'insert', 'update', 'delete'],
+                    },
+                }
+                add('table', [schema_name], object_name, temp_native, identity=temp_id)
+                for col_row in optional(f'SHOW FULL COLUMNS FROM `{escaped_schema}`.`{escaped_name}`'):
+                    col_name = str(col_row[0])
+                    col_extra = str(col_row[6] or '')
+                    add(
+                        'column',
+                        [schema_name, object_name],
+                        col_name,
+                        {
+                            'temporary': True,
+                            'authority_scope': 'retained-session',
+                            'navigator_parent_resource_id': temp_id,
+                            'details': [
+                                None if item is None else str(item)
+                                for item in (col_row[1], col_row[3], col_row[5])
+                            ],
+                            'extra': col_extra,
+                            'comment': str(col_row[8] or '') if len(col_row) > 8 else '',
+                        },
+                        identity=temporary_column_resource_id(schema_name, object_name, col_name),
+                    )
+                continue
             create_source = ''
+            is_shadowed_mariadb_base = (
+                profile is MARIADB_PROFILE
+                and object_type == 'BASE TABLE'
+                and (schema_name, str(object_name)) in mariadb_temp_pairs
+            )
             if object_type == 'SEQUENCE' and profile is MARIADB_PROFILE:
                 kind = 'sequence'
                 definition = optional(
@@ -2566,6 +2714,10 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 from ..mysql_view_identity import HEADER as view_header
                 matched = view_header.match(create_source)
                 kind = 'materialized-view' if matched and matched['materialized'] else 'view'
+            elif is_shadowed_mariadb_base:
+                kind = 'table'
+                if isinstance(peer_ddl_map, dict):
+                    create_source = str(peer_ddl_map.get((schema_name, str(object_name))) or '')
             else:
                 kind = 'view' if 'VIEW' in object_type else 'table'
                 show_kind = 'VIEW' if kind == 'view' else 'TABLE'
@@ -2582,6 +2734,13 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     str(definition[0][1]) if definition else ''
                 )
             native = {'table_type': object_type}
+            if is_shadowed_mariadb_base:
+                from .mariadb_temporary_tables import temporary_table_resource_id
+                native.update(
+                    authority_scope='committed-catalog',
+                    shadowed_by_session_temporary=True,
+                    shadowing_temporary_resource_id=temporary_table_resource_id(schema_name, object_name),
+                )
             if create_source:
                 native['ddl'] = create_source
             if kind == 'table' and (schema_name, str(object_name)) in table_facts:
@@ -3057,14 +3216,32 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
         if profile is MYSQL_PROFILE:
             for record in optional_records('SELECT component_id,component_group_id,component_urn FROM mysql.component ORDER BY component_id'):
                 add('component',[],record['component_urn'],record)
+        maria_all_plugins = {}
+        if profile is MARIADB_PROFILE:
+            from .mariadb_available_plugins import classify_plugin, discover_catalog_plugins
+            maria_all_plugins = discover_catalog_plugins(
+                optional_records,
+                add,
+                server_uid=resources.get('server:MariaDB', {}).get('native', {}).get('server_uid'),
+            )
         for plugin in plugin_rows:
             name, status, plugin_type, library, license_name = plugin[:5]
             # MariaDB's uuid is both a DATA TYPE and a FUNCTION plugin.
             # Preserve native names for operations and distinct catalog IDs.
             identity = ('mariadb:plugin:' + json.dumps([name, plugin_type],
                 ensure_ascii=False, separators=(',', ':'))) if profile is MARIADB_PROFILE else None
+            maria_classified = {}
+            if profile is MARIADB_PROFILE:
+                maria_classified = maria_all_plugins.get((str(name), str(plugin_type))) or classify_plugin({
+                    'plugin_name': name,
+                    'plugin_status': status,
+                    'plugin_type': plugin_type,
+                    'plugin_library': library,
+                    'plugin_license': license_name,
+                })
             add('plugin', [], name, {
                 **(dict(zip((key.lower() for key in PLUGIN_COLUMNS), plugin)) if profile is MYSQL_PROFILE else {}),
+                **maria_classified,
                 **({'plugin_name': name} if profile is MARIADB_PROFILE else {}),
                 'status': status,
                 'plugin_type': plugin_type,
@@ -3091,6 +3268,17 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 add('loadable-function', [], record['name'], record)
             from .mariadb_catalog import program_object_natives
             program_object_natives(optional_records, add)
+            from .mariadb_tables import enrich_catalog_tables_and_children
+            from .mariadb_indexes import enrich_catalog_indexes
+            from .mariadb_objects import enrich_catalog_views_and_program_objects
+            maria_sql_mode = resources.get('server:MariaDB', {}).get('native', {}).get('sql_mode')
+            enrich_catalog_tables_and_children(
+                optional, optional_records, resources, resource_key, add, maria_sql_mode
+            )
+            enrich_catalog_indexes(optional_records, resources, resource_key, add)
+            enrich_catalog_views_and_program_objects(
+                optional, optional_records, resources, resource_key, add, catalog_failures
+            )
         if profile is MYSQL_PROFILE and any(str(row[0]).lower()=='group_replication' and str(row[1]).upper()=='ACTIVE' for row in plugin_rows):
             members=optional_records('SELECT * FROM performance_schema.replication_group_members')
             stats=optional_records('SELECT * FROM performance_schema.replication_group_member_stats')
@@ -3256,12 +3444,25 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 "'performance_schema', 'sys') ORDER BY TABLE_SCHEMA, "
                 'TABLE_NAME'
             ):
+                is_temp_storage = str(record.get('temporary', 'N')).upper() == 'Y'
+                storage_identity = None
+                if is_temp_storage:
+                    from .mariadb_temporary_tables import temporary_storage_resource_id
+                    storage_identity = temporary_storage_resource_id(
+                        record['table_schema'], record['table_name']
+                    )
                 add(
                     'table-storage', [record['table_schema']],
-                    record['table_name'], record,
+                    record['table_name'],
+                    {
+                        **record,
+                        'temporary': is_temp_storage,
+                        'authority_scope': 'retained-session' if is_temp_storage else 'committed-catalog',
+                    },
+                    identity=storage_identity,
                 )
                 tbl_key = resource_key('table', [record['table_schema']], record['table_name'])
-                if tbl_key in resources and str(record.get('temporary', 'N')).upper() != 'Y':
+                if tbl_key in resources and not is_temp_storage:
                     tbl_native = resources[tbl_key].setdefault('native', {})
                     if record.get('engine') is not None:
                         tbl_native.setdefault('engine', record['engine'])
@@ -3379,7 +3580,7 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
             'index', 'constraint', 'trigger', 'partition', 'procedure',
             'function', 'event', 'sequence', 'package', 'tablespace',
             'logfile-group', 'x-collection',
-            'plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'spatial-reference-system', 'system-variable',
+            'plugin', 'available-plugin', 'component', 'library', 'loadable-function', 'resource-group', 'server-link', 'spatial-reference-system', 'system-variable',
             'log-configuration', 'tls-configuration',
         }
         state_kinds = {

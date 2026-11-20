@@ -9,23 +9,28 @@
   "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "Index kind (BTREE/HASH/FULLTEXT/SPATIAL), comment, visibility",
-      "reason": "index.create is name/parent/table/columns/unique only"
-    },
-    {
-      "concept": "Index columns on re-open",
-      "reason": "MariaDB inventory (mysql_family provider) lists this as a separate resource with positional details only (non_unique, index type); key columns are not reported. Backend ask for the mysql_family inventory owner."
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "new_name",
+      "label": "New index name",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "help": "Emits ALTER TABLE ... RENAME INDEX when changed."
     },
     {
       "field_id": "parent",
@@ -33,7 +38,10 @@
       "tab": "General",
       "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed.",
+      "modes": [
+        "create"
+      ],
+      "help": "Use a qualified database name where needed.",
       "reference_kind": "database"
     },
     {
@@ -42,26 +50,47 @@
       "tab": "General",
       "control": "reference",
       "required": true,
+      "modes": [
+        "create"
+      ],
       "reference_kind": "table",
       "record_key": "navigator_parent_resource_id",
       "record_pattern": "^[a-z-]+:(?:[^:]+:)?(.*)$"
     },
     {
-      "field_id": "columns",
-      "label": "Indexed columns",
+      "field_id": "index_kind",
+      "label": "Index kind",
       "tab": "General",
-      "control": "grid",
-      "columns": [
-        {
-          "field_id": "value",
-          "label": "Column",
-          "control": "reference",
-          "required": true,
-          "reference_kind": "column"
-        }
+      "control": "select",
+      "required": false,
+      "default": "NORMAL",
+      "modes": [
+        "create"
       ],
-      "required": true,
-      "item_kind": "string"
+      "initial_value_path": [
+        "index_kind"
+      ],
+      "options": [
+        {
+          "value": "NORMAL",
+          "label": "Secondary / normal"
+        },
+        {
+          "value": "FULLTEXT",
+          "label": "FULLTEXT"
+        },
+        {
+          "value": "SPATIAL",
+          "label": "SPATIAL"
+        },
+        {
+          "value": "VECTOR",
+          "label": "VECTOR (MHNSW)",
+          "version": {
+            "minimum": "11.7.1"
+          }
+        }
+      ]
     },
     {
       "field_id": "unique",
@@ -70,17 +99,272 @@
       "control": "boolean",
       "required": false,
       "default": false,
-      "record_derive": {
-        "cases": [
-          {
-            "key": "details.0",
-            "equals": "0",
-            "value": true
-          }
-        ],
-        "default": false
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "unique"
+      ],
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "NORMAL"
       }
+    },
+    {
+      "field_id": "columns",
+      "label": "Indexed key parts",
+      "tab": "General",
+      "control": "grid",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "definition_parts"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Column",
+          "control": "reference",
+          "required": true,
+          "reference_kind": "column",
+          "reference_value": "display_name"
+        },
+        {
+          "field_id": "prefix_length",
+          "label": "Prefix length",
+          "control": "number",
+          "required": false,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "field_id": "direction",
+          "label": "Direction",
+          "control": "select",
+          "required": false,
+          "default": "DEFAULT",
+          "options": [
+            {
+              "value": "DEFAULT",
+              "label": "Default"
+            },
+            {
+              "value": "ASC",
+              "label": "Ascending"
+            },
+            {
+              "value": "DESC",
+              "label": "Descending"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "index_comment"
+      ]
+    },
+    {
+      "field_id": "method",
+      "label": "Index structure (USING)",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "DEFAULT",
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "method"
+      ],
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "Engine default"
+        },
+        {
+          "value": "BTREE",
+          "label": "BTREE"
+        },
+        {
+          "value": "HASH",
+          "label": "HASH"
+        },
+        {
+          "value": "RTREE",
+          "label": "RTREE (SPATIAL)"
+        }
+      ]
+    },
+    {
+      "field_id": "ignored",
+      "label": "Ignored by optimizer (IGNORED)",
+      "tab": "Options",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "native_keyword": "IGNORED",
+      "initial_value_path": [
+        "ignored"
+      ],
+      "help": "Marks the index IGNORED or NOT IGNORED for the query optimizer."
+    },
+    {
+      "field_id": "key_block_size",
+      "label": "Key block size",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "KEY_BLOCK_SIZE",
+      "help": "Unsigned decimal byte/kilobyte hint."
+    },
+    {
+      "field_id": "parser",
+      "label": "Full-text parser plugin",
+      "tab": "Engine",
+      "group": "FULLTEXT",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "WITH PARSER",
+      "initial_value_path": [
+        "parser"
+      ],
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "FULLTEXT"
+      }
+    },
+    {
+      "field_id": "vector_m",
+      "label": "MHNSW neighbor count (M)",
+      "tab": "Engine",
+      "group": "VECTOR",
+      "control": "number",
+      "required": false,
+      "min": 3,
+      "max": 200,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "M",
+      "initial_value_path": [
+        "vector_m"
+      ],
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "VECTOR"
+      }
+    },
+    {
+      "field_id": "vector_distance",
+      "label": "Vector distance metric",
+      "tab": "Engine",
+      "group": "VECTOR",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "DISTANCE",
+      "initial_value_path": [
+        "vector_distance"
+      ],
+      "options": [
+        {
+          "value": "euclidean",
+          "label": "Euclidean"
+        },
+        {
+          "value": "cosine",
+          "label": "Cosine"
+        }
+      ],
+      "visible_when": {
+        "field": "index_kind",
+        "equals": "VECTOR"
+      }
+    },
+    {
+      "field_id": "algorithm",
+      "label": "DDL algorithm",
+      "tab": "Engine",
+      "group": "Online DDL",
+      "control": "select",
+      "required": false,
+      "default": "DEFAULT",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "INPLACE",
+          "label": "INPLACE"
+        },
+        {
+          "value": "COPY",
+          "label": "COPY"
+        },
+        {
+          "value": "NOCOPY",
+          "label": "NOCOPY"
+        },
+        {
+          "value": "INSTANT",
+          "label": "INSTANT"
+        }
+      ]
+    },
+    {
+      "field_id": "lock",
+      "label": "DDL lock level",
+      "tab": "Engine",
+      "group": "Online DDL",
+      "control": "select",
+      "required": false,
+      "default": "DEFAULT",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "DEFAULT",
+          "label": "DEFAULT"
+        },
+        {
+          "value": "NONE",
+          "label": "NONE"
+        },
+        {
+          "value": "SHARED",
+          "label": "SHARED"
+        },
+        {
+          "value": "EXCLUSIVE",
+          "label": "EXCLUSIVE"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: index columns select from target columns; parent picker (database); table picker. Reviewed by tools/review_ui_descriptors.py: index columns as an ordered column list. Round-tripped against MariaDB 10.11 by tools/tests/test_ui_descriptor_roundtrip_mariadb.py (create, re-inspect pre-fill, alter where the engine supports it)."
+  "notes": "MariaDB 12.2.2 native index creation and alteration: NORMAL/UNIQUE, FULLTEXT (WITH PARSER), SPATIAL (RTREE), and VECTOR (M=3..200, DISTANCE=cosine|euclidean), plus IGNORED/NOT IGNORED visibility and RENAME INDEX."
 }

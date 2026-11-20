@@ -74,7 +74,8 @@
       "group_id": "ingest",
       "title": "Plugins",
       "kinds": [
-        "plugin"
+        "plugin",
+        "available-plugin"
       ],
       "order": 8
     },
@@ -155,6 +156,7 @@
     "role": "object.role",
     "privilege": "object.privilege",
     "plugin": "object.plugin",
+    "available-plugin": "object.plugin",
     "replication-channel": "object.replication-channel",
     "server-link": "object.server-link",
     "loadable-function": "object.loadable-function",

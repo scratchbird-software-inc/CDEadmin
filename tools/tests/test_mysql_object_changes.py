@@ -45,7 +45,7 @@ def test_catalog_forms_route_to_native_compiler_only_for_mysql():
         nodes = {row['operation_id']: row for row in catalog[kind]['operations']}
         for operation in operations:
             assert MYSQL_ADMINISTRATION.supports(kind, operation)
-            assert not MARIADB_ADMINISTRATION.supports(kind, operation)
+            assert MARIADB_ADMINISTRATION.supports(kind, operation)
             assert nodes[operation]['target_required'] and nodes[operation]['confirmation_required']
             assert not hasattr(changes, 'form')  # Descriptor owns migrated fields.
     request = {'resource_kind': 'function', 'operation_id': 'alter', 'target_resource': ROUTINE,

@@ -9,28 +9,15 @@
   "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "FOLLOWS / PRECEDES ordering",
-      "reason": "position is exposed but not as the native FOLLOWS/PRECEDES trigger reference"
-    },
-    {
-      "concept": "active / position",
-      "reason": "the shared provider create form lists them, but the MariaDB compiler emits neither (no ENABLE/DISABLE or POSITION clause); hidden so the form never shows a control that does nothing"
-    },
-    {
-      "concept": "Multiple trigger events before 12.0.1",
-      "reason": "MariaDB accepts several events per trigger from 12.0.1 (MDEV-10164, fix version 12.0.1; verified live on 12.2.2). The form does not yet limit 10.6-11.x servers to one event.",
-      "tracking": "mysql-wire-parity"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false
     },
     {
       "field_id": "parent",
@@ -38,7 +25,8 @@
       "tab": "General",
       "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed.",
+      "editable_after_create": false,
+      "help": "Use a qualified database name where needed.",
       "reference_kind": "database"
     },
     {
@@ -47,6 +35,7 @@
       "tab": "General",
       "control": "reference",
       "required": true,
+      "editable_after_create": false,
       "reference_kind": "table",
       "record_key": "navigator_parent_resource_id",
       "record_pattern": "^[a-z-]+:(?:[^:]+:)?(.*)$"
@@ -57,14 +46,17 @@
       "tab": "General",
       "control": "select",
       "required": true,
+      "initial_value_path": [
+        "timing"
+      ],
       "options": [
         {
           "value": "BEFORE",
-          "label": "Before"
+          "label": "BEFORE"
         },
         {
           "value": "AFTER",
-          "label": "After"
+          "label": "AFTER"
         }
       ]
     },
@@ -76,6 +68,9 @@
       "required": true,
       "default": [
         "INSERT"
+      ],
+      "initial_value_path": [
+        "events"
       ],
       "option_values_path": [
         "dialect",
@@ -90,8 +85,101 @@
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "Enter only the trigger body, not CREATE TRIGGER."
+      "initial_value_path": [
+        "body"
+      ],
+      "help": "Enter only the trigger body, not CREATE OR REPLACE TRIGGER."
+    },
+    {
+      "field_id": "order_kind",
+      "label": "Sibling trigger order",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "default": "NONE",
+      "options": [
+        {
+          "value": "NONE",
+          "label": "Preserve / default"
+        },
+        {
+          "value": "FOLLOWS",
+          "label": "FOLLOWS"
+        },
+        {
+          "value": "PRECEDES",
+          "label": "PRECEDES"
+        }
+      ]
+    },
+    {
+      "field_id": "order_trigger",
+      "label": "Sibling trigger name",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "order_kind",
+        "in": [
+          "FOLLOWS",
+          "PRECEDES"
+        ]
+      }
+    },
+    {
+      "field_id": "sql_mode",
+      "label": "Compilation SQL mode",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "initial_value_path": [
+        "sql_mode"
+      ]
+    },
+    {
+      "field_id": "definer_mode",
+      "label": "Definer assignment",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "OMIT",
+      "options": [
+        {
+          "value": "OMIT",
+          "label": "Default (current session user)"
+        },
+        {
+          "value": "CURRENT_USER",
+          "label": "Explicit CURRENT_USER"
+        },
+        {
+          "value": "ACCOUNT",
+          "label": "Named user@host account"
+        }
+      ]
+    },
+    {
+      "field_id": "definer_user",
+      "label": "Definer user",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "definer_mode",
+        "equals": "ACCOUNT"
+      }
+    },
+    {
+      "field_id": "definer_host",
+      "label": "Definer host",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "visible_when": {
+        "field": "definer_mode",
+        "equals": "ACCOUNT"
+      }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database); table picker; trigger events typed as a multiselect from dialect.trigger_events. Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); The MariaDB inventory now reports timing/events/position/body (mariadb_catalog.program_object_natives); create + re-open round-tripped against MariaDB 10.11. 2026-10-29: INSTEAD OF removed from Timing; MariaDB 12.2.2 refuses it on tables and views (live)."
+  "notes": "MariaDB 12.2.2 trigger create and CREATE OR REPLACE editor preserving FOLLOWS/PRECEDES sibling ordering, multi-event triggers (INSERT OR UPDATE OR DELETE), DEFINER and sql_mode."
 }

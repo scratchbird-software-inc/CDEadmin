@@ -23,12 +23,14 @@ KEYS = ('physical_kind', 'physical_name', 'rename_from', 'columns_json', 'unique
         'predicate', 'expression', 'referenced_columns_json', 'on_delete', 'on_update',
         'drop', 'drop_confirmation', 'descending', 'inactive',
         # MySQL / MariaDB additions (additive; other engines never emit them).
-        'index_type', 'prefix_lengths_json', 'directions_json', 'visible', 'enforced')
+        'index_type', 'prefix_lengths_json', 'directions_json', 'visible', 'enforced',
+        'vector_m', 'vector_distance')
 _TYPES = {'physical_kind': str, 'physical_name': str, 'rename_from': str, 'columns_json': str,
           'unique': bool, 'method': str, 'predicate': str, 'expression': str,
           'referenced_columns_json': str, 'on_delete': str, 'on_update': str,
           'drop': bool, 'drop_confirmation': str, 'descending': bool, 'inactive': bool,
-          'index_type': str, 'prefix_lengths_json': str, 'directions_json': str, 'visible': bool, 'enforced': bool}
+          'index_type': str, 'prefix_lengths_json': str, 'directions_json': str, 'visible': bool, 'enforced': bool,
+          'vector_m': int, 'vector_distance': str}
 
 
 def pick(values):
@@ -84,8 +86,14 @@ def normalize(raw, label='physical record'):
         if columns and len(decoded) != len(columns):
             raise ValueError('directions_json needs one entry per column')
         result['directions'] = decoded
-    if result.get('index_type', 'FULLTEXT') not in ('FULLTEXT', 'SPATIAL'):
-        raise ValueError('index_type must be FULLTEXT or SPATIAL')
+    if result.get('index_type', 'FULLTEXT') not in ('FULLTEXT', 'SPATIAL', 'VECTOR'):
+        raise ValueError('index_type must be FULLTEXT, SPATIAL or VECTOR')
+    if 'vector_m' in result:
+        if result.get('index_type') != 'VECTOR' or not 3 <= result['vector_m'] <= 200:
+            raise ValueError('vector_m requires index_type=VECTOR and an integer from 3 to 200')
+    if 'vector_distance' in result:
+        if result.get('index_type') != 'VECTOR' or result['vector_distance'] not in ('cosine', 'euclidean'):
+            raise ValueError('vector_distance requires index_type=VECTOR and cosine or euclidean')
     for key in ('on_delete', 'on_update'):
         if key in result and result[key] not in ACTIONS:
             raise ValueError('Foreign-key action must be one of: ' + ', '.join(ACTIONS))

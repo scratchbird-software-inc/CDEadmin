@@ -446,7 +446,7 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         document, MARIADB_PROFILE,
         MARIADB_ADMINISTRATION.dialect_task_ids(),
     )
-    assert checked['coverage']['authoritative_task_count'] == 110
+    assert checked['coverage']['authoritative_task_count'] == 129
     assert checked['coverage']['authoritative_inventory_counts'] == {
         'lexical_rules': 693,
         'statements': 59,
@@ -465,7 +465,7 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         metrics_document, MARIADB_PROFILE
     )
     assert checked_metrics['authoritative_observation_count'] == 571
-    assert checked_metrics['authoritative_metric_count'] == 28
+    assert checked_metrics['authoritative_metric_count'] == 43
     metrics = {
         item['native_name']: item
         for item in checked_metrics['native_observations']
@@ -475,7 +475,13 @@ def test_mariadb_exact_dialect_inventory_activates_generated_tasks():
         item['observation_id']: item
         for item in checked_metrics['metrics']
     }
-    assert len(metrics) == 28
+    assert len(metrics) == 43
+    assert definitions[
+        metrics['ARIA_PAGECACHE_READ_REQUESTS']['observation_id']
+    ]['kind'] == 'counter'
+    assert definitions[
+        metrics['ARIA_PAGECACHE_BLOCKS_USED']['observation_id']
+    ]['kind'] == 'gauge'
     assert definitions[
         metrics['THREADS_CONNECTED']['observation_id']
     ]['kind'] == 'gauge'

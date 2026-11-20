@@ -12,16 +12,7 @@
   "status": "complete",
   "engine_tab_title": "MariaDB",
   "omitted_tabs": [],
-  "gaps": [
-    {
-      "concept": "Routine options COMMENT and DEFINER (SQL SECURITY, DETERMINISTIC and data access were added for create on 2026-11-02)",
-      "reason": "procedure/function expose create/drop only; MySQL has an alter form with these; COMMENT and DEFINER need bound or mode-aware literals the shared compiler does not provide"
-    },
-    {
-      "concept": "OUT / INOUT parameter modes",
-      "reason": "the shared compiler joins parameters as `name type`; the inventory reports each parameter's mode but there is no create binding for it (backend ask: accept a mode column)"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "variant",
@@ -53,7 +44,8 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false
     },
     {
       "field_id": "parent",
@@ -61,7 +53,8 @@
       "tab": "General",
       "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed.",
+      "editable_after_create": false,
+      "help": "Use a qualified database name where needed.",
       "reference_kind": "database"
     },
     {
@@ -70,6 +63,12 @@
       "tab": "General",
       "control": "text",
       "required": false,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "returns"
+      ],
       "visible_when": {
         "field": "variant",
         "equals": "function"
@@ -116,10 +115,38 @@
     },
     {
       "field_id": "parameters",
-      "label": "Input parameters",
+      "label": "Routine parameters",
       "tab": "Parameters",
       "control": "grid",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "parameter_records"
+      ],
       "columns": [
+        {
+          "field_id": "mode",
+          "label": "Mode",
+          "control": "select",
+          "required": false,
+          "default": "IN",
+          "options": [
+            {
+              "value": "IN",
+              "label": "IN"
+            },
+            {
+              "value": "OUT",
+              "label": "OUT"
+            },
+            {
+              "value": "INOUT",
+              "label": "INOUT"
+            }
+          ]
+        },
         {
           "field_id": "name",
           "label": "Parameter name",
@@ -128,95 +155,11 @@
         },
         {
           "field_id": "type",
-          "label": "Native data type",
+          "label": "Data type",
           "control": "text",
           "required": true
         }
       ],
-      "required": false,
-      "visible_when": {
-        "field": "variant",
-        "in": [
-          "procedure",
-          "function"
-        ]
-      }
-    },
-    {
-      "field_id": "deterministic",
-      "label": "Determinism",
-      "tab": "General",
-      "control": "select",
-      "required": false,
-      "options": [
-        {
-          "value": "NOT DETERMINISTIC",
-          "label": "Not Deterministic"
-        },
-        {
-          "value": "DETERMINISTIC",
-          "label": "Deterministic"
-        }
-      ],
-      "help": "With binary logging on, MariaDB refuses a function that declares none of DETERMINISTIC, NO SQL or READS SQL DATA unless log_bin_trust_function_creators is set.",
-      "visible_when": {
-        "field": "variant",
-        "in": [
-          "procedure",
-          "function"
-        ]
-      }
-    },
-    {
-      "field_id": "data_access",
-      "label": "SQL data access",
-      "tab": "General",
-      "control": "select",
-      "required": false,
-      "options": [
-        {
-          "value": "CONTAINS SQL",
-          "label": "Contains Sql"
-        },
-        {
-          "value": "NO SQL",
-          "label": "No Sql"
-        },
-        {
-          "value": "READS SQL DATA",
-          "label": "Reads Sql Data"
-        },
-        {
-          "value": "MODIFIES SQL DATA",
-          "label": "Modifies Sql Data"
-        }
-      ],
-      "help": "Left empty, MariaDB records CONTAINS SQL.",
-      "visible_when": {
-        "field": "variant",
-        "in": [
-          "procedure",
-          "function"
-        ]
-      }
-    },
-    {
-      "field_id": "sql_security",
-      "label": "SQL security",
-      "tab": "General",
-      "control": "select",
-      "required": false,
-      "options": [
-        {
-          "value": "DEFINER",
-          "label": "Definer"
-        },
-        {
-          "value": "INVOKER",
-          "label": "Invoker"
-        }
-      ],
-      "help": "Left empty, MariaDB uses DEFINER.",
       "visible_when": {
         "field": "variant",
         "in": [
@@ -232,7 +175,10 @@
       "control": "code",
       "language": "sql",
       "required": true,
-      "help": "Enter only the body (BEGIN ... END for compound statements), not a CREATE command."
+      "initial_value_path": [
+        "body"
+      ],
+      "help": "Routine body (BEGIN ... END for compound statements). In alter mode for procedures and functions, body replacement uses the Replace Routine operation; ALTER PROCEDURE/FUNCTION modifies characteristics only."
     },
     {
       "field_id": "header",
@@ -247,7 +193,198 @@
         "field": "variant",
         "equals": "package"
       }
+    },
+    {
+      "field_id": "deterministic",
+      "label": "Determinism",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "deterministic"
+      ],
+      "options": [
+        {
+          "value": "NOT DETERMINISTIC",
+          "label": "NOT DETERMINISTIC"
+        },
+        {
+          "value": "DETERMINISTIC",
+          "label": "DETERMINISTIC"
+        }
+      ],
+      "help": "With binary logging on, MariaDB refuses a function that declares none of DETERMINISTIC, NO SQL or READS SQL DATA unless log_bin_trust_function_creators is set.",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "data_access",
+      "label": "SQL data access",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "initial_value_path": [
+        "data_access"
+      ],
+      "options": [
+        {
+          "value": "CONTAINS SQL",
+          "label": "CONTAINS SQL"
+        },
+        {
+          "value": "NO SQL",
+          "label": "NO SQL"
+        },
+        {
+          "value": "READS SQL DATA",
+          "label": "READS SQL DATA"
+        },
+        {
+          "value": "MODIFIES SQL DATA",
+          "label": "MODIFIES SQL DATA"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "sql_security",
+      "label": "SQL security",
+      "tab": "Options",
+      "control": "select",
+      "required": false,
+      "initial_value_path": [
+        "sql_security"
+      ],
+      "options": [
+        {
+          "value": "DEFINER",
+          "label": "DEFINER"
+        },
+        {
+          "value": "INVOKER",
+          "label": "INVOKER"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "comment",
+      "label": "Routine comment",
+      "tab": "Options",
+      "control": "text",
+      "required": false,
+      "initial_value_path": [
+        "routine_comment"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "sql_mode",
+      "label": "Compilation SQL mode (e.g. ORACLE)",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "sql_mode"
+      ],
+      "help": "Optional session sql_mode applied during CREATE (such as ORACLE for PL/SQL syntax).",
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "definer_mode",
+      "label": "Definer assignment",
+      "tab": "Engine",
+      "control": "select",
+      "required": false,
+      "default": "OMIT",
+      "modes": [
+        "create"
+      ],
+      "options": [
+        {
+          "value": "OMIT",
+          "label": "Default (current session user)"
+        },
+        {
+          "value": "CURRENT_USER",
+          "label": "Explicit CURRENT_USER"
+        },
+        {
+          "value": "ACCOUNT",
+          "label": "Named user@host account"
+        }
+      ],
+      "visible_when": {
+        "field": "variant",
+        "in": [
+          "procedure",
+          "function"
+        ]
+      }
+    },
+    {
+      "field_id": "definer_user",
+      "label": "Definer user",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "definer_mode",
+        "equals": "ACCOUNT"
+      }
+    },
+    {
+      "field_id": "definer_host",
+      "label": "Definer host",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "definer_mode",
+        "equals": "ACCOUNT"
+      }
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (database). Create path round-tripped against MariaDB 10.11 (tools/tests/test_ui_descriptor_roundtrip_mariadb.py); The MariaDB inventory now reports body/parameters/returns for routines and schedule/preserve/enabled/body for events (mariadb_catalog.program_object_natives); create + re-open round-tripped against MariaDB 10.11."
+  "notes": "MariaDB 12.2.2 routine editor supporting IN/OUT/INOUT parameters, DETERMINISTIC, SQL data access, SQL SECURITY, COMMENT, DEFINER, SQL/ORACLE compilation mode, and ALTER PROCEDURE / ALTER FUNCTION characteristics."
 }

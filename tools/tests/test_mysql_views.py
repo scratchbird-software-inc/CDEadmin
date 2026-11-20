@@ -44,7 +44,8 @@ def test_mysql_catalog_retains_native_operations_after_descriptor_migration():
     view = next(row for row in catalog['objects'] if row['resource_kind'] == 'view')
     operations = {row['operation_id']: row for row in view['operations']}
     assert MYSQL_ADMINISTRATION.supports('view', 'alter')
-    assert not MARIADB_ADMINISTRATION.supports('view', 'alter')
+    assert MARIADB_ADMINISTRATION.supports('view', 'alter')
+    assert not MARIADB_ADMINISTRATION.supports('materialized-view', 'alter')
     assert not operations['create']['target_required']
     assert operations['alter']['confirmation_required']
     assert not hasattr(mysql_views, 'form')

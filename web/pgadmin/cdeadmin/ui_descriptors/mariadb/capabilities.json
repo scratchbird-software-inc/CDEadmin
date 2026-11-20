@@ -61,6 +61,41 @@
           "operation_id": "flush",
           "tier": 2,
           "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop_temporary",
+          "tier": 2,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "add_system_versioning",
+          "tier": 2,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop_system_versioning",
+          "tier": 2,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "truncate_system_versioning_history",
+          "tier": 2,
+          "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "rotate_system_time_partitions",
+          "tier": 2,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "add_application_period",
+          "tier": 2,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "drop_application_period",
+          "tier": 2,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -83,6 +118,16 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "create_or_replace",
+          "tier": 2,
+          "mutation_class": "write"
         }
       ]
     },
@@ -105,6 +150,21 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "rename",
+          "tier": 2,
+          "mutation_class": "admin"
+        },
+        {
+          "operation_id": "visibility",
+          "tier": 2,
+          "mutation_class": "admin"
         }
       ]
     },
@@ -128,6 +188,16 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "create_or_replace",
+          "tier": 2,
+          "mutation_class": "write"
         }
       ]
     },
@@ -151,6 +221,16 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "create_or_replace",
+          "tier": 2,
+          "mutation_class": "write"
         }
       ]
     },
@@ -250,6 +330,16 @@
           "operation_id": "drop",
           "tier": 1,
           "mutation_class": "destructive"
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1,
+          "mutation_class": "write"
+        },
+        {
+          "operation_id": "create_or_replace",
+          "tier": 2,
+          "mutation_class": "write"
         }
       ]
     },
@@ -574,6 +664,11 @@
           "mutation_class": "admin",
           "requires_utility": "libgalera_smm.so",
           "support_state": "implemented"
+        },
+        {
+          "operation_id": "inspect_available_plugins",
+          "tier": 2,
+          "mutation_class": "read"
         }
       ]
     },
@@ -808,6 +903,18 @@
       "resource_kind": "tls-configuration",
       "family": "engine_object",
       "title": "TLS configuration",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "available-plugin",
+      "family": "engine_object",
+      "title": "Available plugin module",
       "operations": [
         {
           "operation_id": "inspect",

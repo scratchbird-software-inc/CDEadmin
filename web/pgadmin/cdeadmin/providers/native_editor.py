@@ -146,17 +146,27 @@ def metadata(handle, engine, transaction=None, dialect=None):
             observations.append({'section': name, 'available': False, 'error_code': code})
             return []
 
-    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False, native_variable=None, native_type_syntax=None, native_function=None):
+    def add(kind, path, detail='', *, hidden_from_star=False, native_identifier_token=False, native_type=None, table_valued=False, native_type_keyword=False, native_variable=None, native_type_syntax=None, native_function=None, resource_id=None, temporary=False, authority_scope=None, shadows_base_table=None, shadowed_by_temporary=False):
         nonlocal total, size
         path = [str(value).rstrip(' ') if engine == 'firebird' else str(value) for value in path]
         row = {'resource_kind': kind, 'display_path': path, 'display_name': path[-1], 'detail': str(detail)}
+        if resource_id is not None:
+            row['resource_id'] = str(resource_id)
+        if temporary:
+            row['temporary'] = True
+        if authority_scope is not None:
+            row['authority_scope'] = str(authority_scope)
+        if shadows_base_table is not None:
+            row['shadows_base_table'] = bool(shadows_base_table)
+        if shadowed_by_temporary:
+            row['shadowed_by_temporary'] = True
         if hidden_from_star:
             row['hidden_from_star'] = True
         if native_identifier_token:
             row['native_identifier_token'] = True
         if native_type_keyword:row['native_type_keyword']=True
         if native_variable is not None:row['native_variable']=native_variable
-        if native_function is not None:row['native_function']=native_function
+        if native_function is not None:native_function_val = native_function; row['native_function']=native_function_val
         if native_type_syntax is not None:row['native_type_syntax']=native_type_syntax
         if native_type is not None:
             row['native_type']=native_type
@@ -188,11 +198,57 @@ def metadata(handle, engine, transaction=None, dialect=None):
                         'available': False, 'reason': 'registration-is-not-callability;no-user-code-executed'})
             for (database,) in query('databases', 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 25001'):
                 add('schema', [database])
-            for database, table, kind in query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001'):
-                add('view' if kind == 'VIEW' else 'table', [database, table])
-            for database, table, column, native_type, extra in query('columns', 'SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,EXTRA FROM information_schema.COLUMNS ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION LIMIT 25001'):
-                add('column', [database, table, column], native_type,
-                    hidden_from_star='INVISIBLE' in str(extra).upper().split())
+            relations = query('relations', 'SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME LIMIT 25001')
+            has_mariadb_temp = engine == 'mariadb' and any(kind == 'TEMPORARY' for _db, _tbl, kind in relations)
+            if has_mariadb_temp:
+                lctn = int(context.get('lower_case_table_names') or 0)
+                norm = (lambda d, t: (str(d).lower(), str(t).lower())) if lctn else (lambda d, t: (str(d), str(t)))
+                temp_keys = {norm(db, tbl) for db, tbl, kind in relations if kind == 'TEMPORARY'}
+                base_keys = {norm(db, tbl) for db, tbl, kind in relations if kind != 'TEMPORARY' and kind != 'VIEW'}
+                for database, table, kind in relations:
+                    if kind == 'VIEW':
+                        add('view', [database, table])
+                    elif kind == 'TEMPORARY':
+                        shadows = norm(database, table) in base_keys
+                        add('table', [database, table],
+                            'TEMPORARY' + (' (shadows BASE TABLE)' if shadows else ''),
+                            resource_id=f'temporary-table:{database}:{table}',
+                            temporary=True, authority_scope='retained-session',
+                            shadows_base_table=shadows)
+                    elif norm(database, table) in temp_keys:
+                        add('shadowed-table', [database, table],
+                            'BASE TABLE shadowed by session TEMPORARY table',
+                            resource_id=f'table:{database}:{table}',
+                            shadowed_by_temporary=True, authority_scope='committed-catalog')
+                    else:
+                        add('table', [database, table])
+                for database, table, column, native_type, extra in query('columns', 'SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,EXTRA FROM information_schema.COLUMNS ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION LIMIT 25001'):
+                    if norm(database, table) in temp_keys:
+                        continue
+                    add('column', [database, table, column], native_type,
+                        hidden_from_star='INVISIBLE' in str(extra).upper().split())
+                for database, table, kind in relations:
+                    if kind != 'TEMPORARY':
+                        continue
+                    q_db = '`' + str(database).replace('`', '``') + '`'
+                    q_tbl = '`' + str(table).replace('`', '``') + '`'
+                    for col_row in query(f'temporary-columns:{database}:{table}', f'SHOW FULL COLUMNS FROM {q_db}.{q_tbl}'):
+                        extra = str(col_row[6] or '')
+                        add('column', [database, table, col_row[0]], col_row[1],
+                            hidden_from_star='INVISIBLE' in extra.upper().split(),
+                            resource_id=f'temporary-column:{database}:{table}:{col_row[0]}',
+                            temporary=True, authority_scope='retained-session')
+                observations.append({
+                    'section': 'temporary-session-overlay',
+                    'available': False,
+                    'reason': 'retained-session-temporary-tables-shadow-committed-catalog;uncommitted-state-unconfirmed',
+                })
+            else:
+                for database, table, kind in relations:
+                    add('view' if kind == 'VIEW' else 'table', [database, table])
+                for database, table, column, native_type, extra in query('columns', 'SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,EXTRA FROM information_schema.COLUMNS ORDER BY (TABLE_SCHEMA=DATABASE()) DESC,TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION LIMIT 25001'):
+                    add('column', [database, table, column], native_type,
+                        hidden_from_star='INVISIBLE' in str(extra).upper().split())
             for database, routine, kind, native_type in query('routines', 'SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,DTD_IDENTIFIER FROM information_schema.ROUTINES ORDER BY (ROUTINE_SCHEMA=DATABASE()) DESC,ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE LIMIT 25001'):
                 add(kind.lower(), [database, routine], native_type or kind)
             if engine=='mysql':

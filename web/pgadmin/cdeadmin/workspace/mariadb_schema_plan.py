@@ -33,7 +33,7 @@ def parts(row,sql_mode):
             key=('period',name(match.group(1)))
         elif re.match(r'^PRIMARY\s+KEY\b',stripped,re.I):key=('primary','PRIMARY')
         else:
-            match=re.match(r'^(?:UNIQUE\s+(?:KEY|INDEX)|(?:FULLTEXT\s+|SPATIAL\s+)?(?:KEY|INDEX))\s+('+TOKEN+r')\s*\(',stripped,re.I)
+            match=re.match(r'^(?:UNIQUE\s+(?:KEY|INDEX)|(?:FULLTEXT\s+|SPATIAL\s+|VECTOR\s+)?(?:KEY|INDEX))\s+('+TOKEN+r')\s*\(',stripped,re.I)
             if match:key=('index',name(match.group(1)))
             else:
                 match=re.match(r'^CONSTRAINT\s+('+TOKEN+r')\s+(FOREIGN\s+KEY|CHECK)\b',stripped,re.I)
@@ -46,14 +46,26 @@ def parts(row,sql_mode):
 def alteration(before,after,sql_mode):
     old,columns,old_order=parts(before,sql_mode);new,desired,new_order=parts(after,sql_mode)
     intent=after['native'].get('mariadb_change',{})
-    if not isinstance(intent,dict) or set(intent)-{'drop_columns','drop_periods','temporal_history','rename_columns','rename_indexes','rename_table'}:raise ValueError('Unknown table alteration intent')
+    allowed_intent={'drop_columns','drop_periods','temporal_history','rename_columns','rename_indexes',
+                    'rename_table','drop_system_versioning','destructive_history_confirmed','confirmation'}
+    if not isinstance(intent,dict) or set(intent)-allowed_intent:raise ValueError('Unknown table alteration intent')
     if 'rename_table' in intent:
         from .mysql_physical import table_rename
         return table_rename(before,after,intent,sql_mode,'mariadb')
     temporal='WITH SYSTEM VERSIONING' in old['suffix'].upper()
-    if temporal and intent.get('temporal_history') != 'KEEP':
+    desired_temporal='WITH SYSTEM VERSIONING' in new['suffix'].upper()
+    dropping_sysver=temporal and not desired_temporal
+    adding_sysver=(not temporal) and desired_temporal
+    if dropping_sysver:
+        if (intent.get('drop_system_versioning') is not True or
+                intent.get('destructive_history_confirmed') is not True or
+                intent.get('confirmation') != before['name']):
+            raise ValueError('Removing system versioning requires explicit mariadb_change.drop_system_versioning=True, destructive_history_confirmed=True and exact table name confirmation')
+    elif 'drop_system_versioning' in intent or 'destructive_history_confirmed' in intent:
+        raise ValueError('drop_system_versioning intent is valid only when removing WITH SYSTEM VERSIONING from a versioned table')
+    if temporal and not dropping_sysver and intent.get('temporal_history') != 'KEEP':
         raise ValueError('System-versioned schema alteration requires explicit mariadb_change.temporal_history=KEEP acceptance of native history semantics')
-    if 'temporal_history' in intent and (not temporal or intent['temporal_history'] != 'KEEP'):
+    if 'temporal_history' in intent and (not temporal or (not dropping_sysver and intent['temporal_history'] != 'KEEP')):
         raise ValueError('Native temporal history policy is KEEP on an existing system-versioned table')
     renames=intent.get('rename_columns',{})
     if (not isinstance(renames,dict) or len(renames)>128 or
@@ -70,11 +82,11 @@ def alteration(before,after,sql_mode):
     declared=intent.get('drop_columns',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=removals:
         raise ValueError('Column removal requires exact explicit mariadb_change.drop_columns intent')
-    periods={key[1] for key in columns.keys()-desired.keys() if key[0]=='period'}
+    periods={key[1] for key in columns.keys()-desired.keys() if key[0]=='period' and not (dropping_sysver and key[1]=='SYSTEM_TIME')}
     declared=intent.get('drop_periods',[])
     if not isinstance(declared,list) or any(not isinstance(value,str) for value in declared) or len(set(declared))!=len(declared) or set(declared)!=periods:
         raise ValueError('Period removal requires exact explicit mariadb_change.drop_periods intent')
-    if ('period','SYSTEM_TIME') in columns and ('period','SYSTEM_TIME') not in desired:
+    if ('period','SYSTEM_TIME') in columns and ('period','SYSTEM_TIME') not in desired and not dropping_sysver:
         raise ValueError('Removing system-time history requires a separate explicit native temporal lifecycle operation')
     if renames:
         from .mysql_relational_fields import rename_definition
@@ -102,8 +114,12 @@ def alteration(before,after,sql_mode):
         elif kind=='primary':drops.insert(0,'DROP PRIMARY KEY')
         elif kind=='index':drops.insert(0,'DROP INDEX '+identifier(value))
         elif kind=='foreign-key':drops.insert(0,'DROP FOREIGN KEY '+identifier(value))
-        elif kind=='period':drops.insert(0,'DROP PERIOD FOR '+identifier(value))
+        elif kind=='period':
+            if not (dropping_sysver and value=='SYSTEM_TIME'):
+                drops.insert(0,'DROP PERIOD FOR '+identifier(value))
         else:drops.insert(0,'DROP CONSTRAINT '+identifier(value))
+    if dropping_sysver:
+        drops.append('DROP SYSTEM VERSIONING')
     for index,value in enumerate(new_order):
         key=('column',value)
         previous=new_order[index-1] if index else None
@@ -117,11 +133,13 @@ def alteration(before,after,sql_mode):
                 'ADD COLUMN ' if key not in columns else 'MODIFY COLUMN ')+desired[key]+placement)
     for key in sorted(desired):
         if key[0]!='column' and key not in automatic_references and key not in settled and (key not in columns or columns[key]!=desired[key]):additions.append('ADD '+desired[key])
-    if old['suffix'].strip()!=new['suffix'].strip():
-        if 'WITH SYSTEM VERSIONING' in old['suffix'].upper() and 'WITH SYSTEM VERSIONING' not in new['suffix'].upper():
-            raise ValueError('Removing system versioning requires a separate explicit native temporal lifecycle operation')
-        if not new['suffix'].strip():raise ValueError('Removing native table options requires an explicit option adapter')
-        additions.append(new['suffix'].strip())
+    old_opts = re.sub(r'\bWITH\s+SYSTEM\s+VERSIONING\b', '', old['suffix'], flags=re.I).strip()
+    new_opts = re.sub(r'\bWITH\s+SYSTEM\s+VERSIONING\b', '', new['suffix'], flags=re.I).strip()
+    if adding_sysver:
+        additions.append('ADD SYSTEM VERSIONING')
+    if old_opts != new_opts:
+        if not new_opts:raise ValueError('Removing native table options requires an explicit option adapter')
+        additions.append(new_opts)
     result=drops+renamed_indexes+mutations+additions
     if not result:raise ValueError('Definition changes do not produce an unambiguous native alteration')
     return 'ALTER TABLE '+identifier(before['native']['database'])+'.'+identifier(before['name'])+' '+', '.join(result)

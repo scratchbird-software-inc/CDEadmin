@@ -51,7 +51,7 @@ GR_FLOW_CONTROL_COUNTERS = (
 )
 
 
-def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
+def counter_rates(previous, current, elapsed, *, identity_key='server_uuid', status_names=STATUS_NAMES, gauges=GAUGES):
     """Exact native global counter differences; missing fields remain gaps."""
     unavailable = {'status': 'unavailable', 'reason': 'baseline-unavailable', 'per_second': {}}
     def counters(sample):
@@ -61,7 +61,7 @@ def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
         values = {}
         for row in group.get('rows', []):
             name, value = row.get('variable_name'), row.get('variable_value')
-            if name in STATUS_NAMES and isinstance(value, str) and value.isascii() and value.isdigit():
+            if name in status_names and isinstance(value, str) and value.isascii() and value.isdigit():
                 values[name] = int(value)
         return values
     before, after = counters(previous or {}), counters(current)
@@ -78,8 +78,8 @@ def counter_rates(previous, current, elapsed, *, identity_key='server_uuid'):
     rates, gaps = {}, {}
     with localcontext() as context:
         context.prec = 64
-        for name in STATUS_NAMES:
-            if name in GAUGES:
+        for name in status_names:
+            if name in gauges:
                 continue
             if name not in before or name not in after:
                 gaps[name] = 'counter-unavailable'
@@ -121,6 +121,8 @@ class MySQLMonitor:
     engine = 'mysql'
     native_version = '9.7.0'
     identity_key = 'server_uuid'
+    status_names = STATUS_NAMES
+    gauges = GAUGES
     identity_source = ('SELECT DATABASE() AS database_name, VERSION() AS version, '
         '@@server_uuid AS server_uuid, CONNECTION_ID() AS collector_id, CURRENT_USER() AS account')
     status_table = 'performance_schema.global_status'
@@ -228,9 +230,9 @@ class MySQLMonitor:
                 if identity['version'].split('-')[0] != self.native_version or identity['database_name'] != self.route.get('database'):
                     raise ValueError('Monitoring native identity changed')
                 result.update(identity=identity, source_epoch=self._epoch)
-                markers = ','.join(['%s'] * len(STATUS_NAMES))
+                markers = ','.join(['%s'] * len(self.status_names))
                 self._group(result, 'status', 'SELECT VARIABLE_NAME, VARIABLE_VALUE FROM ' + self.status_table + ' '
-                    'WHERE VARIABLE_NAME IN (' + markers + ') ORDER BY VARIABLE_NAME LIMIT 101', STATUS_NAMES, scope='server')
+                    'WHERE VARIABLE_NAME IN (' + markers + ') ORDER BY VARIABLE_NAME LIMIT 101', self.status_names, scope='server')
                 if self._metadata_clock is None or start - self._metadata_clock >= self._metadata_interval:
                     self._group(result, 'settings', self.settings_source, scope='server')
                     if self.scope == 'database':
@@ -240,8 +242,9 @@ class MySQLMonitor:
                     if self.engine == 'mysql':
                         from .mysql_workload import observe
                         result['groups'].update(observe(self, self.route.get('database') if self.scope == 'database' else None)['groups'])
+                    self._collect_engine_metadata_groups(result)
                     self._metadata_cache = {name: copy.deepcopy(group) for name, group in result['groups'].items()
-                        if name in {'settings', 'storage'} or name.startswith('workload_')}
+                        if name in {'settings', 'storage', 'engines'} or name.startswith('workload_')}
                     self._metadata_clock = start
                 else:
                     for name, group in self._metadata_cache.items():
@@ -249,6 +252,7 @@ class MySQLMonitor:
                             'observation_age_seconds': round(start - self._metadata_clock, 3)}
                 self._group(result, 'activity', self._activity_source())
                 self._group(result, 'replication', self.replication_source, scope='server')
+                self._collect_engine_live_groups(result)
                 if self.engine == 'mysql':
                     self._group(result, 'alert_capacity', 'SELECT @@max_connections AS max_connections', scope='server')
                     self._group(result, 'alert_transactions', 'SELECT COALESCE(MAX(TIMESTAMPDIFF(SECOND, TRX_STARTED, NOW())),0) AS value FROM information_schema.innodb_trx', scope='server')
@@ -263,7 +267,8 @@ class MySQLMonitor:
                 # Visible empty groups do not establish complete server coverage.
                 result[probe] = {'status': 'completed', 'evidence': 'owned-autocommit-read-probes'}
                 result['rates'] = counter_rates(self._previous, result,
-                    None if self._previous_clock is None else start - self._previous_clock, identity_key=self.identity_key)
+                    None if self._previous_clock is None else start - self._previous_clock,
+                    identity_key=self.identity_key, status_names=self.status_names, gauges=self.gauges)
                 if self.engine == 'mysql':
                     from .mysql_workload import reset_evidence
                     result['workload_reset'] = reset_evidence(self._previous, result)
@@ -373,6 +378,12 @@ class MySQLMonitor:
                 'observed_at': now_iso,
                 'observation_age_seconds': 0,
             }
+
+    def _collect_engine_metadata_groups(self, result):
+        return None
+
+    def _collect_engine_live_groups(self, result):
+        return None
 
     def close(self):
         with self._lock:
