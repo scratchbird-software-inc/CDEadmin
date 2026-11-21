@@ -821,25 +821,6 @@ def endpoint_context_actions(
     }
     actions.extend(declared_tool_actions(
         engine_id, 'endpoint', 'after_verify', state=tool_state))
-    if engine_id == 'mariadb':
-        actions.append(_action('endpoint.mariadb.binlog_replay', 'MariaDB binary-log replay...', 'open_mariadb_binlog_replay',
-            icon='action.restore', group='restore', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer native replay jobs.'))
-        actions.append(_action('endpoint.mariadb.binlogs', 'MariaDB binary-log archives...', 'open_mariadb_binlogs',
-            icon='action.backup', group='backup', mutation='admin', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can administer its native archive jobs.'))
-        for tab, label in (('monitoring', 'MariaDB server dashboard...'),
-                           ('monitoring_policy', 'Configure monitoring collection...')):
-            actions.append(_action(f'endpoint.mariadb.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability', arguments={'tab': tab},
-                mutation='admin' if tab == 'monitoring_policy' else 'read', enabled=ready and can_manage,
-                disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can monitor it.'))
-        actions.append(_action('endpoint.mariadb.server_catalog', 'MariaDB server metadata and DDN...', 'open_workspace',
-            icon='action.export', group='database', arguments={'tab': 'export', 'server_catalog': True}, enabled=ready and can_manage,
-            disabled_reason=blocked if not ready else '' if can_manage else 'Only the endpoint owner can inspect it.'))
-        actions.append(_action('endpoint.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
-            icon='action.edit', group='availability', mutation='write', enabled=can_manage,
-            disabled_reason='' if can_manage else 'Only the endpoint owner can edit it.'))
     if engine_id == 'mysql':
         if profile.get('profile_id')=='mysql-native':
             from .providers.mysql_family.mysql_server_control import OPERATIONS as server_controls
@@ -1180,22 +1161,9 @@ def database_target_context_actions(
     actions.extend(declared_tool_actions(
         engine_id, 'database', 'post_tasks', state=tool_state, base=base))
     if engine_id == 'mariadb':
-        for tab, label in (('monitoring', 'MariaDB database dashboard...'),
-                           ('monitoring_policy', 'Configure monitoring collection...')):
-            actions.append(_action(f'database.mariadb.{tab}', label, 'open_workspace',
-                icon='tool.dashboard', group='availability',
-                mutation='admin' if tab == 'monitoring_policy' else 'read', arguments={**base, 'tab': tab}))
-        actions.append(_action('database.mariadb.test_data', 'Generate MariaDB test data...',
-            'open_workspace', icon='action.insert', group='database', priority=45,
-            arguments={**base, 'tab': 'mariadb-test-data'}))
-        actions.append(_action('database.mariadb.catalog_ddn', 'MariaDB metadata and DDN diagrams...',
-            'open_workspace', icon='action.export', group='database', priority=44,
-            arguments={**base, 'tab': 'export'}))
         actions.append(_action('database.mariadb.backup_stages', 'Native MariaDB backup stages...',
             'open_workspace', icon='action.backup', group='backup',
             mutation='admin', arguments={**base, 'tab': 'operations'}))
-        actions.append(_action('database.mariadb.dashboard_editor', 'Edit MariaDB dashboard...', 'open_mariadb_dashboard_editor',
-            icon='action.edit', group='availability', mutation='write', arguments=base))
     if engine_id == 'mysql':
         tasks = (
             ('backup_logical', 'Logical backup (MySQL Shell)...',

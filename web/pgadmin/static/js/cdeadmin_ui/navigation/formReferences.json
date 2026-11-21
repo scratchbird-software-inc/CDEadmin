@@ -6677,6 +6677,514 @@
     "operation:firebird:database:decrypt_database": {
       "reference": "SR-F-030112",
       "title": "Firebird database decrypt database"
+    },
+    "mysql-utility-workspace": {
+      "reference": "SR-F-030200",
+      "title": "MySQL 9.7.0 supervised host utilities workspace"
+    },
+    "mysql-query-attributes": {
+      "reference": "SR-F-030201",
+      "title": "MySQL per-statement query attributes editor"
+    },
+    "mysql-spatial-cell-editor": {
+      "reference": "SR-F-030202",
+      "title": "MySQL spatial WKT/GeoJSON/SRID cell inspector and editor"
+    },
+    "mysql-row-sql-generator": {
+      "reference": "SR-F-030203",
+      "title": "MySQL selected-row SQL generator"
+    },
+    "operation:mysql:server:install_user_key_functions": {
+      "reference": "SR-F-030210",
+      "title": "MySQL server: Install key functions"
+    },
+    "operation:mysql:server:inspect_user_key": {
+      "reference": "SR-F-030211",
+      "title": "MySQL server: Inspect user key"
+    },
+    "operation:mysql:server:store_user_key": {
+      "reference": "SR-F-030212",
+      "title": "MySQL server: Store user key"
+    },
+    "operation:mysql:server:generate_user_key": {
+      "reference": "SR-F-030213",
+      "title": "MySQL server: Generate user key"
+    },
+    "operation:mysql:server:remove_user_key": {
+      "reference": "SR-F-030214",
+      "title": "MySQL server: Remove user key"
+    },
+    "operation:mysql:index:visibility": {
+      "reference": "SR-F-030215",
+      "title": "MySQL index: Change index visibility"
+    },
+    "operation:mysql:event:rename": {
+      "reference": "SR-F-030216",
+      "title": "MySQL event: Rename event"
+    },
+    "operation:mysql:role:grant": {
+      "reference": "SR-F-030217",
+      "title": "MySQL role: Grant role membership"
+    },
+    "operation:mysql:role:revoke": {
+      "reference": "SR-F-030218",
+      "title": "MySQL role: Revoke role membership"
+    },
+    "operation:mysql:role:set_default": {
+      "reference": "SR-F-030219",
+      "title": "MySQL role: Set default roles"
+    },
+    "operation:mysql:user:rename": {
+      "reference": "SR-F-030220",
+      "title": "MySQL user: Rename account"
+    },
+    "operation:mysql:privilege:grant": {
+      "reference": "SR-F-030221",
+      "title": "MySQL privilege: Grant privileges"
+    },
+    "operation:mysql:privilege:revoke": {
+      "reference": "SR-F-030222",
+      "title": "MySQL privilege: Revoke privileges"
+    },
+    "operation:mysql:server:inspect_page_tracking": {
+      "reference": "SR-F-030223",
+      "title": "MySQL server: Inspect InnoDB page tracking"
+    },
+    "operation:mysql:server:start_page_tracking": {
+      "reference": "SR-F-030224",
+      "title": "MySQL server: Start or reset InnoDB page tracking"
+    },
+    "operation:mysql:server:stop_page_tracking": {
+      "reference": "SR-F-030225",
+      "title": "MySQL server: Stop InnoDB page tracking"
+    },
+    "operation:mysql:server:count_tracked_pages": {
+      "reference": "SR-F-030226",
+      "title": "MySQL server: Count tracked page IDs"
+    },
+    "operation:mysql:server:set_page_tracking_backup_id": {
+      "reference": "SR-F-030227",
+      "title": "MySQL server: Set page-tracking backup ID"
+    },
+    "operation:mysql:server:export_tracked_pages": {
+      "reference": "SR-F-030228",
+      "title": "MySQL server: Export tracked page IDs"
+    },
+    "operation:mysql:server:purge_page_tracking": {
+      "reference": "SR-F-030229",
+      "title": "MySQL server: Purge page-tracking files"
+    },
+    "operation:mysql:server:inspect_rewrite_rules": {
+      "reference": "SR-F-030230",
+      "title": "MySQL server: Inspect query rewrite rules"
+    },
+    "operation:mysql:server:create_rewrite_rule": {
+      "reference": "SR-F-030231",
+      "title": "MySQL server: Add query rewrite rule"
+    },
+    "operation:mysql:server:alter_rewrite_rule": {
+      "reference": "SR-F-030232",
+      "title": "MySQL server: Change query rewrite rule"
+    },
+    "operation:mysql:server:drop_rewrite_rule": {
+      "reference": "SR-F-030233",
+      "title": "MySQL server: Remove query rewrite rule"
+    },
+    "operation:mysql:server:reload_rewrite_rules": {
+      "reference": "SR-F-030234",
+      "title": "MySQL server: Reload query rewrite rules"
+    },
+    "operation:mysql:server:shutdown_server": {
+      "reference": "SR-F-030235",
+      "title": "MySQL server: Shut down server"
+    },
+    "operation:mysql:server:restart_server": {
+      "reference": "SR-F-030236",
+      "title": "MySQL server: Restart server"
+    },
+    "operation:mysql:server:inspect_prepared_xa": {
+      "reference": "SR-F-030237",
+      "title": "MySQL server: Inspect prepared XA transactions"
+    },
+    "operation:mysql:server:commit_prepared_xa": {
+      "reference": "SR-F-030238",
+      "title": "MySQL server: Commit a prepared XA transaction"
+    },
+    "operation:mysql:server:rollback_prepared_xa": {
+      "reference": "SR-F-030239",
+      "title": "MySQL server: Roll back a prepared XA transaction"
+    },
+    "operation:mysql:server:rotate_innodb_master_key": {
+      "reference": "SR-F-030240",
+      "title": "MySQL server: Rotate InnoDB master key"
+    },
+    "operation:mysql:server:rotate_binlog_master_key": {
+      "reference": "SR-F-030241",
+      "title": "MySQL server: Rotate binary log master key"
+    },
+    "operation:mysql:server:reload_tls": {
+      "reference": "SR-F-030242",
+      "title": "MySQL server: Reload TLS context"
+    },
+    "operation:mysql:server:reload_keyring": {
+      "reference": "SR-F-030243",
+      "title": "MySQL server: Reload keyring"
+    },
+    "operation:mysql:server:enable_innodb_redo": {
+      "reference": "SR-F-030244",
+      "title": "MySQL server: Enable InnoDB redo logging"
+    },
+    "operation:mysql:server:disable_innodb_redo": {
+      "reference": "SR-F-030245",
+      "title": "MySQL server: Disable InnoDB redo for initial load"
+    },
+    "operation:mysql:server:import_table_sdi": {
+      "reference": "SR-F-030246",
+      "title": "MySQL server: Import table definitions from SDI files"
+    },
+    "operation:mysql:server:inspect_key_cache": {
+      "reference": "SR-F-030247",
+      "title": "MySQL server: Inspect named MyISAM key cache"
+    },
+    "operation:mysql:server:configure_key_cache": {
+      "reference": "SR-F-030248",
+      "title": "MySQL server: Configure MyISAM key cache"
+    },
+    "operation:mysql:server:release_key_cache": {
+      "reference": "SR-F-030249",
+      "title": "MySQL server: Release named MyISAM key cache"
+    },
+    "operation:mysql:table:assign_index_cache": {
+      "reference": "SR-F-030250",
+      "title": "MySQL table: Assign MyISAM index cache"
+    },
+    "operation:mysql:table:preload_index_cache": {
+      "reference": "SR-F-030251",
+      "title": "MySQL table: Preload MyISAM indexes"
+    },
+    "operation:mysql:table:add_partitions": {
+      "reference": "SR-F-030252",
+      "title": "MySQL table: Add partitions"
+    },
+    "operation:mysql:table:coalesce_partitions": {
+      "reference": "SR-F-030253",
+      "title": "MySQL table: Coalesce partitions"
+    },
+    "operation:mysql:table:partition_by": {
+      "reference": "SR-F-030254",
+      "title": "MySQL table: Change partitioning"
+    },
+    "operation:mysql:table:remove_partitioning": {
+      "reference": "SR-F-030255",
+      "title": "MySQL table: Remove partitioning"
+    },
+    "operation:mysql:constraint:enforcement": {
+      "reference": "SR-F-030256",
+      "title": "MySQL constraint: Change CHECK enforcement"
+    },
+    "operation:mysql:partition:analyze": {
+      "reference": "SR-F-030257",
+      "title": "MySQL partition: Analyze partition"
+    },
+    "operation:mysql:partition:check": {
+      "reference": "SR-F-030258",
+      "title": "MySQL partition: Check partition"
+    },
+    "operation:mysql:partition:exchange": {
+      "reference": "SR-F-030259",
+      "title": "MySQL partition: Exchange partition with table"
+    },
+    "operation:mysql:partition:optimize": {
+      "reference": "SR-F-030260",
+      "title": "MySQL partition: Optimize partition"
+    },
+    "operation:mysql:partition:rebuild": {
+      "reference": "SR-F-030261",
+      "title": "MySQL partition: Rebuild partition"
+    },
+    "operation:mysql:partition:reorganize": {
+      "reference": "SR-F-030262",
+      "title": "MySQL partition: Reorganize partitions"
+    },
+    "operation:mysql:partition:truncate": {
+      "reference": "SR-F-030263",
+      "title": "MySQL partition: Truncate partition"
+    },
+    "operation:mysql:privilege:inspect": {
+      "reference": "SR-F-030264",
+      "title": "MySQL privilege: Inspect privileges"
+    },
+    "operation:mysql:group-replication:disable_member_action": {
+      "reference": "SR-F-030265",
+      "title": "MySQL group-replication: Disable member action"
+    },
+    "operation:mysql:group-replication:enable_member_action": {
+      "reference": "SR-F-030266",
+      "title": "MySQL group-replication: Enable member action"
+    },
+    "operation:mysql:group-replication:multi_primary": {
+      "reference": "SR-F-030267",
+      "title": "MySQL group-replication: Use multi-primary mode"
+    },
+    "operation:mysql:group-replication:reset_member_actions": {
+      "reference": "SR-F-030268",
+      "title": "MySQL group-replication: Reset member actions"
+    },
+    "operation:mysql:group-replication:set_primary": {
+      "reference": "SR-F-030269",
+      "title": "MySQL group-replication: Select primary member"
+    },
+    "operation:mysql:group-replication:set_protocol": {
+      "reference": "SR-F-030270",
+      "title": "MySQL group-replication: Set communication protocol"
+    },
+    "operation:mysql:group-replication:set_write_concurrency": {
+      "reference": "SR-F-030271",
+      "title": "MySQL group-replication: Set write concurrency"
+    },
+    "operation:mysql:group-replication:single_primary": {
+      "reference": "SR-F-030272",
+      "title": "MySQL group-replication: Use single-primary mode"
+    },
+    "operation:mysql:group-replication:start": {
+      "reference": "SR-F-030273",
+      "title": "MySQL group-replication: Start group replication"
+    },
+    "operation:mysql:group-replication:stop": {
+      "reference": "SR-F-030274",
+      "title": "MySQL group-replication: Stop group replication"
+    },
+    "operation:mysql:system-variable:set_global": {
+      "reference": "SR-F-030275",
+      "title": "MySQL system-variable: Set global value"
+    },
+    "operation:mysql:system-variable:set_persist": {
+      "reference": "SR-F-030276",
+      "title": "MySQL system-variable: Set and persist value"
+    },
+    "operation:mysql:system-variable:set_persist_only": {
+      "reference": "SR-F-030277",
+      "title": "MySQL system-variable: Persist startup value"
+    },
+    "operation:mysql:system-variable:reset_persist": {
+      "reference": "SR-F-030278",
+      "title": "MySQL system-variable: Remove persisted value"
+    },
+    "operation:mysql:session:terminate_query": {
+      "reference": "SR-F-030279",
+      "title": "MySQL session: Cancel query"
+    },
+    "operation:mysql:session:terminate_connection": {
+      "reference": "SR-F-030280",
+      "title": "MySQL session: Terminate connection"
+    },
+    "operation:mysql:resource-group:assign": {
+      "reference": "SR-F-030281",
+      "title": "MySQL resource-group: Assign threads to resource group"
+    },
+    "operation:mysql:replication-channel:stop": {
+      "reference": "SR-F-030282",
+      "title": "MySQL replication-channel: Stop replication channel"
+    },
+    "operation:mysql:replication-channel:reset": {
+      "reference": "SR-F-030283",
+      "title": "MySQL replication-channel: Reset replication channel"
+    },
+    "operation:mysql:replication-channel:start": {
+      "reference": "SR-F-030284",
+      "title": "MySQL replication-channel: Start replication channel"
+    },
+    "operation:mysql:replication-channel:filter": {
+      "reference": "SR-F-030285",
+      "title": "MySQL replication-channel: Change replication filters"
+    },
+    "operation:mysql:database:analyze_tables": {
+      "reference": "SR-F-030286",
+      "title": "MySQL database: Analyze tables"
+    },
+    "operation:mysql:database:check_tables": {
+      "reference": "SR-F-030287",
+      "title": "MySQL database: Check tables"
+    },
+    "operation:mysql:database:optimize_tables": {
+      "reference": "SR-F-030288",
+      "title": "MySQL database: Optimize tables"
+    },
+    "operation:mysql:database:repair_tables": {
+      "reference": "SR-F-030289",
+      "title": "MySQL database: Repair tables"
+    },
+    "operation:mysql:database:checksum_tables": {
+      "reference": "SR-F-030290",
+      "title": "MySQL database: Checksum tables"
+    },
+    "operation:mysql:database:backup_logical": {
+      "reference": "SR-F-030291",
+      "title": "MySQL database: Back up database"
+    },
+    "operation:mysql:database:verify_logical": {
+      "reference": "SR-F-030292",
+      "title": "MySQL database: Verify restored data"
+    },
+    "operation:mysql:database:restore_logical": {
+      "reference": "SR-F-030293",
+      "title": "MySQL database: Restore database"
+    },
+    "operation:mysql:replication-channel:add_failover_source": {
+      "reference": "SR-F-030294",
+      "title": "MySQL replication-channel: Add failover source"
+    },
+    "operation:mysql:replication-channel:remove_failover_source": {
+      "reference": "SR-F-030295",
+      "title": "MySQL replication-channel: Remove failover source"
+    },
+    "operation:mysql:replication-channel:add_managed_failover": {
+      "reference": "SR-F-030296",
+      "title": "MySQL replication-channel: Add managed failover group"
+    },
+    "operation:mysql:replication-channel:remove_managed_failover": {
+      "reference": "SR-F-030297",
+      "title": "MySQL replication-channel: Remove managed failover group"
+    },
+    "operation:mysql:server:reset_failover_sources": {
+      "reference": "SR-F-030298",
+      "title": "MySQL server: Reset all failover sources"
+    },
+    "operation:mysql:server:refresh_session_metadata": {
+      "reference": "SR-F-030299",
+      "title": "MySQL server: Refresh session metadata"
+    },
+    "operation:mysql:table:drop_temporary": {
+      "reference": "SR-F-030300",
+      "title": "MySQL table: Drop temporary table"
+    },
+    "operation:mysql:server:show_engine_status": {
+      "reference": "SR-F-030301",
+      "title": "MySQL server: Inspect native engine status"
+    },
+    "operation:mysql:server:show_engine_logs": {
+      "reference": "SR-F-030302",
+      "title": "MySQL server: Inspect native engine logs"
+    },
+    "operation:mysql:server:show_engine_mutex": {
+      "reference": "SR-F-030303",
+      "title": "MySQL server: Inspect native engine mutex diagnostics"
+    },
+    "operation:mysql:server:run_myisamchk": {
+      "reference": "SR-F-030304",
+      "title": "MySQL server: Check or repair offline MyISAM table files"
+    },
+    "operation:mysql:server:run_myisampack": {
+      "reference": "SR-F-030305",
+      "title": "MySQL server: Compress offline MyISAM table files"
+    },
+    "operation:mysql:server:run_innochecksum": {
+      "reference": "SR-F-030306",
+      "title": "MySQL server: Inspect or rewrite offline InnoDB page checksums"
+    },
+    "operation:mysql:server:run_ibd2sdi": {
+      "reference": "SR-F-030307",
+      "title": "MySQL server: Extract offline InnoDB tablespace SDI metadata"
+    },
+    "operation:mysql:server:run_mysqlslap": {
+      "reference": "SR-F-030308",
+      "title": "MySQL server: Run concurrency load benchmark"
+    },
+    "operation:mysql:server:flush": {
+      "reference": "SR-F-030309",
+      "title": "MySQL server: Flush server logs, caches, or status"
+    },
+    "operation:mysql:table:flush": {
+      "reference": "SR-F-030310",
+      "title": "MySQL table: Flush table"
+    },
+    "operation:mysql:server:explain_for_connection": {
+      "reference": "SR-F-030311",
+      "title": "MySQL server: Inspect running connection query plan"
+    },
+    "operation:mysql:session:explain_for_connection": {
+      "reference": "SR-F-030312",
+      "title": "MySQL session: Inspect session query plan"
+    },
+    "operation:mysql:server:inspect_ndb_cluster": {
+      "reference": "SR-F-030313",
+      "title": "MySQL server: Inspect cluster status and ndbinfo"
+    },
+    "operation:mysql:server:start_ndb_backup": {
+      "reference": "SR-F-030314",
+      "title": "MySQL server: Start cluster online backup"
+    },
+    "operation:mysql:server:abort_ndb_backup": {
+      "reference": "SR-F-030315",
+      "title": "MySQL server: Abort cluster backup"
+    },
+    "operation:mysql:logfile-group:create": {
+      "reference": "SR-F-030316",
+      "title": "MySQL logfile-group: Create logfile group"
+    },
+    "operation:mysql:logfile-group:alter": {
+      "reference": "SR-F-030317",
+      "title": "MySQL logfile-group: Add undofile to logfile group"
+    },
+    "operation:mysql:logfile-group:drop": {
+      "reference": "SR-F-030318",
+      "title": "MySQL logfile-group: Drop logfile group"
+    },
+    "operation:mysql:ndb-node:restart_ndb_node": {
+      "reference": "SR-F-030319",
+      "title": "MySQL ndb-node: Restart cluster node"
+    },
+    "operation:mysql:ndb-node:stop_ndb_node": {
+      "reference": "SR-F-030320",
+      "title": "MySQL ndb-node: Stop cluster node"
+    },
+    "operation:mysql:x-collection:create": {
+      "reference": "SR-F-030321",
+      "title": "MySQL x-collection: Create document collection"
+    },
+    "operation:mysql:x-collection:ensure": {
+      "reference": "SR-F-030322",
+      "title": "MySQL x-collection: Ensure document collection"
+    },
+    "operation:mysql:x-collection:modify_options": {
+      "reference": "SR-F-030323",
+      "title": "MySQL x-collection: Modify collection schema validation"
+    },
+    "operation:mysql:x-collection:drop": {
+      "reference": "SR-F-030324",
+      "title": "MySQL x-collection: Drop document collection"
+    },
+    "operation:mysql:x-collection:create_index": {
+      "reference": "SR-F-030325",
+      "title": "MySQL x-collection: Create collection document index"
+    },
+    "operation:mysql:x-collection:drop_index": {
+      "reference": "SR-F-030326",
+      "title": "MySQL x-collection: Drop collection document index"
+    },
+    "operation:mysql:x-collection:insert_documents": {
+      "reference": "SR-F-030327",
+      "title": "MySQL x-collection: Insert collection documents"
+    },
+    "operation:mysql:x-collection:find_documents": {
+      "reference": "SR-F-030328",
+      "title": "MySQL x-collection: Find collection documents"
+    },
+    "operation:mysql:x-collection:modify_documents": {
+      "reference": "SR-F-030329",
+      "title": "MySQL x-collection: Modify collection documents"
+    },
+    "operation:mysql:x-collection:remove_documents": {
+      "reference": "SR-F-030330",
+      "title": "MySQL x-collection: Remove collection documents"
+    },
+    "operation:mysql:column:set_masking_policy": {
+      "reference": "SR-F-030331",
+      "title": "MySQL column: Assign native masking policy reference"
+    },
+    "operation:mysql:column:drop_masking_policy": {
+      "reference": "SR-F-030332",
+      "title": "MySQL column: Remove native masking policy reference"
     }
   }
 }

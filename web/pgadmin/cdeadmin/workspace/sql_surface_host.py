@@ -3417,6 +3417,7 @@ class SqlEditorSurfaceState:
     last_profiling: dict[str, Any] | None = None
     last_query_statistics: dict[str, Any] | None = None
     last_fetch_observation: dict[str, Any] | None = None
+    last_mysql_diagnostics: dict[str, Any] | None = None
 
 
 class SqlSurfaceHostService:
@@ -3958,6 +3959,8 @@ class SqlSurfaceHostService:
         profile_mode: bool = False,
         statistics_mode: bool = False,
         history_sensitive: bool = False,
+        mysql_query_attributes: dict[str, Any] | None = None,
+        analyze_mode: bool = False,
     ) -> SqlResultSetBuffer | None:
         t0 = time.perf_counter()
         if execution:
@@ -3967,23 +3970,30 @@ class SqlSurfaceHostService:
         if execution:
             execution.check_stop()
 
+        effective_sql = seg.sql
+        if analyze_mode and single_statement and surface.language_profile == 'mysql-sql':
+            if not re.match(r'^\s*(?:--[^\n]*\n|/\*[\s\S]*?\*/\s*)*EXPLAIN\b', effective_sql, re.IGNORECASE):
+                effective_sql = f'EXPLAIN ANALYZE {effective_sql}'
+
         mysql_specs = None
         if surface.language_profile == 'mysql-sql':
-            spans = self._mysql_surface_parameter_spans(workspace_service, server, surface, seg.sql)
-            mysql_specs = _mysql_parameter_specs(seg.sql, spans)
+            spans = self._mysql_surface_parameter_spans(workspace_service, server, surface, effective_sql)
+            mysql_specs = _mysql_parameter_specs(effective_sql, spans)
             bound_sql, bound_params = _bind_mysql_surface_parameters(
-                seg.sql, param_values, spans, mysql_specs
+                effective_sql, param_values, spans, mysql_specs
             )
         else:
             bound_sql, bound_params = bind_named_to_positional_if_needed(
-                seg.sql, param_values, surface.parameter_shape
+                effective_sql, param_values, surface.parameter_shape
             )
 
         # Check if simple `SELECT * FROM <table>` without params can attach live row identity!
         if (
             not plan_only
+            and not analyze_mode
             and not profile_mode
             and not statistics_mode
+            and not mysql_query_attributes
             and not ((surface.transaction or {}).get('provider_payload') or {}).get('xa_state')
             and client_sql_dialect in (None, 3)
             and (surface.language_profile != 'postgresql-sql' or single_statement)
@@ -4025,10 +4035,12 @@ class SqlSurfaceHostService:
             'parameters': bound_params,
             'database_target_id': surface.database_target_id,
         }
-        if plan_only:
+        if plan_only and not analyze_mode:
             exec_payload['plan_mode'] = True
         if history_sensitive:
             exec_payload['history_sensitive'] = True
+        if surface.language_profile == 'mysql-sql' and mysql_query_attributes and not plan_only:
+            exec_payload['mysql_query_attributes'] = dict(mysql_query_attributes)
         if surface.language_profile == 'firebird-sql':
             if client_sql_dialect is not None:
                 exec_payload['client_sql_dialect'] = client_sql_dialect
@@ -4105,6 +4117,13 @@ class SqlSurfaceHostService:
             surface.last_query_statistics = fb_early.get('query_statistics')
         if fb_early.get('fetch_observation') is not None:
             surface.last_fetch_observation = fb_early.get('fetch_observation')
+        mysql_early = (exts.get('mysql') or {}).get('payload') or {}
+        if mysql_early:
+            surface.last_mysql_diagnostics = {
+                'statement_metrics': mysql_early.get('statement_metrics'),
+                'error': mysql_early.get('error'),
+                'session_reuse_blocked': bool(mysql_early.get('session_reuse_blocked')),
+            }
         rendered = poll_resp.get('rendered_result') or {}
         if stream_columns:
             rendered = {
@@ -4243,6 +4262,11 @@ class SqlSurfaceHostService:
                 'identity_token': f'qrow:{r_i}',
                 'values': vals,
             })
+
+        if not plan_text and len(cols) == 1 and cols[0]['name'].upper() == 'EXPLAIN' and len(normalized_rows) == 1:
+            explain_cell = normalized_rows[0]['values'].get(cols[0]['name'])
+            if isinstance(explain_cell, str) and explain_cell.strip():
+                plan_text = explain_cell
 
         if (surface.autocommit and session_id and not is_readonly_stmt and not plan_only
                 and surface.language_profile != 'postgresql-sql'):
@@ -4568,6 +4592,7 @@ class SqlSurfaceHostService:
             'profiling': surface.last_profiling,
             'query_statistics': surface.last_query_statistics,
             'fetch_observation': surface.last_fetch_observation,
+            'mysql_diagnostics': surface.last_mysql_diagnostics,
             'statement_summaries': getattr(surface, 'last_statement_summaries', []),
             'last_execution_cancelled': bool(getattr(surface, 'last_execution_cancelled', False)),
             'last_execution_had_error': bool(getattr(surface, 'last_execution_had_error', False)),
@@ -5464,9 +5489,17 @@ class SqlSurfaceHostService:
                 surface.last_profiling = None
                 surface.last_query_statistics = None
                 surface.last_fetch_observation = None
+                surface.last_mysql_diagnostics = None
                 req_profile_mode = bool(request.get('profile_mode'))
                 req_stats_mode = bool(request.get('statistics_mode'))
                 req_hist_sensitive = bool(request.get('history_sensitive'))
+                req_analyze_mode = bool(request.get('analyze_mode'))
+                raw_mysql_attrs = request.get('mysql_query_attributes')
+                req_mysql_attrs = None
+                if raw_mysql_attrs is not None:
+                    if not isinstance(raw_mysql_attrs, dict):
+                        raise ValueError('MySQL query attributes must be a JSON object of names and values.')
+                    req_mysql_attrs = dict(raw_mysql_attrs)
                 new_results: list[SqlResultSetBuffer] = []
                 stmt_summaries: list[dict[str, Any]] = []
                 had_error = False
@@ -5516,6 +5549,8 @@ class SqlSurfaceHostService:
                                 profile_mode=req_profile_mode,
                                 statistics_mode=req_stats_mode,
                                 history_sensitive=req_hist_sensitive,
+                                mysql_query_attributes=req_mysql_attrs,
+                                analyze_mode=req_analyze_mode,
                             )
                             dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
                             if rs is not None:

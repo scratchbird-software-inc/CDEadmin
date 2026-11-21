@@ -520,6 +520,92 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "endpoint.mysql.utilities",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Host storage & benchmark utilities (myisamchk, innochecksum, ibd2sdi, mysqlslap)...",
+      "handler": "open_workspace",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "mysql-utilities"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run supervised MySQL host utilities."
+      }
+    },
+    {
+      "command_id": "database.mysql.utilities",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Host storage & benchmark utilities...",
+      "handler": "open_workspace",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "mysql-utilities"
+      }
+    },
+    {
+      "command_id": "database.mysql.data_import",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Import data archive...",
+      "handler": "open_workspace",
+      "icon": "action.import",
+      "group": "database",
+      "mutation": "write",
+      "arguments": {
+        "tab": "export",
+        "focus_import": true
+      }
+    },
+    {
+      "command_id": "database.mysql.content_search",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Search table contents...",
+      "handler": "open_workspace",
+      "icon": "action.view",
+      "group": "diagnostics",
+      "mutation": "read",
+      "arguments": {
+        "tab": "mysql-content-search"
+      }
+    },
+    {
+      "command_id": "database.mysql.data_drift",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Compare peer data drift...",
+      "handler": "open_workspace",
+      "icon": "action.check",
+      "group": "diagnostics",
+      "mutation": "read",
+      "arguments": {
+        "tab": "mysql-data-drift"
+      }
+    },
+    {
+      "command_id": "database.mysql.workload",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Inspect workload & slow queries...",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "diagnostics",
+      "mutation": "read",
+      "arguments": {
+        "tab": "mysql-workload"
+      }
     }
   ]
 }

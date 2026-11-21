@@ -27,7 +27,7 @@ import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
 import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice, nativeEditorForm, nativeInitialValues} from './descriptors';
 import {Stack} from '../primitives/Layout';
 
-const DATABASE_SCOPED = new Set(['resource_inspect', 'resource_page', 'visual_admin_validate',
+const DATABASE_SCOPED = new Set(['resource_inspect', 'resource_page', 'native_forms', 'visual_admin_validate',
   'visual_admin_plan', 'visual_admin_apply']);
 
 /** First provider-native block of a resource, as the workspace reads it. */

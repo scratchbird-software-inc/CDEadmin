@@ -46,7 +46,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030210"
     },
     {
       "operation_id": "inspect_user_key",
@@ -82,7 +83,9 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "produces_log": true,
+      "form_reference": "SR-F-030211"
     },
     {
       "operation_id": "store_user_key",
@@ -152,7 +155,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030212"
     },
     {
       "operation_id": "generate_user_key",
@@ -225,7 +229,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030213"
     },
     {
       "operation_id": "remove_user_key",
@@ -261,7 +266,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030214"
     },
     {
       "operation_id": "visibility",
@@ -308,7 +314,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030215"
     },
     {
       "operation_id": "rename",
@@ -347,7 +354,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030216"
     },
     {
       "resource_kind": "role",
@@ -396,7 +404,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030217"
     },
     {
       "resource_kind": "role",
@@ -438,7 +447,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030218"
     },
     {
       "resource_kind": "role",
@@ -525,7 +535,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030219"
     },
     {
       "resource_kind": "user",
@@ -565,7 +576,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030220"
     },
     {
       "operation_id": "grant",
@@ -805,7 +817,8 @@
           "control": "text",
           "help": "Type the selected target display name when required."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030221"
     },
     {
       "operation_id": "revoke",
@@ -978,7 +991,8 @@
           "control": "text",
           "help": "Type the selected target display name when required."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030222"
     },
     {
       "operation_id": "inspect_page_tracking",
@@ -991,7 +1005,8 @@
       "status": "complete",
       "produces_log": true,
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030223"
     },
     {
       "operation_id": "start_page_tracking",
@@ -1020,7 +1035,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030224"
     },
     {
       "operation_id": "stop_page_tracking",
@@ -1049,7 +1065,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030225"
     },
     {
       "operation_id": "count_tracked_pages",
@@ -1079,7 +1096,8 @@
           "label": "Stop LSN",
           "help": "Native stop LSN (0 selects latest tracked checkpoint)"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030226"
     },
     {
       "operation_id": "set_page_tracking_backup_id",
@@ -1149,7 +1167,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030227"
     },
     {
       "operation_id": "export_tracked_pages",
@@ -1186,7 +1205,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030228"
     },
     {
       "operation_id": "purge_page_tracking",
@@ -1231,7 +1251,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030229"
     },
     {
       "operation_id": "inspect_rewrite_rules",
@@ -1244,7 +1265,8 @@
       "status": "complete",
       "produces_log": true,
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030230"
     },
     {
       "operation_id": "create_rewrite_rule",
@@ -1327,7 +1349,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030231"
     },
     {
       "operation_id": "alter_rewrite_rule",
@@ -1417,7 +1440,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030232"
     },
     {
       "operation_id": "drop_rewrite_rule",
@@ -1445,7 +1469,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030233"
     },
     {
       "operation_id": "reload_rewrite_rules",
@@ -1474,7 +1499,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030234"
     },
     {
       "operation_id": "shutdown_server",
@@ -1505,7 +1531,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030235"
     },
     {
       "operation_id": "restart_server",
@@ -1536,7 +1563,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030236"
     },
     {
       "operation_id": "inspect_prepared_xa",
@@ -1549,7 +1577,8 @@
       "status": "complete",
       "produces_log": true,
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030237"
     },
     {
       "operation_id": "commit_prepared_xa",
@@ -1609,7 +1638,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030238"
     },
     {
       "operation_id": "rollback_prepared_xa",
@@ -1669,7 +1699,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030239"
     },
     {
       "operation_id": "rotate_innodb_master_key",
@@ -1698,7 +1729,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030240"
     },
     {
       "operation_id": "rotate_binlog_master_key",
@@ -1727,7 +1759,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030241"
     },
     {
       "operation_id": "reload_tls",
@@ -1782,7 +1815,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030242"
     },
     {
       "operation_id": "reload_keyring",
@@ -1811,7 +1845,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030243"
     },
     {
       "operation_id": "enable_innodb_redo",
@@ -1840,7 +1875,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030244"
     },
     {
       "operation_id": "disable_innodb_redo",
@@ -1877,7 +1913,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030245"
     },
     {
       "operation_id": "import_table_sdi",
@@ -1938,7 +1975,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030246"
     },
     {
       "operation_id": "inspect_key_cache",
@@ -1960,7 +1998,8 @@
           "label": "Cache name",
           "help": "Exact native key-cache name"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030247"
     },
     {
       "operation_id": "configure_key_cache",
@@ -2044,7 +2083,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030248"
     },
     {
       "operation_id": "release_key_cache",
@@ -2073,7 +2113,8 @@
           "label": "Server name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030249"
     },
     {
       "operation_id": "assign_index_cache",
@@ -2119,7 +2160,8 @@
           "label": "Table name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030250"
     },
     {
       "operation_id": "preload_index_cache",
@@ -2165,7 +2207,8 @@
           "label": "Table name",
           "help": "Type the selected target display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030251"
     },
     {
       "resource_kind": "table",
@@ -2233,7 +2276,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030252"
     },
     {
       "resource_kind": "table",
@@ -2264,7 +2308,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030253"
     },
     {
       "resource_kind": "table",
@@ -2296,7 +2341,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030254"
     },
     {
       "resource_kind": "table",
@@ -2317,7 +2363,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030255"
     },
     {
       "resource_kind": "constraint",
@@ -2358,7 +2405,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030256"
     },
     {
       "resource_kind": "partition",
@@ -2379,7 +2427,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030257"
     },
     {
       "resource_kind": "partition",
@@ -2400,7 +2449,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030258"
     },
     {
       "resource_kind": "partition",
@@ -2453,7 +2503,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030259"
     },
     {
       "resource_kind": "partition",
@@ -2474,7 +2525,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030260"
     },
     {
       "resource_kind": "partition",
@@ -2495,7 +2547,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030261"
     },
     {
       "resource_kind": "partition",
@@ -2544,7 +2597,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030262"
     },
     {
       "resource_kind": "partition",
@@ -2565,7 +2619,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030263"
     },
     {
       "resource_kind": "privilege",
@@ -2578,7 +2633,8 @@
       },
       "confirmation": "none",
       "produces_log": true,
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030264"
     },
     {
       "resource_kind": "group-replication",
@@ -2617,7 +2673,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030265"
     },
     {
       "resource_kind": "group-replication",
@@ -2656,7 +2713,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030266"
     },
     {
       "resource_kind": "group-replication",
@@ -2679,7 +2737,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030267"
     },
     {
       "resource_kind": "group-replication",
@@ -2702,7 +2761,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030268"
     },
     {
       "resource_kind": "group-replication",
@@ -2743,7 +2803,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030269"
     },
     {
       "resource_kind": "group-replication",
@@ -2774,7 +2835,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030270"
     },
     {
       "resource_kind": "group-replication",
@@ -2807,7 +2869,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030271"
     },
     {
       "resource_kind": "group-replication",
@@ -2838,7 +2901,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030272"
     },
     {
       "resource_kind": "group-replication",
@@ -2885,7 +2949,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030273"
     },
     {
       "resource_kind": "group-replication",
@@ -2908,7 +2973,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030274"
     },
     {
       "resource_kind": "system-variable",
@@ -3026,7 +3092,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030275"
     },
     {
       "resource_kind": "system-variable",
@@ -3144,7 +3211,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030276"
     },
     {
       "resource_kind": "system-variable",
@@ -3262,7 +3330,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030277"
     },
     {
       "resource_kind": "system-variable",
@@ -3283,7 +3352,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030278"
     },
     {
       "resource_kind": "session",
@@ -3304,7 +3374,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030279"
     },
     {
       "resource_kind": "session",
@@ -3325,7 +3396,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030280"
     },
     {
       "resource_kind": "resource-group",
@@ -3362,7 +3434,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030281"
     },
     {
       "resource_kind": "replication-channel",
@@ -3403,7 +3476,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030282"
     },
     {
       "resource_kind": "replication-channel",
@@ -3431,7 +3505,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030283"
     },
     {
       "resource_kind": "replication-channel",
@@ -3599,7 +3674,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030284"
     },
     {
       "resource_kind": "replication-channel",
@@ -3845,7 +3921,8 @@
           "required": true,
           "group": "Confirmation"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030285"
     },
     {
       "resource_kind": "database",
@@ -4144,7 +4221,8 @@
           },
           "group": "Histogram import"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030286"
     },
     {
       "resource_kind": "database",
@@ -4207,7 +4285,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030287"
     },
     {
       "resource_kind": "database",
@@ -4244,7 +4323,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030288"
     },
     {
       "resource_kind": "database",
@@ -4302,7 +4382,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030289"
     },
     {
       "resource_kind": "database",
@@ -4353,7 +4434,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030290"
     },
     {
       "resource_kind": "database",
@@ -4887,7 +4969,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030291"
     },
     {
       "resource_kind": "database",
@@ -4941,7 +5024,8 @@
           "default": false,
           "help": "Shell requires this setting even in checksum-only mode. Its prior value is restored after verification. Requires native system-variable administration permission."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030292"
     },
     {
       "resource_kind": "database",
@@ -5625,7 +5709,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030293"
     },
     {
       "resource_kind": "replication-channel",
@@ -5672,7 +5757,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030294"
     },
     {
       "resource_kind": "replication-channel",
@@ -5709,7 +5795,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030295"
     },
     {
       "resource_kind": "replication-channel",
@@ -5772,7 +5859,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030296"
     },
     {
       "resource_kind": "replication-channel",
@@ -5800,7 +5888,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030297"
     },
     {
       "resource_kind": "server",
@@ -5828,7 +5917,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030298"
     },
     {
       "resource_kind": "server",
@@ -5875,7 +5965,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030299"
     },
     {
       "resource_kind": "table",
@@ -5896,7 +5987,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030300"
     },
     {
       "resource_kind": "server",
@@ -5953,7 +6045,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030301"
     },
     {
       "resource_kind": "server",
@@ -6010,7 +6103,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030302"
     },
     {
       "resource_kind": "server",
@@ -6067,7 +6161,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030303"
     },
     {
       "operation_id": "run_myisamchk",
@@ -6381,7 +6476,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030304"
     },
     {
       "operation_id": "run_myisampack",
@@ -6685,7 +6781,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030305"
     },
     {
       "operation_id": "run_innochecksum",
@@ -7074,7 +7171,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030306"
     },
     {
       "operation_id": "run_ibd2sdi",
@@ -7404,7 +7502,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030307"
     },
     {
       "operation_id": "run_mysqlslap",
@@ -7786,7 +7885,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030308"
     },
     {
       "resource_kind": "server",
@@ -7894,7 +7994,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030309"
     },
     {
       "resource_kind": "table",
@@ -7969,7 +8070,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030310"
     },
     {
       "resource_kind": "server",
@@ -8025,7 +8127,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030311"
     },
     {
       "resource_kind": "session",
@@ -8079,7 +8182,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030312"
     },
     {
       "resource_kind": "server",
@@ -8114,7 +8218,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030313"
     },
     {
       "resource_kind": "server",
@@ -8193,7 +8298,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030314"
     },
     {
       "resource_kind": "server",
@@ -8234,7 +8340,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030315"
     },
     {
       "resource_kind": "logfile-group",
@@ -8287,7 +8394,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030316"
     },
     {
       "resource_kind": "logfile-group",
@@ -8319,7 +8427,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030317"
     },
     {
       "resource_kind": "logfile-group",
@@ -8338,7 +8447,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030318"
     },
     {
       "resource_kind": "ndb-node",
@@ -8400,7 +8510,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030319"
     },
     {
       "resource_kind": "ndb-node",
@@ -8448,7 +8559,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030320"
     },
     {
       "resource_kind": "x-collection",
@@ -8519,7 +8631,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030321"
     },
     {
       "resource_kind": "x-collection",
@@ -8583,7 +8696,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030322"
     },
     {
       "resource_kind": "x-collection",
@@ -8634,7 +8748,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030323"
     },
     {
       "resource_kind": "x-collection",
@@ -8662,7 +8777,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030324"
     },
     {
       "resource_kind": "x-collection",
@@ -8764,7 +8880,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030325"
     },
     {
       "resource_kind": "x-collection",
@@ -8798,7 +8915,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030326"
     },
     {
       "resource_kind": "x-collection",
@@ -8848,7 +8966,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030327"
     },
     {
       "resource_kind": "x-collection",
@@ -9020,7 +9139,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030328"
     },
     {
       "resource_kind": "x-collection",
@@ -9240,7 +9360,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030329"
     },
     {
       "resource_kind": "x-collection",
@@ -9378,7 +9499,48 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030330"
+    },
+    {
+      "operation_id": "set_masking_policy",
+      "resource_kind": "column",
+      "title": "Assign native masking policy reference",
+      "description": "Attach a MySQL Enterprise data-masking policy reference to this column via an independent DDL connection.",
+      "menu": {
+        "category": "security",
+        "order": 100
+      },
+      "tier": 2,
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "status": "complete",
+      "fields": [
+        {
+          "field_id": "policy_name",
+          "label": "Masking policy name",
+          "control": "text",
+          "required": true,
+          "help": "Exact MySQL masking policy identifier (1\u201364 characters)."
+        }
+      ],
+      "form_reference": "SR-F-030331"
+    },
+    {
+      "operation_id": "drop_masking_policy",
+      "resource_kind": "column",
+      "title": "Remove native masking policy reference",
+      "description": "Drop the MySQL Enterprise data-masking policy reference from this column.",
+      "menu": {
+        "category": "security",
+        "order": 101
+      },
+      "tier": 2,
+      "confirmation": "typed_name",
+      "produces_log": true,
+      "status": "complete",
+      "fields": [],
+      "form_reference": "SR-F-030332"
     }
   ]
 }

@@ -44,7 +44,11 @@ def test_native_job_and_host_tools_can_reopen_during_sql_outage_only_for_owner(o
 def test_database_tools_keep_exact_selected_scope_and_viewer_collector_editor_separation(target):
     actions = {row['command_id']: row for row in database_target_context_actions(
         profile('mysql', multiple=True), {'target_id': target})}
-    for name in ['monitoring', 'monitoring_policy', 'spatial', 'dashboard_editor', 'catalog_ddn', 'test_data']:
+    for name in [
+        'monitoring', 'monitoring_policy', 'spatial', 'dashboard_editor',
+        'catalog_ddn', 'test_data', 'utilities', 'data_import',
+        'content_search', 'data_drift', 'workload',
+    ]:
         row = actions['database.mysql.' + name]
         assert row['arguments']['resource_id'] == target
         assert row['arguments']['database_target_id'] == target
@@ -59,8 +63,8 @@ def test_database_tools_keep_exact_selected_scope_and_viewer_collector_editor_se
 
 def test_tools_are_openers_with_unique_ids_and_do_not_duplicate_native_operation_descriptors():
     rows = DOCUMENT['tools']; ids = [row['command_id'] for row in rows]
-    assert len(rows) == len(set(ids)) == 31
-    # Six shared design/BI openers augment the 25 engine-specific tools.
+    assert len(rows) == len(set(ids)) == 37
+    # Six shared design/BI openers augment the 31 engine-specific tools.
     assert {row['command_id'] for row in rows if '{engine_id}' in row['command_id']} == {
         'endpoint.{engine_id}.bi_questions',
         'database.{engine_id}.design_erd',

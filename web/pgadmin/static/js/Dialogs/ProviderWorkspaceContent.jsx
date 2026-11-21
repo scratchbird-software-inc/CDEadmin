@@ -93,6 +93,7 @@ import FirebirdQueryPlan from './FirebirdQueryPlan';
 import FirebirdResultStream from './FirebirdResultStream';
 import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
 import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
+import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
 import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
@@ -115,6 +116,10 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
   'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
+  'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save',
+  'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts',
+  'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt',
+  'mysql_relational_review',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
   'firebird_recipe_read', 'firebird_recipe_save',
@@ -6634,6 +6639,12 @@ export default function ProviderWorkspaceContent({
           databaseTargetId: queryDatabaseTargetId,
           initialContext,
         })}
+      {workspace && MYSQL_ADMIN_TABS.includes(tab) &&
+        renderMySQLAdminWorkspace({
+          tab,
+          endpointUrl,
+          databaseTargetId: queryDatabaseTargetId,
+        })}
       {/* Owner direction 2026-11-05: the connection details open from the
           toolbar's info button instead of a banner above the editor. */}
       {workspace && tab === 'studio' && <InfoDialog open={connectionInfoOpen}
@@ -7069,7 +7080,7 @@ export default function ProviderWorkspaceContent({
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
           <MySQLServerCatalog engine="mariadb" post={post} />)}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
-        (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
+        (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} focusImport={Boolean(initialContext.focus_import)} /> :
           <MySQLServerCatalog post={post} />)}
       {workspace && tab === 'export' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
@@ -7188,6 +7199,7 @@ ProviderWorkspaceContent.propTypes = {
     'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment', 'duckdb-extensions',
     'firebird-recovery',
     ...FIREBIRD_ADMIN_TABS,
+    ...MYSQL_ADMIN_TABS,
   ]),
   initialContext: PropTypes.object,
   onOpenSearchResult: PropTypes.func,

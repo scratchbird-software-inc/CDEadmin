@@ -9,7 +9,13 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
-export default function MySQLCatalog({post, databaseTargetId}) {
+export default function MySQLCatalog({post, databaseTargetId, focusImport=false}) {
+  const importRef = useRef(null);
+  useEffect(() => {
+    if (focusImport && importRef.current?.scrollIntoView) {
+      importRef.current.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+  }, [focusImport]);
   const [result, setResult] = useState(null), [error, setError] = useState('');
   const [requestBusy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
@@ -103,7 +109,9 @@ export default function MySQLCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="mysql-catalog-ddn" />
-    <MySQLDataImport post={post} databaseTargetId={databaseTargetId} />
+    <Box ref={importRef} data-focus-import={focusImport ? 'true' : undefined}>
+      <MySQLDataImport post={post} databaseTargetId={databaseTargetId} />
+    </Box>
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native MySQL metadata on a separate connection. Catalog visibility is privilege filtered and concurrent DDL is not fenced. Documentary comparison does not authorize migration or deletion.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
@@ -250,4 +258,4 @@ export default function MySQLCatalog({post, databaseTargetId}) {
     </Box>}
   </Box>;
 }
-MySQLCatalog.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string};
+MySQLCatalog.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string, focusImport: PropTypes.bool};

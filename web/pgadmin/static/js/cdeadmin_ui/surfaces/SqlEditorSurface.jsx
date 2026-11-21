@@ -62,6 +62,11 @@ import {
   SqlProfilerConsentDialog,
 } from './SqlFirebirdDiagnostics';
 import {
+  SqlMySQLAnalyzeConsentDialog,
+  SqlMySQLPlanGraphView,
+  SqlMySQLQueryAttributesDialog,
+} from './SqlMySQLDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -79,6 +84,7 @@ import {
 
 const GUTTER_WIDTH = 58;
 const EMPTY_ARRAY = Object.freeze([]);
+const MYSQL_SURFACE_KEYS = new Set(['mysql', 'mysql-native', 'mysql-sql']);
 
 export const SQL_SURFACE_VIEWS = Object.freeze({
   SQL: 'sql',
@@ -379,6 +385,9 @@ export default function SqlEditorSurface({
   const [collectStatistics, setCollectStatistics] = useState(false);
   const [historySensitive, setHistorySensitive] = useState(false);
   const [profilerConsentOpen, setProfilerConsentOpen] = useState(false);
+  const [mysqlAttributesOpen, setMysqlAttributesOpen] = useState(false);
+  const [mysqlQueryAttrs, setMysqlQueryAttrs] = useState({});
+  const [mysqlAnalyzeConsentOpen, setMysqlAnalyzeConsentOpen] = useState(false);
   const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
   const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
   useEffect(() => {
@@ -441,6 +450,7 @@ export default function SqlEditorSurface({
   );
   const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
   const isFirebird = languageOptions.native_transaction_close_warning;
+  const isMySQL = MYSQL_SURFACE_KEYS.has(languageProfile) || MYSQL_SURFACE_KEYS.has(engineId);
   const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
     [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
@@ -1066,6 +1076,10 @@ export default function SqlEditorSurface({
           max_rows: limitsDraft.maxRows,
           parameters: boundParams,
           ...(execSpec.profileMode ? {profile_mode: true} : {}),
+          ...(execSpec.analyzeMode ? {analyze_mode: true} : {}),
+          ...(isMySQL && Object.keys(mysqlQueryAttrs).length > 0 && execSpec.mode !== 'explain'
+            ? {mysql_query_attributes: mysqlQueryAttrs}
+            : {}),
           ...(isFirebird && collectStatistics && execSpec.mode === 'statement'
             ? {statistics_mode: true}
             : {}),
@@ -1106,7 +1120,7 @@ export default function SqlEditorSurface({
         // Auto-switch view per Surface 2 specification:
         if (resp?.last_execution_had_error || resp?.last_execution_cancelled) {
           setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
-        } else if (execSpec.mode === 'explain' || execSpec.profileMode) {
+        } else if (execSpec.mode === 'explain' || execSpec.profileMode || execSpec.analyzeMode) {
           setSurfaceView(SQL_SURFACE_VIEWS.METRICS_PLAN);
         } else if ((resp?.result_count || 0) > 0) {
           setSurfaceView((cur) =>
@@ -1133,8 +1147,10 @@ export default function SqlEditorSurface({
       collectStatistics,
       historySensitive,
       isFirebird,
+      isMySQL,
       limitsDraft.maxRows,
       limitsDraft.pageSize,
+      mysqlQueryAttrs,
       terminator,
     ]
   );
@@ -3893,6 +3909,21 @@ export default function SqlEditorSurface({
               },
             },
           ] : []),
+          ...(isMySQL ? [
+            {
+              id: `${pfx}.m.mysql_explain_analyze`,
+              label: gettext('Run EXPLAIN ANALYZE (Executes Statement)…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setMysqlAnalyzeConsentOpen(true),
+            },
+            {
+              id: `${pfx}.m.mysql_query_attrs`,
+              label: gettext('MySQL Query Attributes & Session Observation…'),
+              index: 37,
+              callback: () => setMysqlAttributesOpen(true),
+            },
+          ] : []),
           {
             id: `${pfx}.m.hist_sensitive`,
             label: gettext('Suppress Sensitive SQL from Persistent History'),
@@ -4580,6 +4611,13 @@ export default function SqlEditorSurface({
               profiling={hostData?.profiling}
               statistics={hostData?.query_statistics}
             />
+
+            {isMySQL && (
+              <SqlMySQLPlanGraphView
+                planText={activeResult?.plan_text || hostData?.plan_text || ''}
+                mysqlDiagnostics={hostData?.mysql_diagnostics || null}
+              />
+            )}
 
             {(hostData?.statement_summaries || []).length > 0 && (
               <div>
@@ -5475,6 +5513,26 @@ export default function SqlEditorSurface({
                 selectionText: trapSql,
                 cursorOffset: 0,
               });
+            }}
+          />
+        </>
+      )}
+      {isMySQL && (
+        <>
+          <SqlMySQLQueryAttributesDialog
+            open={mysqlAttributesOpen}
+            attributesObject={mysqlQueryAttrs}
+            transaction={hostData?.transaction || null}
+            onSaveAttributes={setMysqlQueryAttrs}
+            onClose={() => setMysqlAttributesOpen(false)}
+          />
+          <SqlMySQLAnalyzeConsentDialog
+            open={mysqlAnalyzeConsentOpen}
+            busy={executing}
+            onClose={() => setMysqlAnalyzeConsentOpen(false)}
+            onConfirm={() => {
+              setMysqlAnalyzeConsentOpen(false);
+              runSql('statement', false, {analyzeMode: true});
             }}
           />
         </>

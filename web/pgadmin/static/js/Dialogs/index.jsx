@@ -51,6 +51,7 @@ import FirebirdDashboardEditor from './FirebirdDashboardEditor';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import FirebirdRegistration from './FirebirdRegistration';
 import {renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
+import {renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
 import {invalidateProviderEndpointProfile} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
@@ -374,7 +375,8 @@ export function showProviderWorkspace(
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
         <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
           <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> :
-          renderFirebirdAdminWorkspace({tab: initialTab, endpointUrl, databaseTargetId, initialContext});
+          (renderMySQLAdminWorkspace({tab: initialTab, endpointUrl, databaseTargetId}) ||
+           renderFirebirdAdminWorkspace({tab: initialTab, endpointUrl, databaseTargetId, initialContext}));
   const isDedicatedBrowseData = Boolean(
     initialTab === 'studio' &&
     initialContext.browse_data &&

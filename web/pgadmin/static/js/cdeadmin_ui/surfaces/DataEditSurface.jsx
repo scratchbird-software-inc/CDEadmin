@@ -48,6 +48,7 @@ import SurfaceMetadata from './SurfaceMetadata';
 import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {DataFirebirdBlobDialog, DataFirebirdRowSqlDialog} from './DataFirebirdTools';
+import {DataMySQLRowSqlDialog, DataMySQLSpatialDialog, isMySQLSpatialType} from './DataMySQLTools';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
@@ -175,6 +176,8 @@ export default function DataEditSurface({
   const [msgSeverityFilter, setMsgSeverityFilter] = useState('all');
   const [fbBlobModalState, setFbBlobModalState] = useState(null); // {column, rowIndex}
   const [fbRowSqlOpen, setFbRowSqlOpen] = useState(false);
+  const [mysqlSpatialModalState, setMysqlSpatialModalState] = useState(null); // {column, rowIndex}
+  const [mysqlRowSqlOpen, setMysqlRowSqlOpen] = useState(false);
 
   useEffect(() => {
     const el = areaRef.current;
@@ -372,6 +375,10 @@ export default function DataEditSurface({
   // Accept current row edits (explicit Accept button OR automatic on row-leave!)
   const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
   const isFirebird = Boolean(languageOptions.native_transaction_close_warning);
+  const isMySQL = useMemo(() => {
+    const keys = new Set(['mysql', 'mysql-native', 'mysql-sql']);
+    return keys.has(languageProfile) || keys.has(engineId);
+  }, [engineId, languageProfile]);
   const conversionPairs = languageOptions.field_conversion_pairs;
   const conversions = useRecordConversions(rows, columns, layout.formFieldPrefs, conversionPairs, callHost);
 
@@ -1139,6 +1146,14 @@ export default function DataEditSurface({
                 onClick={() => setFbBlobModalState({column: col, rowIndex: rIdx})}
               >
                 {gettext('Dedicated BLOB Editor…')}
+              </Button>
+            )}
+            {isMySQL && isMySQLSpatialType(col.native_type || col.data_type || '') && (
+              <Button
+                size="small"
+                onClick={() => setMysqlSpatialModalState({column: col, rowIndex: rIdx})}
+              >
+                {gettext('Spatial WKT / GeoJSON Inspector…')}
               </Button>
             )}
             {canEdit && (
@@ -2743,6 +2758,26 @@ export default function DataEditSurface({
               },
             ]
             : []),
+          ...(isMySQL
+            ? [
+              {
+                id: `${pfx}.mnu.mysql_row_sql`,
+                label: gettext('Generate MySQL Row SQL (INSERT/ON DUPLICATE KEY/UPDATE/IN)…'),
+                iconKey: 'action.sql_preview',
+                disabled: rows.length === 0,
+                index: 225,
+                callback: () => setMysqlRowSqlOpen(true),
+              },
+              {
+                id: `${pfx}.mnu.mysql_spatial_editor`,
+                label: gettext('MySQL Spatial WKT / GeoJSON Inspector…'),
+                iconKey: 'action.edit',
+                disabled: !activeColObj || !isMySQLSpatialType(activeColObj.native_type || activeColObj.data_type || ''),
+                index: 228,
+                callback: () => setMysqlSpatialModalState({column: activeColObj, rowIndex: activeRowIndex}),
+              },
+            ]
+            : []),
         ],
       },
       {
@@ -4216,6 +4251,57 @@ export default function DataEditSurface({
             }
             onOpenInSqlEditor={onOpenInSqlEditor}
             onClose={() => setFbRowSqlOpen(false)}
+          />
+        </>
+      )}
+
+      {isMySQL && (
+        <>
+          <DataMySQLSpatialDialog
+            open={Boolean(mysqlSpatialModalState)}
+            column={mysqlSpatialModalState?.column || null}
+            rawValue={
+              mysqlSpatialModalState
+                ? (isEditingRow &&
+                    (editingRowIndex ?? activeRowIndex) === mysqlSpatialModalState.rowIndex &&
+                    rowDraft &&
+                    Object.prototype.hasOwnProperty.call(rowDraft, mysqlSpatialModalState.column.name)
+                    ? rowDraft[mysqlSpatialModalState.column.name]
+                    : rows[mysqlSpatialModalState.rowIndex]?.values?.[mysqlSpatialModalState.column.name])
+                : null
+            }
+            readOnly={
+              !hostData?.editable ||
+              mysqlSpatialModalState?.column?.editable === false
+            }
+            onApplyValue={(nextVal) => {
+              if (!mysqlSpatialModalState?.column) return;
+              const idx = mysqlSpatialModalState.rowIndex ?? activeRowIndex;
+              const colName = mysqlSpatialModalState.column.name;
+              if (!isEditingRow || (editingRowIndex ?? activeRowIndex) !== idx) {
+                const baseVals = {...(rows[idx]?.values || {})};
+                baseVals[colName] = nextVal;
+                setEditingRowIndex(idx);
+                setIsEditingRow(true);
+                setRowDraft(baseVals);
+              } else {
+                setRowDraft((prev) => ({...(prev || {}), [colName]: nextVal}));
+              }
+            }}
+            onClose={() => setMysqlSpatialModalState(null)}
+          />
+          <DataMySQLRowSqlDialog
+            open={mysqlRowSqlOpen}
+            tableName={targetResource?.display_name || targetResource?.name || 'table'}
+            columns={columns}
+            fetchedRows={rows}
+            initialSelectedIndices={
+              selectedCells.length
+                ? [...new Set(selectedCells.map((c) => c.rowIndex))]
+                : [activeRowIndex]
+            }
+            onOpenInSqlEditor={onOpenInSqlEditor}
+            onClose={() => setMysqlRowSqlOpen(false)}
           />
         </>
       )}

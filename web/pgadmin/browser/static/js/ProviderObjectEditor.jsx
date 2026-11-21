@@ -47,7 +47,8 @@ function nodeEditorAvailable(bundle, resourceKind, itemData, operation) {
   if (!bundle || !resourceKind) return false;
   const tier1SupportsOp = !operation || Boolean(bundle?.kinds?.[resourceKind]?.tier1?.includes(operation));
   return (tier1SupportsOp && resourceEditorAvailable(bundle, resourceKind)) ||
-    (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation));
+    (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation)) ||
+    (operation === 'create' && Array.isArray(itemData?.cde_native_editor_kinds) && itemData.cde_native_editor_kinds.includes(resourceKind));
 }
 
 /**
