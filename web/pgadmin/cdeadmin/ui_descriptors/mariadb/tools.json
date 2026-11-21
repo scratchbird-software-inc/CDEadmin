@@ -428,6 +428,71 @@
       "disabled_reasons": {
         "owner": "Only the endpoint owner can administer Galera cluster membership."
       }
+    },
+    {
+      "command_id": "endpoint.{engine_id}.utilities",
+      "scope": "endpoint",
+      "label": "Host utilities...",
+      "description": "Run supervised MariaDB 12.2.2 offline Aria/MyISAM/InnoDB storage checks, table compression, and isolated mariadb-slap benchmarks.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 59,
+      "arguments": {
+        "tab": "mariadb-utilities",
+        "workspace_action": "mariadb_utility",
+        "describe_action": "catalog"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run supervised host utilities."
+      }
+    },
+    {
+      "command_id": "database.{engine_id}.utilities",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Host utilities...",
+      "description": "Open supervised MariaDB 12.2.2 offline Aria/MyISAM/InnoDB utilities pre-scoped to this database.",
+      "handler": "open_workspace",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 71,
+      "arguments": {
+        "tab": "mariadb-utilities",
+        "workspace_action": "mariadb_utility",
+        "describe_action": "catalog"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run supervised host utilities."
+      }
+    },
+    {
+      "command_id": "database.{engine_id}.data_import",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Import data archive...",
+      "description": "Plan, review and apply delimited or SQL archive data imports into this MariaDB database.",
+      "handler": "open_workspace",
+      "icon": "action.restore",
+      "group": "restore",
+      "mutation": "write",
+      "priority": 69,
+      "arguments": {
+        "tab": "export",
+        "focus_import": true
+      },
+      "enabled_when": [
+        "verified"
+      ]
     }
   ]
 }

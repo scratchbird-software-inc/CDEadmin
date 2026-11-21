@@ -10,7 +10,7 @@ import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
-export default function MariaDBCatalog({post, databaseTargetId}) {
+export default function MariaDBCatalog({post, databaseTargetId, focusImport = false}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [reviewBaseline, setReviewBaseline] = useState(null);
@@ -20,6 +20,12 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
   const [data, setData] = useState(null), [relation, setRelation] = useState('');
   const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
   const serial = useRef(0);
+  const importRef = useRef(null);
+  useEffect(() => {
+    if (focusImport && importRef.current?.scrollIntoView) {
+      importRef.current.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+  }, [focusImport]);
   useEffect(() => {
     serial.current++; setReviewBaseline(null); setMetadata(null); setData(null); setRelation(''); setResult(null); setComparison(null); setSource(''); setError(''); setBusy(false);
     setDisplay('inventory'); setView('inventory_1');
@@ -73,7 +79,9 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
   };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="mariadb-catalog-ddn" />
-    <MySQLDataImport engine="mariadb" post={post} databaseTargetId={databaseTargetId} />
+    <Box ref={importRef} data-testid="mariadb-data-import-anchor">
+      <MySQLDataImport engine="mariadb" post={post} databaseTargetId={databaseTargetId} />
+    </Box>
     {error && <Alert severity="error">{error}</Alert>}
     <Alert severity="info">Native MariaDB metadata uses a separate connection. Visibility is privilege filtered and concurrent DDL is not fenced. Comparison is documentary and does not authorize changes.</Alert>
     <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
@@ -155,4 +163,4 @@ export default function MariaDBCatalog({post, databaseTargetId}) {
     </Box>}
   </Box>;
 }
-MariaDBCatalog.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string};
+MariaDBCatalog.propTypes = {post: PropTypes.func.isRequired, databaseTargetId: PropTypes.string, focusImport: PropTypes.bool};

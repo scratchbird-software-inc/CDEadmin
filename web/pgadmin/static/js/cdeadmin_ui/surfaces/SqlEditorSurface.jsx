@@ -67,6 +67,10 @@ import {
   SqlMySQLQueryAttributesDialog,
 } from './SqlMySQLDiagnostics';
 import {
+  SqlMariaDBAnalyzeConsentDialog,
+  SqlMariaDBSessionDialog,
+} from './SqlMariaDBDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -85,6 +89,7 @@ import {
 const GUTTER_WIDTH = 58;
 const EMPTY_ARRAY = Object.freeze([]);
 const MYSQL_SURFACE_KEYS = new Set(['mysql', 'mysql-native', 'mysql-sql']);
+const MARIADB_SURFACE_KEYS = new Set(['mariadb', 'mariadb-native', 'mariadb-sql']);
 
 export const SQL_SURFACE_VIEWS = Object.freeze({
   SQL: 'sql',
@@ -388,6 +393,8 @@ export default function SqlEditorSurface({
   const [mysqlAttributesOpen, setMysqlAttributesOpen] = useState(false);
   const [mysqlQueryAttrs, setMysqlQueryAttrs] = useState({});
   const [mysqlAnalyzeConsentOpen, setMysqlAnalyzeConsentOpen] = useState(false);
+  const [mariadbSessionOpen, setMariadbSessionOpen] = useState(false);
+  const [mariadbAnalyzeConsentOpen, setMariadbAnalyzeConsentOpen] = useState(false);
   const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
   const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
   useEffect(() => {
@@ -451,6 +458,7 @@ export default function SqlEditorSurface({
   const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
   const isFirebird = languageOptions.native_transaction_close_warning;
   const isMySQL = MYSQL_SURFACE_KEYS.has(languageProfile) || MYSQL_SURFACE_KEYS.has(engineId);
+  const isMariaDB = MARIADB_SURFACE_KEYS.has(languageProfile) || MARIADB_SURFACE_KEYS.has(engineId);
   const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
     [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
@@ -3924,6 +3932,21 @@ export default function SqlEditorSurface({
               callback: () => setMysqlAttributesOpen(true),
             },
           ] : []),
+          ...(isMariaDB ? [
+            {
+              id: `${pfx}.m.mariadb_analyze_json`,
+              label: gettext('Run ANALYZE FORMAT=JSON (Executes Statement)…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setMariadbAnalyzeConsentOpen(true),
+            },
+            {
+              id: `${pfx}.m.mariadb_session_diag`,
+              label: gettext('MariaDB Session Variables, Flagsets & Context…'),
+              index: 37,
+              callback: () => setMariadbSessionOpen(true),
+            },
+          ] : []),
           {
             id: `${pfx}.m.hist_sensitive`,
             label: gettext('Suppress Sensitive SQL from Persistent History'),
@@ -4612,7 +4635,7 @@ export default function SqlEditorSurface({
               statistics={hostData?.query_statistics}
             />
 
-            {isMySQL && (
+            {(isMySQL || isMariaDB) && (
               <SqlMySQLPlanGraphView
                 planText={activeResult?.plan_text || hostData?.plan_text || ''}
                 mysqlDiagnostics={hostData?.mysql_diagnostics || null}
@@ -5532,6 +5555,25 @@ export default function SqlEditorSurface({
             onClose={() => setMysqlAnalyzeConsentOpen(false)}
             onConfirm={() => {
               setMysqlAnalyzeConsentOpen(false);
+              runSql('statement', false, {analyzeMode: true});
+            }}
+          />
+        </>
+      )}
+      {isMariaDB && (
+        <>
+          <SqlMariaDBSessionDialog
+            open={mariadbSessionOpen}
+            transaction={hostData?.transaction || null}
+            callHost={callHost}
+            onClose={() => setMariadbSessionOpen(false)}
+          />
+          <SqlMariaDBAnalyzeConsentDialog
+            open={mariadbAnalyzeConsentOpen}
+            busy={executing}
+            onClose={() => setMariadbAnalyzeConsentOpen(false)}
+            onConfirm={() => {
+              setMariadbAnalyzeConsentOpen(false);
               runSql('statement', false, {analyzeMode: true});
             }}
           />

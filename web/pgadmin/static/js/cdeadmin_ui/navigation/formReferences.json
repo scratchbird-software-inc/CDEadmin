@@ -7185,6 +7185,394 @@
     "operation:mysql:column:drop_masking_policy": {
       "reference": "SR-F-030332",
       "title": "MySQL column: Remove native masking policy reference"
+    },
+    "mariadb-physical-workspace": {
+      "reference": "SR-F-030340",
+      "title": "MariaDB Physical Backups, Recovery & Cutover Workspace"
+    },
+    "mariadb-archive-retention-workspace": {
+      "reference": "SR-F-030341",
+      "title": "MariaDB Binary-Log Archive Retention, Holds & Recovery Chains Workspace"
+    },
+    "mariadb-host-workspace": {
+      "reference": "SR-F-030342",
+      "title": "MariaDB Host Configuration & Daemon Service Workspace"
+    },
+    "mariadb-upgrade-workspace": {
+      "reference": "SR-F-030343",
+      "title": "MariaDB Server Upgrade & Rollback Workspace"
+    },
+    "mariadb-galera-workspace": {
+      "reference": "SR-F-030344",
+      "title": "MariaDB Galera (wsrep) Cluster Administration Workspace"
+    },
+    "mariadb-utilities-workspace": {
+      "reference": "SR-F-030345",
+      "title": "MariaDB 12.2.2 Supervised Host Utilities Workspace"
+    },
+    "sql-surface.mariadb-session-diagnostics": {
+      "reference": "SR-F-030346",
+      "title": "MariaDB Original-Session Variables, Optimizer Flagsets & Context"
+    },
+    "operation:mariadb:server:check_upgrade_required": {
+      "reference": "SR-F-030350",
+      "title": "MariaDB server: Check whether this server requires upgrade"
+    },
+    "operation:mariadb:database:analyze_tables": {
+      "reference": "SR-F-030351",
+      "title": "MariaDB database: Analyze tables and persistent statistics"
+    },
+    "operation:mariadb:database:check_objects": {
+      "reference": "SR-F-030352",
+      "title": "MariaDB database: Check tables or views"
+    },
+    "operation:mariadb:database:optimize_tables": {
+      "reference": "SR-F-030353",
+      "title": "MariaDB database: Optimize tables"
+    },
+    "operation:mariadb:database:repair_objects": {
+      "reference": "SR-F-030354",
+      "title": "MariaDB database: Repair tables or views"
+    },
+    "operation:mariadb:database:checksum_tables": {
+      "reference": "SR-F-030355",
+      "title": "MariaDB database: Checksum tables"
+    },
+    "operation:mariadb:database:backup_logical": {
+      "reference": "SR-F-030356",
+      "title": "MariaDB database: Back up database"
+    },
+    "operation:mariadb:database:restore_logical": {
+      "reference": "SR-F-030357",
+      "title": "MariaDB database: Restore database"
+    },
+    "operation:mariadb:table:add_partitions": {
+      "reference": "SR-F-030358",
+      "title": "MariaDB table: Add Partitions"
+    },
+    "operation:mariadb:table:coalesce_partitions": {
+      "reference": "SR-F-030359",
+      "title": "MariaDB table: Coalesce Partitions"
+    },
+    "operation:mariadb:table:convert_from_table": {
+      "reference": "SR-F-030360",
+      "title": "MariaDB table: Convert From Table"
+    },
+    "operation:mariadb:table:partition_by": {
+      "reference": "SR-F-030361",
+      "title": "MariaDB table: Partition By"
+    },
+    "operation:mariadb:table:remove_partitioning": {
+      "reference": "SR-F-030362",
+      "title": "MariaDB table: Remove Partitioning"
+    },
+    "operation:mariadb:package:create_body": {
+      "reference": "SR-F-030363",
+      "title": "MariaDB package: Create package body"
+    },
+    "operation:mariadb:package:create_specification": {
+      "reference": "SR-F-030364",
+      "title": "MariaDB package: Create package declaration"
+    },
+    "operation:mariadb:package:drop_body": {
+      "reference": "SR-F-030365",
+      "title": "MariaDB package: Drop package body"
+    },
+    "operation:mariadb:package:replace_body": {
+      "reference": "SR-F-030366",
+      "title": "MariaDB package: Replace package body"
+    },
+    "operation:mariadb:package:replace_specification": {
+      "reference": "SR-F-030367",
+      "title": "MariaDB package: Replace package declaration"
+    },
+    "operation:mariadb:partition:analyze": {
+      "reference": "SR-F-030368",
+      "title": "MariaDB partition: Analyze"
+    },
+    "operation:mariadb:partition:check": {
+      "reference": "SR-F-030369",
+      "title": "MariaDB partition: Check"
+    },
+    "operation:mariadb:partition:convert_to_table": {
+      "reference": "SR-F-030370",
+      "title": "MariaDB partition: Convert To Table"
+    },
+    "operation:mariadb:partition:exchange": {
+      "reference": "SR-F-030371",
+      "title": "MariaDB partition: Exchange"
+    },
+    "operation:mariadb:partition:optimize": {
+      "reference": "SR-F-030372",
+      "title": "MariaDB partition: Optimize"
+    },
+    "operation:mariadb:partition:rebuild": {
+      "reference": "SR-F-030373",
+      "title": "MariaDB partition: Rebuild"
+    },
+    "operation:mariadb:partition:reorganize": {
+      "reference": "SR-F-030374",
+      "title": "MariaDB partition: Reorganize"
+    },
+    "operation:mariadb:partition:repair": {
+      "reference": "SR-F-030375",
+      "title": "MariaDB partition: Repair"
+    },
+    "operation:mariadb:role:set_default": {
+      "reference": "SR-F-030376",
+      "title": "MariaDB role: Set default role"
+    },
+    "operation:mariadb:replication-channel:start": {
+      "reference": "SR-F-030377",
+      "title": "MariaDB replication-channel: Start replication channel"
+    },
+    "operation:mariadb:replication-channel:stop": {
+      "reference": "SR-F-030378",
+      "title": "MariaDB replication-channel: Stop replication channel"
+    },
+    "operation:mariadb:replication-channel:reset": {
+      "reference": "SR-F-030379",
+      "title": "MariaDB replication-channel: Reset replication channel"
+    },
+    "operation:mariadb:session:terminate_query": {
+      "reference": "SR-F-030380",
+      "title": "MariaDB session: Terminate running query"
+    },
+    "operation:mariadb:session:terminate_connection": {
+      "reference": "SR-F-030381",
+      "title": "MariaDB session: Terminate connection"
+    },
+    "operation:mariadb:system-variable:set_global": {
+      "reference": "SR-F-030382",
+      "title": "MariaDB system-variable: Set global system variable"
+    },
+    "operation:mariadb:system-variable:set_session": {
+      "reference": "SR-F-030383",
+      "title": "MariaDB system-variable: Set original session system variable"
+    },
+    "operation:mariadb:binary-log:purge_before": {
+      "reference": "SR-F-030384",
+      "title": "MariaDB binary-log: Purge binary logs before selected file"
+    },
+    "operation:mariadb:binary-log-status:rotate": {
+      "reference": "SR-F-030385",
+      "title": "MariaDB binary-log-status: Rotate binary log"
+    },
+    "operation:mariadb:system-variable:set_session_optimizer_switch_flags": {
+      "reference": "SR-F-030386",
+      "title": "MariaDB system-variable: Set original session optimizer switches"
+    },
+    "operation:mariadb:system-variable:set_session_optimizer_trace_flags": {
+      "reference": "SR-F-030387",
+      "title": "MariaDB system-variable: Set original session optimizer trace"
+    },
+    "operation:mariadb:database:refresh_editor_context": {
+      "reference": "SR-F-030388",
+      "title": "MariaDB database: Refresh original editor context"
+    },
+    "operation:mariadb:server:inspect_engine_status": {
+      "reference": "SR-F-030389",
+      "title": "MariaDB server: Inspect engine status"
+    },
+    "operation:mariadb:server:inspect_engine_logs": {
+      "reference": "SR-F-030390",
+      "title": "MariaDB server: Inspect engine logs"
+    },
+    "operation:mariadb:server:inspect_engine_mutex": {
+      "reference": "SR-F-030391",
+      "title": "MariaDB server: Inspect engine mutex diagnostics"
+    },
+    "operation:mariadb:server:inspect_live_explain": {
+      "reference": "SR-F-030392",
+      "title": "MariaDB server: Inspect running query plan"
+    },
+    "operation:mariadb:server:inspect_live_analyze": {
+      "reference": "SR-F-030393",
+      "title": "MariaDB server: Inspect running query execution statistics"
+    },
+    "operation:mariadb:server:shutdown_server": {
+      "reference": "SR-F-030394",
+      "title": "MariaDB server: Shut down server"
+    },
+    "operation:mariadb:server:inspect_prepared_xa": {
+      "reference": "SR-F-030395",
+      "title": "MariaDB server: Inspect prepared transactions"
+    },
+    "operation:mariadb:server:commit_prepared_xa": {
+      "reference": "SR-F-030396",
+      "title": "MariaDB server: Commit a prepared transaction"
+    },
+    "operation:mariadb:server:rollback_prepared_xa": {
+      "reference": "SR-F-030397",
+      "title": "MariaDB server: Roll back a prepared transaction"
+    },
+    "operation:mariadb:server:inspect_key_cache": {
+      "reference": "SR-F-030398",
+      "title": "MariaDB server: Inspect named index cache"
+    },
+    "operation:mariadb:server:configure_key_cache": {
+      "reference": "SR-F-030399",
+      "title": "MariaDB server: Configure named index cache"
+    },
+    "operation:mariadb:server:release_key_cache": {
+      "reference": "SR-F-030400",
+      "title": "MariaDB server: Release named index cache"
+    },
+    "operation:mariadb:server:assign_index_cache": {
+      "reference": "SR-F-030401",
+      "title": "MariaDB server: Assign indexes to a cache"
+    },
+    "operation:mariadb:server:preload_index_cache": {
+      "reference": "SR-F-030402",
+      "title": "MariaDB server: Preload index cache"
+    },
+    "operation:mariadb:server:inspect_key_caches": {
+      "reference": "SR-F-030403",
+      "title": "MariaDB server: Inspect installed index caches"
+    },
+    "operation:mariadb:server:start_all_replicas": {
+      "reference": "SR-F-030404",
+      "title": "MariaDB server: Start all replication connections"
+    },
+    "operation:mariadb:server:stop_all_replicas": {
+      "reference": "SR-F-030405",
+      "title": "MariaDB server: Stop all replication connections"
+    },
+    "operation:mariadb:server:reset_binary_logs": {
+      "reference": "SR-F-030406",
+      "title": "MariaDB server: Reset native binary logs"
+    },
+    "operation:mariadb:server:reset_query_cache": {
+      "reference": "SR-F-030407",
+      "title": "MariaDB server: Reset query cache"
+    },
+    "operation:mariadb:server:reset_default_replica": {
+      "reference": "SR-F-030408",
+      "title": "MariaDB server: Reset default replication connection"
+    },
+    "operation:mariadb:sequence:create": {
+      "reference": "SR-F-030409",
+      "title": "MariaDB sequence: Create native sequence"
+    },
+    "operation:mariadb:sequence:alter": {
+      "reference": "SR-F-030410",
+      "title": "MariaDB sequence: Alter native sequence"
+    },
+    "operation:mariadb:server:run_aria_chk": {
+      "reference": "SR-F-030411",
+      "title": "MariaDB server: Check or repair offline Aria table files"
+    },
+    "operation:mariadb:server:run_aria_pack": {
+      "reference": "SR-F-030412",
+      "title": "MariaDB server: Compress offline Aria table files"
+    },
+    "operation:mariadb:server:run_myisamchk": {
+      "reference": "SR-F-030413",
+      "title": "MariaDB server: Check or repair offline MyISAM table files"
+    },
+    "operation:mariadb:server:run_myisampack": {
+      "reference": "SR-F-030414",
+      "title": "MariaDB server: Compress offline MyISAM table files"
+    },
+    "operation:mariadb:server:run_innochecksum": {
+      "reference": "SR-F-030415",
+      "title": "MariaDB server: Inspect or rewrite offline InnoDB page checksums"
+    },
+    "operation:mariadb:server:run_mariadb_slap": {
+      "reference": "SR-F-030416",
+      "title": "MariaDB server: Run concurrency load benchmark"
+    },
+    "operation:mariadb:server:flush": {
+      "reference": "SR-F-030417",
+      "title": "MariaDB server: Flush server logs, caches, or statistics"
+    },
+    "operation:mariadb:table:flush": {
+      "reference": "SR-F-030418",
+      "title": "MariaDB table: Flush table"
+    },
+    "operation:mariadb:server:physical_backup": {
+      "reference": "SR-F-030419",
+      "title": "MariaDB server: Create physical backup"
+    },
+    "operation:mariadb:server:prepare_physical_chain": {
+      "reference": "SR-F-030420",
+      "title": "MariaDB server: Prepare physical backup chain"
+    },
+    "operation:mariadb:server:recover_physical_instance": {
+      "reference": "SR-F-030421",
+      "title": "MariaDB server: Recover physical backup and cut over"
+    },
+    "operation:mariadb:server:evaluate_archive_retention": {
+      "reference": "SR-F-030422",
+      "title": "MariaDB server: Evaluate binary-log archive retention"
+    },
+    "operation:mariadb:server:manage_host_service": {
+      "reference": "SR-F-030423",
+      "title": "MariaDB server: Manage host configuration and service"
+    },
+    "operation:mariadb:server:upgrade_server_instance": {
+      "reference": "SR-F-030424",
+      "title": "MariaDB server: Upgrade server binaries and system tables"
+    },
+    "operation:mariadb:server:manage_galera_cluster": {
+      "reference": "SR-F-030425",
+      "title": "MariaDB server: Manage Galera synchronous cluster"
+    },
+    "operation:mariadb:table:drop_temporary": {
+      "reference": "SR-F-030426",
+      "title": "MariaDB table: Drop session temporary table"
+    },
+    "operation:mariadb:table:add_system_versioning": {
+      "reference": "SR-F-030427",
+      "title": "MariaDB table: Enable system versioning"
+    },
+    "operation:mariadb:table:drop_system_versioning": {
+      "reference": "SR-F-030428",
+      "title": "MariaDB table: Drop system versioning and history"
+    },
+    "operation:mariadb:table:truncate_system_versioning_history": {
+      "reference": "SR-F-030429",
+      "title": "MariaDB table: Delete system-versioning history"
+    },
+    "operation:mariadb:table:rotate_system_time_partitions": {
+      "reference": "SR-F-030430",
+      "title": "MariaDB table: Partition or rotate system-time history"
+    },
+    "operation:mariadb:table:add_application_period": {
+      "reference": "SR-F-030431",
+      "title": "MariaDB table: Add application-time period"
+    },
+    "operation:mariadb:table:drop_application_period": {
+      "reference": "SR-F-030432",
+      "title": "MariaDB table: Drop application-time period"
+    },
+    "operation:mariadb:index:rename": {
+      "reference": "SR-F-030433",
+      "title": "MariaDB index: Rename index"
+    },
+    "operation:mariadb:index:visibility": {
+      "reference": "SR-F-030434",
+      "title": "MariaDB index: Set index optimizer visibility"
+    },
+    "operation:mariadb:view:create_or_replace": {
+      "reference": "SR-F-030435",
+      "title": "MariaDB view: Replace view definition"
+    },
+    "operation:mariadb:procedure:create_or_replace": {
+      "reference": "SR-F-030436",
+      "title": "MariaDB procedure: Replace stored procedure"
+    },
+    "operation:mariadb:function:create_or_replace": {
+      "reference": "SR-F-030437",
+      "title": "MariaDB function: Replace stored function"
+    },
+    "operation:mariadb:trigger:create_or_replace": {
+      "reference": "SR-F-030438",
+      "title": "MariaDB trigger: Replace trigger"
+    },
+    "operation:mariadb:server:inspect_available_plugins": {
+      "reference": "SR-F-030439",
+      "title": "MariaDB server: Inspect available plugin modules"
     }
   }
 }

@@ -3974,6 +3974,9 @@ class SqlSurfaceHostService:
         if analyze_mode and single_statement and surface.language_profile == 'mysql-sql':
             if not re.match(r'^\s*(?:--[^\n]*\n|/\*[\s\S]*?\*/\s*)*EXPLAIN\b', effective_sql, re.IGNORECASE):
                 effective_sql = f'EXPLAIN ANALYZE {effective_sql}'
+        elif analyze_mode and single_statement and surface.language_profile == 'mariadb-sql':
+            if not re.match(r'^\s*(?:--[^\n]*\n|/\*[\s\S]*?\*/\s*)*(?:EXPLAIN|ANALYZE)\b', effective_sql, re.IGNORECASE):
+                effective_sql = f'ANALYZE FORMAT=JSON {effective_sql}'
 
         mysql_specs = None
         if surface.language_profile == 'mysql-sql':
@@ -4117,7 +4120,7 @@ class SqlSurfaceHostService:
             surface.last_query_statistics = fb_early.get('query_statistics')
         if fb_early.get('fetch_observation') is not None:
             surface.last_fetch_observation = fb_early.get('fetch_observation')
-        mysql_early = (exts.get('mysql') or {}).get('payload') or {}
+        mysql_early = (exts.get('mysql') or exts.get('mariadb') or {}).get('payload') or {}
         if mysql_early:
             surface.last_mysql_diagnostics = {
                 'statement_metrics': mysql_early.get('statement_metrics'),
@@ -4263,7 +4266,7 @@ class SqlSurfaceHostService:
                 'values': vals,
             })
 
-        if not plan_text and len(cols) == 1 and cols[0]['name'].upper() == 'EXPLAIN' and len(normalized_rows) == 1:
+        if not plan_text and len(cols) == 1 and cols[0]['name'].upper() in ('EXPLAIN', 'ANALYZE') and len(normalized_rows) == 1:
             explain_cell = normalized_rows[0]['values'].get(cols[0]['name'])
             if isinstance(explain_cell, str) and explain_cell.strip():
                 plan_text = explain_cell
@@ -5416,6 +5419,18 @@ class SqlSurfaceHostService:
 
             if sub_action == 'prepare_statement':
                 return self._prepare_statement(workspace_service, server, surface, request)
+
+            if sub_action in ('mariadb_session_variables', 'mariadb_session_flagsets', 'mariadb_editor_context'):
+                session_id = self._ensure_session(workspace_service, server, surface)
+                return workspace_service.language_tool_action(
+                    server,
+                    sub_action,
+                    {
+                        'session_id': session_id,
+                        'database_target_id': surface.database_target_id,
+                        'request': dict(request.get('request') or {}),
+                    },
+                )
 
             if sub_action in ('execute', 'execute_statement', 'execute_script', 'explain_plan'):
                 if surface.language_profile == 'postgresql-sql' and any(

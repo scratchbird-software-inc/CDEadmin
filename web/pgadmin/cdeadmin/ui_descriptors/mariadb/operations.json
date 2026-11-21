@@ -10,12 +10,13 @@
         "category": "diagnostics"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_check_upgrade_required is written and skips unless the tool reports 12.2.2-MariaDB."
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_check_upgrade_required is written and skips unless the tool reports 12.2.2-MariaDB.",
+      "form_reference": "SR-F-030350"
     },
     {
       "operation_id": "analyze_tables",
@@ -121,7 +122,9 @@
           "help": "Native index names (PRIMARY allowed); used when persistent statistics are Specified."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030351",
+      "produces_log": true
     },
     {
       "operation_id": "check_objects",
@@ -200,7 +203,9 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030352",
+      "produces_log": true
     },
     {
       "operation_id": "optimize_tables",
@@ -279,7 +284,9 @@
           "default": 0
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030353",
+      "produces_log": true
     },
     {
       "operation_id": "repair_objects",
@@ -379,7 +386,9 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030354",
+      "produces_log": true
     },
     {
       "operation_id": "checksum_tables",
@@ -430,7 +439,9 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030355",
+      "produces_log": true
     },
     {
       "operation_id": "backup_logical",
@@ -440,7 +451,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -633,7 +644,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB."
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB.",
+      "form_reference": "SR-F-030356"
     },
     {
       "operation_id": "restore_logical",
@@ -643,7 +655,7 @@
         "category": "backup_restore"
       },
       "tier": 3,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -704,7 +716,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB."
+      "notes": "Not yet round-tripped: the provider runs only the exact 12.2.2-MariaDB tool release (client check \"MariaDB tool must be from the exact 12.2.2 release\") and this host has the 10.11.14 tools, so the dialog draft stops before the tool starts; the draft was verified to plan and run correctly only with that version check bypassed in a scratch run. The test test_logical_backup_and_restore is written and skips unless the tool reports 12.2.2-MariaDB.",
+      "form_reference": "SR-F-030357"
     },
     {
       "operation_id": "add_partitions",
@@ -755,7 +768,8 @@
           }
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030358"
     },
     {
       "operation_id": "coalesce_partitions",
@@ -775,7 +789,8 @@
           "required": true
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030359"
     },
     {
       "operation_id": "convert_from_table",
@@ -785,7 +800,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -824,7 +839,8 @@
           "required": true
         }
       ],
-      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server.",
+      "form_reference": "SR-F-030360"
     },
     {
       "operation_id": "partition_by",
@@ -844,7 +860,8 @@
           "required": true
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030361"
     },
     {
       "operation_id": "remove_partitioning",
@@ -857,7 +874,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030362"
     },
     {
       "operation_id": "create_body",
@@ -900,7 +918,8 @@
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030363"
     },
     {
       "operation_id": "create_specification",
@@ -951,7 +970,8 @@
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030364"
     },
     {
       "operation_id": "drop_body",
@@ -987,7 +1007,8 @@
           "help": "Packages parse only under Oracle mode; choose Oracle (or Stored when the body was created in Oracle mode) if the session is not already in it."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030365"
     },
     {
       "operation_id": "replace_body",
@@ -1030,7 +1051,8 @@
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030366"
     },
     {
       "operation_id": "replace_specification",
@@ -1073,7 +1095,8 @@
           "help": "Enter the fragment after the qualified package name, including END; native MariaDB validates grammar."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030367"
     },
     {
       "operation_id": "analyze",
@@ -1086,7 +1109,9 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030368",
+      "produces_log": true
     },
     {
       "operation_id": "check",
@@ -1099,7 +1124,9 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030369",
+      "produces_log": true
     },
     {
       "operation_id": "convert_to_table",
@@ -1109,7 +1136,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1142,7 +1169,8 @@
           ]
         }
       ],
-      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server.",
+      "form_reference": "SR-F-030370"
     },
     {
       "operation_id": "exchange",
@@ -1152,7 +1180,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "confirm",
       "fields": [
         {
@@ -1185,7 +1213,8 @@
           ]
         }
       ],
-      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server."
+      "notes": "Not yet round-tripped: the provider always emits {WITH|WITHOUT} VALIDATION (MariaDB 12.2.2 grammar) and a MariaDB 10.11 server rejects that clause with error 1064. The draft validates and plans (test_exchange_and_convert_partition_operations); applying is gated on a 12.x server.",
+      "form_reference": "SR-F-030371"
     },
     {
       "operation_id": "optimize",
@@ -1198,7 +1227,9 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030372",
+      "produces_log": true
     },
     {
       "operation_id": "rebuild",
@@ -1211,7 +1242,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030373"
     },
     {
       "operation_id": "reorganize",
@@ -1247,7 +1279,8 @@
           "required": true
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030374"
     },
     {
       "operation_id": "repair",
@@ -1260,7 +1293,9 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030375",
+      "produces_log": true
     },
     {
       "operation_id": "set_default",
@@ -1297,7 +1332,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030376"
     },
     {
       "operation_id": "start",
@@ -1383,7 +1419,8 @@
           "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030377"
     },
     {
       "operation_id": "stop",
@@ -1418,7 +1455,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030378"
     },
     {
       "operation_id": "reset",
@@ -1439,7 +1477,8 @@
           "default": true
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030379"
     },
     {
       "operation_id": "terminate_query",
@@ -1470,7 +1509,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030380"
     },
     {
       "operation_id": "terminate_connection",
@@ -1501,7 +1541,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030381"
     },
     {
       "operation_id": "set_global",
@@ -1610,7 +1651,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030382"
     },
     {
       "operation_id": "set_session",
@@ -1743,7 +1785,8 @@
           "required": true
         }
       ],
-      "notes": "Original-session task mariadb_session_variables; inspect/review/set_session on the owner-bound query session. Admits writable SESSION and SESSION ONLY variables while refusing GLOBAL-only, read-only and unknown variables. Requires diagnostics_change_confirmed:true before sending SQL to the retained session, preserves caller transactions and savepoints, and leaves global and peer sessions unchanged."
+      "notes": "Original-session task mariadb_session_variables; inspect/review/set_session on the owner-bound query session. Admits writable SESSION and SESSION ONLY variables while refusing GLOBAL-only, read-only and unknown variables. Requires diagnostics_change_confirmed:true before sending SQL to the retained session, preserves caller transactions and savepoints, and leaves global and peer sessions unchanged.",
+      "form_reference": "SR-F-030383"
     },
     {
       "operation_id": "purge_before",
@@ -1756,7 +1799,8 @@
       "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030384"
     },
     {
       "operation_id": "rotate",
@@ -1769,7 +1813,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_mariadb.py (dialog draft -> plan -> apply on a live MariaDB 10.11 server, effect observed).",
+      "form_reference": "SR-F-030385"
     },
     {
       "operation_id": "set_session_optimizer_switch_flags",
@@ -1896,7 +1941,9 @@
           "required": true
         }
       ],
-      "notes": "Fixed request.variable=optimizer_switch. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session."
+      "notes": "Fixed request.variable=optimizer_switch. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session.",
+      "form_reference": "SR-F-030386",
+      "produces_log": true
     },
     {
       "operation_id": "set_session_optimizer_trace_flags",
@@ -2023,7 +2070,9 @@
           "required": true
         }
       ],
-      "notes": "Fixed request.variable=optimizer_trace. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session."
+      "notes": "Fixed request.variable=optimizer_trace. Original-session task mariadb_session_flagsets; inspect/review/set_session_flags on the owner-bound query session. Unlike passive completion, explicit inspection sends native SQL to that session and requires diagnostics_change_confirmed:true for every request. Read native FLAGSET metadata/session value; carry exact string expected_value from review and confirmed:true at apply. Native DEFAULT, FLAGS grid/reset, exact decimal BITMASK and VALUE grammar share global controls. Report expanded native effective_value and partial/unknown outcomes; no commit, rollback, global or future-default change and no reconnect/retry. The selected system-variable resource does not authorize changing another session.",
+      "form_reference": "SR-F-030387",
+      "produces_log": true
     },
     {
       "operation_id": "refresh_editor_context",
@@ -2044,7 +2093,8 @@
           "help": "Explicitly reads the original query session. Its warning and row-count state can change; pending transactions remain owned by the caller."
         }
       ],
-      "notes": "Task mariadb_editor_context, fixed operation=refresh_completion with diagnostics_change_confirmed:true. Bind the owned public query-session ID and registered target; the server substitutes its private session ID. Returns editor_context with observed original sql_mode/default schema/role/character sets and a same-context private committed catalog. It observes once while the source is idle/locked; it is not a live guarantee after later source commands. Routine declarations remain separate from column types and carry available plus required_sql_mode gates. Temporary objects and uncommitted DDL remain explicitly unobserved. Passive source_complete still sends zero original-session commands. Do not silently call this explicit refresh on keystrokes or replay it after a lost response. Unavailable refresh returns accepted:false, outcome=context_refresh_unavailable, close_session_required and no automatic retry."
+      "notes": "Task mariadb_editor_context, fixed operation=refresh_completion with diagnostics_change_confirmed:true. Bind the owned public query-session ID and registered target; the server substitutes its private session ID. Returns editor_context with observed original sql_mode/default schema/role/character sets and a same-context private committed catalog. It observes once while the source is idle/locked; it is not a live guarantee after later source commands. Routine declarations remain separate from column types and carry available plus required_sql_mode gates. Temporary objects and uncommitted DDL remain explicitly unobserved. Passive source_complete still sends zero original-session commands. Do not silently call this explicit refresh on keystrokes or replay it after a lost response. Unavailable refresh returns accepted:false, outcome=context_refresh_unavailable, close_session_required and no automatic retry.",
+      "form_reference": "SR-F-030388"
     },
     {
       "operation_id": "inspect_engine_status",
@@ -2054,7 +2104,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2096,7 +2146,9 @@
         }
       ],
       "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
-      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate.",
+      "form_reference": "SR-F-030389",
+      "produces_log": true
     },
     {
       "operation_id": "inspect_engine_logs",
@@ -2106,7 +2158,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2148,7 +2200,9 @@
         }
       ],
       "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
-      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate.",
+      "form_reference": "SR-F-030390",
+      "produces_log": true
     },
     {
       "operation_id": "inspect_engine_mutex",
@@ -2158,7 +2212,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2200,7 +2254,9 @@
         }
       ],
       "description": "Reads private native engine output on a dedicated observer. Requires native PROCESS (STATUS/MUTEX) or FILE (LOGS) authority. Native ALL is one statement. Output is bounded and truncation is explicit; empty output does not establish an implemented handler. Original query sessions and monitoring history are not used. No automatic replay.",
-      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate."
+      "notes": "Native MariaDB12.2.2 server_uid/principal/role/engine-bound review/apply; backend handler mariadb_server_diagnostics. Human presentation acceptance remains separate.",
+      "form_reference": "SR-F-030391",
+      "produces_log": true
     },
     {
       "operation_id": "inspect_live_explain",
@@ -2210,7 +2266,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2249,7 +2305,9 @@
         }
       ],
       "description": "Native SHOW EXPLAIN / ANALYZE on a dedicated observer. Private output; native own-user visibility or PROCESS authority. Reviewed QUERY_ID is rechecked before and after reading; changed-query output is withheld. Bounded output, no original-session changes, no monitoring history and no automatic replay. A timeout does not prove server cancellation.",
-      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate."
+      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate.",
+      "form_reference": "SR-F-030392",
+      "produces_log": true
     },
     {
       "operation_id": "inspect_live_analyze",
@@ -2259,7 +2317,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2298,7 +2356,9 @@
         }
       ],
       "description": "Native SHOW EXPLAIN / ANALYZE on a dedicated observer. Private output; native own-user visibility or PROCESS authority. Reviewed QUERY_ID is rechecked before and after reading; changed-query output is withheld. Bounded output, no original-session changes, no monitoring history and no automatic replay. A timeout does not prove server cancellation.",
-      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate."
+      "notes": "MariaDB12.2.2 server_uid/principal/role/QUERY_ID review. Native query identity checks are observations, not an atomic reservation. Human presentation acceptance remains separate.",
+      "form_reference": "SR-F-030393",
+      "produces_log": true
     },
     {
       "operation_id": "shutdown_server",
@@ -2308,7 +2368,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2325,7 +2385,8 @@
         }
       ],
       "description": "Issues native SHUTDOWN with native SHUTDOWN authority on a dedicated connection after exact server/service-disruption confirmation. Fresh identity/uptime review expires after 60 seconds. Native OK acknowledges the request only; process exit is not inferred from connection loss. No host service control, restart or retry.",
-      "notes": "Native MariaDB12.2.2 network server only. Original sessions retain their own transaction ownership. Independent process lifecycle qualification is separate from command acknowledgement."
+      "notes": "Native MariaDB12.2.2 network server only. Original sessions retain their own transaction ownership. Independent process lifecycle qualification is separate from command acknowledgement.",
+      "form_reference": "SR-F-030394"
     },
     {
       "operation_id": "inspect_prepared_xa",
@@ -2335,7 +2396,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2345,7 +2406,9 @@
           "required": true
         }
       ],
-      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence.",
+      "form_reference": "SR-F-030395",
+      "produces_log": true
     },
     {
       "operation_id": "commit_prepared_xa",
@@ -2355,7 +2418,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2390,7 +2453,8 @@
           "required": true
         }
       ],
-      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence.",
+      "form_reference": "SR-F-030396"
     },
     {
       "operation_id": "rollback_prepared_xa",
@@ -2400,7 +2464,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2435,7 +2499,8 @@
           "required": true
         }
       ],
-      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence."
+      "description": "Native RAW prepared-XID discovery and explicitly authorized resolution on an independent connection. Exact bytes, native server_uid/principal binding, no global-decision inference or automatic replay. XID reuse has no native generation fence.",
+      "form_reference": "SR-F-030397"
     },
     {
       "operation_id": "inspect_key_cache",
@@ -2445,7 +2510,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2462,7 +2527,9 @@
           "required": true
         }
       ],
-      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned.",
+      "form_reference": "SR-F-030398",
+      "produces_log": true
     },
     {
       "operation_id": "configure_key_cache",
@@ -2472,7 +2539,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2546,7 +2613,8 @@
           "required": true
         }
       ],
-      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned.",
+      "form_reference": "SR-F-030399"
     },
     {
       "operation_id": "release_key_cache",
@@ -2556,7 +2624,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2573,7 +2641,8 @@
           "required": true
         }
       ],
-      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned.",
+      "form_reference": "SR-F-030400"
     },
     {
       "operation_id": "assign_index_cache",
@@ -2583,7 +2652,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2653,7 +2722,8 @@
           "required": true
         }
       ],
-      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned.",
+      "form_reference": "SR-F-030401"
     },
     {
       "operation_id": "preload_index_cache",
@@ -2663,7 +2733,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2732,7 +2802,8 @@
           "required": true
         }
       ],
-      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned."
+      "description": "Native six-variable named/segmented MyISAM cache management. One native CACHE INDEX or LOAD INDEX INTO CACHE statement handles selected tables/partitions. Native warnings and handler rows are distinct from acknowledgement; no assignment/content/persistence or table-generation guarantees are invented. Original user transactions remain caller-owned.",
+      "form_reference": "SR-F-030402"
     },
     {
       "operation_id": "inspect_key_caches",
@@ -2742,7 +2813,7 @@
         "category": "diagnostics"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2752,7 +2823,9 @@
           "required": true
         }
       ],
-      "description": "Native KEY_CACHES inspection enumerates configured cache names, segments and runtime counters. Configuration/occupancy/counters are observations, not cache-content or data-durability proof."
+      "description": "Native KEY_CACHES inspection enumerates configured cache names, segments and runtime counters. Configuration/occupancy/counters are observations, not cache-content or data-durability proof.",
+      "form_reference": "SR-F-030403",
+      "produces_log": true
     },
     {
       "operation_id": "start_all_replicas",
@@ -2762,7 +2835,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2792,7 +2865,8 @@
           "required": true
         }
       ],
-      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay.",
+      "form_reference": "SR-F-030404"
     },
     {
       "operation_id": "stop_all_replicas",
@@ -2802,7 +2876,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2832,7 +2906,8 @@
           "required": true
         }
       ],
-      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay.",
+      "form_reference": "SR-F-030405"
     },
     {
       "operation_id": "reset_binary_logs",
@@ -2842,7 +2917,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2864,7 +2939,8 @@
           "required": true
         }
       ],
-      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay.",
+      "form_reference": "SR-F-030406"
     },
     {
       "operation_id": "reset_query_cache",
@@ -2874,7 +2950,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2884,7 +2960,8 @@
           "required": true
         }
       ],
-      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay.",
+      "form_reference": "SR-F-030407"
     },
     {
       "operation_id": "reset_default_replica",
@@ -2894,7 +2971,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -2916,7 +2993,8 @@
           "required": true
         }
       ],
-      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay."
+      "description": "One native command on an owned connection. Review topology and irreversible reset consequences. Acknowledgement does not attest replication health or restore purged history. No automatic replay.",
+      "form_reference": "SR-F-030408"
     },
     {
       "operation_id": "create",
@@ -2926,7 +3004,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "none",
       "fields": [
         {
@@ -3073,7 +3151,8 @@
           ]
         }
       ],
-      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection.",
+      "form_reference": "SR-F-030409"
     },
     {
       "operation_id": "alter",
@@ -3083,7 +3162,7 @@
         "category": "maintenance"
       },
       "tier": 2,
-      "status": "draft",
+      "status": "complete",
       "confirmation": "typed_name",
       "fields": [
         {
@@ -3235,7 +3314,8 @@
           "control": "text"
         }
       ],
-      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection."
+      "description": "Exact decimal text preserves unsigned 64-bit bounds. Omitted options preserve native defaults/current values; NO MINVALUE and NO MAXVALUE reset native bounds. Restart needs exact name confirmation. Native DDL commits independently; no sequence value is consumed for inspection.",
+      "form_reference": "SR-F-030410"
     },
     {
       "operation_id": "run_aria_chk",
@@ -3545,7 +3625,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030411"
     },
     {
       "operation_id": "run_aria_pack",
@@ -3825,7 +3906,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030412"
     },
     {
       "operation_id": "run_myisamchk",
@@ -4143,7 +4225,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030413"
     },
     {
       "operation_id": "run_myisampack",
@@ -4447,7 +4530,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030414"
     },
     {
       "operation_id": "run_innochecksum",
@@ -4812,7 +4896,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030415"
     },
     {
       "operation_id": "run_mariadb_slap",
@@ -5194,7 +5279,8 @@
           "group": "Confirmation",
           "help": "Type the selected server display name."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030416"
     },
     {
       "resource_kind": "server",
@@ -5333,7 +5419,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030417"
     },
     {
       "resource_kind": "table",
@@ -5407,7 +5494,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030418"
     },
     {
       "operation_id": "physical_backup",
@@ -5486,7 +5574,8 @@
           "max": 604800
         }
       ],
-      "description": "Runs mariadb-backup with a private 0600 credential file, verifies LSN/GTID checkpoints and file digests, and records separate dispatch, acknowledgement and artifact-adoption states."
+      "description": "Runs mariadb-backup with a private 0600 credential file, verifies LSN/GTID checkpoints and file digests, and records separate dispatch, acknowledgement and artifact-adoption states.",
+      "form_reference": "SR-F-030419"
     },
     {
       "operation_id": "prepare_physical_chain",
@@ -5531,7 +5620,8 @@
           "max": 17179869184
         }
       ],
-      "description": "Validates contiguous LSN and server_uid lineage, stages a private working copy leaving original full and incremental artifacts immutable, runs mariadb-backup --prepare, and verifies LSN advancement."
+      "description": "Validates contiguous LSN and server_uid lineage, stages a private working copy leaving original full and incremental artifacts immutable, runs mariadb-backup --prepare, and verifies LSN advancement.",
+      "form_reference": "SR-F-030420"
     },
     {
       "operation_id": "recover_physical_instance",
@@ -5603,7 +5693,8 @@
           "required": true
         }
       ],
-      "description": "Restores into an isolated data directory, starts an isolated recovery daemon with --skip-slave-start, optionally replays binary logs to a target GTID or position, verifies schemas/rows/grants independently, and supports one-use cutover with rollback metadata."
+      "description": "Restores into an isolated data directory, starts an isolated recovery daemon with --skip-slave-start, optionally replays binary logs to a target GTID or position, verifies schemas/rows/grants independently, and supports one-use cutover with rollback metadata.",
+      "form_reference": "SR-F-030421"
     },
     {
       "operation_id": "evaluate_archive_retention",
@@ -5636,7 +5727,8 @@
           "max": 10000
         }
       ],
-      "description": "Evaluates binary-log archives against age, minimum count, unretired physical backup chains, active recovery holds, and uncertain process/target holds before permitting restart-safe removal."
+      "description": "Evaluates binary-log archives against age, minimum count, unretired physical backup chains, active recovery holds, and uncertain process/target holds before permitting restart-safe removal.",
+      "form_reference": "SR-F-030422"
     },
     {
       "operation_id": "manage_host_service",
@@ -5722,7 +5814,8 @@
           "default": false
         }
       ],
-      "description": "Validates option files via mariadbd --help --verbose without starting the server, deploys atomically with a 0600 backup, initializes empty data directories, and manages daemon lifecycle with independent SQL readiness checks."
+      "description": "Validates option files via mariadbd --help --verbose without starting the server, deploys atomically with a 0600 backup, initializes empty data directories, and manages daemon lifecycle with independent SQL readiness checks.",
+      "form_reference": "SR-F-030423"
     },
     {
       "operation_id": "upgrade_server_instance",
@@ -5783,7 +5876,8 @@
           "required": true
         }
       ],
-      "description": "Enforces backup and version prerequisites, performs a clean innodb_fast_shutdown=0 stop, switches to the target server binary, executes system-table upgrade, verifies upgrade metadata and readiness, and supports rollback on interruption."
+      "description": "Enforces backup and version prerequisites, performs a clean innodb_fast_shutdown=0 stop, switches to the target server binary, executes system-table upgrade, verifies upgrade metadata and readiness, and supports rollback on interruption.",
+      "form_reference": "SR-F-030424"
     },
     {
       "operation_id": "manage_galera_cluster",
@@ -5869,7 +5963,8 @@
           }
         }
       ],
-      "description": "Verifies external wsrep_provider (libgalera_smm.so) availability without substituting asynchronous replication, enforces grastate.dat safe_to_bootstrap checks, and manages Galera bootstrap, SST/IST join/rejoin, desync, and quorum recovery."
+      "description": "Verifies external wsrep_provider (libgalera_smm.so) availability without substituting asynchronous replication, enforces grastate.dat safe_to_bootstrap checks, and manages Galera bootstrap, SST/IST join/rejoin, desync, and quorum recovery.",
+      "form_reference": "SR-F-030425"
     },
     {
       "resource_kind": "table",
@@ -5889,7 +5984,8 @@
           "required": true
         }
       ],
-      "description": "Executes DROP TEMPORARY TABLE on the bound retained session so a same-name committed base table is never dropped."
+      "description": "Executes DROP TEMPORARY TABLE on the bound retained session so a same-name committed base table is never dropped.",
+      "form_reference": "SR-F-030426"
     },
     {
       "resource_kind": "table",
@@ -5949,7 +6045,8 @@
           "required": true
         }
       ],
-      "description": "Adds SQL:2011 system versioning (WITH SYSTEM VERSIONING) to an existing unversioned table."
+      "description": "Adds SQL:2011 system versioning (WITH SYSTEM VERSIONING) to an existing unversioned table.",
+      "form_reference": "SR-F-030427"
     },
     {
       "resource_kind": "table",
@@ -6002,7 +6099,8 @@
           "required": true
         }
       ],
-      "description": "Irreversibly removes system versioning and destroys historical row versions on the target table."
+      "description": "Irreversibly removes system versioning and destroys historical row versions on the target table.",
+      "form_reference": "SR-F-030428"
     },
     {
       "resource_kind": "table",
@@ -6070,7 +6168,8 @@
           "required": true
         }
       ],
-      "description": "Executes ALTER TABLE ... DELETE HISTORY [BEFORE SYSTEM_TIME ...] after revalidating server and table identity."
+      "description": "Executes ALTER TABLE ... DELETE HISTORY [BEFORE SYSTEM_TIME ...] after revalidating server and table identity.",
+      "form_reference": "SR-F-030429"
     },
     {
       "resource_kind": "table",
@@ -6199,7 +6298,8 @@
           "required": true
         }
       ],
-      "description": "Configures or adds history partitions for a system-versioned table."
+      "description": "Configures or adds history partitions for a system-versioned table.",
+      "form_reference": "SR-F-030430"
     },
     {
       "resource_kind": "table",
@@ -6237,7 +6337,8 @@
           "required": true
         }
       ],
-      "description": "Adds an application-time PERIOD FOR definition on two existing date/datetime/timestamp columns."
+      "description": "Adds an application-time PERIOD FOR definition on two existing date/datetime/timestamp columns.",
+      "form_reference": "SR-F-030431"
     },
     {
       "resource_kind": "table",
@@ -6269,7 +6370,8 @@
           "required": true
         }
       ],
-      "description": "Drops an application-time PERIOD FOR definition from the target table."
+      "description": "Drops an application-time PERIOD FOR definition from the target table.",
+      "form_reference": "SR-F-030432"
     },
     {
       "resource_kind": "index",
@@ -6295,7 +6397,8 @@
           "required": true
         }
       ],
-      "description": "Renames a non-PRIMARY index in place via ALTER TABLE ... RENAME INDEX."
+      "description": "Renames a non-PRIMARY index in place via ALTER TABLE ... RENAME INDEX.",
+      "form_reference": "SR-F-030433"
     },
     {
       "resource_kind": "index",
@@ -6332,7 +6435,8 @@
           "required": true
         }
       ],
-      "description": "Sets IGNORED or NOT IGNORED optimizer visibility via ALTER TABLE ... ALTER INDEX."
+      "description": "Sets IGNORED or NOT IGNORED optimizer visibility via ALTER TABLE ... ALTER INDEX.",
+      "form_reference": "SR-F-030434"
     },
     {
       "resource_kind": "view",
@@ -6473,7 +6577,8 @@
           "required": true
         }
       ],
-      "description": "Replaces a view in place via CREATE OR REPLACE VIEW and reports dependent views."
+      "description": "Replaces a view in place via CREATE OR REPLACE VIEW and reports dependent views.",
+      "form_reference": "SR-F-030435"
     },
     {
       "resource_kind": "procedure",
@@ -6650,7 +6755,8 @@
           "required": true
         }
       ],
-      "description": "Replaces a stored procedure atomically via CREATE OR REPLACE PROCEDURE and reports existing routine grants."
+      "description": "Replaces a stored procedure atomically via CREATE OR REPLACE PROCEDURE and reports existing routine grants.",
+      "form_reference": "SR-F-030436"
     },
     {
       "resource_kind": "function",
@@ -6812,7 +6918,8 @@
           "required": true
         }
       ],
-      "description": "Replaces a stored function atomically via CREATE OR REPLACE FUNCTION and reports dependent views and routine grants."
+      "description": "Replaces a stored function atomically via CREATE OR REPLACE FUNCTION and reports dependent views and routine grants.",
+      "form_reference": "SR-F-030437"
     },
     {
       "resource_kind": "trigger",
@@ -6959,7 +7066,8 @@
           "required": true
         }
       ],
-      "description": "Replaces a trigger via CREATE OR REPLACE TRIGGER while preserving sibling FOLLOWS/PRECEDES ordering and sql_mode."
+      "description": "Replaces a trigger via CREATE OR REPLACE TRIGGER while preserving sibling FOLLOWS/PRECEDES ordering and sql_mode.",
+      "form_reference": "SR-F-030438"
     },
     {
       "resource_kind": "server",
@@ -7062,7 +7170,9 @@
           "default": false
         }
       ],
-      "description": "Queries information_schema.ALL_PLUGINS on an independent observer connection, distinguishing installed ACTIVE modules from uninstalled-but-available plugin libraries and classifying Community open-source vs test/example modules."
+      "description": "Queries information_schema.ALL_PLUGINS on an independent observer connection, distinguishing installed ACTIVE modules from uninstalled-but-available plugin libraries and classifying Community open-source vs test/example modules.",
+      "form_reference": "SR-F-030439",
+      "produces_log": true
     }
   ]
 }

@@ -376,7 +376,10 @@ export default function DataEditSurface({
   const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
   const isFirebird = Boolean(languageOptions.native_transaction_close_warning);
   const isMySQL = useMemo(() => {
-    const keys = new Set(['mysql', 'mysql-native', 'mysql-sql']);
+    const keys = new Set([
+      'mysql', 'mysql-native', 'mysql-sql',
+      'mariadb', 'mariadb-native', 'mariadb-sql',
+    ]);
     return keys.has(languageProfile) || keys.has(engineId);
   }, [engineId, languageProfile]);
   const conversionPairs = languageOptions.field_conversion_pairs;

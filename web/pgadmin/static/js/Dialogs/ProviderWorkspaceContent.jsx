@@ -94,6 +94,7 @@ import FirebirdResultStream from './FirebirdResultStream';
 import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
 import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
+import {MARIADB_ADMIN_TABS, renderMariaDBAdminWorkspace} from '../cdeadmin_ui/modules/mariadb_admin';
 import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
@@ -107,12 +108,23 @@ import SqlEditorSurface from '../cdeadmin_ui/surfaces/SqlEditorSurface';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
 
+const DATABASE_SCOPED_TOP_LEVEL_ACTIONS = new Set([
+  'mariadb_backup_stages',
+  'mariadb_session_flagsets',
+  'mariadb_session_variables',
+  'mariadb_editor_context',
+]);
+
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'data_surface_action',
   'sql_surface_action',
   'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal','postgresql_large_object_start',
   'postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
   'mariadb_catalog_export', 'mariadb_catalog_compare', 'mariadb_data_capture',
+  'mariadb_native_metadata', 'mariadb_test_data', 'mariadb_recipe_read', 'mariadb_recipe_save',
+  'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts',
+  'mariadb_design_read', 'mariadb_design_save', 'mariadb_relational_review',
+  'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt',
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
   'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
@@ -5614,6 +5626,11 @@ export default function ProviderWorkspaceContent({
           ...(payload.request || {}),
           database_target_id: queryDatabaseTargetId,
         },
+      } : queryDatabaseTargetId &&
+      DATABASE_SCOPED_TOP_LEVEL_ACTIONS.has(payload.action) &&
+      payload.database_target_id === undefined ? {
+        ...payload,
+        database_target_id: queryDatabaseTargetId,
       } : payload;
     const submit = () => api.post(endpointUrl, scopedPayload)
       .then((response) => response.data.data);
@@ -6552,6 +6569,12 @@ export default function ProviderWorkspaceContent({
           'postgresql-large-object-files': gettext('PostgreSQL Large-object Files'),
           'mysql-test-data': gettext('MySQL Test Data'),
           'mariadb-test-data': gettext('MariaDB Test Data'),
+          'mariadb-physical': gettext('MariaDB Physical Backups & Recovery'),
+          'mariadb-archive-retention': gettext('MariaDB Archive Retention & Holds'),
+          'mariadb-host': gettext('MariaDB Host Configuration & Service'),
+          'mariadb-upgrade': gettext('MariaDB Server Upgrade'),
+          'mariadb-galera': gettext('MariaDB Galera Cluster'),
+          'mariadb-utilities': gettext('MariaDB 12.2.2 Host Utilities'),
           'duckdb-test-data': gettext('DuckDB Test Data'),
           'duckdb-copy': gettext('DuckDB Native COPY'),
           'duckdb-attachment': gettext('DuckDB Attachment'),
@@ -6641,6 +6664,12 @@ export default function ProviderWorkspaceContent({
         })}
       {workspace && MYSQL_ADMIN_TABS.includes(tab) &&
         renderMySQLAdminWorkspace({
+          tab,
+          endpointUrl,
+          databaseTargetId: queryDatabaseTargetId,
+        })}
+      {workspace && MARIADB_ADMIN_TABS.includes(tab) &&
+        renderMariaDBAdminWorkspace({
           tab,
           endpointUrl,
           databaseTargetId: queryDatabaseTargetId,
@@ -7077,7 +7106,7 @@ export default function ProviderWorkspaceContent({
           <SQLiteCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
             resourceId={initialContext.resource_id} />)}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mariadb-native' &&
-        (!initialContext.server_catalog && queryDatabaseTargetId ? <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} /> :
+        (!initialContext.server_catalog && queryDatabaseTargetId ? <MariaDBCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} focusImport={Boolean(initialContext.focus_import)} /> :
           <MySQLServerCatalog engine="mariadb" post={post} />)}
       {workspace && tab === 'export' && workspace.endpoint?.profile_id === 'mysql-native' &&
         (!initialContext.server_catalog && queryDatabaseTargetId ? <MySQLCatalog key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} focusImport={Boolean(initialContext.focus_import)} /> :
@@ -7200,6 +7229,7 @@ ProviderWorkspaceContent.propTypes = {
     'firebird-recovery',
     ...FIREBIRD_ADMIN_TABS,
     ...MYSQL_ADMIN_TABS,
+    ...MARIADB_ADMIN_TABS,
   ]),
   initialContext: PropTypes.object,
   onOpenSearchResult: PropTypes.func,

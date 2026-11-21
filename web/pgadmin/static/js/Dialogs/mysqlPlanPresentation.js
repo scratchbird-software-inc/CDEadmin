@@ -63,7 +63,7 @@ function jsonGraph(root) {
         }
       } else {
         node.facts.push({name: key, value: literal(item)});
-        if (key.startsWith('actual_')) node.actual = true;
+        if (key.startsWith('actual_') || key.startsWith('r_')) node.actual = true;
       }
     }
     for (const [entry, childName, childPath] of children) add(entry, childName, node.id, childPath, depth + 1);
@@ -112,7 +112,7 @@ export function mysqlPlanText(rendered) {
   const rows = view?.rows || view?.records;
   const columns = view?.columns || view?.schema?.columns;
   if (!Array.isArray(rows) || rows.length !== 1 || !Array.isArray(columns) || columns.length !== 1 ||
-      String(columns[0].native_name || columns[0].name).toUpperCase() !== 'EXPLAIN') return null;
+      !['EXPLAIN', 'ANALYZE'].includes(String(columns[0].native_name || columns[0].name).toUpperCase())) return null;
   const row = rows[0];
   const value = Array.isArray(row) ? row[0] : object(row) ? row[columns[0].key || columns[0].name] : null;
   return typeof value === 'string' ? value : null;

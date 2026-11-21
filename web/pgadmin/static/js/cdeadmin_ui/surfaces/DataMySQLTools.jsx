@@ -330,7 +330,8 @@ export function DataMySQLRowSqlDialog({
           const rowParams = [];
           const colList = writeCols.map((c) => backtickIdent(c.name)).join(', ');
           const valList = writeCols.map((c) => bindVal(row[c.name], rowParams)).join(', ');
-          let sql = `INSERT INTO ${tbl} (${colList}) VALUES (${valList})`;
+          const verb = operation === 'replace' ? 'REPLACE INTO' : 'INSERT INTO';
+          let sql = `${verb} ${tbl} (${colList}) VALUES (${valList})`;
           if (operation === 'upsert') {
             const updCols = writeCols.filter((c) => !keyColumns.includes(c.name));
             const targets = updCols.length ? updCols : writeCols;
@@ -384,6 +385,7 @@ export function DataMySQLRowSqlDialog({
             size="small"
             options={[
               {value: 'insert', label: 'INSERT INTO'},
+              {value: 'replace', label: 'REPLACE INTO'},
               {value: 'upsert', label: 'INSERT ... ON DUPLICATE KEY UPDATE'},
               {value: 'update', label: 'UPDATE ... WHERE (<=>)'},
               {value: 'in', label: 'SELECT ... WHERE col IN (...)'},
