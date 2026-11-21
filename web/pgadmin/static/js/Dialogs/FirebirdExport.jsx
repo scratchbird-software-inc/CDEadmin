@@ -9,7 +9,13 @@ import FirebirdSchemaPlan from './FirebirdSchemaPlan';
 import FirebirdERD from './FirebirdERD';
 import FirebirdDataImport from './FirebirdDataImport';
 
-export default function FirebirdExport({post, generation, selectedResource, resources = [], onCatalogRefresh, onOpenAllocation, databaseTargetId, onLoadMore, hasMore=false, loadingMore=false}) {
+export default function FirebirdExport({post, generation, selectedResource, resources = [], onCatalogRefresh, onOpenAllocation, databaseTargetId, onLoadMore, hasMore=false, loadingMore=false, focusImport=false}) {
+  const importSectionRef = useRef(null);
+  useEffect(() => {
+    if (focusImport && importSectionRef.current?.scrollIntoView) {
+      importSectionRef.current.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+  }, [focusImport]);
   const [scope, setScope] = useState('database');
   const [branchFilter, setBranchFilter] = useState('');
   const [includeSystem, setIncludeSystem] = useState(false);
@@ -122,7 +128,9 @@ export default function FirebirdExport({post, generation, selectedResource, reso
     </Box>
     <FirebirdSchemaPlan designRequest={designRequest} databaseTargetId={databaseTargetId} baseline={source} post={post} generation={generation}
       onCatalogRefresh={onCatalogRefresh} disabled={busy} />
-    <FirebirdDataImport onOpenAllocation={onOpenAllocation} post={post} generation={generation} databaseTargetId={databaseTargetId} onCatalogRefresh={onCatalogRefresh} disabled={busy} />
+    <Box ref={importSectionRef} data-focus-import={focusImport ? 'true' : undefined}>
+      <FirebirdDataImport onOpenAllocation={onOpenAllocation} post={post} generation={generation} databaseTargetId={databaseTargetId} onCatalogRefresh={onCatalogRefresh} disabled={busy} />
+    </Box>
     {error && <Alert severity="error">{error}</Alert>}
     {dataResult && <>
       <Alert severity="info">{gettext('Lossless native data archive captured in a separate read-only snapshot. The snapshot has been released. Computed and identity metadata remain explicit; this document is not an executable SQL script.')}</Alert>
@@ -187,5 +195,5 @@ export default function FirebirdExport({post, generation, selectedResource, reso
       }} />}
   </Box>;
 }
-FirebirdExport.propTypes = {onLoadMore: PropTypes.func, hasMore: PropTypes.bool, loadingMore: PropTypes.bool, onOpenAllocation: PropTypes.func, databaseTargetId: PropTypes.string,post: PropTypes.func.isRequired, generation: PropTypes.string,
+FirebirdExport.propTypes = {onLoadMore: PropTypes.func, hasMore: PropTypes.bool, loadingMore: PropTypes.bool, focusImport: PropTypes.bool, onOpenAllocation: PropTypes.func, databaseTargetId: PropTypes.string,post: PropTypes.func.isRequired, generation: PropTypes.string,
   selectedResource: PropTypes.object, resources: PropTypes.array, onCatalogRefresh: PropTypes.func};

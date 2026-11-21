@@ -50,6 +50,7 @@ import FirebirdDocker from './FirebirdDocker';
 import FirebirdDashboardEditor from './FirebirdDashboardEditor';
 import endpointProfiles from 'pgadmin.cdeadmin.endpoint_profiles';
 import FirebirdRegistration from './FirebirdRegistration';
+import {renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {invalidateProviderEndpointProfile} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 
@@ -372,7 +373,8 @@ export function showProviderWorkspace(
     <MySQLBinlogReplay engine={initialTab==='mariadb-binlog-replay' ? 'mariadb' : 'mysql'} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : ['mysql-binlogs','mariadb-binlogs','mysql-raw-binlogs'].includes(initialTab) ?
       <MySQLBinlogArchives raw={initialTab==='mysql-raw-binlogs'} engine={initialTab==='mariadb-binlogs' ? 'mariadb' : 'mysql'} endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'mysql-clone' ?
         <MySQLClone post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : initialTab === 'postgresql-continuity' ?
-          <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> : null;
+          <PostgresqlContinuity endpointUrl={endpointUrl} post={payload => getApiInstance().post(endpointUrl,payload).then(response => response.data.data)} /> :
+          renderFirebirdAdminWorkspace({tab: initialTab, endpointUrl, databaseTargetId, initialContext});
   const isDedicatedBrowseData = Boolean(
     initialTab === 'studio' &&
     initialContext.browse_data &&

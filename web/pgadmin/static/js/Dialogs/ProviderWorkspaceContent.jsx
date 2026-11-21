@@ -92,6 +92,7 @@ import FirebirdScript from './FirebirdScript';
 import FirebirdQueryPlan from './FirebirdQueryPlan';
 import FirebirdResultStream from './FirebirdResultStream';
 import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
+import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
@@ -116,6 +117,12 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'firebird_design_read', 'firebird_design_save',
   'firebird_relational_review',
+  'firebird_recipe_read', 'firebird_recipe_save',
+  'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
+  'firebird_schema_review', 'firebird_schema_apply', 'firebird_schema_receipt',
+  'firebird_trace', 'firebird_lock_print', 'firebird_events',
+  'firebird_object_templates', 'firebird_isql_context',
+  'firebird_eds_pool', 'firebird_eds_pool_receipts',
   'resource_page', 'resource_refresh', 'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt', 'postgresql_test_data', 'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_schema_plan', 'resource_inspect',
   'visual_admin_validate', 'visual_admin_plan', 'visual_admin_apply',
   'visual_admin_bulk_plan', 'visual_admin_bulk_apply',
@@ -6575,8 +6582,8 @@ export default function ProviderWorkspaceContent({
         {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <Button onClick={() => setTab('firebird-templates')}>Object code templates</Button>}
       </Box>}
-      {workspace && selectedResource && tab === 'firebird-templates' && <FirebirdTemplates post={post}
-        resource={selectedResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}
+      {workspace && (selectedResource || dedicatedSqlTargetResource) && tab === 'firebird-templates' && <FirebirdTemplates post={post}
+        resource={selectedResource || dedicatedSqlTargetResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}
         disabled={busy || !!occurrenceId || scriptLocked}
         onLoad={({source: renderedSource, parameters}) => {
           if (busy || occurrenceId || scriptLocked) return;
@@ -6584,6 +6591,7 @@ export default function ProviderWorkspaceContent({
         }} />}
       {workspace && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) && tab === 'firebird-test-data' && <FirebirdTestData
         key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId}
+        endpointId={String(workspace.endpoint?.endpoint_id || '')}
         languageProfile={languageProfile} resources={resourcePage?.items || []} />}
       {workspace && queryDatabaseTargetId && workspace.database_tool_tabs?.includes('postgresql-test-data') && tab === 'postgresql-test-data' && <PostgresqlTestData key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
       {workspace && queryDatabaseTargetId && workspace.database_tool_tabs?.includes('postgresql-large-object-files') && tab === 'postgresql-large-object-files' && <PostgresqlLargeObjectFiles key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} endpointUrl={endpointUrl} />}
@@ -6619,6 +6627,13 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'firebird-recovery' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdRecoveryGroup post={post} />}
+      {workspace && FIREBIRD_ADMIN_TABS.includes(tab) &&
+        renderFirebirdAdminWorkspace({
+          tab,
+          endpointUrl,
+          databaseTargetId: queryDatabaseTargetId,
+          initialContext,
+        })}
       {/* Owner direction 2026-11-05: the connection details open from the
           toolbar's info button instead of a banner above the editor. */}
       {workspace && tab === 'studio' && <InfoDialog open={connectionInfoOpen}
@@ -6660,6 +6675,7 @@ export default function ProviderWorkspaceContent({
           }
           initialSql={initialContext.initial_sql || (source && source !== defaultSource(activeLanguage) ? source : '')}
           initialQuickQueryId={initialContext.quick_query_id || ''}
+          initialSessionToolsTab={initialContext.session_tools_tab || ''}
           post={post}
         />
       )}
@@ -7058,6 +7074,7 @@ export default function ProviderWorkspaceContent({
       {workspace && tab === 'export' &&
         ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
         <FirebirdExport onLoadMore={loadMoreResources} hasMore={Boolean(resourcePage?.next_cursor)} loadingMore={loadingMore}
+          focusImport={Boolean(initialContext.focus_import)}
           databaseTargetId={queryDatabaseTargetId} key={queryDatabaseTargetId || 'active'} post={post} generation={resourcePage?.generation}
           selectedResource={selectedResource} resources={resourcePage?.items || []} onCatalogRefresh={reloadResources}
           onOpenAllocation={async (target) => {
@@ -7126,9 +7143,9 @@ export default function ProviderWorkspaceContent({
             databaseTargetId={queryDatabaseTargetId}
             targetResource={dedicatedTargetResource}
             post={post}
-            onOpenInSqlEditor={({source: generatedSource, parameters}) => {
+            onOpenInSqlEditor={({source: generatedSource, initial_sql, parameters}) => {
               if (busy || occurrenceId || scriptLocked) return;
-              setSource(generatedSource || '');
+              setSource(generatedSource || initial_sql || '');
               setParameterSource(JSON.stringify(parameters || {}));
               setTab('studio');
             }}
@@ -7170,6 +7187,7 @@ ProviderWorkspaceContent.propTypes = {
     'semantic', 'movement', 'streams', 'connections', 'export',
     'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment', 'duckdb-extensions',
     'firebird-recovery',
+    ...FIREBIRD_ADMIN_TABS,
   ]),
   initialContext: PropTypes.object,
   onOpenSearchResult: PropTypes.func,

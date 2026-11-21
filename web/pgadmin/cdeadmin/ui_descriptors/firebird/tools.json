@@ -748,6 +748,137 @@
         "workspace_action": "firebird_replication",
         "describe_action": "describe"
       }
+    },
+    {
+      "command_id": "endpoint.firebird.metadata_search",
+      "scope": "endpoint",
+      "label": "Search registered database metadata...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.view",
+      "group": "database",
+      "mutation": "read",
+      "arguments": {
+        "tab": "metadata-search"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.firebird.metadata_search",
+      "scope": "database",
+      "label": "Search Firebird metadata...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.view",
+      "group": "database",
+      "mutation": "read",
+      "arguments": {
+        "tab": "metadata-search"
+      }
+    },
+    {
+      "command_id": "database.firebird.events",
+      "scope": "database",
+      "label": "Native event monitor (POST_EVENT)...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.view",
+      "group": "availability",
+      "mutation": "read",
+      "arguments": {
+        "tab": "firebird-events"
+      }
+    },
+    {
+      "command_id": "endpoint.firebird.recovery",
+      "scope": "endpoint",
+      "label": "Prepared 2PC transaction recovery...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.restore",
+      "group": "maintenance",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-recovery"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Endpoint management permission is required."
+      }
+    },
+    {
+      "command_id": "database.firebird.recovery",
+      "scope": "database",
+      "label": "Prepared 2PC transaction recovery...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.restore",
+      "group": "maintenance",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "firebird-recovery"
+      }
+    },
+    {
+      "command_id": "database.firebird.data_import",
+      "scope": "database",
+      "label": "Import Firebird data archive...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.import",
+      "group": "database",
+      "mutation": "write",
+      "arguments": {
+        "tab": "export",
+        "focus_import": true
+      }
+    },
+    {
+      "command_id": "database.firebird.eds_pool",
+      "scope": "database",
+      "label": "External connection pool (EDS) & receipts...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "maintenance",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "studio",
+        "session_tools_tab": "eds_pool"
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.object_templates",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "Object SQL/PSQL code templates...",
+      "description": "Generate native Firebird SELECT, DML, trigger, or PSQL scaffolds for this object.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "generate_sql",
+      "priority": 65,
+      "arguments": {
+        "tab": "firebird-templates"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "view",
+          "procedure",
+          "function",
+          "package",
+          "trigger",
+          "sequence",
+          "domain",
+          "exception"
+        ],
+        "requires_database_target": true
+      }
     }
   ]
 }

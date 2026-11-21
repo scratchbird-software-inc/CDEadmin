@@ -28,6 +28,8 @@ import {ScratchDiffTable} from '../data/beautiful';
 import FieldControl from './FieldControl';
 import {activeFields, fieldVisible, toOperationDraft} from './descriptors';
 import {planSqlText} from './ObjectEditor';
+import FirebirdServiceObservation from '../../Dialogs/FirebirdServiceObservation';
+import FirebirdLimboObservation from '../../Dialogs/FirebirdLimboObservation';
 
 function initialValues(fields) {
   const values = {};
@@ -200,12 +202,33 @@ export default function OperationDialog({open, operation, targetName, context={}
           value={sql || gettext('-- Native operation; the provider reported no SQL text.')} />
       </Box>}
       {applyState.status === 'error' && <ValidationMessage status="error">{applyState.error}</ValidationMessage>}
-      {applyState.status === 'done' && <Box data-cdeadmin-qa-key="operation-dialog.receipt">
-        <ValidationMessage status="success">{gettext('Completed.')}</ValidationMessage>
-        {receipt && (operation.produces_log || typeof receipt === 'string') &&
-          <CodeEditor label={gettext('Operation output')} readonly language="text"
-            value={typeof receipt === 'string' ? receipt : JSON.stringify(receipt, null, 2)} />}
-      </Box>}
+      {applyState.status === 'done' && (() => {
+        const observation = receipt?.driver_observation ??
+          (typeof receipt?.schema === 'string' && receipt.schema.startsWith('cdeadmin.firebird-') ? receipt : null);
+        const followUpFailures = (applyState.result?.workspace_follow_up || []).filter(
+          (item) => item?.state === 'failed' && typeof item.message === 'string'
+        );
+        return <Box data-cdeadmin-qa-key="operation-dialog.receipt">
+          <ValidationMessage status="success">{gettext('Completed.')}</ValidationMessage>
+          {observation?.service_release?.service_handle_released === false && (
+            <Banner status="warning">
+              {gettext('Firebird service handle release is unconfirmed. Do not replay the operation. Review its returned outcome separately from cleanup, then explicitly close the provider connection to retry handle release.')}
+            </Banner>
+          )}
+          {followUpFailures.map((item, idx) => (
+            <Banner key={`${item.action || 'followup'}-${idx}`} status="warning">{item.message}</Banner>
+          ))}
+          {observation?.schema === 'cdeadmin.firebird-limbo-result.v1' ? (
+            <FirebirdLimboObservation observation={observation} />
+          ) : observation?.schema === 'cdeadmin.firebird-service-result.v1' ? (
+            <FirebirdServiceObservation title={opTitle} observation={observation} />
+          ) : (
+            receipt && (operation.produces_log || typeof receipt === 'string') &&
+            <CodeEditor label={gettext('Operation output')} readonly language="text"
+              value={typeof receipt === 'string' ? receipt : JSON.stringify(receipt, null, 2)} />
+          )}
+        </Box>;
+      })()}
     </Stack>
   </Dialog>;
 }

@@ -6585,6 +6585,98 @@
     "command-line-workspace": {
       "reference": "SR-F-030089",
       "title": "Interactive multi-engine command line and ISQL/PSQL launcher workspace"
+    },
+    "firebird-trace": {
+      "reference": "SR-F-030090",
+      "title": "Firebird native service, session and audit trace workspace"
+    },
+    "firebird-lock-print": {
+      "reference": "SR-F-030091",
+      "title": "Firebird native fb_lock_print diagnostics workspace"
+    },
+    "firebird-host-configuration": {
+      "reference": "SR-F-030092",
+      "title": "Firebird host configuration files workspace"
+    },
+    "firebird-plugin-deployment": {
+      "reference": "SR-F-030093",
+      "title": "Firebird plugin and UDR module deployment workspace"
+    },
+    "firebird-runtime-lifecycle": {
+      "reference": "SR-F-030094",
+      "title": "Firebird runtime lifecycle and cross-ODS migration workspace"
+    },
+    "firebird-database-encryption": {
+      "reference": "SR-F-030095",
+      "title": "Firebird database-at-rest encryption status and lifecycle workspace"
+    },
+    "firebird-replication": {
+      "reference": "SR-F-030096",
+      "title": "Firebird journal replication workflow workspace"
+    },
+    "operation:firebird:database:commit_limbo_local": {
+      "reference": "SR-F-030097",
+      "title": "Firebird database commit limbo local"
+    },
+    "operation:firebird:database:inspect_limbo": {
+      "reference": "SR-F-030098",
+      "title": "Firebird database inspect limbo"
+    },
+    "operation:firebird:database:rollback_limbo_local": {
+      "reference": "SR-F-030099",
+      "title": "Firebird database rollback limbo local"
+    },
+    "operation:firebird:database:add_difference_file": {
+      "reference": "SR-F-030100",
+      "title": "Firebird database add difference file"
+    },
+    "operation:firebird:database:add_files": {
+      "reference": "SR-F-030101",
+      "title": "Firebird database add files"
+    },
+    "operation:firebird:database:begin_backup": {
+      "reference": "SR-F-030102",
+      "title": "Firebird database begin backup"
+    },
+    "operation:firebird:database:drop_difference_file": {
+      "reference": "SR-F-030103",
+      "title": "Firebird database drop difference file"
+    },
+    "operation:firebird:database:end_backup": {
+      "reference": "SR-F-030104",
+      "title": "Firebird database end backup"
+    },
+    "operation:firebird:table:reorder_columns": {
+      "reference": "SR-F-030105",
+      "title": "Firebird table reorder columns"
+    },
+    "operation:firebird:sequence:set_current": {
+      "reference": "SR-F-030106",
+      "title": "Firebird sequence set current"
+    },
+    "operation:firebird:package:create_body": {
+      "reference": "SR-F-030107",
+      "title": "Firebird package create body"
+    },
+    "operation:firebird:package:drop_body": {
+      "reference": "SR-F-030108",
+      "title": "Firebird package drop body"
+    },
+    "operation:firebird:package:replace_body": {
+      "reference": "SR-F-030109",
+      "title": "Firebird package replace body"
+    },
+    "operation:firebird:role:configure_admin_mapping": {
+      "reference": "SR-F-030110",
+      "title": "Firebird role configure admin mapping"
+    },
+    "operation:firebird:database:encrypt_database": {
+      "reference": "SR-F-030111",
+      "title": "Firebird database encrypt database"
+    },
+    "operation:firebird:database:decrypt_database": {
+      "reference": "SR-F-030112",
+      "title": "Firebird database decrypt database"
     }
   }
 }

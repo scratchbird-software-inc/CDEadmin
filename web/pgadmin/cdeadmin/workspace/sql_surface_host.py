@@ -3414,6 +3414,9 @@ class SqlEditorSurfaceState:
     })
     lock: threading.RLock = field(default_factory=threading.RLock)
     execution: SqlSurfaceExecution | None = None
+    last_profiling: dict[str, Any] | None = None
+    last_query_statistics: dict[str, Any] | None = None
+    last_fetch_observation: dict[str, Any] | None = None
 
 
 class SqlSurfaceHostService:
@@ -3952,6 +3955,9 @@ class SqlSurfaceHostService:
         single_statement: bool = True,
         client_sql_dialect: int | None = None,
         execution: SqlSurfaceExecution | None = None,
+        profile_mode: bool = False,
+        statistics_mode: bool = False,
+        history_sensitive: bool = False,
     ) -> SqlResultSetBuffer | None:
         t0 = time.perf_counter()
         if execution:
@@ -3976,6 +3982,8 @@ class SqlSurfaceHostService:
         # Check if simple `SELECT * FROM <table>` without params can attach live row identity!
         if (
             not plan_only
+            and not profile_mode
+            and not statistics_mode
             and not ((surface.transaction or {}).get('provider_payload') or {}).get('xa_state')
             and client_sql_dialect in (None, 3)
             and (surface.language_profile != 'postgresql-sql' or single_statement)
@@ -4019,10 +4027,16 @@ class SqlSurfaceHostService:
         }
         if plan_only:
             exec_payload['plan_mode'] = True
+        if history_sensitive:
+            exec_payload['history_sensitive'] = True
         if surface.language_profile == 'firebird-sql':
             if client_sql_dialect is not None:
                 exec_payload['client_sql_dialect'] = client_sql_dialect
             exec_payload['max_rows'] = surface.max_rows
+            if profile_mode and single_statement and not plan_only:
+                exec_payload['profile_mode'] = True
+            if statistics_mode and single_statement and not plan_only:
+                exec_payload['statistics_mode'] = True
 
         if execution:
             execution.check_stop()
@@ -4084,6 +4098,13 @@ class SqlSurfaceHostService:
         occ = poll_resp.get('occurrence') or {}
         res_obj = occ.get('result') or {}
         exts = res_obj.get('extensions') or {}
+        fb_early = (exts.get('firebird') or {}).get('payload') or {}
+        if fb_early.get('profiling') is not None:
+            surface.last_profiling = fb_early.get('profiling')
+        if fb_early.get('query_statistics') is not None:
+            surface.last_query_statistics = fb_early.get('query_statistics')
+        if fb_early.get('fetch_observation') is not None:
+            surface.last_fetch_observation = fb_early.get('fetch_observation')
         rendered = poll_resp.get('rendered_result') or {}
         if stream_columns:
             rendered = {
@@ -4544,6 +4565,9 @@ class SqlSurfaceHostService:
             'fields_grid': active_rs.field_catalog if active_rs else [],
             'timings_ms': surface.timings_ms,
             'plan_text': active_rs.plan_text if active_rs else '',
+            'profiling': surface.last_profiling,
+            'query_statistics': surface.last_query_statistics,
+            'fetch_observation': surface.last_fetch_observation,
             'statement_summaries': getattr(surface, 'last_statement_summaries', []),
             'last_execution_cancelled': bool(getattr(surface, 'last_execution_cancelled', False)),
             'last_execution_had_error': bool(getattr(surface, 'last_execution_had_error', False)),
@@ -5095,6 +5119,12 @@ class SqlSurfaceHostService:
                     surface, user_id, window_offset=window_offset, window_size=window_size
                 )
 
+            if sub_action == 'ensure_session':
+                self._ensure_session(workspace_service, server, surface)
+                return self._serialize_state(
+                    surface, user_id, window_offset=window_offset, window_size=window_size
+                )
+
             if sub_action == 'resolve_visual_object':
                 all_cat = self._ensure_visual_catalog(
                     workspace_service, server, surface, catalog_resources
@@ -5431,6 +5461,12 @@ class SqlSurfaceHostService:
                     ):
                         raise ValueError('Firebird client SQL dialect must be integer 1, 2 or 3.')
 
+                surface.last_profiling = None
+                surface.last_query_statistics = None
+                surface.last_fetch_observation = None
+                req_profile_mode = bool(request.get('profile_mode'))
+                req_stats_mode = bool(request.get('statistics_mode'))
+                req_hist_sensitive = bool(request.get('history_sensitive'))
                 new_results: list[SqlResultSetBuffer] = []
                 stmt_summaries: list[dict[str, Any]] = []
                 had_error = False
@@ -5477,6 +5513,9 @@ class SqlSurfaceHostService:
                                 single_statement=len(segments) == 1,
                                 client_sql_dialect=client_sql_dialect,
                                 execution=execution,
+                                profile_mode=req_profile_mode,
+                                statistics_mode=req_stats_mode,
+                                history_sensitive=req_hist_sensitive,
                             )
                             dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
                             if rs is not None:

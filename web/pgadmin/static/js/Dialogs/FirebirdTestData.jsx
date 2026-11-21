@@ -13,7 +13,7 @@ const save = (value, filename) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-export default function FirebirdTestData({resources, post, databaseTargetId, languageProfile}) {
+export default function FirebirdTestData({resources, post, databaseTargetId, languageProfile, endpointId=''}) {
   const tables = resources.filter(generatorTable);
   const [selected, setSelected] = useState([]), [catalogs, setCatalogs] = useState(null);
   const [source, setSource] = useState(''), [preview, setPreview] = useState(null);
@@ -22,11 +22,13 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
   const [receipt, setReceipt] = useState(null), [confirmed, setConfirmed] = useState(false);
   const [progress, setProgress] = useState(0), [transaction, setTransaction] = useState(null);
   const [fileTable, setFileTable] = useState(''), [fileColumn, setFileColumn] = useState('');
+  const [recipeId, setRecipeId] = useState('default'), [recipeVersion, setRecipeVersion] = useState(0), [recipeRevision, setRecipeRevision] = useState('');
   const scope = useFirebirdDataSession({post, databaseTargetId, languageProfile, purpose: 'firebird-test-data'});
   useEffect(() => {
     setSelected([]); setCatalogs(null); setSource(''); setPreview(null); setBusy(false);
     setError(''); setAttempted(false); setPending(false); setReceipt(null); setConfirmed(false);
     setProgress(0); setTransaction(null); setFileTable(''); setFileColumn('');
+    setRecipeId('default'); setRecipeVersion(0); setRecipeRevision('');
   }, [scope]);
   const change = value => {scope.fileRevision++; setSource(value); setPreview(null); setConfirmed(false);};
   const load = async () => {
@@ -53,7 +55,8 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
       cleanupObserved = firebirdTransactionIdle(await post({action: 'transaction_action', session_id: id,
         transaction_action: 'rollback', database_target_id: databaseTargetId}));
       if (!cleanupObserved) throw new Error('Sample transaction cleanup was not confirmed.');
-      if (scope.active) {setCatalogs(next); change(JSON.stringify({format: 'scratchrobin.firebird.test-data@1', seed: 1, tables: entries}, null, 2));}
+      const recipeScope = endpointId ? {endpoint_id: String(endpointId), database_target_id: databaseTargetId} : undefined;
+      if (scope.active) {setCatalogs(next); change(JSON.stringify({format: 'scratchrobin.firebird.test-data@1', ...(recipeScope ? {scope: recipeScope} : {}), seed: 1, tables: entries}, null, 2));}
     } catch (failure) {
       if (scope.active) {
         setError(failure.message || 'Sample loading failed.');
@@ -126,6 +129,38 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
     } catch {if (scope.active) setError('Native transaction outcome was not received. Keep this session open and inspect its state before further work.');}
     finally {if (scope.active) setBusy(false); else await scope.releaseAfterWork().catch(() => {});}
   };
+  const persistServerRecipe = async write => {
+    const revision = ++scope.fileRevision;
+    setBusy(true); setError('');
+    try {
+      let body = null;
+      if (write) {
+        const parsed = parseRecipe(source);
+        const expectedScope = parsed.scope || (endpointId ? {endpoint_id: String(endpointId), database_target_id: databaseTargetId} : {endpoint_id: '', database_target_id: databaseTargetId});
+        body = {format: parsed.format, scope: expectedScope, seed: parsed.seed, tables: parsed.tables};
+      }
+      const response = await post({
+        action: write ? 'firebird_recipe_save' : 'firebird_recipe_read',
+        request: {
+          database_target_id: databaseTargetId,
+          recipe_id: recipeId,
+          ...(write
+            ? {expected_version: recipeVersion, recipe: body}
+            : recipeRevision ? {version: Number(recipeRevision)} : {}),
+        },
+      });
+      if (!scope.active || revision !== scope.fileRevision) return;
+      if (typeof response?.current_version === 'number') setRecipeVersion(response.current_version);
+      if (response?.recipe) change(JSON.stringify(response.recipe, null, 2));
+      else if (!write) setError('No saved recipe with this name in this database.');
+    } catch (failure) {
+      if (scope.active && revision === scope.fileRevision) {
+        setError(failure?.response?.data?.errormsg || failure?.message || 'Recipe storage unavailable.');
+      }
+    } finally {
+      if (scope.active) setBusy(false);
+    }
+  };
   return <Box data-cde-compact-form sx={{p: 1, overflow: 'auto', ...compactFormSx}}>
     <FormReference formKey="firebird-test-data" />
     <Alert severity="warning">Generate test rows only in the selected database. This form uses its own native transaction. Preview does not execute. Staged rows require explicit commit or rollback; closing requests session release, without claiming a confirmed outcome.</Alert>
@@ -139,6 +174,14 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
     {catalogs && <Box component="pre">{Object.entries(catalogs).map(([name, value]) => `${name}: ${value.rows.length} sampled rows${value.sampleLimited ? ' (limited)' : ''}\n`).join('')}</Box>}
     <TextField label="Test-data recipe JSON" multiline minRows={10} fullWidth value={source}
       disabled={busy || pending} onChange={event => change(event.target.value)} />
+    <Box sx={{display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap'}}>
+      <TextField size="small" label="Saved server recipe name" value={recipeId} disabled={busy || pending}
+        onChange={event => {setRecipeId(event.target.value); setRecipeVersion(0); setRecipeRevision('');}} />
+      <TextField size="small" label="Saved revision (optional)" value={recipeRevision} disabled={busy || pending}
+        onChange={event => setRecipeRevision(event.target.value)} />
+      <Button disabled={busy || pending || !recipeId.trim()} onClick={() => persistServerRecipe(false)}>Load server recipe</Button>
+      <Button disabled={busy || pending || !source || !recipeId.trim()} onClick={() => persistServerRecipe(true)}>Save server recipe (v{recipeVersion})</Button>
+    </Box>
     <Button component="label" disabled={busy || pending}>Read saved recipe<input hidden type="file" accept=".json,application/json" aria-label="Test-data recipe file" disabled={busy || pending} onChange={importRecipe} /></Button>
     <Box>
       <TextField size="small" label="File source table" value={fileTable} disabled={busy || pending} onChange={event => {scope.fileRevision++; setFileTable(event.target.value);}} />
@@ -166,4 +209,5 @@ export default function FirebirdTestData({resources, post, databaseTargetId, lan
   </Box>;
 }
 FirebirdTestData.propTypes = {resources: PropTypes.array.isRequired, post: PropTypes.func.isRequired,
-  databaseTargetId: PropTypes.string.isRequired, languageProfile: PropTypes.string.isRequired};
+  databaseTargetId: PropTypes.string.isRequired, languageProfile: PropTypes.string.isRequired,
+  endpointId: PropTypes.string};

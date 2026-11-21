@@ -850,7 +850,10 @@ export function providerTreeContextActions(itemData, item=null) {
 
   menus.forEach((menu)=>{
     const suffix = String(menu.commandId).split('.').at(-1);
-    if(descriptorOperationIds.has(suffix)) return;
+    const menuArgs = typeof menu.commandArguments === 'function' ?
+      menu.commandArguments({itemData, item}) : null;
+    if(descriptorOperationIds.has(suffix) ||
+        (menuArgs?.operation_id && descriptorOperationIds.has(String(menuArgs.operation_id)))) return;
 
     if ((nodeType === 'server' || nodeType === 'cde_database_target') && menu.handler === 'register_endpoint') {
       return;

@@ -56,6 +56,12 @@ import SurfaceMetadata from './SurfaceMetadata';
 import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {
+  SqlFirebirdSessionToolsDialog,
+  SqlPersistentHistoryPanel,
+  SqlProfilerAndStatsView,
+  SqlProfilerConsentDialog,
+} from './SqlFirebirdDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -225,6 +231,7 @@ export default function SqlEditorSurface({
   initialScriptKind = '',
   initialSql = '',
   initialQuickQueryId = '',
+  initialSessionToolsTab = '',
   post,
 }) {
   const shell = useProjectShell();
@@ -254,6 +261,13 @@ export default function SqlEditorSurface({
   const [sqlText, setSqlText] = useState(initialSql || '');
   const sqlTextRef = useRef(sqlText);
   sqlTextRef.current = sqlText;
+  const lastInitialSqlRef = useRef(initialSql || '');
+  useEffect(() => {
+    if (initialSql && initialSql !== lastInitialSqlRef.current) {
+      lastInitialSqlRef.current = initialSql;
+      setSqlText(initialSql);
+    }
+  }, [initialSql]);
 
   const [selectionText, setSelectionText] = useState('');
   const [cursorPos, setCursorPos] = useState({line: 1, col: 1});
@@ -362,6 +376,17 @@ export default function SqlEditorSurface({
   const [exportInitialFormat, setExportInitialFormat] = useState('csv');
   const [limitsModalOpen, setLimitsModalOpen] = useState(false);
   const [connectionModalOpen, setConnectionModalOpen] = useState(false);
+  const [collectStatistics, setCollectStatistics] = useState(false);
+  const [historySensitive, setHistorySensitive] = useState(false);
+  const [profilerConsentOpen, setProfilerConsentOpen] = useState(false);
+  const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
+  const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
+  useEffect(() => {
+    if (initialSessionToolsTab) {
+      setSessionToolsTab(initialSessionToolsTab);
+      setSessionToolsOpen(true);
+    }
+  }, [initialSessionToolsTab]);
   const [contextMenuState, setContextMenuState] = useState({
     open: false,
     x: 0,
@@ -439,6 +464,13 @@ export default function SqlEditorSurface({
     },
     [databaseTargetId, engineId, languageProfile]
   );
+
+  const ensureSurfaceSession = useCallback(async () => {
+    if (hostData?.session_id) return hostData.session_id;
+    const resp = await callHost('ensure_session');
+    if (resp) setHostData(resp);
+    return resp?.session_id || null;
+  }, [callHost, hostData?.session_id]);
 
   useEffect(() => {
     if (!templatePickerOpen) return undefined;
@@ -1033,6 +1065,11 @@ export default function SqlEditorSurface({
           page_size: limitsDraft.pageSize,
           max_rows: limitsDraft.maxRows,
           parameters: boundParams,
+          ...(execSpec.profileMode ? {profile_mode: true} : {}),
+          ...(isFirebird && collectStatistics && execSpec.mode === 'statement'
+            ? {statistics_mode: true}
+            : {}),
+          ...(historySensitive ? {history_sensitive: true} : {}),
         });
         const savedView = savedResultViewRef.current;
         const result = resp?.active_result;
@@ -1069,7 +1106,7 @@ export default function SqlEditorSurface({
         // Auto-switch view per Surface 2 specification:
         if (resp?.last_execution_had_error || resp?.last_execution_cancelled) {
           setSurfaceView(SQL_SURFACE_VIEWS.MESSAGES);
-        } else if (execSpec.mode === 'explain') {
+        } else if (execSpec.mode === 'explain' || execSpec.profileMode) {
           setSurfaceView(SQL_SURFACE_VIEWS.METRICS_PLAN);
         } else if ((resp?.result_count || 0) > 0) {
           setSurfaceView((cur) =>
@@ -1093,6 +1130,9 @@ export default function SqlEditorSurface({
       autocommit,
       callHost,
       clientSqlDialect,
+      collectStatistics,
+      historySensitive,
+      isFirebird,
       limitsDraft.maxRows,
       limitsDraft.pageSize,
       terminator,
@@ -1100,7 +1140,7 @@ export default function SqlEditorSurface({
   );
 
   const runSql = useCallback(
-    async (mode = 'statement', skipParamPrompt = false) => {
+    async (mode = 'statement', skipParamPrompt = false, extraExecFlags = {}) => {
       const liveText = editorRef.current?.getValue?.() ?? sqlTextRef.current;
       if (liveText !== sqlTextRef.current) {
         setSqlText(liveText);
@@ -1116,6 +1156,7 @@ export default function SqlEditorSurface({
         sqlSource: liveText,
         selectionText: mode === 'statement' ? liveSel : '',
         cursorOffset,
+        ...extraExecFlags,
       };
 
       if (!skipParamPrompt && mode !== 'explain') {
@@ -2577,9 +2618,17 @@ export default function SqlEditorSurface({
       return (
         <Box
           data-cdeadmin-qa-key="sql-surface-3b-history"
-          sx={{p: 1.5, display: 'grid', gap: 1}}
+          sx={{p: 1.5, display: 'grid', gap: 1.5}}
         >
-          <strong>{gettext('Executed SQL History')}</strong>
+          <SqlPersistentHistoryPanel
+            post={post}
+            databaseTargetId={databaseTargetId}
+            clientSqlDialect={clientSqlDialect}
+            supportsDialectScope={isFirebird}
+            onLoadSql={(src) => insertSnippetText(src, true)}
+            disabled={executing}
+          />
+          <strong>{gettext('Current Session SQL History')}</strong>
           {localQueryHistory.length === 0 ? (
             <div style={{fontSize: '0.78rem', opacity: 0.75}}>
               {gettext('Statements executed in this session appear here.')}
@@ -3819,6 +3868,38 @@ export default function SqlEditorSurface({
           ...(prepareId ? [{
             id: `${pfx}.m.prepare_statement`, actionId: prepareId, label: gettext('Prepare Statement'), index: 35,
           }] : []),
+          ...(isFirebird ? [
+            {
+              id: `${pfx}.m.fb_profile`,
+              label: gettext('Profile Statement (RDB$PROFILER)…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setProfilerConsentOpen(true),
+            },
+            {
+              id: `${pfx}.m.fb_stats`,
+              label: gettext('Collect Attachment Statistics (MON$)'),
+              checked: collectStatistics,
+              index: 37,
+              callback: () => setCollectStatistics((v) => !v),
+            },
+            {
+              id: `${pfx}.m.fb_session_tools`,
+              label: gettext('EDS Pool, Session Traps & Stream Reader…'),
+              index: 38,
+              callback: () => {
+                setSessionToolsTab('eds_pool');
+                setSessionToolsOpen(true);
+              },
+            },
+          ] : []),
+          {
+            id: `${pfx}.m.hist_sensitive`,
+            label: gettext('Suppress Sensitive SQL from Persistent History'),
+            checked: historySensitive,
+            index: 39,
+            callback: () => setHistorySensitive((v) => !v),
+          },
           {id: `${pfx}.m.params`, actionId: paramsId, label: gettext('Parameters…'), index: 40},
           {id: `${pfx}.m.sep1`, type: 'separator', index: 45},
           ...(startTransactionId ? [{
@@ -3963,8 +4044,11 @@ export default function SqlEditorSurface({
     callHost,
     cancelPending,
     canInsertResult,
+    collectStatistics,
     executing,
     hasUncommitted,
+    historySensitive,
+    isFirebird,
     hostData?.active_result_index,
     hostData?.object_layout_key,
     hostData?.result_count,
@@ -4491,6 +4575,11 @@ export default function SqlEditorSurface({
                   gettext('Run Explain Plan on the TiB or Query menu to capture the native execution plan.')}
               </pre>
             </div>
+
+            <SqlProfilerAndStatsView
+              profiling={hostData?.profiling}
+              statistics={hostData?.query_statistics}
+            />
 
             {(hostData?.statement_summaries || []).length > 0 && (
               <div>
@@ -5260,21 +5349,60 @@ export default function SqlEditorSurface({
             }
           />
           {isFirebird && (
-            <div className="sr-field">
-              <label className="sr-field-label" htmlFor={`${surfaceIdRef.current}-sql-dialect`}>
-                {gettext('Firebird SQL Dialect')}
+            <>
+              <div className="sr-field">
+                <label className="sr-field-label" htmlFor={`${surfaceIdRef.current}-sql-dialect`}>
+                  {gettext('Firebird SQL Dialect')}
+                </label>
+                <select
+                  id={`${surfaceIdRef.current}-sql-dialect`}
+                  className="sr-input"
+                  value={clientSqlDialect}
+                  onChange={(e) => setClientSqlDialect(Number(e.target.value) || 3)}
+                >
+                  <option value={3}>{gettext('Dialect 3 — Modern SQL')}</option>
+                  <option value={1}>{gettext('Dialect 1 — Legacy')}</option>
+                </select>
+              </div>
+              <label style={{display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem'}}>
+                <input
+                  type="checkbox"
+                  checked={collectStatistics}
+                  onChange={(e) => setCollectStatistics(e.target.checked)}
+                />
+                {gettext('Capture attachment MON$ query statistics on single-statement runs')}
               </label>
-              <select
-                id={`${surfaceIdRef.current}-sql-dialect`}
-                className="sr-input"
-                value={clientSqlDialect}
-                onChange={(e) => setClientSqlDialect(Number(e.target.value) || 3)}
-              >
-                <option value={3}>{gettext('Dialect 3 — Modern SQL')}</option>
-                <option value={1}>{gettext('Dialect 1 — Legacy')}</option>
-              </select>
-            </div>
+              <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setLimitsModalOpen(false);
+                    setProfilerConsentOpen(true);
+                  }}
+                >
+                  {gettext('Run Profiled Statement (RDB$PROFILER)…')}
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setLimitsModalOpen(false);
+                    setSessionToolsTab('eds_pool');
+                    setSessionToolsOpen(true);
+                  }}
+                >
+                  {gettext('EDS Pool / Traps / Stream Reader…')}
+                </Button>
+              </div>
+            </>
           )}
+          <label style={{display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem'}}>
+            <input
+              type="checkbox"
+              checked={historySensitive}
+              onChange={(e) => setHistorySensitive(e.target.checked)}
+            />
+            {gettext('Suppress SQL source from persistent history (sensitive literals)')}
+          </label>
         </Box>
       </Dialog>
 
@@ -5316,6 +5444,41 @@ export default function SqlEditorSurface({
         columns={gridColumns}
         onExportHost={(req) => callHost('export_formatted', req)}
       />
+
+      {isFirebird && (
+        <>
+          <SqlProfilerConsentDialog
+            open={profilerConsentOpen}
+            busy={executing}
+            onClose={() => setProfilerConsentOpen(false)}
+            onConfirm={() => {
+              setProfilerConsentOpen(false);
+              runSql('statement', false, {profileMode: true});
+            }}
+          />
+          <SqlFirebirdSessionToolsDialog
+            open={sessionToolsOpen}
+            onClose={() => setSessionToolsOpen(false)}
+            post={post}
+            databaseTargetId={databaseTargetId}
+            sessionId={hostData?.session_id || null}
+            ensureSession={ensureSurfaceSession}
+            sqlSource={sqlText}
+            clientSqlDialect={clientSqlDialect}
+            initialTab={sessionToolsTab}
+            onExecuteTrapSql={(trapSql) => {
+              setSqlText(trapSql);
+              editorRef.current?.setValue?.(trapSql);
+              dispatchExecution({
+                mode: 'statement',
+                sqlSource: trapSql,
+                selectionText: trapSql,
+                cursorOffset: 0,
+              });
+            }}
+          />
+        </>
+      )}
     </Box>
   );
 }
@@ -5394,5 +5557,6 @@ SqlEditorSurface.propTypes = {
   initialScriptKind: PropTypes.string,
   initialSql: PropTypes.string,
   initialQuickQueryId: PropTypes.string,
+  initialSessionToolsTab: PropTypes.string,
   post: PropTypes.func.isRequired,
 };

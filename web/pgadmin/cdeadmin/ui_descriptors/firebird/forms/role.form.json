@@ -65,6 +65,7 @@
       "tab": "General",
       "control": "text",
       "required": false,
+      "help": "Server SEC$ user-management plugin (for example Srp or Legacy_UserManager). In Firebird embedded mode without a configured per-database SecurityDatabase in databases.conf, user-account DDL requires a network or configured security-database context; SQL roles and object GRANT/REVOKE work in both network and embedded modes.",
       "group": "User account",
       "visible_when": {
         "field": "variant",

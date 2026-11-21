@@ -9,7 +9,7 @@ import {useLocaleRevision} from '../../actions/t_actions';
 import {Box} from '../../primitives/Layout';
 import {ScratchScrollArea} from '../../base/ScratchScrollArea';
 import {Button} from '../../primitives/Button';
-import {Select} from '../../primitives/Choice';
+import {Checkbox, Select} from '../../primitives/Choice';
 import {TextArea} from '../../primitives/Field';
 import {SearchField} from '../../primitives/AdvancedControls';
 import {ResourcePicker, AssetPicker, TreeRow} from '../../navigation/AdvancedNavigation';
@@ -113,10 +113,35 @@ function CompareSetup({session, invoke, resources, assets, requestedPickerSide, 
           onChooseResource={() => setPicker({side, kind: 'resource'})}
           onChooseAsset={() => setPicker({side, kind: 'asset'})} />)}
       </Box>
-      <Box component="fieldset" sx={{mt: 2, border: '1px solid', borderColor: 'divider'}}>
+      <Box component="fieldset" sx={{mt: 2, border: '1px solid', borderColor: 'divider', p: 1.5}}>
         <legend>{gettext('Comparison scope and normalization options')}</legend>
-        <TextArea rows={6} fullWidth label={gettext('Options (JSON)')} readOnly
-          value={JSON.stringify(session.content.options, null, 2)} />
+        <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 1}}>
+          {[
+            ['ignoreWhitespace', gettext('Ignore SQL body whitespace differences')],
+            ['ignoreComments', gettext('Ignore SQL comment differences')],
+            ['includeGrants', gettext('Include object privileges and grants')],
+            ['caseSensitiveIdentifiers', gettext('Case-sensitive unquoted identifier comparison')],
+            ['includeSystemObjects', gettext('Include engine system objects')],
+          ].map(([optKey, optLabel]) => (
+            <Checkbox
+              key={optKey}
+              label={optLabel}
+              disabled={busy}
+              checked={Boolean(session.content.options?.[optKey])}
+              onChange={(checked) => invoke('schema_compare.session.create', {
+                configureSessionId: session.id,
+                options: {...(session.content.options || {}), [optKey]: Boolean(checked)},
+              })}
+            />
+          ))}
+        </Box>
+        <Box component="details" sx={{mt: 1}}>
+          <Box component="summary" sx={{cursor: 'pointer', fontSize: '0.75rem'}}>
+            {gettext('Options (JSON)')}
+          </Box>
+          <TextArea rows={4} fullWidth label={gettext('Options (JSON)')} readOnly
+            value={JSON.stringify(session.content.options, null, 2)} />
+        </Box>
       </Box>
       <Box sx={{mt: 2}}><Button intent="primary" disabled={busy ||
         !session.content.leftRef || !session.content.rightRef}

@@ -47,6 +47,7 @@ import FieldTypeDefaultsDialog from './FieldTypeDefaultsDialog';
 import SurfaceMetadata from './SurfaceMetadata';
 import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
+import {DataFirebirdBlobDialog, DataFirebirdRowSqlDialog} from './DataFirebirdTools';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
@@ -172,6 +173,8 @@ export default function DataEditSurface({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv');
   const [msgSeverityFilter, setMsgSeverityFilter] = useState('all');
+  const [fbBlobModalState, setFbBlobModalState] = useState(null); // {column, rowIndex}
+  const [fbRowSqlOpen, setFbRowSqlOpen] = useState(false);
 
   useEffect(() => {
     const el = areaRef.current;
@@ -367,7 +370,9 @@ export default function DataEditSurface({
   );
 
   // Accept current row edits (explicit Accept button OR automatic on row-leave!)
-  const conversionPairs = sqlLanguageProfile(languageProfile, engineId).field_conversion_pairs;
+  const languageOptions = useMemo(() => sqlLanguageProfile(languageProfile, engineId), [languageProfile, engineId]);
+  const isFirebird = Boolean(languageOptions.native_transaction_close_warning);
+  const conversionPairs = languageOptions.field_conversion_pairs;
   const conversions = useRecordConversions(rows, columns, layout.formFieldPrefs, conversionPairs, callHost);
 
   const acceptCurrentRow = useCallback(async () => {
@@ -1126,6 +1131,14 @@ export default function DataEditSurface({
                 }}
               >
                 {gettext('Format JSON')}
+              </Button>
+            )}
+            {isFirebird && /BLOB/i.test(col.native_type || '') && (
+              <Button
+                size="small"
+                onClick={() => setFbBlobModalState({column: col, rowIndex: rIdx})}
+              >
+                {gettext('Dedicated BLOB Editor…')}
               </Button>
             )}
             {canEdit && (
@@ -2710,6 +2723,26 @@ export default function DataEditSurface({
             iconKey: 'tool.query',
             index: 220,
           },
+          ...(isFirebird
+            ? [
+              {
+                id: `${pfx}.mnu.fb_row_sql`,
+                label: gettext('Generate Firebird Row SQL (INSERT/UPDATE/UPSERT/IN)…'),
+                iconKey: 'action.sql_preview',
+                disabled: rows.length === 0,
+                index: 225,
+                callback: () => setFbRowSqlOpen(true),
+              },
+              {
+                id: `${pfx}.mnu.fb_blob_editor`,
+                label: gettext('Dedicated Firebird BLOB Editor…'),
+                iconKey: 'action.edit',
+                disabled: !activeColObj || !/BLOB/i.test(activeColObj.native_type || ''),
+                index: 228,
+                callback: () => setFbBlobModalState({column: activeColObj, rowIndex: activeRowIndex}),
+              },
+            ]
+            : []),
         ],
       },
       {
@@ -4135,6 +4168,57 @@ export default function DataEditSurface({
           onChange={(e) => setImportTextDraft(e.target.value)}
         />
       </Dialog>
+
+      {isFirebird && (
+        <>
+          <DataFirebirdBlobDialog
+            open={Boolean(fbBlobModalState)}
+            column={fbBlobModalState?.column || null}
+            rawValue={
+              fbBlobModalState
+                ? (isEditingRow &&
+                    (editingRowIndex ?? activeRowIndex) === fbBlobModalState.rowIndex &&
+                    rowDraft &&
+                    Object.prototype.hasOwnProperty.call(rowDraft, fbBlobModalState.column.name)
+                    ? rowDraft[fbBlobModalState.column.name]
+                    : rows[fbBlobModalState.rowIndex]?.values?.[fbBlobModalState.column.name])
+                : null
+            }
+            readOnly={
+              !hostData?.editable ||
+              fbBlobModalState?.column?.editable === false
+            }
+            onApplyValue={(nextVal) => {
+              if (!fbBlobModalState?.column) return;
+              const idx = fbBlobModalState.rowIndex ?? activeRowIndex;
+              const colName = fbBlobModalState.column.name;
+              if (!isEditingRow || (editingRowIndex ?? activeRowIndex) !== idx) {
+                const baseVals = {...(rows[idx]?.values || {})};
+                baseVals[colName] = nextVal;
+                setEditingRowIndex(idx);
+                setIsEditingRow(true);
+                setRowDraft(baseVals);
+              } else {
+                setRowDraft((prev) => ({...(prev || {}), [colName]: nextVal}));
+              }
+            }}
+            onClose={() => setFbBlobModalState(null)}
+          />
+          <DataFirebirdRowSqlDialog
+            open={fbRowSqlOpen}
+            tableName={targetResource?.display_name || targetResource?.name || 'TABLE'}
+            columns={columns}
+            fetchedRows={rows}
+            initialSelectedIndices={
+              selectedCells.length
+                ? [...new Set(selectedCells.map((c) => c.rowIndex))]
+                : [activeRowIndex]
+            }
+            onOpenInSqlEditor={onOpenInSqlEditor}
+            onClose={() => setFbRowSqlOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

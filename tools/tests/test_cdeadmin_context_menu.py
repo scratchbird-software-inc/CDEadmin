@@ -589,8 +589,8 @@ class ContextMenuTests(unittest.TestCase):
         declared = declared_database_operations('sqlite')
         self.assertTrue({'backup', 'restore', 'integrity_check', 'vacuum', 'wal_checkpoint'} <= set(declared))
         for operation, category in declared.items():
-            self.assertNotIn(f'database.sqlite.{operation}', by_id)
-            self.assertIn(category, {'backup_restore', 'diagnostics', 'maintenance'})
+            self.assertNotIn(f'database.sqlite.{operation}', byid := by_id)
+            self.assertIn(category, {'backup_restore', 'diagnostics', 'maintenance', 'security'})
 
     def test_duckdb_database_actions_expose_native_file_operations(self):
         duckdb = profile('duckdb', route_kind='embedded_file', multiple=True)
