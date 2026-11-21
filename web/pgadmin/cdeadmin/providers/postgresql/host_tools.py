@@ -10,8 +10,21 @@ import sys
 
 from ...sdk.tooling import ProviderToolGrant, ProviderToolRunner
 from .continuity import ContinuityError
+from .host_utilities import (
+    EXTENDED_OPERATIONS,
+    execute_extended,
+    observe_extended,
+    validate_extended_options,
+)
 
-OPERATIONS = {'host_pg_controldata': 'pg_controldata', 'host_pg_walsummary': 'pg_walsummary', 'host_pg_test_timing': 'pg_test_timing', 'host_pg_test_fsync': 'pg_test_fsync', 'host_pg_checksums': 'pg_checksums'}
+OPERATIONS = {
+    'host_pg_controldata': 'pg_controldata',
+    'host_pg_walsummary': 'pg_walsummary',
+    'host_pg_test_timing': 'pg_test_timing',
+    'host_pg_test_fsync': 'pg_test_fsync',
+    'host_pg_checksums': 'pg_checksums',
+    **EXTENDED_OPERATIONS,
+}
 MAX_MANIFEST = 1024 * 1024
 
 
@@ -65,15 +78,25 @@ def grants(filename, endpoint):
     if not isinstance(value, dict) or set(value) != {'format', 'grants'} or value['format'] != 'scratchrobin.postgresql.host-tools@1' or not isinstance(value['grants'], list):
         raise ContinuityError('Select the versioned native host grant manifest')
     matches = [row for row in value['grants'] if isinstance(row, dict) and row.get('endpoint_id') == endpoint]
-    if len(matches) != 1 or set(matches[0]) - {'endpoint_id', 'clusters', 'summary_files', 'benchmark_roots'}:
+    allowed_grant_keys = {
+        'endpoint_id', 'clusters', 'summary_files', 'benchmark_roots',
+        'init_roots', 'archive_dirs', 'upgrade_pairs',
+    }
+    if len(matches) != 1 or set(matches[0]) - allowed_grant_keys:
         raise ContinuityError('Exactly one endpoint host grant is required')
     selected = matches[0]
-    for kind in ('clusters', 'summary_files', 'benchmark_roots'):
+    for kind in ('clusters', 'summary_files', 'benchmark_roots', 'init_roots', 'archive_dirs', 'upgrade_pairs'):
         entries = selected.get(kind, [])
         if not isinstance(entries, list) or len(entries) > 1000:
             raise ContinuityError('Native host grants exceed their inventory budget')
         ids = []
         for row in entries:
+            if kind == 'upgrade_pairs':
+                req_pair = {'id', 'old_bindir', 'new_bindir', 'old_datadir', 'new_datadir'}
+                if not isinstance(row, dict) or set(row) != req_pair or not isinstance(row['id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', row['id']) or any(not isinstance(row[k], str) or not row[k] for k in req_pair - {'id'}):
+                    raise ContinuityError('Native upgrade pair grants require exact id and four binary/data paths')
+                ids.append(row['id'])
+                continue
             if not isinstance(row, dict) or not {'id', 'path'} <= set(row) or set(row) - ({'id', 'path', 'tablespaces'} if kind == 'clusters' else {'id', 'path'}) or not isinstance(row['id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', row['id']):
                 raise ContinuityError('Native host grants require bounded exact identities and paths')
             if kind == 'clusters':
@@ -96,6 +119,8 @@ def grants(filename, endpoint):
 def options(operation, draft):
     if not isinstance(operation, str) or operation not in OPERATIONS or not isinstance(draft, dict):
         raise ContinuityError('Select a typed native host utility')
+    if operation in EXTENDED_OPERATIONS:
+        return validate_extended_options(operation, draft)
     allowed = ({'cluster_id', 'mode', 'filenode', 'progress', 'verbose', 'sync', 'sync_method', 'offline_quiescence_confirmed', 'checksum_change_confirmed', 'unsafe_no_sync_confirmed', 'confirmation', 'timeout_seconds'} if operation == 'host_pg_checksums' else
                {'scratch_id', 'seconds_per_test', 'confirmation', 'timeout_seconds'} if operation == 'host_pg_test_fsync' else
                {'duration_seconds', 'confirmation', 'timeout_seconds'} if operation == 'host_pg_test_timing' else
@@ -184,6 +209,8 @@ class HostTools:
                                    'platform': sys.platform, 'process_uid': str(os.getuid()) if hasattr(os, 'getuid') else None}}
 
     def observe(self, operation, selected, grant, workspace):
+        if operation in EXTENDED_OPERATIONS:
+            return observe_extended(self, operation, selected, grant, workspace, exact_path, identity, parse_control)
         if operation == 'host_pg_test_fsync':
             entry = next((row for row in grant.get('benchmark_roots', []) if row['id'] == selected['scratch_id']), None)
             if entry is None:
@@ -234,6 +261,8 @@ class HostTools:
         return source
 
     def execute(self, operation, selected, source, workspace, cancel, progress, before_dispatch=None):
+        if operation in EXTENDED_OPERATIONS:
+            return execute_extended(self, operation, selected, source, workspace, cancel, progress, before_dispatch, parse_control)
         if operation == 'host_pg_checksums':
             arguments = ['--pgdata=' + source['cluster_path'], '--' + selected['mode'].lower()]
             if selected['filenode']:

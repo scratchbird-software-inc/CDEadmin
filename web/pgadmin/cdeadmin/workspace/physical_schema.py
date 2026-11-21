@@ -14,9 +14,9 @@ import uuid
 
 VERSION = 'scratchrobin.physical-schema@1'
 ENGINES = ('postgresql', 'sqlite', 'duckdb', 'firebird', 'mysql', 'mariadb')
-KINDS = ('index', 'primary-key', 'unique', 'check', 'foreign-key')
+KINDS = ('index', 'primary-key', 'unique', 'check', 'foreign-key', 'not-null')
 ROLE = {'index': 'index', 'primary-key': 'constraint', 'unique': 'constraint',
-        'check': 'constraint', 'foreign-key': 'ref'}
+        'check': 'constraint', 'foreign-key': 'ref', 'not-null': 'constraint'}
 ACTIONS = ('NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT')
 # Flat x_record keys. *_json values are JSON text, like native_json.
 KEYS = ('physical_kind', 'physical_name', 'rename_from', 'columns_json', 'unique', 'method',

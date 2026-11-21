@@ -485,7 +485,9 @@ def _column_comments(identity, before, after, live):
             operations.extend(dropped)
             converged += count
             continue
-        if set(changes) - {'comment', 'attnotnull', 'attname', 'default_expression', 'formatted_type'} or any(key not in wanted for key in changes):
+        from .postgresql_ddn_extensions import EXTENDED_COLUMN_KEYS, plan_extended_column_changes
+        allowed_col_keys = {'comment', 'attnotnull', 'attname', 'default_expression', 'formatted_type'} | EXTENDED_COLUMN_KEYS
+        if set(changes) - allowed_col_keys or any(key not in wanted for key in changes):
             raise ValueError('Column metadata changes require an additional native adapter')
         current = children[2][1].get(number)
         if (current is None or ('attname' not in changes and current.get('attname') != old.get('attname')) or
@@ -613,6 +615,12 @@ def _column_comments(identity, before, after, live):
                     'operation': 'set_default', 'lock_target': _lock_target(live),
                     'before_default': values[2], 'after_default': values[1],
                     'live_guard': digest({'relation_oid': native['oid'], 'attribute': current}), 'statement': statement})
+        if set(changes) & EXTENDED_COLUMN_KEYS:
+            ext_ops, ext_conv = plan_extended_column_changes(
+                identity, parent, live, number, effective_name, old, wanted, current, changes, _lock_target(live)
+            )
+            operations.extend(ext_ops)
+            converged += ext_conv
         if 'comment' not in changes:
             continue
         for value in (old.get('comment'), wanted['comment'], current.get('comment')):
@@ -636,13 +644,26 @@ def _column_comments(identity, before, after, live):
     return operations, converged
 
 
-def build_plan(baseline, desired, current):
+def build_plan(baseline, desired, current, *, allow_retained_session=False):
     for document in (baseline, desired, current):
-        if (document['provenance'].get('observation_scope') == 'retained-session' or
-                any(row.get('native', {}).get('observation_scope') == 'retained-session' or
-                    row.get('native', {}).get('catalog_row', {}).get('relpersistence') == 't'
-                    for row in document['rows'].values())):
+        is_retained = (
+            document['provenance'].get('observation_scope') == 'retained-session'
+            or any(
+                row.get('native', {}).get('observation_scope') == 'retained-session'
+                or row.get('native', {}).get('catalog_row', {}).get('relpersistence') == 't'
+                for row in document['rows'].values()
+            )
+        )
+        if not allow_retained_session and is_retained:
             raise ValueError('Retained-session catalog observations cannot be applied as independent database migrations')
+        if allow_retained_session:
+            db_rows = [r for r in document['rows'].values() if r.get('kind') == 'database']
+            cur_db_rows = [r for r in current['rows'].values() if r.get('kind') == 'database']
+            if db_rows and cur_db_rows:
+                sctx = db_rows[0].get('native', {}).get('session_context')
+                cur_sctx = cur_db_rows[0].get('native', {}).get('session_context')
+                if sctx != cur_sctx:
+                    raise ValueError('Retained-session migration documents belong to different backends or temporary schemas')
         if document['provenance'].get('mapping') != 'scratchrobin.postgresql.catalog@1':
             raise ValueError('PostgreSQL native mapping is required')
         for field in ('endpoint_id', 'database_target_id'):
@@ -705,6 +726,14 @@ def build_plan(baseline, desired, current):
                 operations.extend(security[0])
                 counts['converged'] += security[1]
                 continue
+            from .postgresql_ddn_extensions import plan_extended_object_changes
+            extended = plan_extended_object_changes(identity, before, after, live, current, _lock_target)
+            if extended is not None:
+                operations.extend(extended[0])
+                counts['converged'] += extended[1]
+                after = extended[2]
+                if _equal(before['native'], after['native']):
+                    continue
             if any(not _equal(before.get(key), after.get(key)) for key in ('kind', 'path', 'system')):
                 raise ValueError('Object kind, path or system identity changed')
             changes = [key for key in before['native'].keys() | after['native'].keys()

@@ -3939,3 +3939,80 @@ operations) and zero UI lint count increases:
   acceptance remain ``external_acceptance_pending``; MySQL Enterprise masking/
   MLE/primary-attributes remain ``post_beta``; and raw user-key export remains
   ``owner_excluded``.
+
+PostgreSQL remaining 30-item backend & UI completion
+----------------------------------------------------
+
+* **Table TOAST/alter contracts, PG 18 constraints, full VACUUM/ANALYZE/REINDEX
+  matrix, partitioned indexes, IMPORT FOREIGN SCHEMA, 2PC & configuration/HBA
+  deployment** (``PG-AUDIT-FIELD-01``, ``PG-AUDIT-CONSTRAINT-01``,
+  ``PG-AUDIT-MAINT-01``, ``PG-AUDIT-INDEXPART-01``, ``PG-AUDIT-FDW-01``,
+  ``PG-AUDIT-TWOPHASE-01``, ``PG-AUDIT-CONFIG-01``): qualified table alter &
+  TOAST options across PostgreSQL ``16``/``17``/``18`` and HTTP; added PG 18
+  temporal ``PRIMARY KEY``/``UNIQUE`` ``WITHOUT OVERLAPS``, ``FOREIGN KEY``
+  ``PERIOD``, ``NOT ENFORCED``/``ENFORCED`` constraints, and ``NULLS NOT
+  DISTINCT`` unique constraints; completed ``VACUUM`` (``PROCESS_MAIN``,
+  ``PROCESS_TOAST``, ``TRUNCATE``, ``INDEX_CLEANUP``, ``SKIP_DATABASE_STATS``,
+  ``ONLY_DATABASE_STATS``, ``BUFFER_USAGE_LIMIT``), ``ANALYZE`` column targets,
+  and ``REINDEX SYSTEM``; added ``partitioned-index`` discovery and
+  ``ALTER INDEX ... ATTACH PARTITION``; added ``IMPORT FOREIGN SCHEMA``
+  (``LIMIT TO`` / ``EXCEPT``); added ``prepared-transaction`` discovery and
+  reviewed ``COMMIT PREPARED`` / ``ROLLBACK PREPARED`` outside transaction
+  blocks after exact GID/database/owner/XID revalidation; and implemented
+  ``configuration.py`` + ``postgresql_configuration_service.py`` for
+  ``pg_settings``/``pg_file_settings``/``pg_hba_file_rules`` inspection,
+  ``ALTER SYSTEM SET/RESET/RESET ALL``, and validated ``0600`` host deployment
+  of ``postgresql.conf``, ``pg_hba.conf``, ``pg_ident.conf``, and TLS files
+  with automatic rollback.
+* **All 8 remaining supervised PostgreSQL host utilities**
+  (``PG-AUDIT-UTILITY-INITDB``, ``PG-AUDIT-UTILITY-PG_AMCHECK``,
+  ``PG-AUDIT-UTILITY-PG_CREATESUBSCRIBER``, ``PG-AUDIT-UTILITY-PG_RESETWAL``,
+  ``PG-AUDIT-UTILITY-PG_REWIND``, ``PG-AUDIT-UTILITY-PGARCHIVECLEANUP``,
+  ``PG-AUDIT-UTILITY-PGBENCH``, ``PG-AUDIT-UTILITY-PGUPGRADE``): expanded
+  ``host_utilities.py``, ``host_tools.py``, and ``postgresql_host_tool_jobs.py``
+  with operator-granted directory allowlists, ``0600`` ``PGPASSFILE`` /
+  ``--pwfile`` secret staging, offline postmaster.pid precondition checks,
+  single-use ``review_digest`` start gates, and live execution across all 8
+  binaries including cross-major ``pg_upgrade`` (``17 -> 18``),
+  ``pg_createsubscriber``, and ``pg_rewind``.
+* **Extension-owned catalog ACL preservation, full-kind DDN schema planning &
+  original retained-session DDL/DML administration** (``PG-AUDIT-EXTACL-01``,
+  ``PG-AUDIT-DDN-01``, ``PG-AUDIT-RETAINEDADMIN-01``): added ``pg_init_privs``
+  capture and ``extension_acls.py`` delta planning; expanded DDN planning across
+  constraints, indexes, views/materialized views, routines, triggers, policies,
+  domains/types, sequences, FDWs/foreign servers/foreign tables, publications,
+  and ``REPLICA IDENTITY`` while preserving ``filter-not-delete``; and added
+  ``retained_admin.py`` savepoint-fenced execution on the caller's retained
+  session preserving ``pg_temp`` visibility and uncommitted transaction state.
+* **Production PITR destination restore & cutover, WAL archive holds/retention,
+  HA standby bootstrap/switchover/pg_ctl & synchronized snapshot consumers**
+  (``PG-AUDIT-RESTORE-01``, ``PG-AUDIT-ARCHIVE-01``, ``PG-AUDIT-HA-01``,
+  ``PG-AUDIT-SNAPSHOT-01``): implemented ``postgresql_continuity_orchestration.py``,
+  ``ha_topology.py``, ``postgresql_ha_service.py``, and
+  ``postgresql_snapshot_orchestration.py`` covering interrupted WAL stream
+  restart review, archive retention holds & lineage-safe pruning, production
+  destination restore + independent R/W acceptance + coordinated fenced cutover
+  & rollback, streaming standby bootstrap, coordinated switchover, supervised
+  ``pg_ctl``, logical output-plugin discovery, ordinary-SQL ``SET TRANSACTION
+  SNAPSHOT`` consumers (via ``ClientCursor``), and coordinated destination
+  table load + atomic swap.
+* **Kerberos delegated ccache lifecycle, PG 15–18 version matrix, version-aware
+  offline SQL/PLpgSQL validator, runtime capabilities, psycopg_pool & exact
+  197-task 18.3 contracts** (``PG-AUDIT-COLLECTOR-02``, ``PG-AUDIT-VERSION-01``,
+  ``PG-AUDIT-LANGUAGE-01``, ``PG-AUDIT-CAPABILITIES-01``, ``PG-AUDIT-POOL-01``,
+  ``PG-AUDIT-HARNESS-01``, ``PG-AUDIT-CONTRACT-01``, ``PG-AUDIT-PROVENANCE-01``):
+  implemented ``0600`` MIT Kerberos ccache v4 staging/renewal/expiry refusal
+  (``kerberos_delegation.py``), ``POSTGRESQL_NATIVE`` connection capability set,
+  version-gated PG 15–18 catalog/grammar/capability rules, lossless ``SQL_ASCII``
+  raw-byte envelopes, ``psycopg_pool.ConnectionPool`` generation retirement and
+  session reset, 111-check ``postgres:18.3`` catalog/DDN driver gate, and
+  regenerated ``postgresql_dialect_18_3.json`` (``197`` live-proven provider-native
+  SQL compiler tasks) and ``postgresql_metrics_18_3.json`` (``52`` families /
+  ``604`` observations) with exact SHA-256 provenance in ``provider_manifest.json``.
+  Dedicated ``cdeadmin_ui`` workspaces (``SR-F-030450``..``SR-F-030454``) and
+  SQL/Data surface tools (``SR-F-030455``..``SR-F-030458``) surface these
+  workflows in the client alongside ``SR-F-030460``..``SR-F-030535`` operation
+  descriptors. Persistent ScratchBird monitoring history (``PG-AUDIT-HISTORY``)
+  remains ``owner_deferred``, while human UI review (``PG-AUDIT-UI``) and native
+  Windows/macOS qualification (``PG-AUDIT-PLATFORMS``) remain
+  ``external_acceptance_pending``.

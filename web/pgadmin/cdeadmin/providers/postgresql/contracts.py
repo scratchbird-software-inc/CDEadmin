@@ -20,6 +20,11 @@ PROFILE=PostgreSQLContractProfile()
 
 def dialect_task_ids():
     # Preserved pgAdmin HTTP/form workflows retain their own qualification.
-    # This contract covers SQL compiled by this provider's native adapter.
-    return tuple(sorted('postgresql.'+kind+'.'+operation
-        for kind in POSTGRESQL_NATIVE_FORM_KINDS for operation in POSTGRESQL_ADMIN_OPERATIONS[kind]))
+    # This contract covers the exact executable provider-native SQL compiler set.
+    from .preserved_surface import adapt_catalog
+    return tuple(sorted(
+        f"postgresql.{obj['resource_kind']}.{operation['operation_id']}"
+        for obj in adapt_catalog({'objects': []})['objects']
+        for operation in obj['operations']
+        if operation.get('execution_route') == 'provider-native'
+    ))

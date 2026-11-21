@@ -360,7 +360,47 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                     addresses[(catalog, objid)]['native'].setdefault('security_labels', []).append(value)
                 return len(pending)
             for label_catalog in ('pg_seclabel', 'pg_shseclabel'):
-                group(cursor, label_catalog, lambda: security_labels(label_catalog))
+                group(cursor, label_catalog, lambda lc=label_catalog: security_labels(lc))
+
+            def initial_privileges():
+                cursor.execute('SELECT oid, relname FROM pg_catalog.pg_class WHERE relnamespace = %s::regnamespace', ('pg_catalog',))
+                catalogs = {name: oid for oid, name in cursor.fetchall()}
+                keys = list(addresses)
+                query = '''SELECT c.relname, p.objoid, (
+                        to_jsonb(p) || jsonb_build_object(
+                            'exploded',
+                            COALESCE((
+                                SELECT jsonb_agg(jsonb_build_object(
+                                    'grantor_oid', x.grantor::oid,
+                                    'grantor', CASE WHEN x.grantor = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(x.grantor) END,
+                                    'grantee_oid', x.grantee::oid,
+                                    'grantee', CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(x.grantee) END,
+                                    'privilege_type', x.privilege_type,
+                                    'is_grantable', x.is_grantable
+                                ) ORDER BY x.grantee, x.privilege_type)
+                                FROM pg_catalog.aclexplode(p.initprivs) x
+                            ), '[]'::jsonb)
+                        )
+                    )::text
+                    FROM pg_catalog.pg_init_privs p
+                    JOIN pg_catalog.pg_class c ON c.oid = p.classoid
+                    JOIN unnest(%s::oid[], %s::oid[]) wanted(classid, objid)
+                    ON wanted.classid = p.classoid AND wanted.objid = p.objoid
+                    WHERE p.privtype = 'e'
+                    ORDER BY p.classoid, p.objoid, p.objsubid'''
+                pending = []
+                for catalog, objid, data in read(
+                    cursor,
+                    query,
+                    ([catalogs[cat] for cat, _ in keys if cat in catalogs], [oid for cat, oid in keys if cat in catalogs]),
+                ):
+                    value = json.loads(data)
+                    account(value)
+                    pending.append((catalog, objid, value))
+                for catalog, objid, value in pending:
+                    addresses[(catalog, objid)]['native'].setdefault('initial_privileges', []).append(value)
+                return len(pending)
+            group(cursor, 'pg_init_privs', initial_privileges)
             # Keep branch ownership native: indexes/triggers/constraints belong
             # to their relation, rather than being unrelated database siblings.
             for (catalog, objid), item in addresses.items():

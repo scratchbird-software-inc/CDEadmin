@@ -31,7 +31,9 @@
           "help": "At most 1 MiB per read; the result carries the chunk as base64 with its SHA-256."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16.",
+      "form_reference": "SR-F-030460",
+      "produces_log": true
     },
     {
       "operation_id": "write",
@@ -62,7 +64,8 @@
           "help": "Canonical base64, at most 1 MiB per reviewed chunk. The write is verified by a SHA-256 read-back before the transaction commits."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16.",
+      "form_reference": "SR-F-030461"
     },
     {
       "operation_id": "truncate",
@@ -85,7 +88,8 @@
           "help": "Bytes beyond this length are discarded; a longer length extends the object with zero bytes."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the large-object OID, which is the resource display name."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the large-object OID, which is the resource display name.",
+      "form_reference": "SR-F-030462"
     },
     {
       "operation_id": "import-server-file",
@@ -114,7 +118,8 @@
           "help": "The path belongs to the database server host; server file privileges and operating-system access apply."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Creates a large object from a server-side file, so it has no existing target; it is kept as a data-transfer action rather than the tier-1 create."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Creates a large object from a server-side file, so it has no existing target; it is kept as a data-transfer action rather than the tier-1 create.",
+      "form_reference": "SR-F-030463"
     },
     {
       "operation_id": "export-server-file",
@@ -143,7 +148,8 @@
           "help": "Must equal the destination path above."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed value is the destination path, not the target name, so it is an ordinary required field (as the Firebird confirm-type operations do), not typed_name."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed value is the destination path, not the target name, so it is an ordinary required field (as the Firebird confirm-type operations do), not typed_name.",
+      "form_reference": "SR-F-030464"
     },
     {
       "operation_id": "vacuum",
@@ -187,9 +193,76 @@
           "control": "number",
           "required": false,
           "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        },
+        {
+          "field_id": "disable_page_skipping",
+          "label": "Disable visibility-map page skipping",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip relations that cannot be immediately locked",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "index_cleanup",
+          "label": "Index cleanup mode",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "AUTO",
+              "label": "Auto"
+            },
+            {
+              "value": "ON",
+              "label": "On"
+            },
+            {
+              "value": "OFF",
+              "label": "Off"
+            }
+          ]
+        },
+        {
+          "field_id": "process_main",
+          "label": "Process main relation (16+)",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "process_toast",
+          "label": "Process TOAST table",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "truncate",
+          "label": "Truncate empty trailing pages",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "skip_database_stats",
+          "label": "Skip updating frozen XID database stats (16+)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 16MB or 0)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. VACUUM cannot run in a transaction block: the apply route runs it in autocommit."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. VACUUM cannot run in a transaction block: the apply route runs it in autocommit.",
+      "form_reference": "SR-F-030465",
+      "produces_log": true
     },
     {
       "operation_id": "analyze",
@@ -214,9 +287,23 @@
           "label": "Skip tables that cannot be locked",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 8MB or 0)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "columns",
+          "label": "Selected columns (optional, comma-separated)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16.",
+      "form_reference": "SR-F-030466",
+      "produces_log": true
     },
     {
       "operation_id": "reindex",
@@ -241,9 +328,17 @@
           "label": "Verbose",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen.",
+      "form_reference": "SR-F-030467",
+      "produces_log": true
     },
     {
       "operation_id": "cluster",
@@ -271,7 +366,9 @@
           "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Rewrites the table under an exclusive lock, hence the confirmation."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Rewrites the table under an exclusive lock, hence the confirmation.",
+      "form_reference": "SR-F-030468",
+      "produces_log": true
     },
     {
       "operation_id": "truncate",
@@ -298,7 +395,8 @@
           "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the table name (the resource display name)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. The typed name is the table name (the resource display name).",
+      "form_reference": "SR-F-030469"
     },
     {
       "operation_id": "reindex",
@@ -323,9 +421,17 @@
           "label": "Verbose",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. Runs in autocommit when CONCURRENTLY is chosen.",
+      "form_reference": "SR-F-030470",
+      "produces_log": true
     },
     {
       "operation_id": "reindex",
@@ -350,9 +456,17 @@
           "label": "Verbose",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX SCHEMA always runs in autocommit."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX SCHEMA always runs in autocommit.",
+      "form_reference": "SR-F-030471",
+      "produces_log": true
     },
     {
       "operation_id": "reindex",
@@ -377,9 +491,17 @@
           "label": "Verbose",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX DATABASE always runs in autocommit and only the connected database."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16. REINDEX DATABASE always runs in autocommit and only the connected database.",
+      "form_reference": "SR-F-030472",
+      "produces_log": true
     },
     {
       "operation_id": "refresh",
@@ -407,7 +529,9 @@
           "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 16.15 server, effect observed). Not PostgreSQL 18.3 evidence: the profile pins 18.3, this host has 16.",
+      "form_reference": "SR-F-030473",
+      "produces_log": true
     },
     {
       "operation_id": "reload",
@@ -421,7 +545,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11).",
+      "form_reference": "SR-F-030474"
     },
     {
       "operation_id": "restore-point",
@@ -443,7 +568,8 @@
           "help": "Recorded in the WAL; a recovery_target_name for point-in-time recovery."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11).",
+      "form_reference": "SR-F-030475"
     },
     {
       "operation_id": "wal-replay-pause",
@@ -457,7 +583,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes.",
+      "form_reference": "SR-F-030476"
     },
     {
       "operation_id": "wal-replay-resume",
@@ -471,7 +598,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, result row observed). Runs from the server scope on the maintenance attachment; the provider tree server node offers it (M6, 2026-11-11). Only a standby in recovery accepts it; the server refuses it on a primary, which the live test observes.",
+      "form_reference": "SR-F-030477"
     },
     {
       "operation_id": "vacuum",
@@ -515,9 +643,76 @@
           "control": "number",
           "required": false,
           "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        },
+        {
+          "field_id": "disable_page_skipping",
+          "label": "Disable visibility-map page skipping",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip relations that cannot be immediately locked",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "index_cleanup",
+          "label": "Index cleanup mode",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "AUTO",
+              "label": "Auto"
+            },
+            {
+              "value": "ON",
+              "label": "On"
+            },
+            {
+              "value": "OFF",
+              "label": "Off"
+            }
+          ]
+        },
+        {
+          "field_id": "process_main",
+          "label": "Process main relation (16+)",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "process_toast",
+          "label": "Process TOAST table",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "truncate",
+          "label": "Truncate empty trailing pages",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "skip_database_stats",
+          "label": "Skip updating frozen XID database stats (16+)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 16MB or 0)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused. VACUUM cannot run in a transaction block: autocommit."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused. VACUUM cannot run in a transaction block: autocommit.",
+      "form_reference": "SR-F-030478",
+      "produces_log": true
     },
     {
       "operation_id": "analyze",
@@ -542,9 +737,17 @@
           "label": "Skip tables that cannot be locked",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 8MB or 0)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Schema scope: PostgreSQL has no schema form, so the statement names the tables and materialized views listed with the schema; a table created after the listing is not included, and an empty schema is refused.",
+      "form_reference": "SR-F-030479",
+      "produces_log": true
     },
     {
       "operation_id": "vacuum",
@@ -588,9 +791,82 @@
           "control": "number",
           "required": false,
           "help": "Leave empty to let the server decide; 0 disables parallel index vacuuming."
+        },
+        {
+          "field_id": "disable_page_skipping",
+          "label": "Disable visibility-map page skipping",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "skip_locked",
+          "label": "Skip relations that cannot be immediately locked",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "index_cleanup",
+          "label": "Index cleanup mode",
+          "control": "select",
+          "required": false,
+          "options": [
+            {
+              "value": "AUTO",
+              "label": "Auto"
+            },
+            {
+              "value": "ON",
+              "label": "On"
+            },
+            {
+              "value": "OFF",
+              "label": "Off"
+            }
+          ]
+        },
+        {
+          "field_id": "process_main",
+          "label": "Process main relation (16+)",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "process_toast",
+          "label": "Process TOAST table",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "truncate",
+          "label": "Truncate empty trailing pages",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "skip_database_stats",
+          "label": "Skip updating frozen XID database stats (16+)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 16MB or 0)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "only_database_stats",
+          "label": "Update only frozen XID database stats (16+)",
+          "control": "boolean",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database. VACUUM cannot run in a transaction block: autocommit."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database. VACUUM cannot run in a transaction block: autocommit.",
+      "form_reference": "SR-F-030480",
+      "produces_log": true
     },
     {
       "operation_id": "analyze",
@@ -615,9 +891,17 @@
           "label": "Skip tables that cannot be locked",
           "control": "boolean",
           "required": false
+        },
+        {
+          "field_id": "buffer_usage_limit",
+          "label": "Buffer usage limit (16+, e.g. 8MB or 0)",
+          "control": "text",
+          "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. Database scope: no table list, so it covers the connected database; the apply route runs on that database.",
+      "form_reference": "SR-F-030481",
+      "produces_log": true
     },
     {
       "operation_id": "reassign-owned",
@@ -648,7 +932,8 @@
           "reference_kind": "role"
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did.",
+      "form_reference": "SR-F-030482"
     },
     {
       "operation_id": "drop-owned",
@@ -678,7 +963,8 @@
           "required": false
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. Also revokes the role's privileges in that database."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. Also revokes the role's privileges in that database.",
+      "form_reference": "SR-F-030483"
     },
     {
       "operation_id": "move-objects",
@@ -742,7 +1028,8 @@
           "help": "Leave empty to move every object in the tablespace."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. ALTER TABLE/INDEX/MATERIALIZED VIEW ALL IN TABLESPACE ... SET TABLESPACE, one transaction; it takes an exclusive lock on each moved relation. Live check uses tablespace_dir."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M6, 2026-11-11. The dialog picks the database; the plan runs in it and touches only that database's objects, as the inherited dialog did. ALTER TABLE/INDEX/MATERIALIZED VIEW ALL IN TABLESPACE ... SET TABLESPACE, one transaction; it takes an exclusive lock on each moved relation. Live check uses tablespace_dir.",
+      "form_reference": "SR-F-030484"
     },
     {
       "operation_id": "run-now",
@@ -756,7 +1043,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py against a stand-in pgagent schema on PostgreSQL 18.3 (the demo image cannot install pgAgent; not checked against a real agent). Sets jobnextrun = now(); the agent picks the job up at its next poll. M6, 2026-11-11."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py against a stand-in pgagent schema on PostgreSQL 18.3 (the demo image cannot install pgAgent; not checked against a real agent). Sets jobnextrun = now(); the agent picks the job up at its next poll. M6, 2026-11-11.",
+      "form_reference": "SR-F-030485"
     },
     {
       "operation_id": "count-rows",
@@ -770,7 +1058,9 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt.",
+      "form_reference": "SR-F-030486",
+      "produces_log": true
     },
     {
       "operation_id": "reset-statistics",
@@ -784,7 +1074,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. pg_stat_reset_single_table_counters(oid)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. pg_stat_reset_single_table_counters(oid).",
+      "form_reference": "SR-F-030487"
     },
     {
       "operation_id": "enable-triggers",
@@ -798,7 +1089,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... ENABLE TRIGGER ALL."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... ENABLE TRIGGER ALL.",
+      "form_reference": "SR-F-030488"
     },
     {
       "operation_id": "disable-triggers",
@@ -812,7 +1104,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... DISABLE TRIGGER ALL, including internal constraint triggers: foreign keys stop being enforced until re-enabled."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. ALTER TABLE ... DISABLE TRIGGER ALL, including internal constraint triggers: foreign keys stop being enforced until re-enabled.",
+      "form_reference": "SR-F-030489"
     },
     {
       "operation_id": "create-partition",
@@ -964,7 +1257,8 @@
           "language": "text"
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server.",
+      "form_reference": "SR-F-030490"
     },
     {
       "operation_id": "attach-partition",
@@ -999,7 +1293,8 @@
           "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Offered on a partitioned table; a plain table refuses it at the server.",
+      "form_reference": "SR-F-030491"
     },
     {
       "operation_id": "create-partition",
@@ -1151,7 +1446,8 @@
           "language": "text"
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it.",
+      "form_reference": "SR-F-030492"
     },
     {
       "operation_id": "attach-partition",
@@ -1186,7 +1482,8 @@
           "help": "FOR VALUES FROM (...) TO (...), FOR VALUES IN (...) or FOR VALUES WITH (MODULUS m, REMAINDER r); empty with Default partition."
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it.",
+      "form_reference": "SR-F-030493"
     },
     {
       "operation_id": "detach-partition",
@@ -1222,7 +1519,8 @@
           ]
         }
       ],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Only a table that is a partition accepts it; the plan names its parent from the listing."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited partition and table nodes offered it. Only a table that is a partition accepts it; the plan names its parent from the listing.",
+      "form_reference": "SR-F-030494"
     },
     {
       "operation_id": "count-rows",
@@ -1236,7 +1534,9 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_postgresql.py (dialog draft -> validate -> plan -> apply on a live PostgreSQL 18.3 server, effect observed). M7, 2026-11-11; the inherited table node offered it. A read: SELECT count(*); the result row is the receipt.",
+      "form_reference": "SR-F-030495",
+      "produces_log": true
     },
     {
       "operation_id": "install-drop-namespace-guard",
@@ -1257,7 +1557,8 @@
           "required": true
         }
       ],
-      "notes": "Database superuser only. Installs a fixed SECURITY DEFINER SQL function in pg_catalog to retain the native namespace and relation catalog-row locks for reviewed table DROP by table/schema owners. The function checks the invoking session or SET ROLE ownership and grants no catalog update privileges. Installation is CREATE only: an existing function is never overwritten. Inspect an existing collision before retrying. Required per database for ordinary owners, including older PostgreSQL minors whose schema rename ignores object locks. No automatic installation, SQL replay or restart. The reviewed installer explicitly grants PUBLIC EXECUTE; the fixed body restricts use to native table/schema owners. It does not grant catalog or table privileges."
+      "notes": "Database superuser only. Installs a fixed SECURITY DEFINER SQL function in pg_catalog to retain the native namespace and relation catalog-row locks for reviewed table DROP by table/schema owners. The function checks the invoking session or SET ROLE ownership and grants no catalog update privileges. Installation is CREATE only: an existing function is never overwritten. Inspect an existing collision before retrying. Required per database for ordinary owners, including older PostgreSQL minors whose schema rename ignores object locks. No automatic installation, SQL replay or restart. The reviewed installer explicitly grants PUBLIC EXECUTE; the fixed body restricts use to native table/schema owners. It does not grant catalog or table privileges.",
+      "form_reference": "SR-F-030496"
     },
     {
       "operation_id": "create",
@@ -1571,7 +1872,8 @@
       "notes": "Provider-native column plan/apply. generated_kind=s/v; VIRTUAL requires native18+, SET EXPRESSION native17+ (virtual18+), DROP EXPRESSION stored only13+. KEEP never silently discards changed genexpr. Runtime is verified at review and apply, not supplied by the client. Native DDL is transactional; SET rewrites stored values and clears statistics. Refresh exact attnum/expression/kind after apply; no automatic replay.",
       "menu": {
         "category": "create"
-      }
+      },
+      "form_reference": "SR-F-030497"
     },
     {
       "operation_id": "alter",
@@ -1996,7 +2298,8 @@
       "notes": "Provider-native column plan/apply. generated_kind=s/v; VIRTUAL requires native18+, SET EXPRESSION native17+ (virtual18+), DROP EXPRESSION stored only13+. KEEP never silently discards changed genexpr. Runtime is verified at review and apply, not supplied by the client. Native DDL is transactional; SET rewrites stored values and clears statistics. Refresh exact attnum/expression/kind after apply; no automatic replay.",
       "menu": {
         "category": "maintenance"
-      }
+      },
+      "form_reference": "SR-F-030498"
     },
     {
       "operation_id": "create",
@@ -2029,7 +2332,7 @@
           "label": "Statistics target",
           "control": "number",
           "required": false,
-          "help": "-1 uses default; 0\u201310000 native target."
+          "help": "-1 uses default; 0–10000 native target."
         },
         {
           "field_id": "comment",
@@ -2111,10 +2414,11 @@
           ]
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "create"
-      }
+      },
+      "form_reference": "SR-F-030499"
     },
     {
       "operation_id": "alter",
@@ -2147,7 +2451,7 @@
           "label": "Statistics target",
           "control": "number",
           "required": false,
-          "help": "-1 uses default; 0\u201310000 native target."
+          "help": "-1 uses default; 0–10000 native target."
         },
         {
           "field_id": "comment",
@@ -2156,10 +2460,11 @@
           "required": false
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "maintenance"
-      }
+      },
+      "form_reference": "SR-F-030500"
     },
     {
       "operation_id": "drop",
@@ -2182,10 +2487,11 @@
           "required": true
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "maintenance"
-      }
+      },
+      "form_reference": "SR-F-030501"
     },
     {
       "operation_id": "inspect",
@@ -2195,10 +2501,12 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "open"
-      }
+      },
+      "form_reference": "SR-F-030502",
+      "produces_log": true
     },
     {
       "operation_id": "grant",
@@ -2263,7 +2571,8 @@
           "required": false
         }
       ],
-      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay.",
+      "form_reference": "SR-F-030503"
     },
     {
       "operation_id": "revoke",
@@ -2334,7 +2643,8 @@
           "required": false
         }
       ],
-      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay.",
+      "form_reference": "SR-F-030504"
     },
     {
       "operation_id": "inspect",
@@ -2355,7 +2665,9 @@
           "help": "Use a catalog parameter name, never a setting value."
         }
       ],
-      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay."
+      "notes": "Native PostgreSQL15+ pg_parameter_acl. Target native parname/OID and typed SET/ALTER SYSTEM privileges, roles, grant option and explicit CASCADE/RESTRICT. No configuration values enter requests, plans or inventory. Native grant authority is independent of application administer/execute permission. Inspection reports explicit ACL rows and native current-principal privileges, without inferring that a missing row allows access. Shared cluster ACLs are inspected via the server inventory; runtime gate is checked at review and apply. Native grants do not SET or ALTER SYSTEM a value. Transactional native acknowledgement and cleanup; no automatic replay.",
+      "form_reference": "SR-F-030505",
+      "produces_log": true
     },
     {
       "operation_id": "grant",
@@ -2574,7 +2886,8 @@
           "required": false
         }
       ],
-      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets.",
+      "form_reference": "SR-F-030506"
     },
     {
       "operation_id": "revoke",
@@ -2799,7 +3112,8 @@
           "required": false
         }
       ],
-      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets.",
+      "form_reference": "SR-F-030507"
     },
     {
       "operation_id": "inspect",
@@ -2931,7 +3245,9 @@
           ]
         }
       ],
-      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets."
+      "notes": "Selected-database native ALTER DEFAULT PRIVILEGES. Explicit current or named creation owners, FOR ROLE/USER, global or selected-schema scope; all native families including SCHEMAS and LARGE OBJECTS (18+). MAINTAIN requires17+. SCHEMAS/LARGE OBJECTS reject IN SCHEMA. Grant-option-only revocation and CASCADE/RESTRICT retain native semantics. Future objects only: existing ACLs are not changed, and role membership does not merge other owners default privileges. Inspect/readback returns native default-ACL OIDs and explicit grant entries; an absent row means native built-in defaults, never inferred denial. Selectors are explicit, not inferred from a selected catalog row. Shared retained review/apply permissions, transaction, cleanup and no replay; no values or secrets.",
+      "form_reference": "SR-F-030508",
+      "produces_log": true
     },
     {
       "operation_id": "checkpoint",
@@ -2950,10 +3266,12 @@
           "control": "number",
           "default": 30000,
           "required": false,
-          "help": "1\u2013600000. Stops waiting; checkpoint work may continue."
+          "help": "1–600000. Stops waiting; checkpoint work may continue."
         }
       ],
-      "notes": "Standalone native CHECKPOINT on an independent autocommit attachment, bound at review/apply to the actual server/startup/database and effective/authenticated principals. Native superuser or native checkpoint-role authority is required, independently of application administer/execute permissions. Exact CHECKPOINT command tag is required. Receipt separates nontransactional completion and connection release; rollback never undoes a checkpoint. Timeout, cancellation and lost acknowledgement have unknown effect; no automatic replay and no physical durability inference. Synchronous bounded wait; no progress stream or manual cancellation API is advertised."
+      "notes": "Standalone native CHECKPOINT on an independent autocommit attachment, bound at review/apply to the actual server/startup/database and effective/authenticated principals. Native superuser or native checkpoint-role authority is required, independently of application administer/execute permissions. Exact CHECKPOINT command tag is required. Receipt separates nontransactional completion and connection release; rollback never undoes a checkpoint. Timeout, cancellation and lost acknowledgement have unknown effect; no automatic replay and no physical durability inference. Synchronous bounded wait; no progress stream or manual cancellation API is advertised.",
+      "form_reference": "SR-F-030509",
+      "produces_log": true
     },
     {
       "operation_id": "host_pg_controldata",
@@ -2986,7 +3304,9 @@
         }
       ],
       "description": "Native pg_controldata on an operator-granted application-host cluster; fixed postgresql_host_tools review/start/status/cancel/list contract. Requires host Administrator and backup_admin independently of server connection. Process return is not an atomic live-cluster snapshot.",
-      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030510",
+      "produces_log": true
     },
     {
       "operation_id": "host_pg_walsummary",
@@ -3032,7 +3352,9 @@
         }
       ],
       "description": "Native pg_walsummary reads exact privately staged SHA-256-bound granted files, one invocation for ordered selections. Printed relation/block references are observations, not proof these files belong to the registered remote server. postgresql_host_tools review/start/status/cancel/list; native helper/version/host authority remain backend-owned.",
-      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030511",
+      "produces_log": true
     },
     {
       "operation_id": "host_pg_test_timing",
@@ -3047,7 +3369,7 @@
       "fields": [
         {
           "field_id": "duration_seconds",
-          "label": "Native test duration (seconds, 1\u201360)",
+          "label": "Native test duration (seconds, 1–60)",
           "control": "number",
           "default": 3
         },
@@ -3065,7 +3387,9 @@
         }
       ],
       "description": "Native pg_test_timing on the application host. Requires a separate endpoint-scoped operator host grant plus host Administrator and backup_admin. Does not measure the registered database server. Durable native process progress/cancel/status, exact binary/version/host identity, timeout and no replay.",
-      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030512",
+      "produces_log": true
     },
     {
       "operation_id": "host_pg_test_fsync",
@@ -3086,7 +3410,7 @@
         },
         {
           "field_id": "seconds_per_test",
-          "label": "Seconds per native test (1\u201360)",
+          "label": "Seconds per native test (1–60)",
           "control": "number",
           "default": 1
         },
@@ -3104,7 +3428,9 @@
         }
       ],
       "description": "Native pg_test_fsync uses a newly owned private file within a separately operator-granted scratch root. Its per-test duration is not the total runtime. No existing cluster file is selected, overwritten or used. Display exact host/filesystem/native version, bounded raw report, process cleanup and temporary-file cleanup separately. Not a remote-server performance measurement.",
-      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030513",
+      "produces_log": true
     },
     {
       "operation_id": "host_pg_checksums",
@@ -3215,7 +3541,1437 @@
         }
       ],
       "description": "Native pg_checksums CHECK/ENABLE/DISABLE on an exactly granted stopped application-host cluster and explicitly granted tablespaces. Separate external quiescence and mutation/no-sync acknowledgements, native control/tree/runtime revalidation, persistent process-resource lease and non-replaying durable receipts. Native error/cancel/lost acknowledgement can leave partial page effects; SQL rollback and a control flag cannot prove recovery or physical data integrity.",
-      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication."
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030514",
+      "produces_log": true
+    },
+    {
+      "operation_id": "reindex-system",
+      "resource_kind": "database",
+      "title": "Reindex system catalogs",
+      "menu": {
+        "category": "maintenance",
+        "order": 15
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Native REINDEX SYSTEM on the connected database in autocommit mode; CONCURRENTLY is refused per native rules.",
+      "form_reference": "SR-F-030515",
+      "produces_log": true
+    },
+    {
+      "operation_id": "reindex",
+      "resource_kind": "partitioned-index",
+      "title": "Reindex partitioned index",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "concurrently",
+          "label": "Concurrently (cannot run in a transaction block)",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "verbose",
+          "label": "Verbose",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "tablespace",
+          "label": "Destination tablespace (optional)",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Native REINDEX INDEX on a partitioned index.",
+      "form_reference": "SR-F-030516",
+      "produces_log": true
+    },
+    {
+      "operation_id": "attach-partition",
+      "resource_kind": "index",
+      "title": "Attach index partition",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "child_schema",
+          "label": "Partition index schema",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "child_index",
+          "label": "Partition index name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Standalone native ALTER INDEX parent ATTACH PARTITION child with pg_inherits + indisvalid observation read-back.",
+      "form_reference": "SR-F-030517"
+    },
+    {
+      "operation_id": "attach-partition",
+      "resource_kind": "partitioned-index",
+      "title": "Attach index partition",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "child_schema",
+          "label": "Partition index schema",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "child_index",
+          "label": "Partition index name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Standalone native ALTER INDEX parent ATTACH PARTITION child on a partitioned index.",
+      "form_reference": "SR-F-030518"
+    },
+    {
+      "operation_id": "import-foreign-schema",
+      "resource_kind": "foreign-server",
+      "title": "Import foreign schema",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "remote_schema",
+          "label": "Remote schema",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "local_schema",
+          "label": "Destination local schema",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "filter_mode",
+          "label": "Table selection mode",
+          "control": "select",
+          "required": false,
+          "default": "ALL",
+          "options": [
+            {
+              "value": "ALL",
+              "label": "All remote tables"
+            },
+            {
+              "value": "LIMIT_TO",
+              "label": "LIMIT TO selected tables"
+            },
+            {
+              "value": "EXCEPT",
+              "label": "EXCEPT excluded tables"
+            }
+          ]
+        },
+        {
+          "field_id": "tables",
+          "label": "Selected or excluded tables",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Remote table name",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "options",
+          "label": "FDW import options",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Option",
+              "control": "text",
+              "required": true
+            },
+            {
+              "field_id": "value",
+              "label": "Value",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "notes": "Native IMPORT FOREIGN SCHEMA with LIMIT TO / EXCEPT, redacted credential option guard and pg_foreign_table observation read-back.",
+      "form_reference": "SR-F-030519"
+    },
+    {
+      "operation_id": "inspect",
+      "resource_kind": "prepared-transaction",
+      "title": "Inspect prepared 2PC transactions",
+      "menu": {
+        "category": "diagnostics",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "draft",
+      "produces_log": true,
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Reads pg_prepared_xacts (GID, prepared timestamp, owner, database, XID).",
+      "form_reference": "SR-F-030520"
+    },
+    {
+      "operation_id": "resolve",
+      "resource_kind": "prepared-transaction",
+      "title": "Resolve prepared 2PC transaction",
+      "menu": {
+        "category": "maintenance",
+        "order": 10
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "gid",
+          "label": "Prepared transaction GID",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_database",
+          "label": "Expected database name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_owner",
+          "label": "Expected owner role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_xid",
+          "label": "Expected transaction XID (optional)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "decision",
+          "label": "Resolution decision",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "COMMIT",
+              "label": "COMMIT PREPARED"
+            },
+            {
+              "value": "ROLLBACK",
+              "label": "ROLLBACK PREPARED"
+            }
+          ]
+        },
+        {
+          "field_id": "coordinator_reference",
+          "label": "External coordinator / incident decision reference",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type the exact GID to confirm",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Autocommit COMMIT PREPARED / ROLLBACK PREPARED with exact GID, database, owner and XID re-verification immediately before dispatch.",
+      "form_reference": "SR-F-030521"
+    },
+    {
+      "operation_id": "inspect-prepared-transactions",
+      "resource_kind": "server",
+      "title": "Inspect prepared 2PC transactions",
+      "menu": {
+        "category": "diagnostics",
+        "order": 30
+      },
+      "tier": 2,
+      "status": "draft",
+      "produces_log": true,
+      "confirmation": "none",
+      "fields": [],
+      "notes": "Server-scoped inspection of pg_prepared_xacts.",
+      "form_reference": "SR-F-030522"
+    },
+    {
+      "operation_id": "resolve-prepared-transaction",
+      "resource_kind": "server",
+      "title": "Resolve prepared 2PC transaction",
+      "menu": {
+        "category": "maintenance",
+        "order": 30
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "gid",
+          "label": "Prepared transaction GID",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_database",
+          "label": "Expected database name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_owner",
+          "label": "Expected owner role",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "expected_xid",
+          "label": "Expected transaction XID (optional)",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "decision",
+          "label": "Resolution decision",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "COMMIT",
+              "label": "COMMIT PREPARED"
+            },
+            {
+              "value": "ROLLBACK",
+              "label": "ROLLBACK PREPARED"
+            }
+          ]
+        },
+        {
+          "field_id": "coordinator_reference",
+          "label": "External coordinator / incident decision reference",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type the exact GID to confirm",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Server-scoped autocommit COMMIT PREPARED / ROLLBACK PREPARED with pre-dispatch GID/database/owner/XID verification.",
+      "form_reference": "SR-F-030523"
+    },
+    {
+      "operation_id": "inspect-configuration",
+      "resource_kind": "server",
+      "title": "Inspect server configuration and HBA rules",
+      "menu": {
+        "category": "diagnostics",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "draft",
+      "produces_log": true,
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "scope",
+          "label": "Inspection view",
+          "control": "select",
+          "required": false,
+          "default": "settings",
+          "options": [
+            {
+              "value": "settings",
+              "label": "Effective vs file settings (pg_settings + pg_file_settings)"
+            },
+            {
+              "value": "pending_restart",
+              "label": "Parameters pending postmaster restart"
+            },
+            {
+              "value": "file_errors",
+              "label": "Configuration file errors & unapplied entries"
+            },
+            {
+              "value": "hba_rules",
+              "label": "Client authentication rules (pg_hba_file_rules)"
+            },
+            {
+              "value": "ident_mappings",
+              "label": "User-name maps (pg_ident_file_mappings)"
+            }
+          ]
+        },
+        {
+          "field_id": "parameter",
+          "label": "Filter by parameter name (optional)",
+          "control": "text",
+          "required": false
+        }
+      ],
+      "notes": "Reads effective vs file settings, pending-restart parameters, pg_file_settings errors, pg_hba_file_rules and pg_ident_file_mappings.",
+      "form_reference": "SR-F-030524"
+    },
+    {
+      "operation_id": "alter-system-set",
+      "resource_kind": "server",
+      "title": "Persist parameter (ALTER SYSTEM SET)",
+      "menu": {
+        "category": "maintenance",
+        "order": 20
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value_mode",
+          "label": "Value mode",
+          "control": "select",
+          "required": false,
+          "default": "VALUE",
+          "options": [
+            {
+              "value": "VALUE",
+              "label": "Explicit value"
+            },
+            {
+              "value": "DEFAULT",
+              "label": "Reset to compiled/file DEFAULT"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "reload_after",
+          "label": "Reload server configuration after write",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        }
+      ],
+      "notes": "Autocommit ALTER SYSTEM SET with protected shell-command/secret GUC guard, optional pg_reload_conf and pg_settings/pg_file_settings observation.",
+      "form_reference": "SR-F-030525"
+    },
+    {
+      "operation_id": "alter-system-reset",
+      "resource_kind": "server",
+      "title": "Reset persisted parameter (ALTER SYSTEM RESET)",
+      "menu": {
+        "category": "maintenance",
+        "order": 21
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "parameter",
+          "label": "Parameter name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "reload_after",
+          "label": "Reload server configuration after reset",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type the parameter name to confirm",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Autocommit ALTER SYSTEM RESET with typed parameter confirmation and optional pg_reload_conf.",
+      "form_reference": "SR-F-030526"
+    },
+    {
+      "operation_id": "alter-system-reset-all",
+      "resource_kind": "server",
+      "title": "Clear all persisted parameters (ALTER SYSTEM RESET ALL)",
+      "menu": {
+        "category": "maintenance",
+        "order": 22
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "reload_after",
+          "label": "Reload server configuration after reset",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Type RESET ALL to confirm",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Autocommit ALTER SYSTEM RESET ALL clearing postgresql.auto.conf with explicit RESET ALL confirmation.",
+      "form_reference": "SR-F-030527"
+    },
+    {
+      "operation_id": "host_initdb",
+      "resource_kind": "server",
+      "title": "Initialize local database cluster (initdb)",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "init_root_id",
+          "label": "Operator-granted initialization root",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "subdir",
+          "label": "New cluster directory name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "encoding",
+          "label": "Default encoding",
+          "control": "select",
+          "default": "UTF8",
+          "options": [
+            {
+              "value": "UTF8",
+              "label": "UTF8"
+            },
+            {
+              "value": "LATIN1",
+              "label": "LATIN1"
+            },
+            {
+              "value": "SQL_ASCII",
+              "label": "SQL_ASCII"
+            }
+          ]
+        },
+        {
+          "field_id": "locale_provider",
+          "label": "Locale provider",
+          "control": "select",
+          "default": "libc",
+          "options": [
+            {
+              "value": "libc",
+              "label": "libc"
+            },
+            {
+              "value": "icu",
+              "label": "icu"
+            },
+            {
+              "value": "builtin",
+              "label": "builtin"
+            }
+          ]
+        },
+        {
+          "field_id": "locale",
+          "label": "Default locale",
+          "control": "text",
+          "default": "C"
+        },
+        {
+          "field_id": "icu_locale",
+          "label": "ICU locale (when provider is icu)",
+          "control": "text"
+        },
+        {
+          "field_id": "builtin_locale",
+          "label": "Built-in locale (when provider is builtin)",
+          "control": "text"
+        },
+        {
+          "field_id": "data_checksums",
+          "label": "Enable data page checksums",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "wal_segsize_mb",
+          "label": "WAL segment size (MiB, power of two)",
+          "control": "number",
+          "default": 16
+        },
+        {
+          "field_id": "username",
+          "label": "Initial superuser name",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "auth_host",
+          "label": "Host TCP/IP auth method",
+          "control": "select",
+          "default": "scram-sha-256",
+          "options": [
+            {
+              "value": "scram-sha-256",
+              "label": "scram-sha-256"
+            },
+            {
+              "value": "md5",
+              "label": "md5"
+            },
+            {
+              "value": "reject",
+              "label": "reject"
+            },
+            {
+              "value": "trust",
+              "label": "trust"
+            }
+          ]
+        },
+        {
+          "field_id": "auth_local",
+          "label": "Local socket auth method",
+          "control": "select",
+          "default": "peer",
+          "options": [
+            {
+              "value": "peer",
+              "label": "peer"
+            },
+            {
+              "value": "scram-sha-256",
+              "label": "scram-sha-256"
+            },
+            {
+              "value": "reject",
+              "label": "reject"
+            },
+            {
+              "value": "trust",
+              "label": "trust"
+            }
+          ]
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm init_root_id/subdir",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 120
+        }
+      ],
+      "description": "Native initdb inside an operator-granted empty initialization root with post-init pg_controldata verification.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030528",
+      "produces_log": true
+    },
+    {
+      "operation_id": "host_pg_amcheck",
+      "resource_kind": "server",
+      "title": "Check heap and B-tree corruption (pg_amcheck)",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "produces_log": true,
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "host",
+          "label": "Loopback host",
+          "control": "text",
+          "default": "127.0.0.1"
+        },
+        {
+          "field_id": "port",
+          "label": "Port",
+          "control": "number",
+          "default": 5432
+        },
+        {
+          "field_id": "username",
+          "label": "Database user",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "all_databases",
+          "label": "Check all databases",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "database",
+          "label": "Target database",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "schema_pattern",
+          "label": "Schema pattern (optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "table_pattern",
+          "label": "Table pattern (optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "index_pattern",
+          "label": "Index pattern (optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "heapallindexed",
+          "label": "Verify all heap tuples are indexed (--heapallindexed)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "parent_check",
+          "label": "Verify index parent/child relationships (--parent-check)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "rootdescend",
+          "label": "Re-probe from B-tree root (--rootdescend)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "no_dependent_indexes",
+          "label": "Do not expand relations to dependent indexes",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "no_dependent_toast",
+          "label": "Do not expand relations to TOAST tables",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "jobs",
+          "label": "Concurrent worker jobs",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm database name (or ALL)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 120
+        }
+      ],
+      "description": "Managed native pg_amcheck consistency verification distinguishing clean pass (0), operational refusal (1) and detected corruption (2).",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030529"
+    },
+    {
+      "operation_id": "host_pg_createsubscriber",
+      "resource_kind": "server",
+      "title": "Convert physical standby to logical replica (pg_createsubscriber)",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "cluster_id",
+          "label": "Operator-granted stopped standby cluster",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "publisher_host",
+          "label": "Publisher host",
+          "control": "text",
+          "default": "127.0.0.1"
+        },
+        {
+          "field_id": "publisher_port",
+          "label": "Publisher port",
+          "control": "number",
+          "default": 5432
+        },
+        {
+          "field_id": "publisher_user",
+          "label": "Publisher replication user",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "databases",
+          "label": "Target databases",
+          "control": "grid",
+          "item_kind": "string",
+          "required": true
+        },
+        {
+          "field_id": "dry_run",
+          "label": "Dry-run check only (--dry-run)",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "subscriber_port",
+          "label": "Temporary subscriber startup port",
+          "control": "number",
+          "default": 50432
+        },
+        {
+          "field_id": "subscriber_username",
+          "label": "Subscriber superuser",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "recovery_timeout",
+          "label": "Recovery timeout (seconds)",
+          "control": "number",
+          "default": 60
+        },
+        {
+          "field_id": "enable_two_phase",
+          "label": "Enable two-phase commit on subscriptions",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "publication_name",
+          "label": "Publication name (single DB)",
+          "control": "text"
+        },
+        {
+          "field_id": "subscription_name",
+          "label": "Subscription name (single DB)",
+          "control": "text"
+        },
+        {
+          "field_id": "replication_slot_name",
+          "label": "Replication slot name (single DB)",
+          "control": "text"
+        },
+        {
+          "field_id": "offline_quiescence_confirmed",
+          "label": "Confirm standby is stopped and externally quiesced",
+          "control": "boolean",
+          "default": false,
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm standby cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 180
+        }
+      ],
+      "description": "Native pg_createsubscriber physical-to-logical standby conversion with system-identifier change verification.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030530",
+      "produces_log": true
+    },
+    {
+      "operation_id": "host_pg_resetwal",
+      "resource_kind": "server",
+      "title": "Inspect or reset offline cluster WAL (pg_resetwal)",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "cluster_id",
+          "label": "Operator-granted stopped cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dry_run",
+          "label": "Dry-run control-file preview only (-n)",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "force",
+          "label": "Force reset after unclean shutdown (-f)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "next_xid",
+          "label": "Next transaction ID (-x, optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "next_oid",
+          "label": "Next OID (-o, optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "next_multixact_ids",
+          "label": "Next,oldest multixact ID (-m, optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "next_wal_file",
+          "label": "Minimum starting WAL file (-l, optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "wal_segsize_mb",
+          "label": "WAL segment size MiB (optional)",
+          "control": "number"
+        },
+        {
+          "field_id": "offline_quiescence_confirmed",
+          "label": "Confirm cluster is stopped and externally quiesced",
+          "control": "boolean",
+          "default": false,
+          "required": true
+        },
+        {
+          "field_id": "destructive_reset_confirmed",
+          "label": "Confirm destructive WAL reset consequences (when not dry-run)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 60
+        }
+      ],
+      "description": "Guarded offline pg_resetwal with dry-run default, stopped-cluster enforcement, and pre/post pg_controldata read-back.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030531",
+      "produces_log": true
+    },
+    {
+      "operation_id": "host_pg_rewind",
+      "resource_kind": "server",
+      "title": "Rewind diverged offline cluster timeline (pg_rewind)",
+      "menu": {
+        "category": "replication"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "cluster_id",
+          "label": "Target stopped cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "source_mode",
+          "label": "Synchronization source",
+          "control": "select",
+          "default": "cluster",
+          "options": [
+            {
+              "value": "cluster",
+              "label": "Operator-granted local cluster (--source-pgdata)"
+            },
+            {
+              "value": "server",
+              "label": "Live source server (--source-server)"
+            }
+          ]
+        },
+        {
+          "field_id": "source_cluster_id",
+          "label": "Source cluster identity (cluster mode)",
+          "control": "text"
+        },
+        {
+          "field_id": "source_host",
+          "label": "Source server host (server mode)",
+          "control": "text",
+          "default": "127.0.0.1"
+        },
+        {
+          "field_id": "source_port",
+          "label": "Source server port (server mode)",
+          "control": "number",
+          "default": 5432
+        },
+        {
+          "field_id": "source_user",
+          "label": "Source server user (server mode)",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "source_dbname",
+          "label": "Source database (server mode)",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "dry_run",
+          "label": "Dry-run plan only (--dry-run)",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "restore_target_wal",
+          "label": "Use target restore_command for WAL (-c)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "write_recovery_conf",
+          "label": "Write standby recovery configuration (-R, server mode)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "no_sync",
+          "label": "Skip filesystem sync (--no-sync)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "offline_quiescence_confirmed",
+          "label": "Confirm target cluster is stopped and externally quiesced",
+          "control": "boolean",
+          "default": false,
+          "required": true
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm target cluster identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 180
+        }
+      ],
+      "description": "Native pg_rewind timeline resynchronization with stopped-cluster and control-data verification.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030532",
+      "produces_log": true
+    },
+    {
+      "operation_id": "host_pg_archivecleanup",
+      "resource_kind": "server",
+      "title": "Clean archived WAL segments (pg_archivecleanup)",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 2,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "archive_id",
+          "label": "Operator-granted WAL archive identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "oldest_kept_wal_file",
+          "label": "Oldest kept WAL segment or .backup file",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dry_run",
+          "label": "Dry-run preview only (-n)",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "debug",
+          "label": "Verbose debug output (-d)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "clean_backup_history",
+          "label": "Also remove older .backup history files (-b)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "strip_extension",
+          "label": "Strip compression extension (-x, e.g. .gz)",
+          "control": "text"
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm archive identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 60
+        }
+      ],
+      "description": "Native pg_archivecleanup with active recovery/consumer hold enforcement and before/after WAL inventory counts.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030533",
+      "produces_log": true
+    },
+    {
+      "operation_id": "host_pgbench",
+      "resource_kind": "server",
+      "title": "Run isolated workload benchmark (pgbench)",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "draft",
+      "produces_log": true,
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "Benchmark stage",
+          "control": "select",
+          "default": "RUN",
+          "options": [
+            {
+              "value": "INIT",
+              "label": "Initialize benchmark tables (-i)"
+            },
+            {
+              "value": "RUN",
+              "label": "Run workload transactions"
+            }
+          ]
+        },
+        {
+          "field_id": "host",
+          "label": "Loopback host",
+          "control": "text",
+          "default": "127.0.0.1"
+        },
+        {
+          "field_id": "port",
+          "label": "Port",
+          "control": "number",
+          "default": 5432
+        },
+        {
+          "field_id": "username",
+          "label": "Database user",
+          "control": "text",
+          "default": "postgres"
+        },
+        {
+          "field_id": "database",
+          "label": "Dedicated benchmark database (cdeadmin_pgbench_*)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "scale",
+          "label": "Scale factor (-s)",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "clients",
+          "label": "Concurrent clients (-c)",
+          "control": "number",
+          "default": 2
+        },
+        {
+          "field_id": "jobs",
+          "label": "Worker threads (-j)",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "transactions",
+          "label": "Transactions per client (-t)",
+          "control": "number"
+        },
+        {
+          "field_id": "time_seconds",
+          "label": "Timed run duration seconds (-T)",
+          "control": "number"
+        },
+        {
+          "field_id": "builtin_script",
+          "label": "Built-in workload",
+          "control": "select",
+          "default": "tpcb-like",
+          "options": [
+            {
+              "value": "tpcb-like",
+              "label": "TPC-B-like (read/write)"
+            },
+            {
+              "value": "simple-update",
+              "label": "Simple update"
+            },
+            {
+              "value": "select-only",
+              "label": "Select only"
+            }
+          ]
+        },
+        {
+          "field_id": "protocol",
+          "label": "Query protocol (-M)",
+          "control": "select",
+          "default": "simple",
+          "options": [
+            {
+              "value": "simple",
+              "label": "simple"
+            },
+            {
+              "value": "extended",
+              "label": "extended"
+            },
+            {
+              "value": "prepared",
+              "label": "prepared"
+            }
+          ]
+        },
+        {
+          "field_id": "no_vacuum",
+          "label": "Skip pre-run VACUUM (-n)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm dedicated cdeadmin_pgbench_* database",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 120
+        }
+      ],
+      "description": "Managed native pgbench restricted to dedicated cdeadmin_pgbench_* databases with parsed TPS and latency receipts.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030534"
+    },
+    {
+      "operation_id": "host_pg_upgrade",
+      "resource_kind": "server",
+      "title": "Check or execute major cluster upgrade (pg_upgrade)",
+      "menu": {
+        "category": "lifecycle"
+      },
+      "tier": 3,
+      "status": "draft",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "pair_id",
+          "label": "Operator-granted upgrade pair identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "check_only",
+          "label": "Compatibility check only (--check)",
+          "control": "boolean",
+          "default": true
+        },
+        {
+          "field_id": "transfer_mode",
+          "label": "Data transfer mode",
+          "control": "select",
+          "default": "copy",
+          "options": [
+            {
+              "value": "copy",
+              "label": "Copy (--copy)"
+            },
+            {
+              "value": "clone",
+              "label": "Reflink clone (--clone)"
+            },
+            {
+              "value": "link",
+              "label": "Hard link (--link)"
+            },
+            {
+              "value": "swap",
+              "label": "Directory swap (--swap)"
+            }
+          ]
+        },
+        {
+          "field_id": "jobs",
+          "label": "Parallel worker jobs (-j)",
+          "control": "number",
+          "default": 1
+        },
+        {
+          "field_id": "retain",
+          "label": "Retain diagnostic log files (--retain)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "no_sync",
+          "label": "Skip post-upgrade fsync (--no-sync)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "username",
+          "label": "Cluster superuser (-U, optional)",
+          "control": "text"
+        },
+        {
+          "field_id": "offline_quiescence_confirmed",
+          "label": "Confirm both old and new clusters are shut down",
+          "control": "boolean",
+          "default": false,
+          "required": true
+        },
+        {
+          "field_id": "upgrade_mutation_confirmed",
+          "label": "Confirm live upgrade mutation (when check_only is false)",
+          "control": "boolean",
+          "default": false
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm upgrade pair identity",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "timeout_seconds",
+          "label": "Native supervisor timeout (seconds)",
+          "control": "number",
+          "default": 300
+        }
+      ],
+      "description": "Managed native pg_upgrade compatibility check and cross-major cluster upgrade with pre/post control-file verification.",
+      "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
+      "form_reference": "SR-F-030535",
+      "produces_log": true
     }
   ]
 }

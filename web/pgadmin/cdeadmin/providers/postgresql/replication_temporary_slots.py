@@ -110,8 +110,8 @@ class ReplicationTemporarySlots:
         self.owns_snapshot_transaction = False
         self.copy_sources = OrderedDict()
         self.require_idle()
-        if connection.info.server_version != 180003:
-            raise TemporarySlotError('Temporary replication requires native PostgreSQL18.3')
+        if not 180000 <= connection.info.server_version < 190000:
+            raise TemporarySlotError('Temporary replication requires native PostgreSQL 18')
         with ClientCursor(connection, row_factory=tuple_row) as cursor:
             cursor.execute('IDENTIFY_SYSTEM')
             identity, timeline, _lsn, database = map(_text, cursor.fetchone())

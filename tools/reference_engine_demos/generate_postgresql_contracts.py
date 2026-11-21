@@ -30,7 +30,7 @@ def generate(dialect_inventory,metrics_inventory,native_receipt,metrics_receipt,
     proofs={}
     for row in live.get('native_admin_task_proofs',[]):
         task='postgresql.'+row['task_id'].replace(':','.')
-        if row.get('native_execution_returned') is True and row.get('transaction_outcome')=='committed':proofs.setdefault(task,[]).append(row)
+        if row.get('native_execution_returned') is True and row.get('transaction_outcome') in {'committed','not_applicable'}:proofs.setdefault(task,[]).append(row)
     expected=set(dialect_task_ids())
     if set(proofs)!=expected:raise ValueError('Native SQL compiler task evidence differs: '+str(sorted(expected^set(proofs))))
     identity={'provider_id':PROFILE.provider_id,'profile_id':PROFILE.profile_id,'engine_id':PROFILE.engine_id,

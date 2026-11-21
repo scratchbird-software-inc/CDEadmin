@@ -3,7 +3,8 @@
   "engine": "postgresql",
   "family": "index",
   "resource_kinds": [
-    "index"
+    "index",
+    "partitioned-index"
   ],
   "form_reference": "SR-F-020061",
   "status": "complete",

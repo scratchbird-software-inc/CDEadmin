@@ -25,16 +25,20 @@ MAINTENANCE_OPERATIONS = {
                         'create-partition', 'attach-partition', 'detach-partition'}),
     # A partitioned table takes the partition operations and the row count (M7).
     'partitioned-table': frozenset({'create-partition', 'attach-partition', 'count-rows'}),
-    'index': frozenset({'reindex'}),
+    'index': frozenset({'reindex', 'attach-partition'}),
+    'partitioned-index': frozenset({'reindex', 'attach-partition'}),
     # Schema and database scope VACUUM/ANALYZE (M6, 2026-11-11): a schema
     # has no VACUUM form, so its statement names the tables captured with it.
     'schema': frozenset({'vacuum', 'analyze', 'reindex'}),
-    'database': frozenset({'vacuum', 'analyze', 'reindex'}),
+    'database': frozenset({'vacuum', 'analyze', 'reindex', 'reindex-system'}),
     'materialized-view': frozenset({'refresh'}),
     # Server operations from the provider tree's server scope (M6, 2026-11-11):
     # the inherited server menu's reload, restore point and WAL replay control.
     'server': frozenset({'reload', 'restore-point', 'wal-replay-pause',
-                         'wal-replay-resume', 'checkpoint'}),
+                         'wal-replay-resume', 'checkpoint',
+                         'inspect-configuration', 'alter-system-set',
+                         'alter-system-reset', 'alter-system-reset-all',
+                         'inspect-prepared-transactions', 'resolve-prepared-transaction'}),
     # Role and tablespace operations that act inside one database (M6,
     # 2026-11-11): the dialog picks the database; the plan's route runs there.
     'role': frozenset({'reassign-owned', 'drop-owned'}),
@@ -51,15 +55,21 @@ MOVE_OBJECT_TYPES = {'all': ('TABLE', 'INDEX', 'MATERIALIZED VIEW'), 'tables': (
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).
 CONFIRMED = frozenset({
     ('table', 'truncate'), ('table', 'cluster'), ('schema', 'reindex'), ('database', 'reindex'),
+    ('database', 'reindex-system'), ('index', 'attach-partition'), ('partitioned-index', 'attach-partition'),
     ('server', 'checkpoint'), ('server', 'reload'), ('server', 'wal-replay-pause'), ('server', 'wal-replay-resume'),
+    ('server', 'alter-system-reset'), ('server', 'alter-system-reset-all'),
+    ('server', 'resolve-prepared-transaction'),
     ('role', 'reassign-owned'), ('role', 'drop-owned'), ('tablespace', 'move-objects'),
     ('pgagent-job', 'run-now'), ('table', 'disable-triggers'), ('table', 'detach-partition'),
 })
 MUTATION_CLASSES = {
-    'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'cluster': 'admin',
+    'vacuum': 'admin', 'analyze': 'admin', 'reindex': 'admin', 'reindex-system': 'admin', 'cluster': 'admin',
     'truncate': 'destructive', 'refresh': 'admin',
     'checkpoint': 'admin', 'reload': 'admin', 'restore-point': 'admin', 'wal-replay-pause': 'admin',
     'wal-replay-resume': 'admin',
+    'inspect-configuration': 'read', 'alter-system-set': 'admin',
+    'alter-system-reset': 'admin', 'alter-system-reset-all': 'destructive',
+    'inspect-prepared-transactions': 'read', 'resolve-prepared-transaction': 'destructive',
     'reassign-owned': 'admin', 'drop-owned': 'destructive', 'move-objects': 'admin',
     'run-now': 'admin',
     'count-rows': 'read', 'reset-statistics': 'admin', 'enable-triggers': 'admin',
@@ -67,17 +77,28 @@ MUTATION_CLASSES = {
     'detach-partition': 'admin',
 }
 
+_VACUUM_COMMON = {
+    'full', 'freeze', 'analyze', 'verbose', 'parallel',
+    'disable_page_skipping', 'skip_locked', 'index_cleanup',
+    'process_main', 'process_toast', 'truncate',
+    'skip_database_stats', 'only_database_stats', 'buffer_usage_limit',
+}
+
 _OPTIONS = {
-    ('table', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
-    ('table', 'analyze'): {'verbose', 'skip_locked'},
-    ('table', 'reindex'): {'concurrently', 'verbose'},
-    ('index', 'reindex'): {'concurrently', 'verbose'},
-    ('schema', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
-    ('schema', 'analyze'): {'verbose', 'skip_locked'},
-    ('schema', 'reindex'): {'concurrently', 'verbose'},
-    ('database', 'vacuum'): {'full', 'freeze', 'analyze', 'verbose', 'parallel'},
-    ('database', 'analyze'): {'verbose', 'skip_locked'},
-    ('database', 'reindex'): {'concurrently', 'verbose'},
+    ('table', 'vacuum'): _VACUUM_COMMON - {'only_database_stats'},
+    ('table', 'analyze'): {'verbose', 'skip_locked', 'buffer_usage_limit', 'columns'},
+    ('table', 'reindex'): {'concurrently', 'verbose', 'tablespace'},
+    ('index', 'reindex'): {'concurrently', 'verbose', 'tablespace'},
+    ('partitioned-index', 'reindex'): {'concurrently', 'verbose', 'tablespace'},
+    ('index', 'attach-partition'): {'child_schema', 'child_index'},
+    ('partitioned-index', 'attach-partition'): {'child_schema', 'child_index'},
+    ('schema', 'vacuum'): _VACUUM_COMMON - {'only_database_stats'},
+    ('schema', 'analyze'): {'verbose', 'skip_locked', 'buffer_usage_limit'},
+    ('schema', 'reindex'): {'concurrently', 'verbose', 'tablespace'},
+    ('database', 'vacuum'): _VACUUM_COMMON,
+    ('database', 'analyze'): {'verbose', 'skip_locked', 'buffer_usage_limit'},
+    ('database', 'reindex'): {'concurrently', 'verbose', 'tablespace'},
+    ('database', 'reindex-system'): {'concurrently', 'verbose', 'tablespace'},
     ('table', 'cluster'): {'index', 'verbose'},
     ('table', 'truncate'): {'restart_identity', 'cascade', 'confirmation'},
     ('materialized-view', 'refresh'): {'concurrently', 'with_data'},
@@ -86,6 +107,12 @@ _OPTIONS = {
     ('server', 'restore-point'): {'name'},
     ('server', 'wal-replay-pause'): set(),
     ('server', 'wal-replay-resume'): set(),
+    ('server', 'inspect-configuration'): {'scope', 'parameter'},
+    ('server', 'alter-system-set'): {'parameter', 'value_mode', 'value', 'reload_after'},
+    ('server', 'alter-system-reset'): {'parameter', 'reload_after', 'confirmation'},
+    ('server', 'alter-system-reset-all'): {'reload_after', 'confirmation'},
+    ('server', 'inspect-prepared-transactions'): set(),
+    ('server', 'resolve-prepared-transaction'): {'gid', 'expected_database', 'expected_owner', 'expected_xid', 'decision', 'coordinator_reference', 'confirmation'},
     ('role', 'reassign-owned'): {'database', 'new_owner'},
     ('role', 'drop-owned'): {'database', 'cascade', 'confirmation'},
     ('tablespace', 'move-objects'): {'database', 'object_type', 'new_tablespace', 'owner'},
@@ -107,7 +134,50 @@ _OPTIONS = {
     ('partitioned-table', 'count-rows'): set(),
 }
 _RESTORE_POINT = __import__('re').compile(r'[^\x00]{1,63}')
+_BUFFER_LIMIT = __import__('re').compile(r'(?:0|[1-9][0-9]{0,9})(?:\s*(?:B|kB|MB|GB|TB))?', __import__('re').IGNORECASE)
 _MAX_PARALLEL = 1024
+
+
+def _buffer_usage_limit(value):
+    if value in (None, ''):
+        return None
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return str(value)
+    if not isinstance(value, str) or not _BUFFER_LIMIT.fullmatch(value.strip()):
+        _refuse('BUFFER_USAGE_LIMIT must be 0 or an integer size with optional B, kB, MB, GB or TB unit')
+    return value.strip()
+
+
+def _tri_bool(draft, name):
+    if name not in draft or draft[name] in (None, ''):
+        return None
+    val = draft[name]
+    if type(val) is bool:
+        return val
+    if isinstance(val, str) and val.upper() in ('TRUE', 'FALSE'):
+        return val.upper() == 'TRUE'
+    _refuse(f'{name} must be boolean')
+
+
+def _analyze_columns(value):
+    from .native_admin import _identifier, _name
+    if value in (None, '', []):
+        return []
+    if isinstance(value, str):
+        items = [part.strip() for part in value.split(',') if part.strip()]
+    elif isinstance(value, list):
+        items = []
+        for entry in value:
+            if isinstance(entry, dict):
+                col = entry.get('name') or entry.get('column') or entry.get('value')
+                items.append(_name(col, 'column'))
+            else:
+                items.append(_name(entry, 'column'))
+    else:
+        _refuse('ANALYZE columns must be a list of column names')
+    if not items or len(set(items)) != len(items):
+        _refuse('ANALYZE columns must be non-empty and distinct')
+    return [_identifier(col, 'column') for col in items]
 
 
 def _refuse(message):
@@ -169,13 +239,20 @@ def compile_operation(kind, operation, native, draft):
     if kind in {'table', 'partitioned-table'} and operation in {
             'count-rows', 'reset-statistics', 'enable-triggers', 'disable-triggers'}:
         return _table_operation(operation, native)
-    if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
+    if operation in {'create-partition', 'attach-partition', 'detach-partition'} and kind in {'table', 'partitioned-table'}:
         from .partitions import compile_operation as compile_partition
         compiled = compile_partition(operation, native, draft)
         compiled.setdefault('autocommit', False)
         compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
                                    'options': [], 'transaction_mode': 'autocommit' if compiled['autocommit']
                                    else 'transaction'}
+        return compiled
+    if operation == 'attach-partition' and kind in {'index', 'partitioned-index'}:
+        from .indexes import compile_attach_partition
+        compiled = compile_attach_partition(native, draft)
+        compiled.setdefault('autocommit', False)
+        compiled['maintenance'] = {'action': operation, 'object_kind': kind, 'object': native.get('name'),
+                                   'options': [], 'transaction_mode': 'transaction'}
         return compiled
     if key == ('pgagent-job', 'run-now'):
         from .pgagent import run_now
@@ -194,25 +271,89 @@ def compile_operation(kind, operation, native, draft):
         target = ''
     elif operation in {'vacuum', 'analyze'} and kind == 'schema':
         target = _schema_relations(native)
+    min_ver = None
     if operation == 'vacuum':
-        flags = {name: _flag(draft, name) for name in ('full', 'freeze', 'analyze', 'verbose')}
+        from .native_admin import _literal
+        flags = {name: _flag(draft, name) for name in (
+            'full', 'freeze', 'analyze', 'verbose',
+            'disable_page_skipping', 'skip_locked', 'skip_database_stats',
+        )}
+        only_db_stats = _flag(draft, 'only_database_stats') if 'only_database_stats' in draft else False
+        if only_db_stats:
+            if kind != 'database':
+                _refuse('VACUUM (ONLY_DATABASE_STATS) applies only to database scope')
+            if flags['full'] or flags['freeze'] or flags['analyze'] or flags['skip_database_stats']:
+                _refuse('ONLY_DATABASE_STATS cannot be combined with FULL, FREEZE, ANALYZE or SKIP_DATABASE_STATS')
+        if flags['full'] and flags['skip_locked']:
+            _refuse('VACUUM FULL cannot be combined with SKIP_LOCKED')
         parallel = _parallel(draft.get('parallel'))
         if flags['full'] and parallel is not None:
             _refuse('VACUUM FULL cannot use PARALLEL')
-        options = [name.upper() for name, on in flags.items() if on]
+        idx_cleanup = draft.get('index_cleanup')
+        if idx_cleanup not in (None, ''):
+            if isinstance(idx_cleanup, bool) or not isinstance(idx_cleanup, str):
+                _refuse('INDEX_CLEANUP must be AUTO, ON or OFF')
+            idx_cleanup = idx_cleanup.strip().upper()
+            if idx_cleanup not in {'AUTO', 'ON', 'OFF'}:
+                _refuse('INDEX_CLEANUP must be AUTO, ON or OFF')
+            if flags['full']:
+                _refuse('VACUUM FULL cannot use INDEX_CLEANUP')
+        else:
+            idx_cleanup = None
+        proc_main = _tri_bool(draft, 'process_main')
+        proc_toast = _tri_bool(draft, 'process_toast')
+        trunc_opt = _tri_bool(draft, 'truncate')
+        if flags['full'] and (proc_main is False or trunc_opt is False):
+            _refuse('VACUUM FULL cannot disable PROCESS_MAIN or specify TRUNCATE')
+        buf_limit = _buffer_usage_limit(draft.get('buffer_usage_limit'))
+        options = [name.upper() for name in ('full', 'freeze', 'analyze', 'verbose', 'disable_page_skipping', 'skip_locked') if flags[name]]
+        if idx_cleanup:
+            options.append(f'INDEX_CLEANUP {idx_cleanup}')
+        if proc_main is False:
+            options.append('PROCESS_MAIN FALSE')
+            min_ver = max(min_ver or 0, 160000)
+        if proc_toast is False:
+            options.append('PROCESS_TOAST FALSE')
+        if trunc_opt is False:
+            options.append('TRUNCATE FALSE')
         if parallel is not None:
             options.append(f'PARALLEL {parallel}')
+        if flags['skip_database_stats']:
+            options.append('SKIP_DATABASE_STATS')
+            min_ver = max(min_ver or 0, 160000)
+        if only_db_stats:
+            options.append('ONLY_DATABASE_STATS')
+            min_ver = max(min_ver or 0, 160000)
+        if buf_limit is not None:
+            options.append('BUFFER_USAGE_LIMIT ' + _literal(buf_limit, 'buffer_usage_limit'))
+            min_ver = max(min_ver or 0, 160000)
         statement = ('VACUUM' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
         autocommit = True
     elif operation == 'analyze':
+        from .native_admin import _literal
         options = [name.upper() for name in ('verbose', 'skip_locked') if _flag(draft, name)]
-        statement = ('ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') + ' ' + target).rstrip()
-    elif operation == 'reindex':
+        buf_limit = _buffer_usage_limit(draft.get('buffer_usage_limit'))
+        if buf_limit is not None:
+            options.append('BUFFER_USAGE_LIMIT ' + _literal(buf_limit, 'buffer_usage_limit'))
+            min_ver = max(min_ver or 0, 160000)
+        col_list = _analyze_columns(draft.get('columns')) if kind == 'table' else []
+        col_clause = (' (' + ', '.join(col_list) + ')') if col_list else ''
+        statement = ('ANALYZE' + (' (' + ', '.join(options) + ')' if options else '') +
+                     ((' ' + target + col_clause) if target else '')).rstrip()
+    elif operation in {'reindex', 'reindex-system'}:
         concurrently = _flag(draft, 'concurrently')
         options = (['CONCURRENTLY'] if concurrently else []) + (['VERBOSE'] if _flag(draft, 'verbose') else [])
-        word = {'table': 'TABLE', 'index': 'INDEX', 'schema': 'SCHEMA', 'database': 'DATABASE'}[kind]
+        spcname = draft.get('tablespace')
+        if spcname not in (None, ''):
+            options.append('TABLESPACE ' + _identifier(_name(spcname, 'tablespace'), 'tablespace'))
+        if operation == 'reindex-system':
+            if concurrently:
+                _refuse('REINDEX SYSTEM cannot run CONCURRENTLY')
+            word = 'SYSTEM'
+        else:
+            word = {'table': 'TABLE', 'index': 'INDEX', 'partitioned-index': 'INDEX', 'schema': 'SCHEMA', 'database': 'DATABASE'}[kind]
         statement = 'REINDEX' + (' (' + ', '.join(options) + ')' if options else '') + f' {word} {target}'
-        autocommit = concurrently or kind in {'schema', 'database'}
+        autocommit = concurrently or kind in {'schema', 'database', 'partitioned-index'} or operation == 'reindex-system'
     elif operation == 'cluster':
         verbose = _flag(draft, 'verbose')
         index = draft.get('index')
@@ -234,11 +375,14 @@ def compile_operation(kind, operation, native, draft):
         options = (['CONCURRENTLY'] if concurrently else []) + ([] if with_data else ['WITH NO DATA'])
         statement = ('REFRESH MATERIALIZED VIEW ' + ('CONCURRENTLY ' if concurrently else '') + target +
                      (' WITH DATA' if with_data else ' WITH NO DATA'))
-    return {
+    out = {
         'statement': statement, 'read_only': False, 'autocommit': autocommit,
         'maintenance': {'action': operation, 'object_kind': kind, 'object': object_name,
                         'options': options, 'transaction_mode': 'autocommit' if autocommit else 'transaction'},
     }
+    if min_ver is not None:
+        out['minimum_server_version'] = min_ver
+    return out
 
 
 def database_reference_oid(value):
@@ -315,6 +459,12 @@ def _table_operation(operation, native):
 def _server_operation(operation, draft):
     """One server-wide function call; the result row is the receipt."""
     from .native_admin import _literal
+    if operation in {'inspect-configuration', 'alter-system-set', 'alter-system-reset', 'alter-system-reset-all'}:
+        from .configuration import compile_operation as compile_cfg
+        return compile_cfg(operation, {}, draft)
+    if operation in {'inspect-prepared-transactions', 'resolve-prepared-transaction'}:
+        from .prepared_transactions import compile_operation as compile_2pc
+        return compile_2pc(operation, {}, draft)
     if operation == 'checkpoint':
         timeout=draft.get('wait_timeout_ms',30000)
         if type(timeout)is not int or not 1<=timeout<=600000:
@@ -343,6 +493,22 @@ def _server_operation(operation, draft):
 
 def form(kind, operation, field):
     """Dialog fields for the catalog form; mirrors the allow-list above."""
+    if kind == 'server' and operation in {'inspect-configuration', 'alter-system-set', 'alter-system-reset', 'alter-system-reset-all'}:
+        from .configuration import form as cfg_form
+        return cfg_form(operation, field)
+    if kind == 'server' and operation in {'inspect-prepared-transactions', 'resolve-prepared-transaction'}:
+        from .prepared_transactions import form as xact_form
+        return xact_form(operation, field)
+    if operation == 'attach-partition' and kind in {'index', 'partitioned-index'}:
+        return {
+            'form_id': f'postgresql-{kind}-attach-partition',
+            'form_key': 'native:postgresql:schema:index',
+            'title': 'Attach index partition',
+            'fields': [
+                field('child_schema', 'Partition index schema', help='Defaults to the parent index schema.'),
+                field('child_index', 'Partition index name', required=True),
+            ],
+        }
     if operation in {'create-partition', 'attach-partition', 'detach-partition'}:
         from .partitions import form as partition_form
         return partition_form(operation, field)
@@ -354,13 +520,32 @@ def form(kind, operation, field):
                   boolean('freeze', 'Freeze row versions'),
                   boolean('analyze', 'Also analyze'),
                   boolean('verbose', 'Verbose'),
+                  boolean('disable_page_skipping', 'Disable visibility-map page skipping'),
+                  boolean('skip_locked', 'Skip relations that cannot be immediately locked'),
+                  field('index_cleanup', 'Index cleanup mode', 'select', options=[
+                      {'value': 'AUTO', 'label': 'Auto'},
+                      {'value': 'ON', 'label': 'On'},
+                      {'value': 'OFF', 'label': 'Off'},
+                  ]),
+                  boolean('process_main', 'Process main relation (PostgreSQL 16+)', default=True),
+                  boolean('process_toast', 'Process TOAST table', default=True),
+                  boolean('truncate', 'Truncate empty trailing pages'),
+                  boolean('skip_database_stats', 'Skip updating pg_database frozen XID stats (PostgreSQL 16+)'),
+                  *([boolean('only_database_stats', 'Update only pg_database frozen XID stats (PostgreSQL 16+)')]
+                    if kind == 'database' else []),
+                  field('buffer_usage_limit', 'Buffer usage limit (PostgreSQL 16+, e.g. 16MB or 0)'),
                   field('parallel', 'Parallel workers (not with Full)', 'number',
                         help='Leave empty to let the server decide; 0 disables parallel index vacuuming.')]
     elif operation == 'analyze':
-        fields = [boolean('verbose', 'Verbose'), boolean('skip_locked', 'Skip tables that cannot be locked')]
-    elif operation == 'reindex':
-        fields = [boolean('concurrently', 'Concurrently (cannot run in a transaction block)'),
-                  boolean('verbose', 'Verbose')]
+        fields = [boolean('verbose', 'Verbose'),
+                  boolean('skip_locked', 'Skip tables that cannot be locked'),
+                  field('buffer_usage_limit', 'Buffer usage limit (PostgreSQL 16+, e.g. 8MB or 0)'),
+                  *([field('columns', 'Selected columns (optional, comma-separated)')] if kind == 'table' else [])]
+    elif operation in {'reindex', 'reindex-system'}:
+        fields = [*([boolean('concurrently', 'Concurrently (cannot run in a transaction block)')]
+                    if operation != 'reindex-system' else []),
+                  boolean('verbose', 'Verbose'),
+                  field('tablespace', 'Destination tablespace (optional)')]
     elif operation == 'cluster':
         fields = [field('index', 'Index to cluster on', help='Leave empty to reuse the index the table was last clustered on.'),
                   boolean('verbose', 'Verbose')]
@@ -391,7 +576,8 @@ def form(kind, operation, field):
                   field('owner', 'Only objects owned by', 'reference', reference_kind='role',
                         help='Leave empty to move every object in the tablespace.')]
     if operation=='checkpoint':fields=[field('wait_timeout_ms','Wait timeout (milliseconds)','number',default=30000,help='1–600000. Timeout/cancellation stops waiting; native checkpoint work may continue.') ]
-    titles = {'checkpoint':'Checkpoint', 'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex', 'cluster': 'Cluster',
+    titles = {'checkpoint':'Checkpoint', 'vacuum': 'Vacuum', 'analyze': 'Analyze', 'reindex': 'Reindex',
+              'reindex-system': 'Reindex system catalogs', 'cluster': 'Cluster',
               'truncate': 'Truncate', 'refresh': 'Refresh', 'reload': 'Reload configuration',
               'restore-point': 'Create restore point', 'wal-replay-pause': 'Pause WAL replay',
               'wal-replay-resume': 'Resume WAL replay', 'reassign-owned': 'Reassign owned objects',

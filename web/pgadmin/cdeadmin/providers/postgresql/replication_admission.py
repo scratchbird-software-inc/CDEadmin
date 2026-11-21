@@ -31,8 +31,8 @@ def _native_capture(parameters, *, logical=False):
     transport = None
     try:
         with psycopg.connect(**options) as connection:
-            if connection.info.server_version != 180003:
-                raise ContinuityError('Replication admission requires PostgreSQL 18.3')
+            if not 180000 <= connection.info.server_version < 190000:
+                raise ContinuityError('Replication admission requires PostgreSQL 18')
             with psycopg.ClientCursor(connection, row_factory=tuple_row) as cursor:
                 cursor.execute('IDENTIFY_SYSTEM')
                 identity, timeline, lsn, database = cursor.fetchone()

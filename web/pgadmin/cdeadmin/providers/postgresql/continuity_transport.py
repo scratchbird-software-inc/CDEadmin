@@ -71,7 +71,7 @@ def replication_identity(parameters):
                 identity=identity.decode('ascii') if isinstance(identity,bytes) else str(identity)
                 lsn=lsn.decode('ascii') if isinstance(lsn,bytes) else str(lsn)
                 version=connection.info.server_version
-        if version!=180003:raise ContinuityError('Physical backup requires the selected PostgreSQL 18.3 runtime')
+        if not 180000<=version<190000:raise ContinuityError('Physical backup requires a supported PostgreSQL 18 runtime')
         if not str(identity).isdigit() or not 0<int(identity)<2**64:
             raise ContinuityError('Native replication system identity is unavailable')
         return {'system_identifier':str(identity),'timeline':int(timeline),'lsn':str(lsn),'server_version':version}

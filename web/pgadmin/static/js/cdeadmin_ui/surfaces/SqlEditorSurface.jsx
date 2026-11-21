@@ -71,6 +71,10 @@ import {
   SqlMariaDBSessionDialog,
 } from './SqlMariaDBDiagnostics';
 import {
+  SqlPostgresAnalyzeConsentDialog,
+  SqlPostgresSessionDialog,
+} from './SqlPostgresDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -90,6 +94,7 @@ const GUTTER_WIDTH = 58;
 const EMPTY_ARRAY = Object.freeze([]);
 const MYSQL_SURFACE_KEYS = new Set(['mysql', 'mysql-native', 'mysql-sql']);
 const MARIADB_SURFACE_KEYS = new Set(['mariadb', 'mariadb-native', 'mariadb-sql']);
+const POSTGRES_SURFACE_KEYS = new Set(['postgresql', 'postgresql-native', 'postgresql-sql']);
 
 export const SQL_SURFACE_VIEWS = Object.freeze({
   SQL: 'sql',
@@ -395,6 +400,8 @@ export default function SqlEditorSurface({
   const [mysqlAnalyzeConsentOpen, setMysqlAnalyzeConsentOpen] = useState(false);
   const [mariadbSessionOpen, setMariadbSessionOpen] = useState(false);
   const [mariadbAnalyzeConsentOpen, setMariadbAnalyzeConsentOpen] = useState(false);
+  const [postgresSessionOpen, setPostgresSessionOpen] = useState(false);
+  const [postgresAnalyzeConsentOpen, setPostgresAnalyzeConsentOpen] = useState(false);
   const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
   const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
   useEffect(() => {
@@ -459,6 +466,7 @@ export default function SqlEditorSurface({
   const isFirebird = languageOptions.native_transaction_close_warning;
   const isMySQL = MYSQL_SURFACE_KEYS.has(languageProfile) || MYSQL_SURFACE_KEYS.has(engineId);
   const isMariaDB = MARIADB_SURFACE_KEYS.has(languageProfile) || MARIADB_SURFACE_KEYS.has(engineId);
+  const isPostgres = POSTGRES_SURFACE_KEYS.has(languageProfile) || POSTGRES_SURFACE_KEYS.has(engineId);
   const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
     [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
@@ -1085,6 +1093,7 @@ export default function SqlEditorSurface({
           parameters: boundParams,
           ...(execSpec.profileMode ? {profile_mode: true} : {}),
           ...(execSpec.analyzeMode ? {analyze_mode: true} : {}),
+          ...(execSpec.pgExplainOptions ? {pg_explain_options: execSpec.pgExplainOptions} : {}),
           ...(isMySQL && Object.keys(mysqlQueryAttrs).length > 0 && execSpec.mode !== 'explain'
             ? {mysql_query_attributes: mysqlQueryAttrs}
             : {}),
@@ -3947,6 +3956,21 @@ export default function SqlEditorSurface({
               callback: () => setMariadbSessionOpen(true),
             },
           ] : []),
+          ...(isPostgres ? [
+            {
+              id: `${pfx}.m.pg_explain_analyze`,
+              label: gettext('Run EXPLAIN ANALYZE / GENERIC_PLAN…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setPostgresAnalyzeConsentOpen(true),
+            },
+            {
+              id: `${pfx}.m.pg_session_diag`,
+              label: gettext('PostgreSQL Session Framing, Retained Catalog & Grammar…'),
+              index: 37,
+              callback: () => setPostgresSessionOpen(true),
+            },
+          ] : []),
           {
             id: `${pfx}.m.hist_sensitive`,
             label: gettext('Suppress Sensitive SQL from Persistent History'),
@@ -5575,6 +5599,25 @@ export default function SqlEditorSurface({
             onConfirm={() => {
               setMariadbAnalyzeConsentOpen(false);
               runSql('statement', false, {analyzeMode: true});
+            }}
+          />
+        </>
+      )}
+      {isPostgres && (
+        <>
+          <SqlPostgresSessionDialog
+            open={postgresSessionOpen}
+            transaction={hostData?.transaction || null}
+            editorSource={sqlText}
+            callHost={callHost}
+            onClose={() => setPostgresSessionOpen(false)}
+          />
+          <SqlPostgresAnalyzeConsentDialog
+            open={postgresAnalyzeConsentOpen}
+            onClose={() => setPostgresAnalyzeConsentOpen(false)}
+            onConfirmAnalyze={(pgExplainOptions) => {
+              setPostgresAnalyzeConsentOpen(false);
+              runSql('statement', false, {analyzeMode: true, pgExplainOptions});
             }}
           />
         </>

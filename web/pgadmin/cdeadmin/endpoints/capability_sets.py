@@ -527,6 +527,88 @@ POSTGRESQL_WIRE = {
 }
 
 
+POSTGRESQL_NATIVE = {
+    'authentication': _complete(
+        ('server-negotiated-password-and-SCRAM', 'GSSAPI-and-SSPI',
+         'OAuth', 'client-certificate', 'channel-binding',
+         'required-authentication-policy'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+        'unit:test_cdeadmin_credential_bundle',
+    ),
+    'tls': _complete(
+        ('disable', 'allow', 'prefer', 'require', 'verify-CA',
+         'verify-full', 'protocol-version-range', 'SNI',
+         'certificate-revocation', 'direct-TLS-negotiation'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+    'client_certificates': _complete(
+        ('certificate-and-key', 'encrypted-private-key'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+        'unit:test_cdeadmin_credential_bundle',
+    ),
+    'connection_profiles': _complete(
+        ('persistent-provider-profile', 'editable-connection-options',
+         'typed-secret-bundle', 'generation-based-runtime-invalidation'),
+        PROFILE_EVIDENCE, ROUTE_EVIDENCE,
+    ),
+    'multiple_endpoints': _complete(
+        ('libpq-host-list', 'persistent-prioritized-routes'),
+        'unit:test_postgresql_batch5_runtime_contracts', ROUTE_EVIDENCE,
+    ),
+    'topology_discovery': _complete(
+        ('target-session-attributes', 'host-load-balancing',
+         'provider-topology-catalog'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+        'unit:test_postgresql_batch4_continuity_ha',
+    ),
+    'routing_failover': _complete(
+        ('libpq-multi-host-failover', 'target-session-attributes',
+         'random-host-load-balancing',
+         'bounded-pre-session-route-failover'),
+        'unit:test_postgresql_batch5_runtime_contracts', ROUTE_EVIDENCE,
+    ),
+    'session_defaults': _complete(
+        ('database', 'application-name', 'client-encoding',
+         'server-options', 'autocommit'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+    'timeouts': _complete(
+        ('connect', 'TCP-user-timeout', 'TCP-keepalive-policy',
+         'pool-acquisition'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+    'compression': _na(
+        'The PostgreSQL wire protocol and qualified libpq client expose no '
+        'negotiated transport-compression setting.',
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+    'consistency_isolation': _complete(
+        ('four-transaction-isolation-modes', 'read-only-or-read-write',
+         'deferrable-or-not-deferrable', 'autocommit'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+    'pooling': _complete(
+        ('optional-psycopg-pool', 'minimum-and-maximum-size',
+         'acquisition-timeout', 'queue-limit', 'lifetime', 'idle-timeout',
+         'checkout-validation', 'background-reconnect-window',
+         'generation-based-pool-retirement'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+        'unit:test_cdeadmin_provider_registry',
+    ),
+    'reconnection': _complete(
+        ('pool-background-replenishment', 'libpq-multi-host-connect',
+         'bounded-pre-session-route-failover',
+         'explicit-new-session-after-loss'),
+        'unit:test_postgresql_batch5_runtime_contracts', ROUTE_EVIDENCE,
+    ),
+    'state_visibility': _complete(
+        ('autocommit', 'transaction-status', 'isolation-level',
+         'provider-owned-finality'),
+        'unit:test_postgresql_batch5_runtime_contracts',
+    ),
+}
+
+
 def _analytic_http_capabilities(authentication, session_defaults,
                                 topology=None):
     evidence = 'unit:test_cdeadmin_analytic_providers'
@@ -1023,6 +1105,7 @@ CONNECTION_CAPABILITY_SETS = {
     'mariadb-connector-python-v1': MARIADB,
     'firebird-driver-v1': FIREBIRD,
     'postgresql-wire-v1': POSTGRESQL_WIRE,
+    'postgresql-native-v1': POSTGRESQL_NATIVE,
     'influxdb-http-v1': INFLUXDB_HTTP,
     'opensearch-http-v1': OPENSEARCH_HTTP,
     'opensearch-sql-ppl-http-v1': OPENSEARCH_SQL_PPL_HTTP,

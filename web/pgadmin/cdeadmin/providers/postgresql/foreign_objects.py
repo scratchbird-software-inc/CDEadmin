@@ -299,8 +299,59 @@ FACTS = {'foreign-data-wrapper': ('wrapper_facts', wrapper_facts),
          'user-mapping': ('mapping_facts', mapping_facts)}
 
 
+def _server_import_schema(native, draft):
+    """IMPORT FOREIGN SCHEMA workflow (PG-AUDIT-FDW-01)."""
+    current = native.get('server_facts') or server_facts(native)
+    srv_name = _name(current['name'], 'name')
+    remote_schema = _name(draft.get('remote_schema'), 'remote_schema')
+    local_schema = _name(draft.get('local_schema'), 'local_schema')
+    filter_mode = str(draft.get('filter_mode') or 'ALL').strip().upper()
+    if filter_mode not in {'ALL', 'LIMIT_TO', 'EXCEPT'}:
+        raise PostgreSQLNativeAdminError('filter_mode must be ALL, LIMIT_TO or EXCEPT')
+    raw_tables = draft.get('tables')
+    table_names = []
+    if raw_tables not in (None, '', []):
+        if isinstance(raw_tables, str):
+            table_names = [_name(t.strip(), 'table') for t in raw_tables.split(',') if t.strip()]
+        elif isinstance(raw_tables, list):
+            for entry in raw_tables:
+                t = entry.get('name') or entry.get('value') if isinstance(entry, dict) else entry
+                table_names.append(_name(t, 'table'))
+        else:
+            raise PostgreSQLNativeAdminError('tables must be a list of foreign table names')
+    if filter_mode == 'ALL' and table_names:
+        raise PostgreSQLNativeAdminError('tables list applies only to LIMIT_TO or EXCEPT')
+    if filter_mode != 'ALL':
+        if not table_names or len(set(table_names)) != len(table_names):
+            raise PostgreSQLNativeAdminError(f'{filter_mode} requires 1 or more distinct table names')
+        clause_word = 'LIMIT TO' if filter_mode == 'LIMIT_TO' else 'EXCEPT'
+        filter_clause = f' {clause_word} (' + ', '.join(_identifier(t, 'table') for t in table_names) + ')'
+    else:
+        filter_clause = ''
+    opts = _option_pairs(_rows(draft, 'options', 'import options'))
+    opt_clause = (' OPTIONS (' + ', '.join(opts) + ')') if opts else ''
+    stmt = (
+        f'IMPORT FOREIGN SCHEMA {_identifier(remote_schema, "remote_schema")}'
+        f'{filter_clause} FROM SERVER {_identifier(srv_name, "server")} '
+        f'INTO {_identifier(local_schema, "local_schema")}{opt_clause}'
+    )
+    obs = (
+        'SELECT c.oid AS foreign_table_oid, n.nspname AS local_schema, c.relname AS table_name, s.srvname AS server_name '
+        'FROM pg_catalog.pg_foreign_table ft '
+        'JOIN pg_catalog.pg_class c ON c.oid = ft.ftrelid '
+        'JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace '
+        'JOIN pg_catalog.pg_foreign_server s ON s.oid = ft.ftserver '
+        f'WHERE n.nspname = {_literal(local_schema, "local_schema")} '
+        f'AND s.srvname = {_literal(srv_name, "server")} '
+        'ORDER BY c.relname'
+    )
+    return {'statement': stmt, 'read_only': False, 'observation_statement': obs}
+
+
 def compile_operation(kind, operation, native, draft):
     """One exact native text for a wrapper, server or mapping."""
+    if kind == 'foreign-server' and operation == 'import-foreign-schema':
+        return _server_import_schema(native, draft)
     create, alter, drop = _COMPILERS[kind]
     if operation == 'create':
         statements = create(draft)
@@ -347,6 +398,25 @@ def form(kind, operation, field):
 
     def initial(key):
         return {'initial_value_path': [facts_key, key]} if alter else {}
+    if kind == 'foreign-server' and operation == 'import-foreign-schema':
+        return {
+            'form_id': 'postgresql-foreign-server-import-foreign-schema',
+            'form_key': 'native:postgresql:database:foreign-server',
+            'title': 'Import foreign schema',
+            'fields': [
+                field('remote_schema', 'Remote schema', required=True),
+                field('local_schema', 'Destination local schema', required=True),
+                field('filter_mode', 'Table selection mode', 'select', default='ALL', options=[
+                    {'value': 'ALL', 'label': 'All remote tables'},
+                    {'value': 'LIMIT_TO', 'label': 'LIMIT TO selected tables'},
+                    {'value': 'EXCEPT', 'label': 'EXCEPT excluded tables'},
+                ]),
+                field('tables', 'Selected or excluded tables', 'grid',
+                      columns=[{'field_id': 'name', 'label': 'Remote table name', 'control': 'text', 'required': True}]),
+                field('options', 'FDW import options', 'grid', columns=_OPTION_COLUMNS, help=_SECRET_NOTE),
+            ],
+            'notes': _SECRET_NOTE,
+        }
     if operation == 'drop':
         fields = [field('confirmation', f'Type the {label} name to confirm',
                         required=True)]

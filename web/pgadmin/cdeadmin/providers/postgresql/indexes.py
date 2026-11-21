@@ -415,6 +415,41 @@ def _drop(native, draft):
             'read_only': False}
 
 
+def compile_attach_partition(native, draft):
+    """Standalone ALTER INDEX parent ATTACH PARTITION child (PG-AUDIT-INDEXPART-01)."""
+    current = native.get('index_facts') or facts(native)
+    parent_schema = _name(current['schema'], 'schema')
+    parent_name = _name(current['name'], 'name')
+    relkind = (native.get('catalog_row') or {}).get('relkind')
+    if relkind is not None and relkind != 'I':
+        raise PostgreSQLNativeAdminError('Target index is not a partitioned index (relkind I)')
+    child_schema = _name(draft.get('child_schema') or parent_schema, 'child_schema')
+    child_name = _name(draft.get('child_index'), 'child_index')
+    if (parent_schema, parent_name) == (child_schema, child_name):
+        raise PostgreSQLNativeAdminError('Cannot attach a partitioned index to itself')
+    parent_qual = _qualified(parent_schema, parent_name)
+    child_qual = _qualified(child_schema, child_name)
+    obs = (
+        'SELECT p.oid AS parent_index_oid, c.oid AS child_index_oid, '
+        'pi.indisvalid AS parent_valid, ci.indisvalid AS child_valid, '
+        'EXISTS(SELECT 1 FROM pg_catalog.pg_inherits h WHERE h.inhparent = p.oid AND h.inhrelid = c.oid) AS attached '
+        'FROM pg_catalog.pg_class p '
+        'JOIN pg_catalog.pg_namespace pn ON pn.oid = p.relnamespace '
+        'JOIN pg_catalog.pg_index pi ON pi.indexrelid = p.oid '
+        'JOIN pg_catalog.pg_class c ON true '
+        'JOIN pg_catalog.pg_namespace cn ON cn.oid = c.relnamespace '
+        'JOIN pg_catalog.pg_index ci ON ci.indexrelid = c.oid '
+        f'WHERE pn.nspname = {_literal(parent_schema, "schema")} AND p.relname = {_literal(parent_name, "name")} '
+        f'AND cn.nspname = {_literal(child_schema, "child_schema")} AND c.relname = {_literal(child_name, "child_index")}'
+    )
+    return {
+        'statement': f'ALTER INDEX {parent_qual} ATTACH PARTITION {child_qual}',
+        'read_only': False,
+        'autocommit': False,
+        'observation_statement': obs,
+    }
+
+
 def compile_operation(operation, native, draft):
     """One exact native text for the index lifecycle."""
     if operation == 'create':
@@ -423,6 +458,8 @@ def compile_operation(operation, native, draft):
         return _alter(native, draft)
     if operation == 'drop':
         return _drop(native, draft)
+    if operation == 'attach-partition':
+        return compile_attach_partition(native, draft)
     raise PostgreSQLNativeAdminError(
         'index inspection stays with the provider tree')
 

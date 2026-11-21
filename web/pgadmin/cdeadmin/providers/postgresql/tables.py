@@ -253,7 +253,7 @@ def _constraint_row(contype, row):
         draft['elements'] = _rows(row, 'columns')
         if not _blank(row.get('include')):
             draft['include'] = _names(row['include'], 'include')
-    body = constraint_editor._body(contype, draft)
+    body, _min_ver = constraint_editor._body(contype, draft)
     if not _blank(row.get('name')):
         body = ('CONSTRAINT ' + _identifier(_name(row['name'], 'name'), 'name')
                 + ' ' + body)

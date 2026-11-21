@@ -412,6 +412,8 @@ def administration_operations():
                                  | {'create', 'alter', 'drop', 'inspect'})
     result['default-privileges'] = frozenset({'inspect','grant','revoke'})
     result['parameter-acl'] = frozenset({'inspect','grant','revoke'})
+    result['prepared-transaction'] = frozenset({'inspect', 'resolve'})
+    result['foreign-server'] = frozenset(result['foreign-server'] | {'import-foreign-schema'})
     result['database'] = frozenset(result['database'] | {'install-drop-namespace-guard'})
     return result
 
@@ -435,6 +437,7 @@ def adapt_catalog(catalog):
         'grant': 'admin', 'revoke': 'admin',
         'delete': 'destructive', 'drop': 'destructive',
         'refresh': 'admin', 'install-drop-namespace-guard': 'admin',
+        'import-foreign-schema': 'admin', 'resolve': 'destructive',
         'read': 'read', 'write': 'write', 'truncate': 'destructive',
         'import-server-file': 'admin', 'export-server-file': 'destructive',
         **MUTATION_CLASSES,
@@ -451,6 +454,7 @@ def adapt_catalog(catalog):
         'text-search-dictionary', 'text-search-parser',
         'text-search-template', 'pgagent-job', 'column', 'constraint',
         'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges',
+        'prepared-transaction',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -462,6 +466,9 @@ def adapt_catalog(catalog):
     def native_form(kind, operation_id, title):
         field = native_field
 
+        if kind == 'prepared-transaction':
+            from .prepared_transactions import form as xact_form
+            return xact_form(operation_id, field)
         if kind == 'default-privileges':
             from .default_privileges import form
             return form(operation_id,field)
@@ -668,10 +675,10 @@ def adapt_catalog(catalog):
                 'form_id': 'postgresql-preserved-route',
                 'target_required': operation_id not in {'create', 'import-server-file', 'install-drop-namespace-guard'},
                 'confirmation_required': operation_id in {
-                    'delete', 'drop', 'truncate', 'export-server-file',
+                    'delete', 'drop', 'truncate', 'export-server-file', 'resolve',
                 },
             })
-            if kind in {'parameter-acl','default-privileges'}:operation['target_required']=False
+            if kind in {'parameter-acl','default-privileges','prepared-transaction'}:operation['target_required']=False
             if operation_id in maintenance.get(kind, ()):
                 operation['form'] = maintenance_form(
                     kind, operation_id, lambda *a, **k: native_field(*a, **k))

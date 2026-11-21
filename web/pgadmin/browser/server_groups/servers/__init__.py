@@ -3808,13 +3808,57 @@ class ServerNode(PGChildNodeView):
                         payload = service.postgresql_host_tools(server, data.get('request'), host_authorized=host_authorized)
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
+                elif action in {'postgresql_config_inspect_file', 'postgresql_config_review_deploy',
+                                'postgresql_config_start_deploy', 'postgresql_config_rollback',
+                                'postgresql_config_status', 'postgresql_config_list'}:
+                    if scoped_target or data.get('database_target_id') not in (None, ''):
+                        return bad_request('Open the server workspace for host configuration and TLS certificate management.')
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
+                    try:
+                        payload = service.postgresql_configuration(
+                            server, action.removeprefix('postgresql_config_'), data.get('request') or {}, host_authorized=host_authorized)
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
                 elif action in {'postgresql_continuity_release_transport','postgresql_continuity_transport','postgresql_continuity_review', 'postgresql_continuity_start',
                                 'postgresql_continuity_status', 'postgresql_continuity_list', 'postgresql_continuity_cancel',
                                 'postgresql_continuity_reconcile_writer', 'postgresql_continuity_archives', 'postgresql_continuity_slots',
                                 'postgresql_continuity_slot_databases','postgresql_continuity_change_preview',
-                                'postgresql_continuity_change_reconcile','postgresql_continuity_logical_stream_preview','postgresql_continuity_logical_stream_reconcile'}:
+                                'postgresql_continuity_change_reconcile','postgresql_continuity_logical_stream_preview','postgresql_continuity_logical_stream_reconcile',
+                                'postgresql_continuity_archive_holds','postgresql_continuity_archive_hold_register','postgresql_continuity_archive_hold_release',
+                                'postgresql_continuity_archive_retention_evaluate','postgresql_continuity_archive_retention_review','postgresql_continuity_archive_retention_start',
+                                'postgresql_continuity_restore_review','postgresql_continuity_restore_start',
+                                'postgresql_continuity_cutover_review','postgresql_continuity_cutover_start','postgresql_continuity_cutover_rollback',
+                                'postgresql_continuity_orchestration_status','postgresql_continuity_stream_restart_review'}:
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
                     try:
-                        payload = service.postgresql_continuity(server, action.removeprefix('postgresql_continuity_'), data.get('request'))
+                        payload = service.postgresql_continuity(
+                            server, action.removeprefix('postgresql_continuity_'), data.get('request'), host_authorized=host_authorized)
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'postgresql_ha_topology', 'postgresql_ha_review', 'postgresql_ha_start',
+                                'postgresql_ha_status', 'postgresql_ha_list'}:
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
+                    try:
+                        payload = service.postgresql_ha(
+                            server, action.removeprefix('postgresql_ha_'), data.get('request') or {}, host_authorized=host_authorized)
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {'postgresql_snapshot_output_plugins', 'postgresql_snapshot_consumer_review',
+                                'postgresql_snapshot_consumer_start', 'postgresql_snapshot_consumer_copy',
+                                'postgresql_snapshot_consumer_release', 'postgresql_snapshot_consumer_status',
+                                'postgresql_snapshot_load_review', 'postgresql_snapshot_load_start',
+                                'postgresql_snapshot_load_status'}:
+                    try:
+                        payload = service.postgresql_snapshot_orchestration(
+                            server, action.removeprefix('postgresql_snapshot_'), data.get('request') or {})
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action == 'postgresql_runtime_capabilities':
+                    try:
+                        payload = service.postgresql_runtime_capabilities(server, data.get('request') or {})
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
                 elif action in {'mysql_spatial_databases','mysql_spatial_tables','mysql_spatial_columns','mysql_spatial_read'}:

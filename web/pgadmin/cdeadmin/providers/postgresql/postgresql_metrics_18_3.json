@@ -30,7 +30,7 @@
       "evidence_kind": "live_execution",
       "authority": "PostgreSQL18.3 native statistics functions",
       "artifact": "native-metrics-receipt.json",
-      "sha256": "ba7671f65287536b2adfcee26c645d00a78920052f6b53b50d03b63807bc91e2",
+      "sha256": "519ccf9274419cbb50a5435e15b22d2999475302fda965e3c7db116fcae6d1fc",
       "format": "Native privileged/restricted read-only collector observations",
       "license_id": "PostgreSQL"
     }

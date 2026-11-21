@@ -67,6 +67,9 @@ def action(service, server, request, *, host_authorized=False):
         return {'clusters': [{'id': row['id']} for row in grant.get('clusters', [])],
                 'summary_files': [{'id': row['id']} for row in grant.get('summary_files', [])],
                 'benchmark_roots': [{'id': row['id']} for row in grant.get('benchmark_roots', [])],
+                'init_roots': [{'id': row['id']} for row in grant.get('init_roots', [])],
+                'archive_dirs': [{'id': row['id']} for row in grant.get('archive_dirs', [])],
+                'upgrade_pairs': [{'id': row['id']} for row in grant.get('upgrade_pairs', [])],
                 'execution_host': __import__('socket').gethostname(), 'grant_sha256': grant_sha,
                 'tools': capabilities, 'native_server_connection_observed': False}
     if stage == 'review':

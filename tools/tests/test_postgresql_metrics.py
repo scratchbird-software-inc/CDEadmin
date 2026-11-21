@@ -16,7 +16,7 @@ def test_packaged_postgresql_contracts_have_exact_native_acceptance():
     assert result['state']=='passed'
     root=Path(__file__).resolve().parents[2]/'web/pgadmin/cdeadmin/providers/postgresql'
     dialect=json.loads((root/'postgresql_dialect_18_3.json').read_text())
-    assert len(dialect['task_templates'])==37
+    assert len(dialect['task_templates'])==len(dialect_task_ids())
     assert all(task['source_format']=='provider_native_compiler_reference' and task['native_statement_sha256s'] for task in dialect['task_templates'])
     inventory=metrics.inventory()
     assert len(inventory)==52

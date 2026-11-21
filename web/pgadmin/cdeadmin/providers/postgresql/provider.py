@@ -452,10 +452,21 @@ class PostgreSQLProvider:
         self._completion_adapters: dict[str, object] = {}
         self._closed = False
         self._state_lock = threading.RLock()
+        from .connection_pool import PostgreSQLConnectionPoolRegistry
+        self._pools = PostgreSQLConnectionPoolRegistry()
         self._visual_admin = ProviderVisualAdministration(
             context, permissions, 'postgresql', PROFILE_VERSION,
             client=self, operation_gate=self.supports_admin_operation,
         )
+
+    @property
+    def pool_registry(self):
+        return self._pools
+
+    @staticmethod
+    def effective_version_capabilities(native_version):
+        from .support_policy import effective_capabilities_for_version
+        return effective_capabilities_for_version(native_version)
 
     @staticmethod
     def supports_admin_operation(resource_kind, operation_id):
@@ -485,7 +496,7 @@ class PostgreSQLProvider:
         # (M4): the attachment is the maintenance database, so no database
         # id.
         kind = request.get('resource_kind')
-        optional = (kind in {'database', 'role', 'tablespace', 'server', 'pgagent-job', 'parameter-acl'}
+        optional = (kind in {'database', 'role', 'tablespace', 'server', 'pgagent-job', 'parameter-acl', 'prepared-transaction'}
                     and request.get('operation_id') != 'install-drop-namespace-guard')
         if kind == 'database' and request.get('operation_id') == 'drop':
             # DROP DATABASE cannot run on a connection to that database
@@ -565,11 +576,19 @@ class PostgreSQLProvider:
             'route': self._native_admin_route(request),
             'statement': compiled['statement'],
             'read_only': compiled['read_only'],
-            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement') if key in compiled},
+            **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement', 'reload_conf') if key in compiled},
         }
-        from . import checkpoint
+        from . import checkpoint, prepared_transactions, retained_admin
         checkpoint_peer = None
-        if compiled.get('minimum_server_version') or checkpoint.applies(request):
+        prepared_binding = None
+        retained_binding = None
+        requested_session_id = request.get('session_id')
+        if requested_session_id is not None:
+            retained_binding = retained_admin.observe_retained_session(
+                self, _required_text(requested_session_id, 'session_id'), payload['route'], compiled
+            )
+            payload['retained_session_binding'] = retained_binding
+        elif compiled.get('minimum_server_version') or checkpoint.applies(request) or prepared_transactions.applies_resolution(request):
             session = self.open_session({'route': payload['route']})
             try:
                 state = self._sessions[session['session_id']]
@@ -577,6 +596,14 @@ class PostgreSQLProvider:
                 self._check_admin_version(state.connection.conn, compiled)
                 if checkpoint.applies(request):
                     checkpoint_peer = checkpoint.peer(state.connection.conn)
+                if prepared_transactions.applies_resolution(request):
+                    try:
+                        prepared_binding = prepared_transactions.verify_binding(
+                            state.connection.conn,
+                            compiled['maintenance']['expected_binding'],
+                        )
+                    except PostgreSQLNativeAdminError as err:
+                        raise PostgreSQLStatementRejected(str(err)) from None
             finally:
                 self.close_session(session)
         planned = {
@@ -594,6 +621,19 @@ class PostgreSQLProvider:
                 'common_transaction_finality_inference': False,
             },
         }
+        if prepared_binding is not None:
+            payload['prepared_xact_binding'] = prepared_binding
+            planned['command_preview']['native_target_identity'] = copy.deepcopy(prepared_binding)
+            planned['warnings'].append(
+                'Prepared 2PC resolution runs outside a SQL transaction block and cannot be undone. '
+                'ScratchRobin never guesses external distributed-transaction coordinator decisions; '
+                'GID, database, owner and XID are re-verified immediately before dispatch with no automatic replay.'
+            )
+        if retained_binding is not None:
+            planned['command_preview']['retained_session'] = copy.deepcopy(retained_binding)
+            planned['warnings'].append(
+                'Runs on the selected retained session backend without reconnecting or committing an enclosing caller transaction.'
+            )
         if checkpoint_peer is not None:
             payload['checkpoint_peer_identity'] = checkpoint_peer
             planned['command_preview']['native_peer_identity'] = copy.deepcopy(checkpoint_peer)
@@ -642,13 +682,16 @@ class PostgreSQLProvider:
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
         expected = {'statement': statement, 'read_only': payload.get('read_only')}
-        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement'):
+        for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement', 'reload_conf'):
             if key in compiled:
                 expected[key] = payload.get(key)
         if compiled != expected:
             raise PostgreSQLProviderError('Retained administrative statement changed')
         self.permissions.require('data_read' if compiled['read_only'] else 'administer')
         self.permissions.require('execute')
+        if payload.get('retained_session_binding'):
+            from . import retained_admin
+            return retained_admin.apply_on_retained_session(self, payload, compiled)
         database_id = route.get('database_id')
         if database_id is not None:
             database_id = _required_int(route, 'database_id')
@@ -656,11 +699,14 @@ class PostgreSQLProvider:
         state = self._sessions[session['session_id']]
         response = None
         observation = None
+        reload_rows = None
         committing = False
         file_export_dispatched = False
         checkpoint_dispatched = False
-        from . import checkpoint
+        prepared_dispatched = False
+        from . import checkpoint, prepared_transactions
         is_checkpoint = checkpoint.applies(payload)
+        is_prepared_resolution = prepared_transactions.applies_resolution(payload)
         try:
             self._ensure_native_connection(state)
             connection = state.connection
@@ -707,6 +753,14 @@ class PostgreSQLProvider:
                 timeout = compiled['maintenance']['wait_timeout_ms']
                 status, _ = native_control(connection.conn, f"SET statement_timeout = '{timeout}ms'")
                 if not status: raise PostgreSQLStatementRejected('Native checkpoint wait policy could not be established')
+            if is_prepared_resolution:
+                try:
+                    prepared_transactions.verify_binding(
+                        connection.conn,
+                        payload.get('prepared_xact_binding') or compiled['maintenance']['expected_binding'],
+                    )
+                except PostgreSQLNativeAdminError as err:
+                    raise PostgreSQLStatementRejected(str(err)) from None
             file_export_dispatched = compiled.get('server_file_operation') == 'export'
             returns_rows = (compiled['read_only'] or
                             compiled.get('returns_rows'))
@@ -720,6 +774,8 @@ class PostgreSQLProvider:
                         tag = checkpoint_cursor.statusmessage
                     status, result = tag == 'CHECKPOINT', {'command_tag': tag}
                 else:
+                    if is_prepared_resolution:
+                        prepared_dispatched = True
                     status, result = (
                         connection.execute_dict(statement, formatted_exception_msg=True)
                         if returns_rows else
@@ -742,6 +798,11 @@ class PostgreSQLProvider:
                         compiled['server_file_operation'] == 'import' and
                         (type(rows[0].get('oid')) is not int or not 1 <= rows[0]['oid'] <= 2**32-1)):
                     raise PostgreSQLProviderError('Native PostgreSQL server-file acknowledgement is unavailable')
+            if compiled.get('reload_conf'):
+                reload_ok, reload_res = connection.execute_dict('SELECT pg_catalog.pg_reload_conf() AS reloaded')
+                if not reload_ok:
+                    raise PostgreSQLProviderError('PostgreSQL configuration reload failed after ALTER SYSTEM')
+                reload_rows = reload_res.get('rows', [])
             if compiled.get('post_statement'):
                 status, result = connection.execute_dict(compiled['post_statement'])
                 if (not status or len(result.get('rows', [])) != 1 or
@@ -773,6 +834,8 @@ class PostgreSQLProvider:
                     'completion':'native_command_returned','automatic_replay':False,
                     'wait_timeout_ms':compiled['maintenance']['wait_timeout_ms'],
                     'physical_durability_independently_observed':False}
+            if reload_rows is not None:
+                response['configuration_reload'] = copy.deepcopy(reload_rows)
             if observation is not None:
                 response['native_observation'] = copy.deepcopy(observation)
             if compiled.get('maintenance'):
@@ -784,6 +847,9 @@ class PostgreSQLProvider:
                     'native_function_acknowledged':True,'independent_file_verification':False,
                     'filesystem_write_rolled_back_by_sql':False}
         except Exception as error:
+            if prepared_dispatched and not isinstance(error, PostgreSQLStatementRejected):
+                state.uncertain = True
+                raise PostgreSQLProviderError('Prepared 2PC resolution outcome is unknown; inspect pg_prepared_xacts before taking further action and do not replay.') from None
             if checkpoint_dispatched and not (isinstance(error, PostgreSQLStatementRejected) and error.sqlstate in {'42501','25001'}):
                 state.uncertain = True
                 raise PostgreSQLProviderError('Native CHECKPOINT outcome is unknown; cancellation or lost acknowledgement does not undo server checkpoint work. Inspect the server before a new explicit decision; do not replay.') from None
@@ -836,7 +902,19 @@ class PostgreSQLProvider:
         return self._visual_admin.validate(request)
 
     def plan_visual_admin(self, request):
-        return self._visual_admin.plan(request)
+        from pgadmin.cdeadmin.visual_admin import VisualAdminValidationError
+        try:
+            return self._visual_admin.plan(request)
+        except PostgreSQLProviderError as exc:
+            msg = str(exc)
+            field_id = None
+            code = 'native_review_refused'
+            for delegated in ('columns', 'primary_key', 'foreign_key', 'check_constraint', 'unique_constraint', 'exclude_constraint'):
+                if msg.startswith(delegated + ':'):
+                    field_id = delegated
+                    code = 'delegated_to_child_node'
+                    break
+            raise VisualAdminValidationError(msg, [{'field_id': field_id, 'code': code}]) from None
 
     def apply_visual_admin(self, request):
         return self._visual_admin.apply(request)
@@ -2002,10 +2080,13 @@ class PostgreSQLProvider:
         self._ensure_native_connection(state)
         connection = state.connection.conn
         context = self._editor_context(state, payload.get('source'))
+        target_ver = payload.get('target_server_version', connection.info.server_version)
         result = analyze(payload.get('source'), script=payload.get('script', False),
                          standard_strings=context['standard_conforming_strings'],
-                         backslash_quote=context['backslash_quote'])
+                         backslash_quote=context['backslash_quote'],
+                         target_server_version=target_ver)
         result['server_version'] = connection.info.server_version
+        result['version_capabilities'] = self.effective_version_capabilities(connection.info.server_version)
         return result
 
     @staticmethod
@@ -2621,6 +2702,7 @@ class PostgreSQLProvider:
                 'PostgreSQL session cleanup is incomplete')
         self._operations.clear()
         self._completion_adapters.clear()
+        self._pools.close_all()
 
 
 def create_provider(context, permissions):

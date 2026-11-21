@@ -16,7 +16,8 @@ class PostgreSQLSchemaApplications(SchemaApplications):
         # in the persisted baseline. Otherwise reduction loses the authority
         # needed to revalidate a trigger/rule/policy after receipt reload.
         ids.update('postgresql:pg_class:' + str(operation['lock_target']['oid'])
-                   for operation in plan['operations'] if operation.get('lock_target'))
+                   for operation in plan['operations']
+                   if operation.get('lock_target') and operation['lock_target'].get('lock_mode') != 'none')
         def reduced(document):
             return {'provenance': deepcopy(document['provenance']),
                     'rows': {key: deepcopy(value) for key, value in document['rows'].items() if key in ids}}

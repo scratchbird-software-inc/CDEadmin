@@ -74,13 +74,13 @@ class PostgreSQLMonitoringHost(MonitoringHost):
             return {**admitted, 'route': copy.deepcopy(admitted['route']),
                     'permissions': self._issuing_permissions.get((owner, sid, target))}
 
-    def _admit(self, owner, sid, target, dedicated):
+    def _admit(self, owner, sid, target, dedicated, *, kerberos_delegation=None):
         from pgadmin.utils.driver.registry import DriverRegistry
         from pgadmin.utils.master_password import get_crypt_key
         from pgadmin.utils.crypto import decrypt
         server = self._owned_server(owner, sid)
-        if server.kerberos_conn and not dedicated:
-            raise ValueError('Independent Kerberos monitoring is not yet admitted')
+        if server.kerberos_conn and not dedicated and not kerberos_delegation:
+            raise ValueError('Independent Kerberos monitoring requires a delegated credential cache or dedicated account')
         oid = database_oid(target)
         manager = DriverRegistry.get('psycopg3').connection_manager(sid)
         connection = manager.connection(did=oid) if oid is not None else manager.connection()
@@ -101,16 +101,36 @@ class PostgreSQLMonitoringHost(MonitoringHost):
             route.update(self._resolved_service(connection, secrets=transport_secrets))
         else:
             route['connection_params'] = self._direct_options(route['connection_params'])
-        if server.kerberos_conn:
+        if server.kerberos_conn and dedicated:
             route['connection_params'].update(gssencmode='disable',
                 require_auth='password,md5,scram-sha-256')
+        elif server.kerberos_conn and kerberos_delegation:
+            from pathlib import Path
+            from ..providers.postgresql.kerberos_delegation import stage_isolated_ccache
+            if not isinstance(kerberos_delegation, dict) or not kerberos_delegation.get('ccache_path'):
+                raise ValueError('Kerberos delegation requires an explicit ccache_path')
+            staging_root = Path(self.app.config.get('STORAGE_DIR') or '/tmp') / 'krb5_monitoring' / str(owner)
+            staged = stage_isolated_ccache(kerberos_delegation['ccache_path'], staging_root)
+            route['kerberos_delegation'] = {
+                'ccache_path': staged['ccache_path'],
+                'ccache_sha256': staged['ccache_sha256'],
+                'default_principal': staged['default_principal'],
+                'expires_at': staged['expires_at'],
+                'renewable': staged['renewable'],
+                'keytab_path': kerberos_delegation.get('keytab_path'),
+                'principal': kerberos_delegation.get('principal'),
+                'renew_before_seconds': int(kerberos_delegation.get('renew_before_seconds', 60)),
+            }
+            route['credential_reference_id'] = 'kerberos-delegated-ccache'
+            route['connection_params']['require_auth'] = 'gss'
+            route['connection_params'].setdefault('gssencmode', 'prefer')
         tls_password = route['connection_params'].pop('sslpassword', None)
         if tls_password:
             transport_secrets['tls_private_key_password'] = tls_password
         if oid is not None:
             route['database_oid'] = oid
         permission = None
-        if not dedicated:
+        if not dedicated and not kerberos_delegation:
             encrypted = connection.password or manager.password
             present, crypt_key = get_crypt_key()
             if present and encrypted:
@@ -229,19 +249,23 @@ class PostgreSQLMonitoringHost(MonitoringHost):
 
     def enable(self, owner, sid, target, body):
         database_oid(target)
-        if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials'}):
+        if not isinstance(body, dict) or set(body) - (self.policy_fields | {'credentials', 'kerberos_delegation'}):
             raise ValueError('Unsupported PostgreSQL monitoring fields')
         if 'native_metric_sources' in body:
             from ..providers.postgresql.metrics import select_sources
             select_sources(body['native_metric_sources'])
+        krb_delegation = body.get('kerberos_delegation')
+        clean_body = {k: v for k, v in body.items() if k != 'kerberos_delegation'}
         key = owner, sid, target
         with self._lock:
             if key not in self._grants:
-                admitted, permissions = self._admit(owner, sid, target, 'credentials' in body)
+                admitted, permissions = self._admit(
+                    owner, sid, target, 'credentials' in clean_body, kerberos_delegation=krb_delegation
+                )
                 self._admissions[key] = admitted
                 self._issuing_permissions[key] = permissions
             try:
-                return super().enable(owner, sid, target, body)
+                return super().enable(owner, sid, target, clean_body)
             finally:
                 self._issuing_permissions.pop(key, None)
                 if key not in self._grants:

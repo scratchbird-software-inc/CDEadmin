@@ -661,7 +661,11 @@ def qualify_application(provider, route, admin, receipt, evidence, schema):
             field = 'n_' + hashlib.sha256((identity + ':1').encode()).hexdigest()
             count = 0
             for filename, source in authored['files'].items():
-                authored['files'][filename], changed = re.subn(r'(field ' + field + r'\b[^}]*?)nullable: false;', r'\1nullable: true;', source)
+                authored['files'][filename], changed = re.subn(
+                    r'(element "' + field + r'" as "field"(?:\n    .*)+?\n            )nullable false',
+                    r'\1nullable true',
+                    source,
+                )
                 count += changed
             assert count == 1
             mapped = handoff(exported['snapshot'], original, authored, engine='postgresql')
@@ -1393,10 +1397,50 @@ def qualify_column_addition(provider, route, admin, receipt, evidence, schema):
         parent_id = next(key for key, value in rows.items() if value['native'].get('schema') == schema
             and value['native'].get('catalog_row', {}).get('relname') == 'column_addition')
         draft_uid = rows[parent_id]['uid'] + ':new:' + str(uuid.uuid4())
-        anchor = 'field n_' + hashlib.sha256((parent_id + ':1').encode()).hexdigest()
-        field = 'field owned_graphical "diagram field" {uid: ' + json.dumps(draft_uid) + '; datatype: "text"; nullable: true;}'
+        from pgadmin.cdeadmin.workspace import ddn_source as ddn
+        from pathlib import Path
+        import subprocess
+        table_elem_id = 'n_' + hashlib.sha256(parent_id.encode()).hexdigest()
+        existing_attrs = rows[parent_id]['native'].get('children', {}).get('pg_attribute', [])
+        existing_refs = [
+            ddn.ref('n_' + hashlib.sha256((parent_id + ':' + str(attr['attnum'])).encode()).hexdigest())
+            for attr in existing_attrs
+        ]
+        f_vals = {'datatype': 'text', 'nullable': True}
+        f_decl = ddn.native_field('owned_graphical', 'diagram field', draft_uid, f_vals)
         edited = deepcopy(original)
-        edited['files'] = {key: source.replace(anchor, field + '\n' + anchor) for key, source in edited['files'].items()}
+        for key, source in list(edited['files'].items()):
+            if f'id "{table_elem_id}"' not in source:
+                continue
+            req = {
+                'snapshot': {
+                    **edited,
+                    'files': {
+                        **edited['files'],
+                        key: source + f_decl['source'] + ddn.annotation(
+                            'owned_graphical',
+                            'diagram field',
+                            draft_uid,
+                            {'subject_kind': 'field', 'parent_id': table_elem_id, 'field_properties_json': json.dumps(f_vals)},
+                            'scratchrobin.postgresql.relations',
+                        ),
+                    },
+                },
+                'edits': [{
+                    'target': {'file': key, 'id': table_elem_id},
+                    'path': 'members',
+                    'value': [ddn.ref('owned_graphical'), *existing_refs],
+                }],
+            }
+            changed_proc = subprocess.run(
+                [ddn.node_executable(), str(Path(__file__).resolve().parent / 'ddn_edit.mjs')],
+                input=json.dumps(req),
+                text=True,
+                capture_output=True,
+                check=True,
+                env=ddn.runner_environment(),
+            )
+            edited = json.loads(changed_proc.stdout)
         assert edited != original
         handed = handoff(exported['snapshot'], original, edited, engine='postgresql')
         baseline = read_catalog(handed['baseline'], engine='postgresql')

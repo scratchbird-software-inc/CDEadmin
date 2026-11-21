@@ -49,6 +49,7 @@ import {convertRecordField, recordConversionPair, useRecordConversions} from './
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {DataFirebirdBlobDialog, DataFirebirdRowSqlDialog} from './DataFirebirdTools';
 import {DataMySQLRowSqlDialog, DataMySQLSpatialDialog, isMySQLSpatialType} from './DataMySQLTools';
+import {DataPostgresCellInspectorModal, DataPostgresRowSqlDialog} from './DataPostgresTools';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
@@ -178,6 +179,8 @@ export default function DataEditSurface({
   const [fbRowSqlOpen, setFbRowSqlOpen] = useState(false);
   const [mysqlSpatialModalState, setMysqlSpatialModalState] = useState(null); // {column, rowIndex}
   const [mysqlRowSqlOpen, setMysqlRowSqlOpen] = useState(false);
+  const [pgCellInspectorState, setPgCellInspectorState] = useState(null); // {column, rowIndex}
+  const [pgRowSqlOpen, setPgRowSqlOpen] = useState(false);
 
   useEffect(() => {
     const el = areaRef.current;
@@ -380,6 +383,10 @@ export default function DataEditSurface({
       'mysql', 'mysql-native', 'mysql-sql',
       'mariadb', 'mariadb-native', 'mariadb-sql',
     ]);
+    return keys.has(languageProfile) || keys.has(engineId);
+  }, [engineId, languageProfile]);
+  const isPostgres = useMemo(() => {
+    const keys = new Set(['postgresql', 'postgresql-native', 'postgresql-sql']);
     return keys.has(languageProfile) || keys.has(engineId);
   }, [engineId, languageProfile]);
   const conversionPairs = languageOptions.field_conversion_pairs;
@@ -2781,6 +2788,26 @@ export default function DataEditSurface({
               },
             ]
             : []),
+          ...(isPostgres
+            ? [
+              {
+                id: `${pfx}.mnu.pg_row_sql`,
+                label: gettext('Generate PostgreSQL Row SQL (ON CONFLICT / OVERRIDING SYSTEM VALUE)…'),
+                iconKey: 'action.sql_preview',
+                disabled: rows.length === 0,
+                index: 225,
+                callback: () => setPgRowSqlOpen(true),
+              },
+              {
+                id: `${pfx}.mnu.pg_cell_inspector`,
+                label: gettext('Inspect PostgreSQL Value, Encoding & TOAST Attributes…'),
+                iconKey: 'action.view',
+                disabled: !activeColObj || rows.length === 0,
+                index: 228,
+                callback: () => setPgCellInspectorState({column: activeColObj, rowIndex: activeRowIndex}),
+              },
+            ]
+            : []),
         ],
       },
       {
@@ -4305,6 +4332,28 @@ export default function DataEditSurface({
             }
             onOpenInSqlEditor={onOpenInSqlEditor}
             onClose={() => setMysqlRowSqlOpen(false)}
+          />
+        </>
+      )}
+
+      {isPostgres && (
+        <>
+          <DataPostgresCellInspectorModal
+            open={Boolean(pgCellInspectorState)}
+            column={pgCellInspectorState?.column || null}
+            value={
+              pgCellInspectorState
+                ? rows[pgCellInspectorState.rowIndex]?.values?.[pgCellInspectorState.column.name]
+                : null
+            }
+            onClose={() => setPgCellInspectorState(null)}
+          />
+          <DataPostgresRowSqlDialog
+            open={pgRowSqlOpen}
+            tableLabel={targetResource?.display_name || targetResource?.name || 'public.table'}
+            columns={columns}
+            row={rows[activeRowIndex]?.values || null}
+            onClose={() => setPgRowSqlOpen(false)}
           />
         </>
       )}

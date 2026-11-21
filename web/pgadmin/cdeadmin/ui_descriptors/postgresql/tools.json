@@ -473,6 +473,235 @@
       "arguments": {
         "tool": "schema_diff"
       }
+    },
+    {
+      "command_id": "endpoint.postgresql.continuity",
+      "scope": "endpoint",
+      "label": "Continuity, PITR & WAL archive...",
+      "description": "Manage physical backups, continuous WAL streaming, archive holds/retention, PITR restore, and coordinated cutover.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.backup",
+      "group": "availability",
+      "mutation": "admin",
+      "priority": 52,
+      "arguments": {
+        "tab": "postgresql-continuity"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer physical continuity and PITR."
+      }
+    },
+    {
+      "command_id": "endpoint.postgresql.ha_topology",
+      "scope": "endpoint",
+      "label": "HA topology, standbys & pg_ctl...",
+      "description": "Inspect replication topology, bootstrap physical standbys, run coordinated switchover, and execute supervised pg_ctl service actions.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "availability",
+      "mutation": "admin",
+      "priority": 53,
+      "arguments": {
+        "tab": "postgresql-ha-topology"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can administer HA topology and host cluster lifecycle."
+      }
+    },
+    {
+      "command_id": "endpoint.postgresql.configuration",
+      "scope": "endpoint",
+      "label": "Server configuration & pg_hba.conf...",
+      "description": "Inspect pg_settings, pg_file_settings and pg_hba_file_rules, persist ALTER SYSTEM changes, and edit host configuration files with automatic rollback.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 54,
+      "arguments": {
+        "tab": "postgresql-configuration"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can modify server configuration."
+      }
+    },
+    {
+      "command_id": "endpoint.postgresql.prepared_xacts",
+      "scope": "endpoint",
+      "label": "Prepared 2PC transactions...",
+      "description": "Inspect orphaned or active two-phase transactions in pg_prepared_xacts and review COMMIT PREPARED or ROLLBACK PREPARED.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 55,
+      "arguments": {
+        "tab": "postgresql-prepared-xacts"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can resolve prepared 2PC transactions."
+      }
+    },
+    {
+      "command_id": "endpoint.postgresql.host_tools",
+      "scope": "endpoint",
+      "label": "Host utilities (initdb, pg_upgrade, pg_rewind, pgbench)...",
+      "description": "Run supervised PostgreSQL host binaries including initdb, pg_amcheck, pg_createsubscriber, pg_resetwal, pg_rewind, pg_archivecleanup, pgbench, pg_upgrade and pg_checksums.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.settings",
+      "group": "maintenance",
+      "mutation": "admin",
+      "priority": 56,
+      "arguments": {
+        "tab": "postgresql-host-tools"
+      },
+      "enabled_when": [
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run supervised host utilities."
+      }
+    },
+    {
+      "command_id": "database.postgresql.snapshot_copy",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Synchronized snapshot export & table copy...",
+      "description": "Export synchronized MVCC transaction snapshots via SQL or logical replication slots and run parallel consistent cross-database table copies.",
+      "handler": "open_workspace",
+      "icon": "action.export",
+      "group": "database",
+      "mutation": "write",
+      "priority": 48,
+      "arguments": {
+        "tab": "postgresql-snapshot-copy"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.postgresql.data_import",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Import data archive...",
+      "description": "Plan, review and apply delimited or SQL archive data imports into this database.",
+      "handler": "open_workspace",
+      "icon": "action.restore",
+      "group": "restore",
+      "mutation": "write",
+      "priority": 49,
+      "arguments": {
+        "tab": "export",
+        "focus_import": true
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.{engine_id}.design_erd",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Design from this database...",
+      "description": "Import this database schema into a Draft four-level ERD & Data Model.",
+      "handler": "open_tool",
+      "icon": "tool.erd",
+      "group": "database",
+      "priority": 74,
+      "arguments": {
+        "activity": "activity.erd-models",
+        "design_shortcut": "erd_from_database"
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_cube",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New cube from this table...",
+      "description": "Seed a Draft dimensional cube using this table as its fact source.",
+      "handler": "open_tool",
+      "icon": "tool.cube",
+      "group": "object",
+      "priority": 61,
+      "arguments": {
+        "activity": "activity.cubes",
+        "design_shortcut": "cube_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_bi_question",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New BI question from this table...",
+      "description": "Seed a Draft BI question structured query targeting this table.",
+      "handler": "open_tool",
+      "icon": "tool.bi",
+      "group": "object",
+      "priority": 62,
+      "arguments": {
+        "activity": "activity.bi-designs",
+        "design_shortcut": "bi_question_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
+    },
+    {
+      "command_id": "resource.{engine_id}.table.design_screen_mesh",
+      "scope": "resource",
+      "slot": "after_data",
+      "label": "New screen mesh from this table...",
+      "description": "Seed a Draft wireframe screen mesh with controls bound to this table.",
+      "handler": "open_tool",
+      "icon": "tool.screen-mesh",
+      "group": "object",
+      "priority": 63,
+      "arguments": {
+        "activity": "activity.screen-meshes",
+        "design_shortcut": "screen_mesh_from_table"
+      },
+      "when": {
+        "resource_kinds": [
+          "table",
+          "partitioned-table"
+        ],
+        "requires_database_target": true,
+        "not_system_object": true
+      }
     }
   ]
 }

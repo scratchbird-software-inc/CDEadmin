@@ -122,7 +122,11 @@ def apply_review(provider, route, record):
             connection.execute('SET LOCAL standard_conforming_strings = on')
             connection.execute("SET LOCAL lock_timeout = '2s'")
             connection.execute("SET LOCAL statement_timeout = '15s'")
-            targets = {item['lock_target']['oid']: item['lock_target'] for item in record['plan']['operations'] if item.get('lock_target')}
+            targets = {
+                item['lock_target']['oid']: item['lock_target']
+                for item in record['plan']['operations']
+                if item.get('lock_target') and item['lock_target'].get('lock_mode') != 'none'
+            }
             for oid, target in sorted(targets.items()):
                 connection.execute(sql.SQL('LOCK TABLE ONLY {}.{} IN ACCESS EXCLUSIVE MODE').format(
                     sql.Identifier(target['schema']), sql.Identifier(target['name'])))
@@ -195,3 +199,114 @@ def apply_review(provider, route, record):
             except Exception as error:
                 result['release_error_type'] = type(error).__name__
     return result
+
+
+def apply_retained_session_review(provider, session_id: str, database_oid: int, record: dict) -> dict:
+    """Apply an admitted retained-session DDN migration on the original session backend (PG-AUDIT-RETAINEDADMIN-01)."""
+    import uuid
+    from psycopg import Cursor
+    from psycopg.pq import TransactionStatus
+    from psycopg.rows import tuple_row
+
+    for permission in ('administer', 'execute', 'data_read'):
+        provider.permissions.require(permission)
+    state = provider._sessions.get(session_id)
+    if state is None or state.uncertain or not state.attached:
+        raise ValueError('Retained session is unavailable or uncertain; do not reconnect')
+    with state.lock:
+        connection = state.connection.conn
+        if connection is None or connection.closed or connection.broken:
+            state.uncertain = True
+            raise ValueError('Retained session backend is closed; will not reconnect')
+        orig_tx = connection.info.transaction_status
+        if orig_tx not in {TransactionStatus.IDLE, TransactionStatus.INTRANS}:
+            raise ValueError('Retained session has an aborted transaction; resolve it before applying')
+
+        owned_tx = orig_tx == TransactionStatus.IDLE
+        sp_ident = sql.Identifier('sr_ddn_ret_' + uuid.uuid4().hex[:12])
+        result = {
+            'state': 'not_executed',
+            'retained_session_id': session_id,
+            'caller_transaction_committed': False,
+            'statements_completed': 0,
+        }
+        guard_started = False
+        committing = False
+        try:
+            if owned_tx:
+                connection.execute('BEGIN ISOLATION LEVEL REPEATABLE READ')
+            else:
+                with Cursor(connection, row_factory=tuple_row) as cur:
+                    cur.execute(sql.SQL('SAVEPOINT {}').format(sp_ident))
+            guard_started = True
+            connection.execute('SET LOCAL standard_conforming_strings = on')
+
+            targets = {
+                item['lock_target']['oid']: item['lock_target']
+                for item in record['plan']['operations']
+                if item.get('lock_target') and item['lock_target'].get('lock_mode') != 'none'
+            }
+            for _oid, target in sorted(targets.items()):
+                connection.execute(
+                    sql.SQL('LOCK TABLE ONLY {}.{} IN ACCESS EXCLUSIVE MODE').format(
+                        sql.Identifier(target['schema']), sql.Identifier(target['name'])
+                    )
+                )
+
+            captured = capture(connection, database_oid, _in_transaction=True, session_scope=True)
+            current = build_export(
+                captured['resources'],
+                endpoint_id=record['plan']['endpoint_id'],
+                target_id=record['plan']['database_target_id'],
+                generation=captured['generation'],
+                engine='postgresql',
+                native_model=True,
+            )
+            fresh = build_plan(record['baseline'], record['desired'], current, allow_retained_session=True)
+            if not fresh['application_supported'] or fresh['execution_sha256'] != record['plan']['execution_sha256']:
+                if owned_tx:
+                    connection.rollback()
+                else:
+                    with Cursor(connection, row_factory=tuple_row) as cur:
+                        cur.execute(sql.SQL('ROLLBACK TO SAVEPOINT {}').format(sp_ident))
+                        cur.execute(sql.SQL('RELEASE SAVEPOINT {}').format(sp_ident))
+                guard_started = False
+                result.update(state='native_rollback_returned', reason='Retained-session metadata changed since review')
+                return result
+
+            for op in fresh['operations']:
+                connection.execute(op['statement'])
+                result['statements_completed'] += 1
+
+            if owned_tx:
+                committing = True
+                ok, cmd = control(connection, 'COMMIT')
+                if not ok or cmd != 'COMMIT':
+                    raise RuntimeError('Retained-session commit was not confirmed')
+                guard_started = False
+                result['state'] = 'native_commit_returned'
+            else:
+                with Cursor(connection, row_factory=tuple_row) as cur:
+                    cur.execute(sql.SQL('RELEASE SAVEPOINT {}').format(sp_ident))
+                guard_started = False
+                result['state'] = 'savepoint_released_pending_caller_commit'
+            return result
+        except Exception as err:
+            result['error_type'] = type(err).__name__
+            result['sqlstate'] = getattr(err, 'sqlstate', None)
+            if committing:
+                state.uncertain = True
+                result['state'] = 'unknown_outcome'
+            elif guard_started:
+                try:
+                    if owned_tx:
+                        connection.rollback()
+                    else:
+                        with Cursor(connection, row_factory=tuple_row) as cur:
+                            cur.execute(sql.SQL('ROLLBACK TO SAVEPOINT {}').format(sp_ident))
+                            cur.execute(sql.SQL('RELEASE SAVEPOINT {}').format(sp_ident))
+                    result['state'] = 'native_rollback_returned'
+                except Exception:
+                    state.uncertain = True
+                    result['state'] = 'unknown_outcome'
+            return result

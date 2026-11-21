@@ -335,7 +335,7 @@ def test_host_tool_contract_is_exactly_the_native_typed_inventory():
     from pgadmin.cdeadmin.workspace.postgresql_host_tool_service import descriptors
     rows = descriptors()
     assert {row['operation_id'] for row in rows} == set(OPERATIONS)
-    assert len(rows) == 5
+    assert len(rows) == 13
     for row in rows:
         assert all(field['control'] in {'text','number','boolean','select','grid'} for field in row['fields'])
         assert row['resource_kind'] == 'server' and row['status'] == 'draft'

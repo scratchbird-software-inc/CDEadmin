@@ -140,25 +140,51 @@ class PostgreSQLMonitor:
             port = self._tunnel.start()
             # libpq keeps the original hostname for TLS hostname verification.
             options['hostaddr'] = '127.0.0.1'
-        with self.permissions.acquire_secret(reference, route['principal_reference'],
-                                             'connect', 'database_password') as lease:
-            def attach(value):
-                def connect(tls_password=None):
+        krb_delegation = route.get('kerberos_delegation')
+        if krb_delegation is not None:
+            from .kerberos_delegation import KerberosDelegationError, inspect_ccache, renew_ccache, scoped_krb5ccname
+            try:
+                ccache_path = krb_delegation['ccache_path']
+                info = inspect_ccache(ccache_path)
+                renew_threshold = int(krb_delegation.get('renew_before_seconds', 60))
+                if (info['expired'] or info['remaining_seconds'] <= renew_threshold) and (
+                    info['renewable'] or krb_delegation.get('keytab_path')
+                ):
+                    info = renew_ccache(
+                        ccache_path,
+                        keytab_path=krb_delegation.get('keytab_path'),
+                        principal=krb_delegation.get('principal'),
+                    )
+                with scoped_krb5ccname(ccache_path):
                     parameters = dict(options)
-                    if tls_password is not None:
-                        parameters['sslpassword'] = bytes(tls_password).decode('utf8')
-                    return (self._connect or psycopg.connect)(
+                    parameters.setdefault('require_auth', 'gss')
+                    connection = (self._connect or psycopg.connect)(
                         host=route['host'], port=port, user=route['user'],
-                        dbname=route['database'], password=bytes(value).decode('utf8'),
+                        dbname=route['database'],
                         application_name='ScratchRobin monitoring', connect_timeout=timeout,
                         autocommit=True, **parameters)
-                tls_reference = route.get('credential_references', {}).get('tls_private_key_password')
-                if tls_reference:
-                    with self.permissions.acquire_secret(tls_reference, route['principal_reference'],
-                            'connect', 'tls_private_key_password') as tls_lease:
-                        return tls_lease.use(connect)
-                return connect()
-            connection = lease.use(attach)
+            except KerberosDelegationError as err:
+                raise PostgreSQLMonitoringError(str(err)) from None
+        else:
+            with self.permissions.acquire_secret(reference, route['principal_reference'],
+                                                 'connect', 'database_password') as lease:
+                def attach(value):
+                    def connect(tls_password=None):
+                        parameters = dict(options)
+                        if tls_password is not None:
+                            parameters['sslpassword'] = bytes(tls_password).decode('utf8')
+                        return (self._connect or psycopg.connect)(
+                            host=route['host'], port=port, user=route['user'],
+                            dbname=route['database'], password=bytes(value).decode('utf8'),
+                            application_name='ScratchRobin monitoring', connect_timeout=timeout,
+                            autocommit=True, **parameters)
+                    tls_reference = route.get('credential_references', {}).get('tls_private_key_password')
+                    if tls_reference:
+                        with self.permissions.acquire_secret(tls_reference, route['principal_reference'],
+                                'connect', 'tls_private_key_password') as tls_lease:
+                            return tls_lease.use(connect)
+                    return connect()
+                connection = lease.use(attach)
         self._connection = connection
         from .support_policy import admission_error
         reason = admission_error(connection.info.server_version)

@@ -19,10 +19,11 @@ from .native_admin import (
 from .policies import expression
 
 CONTYPES = {'p': 'PRIMARY KEY', 'u': 'UNIQUE', 'f': 'FOREIGN KEY',
-            'c': 'CHECK', 'x': 'EXCLUDE'}
+            'c': 'CHECK', 'x': 'EXCLUDE', 'n': 'NOT NULL'}
 ACTIONS = {'a': 'NO ACTION', 'r': 'RESTRICT', 'c': 'CASCADE',
            'n': 'SET NULL', 'd': 'SET DEFAULT'}
 INDEX_BACKED = ('p', 'u', 'x')
+ENFORCEABLE_CREATE_KINDS = ('f', 'c')
 
 
 def _refuse(message):
@@ -55,6 +56,8 @@ def facts(native, relations=None):
         'condeferrable': bool(row.get('condeferrable')),
         'condeferred': bool(row.get('condeferred')),
         'convalidated': row.get('convalidated') is not False,
+        'conenforced': row.get('conenforced') is not False,
+        'conperiod': bool(row.get('conperiod')),
         'connoinherit': bool(row.get('connoinherit')),
         'confupdtype': row.get('confupdtype') or '',
         'confdeltype': row.get('confdeltype') or '',
@@ -136,22 +139,71 @@ def _table(current):
                       _name(current['table'], 'table'))
 
 
+def _enforcement_clause(contype, draft):
+    mode = draft.get('enforcement')
+    not_enforced_flag = _flag(draft, 'not_enforced') if 'not_enforced' in draft else False
+    if _blank(mode) and not not_enforced_flag:
+        return '', False
+    if not _blank(mode):
+        norm = str(mode).strip().upper()
+        if norm not in ('ENFORCED', 'NOT ENFORCED'):
+            _refuse('enforcement must be ENFORCED or NOT ENFORCED')
+        if not_enforced_flag and norm == 'ENFORCED':
+            _refuse('conflicting enforcement settings')
+    else:
+        norm = 'NOT ENFORCED'
+    if contype not in ENFORCEABLE_CREATE_KINDS:
+        _refuse('only CHECK and FOREIGN KEY constraints support ENFORCED / NOT ENFORCED')
+    if norm == 'NOT ENFORCED' and _flag(draft, 'not_valid'):
+        _refuse('NOT ENFORCED cannot be combined with NOT VALID')
+    return f' {norm}', True
+
+
 def _body(contype, draft):
+    min_ver = None
+    if contype == 'n':
+        col = _identifier(_name(draft.get('not_null_column') or draft.get('column'), 'not_null_column'), 'not_null_column')
+        if not _blank(draft.get('enforcement')) or _flag(draft, 'not_enforced'):
+            _refuse('only CHECK and FOREIGN KEY constraints support ENFORCED / NOT ENFORCED')
+        text = f'NOT NULL {col}'
+        if _flag(draft, 'connoinherit'):
+            text += ' NO INHERIT'
+        return text, 180000
     if contype in ('p', 'u'):
+        if not _blank(draft.get('enforcement')) or _flag(draft, 'not_enforced'):
+            _refuse('only CHECK and FOREIGN KEY constraints support ENFORCED / NOT ENFORCED')
+        without_overlaps = draft.get('without_overlaps_column')
         if not _blank(draft.get('index')):
+            if not _blank(without_overlaps):
+                _refuse('WITHOUT OVERLAPS cannot be combined with USING INDEX')
             return (f'{CONTYPES[contype]} USING INDEX '
-                    + _identifier(_name(draft['index'], 'index'), 'index'))
+                    + _identifier(_name(draft['index'], 'index'), 'index')), None
+        cols = _names(draft.get('columns'), 'columns') if not _blank(draft.get('columns')) else []
+        if not _blank(without_overlaps):
+            wo_col = _identifier(_name(without_overlaps, 'without_overlaps_column'), 'without_overlaps_column')
+            cols.append(f'{wo_col} WITHOUT OVERLAPS')
+            min_ver = 180000
+        if not cols:
+            _refuse('columns needs at least one column')
         return (f'{CONTYPES[contype]} ('
-                + ', '.join(_names(draft.get('columns'), 'columns')) + ')'
-                + _index_options(draft) + _deferrable(draft))
+                + ', '.join(cols) + ')'
+                + _index_options(draft) + _deferrable(draft)), min_ver
     if contype == 'f':
         rows = _rows(draft, 'fk_columns')
-        if not rows:
+        local_period = draft.get('local_period_column')
+        remote_period = draft.get('referenced_period_column')
+        if bool(_blank(local_period)) != bool(_blank(remote_period)):
+            _refuse('PERIOD foreign keys require both local_period_column and referenced_period_column')
+        if not rows and _blank(local_period):
             _refuse('a foreign key needs column pairs')
         local = [_identifier(_name(row.get('local_column'), 'local_column'),
                              'local_column') for row in rows]
         remote = [_identifier(_name(row.get('referenced'), 'referenced'),
                               'referenced') for row in rows]
+        if not _blank(local_period):
+            local.append('PERIOD ' + _identifier(_name(local_period, 'local_period_column'), 'local_period_column'))
+            remote.append('PERIOD ' + _identifier(_name(remote_period, 'referenced_period_column'), 'referenced_period_column'))
+            min_ver = 180000
         text = ('FOREIGN KEY (' + ', '.join(local) + ') REFERENCES '
                 + _qualified(
                     _name(draft.get('remote_schema'), 'remote_schema'),
@@ -162,16 +214,26 @@ def _body(contype, draft):
                 else ' MATCH SIMPLE'
         text += _action(draft, 'confupdtype') + _action(draft, 'confdeltype')
         text += _deferrable(draft)
+        enf_clause, enf_v18 = _enforcement_clause(contype, draft)
+        if enf_v18:
+            min_ver = 180000
+        text += enf_clause
         if _flag(draft, 'not_valid'):
             text += ' NOT VALID'
-        return text
+        return text, min_ver
     if contype == 'c':
         text = 'CHECK (' + expression(draft.get('consrc'), 'consrc') + ')'
-        if _flag(draft, 'not_valid'):
-            text += ' NOT VALID'
         if _flag(draft, 'connoinherit'):
             text += ' NO INHERIT'
-        return text
+        enf_clause, enf_v18 = _enforcement_clause(contype, draft)
+        if enf_v18:
+            min_ver = 180000
+        text += enf_clause
+        if _flag(draft, 'not_valid'):
+            text += ' NOT VALID'
+        return text, min_ver
+    if not _blank(draft.get('enforcement')) or _flag(draft, 'not_enforced'):
+        _refuse('only CHECK and FOREIGN KEY constraints support ENFORCED / NOT ENFORCED')
     rows = _rows(draft, 'elements')
     if not rows:
         _refuse('an exclusion constraint needs at least one element')
@@ -200,7 +262,7 @@ def _body(contype, draft):
     if not _blank(draft.get('indconstraint')):
         text += ' WHERE (' + expression(draft['indconstraint'],
                                         'indconstraint') + ')'
-    return text + _deferrable(draft)
+    return text + _deferrable(draft), None
 
 
 def _create(native, draft):
@@ -208,19 +270,20 @@ def _create(native, draft):
     table = _table(current)
     contype = draft.get('contype')
     if contype not in CONTYPES:
-        _refuse('contype must be one of p, u, f, c, x')
+        _refuse('contype must be one of p, u, f, c, x, n')
     statement = f'ALTER TABLE {table} ADD'
     name = draft.get('name')
     if not _blank(name):
         statement += ' CONSTRAINT ' + _identifier(_name(name, 'name'), 'name')
-    statements = [statement + ' ' + _body(contype, draft)]
+    body_sql, min_ver = _body(contype, draft)
+    statements = [statement + ' ' + body_sql]
     if not _blank(draft.get('comment')):
         if _blank(name):
             _refuse('a comment needs a constraint name')
         statements.append(
             f'COMMENT ON CONSTRAINT {_identifier(_name(name, "name"), "name")}'
             f' ON {table} IS ' + _literal(str(draft['comment']), 'comment'))
-    return statements
+    return statements, min_ver
 
 
 def _alter(native, draft):
@@ -235,8 +298,19 @@ def _alter(native, draft):
         statements.append(f'ALTER TABLE {table} RENAME CONSTRAINT {old} TO '
                           + _identifier(name, 'name'))
     constraint = _identifier(name, 'name')
+    min_ver = None
+    if not _blank(draft.get('enforcement')) or 'not_enforced' in draft:
+        enf_clause, _ = _enforcement_clause('f' if contype == 'f' else contype, draft)
+        if contype != 'f':
+            _refuse('PostgreSQL ALTER CONSTRAINT ENFORCED / NOT ENFORCED applies only to FOREIGN KEY constraints')
+        target_enforced = enf_clause.strip() == 'ENFORCED'
+        if target_enforced != current['conenforced']:
+            statements.append(f'ALTER TABLE {table} ALTER CONSTRAINT {constraint}{enf_clause}')
+            min_ver = 180000
     if contype in ('f', 'c') and _flag(draft, 'validate') and \
             not current['convalidated']:
+        if not current['conenforced'] and not any('ENFORCED' in s and 'NOT ENFORCED' not in s for s in statements):
+            _refuse('cannot VALIDATE a NOT ENFORCED constraint without enforcing it')
         statements.append(f'ALTER TABLE {table} VALIDATE CONSTRAINT '
                           f'{constraint}')
     if contype == 'f' and 'condeferrable' in draft and (
@@ -269,7 +343,7 @@ def _alter(native, draft):
             + ('NULL' if value == '' else _literal(str(value), 'comment')))
     if not statements:
         _refuse('nothing to change')
-    return statements
+    return statements, min_ver
 
 
 def _drop(native, draft):
@@ -278,20 +352,23 @@ def _drop(native, draft):
         _refuse('drop confirmation does not match object name')
     cascade = ' CASCADE' if _flag(draft, 'cascade') else ''
     return [f'ALTER TABLE {_table(current)} DROP CONSTRAINT '
-            f'{_identifier(_name(current["name"], "name"), "name")}{cascade}']
+            f'{_identifier(_name(current["name"], "name"), "name")}{cascade}'], None
 
 
 def compile_operation(operation, native, draft):
     """One exact native text for the constraint lifecycle."""
     if operation == 'create':
-        statements = _create(native, draft)
+        statements, min_ver = _create(native, draft)
     elif operation == 'alter':
-        statements = _alter(native, draft)
+        statements, min_ver = _alter(native, draft)
     elif operation == 'drop':
-        statements = _drop(native, draft)
+        statements, min_ver = _drop(native, draft)
     else:
         _refuse('constraint inspection stays with the provider tree')
-    return {'statement': ';\n'.join(statements), 'read_only': False}
+    result = {'statement': ';\n'.join(statements), 'read_only': False}
+    if min_ver is not None:
+        result['minimum_server_version'] = min_ver
+    return result
 
 
 # -- form -------------------------------------------------------------------
@@ -334,6 +411,11 @@ def form(operation, field):
             field('condeferred', 'Initially deferred', 'boolean',
                   visible_when=_when('f'),
                   initial_value_path=['constraint_facts', 'condeferred']),
+            field('enforcement', 'Enforcement (PostgreSQL 18+)', 'select',
+                  options=[{'value': 'ENFORCED', 'label': 'Enforced'},
+                           {'value': 'NOT ENFORCED', 'label': 'Not enforced'}],
+                  visible_when=_when('f'),
+                  help='ALTER CONSTRAINT ENFORCED / NOT ENFORCED for foreign keys.'),
             field('fillfactor', 'Fill factor', 'number',
                   visible_when=_when(['p', 'u', 'x']), help='10 to 100.'),
             field('reset_fillfactor', 'Reset fill factor to the default',
@@ -354,13 +436,22 @@ def form(operation, field):
               default='p'),
         field('columns', 'Columns', help='Comma separated.',
               visible_when=_when(['p', 'u'])),
+        field('without_overlaps_column', 'Temporal range column (WITHOUT OVERLAPS, PostgreSQL 18+)',
+              help='Optional range/multirange column for temporal PRIMARY KEY / UNIQUE.',
+              visible_when=_when(['p', 'u'])),
         field('index', 'Existing unique index', help=(
             'USING INDEX; replaces the column list.'),
             visible_when=_when(['p', 'u'])),
+        field('not_null_column', 'Column (named NOT NULL, PostgreSQL 18+)',
+              visible_when=_when('n')),
         field('fk_columns', 'Column pairs', 'grid', columns=[
             column('local_column', 'Local column', required=True),
             column('referenced', 'Referenced column', required=True)],
             visible_when=_when('f')),
+        field('local_period_column', 'Local PERIOD range column (PostgreSQL 18+)',
+              visible_when=_when('f')),
+        field('referenced_period_column', 'Referenced PERIOD range column (PostgreSQL 18+)',
+              visible_when=_when('f')),
         field('remote_schema', 'Referenced schema', visible_when=_when('f')),
         field('remote_table', 'Referenced table', visible_when=_when('f')),
         field('confmatchtype', 'Match full', 'boolean',
@@ -374,7 +465,13 @@ def form(operation, field):
         field('consrc', 'Check expression', 'multiline',
               visible_when=_when('c')),
         field('connoinherit', 'No inherit', 'boolean',
-              visible_when=_when('c')),
+              visible_when=_when(['c', 'n'])),
+        field('enforcement', 'Enforcement (PostgreSQL 18+)', 'select',
+              options=[{'value': 'ENFORCED', 'label': 'Enforced'},
+                       {'value': 'NOT ENFORCED', 'label': 'Not enforced'}],
+              visible_when=_when(['f', 'c'])),
+        field('not_enforced', 'Do not enforce constraint (NOT ENFORCED, PostgreSQL 18+)',
+              'boolean', visible_when=_when(['f', 'c'])),
         field('not_valid', "Don't validate existing rows (NOT VALID)",
               'boolean', visible_when=_when(['f', 'c'])),
         field('amname', 'Access method', visible_when=_when('x'),

@@ -46,7 +46,7 @@ def paths_for_app(app):
     return binary_paths(configured)
 
 
-def action(service, server, operation, request):
+def action(service, server, operation, request, *, host_authorized=False):
     from flask import current_app
     if not isinstance(request,dict):raise ContinuityError('A native continuity request is required')
     if not PostgreSQLMonitoringHost._native_registration(server):raise ContinuityError('Select a native PostgreSQL registration')
@@ -114,6 +114,64 @@ def action(service, server, operation, request):
     paths=paths_for_app(current_app)
     configuration=fingerprint({'registration':PostgreSQLMonitoringHost._configuration(server),
                                'runtime_limit':runtime_limit,'paths':paths,'wal_archive_root':str(jobs.archive_root)})
+    if operation in {
+        'archive_holds', 'archive_hold_register', 'archive_hold_release',
+        'archive_retention_evaluate', 'archive_retention_review', 'archive_retention_start',
+        'restore_review', 'restore_start',
+        'cutover_review', 'cutover_start', 'cutover_rollback',
+        'orchestration_status', 'stream_restart_review',
+    }:
+        from . import postgresql_continuity_orchestration as orch
+        if operation == 'archive_holds':
+            return orch.archive_holds_list(jobs, owner, endpoint, request)
+        if operation == 'archive_hold_register':
+            return orch.archive_hold_register(jobs, owner, endpoint, request)
+        if operation == 'archive_hold_release':
+            return orch.archive_hold_release(jobs, owner, endpoint, request)
+        if operation == 'archive_retention_evaluate':
+            return orch.archive_retention_evaluate(jobs, owner, endpoint, request)
+        if operation == 'archive_retention_review':
+            return orch.archive_retention_review(jobs, owner, endpoint, request)
+        if operation == 'archive_retention_start':
+            return orch.archive_retention_start(jobs, owner, endpoint, request)
+        if operation == 'restore_review':
+            return orch.restore_review(current_app, jobs, owner, endpoint, paths, request, host_authorized=host_authorized)
+        if operation == 'restore_start':
+            return orch.restore_start(current_app, jobs, owner, endpoint, request, host_authorized=host_authorized)
+        if operation == 'orchestration_status':
+            return orch.orchestration_status(jobs, owner, endpoint, request)
+        if operation in {'cutover_review', 'cutover_start', 'cutover_rollback'}:
+            context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+            provider = service.endpoint_service.provider_registry.resolve(context).instance
+            _src, tr = capture(provider, payload['route'], server=server)
+            try:
+                with tr.parameters() as params:
+                    dsn_parts = [f"{k}='{str(v).replace(chr(39), chr(92)+chr(39))}'" for k, v in params.items() if v is not None]
+                    src_dsn = ' '.join(dsn_parts)
+            finally:
+                tr.close()
+            if operation == 'cutover_review':
+                return orch.cutover_review(jobs, owner, endpoint, src_dsn, request)
+            if operation == 'cutover_start':
+                return orch.cutover_start(jobs, owner, endpoint, src_dsn, request)
+            return orch.cutover_rollback(jobs, owner, endpoint, src_dsn, request)
+        # stream_restart_review
+        prior = jobs.load(request.get('prior_job_id'), owner, endpoint)
+        context, payload, _root = service.endpoint_service.workspace(server, database_target_id=None)
+        provider = service.endpoint_service.provider_registry.resolve(context).instance
+        if prior.get('operation') == 'logical_stream_capture':
+            from ..providers.postgresql.connection_target import database_oid
+            from . import postgresql_continuity_slot_sql as sql_slots
+            src, tr = sql_slots.capture(provider, payload['route'], server, prior['options'], database_oid(prior['database_target_id']))
+        else:
+            src, tr = capture(provider, payload['route'], server=server, wal_details=True)
+        try:
+            return orch.stream_restart_review(
+                service, server, jobs, owner, endpoint, request,
+                source=src, configuration=configuration, paths=paths, runtime_limit=runtime_limit,
+            )
+        finally:
+            tr.close()
     transport=None
     try:
         from . import postgresql_continuity_slot_sql as sql_slots

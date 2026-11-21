@@ -123,7 +123,8 @@
       "group_id": "activity",
       "title": "Activity",
       "kinds": [
-        "session"
+        "session",
+        "prepared-transaction"
       ],
       "order": 10
     }
@@ -233,6 +234,8 @@
     "pgagent-job": "object.job",
     "pgagent-schedule": "object.job",
     "pgagent-step": "object.job",
+    "parameter-acl": "object.privilege",
+    "prepared-transaction": "object.session",
     "session": "object.session"
   }
 }

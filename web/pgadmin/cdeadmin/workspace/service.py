@@ -1700,12 +1700,48 @@ class ProviderWorkspaceService:
         except (ValueError, OSError, BinlogArchiveError, ProviderToolError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
-    def postgresql_continuity(self, server, operation, request):
+    def postgresql_configuration(self, server, operation, request, *, host_authorized=False):
+        from .postgresql_configuration_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return action(self, server, operation, request, host_authorized=host_authorized)
+        except (ValueError, OSError, ContinuityError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_continuity(self, server, operation, request, *, host_authorized=False):
         from .postgresql_continuity_service import action
         from ..providers.postgresql.continuity import ContinuityError
         try:
-            return action(self, server, operation, request)
+            return action(self, server, operation, request, host_authorized=host_authorized)
         except ContinuityError as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_ha(self, server, operation, request, *, host_authorized=False):
+        from .postgresql_ha_service import action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return action(self, server, operation, request, host_authorized=host_authorized)
+        except (ValueError, OSError, ContinuityError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_snapshot_orchestration(self, server, operation, request):
+        from .postgresql_snapshot_orchestration import snapshot_orchestration_action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return snapshot_orchestration_action(self, server, operation, request)
+        except (ValueError, OSError, ContinuityError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
+    def postgresql_runtime_capabilities(self, server, request):
+        from ..providers.postgresql.runtime_capabilities import inspect_runtime_capabilities
+        from .postgresql_snapshot_orchestration import _sql_conn_params
+        import psycopg
+        req = request if isinstance(request, dict) else {}
+        try:
+            params = _sql_conn_params(self, server, database_name=req.get('database'))
+            with psycopg.connect(**{**params, 'autocommit': True, 'connect_timeout': 10}) as conn:
+                return inspect_runtime_capabilities(conn)
+        except Exception as error:
             raise ProviderWorkspaceError(str(error)) from None
 
     def postgresql_temporary_slots(self,server,operation,request):
@@ -5091,6 +5127,8 @@ class ProviderWorkspaceService:
                 options = {'client_sql_dialect': data['client_sql_dialect']} if 'client_sql_dialect' in data else {}
                 if 'script' in data:
                     options['script'] = data['script']
+                if 'target_server_version' in data:
+                    options['target_server_version'] = data['target_server_version']
                 return self.studio_service.validate_source(context, data.get('session_id'), data.get('source'), **options)
             if action == 'native_script_prepare':
                 parameters = data.get('parameters', {})

@@ -3961,6 +3961,7 @@ class SqlSurfaceHostService:
         history_sensitive: bool = False,
         mysql_query_attributes: dict[str, Any] | None = None,
         analyze_mode: bool = False,
+        pg_explain_options: dict[str, Any] | None = None,
     ) -> SqlResultSetBuffer | None:
         t0 = time.perf_counter()
         if execution:
@@ -3977,6 +3978,18 @@ class SqlSurfaceHostService:
         elif analyze_mode and single_statement and surface.language_profile == 'mariadb-sql':
             if not re.match(r'^\s*(?:--[^\n]*\n|/\*[\s\S]*?\*/\s*)*(?:EXPLAIN|ANALYZE)\b', effective_sql, re.IGNORECASE):
                 effective_sql = f'ANALYZE FORMAT=JSON {effective_sql}'
+        elif analyze_mode and single_statement and surface.language_profile == 'postgresql-sql':
+            if not re.match(r'^\s*(?:--[^\n]*\n|/\*[\s\S]*?\*/\s*)*EXPLAIN\b', effective_sql, re.IGNORECASE):
+                opts_map = pg_explain_options if isinstance(pg_explain_options, dict) else {}
+                pg_opts = ['GENERIC_PLAN'] if opts_map.get('generic_plan') else ['ANALYZE']
+                if opts_map.get('buffers', True):
+                    pg_opts.append('BUFFERS')
+                if not opts_map.get('generic_plan') and opts_map.get('wal', True):
+                    pg_opts.append('WAL')
+                if opts_map.get('settings', True):
+                    pg_opts.append('SETTINGS')
+                pg_opts.append('FORMAT JSON')
+                effective_sql = f"EXPLAIN ({', '.join(pg_opts)}) {effective_sql}"
 
         mysql_specs = None
         if surface.language_profile == 'mysql-sql':
@@ -5420,6 +5433,29 @@ class SqlSurfaceHostService:
             if sub_action == 'prepare_statement':
                 return self._prepare_statement(workspace_service, server, surface, request)
 
+            if sub_action in ('validate_source', 'refresh_session_metadata'):
+                session_id = self._ensure_session(workspace_service, server, surface)
+                if sub_action == 'refresh_session_metadata':
+                    return workspace_service.language_tool_action(
+                        server,
+                        'source_catalog',
+                        {
+                            'session_id': session_id,
+                            'database_target_id': surface.database_target_id,
+                            'include_system': bool(request.get('include_system', False)),
+                        },
+                    )
+                src = str(request.get('source') or request.get('sql_source') or surface.sql_source or 'SELECT 1')
+                v_req = {
+                    'session_id': session_id,
+                    'database_target_id': surface.database_target_id,
+                    'source': src,
+                    'script': bool(request.get('script', False)),
+                }
+                if request.get('target_server_version') is not None:
+                    v_req['target_server_version'] = int(request['target_server_version'])
+                return workspace_service.language_tool_action(server, 'source_validate', v_req)
+
             if sub_action in ('mariadb_session_variables', 'mariadb_session_flagsets', 'mariadb_editor_context'):
                 session_id = self._ensure_session(workspace_service, server, surface)
                 return workspace_service.language_tool_action(
@@ -5509,6 +5545,8 @@ class SqlSurfaceHostService:
                 req_stats_mode = bool(request.get('statistics_mode'))
                 req_hist_sensitive = bool(request.get('history_sensitive'))
                 req_analyze_mode = bool(request.get('analyze_mode'))
+                raw_pg_explain = request.get('pg_explain_options')
+                req_pg_explain = dict(raw_pg_explain) if isinstance(raw_pg_explain, dict) else None
                 raw_mysql_attrs = request.get('mysql_query_attributes')
                 req_mysql_attrs = None
                 if raw_mysql_attrs is not None:
@@ -5566,6 +5604,7 @@ class SqlSurfaceHostService:
                                 history_sensitive=req_hist_sensitive,
                                 mysql_query_attributes=req_mysql_attrs,
                                 analyze_mode=req_analyze_mode,
+                                pg_explain_options=req_pg_explain,
                             )
                             dt_seg = round((time.perf_counter() - t_seg) * 1000.0, 2)
                             if rs is not None:

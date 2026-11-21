@@ -89,7 +89,13 @@ class PostgreSQLHostToolJobs(MySQLBinlogJobs):
 def lease_paths(jobs, record):
     root = jobs.root / '.host-tool-locks'
     root.mkdir(parents=True, exist_ok=True, mode=0o700);private_directory(root)
-    scope = record['source'].get('cluster_path', 'host-diagnostics')
+    scope = (
+        record['source'].get('cluster_path')
+        or record['source'].get('target_pgdata')
+        or record['source'].get('archive_path')
+        or record['source'].get('new_datadir')
+        or 'host-diagnostics'
+    )
     key = digest(scope)
     return root / (key + '.lock'), root / (key + '.json')
 

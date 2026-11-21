@@ -17,8 +17,8 @@ from .firebird_schema_plan import digest
 
 TABLE_KINDS = {'table'}
 KEY_KINDS = {'primary-key': 'PRIMARY KEY', 'unique': 'UNIQUE', 'check': 'CHECK',
-             'foreign-key': 'FOREIGN KEY'}
-CONTYPES = {'p': 'primary-key', 'u': 'unique', 'c': 'check', 'f': 'foreign-key'}
+             'foreign-key': 'FOREIGN KEY', 'not-null': 'NOT NULL'}
+CONTYPES = {'p': 'primary-key', 'u': 'unique', 'c': 'check', 'f': 'foreign-key', 'n': 'not-null'}
 
 
 def _columns(native):
@@ -95,9 +95,24 @@ def extract(row, rows):
     if not isinstance(facts.get('conname'), str):
         return None
     values = {'physical_kind': kind, 'physical_name': facts['conname']}
+    enforced = facts.get('conenforced') is not False
+    if not enforced:
+        values['enforced'] = False
+    if facts.get('conperiod'):
+        values['temporal_period'] = True
+    if facts.get('connoinherit'):
+        values['no_inherit'] = True
     replaceable = (not facts.get('condeferrable') and facts.get('convalidated') is True and
+                   enforced and not facts.get('conperiod') and not facts.get('connoinherit') and
                    str(facts.get('contypid')) in {'0'} and str(facts.get('conparentid', '0')) == '0' and
                    int(facts.get('coninhcount', 0)) == 0)
+    if kind == 'not-null':
+        keys = [names.get(int(number)) for number in facts.get('conkey') or []]
+        if None in keys or len(keys) != 1:
+            replaceable = False
+        else:
+            values['columns_json'] = vocab.encode(keys)
+        return {'values': values, 'replaceable': False}
     if kind == 'check':
         expression = vocab.split_check(native.get('definition'))
         if expression is None:

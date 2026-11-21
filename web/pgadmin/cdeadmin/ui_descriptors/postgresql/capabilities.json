@@ -6,9 +6,12 @@
   ],
   "beta_tier": "full",
   "version_range": {
-    "minimum": "13.0",
+    "minimum": "15.0",
     "tested": [
-      "18.3"
+      "16",
+      "17",
+      "18.3",
+      "18"
     ]
   },
   "kinds": [
@@ -663,6 +666,65 @@
         },
         {
           "operation_id": "inspect",
+          "tier": 2
+        }
+      ]
+    },
+    {
+      "resource_kind": "prepared-transaction",
+      "family": "engine_object",
+      "title": "Prepared 2PC transaction",
+      "parent_kinds": [
+        "server"
+      ],
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 2
+        },
+        {
+          "operation_id": "resolve",
+          "tier": 2
+        }
+      ]
+    },
+    {
+      "resource_kind": "foreign-server",
+      "family": "engine_object",
+      "title": "Foreign server",
+      "parent_kinds": [
+        "database"
+      ],
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        },
+        {
+          "operation_id": "import-foreign-schema",
+          "tier": 2
+        }
+      ]
+    },
+    {
+      "resource_kind": "partitioned-index",
+      "family": "index",
+      "form": "forms/index.form.json",
+      "operations": [
+        {
+          "operation_id": "reindex",
+          "tier": 2
+        },
+        {
+          "operation_id": "attach-partition",
           "tier": 2
         }
       ]

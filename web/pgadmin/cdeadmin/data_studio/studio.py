@@ -972,7 +972,7 @@ class DataStudioService:
             return {'client':provider.client,'handle':handle,'api':api,'source':source,'program':api.program}
 
     @serialized_execution
-    def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False):
+    def validate_source(self, context, session_id, source, *, client_sql_dialect=None, script=False, target_server_version=None):
         from .language_tools import analyze
         session, binding = self._operational_session(context, session_id)
         options = {}
@@ -980,6 +980,10 @@ class DataStudioService:
             raise DataStudioAccessError('Script checking requires a boolean')
         if script:
             options['script'] = True
+        if target_server_version is not None:
+            if type(target_server_version) is not int or not 150000 <= target_server_version < 190000:
+                raise DataStudioAccessError('Invalid PostgreSQL target server version')
+            options['target_server_version'] = target_server_version
         if client_sql_dialect is not None:
             if session.language_profile != 'firebird-sql' or type(client_sql_dialect) is not int or client_sql_dialect not in {1, 2, 3}:
                 raise DataStudioAccessError('Invalid native editor dialect')

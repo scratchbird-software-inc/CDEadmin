@@ -6,14 +6,65 @@ import re
 from pgadmin.cdeadmin.data_studio.language_tools import LanguageToolError
 
 
-def analyze(source, *, script=False, standard_strings=None, backslash_quote=None):
+def _check_target_major_ast(tree, target_major, raw_utf8, issue):
+    """Enforce per-major PostgreSQL feature gates on the parsed 18.6 AST."""
+    if target_major is None:
+        return True
+    compatible = True
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            for kind, value in node.items():
+                if isinstance(value, dict):
+                    loc_bytes = value.get('location', 0)
+                    char_off = len(raw_utf8[:max(0, loc_bytes)].decode('utf8', 'ignore')) if isinstance(loc_bytes, int) and loc_bytes > 0 else 0
+                    if target_major < 18 and kind == 'Constraint':
+                        if value.get('contype') == 'CONSTR_GENERATED' and value.get('generated_kind') == 'v':
+                            compatible = False
+                            issue('VERSION_FEATURE_UNSUPPORTED', 'VIRTUAL generated columns require PostgreSQL 18 or later.', char_off)
+                        elif value.get('without_overlaps') is True or value.get('fk_with_period') is True:
+                            compatible = False
+                            issue('VERSION_FEATURE_UNSUPPORTED', 'Temporal WITHOUT OVERLAPS / PERIOD constraints require PostgreSQL 18 or later.', char_off)
+                        elif value.get('contype') in {'CONSTR_ATTR_NOT_ENFORCED', 'CONSTR_ATTR_ENFORCED'} or value.get('is_enforced') is False:
+                            compatible = False
+                            issue('VERSION_FEATURE_UNSUPPORTED', 'Constraint ENFORCED / NOT ENFORCED modifiers require PostgreSQL 18 or later.', char_off)
+                    if target_major < 17:
+                        if kind == 'MergeStmt' and value.get('returningClause'):
+                            compatible = False
+                            issue('VERSION_FEATURE_UNSUPPORTED', 'MERGE ... RETURNING requires PostgreSQL 17 or later.', char_off)
+                        elif kind == 'JsonTable':
+                            compatible = False
+                            issue('VERSION_FEATURE_UNSUPPORTED', 'JSON_TABLE() requires PostgreSQL 17 or later.', char_off)
+                stack.append(value)
+    return compatible
+
+
+def analyze(source, *, script=False, standard_strings=None, backslash_quote=None, target_server_version=None):
     if not isinstance(source, str) or len(source.encode()) > 2 * 1024 * 1024:
         raise LanguageToolError('Source must be text no larger than 2 MiB')
+    from .support_policy import runtime_major_minor
+    parsed_ver = runtime_major_minor(target_server_version) if target_server_version is not None else None
+    target_major = parsed_ver[0] if parsed_ver is not None else (
+        target_server_version if type(target_server_version) is int and 10 <= target_server_version <= 99 else None
+    )
     result = {
         'language_profile': 'postgresql-sql',
         'source_sha256': hashlib.sha256(source.encode()).hexdigest(),
-        'authority': 'postgresql-offline-grammar', 'grammar_valid': None,
-        'syntax_valid': False, 'script_ready': False, 'statements': [],
+        'authority': 'postgresql-offline-grammar',
+        'syntax_authority': 'postgresql-offline-grammar',
+        'grammar_valid': None,
+        'grammar_status': 'unknown',
+        'syntax_valid': False,
+        'catalog_binding_status': 'not_evaluated',
+        'privilege_evaluation': 'not_evaluated',
+        'execution_verified': False,
+        'target_server_version': target_server_version,
+        'target_major': target_major,
+        'target_version_compatible': None,
+        'script_ready': False, 'statements': [],
         'diagnostics': [],
         'scope': 'Offline PostgreSQL SQL, SQL-body and PL/pgSQL grammar; catalog '
                  'resolution, permissions and other installed languages require native context.',
@@ -87,6 +138,7 @@ def analyze(source, *, script=False, standard_strings=None, backslash_quote=None
         issue('POSTGRESQL_SYNTAX', str(exc.args[0]), offset)
         result['diagnostics'][-1].update(offset_end=end,
                                          position_exact=end == offset)
+        result['grammar_status'] = 'invalid'
         return result
     if len(slices) > 1000:
         issue('SCRIPT_LIMIT', 'Script exceeds 1000 statements.')
@@ -200,5 +252,15 @@ def analyze(source, *, script=False, standard_strings=None, backslash_quote=None
             issue('DATA_FRAMING_REQUIRED', 'Use the native COPY/import tool for input streams.')
         if 'SESSION_FRAMING_CHANGE' in codes:
             issue('SESSION_FRAMING_CHANGE', 'Run parsing-setting changes outside a retained script.')
+    if target_major is not None:
+        ver_ok = _check_target_major_ast(tree, target_major, source.encode('utf8'), issue)
+        result['target_version_compatible'] = ver_ok
+        if not ver_ok:
+            result['grammar_valid'] = False
+            result['syntax_valid'] = False
+    result['grammar_status'] = (
+        'valid' if result['grammar_valid'] is True
+        else ('invalid' if result['grammar_valid'] is False else 'unknown')
+    )
     result['script_ready'] = script and not any(row['severity'] == 'error' for row in result['diagnostics'])
     return result

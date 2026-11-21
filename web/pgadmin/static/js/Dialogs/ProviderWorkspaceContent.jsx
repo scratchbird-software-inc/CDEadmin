@@ -95,6 +95,7 @@ import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
 import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
 import {MARIADB_ADMIN_TABS, renderMariaDBAdminWorkspace} from '../cdeadmin_ui/modules/mariadb_admin';
+import {POSTGRESQL_ADMIN_TABS, renderPostgresqlAdminWorkspace} from '../cdeadmin_ui/modules/postgresql_admin';
 import {isProviderRegistrationWorkspace} from
   'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
@@ -6673,6 +6674,11 @@ export default function ProviderWorkspaceContent({
           tab,
           endpointUrl,
           databaseTargetId: queryDatabaseTargetId,
+        })}
+      {workspace && POSTGRESQL_ADMIN_TABS.includes(tab) &&
+        renderPostgresqlAdminWorkspace({
+          tab,
+          endpointUrl,
         })}
       {/* Owner direction 2026-11-05: the connection details open from the
           toolbar's info button instead of a banner above the editor. */}

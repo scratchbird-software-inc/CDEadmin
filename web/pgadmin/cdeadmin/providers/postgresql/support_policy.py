@@ -105,3 +105,55 @@ def admission_error(native_version, today=None):
                 'update support_policy.py from the PostgreSQL versioning '
                 'policy')
     return f'PostgreSQL runtime version {native_version!r} could not be read'
+
+
+MAJOR_FEATURE_GATES = {
+    'merge_statement': 15,
+    'security_invoker_views': 15,
+    'unique_nulls_not_distinct': 15,
+    'logical_row_column_filters': 15,
+    'pg_stat_io': 16,
+    'vacuum_buffer_usage_limit': 16,
+    'vacuum_process_main': 16,
+    'load_balance_hosts': 16,
+    'incremental_physical_backup': 17,
+    'wal_summarizer': 17,
+    'pg_walsummary': 17,
+    'pg_createsubscriber': 17,
+    'merge_returning': 17,
+    'json_table': 17,
+    'virtual_generated_columns': 18,
+    'temporal_without_overlaps_constraints': 18,
+    'not_enforced_constraints': 18,
+    'named_not_null_constraints': 18,
+    'pg_stat_io_byte_counters': 18,
+    'oauth_authentication': 18,
+}
+
+
+def effective_capabilities_for_version(native_version, today=None):
+    """Return effective per-major capability metadata and admission status."""
+    parsed = runtime_major_minor(native_version)
+    state = support_state(native_version, today)
+    error = admission_error(native_version, today)
+    major = parsed[0] if parsed is not None else None
+    minor = parsed[1] if parsed is not None else None
+    supported_majors = sorted(
+        m for m in SUPPORTED_MAJORS if support_state(m * 10000, today) == 'supported'
+    )
+    features = {
+        feat: (major is not None and major >= min_major and state == 'supported')
+        for feat, min_major in MAJOR_FEATURE_GATES.items()
+    }
+    return {
+        'public_version': public_version(native_version),
+        'major': major,
+        'minor': minor,
+        'support_state': state,
+        'admitted': error is None,
+        'admission_error': error,
+        'policy_read_on': POLICY_READ_ON.isoformat(),
+        'supported_majors': supported_majors,
+        'minimum_supported_version': f'{supported_majors[0]}.0' if supported_majors else None,
+        'features': features,
+    }
