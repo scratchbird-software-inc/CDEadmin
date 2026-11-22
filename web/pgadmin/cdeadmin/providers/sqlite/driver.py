@@ -53,6 +53,7 @@ class SQLiteConnection(sqlite3.Connection):
         self._cdeadmin_authorizer = None
         self._cdeadmin_progress_handler = (None, 0)
         self._cdeadmin_extension_directories = []
+        self._cdeadmin_loaded_extensions = []
         self._cdeadmin_internal_sql = threading.local()
         self._cdeadmin_session_api = None
         self._cdeadmin_array_api = None
@@ -78,6 +79,7 @@ class SQLiteConnection(sqlite3.Connection):
         for directory in self._cdeadmin_extension_directories:
             shutil.rmtree(directory, ignore_errors=True)
         self._cdeadmin_extension_directories.clear()
+        self._cdeadmin_loaded_extensions.clear()
 
     def __del__(self):
         bridge=getattr(self,'_cdeadmin_config_api',None)

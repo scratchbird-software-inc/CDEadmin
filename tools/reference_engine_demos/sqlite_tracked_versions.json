@@ -7,11 +7,32 @@
       "library": "libcdeadmin_sqlite_arrays.so",
       "minimum": "3.53.0"
     },
+    "expert": {
+      "directory": "sqlite_expert",
+      "environment": "CDEADMIN_SQLITE_EXPERT_LIBRARY",
+      "library": "libcdeadmin_sqlite_expert.so",
+      "minimum": "3.45.1",
+      "recover_source_version": "3.53.0"
+    },
+    "intck": {
+      "directory": "sqlite_intck",
+      "environment": "CDEADMIN_SQLITE_INTCK_LIBRARY",
+      "library": "libcdeadmin_sqlite_intck.so",
+      "minimum": "3.45.1",
+      "recover_source_version": "3.53.0"
+    },
     "preupdate": {
       "directory": "sqlite_preupdate",
       "environment": "CDEADMIN_SQLITE_PREUPDATE_LIBRARY",
       "library": "libcdeadmin_sqlite_preupdate.so",
       "minimum": "3.45.1"
+    },
+    "rbu": {
+      "directory": "sqlite_rbu",
+      "environment": "CDEADMIN_SQLITE_RBU_LIBRARY",
+      "library": "libcdeadmin_sqlite_rbu.so",
+      "minimum": "3.45.1",
+      "recover_source_version": "3.53.0"
     },
     "recovery": {
       "directory": "sqlite_recovery",

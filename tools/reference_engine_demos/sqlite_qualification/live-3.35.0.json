@@ -213,11 +213,6 @@
             {
               "parameter_count": 0,
               "parameters_redacted": false,
-              "source": "PRAGMA synchronous = FULL"
-            },
-            {
-              "parameter_count": 0,
-              "parameters_redacted": false,
               "source": "PRAGMA user_version = 53"
             }
           ]
@@ -650,7 +645,7 @@
             {
               "parameter_count": 0,
               "parameters_redacted": false,
-              "source": "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\" BEGIN SELECT 1; END"
+              "source": "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\"\nBEGIN SELECT 1; END"
             }
           ]
         },

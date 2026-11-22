@@ -35511,7 +35511,7 @@
   "task_proof": {
     "3.35.0": {
       "evidence": "tools/reference_engine_demos/sqlite_qualification/live-3.35.0.json",
-      "evidence_sha256": "65d0fbe86c24e8a3f882aaff85e8e38c336b22bb7d8091b58ad09527ecceb011",
+      "evidence_sha256": "d72c81dd873c1e0214a18139b14b2b20adb86b95035735d01cb6fff9ca1ff312",
       "operation_failures": {
         "fts-table.fts_flush": "RuntimeError: visual editor operation was not accepted"
       },
@@ -35560,7 +35560,7 @@
     },
     "3.45.1": {
       "evidence": "tools/reference_engine_demos/sqlite_qualification/live-3.45.1.json",
-      "evidence_sha256": "85b746ebfb2b046b186f7d7917116789643736eeabc77513abcf59f55897e12a",
+      "evidence_sha256": "8b8468b3cc7932ffe0792e200255b3fede1154a4a38cc6f455de59f2e4dd2b24",
       "operation_failures": {},
       "proven_tasks": [
         "visual_admin.column.create",
@@ -35606,7 +35606,7 @@
     },
     "3.53.0": {
       "evidence": "tools/reference_engine_demos/sqlite_qualification/live-3.53.0.json",
-      "evidence_sha256": "108418c0fa2f3d8f99f2f191de6d1d5d72eb62f8a5d5f1d7c81c76c476e35040",
+      "evidence_sha256": "bda0230a73823c40a1993574eb1b8c1416a752cf1d1fded64e978fb231fe08bc",
       "operation_failures": {},
       "proven_tasks": [
         "visual_admin.column.create",

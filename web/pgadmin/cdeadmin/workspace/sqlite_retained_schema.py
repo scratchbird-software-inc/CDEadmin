@@ -19,7 +19,7 @@ from ..providers.embedded_session_catalog import sqlite_catalog
 
 FORMAT='scratchrobin.sqlite.retained-schema-plan@1'
 KINDS=CREATABLE|{'column','constraint'}
-SAFE_MODULES={'fts3','fts4','fts5','rtree','rtree_i32'}
+SAFE_MODULES={'fts3','fts4','fts5','rtree','rtree_i32','geopoly','fts3tokenize','dbstat','fts4aux','fts5vocab'}
 
 
 def model(resources,endpoint,session):
@@ -80,7 +80,7 @@ def _scope(document,endpoint,session,*,observed=False):
         raise ValueError('Retained DDL requires original-session baseline observations')
 
 
-def _valid(row,namespaces):
+def _valid(row,namespaces,*,live_handle=None):
     kind,path,name=row['kind'],row['path'],row['name']
     length=2 if kind=='trigger' and path and path[0]=='temp' else 3 if kind in {'index','trigger','column'} else 2
     if (row['system']!='false' or row['native'].get('system_object') is not False or
@@ -89,8 +89,13 @@ def _valid(row,namespaces):
         raise ValueError('Retained SQLite object identity or namespace is inconsistent')
     if kind in {'fts-table','virtual-table'}:
         from ..providers.sqlite.modules import declaration
-        if declaration(row['native']['ddl'])[1].lower() not in SAFE_MODULES:
-            raise ValueError('The installed virtual module requires an atomic retained DDL adapter')
+        from ..providers.sqlite.custom_virtual_modules import is_custom_creatable,verify_reproducible_on_connection
+        mod_name=declaration(row['native']['ddl'])[1]
+        if mod_name.lower() not in SAFE_MODULES:
+            if not is_custom_creatable(mod_name):
+                raise ValueError('The installed virtual module requires an atomic retained DDL adapter')
+            if live_handle is not None:
+                verify_reproducible_on_connection(live_handle,mod_name)
     if kind=='trigger' and path[0]=='temp':
         if row['native'].get('catalog_metadata',{}).get('owner_database') not in namespaces:
             raise ValueError('A TEMP trigger requires an observed or explicitly selected native owning database')
@@ -109,12 +114,24 @@ def _children(parent,rows):
         row['kind']=='trigger' and _owner(row)==tuple(path))}
 
 
-def _prototype(document,namespaces):
+def _prototype(document,namespaces,*,live_handle=None):
     probe=sqlite3.connect(':memory:',factory=SQLiteConnection)
     try:
+        if live_handle is not None:
+            loaded_exts=getattr(live_handle,'_cdeadmin_loaded_extensions',None) or ()
+            if loaded_exts and hasattr(sqlite3,'SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION'):
+                try:
+                    probe.enable_load_extension(False)
+                    probe.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,True)
+                    for ext in loaded_exts:
+                        kw={'entrypoint':ext['entrypoint']} if ext.get('entrypoint') else {}
+                        probe.load_extension(ext['staged'],**kw)
+                finally:
+                    probe.enable_load_extension(False)
+                    probe.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,False)
         for name in sorted(namespaces-{'main','temp'}):probe.execute('ATTACH DATABASE \':memory:\' AS '+quote(name))
         rows=[row for row in document['rows'].values() if row['kind'] in CREATABLE]
-        for row in rows:_valid(row,namespaces)
+        for row in rows:_valid(row,namespaces,live_handle=live_handle)
         ordinary={tuple(row['path']):row for row in rows if row['kind']=='table'}
         for row in rows:
             if row['kind'] in {'table','view'}:probe.execute(ddl_prepare.source(row))
@@ -177,18 +194,25 @@ def _create_virtual(probe,row,ordinary):
             removed.update(collisions)
 
 
-def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alterations=()):
+def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alterations=(),fts_rebindings=(),rebuilds=()):
+    if rebuilds:
+        if alterations or deletions or fts_rebindings:
+            raise ValueError('Review retained table rebuilds separately from alterations and deletions')
+        from .sqlite_retained_rebuild import plan_retained_rebuilds
+        return plan_retained_rebuilds(client,handle,baseline,desired,live,endpoint,session,rebuilds)
     if alterations:
         if deletions:raise ValueError('Review native table alterations separately from object removal')
         from . import sqlite_retained_alter
-        return sqlite_retained_alter.plan(client,handle,baseline,desired,live,endpoint,session,alterations)
+        return sqlite_retained_alter.plan(client,handle,baseline,desired,live,endpoint,session,alterations,fts_rebindings=fts_rebindings)
+    if fts_rebindings:
+        raise ValueError('Retained FTS rebinding requires an explicit native table or column alteration')
     for document in (baseline,live):_scope(document,endpoint,session,observed=True)
     _scope(desired,endpoint,session)
     if (not isinstance(deletions,(list,tuple)) or len(deletions)>32 or
             any(not isinstance(item,str) for item in deletions) or len(set(deletions))!=len(deletions)):
         raise ValueError('Select at most 32 exact native deletion identities')
     namespaces={row[1] for row in handle.execute('PRAGMA database_list')}|{'temp'}
-    probe=_prototype(baseline,namespaces)
+    probe=_prototype(baseline,namespaces,live_handle=handle)
     storage=set(probe._cdeadmin_module_storage);storage_owners=dict(probe._cdeadmin_module_storage_owners);probe.close()
     if schema(baseline,storage)!=schema(live,storage):raise ValueError('The original retained SQLite schema changed; capture a new baseline')
     actual_storage=_storage_shape(live,storage)
@@ -205,7 +229,7 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
         row=before.get(identity)
         if row is None or row['kind'] not in CREATABLE or identity in after:
             raise ValueError('Explicit retained deletion requires an observed native object absent from the desired design')
-        _valid(row,namespaces);children=_children(row,before)
+        _valid(row,namespaces,live_handle=handle);children=_children(row,before)
         if children & set(after):raise ValueError('Desired retained DDN still contains a deleted object child')
         stages.append({'operation':'drop','resource_id':identity,'kind':row['kind'],
             'name':row['name'],'row':row,'source':ddl_prepare.drop(row)})
@@ -224,7 +248,7 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
             continue
         old=before.get(identity)
         if old is not None and _definition(old)==_definition(row):continue
-        _valid(row,namespaces)
+        _valid(row,namespaces,live_handle=handle)
         if old is not None:
             if row['kind']=='table':
                 from .sqlite_columns import _clauses
@@ -237,7 +261,7 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
                 for item in new_columns[len(old_columns):]:
                     column=after.get(_resource_id('column',row['path'],item['name']))
                     if column is None or item['name'] not in clauses:raise ValueError('Desired retained column facts are incomplete')
-                    _valid(column,namespaces)
+                    _valid(column,namespaces,live_handle=handle)
                     stages.append({'operation':'add-column','resource_id':column['resource_id'],'kind':'column',
                         'name':column['name'],'row':column,'source':'ALTER TABLE '+quote(row['path'][0])+'.'+quote(row['name'])+
                         ' ADD COLUMN '+clauses[item['name']]})
@@ -253,7 +277,7 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
     creation_order={'table':0,'fts-table':0,'virtual-table':0,'column':1,'view':2,'index':3,'trigger':4}
     stages.sort(key=lambda stage:(0 if stage['operation']=='drop' else 1,
         order[stage['kind']] if stage['operation']=='drop' else creation_order[stage['kind']]))
-    probe=_prototype(baseline,namespaces)
+    probe=_prototype(baseline,namespaces,live_handle=handle)
     try:
         # The empty native prototype validates ordered grammar and definitions.
         # Original-session authorizer checks are repeated before each real step.
@@ -265,8 +289,16 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
             ddl_prepare.prepare(SimpleNamespace(_uncertain=set()),probe,stage['row'],stage['source'],operation=stage['operation'])
             probe.execute(stage['source'])
         proposed=model(_resources(probe,{}),endpoint,session)
-        if schema(proposed,storage)!=schema(desired,storage):raise ValueError('Desired retained DDN facts differ from the complete native resulting schema')
-        if _storage_shape(proposed,storage)!=expected_storage:raise ValueError('Native module storage schema cannot be preserved')
+        after_probe=_prototype(proposed,namespaces,live_handle=handle)
+        try:
+            after_storage=set(after_probe._cdeadmin_module_storage)
+        finally:
+            after_probe.close()
+        if schema(proposed,after_storage)!=schema(desired,after_storage):raise ValueError('Desired retained DDN facts differ from the complete native resulting schema')
+        expected_after_storage=_storage_shape(proposed,after_storage)
+        for identity,val in expected_storage.items():
+            if expected_after_storage.get(identity)!=val:
+                raise ValueError('Native module storage schema cannot be preserved')
     finally:probe.close()
     prepared_columns=set()
     for stage in stages:
@@ -285,7 +317,8 @@ def plan(client,handle,baseline,desired,live,endpoint,session,*,deletions=(),alt
         else:stage['original_binding']='checked-during-ordered-apply'
     return {'format':FORMAT,'engine':'sqlite','provider_session_id':session,'operations':stages,
         'module_storage':[list(key) for key in sorted(storage)],'module_storage_schema':actual_storage,
-        'module_storage_after_schema':expected_storage,
+        'module_storage_after':[list(key) for key in sorted(after_storage)],
+        'module_storage_after_schema':expected_after_storage,
         'execution_sha256':digest(stages),'ready_for_review':True,'application_supported':True,
         'native_grammar_validated':True,'transaction_policy':'original-caller-transaction; never commit',
         'warnings':['Begin a transaction before applying. Successful DDL remains pending the original caller\'s commit or rollback.',
@@ -300,9 +333,9 @@ def generate_columns(client,handle,baseline,endpoint,session,identity,columns):
     row=baseline['rows'].get(identity)
     namespaces={item[1] for item in handle.execute('PRAGMA database_list')}|{'temp'}
     if row is None or row['kind']!='table':raise ValueError('Select an observed ordinary retained SQLite table')
-    _valid(row,namespaces)
+    _valid(row,namespaces,live_handle=handle)
     if not isinstance(columns,list) or not 1<=len(columns)<=32:raise ValueError('Design one to 32 retained native column additions')
-    probe=_prototype(baseline,namespaces)
+    probe=_prototype(baseline,namespaces,live_handle=handle)
     try:
         if schema(baseline,probe._cdeadmin_module_storage)!=schema(live,probe._cdeadmin_module_storage):
             raise ValueError('The original retained schema changed; capture a fresh baseline')
@@ -328,20 +361,36 @@ def apply(client,handle,record,endpoint,session,revision,*,cancel=None,acknowled
         return {'state':'not_dispatched','reason':'Original retained transaction, authorization or session context changed'}
     live=observe(client,handle,endpoint,session)
     storage={tuple(key) for key in record['plan'].get('module_storage',[])}
+    after_storage={tuple(key) for key in record['plan'].get('module_storage_after',record['plan'].get('module_storage',[]))}
     if (schema(live,storage)!=schema(record['baseline'],storage) or
             _storage_shape(live,storage)!=record['plan'].get('module_storage_schema',{})):
         return {'state':'not_dispatched','reason':'Original retained native schema changed'}
+    fk_enabled=bool(handle.execute('PRAGMA foreign_keys').fetchone()[0])
+    rebuilt_targets=[]
+    for rb in record['plan'].get('rebuilds') or ():
+        rb_row=record['baseline']['rows'].get(rb.get('resource_id',''))
+        if rb_row:rebuilt_targets.append((rb_row['path'][0],rb_row['name']))
+    fk_before={}
+    if fk_enabled and rebuilt_targets:
+        for ns,tname in rebuilt_targets:
+            fk_before[(ns,tname)]=list(handle.execute('PRAGMA '+quote(ns)+'.foreign_key_check('+quote(tname)+')'))
     guard='sr_ddl_'+uuid.uuid4().hex;created=False;completed=0;native_ack=False
     try:
         handle.execute('SAVEPOINT '+guard);created=True
         for stage in record['plan']['operations']:
             if cancel is not None and cancel.is_set():raise InterruptedError('Retained DDL canceled before its next stage')
-            ddl_prepare.prepare(client,handle,stage['row'],stage['source'],operation=stage['operation'],
-                authorization_column=stage.get('authorization_column'))
+            if not stage.get('rebuild_data_step') and stage['operation'] not in {'rebuild-create-temp','rebuild-rename-temp','fts-rebind-step'}:
+                ddl_prepare.prepare(client,handle,stage['row'],stage['source'],operation=stage['operation'],
+                    authorization_column=stage.get('authorization_column'))
             handle.execute(stage['source']);completed+=1
+        if fk_enabled and rebuilt_targets:
+            for ns,tname in rebuilt_targets:
+                fk_after=list(handle.execute('PRAGMA '+quote(ns)+'.foreign_key_check('+quote(tname)+')'))
+                if len(fk_after)>len(fk_before.get((ns,tname),())):
+                    raise ValueError('Retained rebuild introduced foreign-key violations on '+ns+'.'+tname)
         actual=observe(client,handle,endpoint,session)
-        if (schema(actual,storage)!=schema(record['desired'],storage) or
-                _storage_shape(actual,storage)!=record['plan'].get('module_storage_after_schema',{})):
+        if (schema(actual,after_storage)!=schema(record['desired'],after_storage) or
+                _storage_shape(actual,after_storage)!=record['plan'].get('module_storage_after_schema',{})):
             raise ValueError('Retained native schema postconditions differ from the desired DDN')
         handle.execute('RELEASE SAVEPOINT '+guard);created=False;native_ack=True
         outcome={'state':'applied_pending_caller_transaction','native_ddl_acknowledged':True,

@@ -58,6 +58,9 @@ def _tokenizer(value, *, fts5=False):
 
 
 def arguments(module, columns, options, *, schema='main'):
+    from .custom_virtual_modules import compile_custom_arguments, is_custom_creatable, is_eponymous_only
+    if isinstance(module, str) and (is_custom_creatable(module) or is_eponymous_only(module)):
+        return compile_custom_arguments(module, columns, options)
     if not isinstance(module, str) or module not in MODULES:
         _error('module has no structured native constructor')
     if not isinstance(options, Mapping):
@@ -194,10 +197,13 @@ def apply_creation(client, request, connection=None):
     try:
         if not owned:
             client._require_idle(connection)
+        from .custom_virtual_modules import installed_modules, is_custom_creatable
         from .virtual_inputs import runtime_gate
         version = connection.execute('SELECT sqlite_version()').fetchone()[0]
         runtime_gate({'resource_kind':'virtual-table','operation_id':'create',
             'draft':{'module':target['module'],'module_options':target.get('module_options',{})}}, version)
+        if is_custom_creatable(target['module']) and target['module'].lower() not in installed_modules(connection):
+            _error(f'custom module {target["module"]!r} is not installed in the selected SQLite connection')
         if owned:
             connection.execute('BEGIN IMMEDIATE')
             started = True

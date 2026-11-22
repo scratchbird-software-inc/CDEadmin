@@ -13,8 +13,12 @@ _RUNTIME = Path(__file__).resolve().parents[1] / 'reference_engine_demos/runtime
 # SQLite; the application checks its version and source ID. bootstrap.py
 # builds pinned releases under the reference runtime. An explicit setting wins.
 _REFERENCE_CLI = _RUNTIME / f'sqlite-{sqlite3.sqlite_version}/bin/sqlite3'
-if 'CDEADMIN_SQLITE_BINARY' not in os.environ and _REFERENCE_CLI.is_file():
-    os.environ['CDEADMIN_SQLITE_BINARY'] = str(_REFERENCE_CLI)
+_TRACKED_CLI = _RUNTIME / f'sqlite-tracked/{sqlite3.sqlite_version}/bin/sqlite3'
+if 'CDEADMIN_SQLITE_BINARY' not in os.environ:
+    if _REFERENCE_CLI.is_file():
+        os.environ['CDEADMIN_SQLITE_BINARY'] = str(_REFERENCE_CLI)
+    elif _TRACKED_CLI.is_file():
+        os.environ['CDEADMIN_SQLITE_BINARY'] = str(_TRACKED_CLI)
 
 # sqlite_tracked.py builds headers and native helpers per tracked version.
 # Extension fixtures compile against headers of this interpreter's version.
@@ -29,7 +33,10 @@ if 'CDEADMIN_SQLITE_HEADERS' not in os.environ and (_TRACKED / 'include/sqlite3e
 _HELPERS = {'CDEADMIN_SQLITE_SESSION_LIBRARY': 'session/libcdeadmin_sqlite_sessions.so',
             'CDEADMIN_SQLITE_ARRAY_LIBRARY': 'array/libcdeadmin_sqlite_arrays.so',
             'CDEADMIN_SQLITE_PREUPDATE_LIBRARY': 'preupdate/libcdeadmin_sqlite_preupdate.so',
-            'CDEADMIN_SQLITE_RECOVERY_LIBRARY': 'recovery/libcdeadmin_sqlite_recovery.so'}
+            'CDEADMIN_SQLITE_RECOVERY_LIBRARY': 'recovery/libcdeadmin_sqlite_recovery.so',
+            'CDEADMIN_SQLITE_RBU_LIBRARY': 'rbu/libcdeadmin_sqlite_rbu.so',
+            'CDEADMIN_SQLITE_EXPERT_LIBRARY': 'expert/libcdeadmin_sqlite_expert.so',
+            'CDEADMIN_SQLITE_INTCK_LIBRARY': 'intck/libcdeadmin_sqlite_intck.so'}
 _PROBE = '''import ctypes, sqlite3, sys
 def loaded():
     with open("/proc/self/maps") as maps:

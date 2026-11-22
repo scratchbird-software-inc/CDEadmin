@@ -4016,3 +4016,63 @@ PostgreSQL remaining 30-item backend & UI completion
   remains ``owner_deferred``, while human UI review (``PG-AUDIT-UI``) and native
   Windows/macOS qualification (``PG-AUDIT-PLATFORMS``) remain
   ``external_acceptance_pending``.
+
+SQLite remaining 26-item backend, UI & multi-runtime qualification completion
+-----------------------------------------------------------------------------
+
+* **Race-safe destructive target identity guard, retained-session table rebuilds,
+  external-content FTS4/FTS5 rebinding, attached-environment rename policy,
+  custom virtual modules & per-receipt sidecar sharding** (``SQ-AUD-01``,
+  ``SQ-AUD-05``, ``SQ-AUD-06``, ``SQ-AUD-07``, ``SQ-AUD-08``, ``SQ-AUD-14``):
+  implemented ``destructive_identity.py`` binding ``(file_identity, schema,
+  schema_version, type, name, tbl_name, rootpage, ddl_sha256, columns_sha256)``
+  at plan time and revalidating under ``BEGIN IMMEDIATE`` (or caller
+  ``SAVEPOINT``) before DDL dispatch so same-name replacement objects are
+  preserved; implemented ``sqlite_retained_rebuild.py`` preserving uncommitted
+  rows, ``TEMP`` tables, attached aliases, triggers, indexes, views, wide
+  64-bit ``rowid`` values, and ``sqlite_sequence`` across caller-retained
+  connections without auto-committing; expanded ``sqlite_fts_rebind.py``,
+  ``sqlite_fts_rowid.py``, ``sqlite_fts_views.py``, and
+  ``sqlite_retained_alter.py`` across ``main``, ``temp``, attached namespaces,
+  and content views with ``languageid``, ``content_rowid``, and TEMP-shadowing
+  refusal; added explicit ``attachment_policy`` and TEMP-masking refusal in
+  ``sqlite_rename.py`` and ``sqlite_schema_plan.py``; added
+  ``custom_virtual_modules.py`` covering built-in and approved loadable virtual
+  modules (``csv``, ``spellfix1``, ``fuzzer``, ``wholenumber``, ``cde_kv_vtab``)
+  while refusing eponymous-only modules; and sharded heavy retained application
+  payloads into ``0600`` per-receipt sidecars in
+  ``sqlite_retained_applications.py`` so ``cdeadmin_sqlite_native_declaration_qualification.py``
+  completes in bounded time without monolithic store rewrites.
+* **Native CMake bridges and workspaces for RBU, Expert Index Advisor,
+  Incremental Integrity Check, Streaming Incremental BLOB I/O, Provenance-Matched
+  CLI Shell & Native SQL Script Exchange** (``SQ-AUD-09``, ``SQ-AUD-10``,
+  ``SQ-AUD-11``, ``SQ-AUD-12``, ``SQ-AUD-13``, ``SQ-AUD-15``): built native C
+  shared-library bridges ``tools/native/sqlite_rbu`` (``sqlite3rbu_*``),
+  ``tools/native/sqlite_expert`` (``sqlite3_expert_*``), and
+  ``tools/native/sqlite_intck`` (``sqlite3_intck_*``) with SHA-256 provenance
+  sidecars across tracked SQLite ``3.45.1`` and ``3.53.0`` runtimes; implemented
+  ``rbu.py``, ``expert.py`` (preview-only read-only index simulation that never
+  auto-creates indexes), ``intck.py`` (bounded unlocked batch stepping),
+  ``blob_stream.py`` (``sqlite3.Connection.blobopen`` chunked read/write and
+  ``zeroblob`` allocation without full-BLOB buffering), ``shell_tool.py``
+  (version-matched ``sqlite3`` CLI read-only dot-commands and structured
+  ``.import``), ``sql_dump.py`` (native ``.dump`` export and reviewed atomic
+  script import), and ``sqlite_operations_hub.py``; and surfaced six dedicated
+  ``cdeadmin_ui`` workspaces (``SqliteRbuWorkspace`` ``SR-F-030560``,
+  ``SqliteExpertWorkspace`` ``SR-F-030561``, ``SqliteIntckWorkspace``
+  ``SR-F-030562``, ``SqliteBlobStreamWorkspace`` ``SR-F-030563``,
+  ``SqliteShellWorkspace`` ``SR-F-030564``, ``SqliteSqlDumpWorkspace``
+  ``SR-F-030565``) plus typed descriptors in ``ui_descriptors/sqlite/`` with
+  zero lint ceiling increases.
+* **Exact 3.53.0 proof reconciliation & three-runtime 3.35.0 / 3.45.1 / 3.53.0
+  qualification matrix** (``SQ-Q01`` .. ``SQ-Q14``): reconciled all proof
+  declarations in ``sqlite_dialect_3_53_0.json``,
+  ``sqlite_metrics_3_53_0.json``, ``sqlite_dialect_versions.json``, and
+  ``provider_manifest.json`` against fresh current-source live receipts across
+  dynamically linked SQLite ``3.35.0``, ``3.45.1``, and ``3.53.0`` runtimes (and
+  verified compatibility-policy distinction for embedded newer runtimes); passed
+  the full three-version ``sqlite_version_matrix.py`` pytest regression suite,
+  native qualification gates, UI descriptor round-trip validation, and all 18
+  SQLite Jest suites. Persistent ScratchBird monitoring history (``SQ-OWN-01``)
+  remains ``owner_deferred`` and was not run, while native Windows/macOS and
+  human UI acceptance (``SQ-OWN-02``) remain ``external_acceptance_pending``.

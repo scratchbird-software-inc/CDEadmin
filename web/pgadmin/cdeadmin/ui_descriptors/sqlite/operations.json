@@ -7844,6 +7844,198 @@
         }
       ],
       "description": "Resolve a fixed binary form delivery action on this workspace; submit its bounded typed payload through the existing authenticated form download route. Never route bytes through JSON or invent a host filesystem path."
+    },
+    {
+      "operation_id": "rbu_resumable_bulk_update",
+      "resource_kind": "database",
+      "title": "Resumable bulk update & vacuum (RBU)",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "mode",
+          "label": "RBU mode",
+          "control": "select",
+          "required": true,
+          "default": "update",
+          "options": [
+            {"value": "update", "label": "Resumable bulk update"},
+            {"value": "vacuum", "label": "Resumable vacuum"}
+          ]
+        },
+        {
+          "field_id": "step_budget",
+          "label": "Step budget per batch",
+          "control": "number",
+          "required": false,
+          "default": 500
+        }
+      ]
+    },
+    {
+      "operation_id": "expert_index_advisor",
+      "resource_kind": "database",
+      "title": "Expert index advisor (preview-only)",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "execution_host": true,
+      "fields": [
+        {
+          "field_id": "query_sql",
+          "label": "SQL query workload",
+          "control": "code",
+          "required": true
+        },
+        {
+          "field_id": "sample_percent",
+          "label": "Statistic sample percentage (0-100)",
+          "control": "number",
+          "required": false,
+          "default": 20
+        }
+      ]
+    },
+    {
+      "operation_id": "incremental_integrity_check",
+      "resource_kind": "database",
+      "title": "Incremental integrity check",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "execution_host": true,
+      "fields": [
+        {
+          "field_id": "max_steps",
+          "label": "Steps per batch",
+          "control": "number",
+          "required": false,
+          "default": 200
+        },
+        {
+          "field_id": "unlock_interval",
+          "label": "Unlock read-lock interval (steps)",
+          "control": "number",
+          "required": false,
+          "default": 16
+        }
+      ]
+    },
+    {
+      "operation_id": "blob_stream_transfer",
+      "resource_kind": "table",
+      "title": "Incremental large-BLOB transfer",
+      "menu": {
+        "category": "maintenance"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "column_name",
+          "label": "BLOB column name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "rowid",
+          "label": "Exact integer rowid",
+          "control": "number",
+          "required": true
+        },
+        {
+          "field_id": "offset",
+          "label": "Byte offset",
+          "control": "number",
+          "required": false,
+          "default": 0
+        },
+        {
+          "field_id": "length",
+          "label": "Chunk length (bytes)",
+          "control": "number",
+          "required": false,
+          "default": 65536
+        }
+      ]
+    },
+    {
+      "operation_id": "sqlite_shell_inspect",
+      "resource_kind": "database",
+      "title": "Native shell inspection",
+      "menu": {
+        "category": "diagnostics"
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "execution_host": true,
+      "fields": [
+        {
+          "field_id": "command",
+          "label": "Read-only dot-command",
+          "control": "select",
+          "required": true,
+          "default": "dbinfo",
+          "options": [
+            {"value": "dbinfo", "label": ".dbinfo"},
+            {"value": "schema", "label": ".schema"},
+            {"value": "fullschema", "label": ".fullschema"},
+            {"value": "tables", "label": ".tables"},
+            {"value": "indexes", "label": ".indexes"},
+            {"value": "vfsinfo", "label": ".vfsinfo"}
+          ]
+        }
+      ]
+    },
+    {
+      "operation_id": "sqlite_sql_dump_exchange",
+      "resource_kind": "database",
+      "title": "Database-wide SQL script dump & import",
+      "menu": {
+        "category": "backup_restore"
+      },
+      "tier": 3,
+      "status": "complete",
+      "confirmation": "none",
+      "execution_host": true,
+      "produces_log": true,
+      "fields": [
+        {
+          "field_id": "data_only",
+          "label": "Data INSERT statements only (--data-only)",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        },
+        {
+          "field_id": "preserve_newlines",
+          "label": "Preserve literal newlines (--newlines)",
+          "control": "boolean",
+          "required": false,
+          "default": true
+        },
+        {
+          "field_id": "exclude_system",
+          "label": "Exclude sqlite_* system tables (--nosys)",
+          "control": "boolean",
+          "required": false,
+          "default": false
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.20)
+project(cdeadmin_sqlite_rbu LANGUAGES C)
+
+set(SCRATCHROBIN_SQLITE_SOURCE "" CACHE PATH "SQLite 3.53.0 source directory")
+set(rbu_source "${SCRATCHROBIN_SQLITE_SOURCE}/ext/rbu")
+foreach(name sqlite3rbu.c sqlite3rbu.h)
+  if(NOT EXISTS "${rbu_source}/${name}")
+    message(FATAL_ERROR "SCRATCHROBIN_SQLITE_SOURCE must contain ext/rbu/${name}")
+  endif()
+endforeach()
+
+find_package(SQLite3 3.35.0 REQUIRED)
+add_library(cdeadmin_sqlite_rbu SHARED "${rbu_source}/sqlite3rbu.c" api.c)
+target_include_directories(cdeadmin_sqlite_rbu PRIVATE "${rbu_source}")
+target_compile_definitions(cdeadmin_sqlite_rbu PRIVATE SQLITE_CORE SQLITE_ENABLE_RBU)
+target_link_libraries(cdeadmin_sqlite_rbu PRIVATE SQLite::SQLite3)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(cdeadmin_sqlite_rbu PRIVATE -Werror=implicit-function-declaration -Werror=int-conversion)
+endif()
+set_target_properties(cdeadmin_sqlite_rbu PROPERTIES
+  C_STANDARD 99 WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(APPLE)
+  set_target_properties(cdeadmin_sqlite_rbu PROPERTIES INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+  set_target_properties(cdeadmin_sqlite_rbu PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+
+set(expected_sqlite3rbu_c e61e5ee2a9ff281a35800a971b1e6660ef8cf519cbbb6d9c107ab5dd0003ab7b)
+set(expected_sqlite3rbu_h 78d951c78b37cfc1e7b8614dcb23437e704565eaf7f358adb5ecc5bfbd40ceb8)
+foreach(name sqlite3rbu.c sqlite3rbu.h)
+  file(SHA256 "${rbu_source}/${name}" source_sha)
+  string(REPLACE "." "_" key "${name}")
+  if(NOT source_sha STREQUAL expected_${key})
+    message(FATAL_ERROR "${name} differs from the qualified SQLite 3.53.0 RBU source")
+  endif()
+  string(APPEND provenance "\"${name}\":\"${source_sha}\",")
+endforeach()
+
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sqlite-rbu-build.json"
+  CONTENT "{\"sqlite_version\":\"${SQLite3_VERSION}\",\"adapter_abi\":1,${provenance}\"implementation\":\"SQLite public RBU API\"}\n")
+add_custom_command(TARGET cdeadmin_sqlite_rbu POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" "-DLIBRARY=$<TARGET_FILE:cdeadmin_sqlite_rbu>"
+    "-DTEMPLATE=${CMAKE_CURRENT_BINARY_DIR}/sqlite-rbu-build.json"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/../sqlite_recovery/provenance.cmake" VERBATIM)
+install(TARGETS cdeadmin_sqlite_rbu LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+if(WIN32)
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_rbu>.json" DESTINATION bin)
+else()
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_rbu>.json" DESTINATION lib)
+endif()
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sqlite-rbu-build.json" DESTINATION share/cdeadmin)

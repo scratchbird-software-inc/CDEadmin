@@ -63,6 +63,11 @@ def test_rebuild_create_and_replacement_share_one_native_transaction(tmp_path,fa
             desired['rows'][_resource_id('view',['main'],'new_projection')]['native']['ddl']='CREATE VIEW "main"."new_projection" AS SELECT value FROM missing_relation'
         with closing(sqlite3.connect(path)) as connection:
             preview=plan(baseline,desired,baseline,connection,rebuilds=[_resource_id('table',['main'],'owned')])
+            if failure=='view':
+                assert not preview['ready_for_review'] and preview['blockers']
+                assert connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before
+                assert not connection.in_transaction
+                return
             assert preview['ready_for_review'],preview
             assert {item['operation'] for item in preview['operations']}=={'create','replace','rebuild'}
             assert plan(baseline,desired,baseline,connection,rebuilds=[_resource_id('table',['main'],'owned')])['execution_sha256']==preview['execution_sha256']

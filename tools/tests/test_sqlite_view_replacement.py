@@ -63,7 +63,7 @@ def test_native_dependent_view_chain_and_trigger_replace_atomically(tmp_path,fai
             preview=plan(baseline,desired,baseline,connection,rebuilds=[owner],column_renames=renamed)
             assert connection.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before
             assert not connection.in_transaction
-            if failure=='filtered':
+            if failure in {'filtered','view'}:
                 assert not preview['ready_for_review'] and preview['blockers'];return
             assert preview['ready_for_review'],preview['blockers']+preview['conflicts']
             assert [(item['operation'],item['kind']) for item in preview['operations']].count(('replace','view'))==2

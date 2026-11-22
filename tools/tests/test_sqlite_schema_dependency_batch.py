@@ -87,9 +87,12 @@ def test_explicit_dependent_view_retirement_and_column_rename_share_native_trans
         service.resource_service=Mock();service._principal_id=lambda _server:'owner'
         documents={'database_target_id':'file','baseline':document(baseline),'desired':document(desired),**selections}
         displayed=service.sqlite_schema_plan('owned',documents)
-        if failure=='unselected':
+        if failure in {'unselected','view'}:
             assert not displayed['ready_for_review']
-            assert any('explicit SQLite deletion' in item['reason'] for item in displayed['blockers'])
+            if failure=='unselected':
+                assert any('explicit SQLite deletion' in item['reason'] for item in displayed['blockers'])
+            else:
+                assert any('view projection' in item['reason'].lower() or 'missing_relation' in item['reason'] for item in displayed['blockers'])
             with closing(sqlite3.connect(path)) as observer:assert observer.execute('SELECT name,sql FROM sqlite_schema ORDER BY name').fetchall()==before
             return
         assert displayed['ready_for_review'],displayed

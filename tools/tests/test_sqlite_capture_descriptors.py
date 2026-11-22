@@ -8,6 +8,8 @@ from pgadmin.cdeadmin.workspace.sqlite_editor_operations import compile_request,
 
 def test_native_capture_descriptor_lifecycle_on_original_handle(native,monkeypatch):
     import config,os
+    if 'CDEADMIN_SQLITE_SESSION_LIBRARY' not in os.environ:
+        pytest.skip('CDEADMIN_SQLITE_SESSION_LIBRARY requires SQLite 3.53.0+')
     monkeypatch.setattr(config,'CDEADMIN_SQLITE_SESSION_LIBRARY',os.environ['CDEADMIN_SQLITE_SESSION_LIBRARY'])
     n=native
     def run(operation,**draft):

@@ -49,6 +49,8 @@ def test_descriptor_contract_matches_registered_native_transports():
 def test_array_descriptor_lossless_values_bind_and_release(native, monkeypatch):
     import config
     import os
+    if 'CDEADMIN_SQLITE_ARRAY_LIBRARY' not in os.environ:
+        pytest.skip('CDEADMIN_SQLITE_ARRAY_LIBRARY requires SQLite 3.53.0+')
     monkeypatch.setattr(config, 'CDEADMIN_SQLITE_ARRAY_LIBRARY', os.environ['CDEADMIN_SQLITE_ARRAY_LIBRARY'])
     n = native
     def run(operation, **draft):
@@ -95,6 +97,8 @@ def test_array_descriptor_refuses_lossy_or_incompatible_cells(kind, row):
 def test_preupdate_descriptor_generations_observe_rollback_without_committing(native, monkeypatch):
     import config
     import os
+    if 'CDEADMIN_SQLITE_PREUPDATE_LIBRARY' not in os.environ:
+        pytest.skip('CDEADMIN_SQLITE_PREUPDATE_LIBRARY requires SQLite 3.45.1+')
     monkeypatch.setattr(config, 'CDEADMIN_SQLITE_PREUPDATE_LIBRARY', os.environ['CDEADMIN_SQLITE_PREUPDATE_LIBRARY'])
     n = native
     def run(operation, **draft):
@@ -120,6 +124,8 @@ def test_preupdate_descriptor_generations_observe_rollback_without_committing(na
 def test_preupdate_descriptor_invalid_native_limits_refuse(native, monkeypatch, draft):
     import config
     import os
+    if 'CDEADMIN_SQLITE_PREUPDATE_LIBRARY' not in os.environ:
+        pytest.skip('CDEADMIN_SQLITE_PREUPDATE_LIBRARY requires SQLite 3.45.1+')
     monkeypatch.setattr(config, 'CDEADMIN_SQLITE_PREUPDATE_LIBRARY', os.environ['CDEADMIN_SQLITE_PREUPDATE_LIBRARY'])
     with pytest.raises((ValueError, DataStudioAccessError)):
         _, request = compile_request('editor_preupdate_start', draft)

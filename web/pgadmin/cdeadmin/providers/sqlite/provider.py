@@ -235,15 +235,28 @@ class SQLiteAdministration(RelationalAdministration):
             ]
         return result
 
+    def plan(self, request):
+        from .destructive_identity import capture_plan_binding
+        clean_request = {k: v for k, v in request.items() if k != '_provider_session_handle'} if isinstance(request, Mapping) else request
+        planned = super().plan(clean_request)
+        binding = capture_plan_binding(request)
+        if binding is not None:
+            planned.setdefault('provider_payload', {})['sqlite_target_identity'] = binding
+        return planned
+
     def apply(self, client, request, connection=None):
+        from .destructive_identity import apply_with_guard
         from .virtual_tables import apply_creation
-        compiled = (request.get('provider_payload') or {}).get('compiled') or {}
+        payload = request.get('provider_payload') or {}
+        compiled = payload.get('compiled') or {}
         if 'sqlite_fts_maintenance' in compiled:
             from .fts_maintenance import apply
             return apply(client, request, connection)
         if 'sqlite_virtual_constructor' in compiled:
             with client._lock:
                 return apply_creation(client, request, connection)
+        if isinstance(payload.get('sqlite_target_identity'), Mapping):
+            return apply_with_guard(self, client, request, connection)
         return super().apply(client, request, connection)
 
     def validate_operation_post_state(self, client, request):

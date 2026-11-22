@@ -3414,6 +3414,7 @@ class ServerNode(PGChildNodeView):
                 if scoped_target and action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
                     return bad_request(gettext(
                         'Open the server continuity workspace for its registered replication database.'))
+                from pgadmin.cdeadmin.workspace.sqlite_operations_hub import SQLITE_OPS_ACTIONS
                 if scoped_target and action in {'sqlite_retained_schema','sqlite_retained_schema_receipts'}:
                     if data.get('database_target_id') not in (None,scoped_target):
                         return bad_request('Retained SQLite database scope does not match this workspace.')
@@ -3436,6 +3437,7 @@ class ServerNode(PGChildNodeView):
                         'sqlite_changeset_conflict', 'sqlite_changeset_decide', 'sqlite_changeset_catalog', 'sqlite_changeset_sources', 'sqlite_changeset_review', 'sqlite_changeset_start', 'sqlite_changeset_status', 'sqlite_changeset_cancel', 'sqlite_changeset_list', 'sqlite_changeset_files', 'sqlite_changeset_reconcile', 'sqlite_changeset_remove_artifact',
                         'sqlite_capture_export_review', 'sqlite_capture_export_start', 'sqlite_capture_export_status', 'sqlite_capture_export_cancel', 'sqlite_capture_export_list', 'sqlite_capture_export_files', 'sqlite_capture_export_reconcile', 'sqlite_capture_export_remove_artifact',
                         'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate',
+                        *SQLITE_OPS_ACTIONS,
                         'postgresql_large_object_create','postgresql_large_object_upload','postgresql_large_object_seal',
                         'postgresql_large_object_start','postgresql_large_object_status','postgresql_large_object_cancel','postgresql_large_object_list','postgresql_large_object_reconcile','postgresql_large_object_remove_artifact',
                         'postgresql_temporary_slots_databases', 'postgresql_temporary_slots_review', 'postgresql_temporary_slots_start', 'postgresql_temporary_slots_status', 'postgresql_temporary_slots_list', 'postgresql_temporary_slots_release', 'postgresql_temporary_slots_reconcile', 'postgresql_temporary_slots_inventory', 'postgresql_temporary_slots_command_review', 'postgresql_temporary_slots_command_start', 'postgresql_temporary_slots_command_status', 'postgresql_temporary_slots_command_list', 'postgresql_temporary_slots_change_preview', 'postgresql_temporary_slots_change_reconcile', 'postgresql_temporary_slots_change_remove', 'postgresql_temporary_slots_command_cancel',
@@ -3755,6 +3757,11 @@ class ServerNode(PGChildNodeView):
                     payload = service.sqlite_capture_export(server, action.removeprefix('sqlite_capture_export_'), data.get('request'))
                 elif action in {'sqlite_recovery_catalog', 'sqlite_recovery_review', 'sqlite_recovery_start', 'sqlite_recovery_status', 'sqlite_recovery_cancel', 'sqlite_recovery_list', 'sqlite_recovery_reconcile', 'sqlite_recovery_remove_images', 'sqlite_recovery_activate'}:
                     payload = service.sqlite_recovery(server, action.removeprefix('sqlite_recovery_'), data.get('request'))
+                elif action in SQLITE_OPS_ACTIONS:
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
+                    payload = service.sqlite_operations(
+                        server, action.removeprefix('sqlite_ops_'), data.get('request') or {}, host_authorized=host_authorized)
                 elif action in {'sqlite_catalog_export', 'sqlite_catalog_compare'}:
                     payload = service.sqlite_catalog(server, data.get('request'),
                         compare=action == 'sqlite_catalog_compare')

@@ -39,7 +39,10 @@
       "title": "Administration",
       "kinds": [
         "pragma",
-        "extension"
+        "extension",
+        "native-function",
+        "collation",
+        "compile-option"
       ],
       "order": 4
     }
@@ -68,6 +71,9 @@
     "virtual-table": "object.virtual-table",
     "fts-table": "object.fts-table",
     "pragma": "object.pragma",
-    "extension": "object.extension"
+    "extension": "object.extension",
+    "native-function": "object.function",
+    "collation": "object.collation",
+    "compile-option": "object.pragma"
   }
 }

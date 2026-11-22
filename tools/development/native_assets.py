@@ -156,6 +156,16 @@ def paths(env):
                   'libcdeadmin_sqlite_preupdate.dylib' if platform.system() == 'Darwin' else 'libcdeadmin_sqlite_preupdate.so')
     preupdate_library = STATE / 'sqlite' / preupdate_name
     if preupdate_library.is_file(): selected.setdefault('CDEADMIN_SQLITE_PREUPDATE_LIBRARY', str(preupdate_library))
+    for helper_env, base_stem in (
+        ('CDEADMIN_SQLITE_RBU_LIBRARY', 'cdeadmin_sqlite_rbu'),
+        ('CDEADMIN_SQLITE_EXPERT_LIBRARY', 'cdeadmin_sqlite_expert'),
+        ('CDEADMIN_SQLITE_INTCK_LIBRARY', 'cdeadmin_sqlite_intck'),
+    ):
+        h_name = (f'{base_stem}.dll' if os.name == 'nt' else
+                  f'lib{base_stem}.dylib' if platform.system() == 'Darwin' else f'lib{base_stem}.so')
+        h_lib = STATE / 'sqlite' / h_name
+        if h_lib.is_file():
+            selected.setdefault(helper_env, str(h_lib))
     config_marker=STATE/'sqlite/config-build.json'
     if config_marker.is_file():
         config_name=json.loads(config_marker.read_text(encoding='utf8')).get('filename','')
@@ -272,6 +282,9 @@ def clients(evidence, env):
     build_sqlite_sessions(evidence, env)
     build_sqlite_arrays(evidence, env)
     build_sqlite_preupdate(evidence, env)
+    build_sqlite_source_helper(evidence, env, 'rbu', 'ext/rbu', ('sqlite3rbu.c', 'sqlite3rbu.h'))
+    build_sqlite_source_helper(evidence, env, 'expert', 'ext/expert', ('sqlite3expert.c', 'sqlite3expert.h'))
+    build_sqlite_source_helper(evidence, env, 'intck', 'ext/intck', ('sqlite3intck.c', 'sqlite3intck.h'))
     (evidence / 'assets.json').write_text(json.dumps(ASSETS, indent=2), encoding='utf-8')
     if platform.system() == 'Darwin':
         build_macos_python(evidence, env)
@@ -393,6 +406,63 @@ def build_sqlite_recovery(evidence, env):
     built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
     if built is None: raise RuntimeError('Native recovery build did not produce its platform library')
     shutil.copy2(built, target); shutil.copy2(str(built) + '.json', str(target) + '.json')
+    marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
+        'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
+
+
+def build_sqlite_source_helper(evidence, env, component, rel_dir, filenames):
+    """Link an official SQLite ext/* C helper (rbu, expert, intck) to the owned SQLite runtime."""
+    sqlite = STATE / 'sqlite'
+    stem = f'cdeadmin_sqlite_{component}'
+    name = (f'{stem}.dll' if os.name == 'nt' else
+            f'lib{stem}.dylib' if platform.system() == 'Darwin' else f'lib{stem}.so')
+    core = sqlite / ('sqlite3.dll' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    project = ROOT / 'tools/native' / f'sqlite_{component}'
+    provenance = ROOT / 'tools/native/sqlite_recovery/provenance.cmake'
+    sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    inputs = {
+        'source': ASSETS['sqlite-recovery'][1],
+        'core': sha(core),
+        'cmake': sha(project / 'CMakeLists.txt'),
+        'provenance': sha(provenance),
+        'adapter': sha(project / 'api.c'),
+        'system': platform.system(),
+        'machine': platform.machine(),
+    }
+    target, marker = sqlite / name, sqlite / f'{component}-build.json'
+    if marker.is_file():
+        previous = json.loads(marker.read_text(encoding='utf8'))
+        if (previous.get('inputs') == inputs and target.is_file() and
+                previous.get('sha256') == sha(target) and Path(str(target) + '.json').is_file() and
+                previous.get('provenance_sha256') == sha(Path(str(target) + '.json'))):
+            return
+        raise RuntimeError(f'Native SQLite {component} build changed; stop apps and use a fresh owned runtime')
+    if target.exists():
+        raise RuntimeError(f'Preserved an unknown native SQLite {component} library')
+    source = STATE / 'sqlite-recovery-source'
+    ext_dir = source / rel_dir
+    ext_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(download('sqlite-recovery')) as archive:
+        for filename in filenames:
+            destination = ext_dir / filename
+            value = archive.read(f'sqlite-src-3530000/{rel_dir}/{filename}')
+            if destination.exists() and destination.read_bytes() != value:
+                raise RuntimeError(f'Preserved a modified native SQLite {component} source')
+            if not destination.exists():
+                destination.write_bytes(value)
+    build = STATE / f'sqlite-{component}-build'
+    library = sqlite / ('sqlite3.lib' if os.name == 'nt' else 'libsqlite3.0.dylib')
+    command(['cmake', '-S', project, '-B', build, '-DCMAKE_BUILD_TYPE=Release',
+        '-DSCRATCHROBIN_SQLITE_SOURCE=' + str(source), '-DSQLite3_INCLUDE_DIR=' + str(sqlite),
+        '-DSQLite3_LIBRARY=' + str(library), *(['-A', 'x64'] if os.name == 'nt' else [])],
+        env=env, log=evidence / f'sqlite-{component}-configure.log')
+    command(['cmake', '--build', build, '--config', 'Release', '--parallel', '3'],
+        env=env, log=evidence / f'sqlite-{component}-build.log')
+    built = next((path for path in (build / name, build / 'Release' / name) if path.is_file()), None)
+    if built is None:
+        raise RuntimeError(f'Native {component} build did not produce its platform library')
+    shutil.copy2(built, target)
+    shutil.copy2(str(built) + '.json', str(target) + '.json')
     marker.write_text(json.dumps({'inputs': inputs, 'sha256': sha(target),
         'provenance_sha256': sha(Path(str(target) + '.json'))}, indent=2), encoding='utf8')
 

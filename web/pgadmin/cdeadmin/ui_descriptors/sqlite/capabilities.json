@@ -300,6 +300,42 @@
           "mutation_class": "read"
         }
       ]
+    },
+    {
+      "resource_kind": "native-function",
+      "family": "engine_object",
+      "title": "Native Function",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "collation",
+      "family": "engine_object",
+      "title": "Collation",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
+    },
+    {
+      "resource_kind": "compile-option",
+      "family": "engine_object",
+      "title": "Compile Option",
+      "operations": [
+        {
+          "operation_id": "inspect",
+          "tier": 1,
+          "mutation_class": "read"
+        }
+      ]
     }
   ],
   "sql_builder": {

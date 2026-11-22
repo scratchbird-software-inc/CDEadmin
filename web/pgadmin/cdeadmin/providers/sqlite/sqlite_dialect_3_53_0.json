@@ -89,15 +89,15 @@
     ],
     "scope": "database.alter file task excludes connection-local synchronous; original main connection policy is a separate retained callback",
     "source_sha256": {
-      "tools/cdeadmin_relational_provider_live_verify.py": "cd990765a828e19e1ba6a336fac8c073a1470ff6ffe4b2a926a172216cf6121c",
+      "tools/cdeadmin_relational_provider_live_verify.py": "b234f1b62458a7cca9bdb8a953b33068cb5d371065f66de333021051888ed367",
       "tools/tests/test_sqlite_connection_settings.py": "6950941af559751f07966685a6a762ececc0cbdc2930b48b0f062c68e0569bd2",
-      "web/pgadmin/browser/server_groups/servers/__init__.py": "469c17d755969961e2a69f4fb11486e09c36371b5be6e8fa9892bcea933b479a",
-      "web/pgadmin/cdeadmin/data_studio/scripts.py": "bacd5f3ed92b4c3c2005554e5f8b66b8d0aa0862566c6c2027dc41f32637db3d",
-      "web/pgadmin/cdeadmin/data_studio/studio.py": "54d5b724cc84d74bea6a3a8eba6ddc30d8872ce8338319f512e4971d9c7fd2dd",
+      "web/pgadmin/browser/server_groups/servers/__init__.py": "33fc469b9631821e0bd8d6040da01b0f33ce6f3677f3313c253679f7e5b69cf8",
+      "web/pgadmin/cdeadmin/data_studio/scripts.py": "e0c6c1f8e8724883fa8f2e9420163c6a80143eb07e36e8b6ae7f99235efb287b",
+      "web/pgadmin/cdeadmin/data_studio/studio.py": "2b7eb0bb67110df02bd1ce875988b28a8020657d409d3946ec555085d4ddb07c",
       "web/pgadmin/cdeadmin/providers/sqlite/connection_settings.py": "6ae2ec5ca478cd203b5694b1763d7584e97d540ac9a580395e88567db57cfc01",
-      "web/pgadmin/cdeadmin/providers/sqlite/provider.py": "6fb7f0c224de3261a0b1dc0bd2c05d59f379f86f0ef27392b2fee3c4e238e270",
-      "web/pgadmin/cdeadmin/ui_descriptors/sqlite/operations.json": "5b7a93c955119ad35c8327b1b11f5e5b170daba8460fdb0759d9fd927105963d",
-      "web/pgadmin/cdeadmin/workspace/service.py": "ac29708bcac971d4008e922f5125a436ccef1491af23af7eb9b203c17d163c90"
+      "web/pgadmin/cdeadmin/providers/sqlite/provider.py": "ea4a291ad2b25549a05d6deb958a382c21a4ef8b6330c030468f55c830d2c367",
+      "web/pgadmin/cdeadmin/ui_descriptors/sqlite/operations.json": "f93ecf1744a74c6d6a4aaf11954825e5de87d002b9ae8691567a7cd1e6d90033",
+      "web/pgadmin/cdeadmin/workspace/service.py": "629cbab427596d9e4409e6ffe3c9a5813ae0b2d19c1307e64fd098a6e602744a"
     },
     "statements": [
       "PRAGMA journal_mode = DELETE",
@@ -11157,31 +11157,31 @@
       "sha256": "f416054fc12a6ab8d743ed1d98ba18ebdf9a3839653da3b2885097265578933e"
     },
     {
-      "artifact": "sqlite-fts-maintenance-live-round296.json",
+      "artifact": "live-3.53.0.json",
       "authority": "SQLite 3.53.0 runtime",
       "evidence_id": "sqlite-3.53.0-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "92ee09a5132c47a56827013844c568825436f6b396266dd4d501787fa4efb56a"
+      "sha256": "bda0230a73823c40a1993574eb1b8c1416a752cf1d1fded64e978fb231fe08bc"
     },
     {
-      "artifact": "sqlite-fts-maintenance-live-round296.json",
+      "artifact": "live-3.53.0.json",
       "authority": "SQLite 3.53.0 runtime",
       "evidence_id": "sqlite-3.53.0-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "92ee09a5132c47a56827013844c568825436f6b396266dd4d501787fa4efb56a"
+      "sha256": "bda0230a73823c40a1993574eb1b8c1416a752cf1d1fded64e978fb231fe08bc"
     },
     {
-      "artifact": "_sqlite3.cpython-314-x86_64-linux-gnu.so",
+      "artifact": "_sqlite3.cpython-312-x86_64-linux-gnu.so",
       "authority": "Python Software Foundation",
       "evidence_id": "cpython-sqlite3-dbapi",
       "evidence_kind": "driver",
       "format": "CPython extension module dynamically linked to SQLite 3.53.0",
       "license_id": "PSF-2.0",
-      "sha256": "2aba6eeb59707b665575fd21811fed844e2b2e9044c8f79b3dc58437b950a5ed"
+      "sha256": "ecf54958b24c533f5c8dc67ca82cdce236aeb322864140bfe93eb8a69b729f4d"
     },
     {
       "artifact": "embedded connection_scope_qualification",
@@ -11190,7 +11190,7 @@
       "evidence_kind": "parser_acceptance",
       "format": "scoped native qualification manifest",
       "license_id": "PostgreSQL",
-      "sha256": "8cb2b57137485e2414615c65516056e5712da7f8026af2136e62bfd13f9e046a"
+      "sha256": "2ac74e6fb0507924b74c4f40396868814c23d93605e867dcc777386ad0f431c9"
     },
     {
       "artifact": "embedded connection_scope_qualification",
@@ -11199,7 +11199,7 @@
       "evidence_kind": "live_execution",
       "format": "scoped native qualification manifest",
       "license_id": "PostgreSQL",
-      "sha256": "8cb2b57137485e2414615c65516056e5712da7f8026af2136e62bfd13f9e046a"
+      "sha256": "2ac74e6fb0507924b74c4f40396868814c23d93605e867dcc777386ad0f431c9"
     }
   ],
   "provider_id": "org.cdeadmin.sqlite",
@@ -11716,10 +11716,10 @@
         "sqlite-3.53.0-task-live-execution"
       ],
       "required_bindings": [],
-      "source": "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\" BEGIN SELECT 1; END",
+      "source": "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\"\nBEGIN SELECT 1; END",
       "source_format": "ordered_native_statements",
       "statements": [
-        "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\" BEGIN SELECT 1; END"
+        "CREATE TRIGGER \"main\".\"cde_editor_trigger\" AFTER INSERT ON \"main\".\"qualification\"\nBEGIN SELECT 1; END"
       ],
       "task_id": "visual_admin.trigger.create"
     },

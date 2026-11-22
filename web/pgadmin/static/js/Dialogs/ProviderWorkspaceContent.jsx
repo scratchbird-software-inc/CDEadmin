@@ -96,8 +96,8 @@ import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/
 import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
 import {MARIADB_ADMIN_TABS, renderMariaDBAdminWorkspace} from '../cdeadmin_ui/modules/mariadb_admin';
 import {POSTGRESQL_ADMIN_TABS, renderPostgresqlAdminWorkspace} from '../cdeadmin_ui/modules/postgresql_admin';
-import {isProviderRegistrationWorkspace} from
-  'sources/cdeadmin_ui/navigation/providerDatabaseTree';
+import {SQLITE_ADMIN_REQUEST_ACTIONS, SQLITE_ADMIN_TABS, renderSqliteAdminWorkspace} from '../cdeadmin_ui/modules/sqlite_admin';
+import {isProviderRegistrationWorkspace} from 'sources/cdeadmin_ui/navigation/providerDatabaseTree';
 import ProviderRowInput, {rowInputDraft, rowInputValue} from './ProviderRowInput';
 import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
@@ -127,7 +127,7 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'mariadb_design_read', 'mariadb_design_save', 'mariadb_relational_review',
   'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt',
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
-  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save',
+  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save', ...SQLITE_ADMIN_REQUEST_ACTIONS,
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save',
   'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts',
@@ -6674,17 +6674,9 @@ export default function ProviderWorkspaceContent({
           endpointUrl,
           databaseTargetId: queryDatabaseTargetId,
         })}
-      {workspace && MARIADB_ADMIN_TABS.includes(tab) &&
-        renderMariaDBAdminWorkspace({
-          tab,
-          endpointUrl,
-          databaseTargetId: queryDatabaseTargetId,
-        })}
-      {workspace && POSTGRESQL_ADMIN_TABS.includes(tab) &&
-        renderPostgresqlAdminWorkspace({
-          tab,
-          endpointUrl,
-        })}
+      {workspace && MARIADB_ADMIN_TABS.includes(tab) && renderMariaDBAdminWorkspace({tab, endpointUrl, databaseTargetId: queryDatabaseTargetId})}
+      {workspace && POSTGRESQL_ADMIN_TABS.includes(tab) && renderPostgresqlAdminWorkspace({tab, endpointUrl})}
+      {workspace && SQLITE_ADMIN_TABS.includes(tab) && renderSqliteAdminWorkspace({tab, endpointUrl, databaseTargetId: queryDatabaseTargetId})}
       {/* Owner direction 2026-11-05: the connection details open from the
           toolbar's info button instead of a banner above the editor. */}
       {workspace && tab === 'studio' && <InfoDialog open={connectionInfoOpen}
@@ -7238,9 +7230,7 @@ ProviderWorkspaceContent.propTypes = {
     'semantic', 'movement', 'streams', 'connections', 'export',
     'metadata-search', 'firebird-server-catalog', 'firebird-events', 'firebird-templates', 'firebird-isql', 'firebird-test-data', 'postgresql-test-data', 'mysql-test-data', 'mariadb-test-data', 'duckdb-test-data', 'duckdb-copy', 'duckdb-attachment', 'duckdb-extensions',
     'firebird-recovery',
-    ...FIREBIRD_ADMIN_TABS,
-    ...MYSQL_ADMIN_TABS,
-    ...MARIADB_ADMIN_TABS,
+    ...FIREBIRD_ADMIN_TABS, ...MYSQL_ADMIN_TABS, ...MARIADB_ADMIN_TABS, ...POSTGRESQL_ADMIN_TABS, ...SQLITE_ADMIN_TABS,
   ]),
   initialContext: PropTypes.object,
   onOpenSearchResult: PropTypes.func,

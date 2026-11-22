@@ -93,10 +93,10 @@ def _source(row,change):
     return prefix+'ADD '+('CONSTRAINT '+quote(change['name'])+' ' if change.get('name') else '')+'CHECK ('+change['expression']+')'+suffix
 
 
-def _fts_dependencies(probe,baseline,table,change):
+def _fts_dependencies(probe,baseline,table,change,*,allowed_fts=frozenset()):
     if change['action'] not in {'rename-table','rename-column','drop-column'}:return
     for row in baseline['rows'].values():
-        if row['kind']!='fts-table':continue
+        if row['kind']!='fts-table' or row['resource_id'] in allowed_fts:continue
         content=option(row['native']['ddl'],'content')
         if not content:continue
         events=[];previous=probe._cdeadmin_authorizer
@@ -114,11 +114,24 @@ def _fts_dependencies(probe,baseline,table,change):
             raise ValueError('This native alteration needs explicit retained external-content FTS preservation')
 
 
-def generate(client,handle,baseline,endpoint,session,changes):
+def _validate_fts_rebindings(baseline,fts_rebindings):
+    if (not isinstance(fts_rebindings,(list,tuple)) or len(fts_rebindings)>16 or
+            any(not isinstance(item,str) or not item for item in fts_rebindings) or
+            len(set(fts_rebindings))!=len(fts_rebindings)):
+        raise ValueError('Select at most sixteen distinct external-content FTS resource identities')
+    for fid in fts_rebindings:
+        frow=baseline['rows'].get(fid)
+        if frow is None or frow['kind']!='fts-table':
+            raise ValueError('Selected FTS rebinding target is not an observed FTS table: '+fid)
+    return list(fts_rebindings)
+
+
+def generate(client,handle,baseline,endpoint,session,changes,fts_rebindings=()):
     retained._scope(baseline,endpoint,session,observed=True)
     selected=_options(changes)
+    selected_fts=_validate_fts_rebindings(baseline,fts_rebindings)
     namespaces={row[1] for row in handle.execute('PRAGMA database_list')}|{'temp'}
-    probe=retained._prototype(baseline,namespaces)
+    probe=retained._prototype(baseline,namespaces,live_handle=handle)
     try:
         storage=set(probe._cdeadmin_module_storage)
         live=retained.observe(client,handle,endpoint,session)
@@ -131,16 +144,87 @@ def generate(client,handle,baseline,endpoint,session,changes):
         probe.commit()
         for pragma in ('foreign_keys','legacy_alter_table','recursive_triggers'):
             probe.execute('PRAGMA '+pragma+'='+str(int(handle.execute('PRAGMA '+pragma).fetchone()[0])))
-        names={};stages=[]
+        names={};stages=[];rebind_details=[]
+        pre_rebind_sql=[];post_rebind_sql=[]
+        if selected_fts:
+            from .sqlite_fts_rebind import plans as rebind_plans,equal
+            from .sqlite_fts_views import content_views,preserve_columns
+            from ..providers.sqlite.modules import declaration as mod_decl
+            if any(c['action']=='drop-column' for c in selected):
+                # Ensure dropped columns are not referenced by selected FTS tables before rebinding
+                for change in selected:
+                    if change['action']=='drop-column':
+                        orig=baseline['rows'].get(change['resource_id'])
+                        if orig is not None:
+                            _fts_dependencies(probe,baseline,orig,change,allowed_fts=frozenset())
+            temp_names={}
+            by_ns={}
+            for change in selected:
+                orig=baseline['rows'].get(change['resource_id'])
+                if orig is None or orig['kind']!='table':
+                    raise ValueError('Select an observed ordinary original table')
+                ns=orig['path'][0]
+                cur_name=temp_names.get(orig['resource_id'],orig['name'])
+                if change['action']=='rename-table':
+                    by_ns.setdefault(ns,[]).append({'kind':'table','table':cur_name,'to':change['name'],'namespace':ns})
+                    temp_names[orig['resource_id']]=change['name']
+                elif change['action']=='rename-column':
+                    by_ns.setdefault(ns,[]).append({'kind':'column','table':cur_name,'from':change['column'],'to':change['name'],'namespace':ns})
+            used_fts=set()
+            for ns in sorted({baseline['rows'][fid]['path'][0] for fid in selected_fts}):
+                ns_cviews=content_views(baseline,namespace=ns)
+                ns_fts_ids=[fid for fid in selected_fts if baseline['rows'][fid]['path'][0]==ns]
+                view_backed_fts=[]
+                table_backed_fts=[]
+                for fid in ns_fts_ids:
+                    frow=baseline['rows'][fid]
+                    target_content=option(frow['native']['ddl'],'content') or ''
+                    matched_view=next((v for v in ns_cviews.values() if equal(v['name'],target_content)),None)
+                    if matched_view is not None:
+                        view_backed_fts.append((fid,frow,matched_view))
+                    else:
+                        table_backed_fts.append(fid)
+                ns_plans=rebind_plans(baseline,by_ns.get(ns,[]),table_backed_fts,namespace=ns)
+                for item in ns_plans:
+                    used_fts.add(item['resource_id'])
+                    rebind_details.append(item)
+                    frow=baseline['rows'][item['resource_id']]
+                    for sql_stmt in item['before']:
+                        pre_rebind_sql.append((frow,sql_stmt))
+                    for sql_stmt in item['stages']:
+                        post_rebind_sql.append((frow,sql_stmt))
+                frozen_views=set()
+                for fid,frow,vrow in view_backed_fts:
+                    used_fts.add(fid)
+                    q_ns=quote(ns)
+                    if vrow['resource_id'] not in frozen_views:
+                        frozen_views.add(vrow['resource_id'])
+                        preserved=preserve_columns(vrow)
+                        if preserved['native']['ddl']!=vrow['native']['ddl']:
+                            drop_v='DROP VIEW '+q_ns+'.'+quote(vrow['name'])
+                            create_v=ddl_prepare.source(preserved)
+                            pre_rebind_sql.append((vrow,drop_v))
+                            pre_rebind_sql.append((preserved,create_v))
+                    mod_name=mod_decl(frow['native']['ddl'])[1].lower()
+                    q_fts=quote(frow['name'])
+                    post_rebind_sql.append((frow,f'INSERT INTO {q_ns}.{q_fts}({q_fts}) VALUES(\'rebuild\')'))
+                    post_rebind_sql.append((frow,f'INSERT INTO {q_ns}.{q_fts}({q_fts}'+(',rank' if mod_name=='fts5' else '')+") VALUES('integrity-check'"+(',1' if mod_name=='fts5' else '')+')'))
+            if used_fts!=set(selected_fts):
+                raise ValueError('Unused external-content FTS rebinding target(s): '+', '.join(sorted(set(selected_fts)-used_fts)))
+        for frow,sql_stmt in pre_rebind_sql:
+            probe.execute(sql_stmt)
+            stages.append({'operation':'fts-rebind-step','resource_id':frow['resource_id'],
+                'kind':frow['kind'],'name':frow['name'],'row':frow,'source':sql_stmt})
+        allowed_set=frozenset(selected_fts)
         for change in selected:
             original=baseline['rows'].get(change['resource_id'])
             if original is None or original['kind']!='table':raise ValueError('Select an observed ordinary original table')
-            retained._valid(original,namespaces)
+            retained._valid(original,namespaces,live_handle=handle)
             namespace=original['path'][0];name=names.get(original['resource_id'],original['name'])
             current=retained.model(_resources(probe,{}),endpoint,session)
             row=current['rows'].get(_resource_id('table',[namespace],name))
             if row is None or (namespace,name) in storage:raise ValueError('Native module storage needs module maintenance')
-            _fts_dependencies(probe,current,row,change)
+            _fts_dependencies(probe,current,row,change,allowed_fts=allowed_set)
             statement=_source(row,change)
             authorization_column=change.get('column') if change['action'] in {'drop-column','set-not-null','drop-not-null'} else None
             stage={'operation':'native-alter','alteration':change,'resource_id':row['resource_id'],
@@ -149,9 +233,19 @@ def generate(client,handle,baseline,endpoint,session,changes):
             ddl_prepare.prepare(SimpleNamespace(_uncertain=set()),probe,row,statement,operation='native-alter',authorization_column=authorization_column)
             probe.execute(statement);stages.append(stage)
             if change['action']=='rename-table':names[original['resource_id']]=change['name']
+        for frow,sql_stmt in post_rebind_sql:
+            probe.execute(sql_stmt)
+            stages.append({'operation':'fts-rebind-step','resource_id':frow['resource_id'],
+                'kind':frow['kind'],'name':frow['name'],'row':frow,'source':sql_stmt})
         proposed=retained.model(_resources(probe,{}),endpoint,session)
-        if retained._storage_shape(proposed,storage)!=retained._storage_shape(live,storage):
+        after_probe=retained._prototype(proposed,namespaces,live_handle=handle)
+        try:
+            after_storage=set(after_probe._cdeadmin_module_storage)
+        finally:
+            after_probe.close()
+        if not selected_fts and retained._storage_shape(proposed,storage)!=retained._storage_shape(live,storage):
             raise ValueError('Native module storage cannot be preserved by this alteration')
+        after_storage_schema=retained._storage_shape(proposed,after_storage)
         # The empty prototype supplies schema facts. Files, settings, functions
         # and other untouched facts retain their actual original observation.
         desired=deepcopy(baseline)
@@ -161,24 +255,32 @@ def generate(client,handle,baseline,endpoint,session,changes):
                 row['native']['observation_scope']='retained-session-design'
                 desired['rows'][key]=row
         if '_all_schema_rows' in desired:desired['_all_schema_rows']=proposed['_all_schema_rows']
-        return desired,stages,storage,retained._storage_shape(live,storage)
+        return desired,stages,storage,retained._storage_shape(live,storage),after_storage,after_storage_schema,rebind_details
     finally:probe.close()
 
 
-def plan(client,handle,baseline,desired,live,endpoint,session,changes):
+def plan(client,handle,baseline,desired,live,endpoint,session,changes,*,fts_rebindings=()):
     retained._scope(desired,endpoint,session)
     retained._scope(live,endpoint,session,observed=True)
-    generated,stages,storage,storage_schema=generate(client,handle,baseline,endpoint,session,changes)
-    if retained.schema(generated,storage)!=retained.schema(desired,storage):
+    generated,stages,storage,storage_schema,after_storage,after_storage_schema,rebind_details=generate(
+        client,handle,baseline,endpoint,session,changes,fts_rebindings=fts_rebindings)
+    if retained.schema(generated,after_storage)!=retained.schema(desired,after_storage):
         raise ValueError('Desired DDN differs from the ordered native table alterations; generate the design again')
     if retained.schema(baseline,storage)!=retained.schema(live,storage):
         raise ValueError('The original retained schema changed')
-    first=stages[0]
-    ddl_prepare.prepare(client,handle,first['row'],first['source'],operation='native-alter',authorization_column=first['authorization_column'])
-    return {'format':retained.FORMAT,'engine':'sqlite','provider_session_id':session,'operations':stages,
+    first=next((s for s in stages if s['operation']=='native-alter'),None)
+    if first is not None and not fts_rebindings:
+        ddl_prepare.prepare(client,handle,first['row'],first['source'],operation='native-alter',authorization_column=first['authorization_column'])
+    result={'format':retained.FORMAT,'engine':'sqlite','provider_session_id':session,'operations':stages,
         'module_storage':[list(key) for key in sorted(storage)],'module_storage_schema':storage_schema,
-        'module_storage_after_schema':storage_schema,'execution_sha256':digest(stages),
+        'module_storage_after':[list(key) for key in sorted(after_storage)],
+        'module_storage_after_schema':after_storage_schema,'execution_sha256':digest(stages),
         'ready_for_review':True,'application_supported':True,'native_grammar_validated':True,
         'transaction_policy':'original-caller-transaction; never commit',
         'warnings':['Native column removal discards that column data within the caller transaction. Inspect every ordered statement before confirming.',
-            'Existing rows are checked by SQLite during apply. Native refusal rolls back the owned savepoint; severe native errors can end the caller transaction.']}
+            'Existing rows are checked by SQLite during apply. Native refusal rolls back the owned savepoint; severe native errors can end the caller transaction.',
+            *(['Explicitly selected external-content FTS indexes are dropped, rebound, rebuilt and integrity-checked inside the caller savepoint.'] if fts_rebindings else [])]}
+    if fts_rebindings:
+        result['fts_rebindings']=list(fts_rebindings)
+        result['fts_rebuilds']=[{k:v for k,v in item.items() if k in {'resource_id','namespace','source_name','name','module','original_content','content','column_renames','row_identity_mapping'}} for item in rebind_details]
+    return result

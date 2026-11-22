@@ -526,6 +526,46 @@
             "resource_kind": "extension",
             "native_name": "dbstat"
           }
+        },
+        {
+          "value": "csv",
+          "label": "CSV (Loadable Extension)",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "csv"
+          }
+        },
+        {
+          "value": "spellfix1",
+          "label": "Spellfix1 (Loadable Extension)",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "spellfix1"
+          }
+        },
+        {
+          "value": "fuzzer",
+          "label": "Fuzzer (Loadable Extension)",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "fuzzer"
+          }
+        },
+        {
+          "value": "wholenumber",
+          "label": "Wholenumber (Loadable Extension)",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "wholenumber"
+          }
+        },
+        {
+          "value": "cde_kv_vtab",
+          "label": "CDE Key-Value VTab (Approved Extension)",
+          "requires_resource": {
+            "resource_kind": "extension",
+            "native_name": "cde_kv_vtab"
+          }
         }
       ],
       "visible_when": {
@@ -1087,6 +1127,112 @@
           }
         }
       ]
+    },
+    {
+      "field_id": "csv_data",
+      "label": "Inline CSV data",
+      "control": "code",
+      "language": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "csv"
+        ]
+      }
+    },
+    {
+      "field_id": "csv_columns_count",
+      "label": "CSV column count",
+      "control": "number",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "csv"
+        ]
+      }
+    },
+    {
+      "field_id": "csv_header",
+      "label": "CSV first row is header",
+      "control": "boolean",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "csv"
+        ]
+      }
+    },
+    {
+      "field_id": "spellfix_vocab_table",
+      "label": "Spellfix1 vocabulary table",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "spellfix1"
+        ]
+      }
+    },
+    {
+      "field_id": "fuzzer_rules_table",
+      "label": "Fuzzer rules table",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "fuzzer"
+        ]
+      }
+    },
+    {
+      "field_id": "vtab_namespace_tag",
+      "label": "Extension namespace tag",
+      "control": "text",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "cde_kv_vtab"
+        ]
+      }
+    },
+    {
+      "field_id": "vtab_with_shadow",
+      "label": "Create shadow backing table",
+      "control": "boolean",
+      "tab": "Engine",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "module",
+        "in": [
+          "cde_kv_vtab"
+        ]
+      }
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (database); virtual/FTS variants get a module_columns grid. Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round trip verified in-process (create, re-inspect, alter via the Columns grid diff) on SQLite 3.53.1 (profile pins 3.53.0) by tools/tests/test_ui_descriptor_roundtrip_sqlite.py. Native qualification on the pinned version remains with the platform teams."

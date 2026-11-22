@@ -207,7 +207,7 @@ def _compile_created_child(row, source, owner):
 
 
 def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
-         column_renames=(), renames=(), fts_rebindings=()):
+         column_renames=(), renames=(), fts_rebindings=(), attachment_policy=None):
     scope = _scope(baseline)
     if _scope(desired) != scope or _scope(live) != scope:
         raise ValueError('Native designs refer to different registered SQLite files')
@@ -222,7 +222,9 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         if deletions or rebuilds or column_renames:
             raise ValueError('Review native renames separately from rebuilds and other transformations')
         from .sqlite_rename import plan as rename_plan
-        return rename_plan(baseline,desired,live,renames,fts_rebindings)
+        loaded_exts = getattr(connection, '_cdeadmin_loaded_extensions', None) or ()
+        return rename_plan(baseline, desired, live, renames, fts_rebindings,
+            attachment_policy=attachment_policy, loaded_extensions=loaded_exts)
     if fts_rebindings:raise ValueError('FTS rebinding requires an explicit native owner rename')
     operations, blockers, conflicts = [], [], []
     before, after, current = baseline['rows'], desired['rows'], live['rows']
@@ -261,7 +263,7 @@ def plan(baseline, desired, live, connection, *, deletions=(), rebuilds=(),
         from ..providers.sqlite.provider import _resources
         prototype=None
         try:
-            prototype=_prototype(desired,{'main'})
+            prototype=_prototype(desired,{'main'},live_handle=connection)
             if not verify_views(desired,_resources(prototype,{})):
                 raise ValueError('Desired view projection facts differ from the rebuilt native schema')
             # Their native SELECTs determine these facts; table affinity changes

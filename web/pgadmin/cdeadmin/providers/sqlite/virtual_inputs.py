@@ -22,7 +22,12 @@ def normalize(draft):
             raise RelationalClientError('Conflicting SQLite module option: ' + key)
         native[key] = value
     for field, key in {'auxiliary_columns':'auxiliary_columns', 'source_table':'table',
-                       'source_database':'database', 'vocabulary_mode':'mode'}.items():
+                       'source_database':'database', 'vocabulary_mode':'mode',
+                       'csv_data':'data', 'csv_schema':'schema',
+                       'csv_columns_count':'columns_count', 'csv_header':'header',
+                       'spellfix_vocab_table':'vocab_table', 'fuzzer_rules_table':'rules_table',
+                       'vtab_namespace_tag':'namespace_tag', 'vtab_read_only_mode':'read_only_mode',
+                       'vtab_with_shadow':'with_shadow'}.items():
         value = draft.pop(field, None)
         if value not in (None, '', []):
             put(key, value)

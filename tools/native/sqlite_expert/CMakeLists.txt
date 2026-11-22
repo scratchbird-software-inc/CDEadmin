@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.20)
+project(cdeadmin_sqlite_expert LANGUAGES C)
+
+set(SCRATCHROBIN_SQLITE_SOURCE "" CACHE PATH "SQLite 3.53.0 source directory")
+set(expert_source "${SCRATCHROBIN_SQLITE_SOURCE}/ext/expert")
+foreach(name sqlite3expert.c sqlite3expert.h)
+  if(NOT EXISTS "${expert_source}/${name}")
+    message(FATAL_ERROR "SCRATCHROBIN_SQLITE_SOURCE must contain ext/expert/${name}")
+  endif()
+endforeach()
+
+find_package(SQLite3 3.35.0 REQUIRED)
+add_library(cdeadmin_sqlite_expert SHARED "${expert_source}/sqlite3expert.c" api.c)
+target_include_directories(cdeadmin_sqlite_expert PRIVATE "${expert_source}")
+target_compile_definitions(cdeadmin_sqlite_expert PRIVATE SQLITE_CORE)
+target_link_libraries(cdeadmin_sqlite_expert PRIVATE SQLite::SQLite3)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(cdeadmin_sqlite_expert PRIVATE -Werror=implicit-function-declaration -Werror=int-conversion)
+endif()
+set_target_properties(cdeadmin_sqlite_expert PROPERTIES
+  C_STANDARD 99 WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(APPLE)
+  set_target_properties(cdeadmin_sqlite_expert PROPERTIES INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+  set_target_properties(cdeadmin_sqlite_expert PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+
+set(expected_sqlite3expert_c e4a43ce024798071e9b436918e9ab12c30e0fe4a691a7967ae0a78d1267b976f)
+set(expected_sqlite3expert_h 9b8aa403e9c6e77ab2049434b02a5901ee687fb78b247aa6557500455294bc77)
+foreach(name sqlite3expert.c sqlite3expert.h)
+  file(SHA256 "${expert_source}/${name}" source_sha)
+  string(REPLACE "." "_" key "${name}")
+  if(NOT source_sha STREQUAL expected_${key})
+    message(FATAL_ERROR "${name} differs from the qualified SQLite 3.53.0 expert source")
+  endif()
+  string(APPEND provenance "\"${name}\":\"${source_sha}\",")
+endforeach()
+
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sqlite-expert-build.json"
+  CONTENT "{\"sqlite_version\":\"${SQLite3_VERSION}\",\"adapter_abi\":1,${provenance}\"implementation\":\"SQLite public expert index advisor API\"}\n")
+add_custom_command(TARGET cdeadmin_sqlite_expert POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" "-DLIBRARY=$<TARGET_FILE:cdeadmin_sqlite_expert>"
+    "-DTEMPLATE=${CMAKE_CURRENT_BINARY_DIR}/sqlite-expert-build.json"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/../sqlite_recovery/provenance.cmake" VERBATIM)
+install(TARGETS cdeadmin_sqlite_expert LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+if(WIN32)
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_expert>.json" DESTINATION bin)
+else()
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_expert>.json" DESTINATION lib)
+endif()
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sqlite-expert-build.json" DESTINATION share/cdeadmin)

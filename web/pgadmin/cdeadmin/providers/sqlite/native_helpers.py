@@ -25,6 +25,9 @@ HELPER_MINIMUM = {
     'preupdate': '3.45.1',
     'array': '3.53.0',
     'recovery': '3.45.1',
+    'rbu': '3.45.1',
+    'expert': '3.45.1',
+    'intck': '3.45.1',
 }
 
 

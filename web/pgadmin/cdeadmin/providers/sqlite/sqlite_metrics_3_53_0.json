@@ -59,12 +59,12 @@
       "sha256": "3549bd1668aaa00e4f7e372d9659184cf2a437d917f767294540d6c058c8cf83"
     },
     {
-      "artifact": "SQLITE_DIALECT_QUALIFICATION_GATE.json",
+      "artifact": "live-3.53.0.json",
       "authority": "SQLite 3.53.0 runtime",
       "evidence_id": "sqlite-3.53.0-live-observation-gate",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "1354af32f1809b98f24007a91d695f792e159a9351d6e77a1e251ba1445014d1"
+      "sha256": "bda0230a73823c40a1993574eb1b8c1416a752cf1d1fded64e978fb231fe08bc"
     }
   ],
   "contract_id": "sqlite.metrics.3.53.0.v1",

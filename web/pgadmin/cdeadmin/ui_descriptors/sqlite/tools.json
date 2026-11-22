@@ -148,6 +148,96 @@
       }
     },
     {
+      "command_id": "database.sqlite.rbu",
+      "scope": "database",
+      "label": "Resumable bulk update & vacuum (RBU)...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.restore",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "sqlite-rbu"
+      },
+      "version": {
+        "minimum": "3.45.1",
+        "reason": "SQLite RBU requires SQLite 3.45.1 or later (native RBU helper)"
+      }
+    },
+    {
+      "command_id": "database.sqlite.expert",
+      "scope": "database",
+      "label": "Expert index advisor (preview)...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.view",
+      "group": "database",
+      "mutation": "read",
+      "arguments": {
+        "tab": "sqlite-expert"
+      },
+      "version": {
+        "minimum": "3.45.1",
+        "reason": "SQLite Expert Index Advisor requires SQLite 3.45.1 or later (native expert helper)"
+      }
+    },
+    {
+      "command_id": "database.sqlite.intck",
+      "scope": "database",
+      "label": "Incremental integrity check...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.view",
+      "group": "database",
+      "mutation": "read",
+      "arguments": {
+        "tab": "sqlite-intck"
+      },
+      "version": {
+        "minimum": "3.45.1",
+        "reason": "SQLite Incremental Integrity Check requires SQLite 3.45.1 or later (native intck helper)"
+      }
+    },
+    {
+      "command_id": "database.sqlite.blob_stream",
+      "scope": "database",
+      "label": "Incremental large-BLOB transfer...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.edit",
+      "group": "database",
+      "mutation": "write",
+      "arguments": {
+        "tab": "sqlite-blob-stream"
+      }
+    },
+    {
+      "command_id": "database.sqlite.shell",
+      "scope": "database",
+      "label": "Native SQLite shell inspection...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.view",
+      "group": "information",
+      "mutation": "read",
+      "arguments": {
+        "tab": "sqlite-shell"
+      }
+    },
+    {
+      "command_id": "database.sqlite.sql_dump",
+      "scope": "database",
+      "label": "Database-wide SQL script dump & import...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.export",
+      "group": "database",
+      "mutation": "write",
+      "arguments": {
+        "tab": "sqlite-sql-dump"
+      }
+    },
+    {
       "command_id": "database.sqlite.monitoring",
       "scope": "database",
       "label": "SQLite database dashboard...",

@@ -2229,6 +2229,13 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError, OSError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def sqlite_operations(self, server, operation, request, *, host_authorized=True):
+        from .sqlite_operations_hub import dispatch_sqlite_operation
+        try:
+            return dispatch_sqlite_operation(self, server, operation, request, host_authorized=host_authorized)
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_data_capture(self, server, request):
         from .sqlite_catalog_service import data
         try:
@@ -5006,8 +5013,10 @@ class ProviderWorkspaceService:
                         return archive.recent(request.get('offset',0),request.get('limit',25))
                     raise ValueError('Select a read-only native EDS receipt request')
             except ValueError as error:raise ProviderWorkspaceError(str(error)) from None
-        resolved_tool_target = self._resolve_session_target_id(
-            data.get('session_id'), data.get('database_target_id')
+        _resolver = getattr(self, '_resolve_session_target_id', None)
+        resolved_tool_target = (
+            _resolver(data.get('session_id'), data.get('database_target_id'))
+            if callable(_resolver) else data.get('database_target_id')
         )
         context, endpoint, _root = self.endpoint_service.workspace(
             server, database_target_id=resolved_tool_target)

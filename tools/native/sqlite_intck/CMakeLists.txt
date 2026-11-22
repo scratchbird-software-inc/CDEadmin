@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.20)
+project(cdeadmin_sqlite_intck LANGUAGES C)
+
+set(SCRATCHROBIN_SQLITE_SOURCE "" CACHE PATH "SQLite 3.53.0 source directory")
+set(intck_source "${SCRATCHROBIN_SQLITE_SOURCE}/ext/intck")
+foreach(name sqlite3intck.c sqlite3intck.h)
+  if(NOT EXISTS "${intck_source}/${name}")
+    message(FATAL_ERROR "SCRATCHROBIN_SQLITE_SOURCE must contain ext/intck/${name}")
+  endif()
+endforeach()
+
+find_package(SQLite3 3.35.0 REQUIRED)
+add_library(cdeadmin_sqlite_intck SHARED "${intck_source}/sqlite3intck.c" api.c)
+target_include_directories(cdeadmin_sqlite_intck PRIVATE "${intck_source}")
+target_compile_definitions(cdeadmin_sqlite_intck PRIVATE SQLITE_CORE)
+target_link_libraries(cdeadmin_sqlite_intck PRIVATE SQLite::SQLite3)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(cdeadmin_sqlite_intck PRIVATE -Werror=implicit-function-declaration -Werror=int-conversion)
+endif()
+set_target_properties(cdeadmin_sqlite_intck PROPERTIES
+  C_STANDARD 99 WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(APPLE)
+  set_target_properties(cdeadmin_sqlite_intck PROPERTIES INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+  set_target_properties(cdeadmin_sqlite_intck PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
+
+set(expected_sqlite3intck_c 5c66e9b6e5e2a1a3e8c3348ae42dc6bee0e8b25dc328a6788912917f233b1b8a)
+set(expected_sqlite3intck_h 28364023e640f1212e194812d26e94b191c1037adf6623be15065322fc8b5887)
+foreach(name sqlite3intck.c sqlite3intck.h)
+  file(SHA256 "${intck_source}/${name}" source_sha)
+  string(REPLACE "." "_" key "${name}")
+  if(NOT source_sha STREQUAL expected_${key})
+    message(FATAL_ERROR "${name} differs from the qualified SQLite 3.53.0 intck source")
+  endif()
+  string(APPEND provenance "\"${name}\":\"${source_sha}\",")
+endforeach()
+
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sqlite-intck-build.json"
+  CONTENT "{\"sqlite_version\":\"${SQLite3_VERSION}\",\"adapter_abi\":1,${provenance}\"implementation\":\"SQLite public incremental integrity-check API\"}\n")
+add_custom_command(TARGET cdeadmin_sqlite_intck POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" "-DLIBRARY=$<TARGET_FILE:cdeadmin_sqlite_intck>"
+    "-DTEMPLATE=${CMAKE_CURRENT_BINARY_DIR}/sqlite-intck-build.json"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/../sqlite_recovery/provenance.cmake" VERBATIM)
+install(TARGETS cdeadmin_sqlite_intck LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+if(WIN32)
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_intck>.json" DESTINATION bin)
+else()
+  install(FILES "$<TARGET_FILE:cdeadmin_sqlite_intck>.json" DESTINATION lib)
+endif()
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sqlite-intck-build.json" DESTINATION share/cdeadmin)

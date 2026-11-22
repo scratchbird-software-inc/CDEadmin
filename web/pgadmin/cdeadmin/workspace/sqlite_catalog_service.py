@@ -156,8 +156,8 @@ def schema_plan(service, server, request, *, generate_renames=False):
     required={'database_target_id','baseline','renames'} if generate_renames else {'database_target_id','baseline','desired'}
     if (not isinstance(request, dict) or not required <= set(request) or
             set(request) - {'database_target_id', 'baseline', 'desired', 'deletions', 'rebuilds',
-                            'column_renames', 'renames', 'fts_rebindings'} or
-            generate_renames and set(request)-required-{'fts_rebindings'}):
+                            'column_renames', 'renames', 'fts_rebindings', 'attachment_policy'} or
+            generate_renames and set(request)-required-{'fts_rebindings', 'attachment_policy'}):
         raise ValueError('SQLite schema preview requires exact baseline and desired DDN')
     target = request['database_target_id']
     if not isinstance(target, str) or not target:
@@ -198,14 +198,21 @@ def schema_plan(service, server, request, *, generate_renames=False):
         refreshed=True, engine='sqlite', native_model=True)
     if generate_renames:
         from .sqlite_rename import generate,schema
-        if schema(baseline)!=schema(live):raise ValueError('Native SQLite schema changed; capture a new baseline')
-        desired,selected,_stages=generate(baseline,request['renames'],request.get('fts_rebindings',()))
+        attachment_policy=request.get('attachment_policy')
+        if attachment_policy is None and schema(baseline)!=schema(live):
+            raise ValueError('Native SQLite schema changed; capture a new baseline')
+        runtime_info={}
+        desired,selected,_stages=generate(baseline,request['renames'],request.get('fts_rebindings',()),
+            attachment_policy=attachment_policy,_rewrite_runtime=runtime_info)
         resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],
             'display_name':row['name'],'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
         result=build_export(resources,endpoint_id=str(context.endpoint_id),target_id=target,
             generation=captured['generation'],include_system=False,refreshed=True,engine='sqlite')
-        return {'snapshot':result['snapshot'],'renames':selected,'fts_rebindings':request.get('fts_rebindings',[]),
+        out={'snapshot':result['snapshot'],'renames':selected,'fts_rebindings':request.get('fts_rebindings',[]),
             'scope':'native schema-only generation; registered file has not changed'}
+        if 'attachment_report' in runtime_info:
+            out['attachment_report']=runtime_info['attachment_report']
+        return out
     connection = provider.client._connect({'route': endpoint['route']})
     try:
         before_info = os.stat(path)
@@ -215,7 +222,8 @@ def schema_plan(service, server, request, *, generate_renames=False):
                        deletions=request.get('deletions', ()),
                        rebuilds=request.get('rebuilds', ()),
                        column_renames=request.get('column_renames', ()),
-                       renames=request.get('renames', ()),fts_rebindings=request.get('fts_rebindings',()))
+                       renames=request.get('renames', ()),fts_rebindings=request.get('fts_rebindings',()),
+                       attachment_policy=request.get('attachment_policy'))
         after_info = os.stat(path)
         if [after_info.st_dev, after_info.st_ino] != [file_info.st_dev, file_info.st_ino]:
             raise ValueError('SQLite registered file changed during native grammar validation')

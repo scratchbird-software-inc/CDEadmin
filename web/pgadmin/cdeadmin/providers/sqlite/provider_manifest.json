@@ -1,25 +1,277 @@
 {
-  "identity": {"contract_version": "1.1.0", "provider_id": "org.cdeadmin.sqlite", "provider_version": "0.1.0", "profile_id": "sqlite-native", "profile_version": "3.53.0", "evidence_reference": "cde-rel-020:sqlite-provider-20260907"},
-  "package_type": "engine", "sdk_compatibility": {"minimum": "1.1.0", "maximum_exclusive": "2.0.0"},
-  "support_state": "experimental", "enabled": true, "fixture": false, "production_registration": true,
-  "contracts": ["EndpointProvider", "ResourceProvider", "LanguageProvider", "SessionProvider", "ExecutionProvider", "ResultProvider", "ResultRenderer", "DiagnosticProvider", "OperationProvider", "ToolProvider", "SecurityProvider", "SemanticLayerProvider", "AnalyticalQueryProvider"],
-  "permissions": [{"permission_id": "embedded_runtime", "granted": true, "scope": ["endpoint"]}, {"permission_id": "filesystem", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "data_read", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "data_write", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "administer", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "execute", "granted": true, "scope": ["endpoint"]}, {"permission_id": "backup_admin", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "restore_admin", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "maintenance_admin", "granted": true, "scope": ["endpoint", "resource"]}],
-  "required_permissions": ["embedded_runtime", "filesystem"], "composition": {"experience_families": ["sqlite"], "target_adapter_ids": ["embedded-sqlite-client"]}, "extension_schema": null,
-  "registration": {"display_name": "SQLite", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["table", "view"]}, "route_kind": "embedded_file", "requires_secret": false, "default_port": null, "default": false, "database_targeting": {"mode": "required", "multiple": true, "server_verification": false, "create_and_activate": true}, "target_adapter_version": "python-dbapi-3.53.0", "connection_field_sets": ["sqlite-embedded-v1"], "connection_capabilities": {"contract_version": "1.0", "categories": {
-    "authentication": {"state": "not_applicable", "features": [], "evidence": [], "reason": "SQLite has no built-in connection-authentication exchange."},
-    "tls": {"state": "not_applicable", "features": [], "evidence": [], "reason": "An embedded SQLite connection has no network transport to protect with TLS."},
-    "client_certificates": {"state": "not_applicable", "features": [], "evidence": [], "reason": "An embedded SQLite connection has no client-certificate exchange."},
-    "connection_profiles": {"state": "complete", "features": ["persistent-provider-profile", "editable-connection-options", "secret-free-export"], "evidence": ["unit:test_cdeadmin_endpoint_persistence", "unit:test_cdeadmin_endpoint_registration"]},
-    "multiple_endpoints": {"state": "not_applicable", "features": [], "evidence": [], "reason": "A SQLite endpoint is one embedded database; ATTACH manages other files inside a session rather than as failover routes."},
-    "topology_discovery": {"state": "not_applicable", "features": [], "evidence": [], "reason": "SQLite does not expose a distributed connection topology."},
-    "routing_failover": {"state": "not_applicable", "features": [], "evidence": [], "reason": "SQLite embedded connections have no remote routing or failover protocol."},
-    "session_defaults": {"state": "complete", "features": ["safe-file-uri-options", "type-detection", "implicit-transaction-mode", "statement-cache"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:sqlite-3.53.0:20260907"]},
-    "timeouts": {"state": "complete", "features": ["busy-timeout"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:sqlite-3.53.0:20260907"]},
-    "compression": {"state": "not_applicable", "features": [], "evidence": [], "reason": "SQLite embedded connections do not negotiate wire compression."},
-    "consistency_isolation": {"state": "complete", "features": ["legacy-transaction-control", "deferred", "immediate", "exclusive", "autocommit"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:sqlite-3.53.0:20260907"]},
-    "pooling": {"state": "not_applicable", "features": [], "evidence": [], "reason": "Python's SQLite DB-API exposes connection handles, not a connection-pool protocol."},
-    "reconnection": {"state": "not_applicable", "features": [], "evidence": [], "reason": "A closed embedded handle is reopened explicitly; there is no network reconnection policy."},
-    "state_visibility": {"state": "complete", "features": ["isolation-level-observation", "transaction-observation", "provider-owned-finality"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:sqlite-3.53.0:20260907"]}
-  }}},
-  "provenance": {"purpose": "CDE-REL-020 SQLite provider: 3.53.0 reference profile, admitted from the declared floor (owner direction 2026-10-29)", "protocol": "embedded_sqlite", "client_state": "cpython_dbapi_dynamically_linked_to_private_sqlite_3.53.0_with_fts5_and_rtree", "client_compatibility": "Python SQLite 3.45.1 cross-version suite retained", "runtime_state": "exact_provider_live_verified", "runtime_launch_requirement": "Python process must resolve a libsqlite3 at or above the declared floor (ui_descriptors/sqlite/capabilities.json version_range.minimum) with FTS5 and RTREE; older runtimes are refused, version-specific features are gated per runtime, and 3.53.0 is the reference profile", "activation_gate": "passed_exact_dialect_and_primary_relational_object_evidence_pending_screenshot_and_manual_ui_review", "live_evidence_reference": "cde-rel-live:sqlite-3.53.0:20260910", "object_experience_gate": "passed", "provider_live_evidence_sha256": "3b03753458ebb2c19222d7a74b06fd1f51492ae9af7c9d28062cef4be6e8d604", "object_evidence_sha256": "04a7865ffcd7e130c8465db76d23f3633206ef6e66217b909cdf7cece82f4e14", "strict_object_evidence_sha256": "0fd5ca7b88dfa2b7945cfaee88edb07dd7a57453ea4dbb259b24f32dcd68d90a"}
+  "identity": {
+    "contract_version": "1.1.0",
+    "provider_id": "org.cdeadmin.sqlite",
+    "provider_version": "0.1.0",
+    "profile_id": "sqlite-native",
+    "profile_version": "3.53.0",
+    "evidence_reference": "cde-rel-020:sqlite-provider-20260907"
+  },
+  "package_type": "engine",
+  "sdk_compatibility": {
+    "minimum": "1.1.0",
+    "maximum_exclusive": "2.0.0"
+  },
+  "support_state": "experimental",
+  "enabled": true,
+  "fixture": false,
+  "production_registration": true,
+  "contracts": [
+    "EndpointProvider",
+    "ResourceProvider",
+    "LanguageProvider",
+    "SessionProvider",
+    "ExecutionProvider",
+    "ResultProvider",
+    "ResultRenderer",
+    "DiagnosticProvider",
+    "OperationProvider",
+    "ToolProvider",
+    "SecurityProvider",
+    "SemanticLayerProvider",
+    "AnalyticalQueryProvider"
+  ],
+  "permissions": [
+    {
+      "permission_id": "embedded_runtime",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "filesystem",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_read",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_write",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "administer",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "execute",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "backup_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "restore_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "maintenance_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    }
+  ],
+  "required_permissions": [
+    "embedded_runtime",
+    "filesystem"
+  ],
+  "composition": {
+    "experience_families": [
+      "sqlite"
+    ],
+    "target_adapter_ids": [
+      "embedded-sqlite-client"
+    ]
+  },
+  "extension_schema": null,
+  "registration": {
+    "display_name": "SQLite",
+    "workflow": "provider_endpoint",
+    "browse_data": {
+      "resource_kinds": [
+        "table",
+        "view"
+      ]
+    },
+    "route_kind": "embedded_file",
+    "requires_secret": false,
+    "default_port": null,
+    "default": false,
+    "database_targeting": {
+      "mode": "required",
+      "multiple": true,
+      "server_verification": false,
+      "create_and_activate": true
+    },
+    "target_adapter_version": "python-dbapi-3.53.0",
+    "connection_field_sets": [
+      "sqlite-embedded-v1"
+    ],
+    "connection_capabilities": {
+      "contract_version": "1.0",
+      "categories": {
+        "authentication": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "SQLite has no built-in connection-authentication exchange."
+        },
+        "tls": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "An embedded SQLite connection has no network transport to protect with TLS."
+        },
+        "client_certificates": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "An embedded SQLite connection has no client-certificate exchange."
+        },
+        "connection_profiles": {
+          "state": "complete",
+          "features": [
+            "persistent-provider-profile",
+            "editable-connection-options",
+            "secret-free-export"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_endpoint_persistence",
+            "unit:test_cdeadmin_endpoint_registration"
+          ]
+        },
+        "multiple_endpoints": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "A SQLite endpoint is one embedded database; ATTACH manages other files inside a session rather than as failover routes."
+        },
+        "topology_discovery": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "SQLite does not expose a distributed connection topology."
+        },
+        "routing_failover": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "SQLite embedded connections have no remote routing or failover protocol."
+        },
+        "session_defaults": {
+          "state": "complete",
+          "features": [
+            "safe-file-uri-options",
+            "type-detection",
+            "implicit-transaction-mode",
+            "statement-cache"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:sqlite-3.53.0:20260907"
+          ]
+        },
+        "timeouts": {
+          "state": "complete",
+          "features": [
+            "busy-timeout"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:sqlite-3.53.0:20260907"
+          ]
+        },
+        "compression": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "SQLite embedded connections do not negotiate wire compression."
+        },
+        "consistency_isolation": {
+          "state": "complete",
+          "features": [
+            "legacy-transaction-control",
+            "deferred",
+            "immediate",
+            "exclusive",
+            "autocommit"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:sqlite-3.53.0:20260907"
+          ]
+        },
+        "pooling": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "Python's SQLite DB-API exposes connection handles, not a connection-pool protocol."
+        },
+        "reconnection": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "A closed embedded handle is reopened explicitly; there is no network reconnection policy."
+        },
+        "state_visibility": {
+          "state": "complete",
+          "features": [
+            "isolation-level-observation",
+            "transaction-observation",
+            "provider-owned-finality"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:sqlite-3.53.0:20260907"
+          ]
+        }
+      }
+    }
+  },
+  "provenance": {
+    "purpose": "CDE-REL-020 SQLite provider: 3.53.0 reference profile, admitted from the declared floor (owner direction 2026-10-29)",
+    "protocol": "embedded_sqlite",
+    "client_state": "cpython_dbapi_dynamically_linked_to_private_sqlite_3.53.0_with_fts5_and_rtree",
+    "client_compatibility": "Python SQLite 3.45.1 cross-version suite retained",
+    "runtime_state": "exact_provider_live_verified",
+    "runtime_launch_requirement": "Python process must resolve a libsqlite3 at or above the declared floor (ui_descriptors/sqlite/capabilities.json version_range.minimum) with FTS5 and RTREE; older runtimes are refused, version-specific features are gated per runtime, and 3.53.0 is the reference profile",
+    "activation_gate": "passed_exact_dialect_and_primary_relational_object_evidence_pending_screenshot_and_manual_ui_review",
+    "live_evidence_reference": "cde-rel-live:sqlite-3.53.0:20260910",
+    "object_experience_gate": "passed",
+    "provider_live_evidence_sha256": "bda0230a73823c40a1993574eb1b8c1416a752cf1d1fded64e978fb231fe08bc",
+    "object_evidence_sha256": "a342cb2dab36a0393b0332cbb9f16152f35bfed8a54009da4ed56a0a25ad51fe",
+    "strict_object_evidence_sha256": "0fd5ca7b88dfa2b7945cfaee88edb07dd7a57453ea4dbb259b24f32dcd68d90a"
+  }
 }

@@ -737,6 +737,8 @@ def _relational_editor_evidence(provider, request, engine):
                     'drop_columns': [], 'rename_columns': [],
                 }, probe,
             )
+            resources = provider.list_resources(request)
+            probe = _target(resources, 'table', 'cde_editor_probe') or probe
             renamed = False
             if provider.client.supports_admin_operation('table', 'rename'):
                 renamed = attempt(

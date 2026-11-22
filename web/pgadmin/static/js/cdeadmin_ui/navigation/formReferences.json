@@ -7986,6 +7986,30 @@
       "reference": "SR-F-001422",
       "title": "SQLite native test-data recipe and SQL generation"
     },
+    "sqlite-rbu": {
+      "reference": "SR-F-030560",
+      "title": "SQLite resumable bulk update and resumable vacuum (RBU)"
+    },
+    "sqlite-expert": {
+      "reference": "SR-F-030561",
+      "title": "SQLite expert index advisor preview-only workspace"
+    },
+    "sqlite-intck": {
+      "reference": "SR-F-030562",
+      "title": "SQLite incremental integrity-check lifecycle workspace"
+    },
+    "sqlite-blob-stream": {
+      "reference": "SR-F-030563",
+      "title": "SQLite incremental large-BLOB transfer workspace"
+    },
+    "sqlite-shell": {
+      "reference": "SR-F-030564",
+      "title": "SQLite native shell dot-command inspection and CLI provenance"
+    },
+    "sqlite-sql-dump": {
+      "reference": "SR-F-030565",
+      "title": "SQLite database-wide native SQL script dump and import"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

@@ -717,7 +717,8 @@ class DataStudioService:
                             request['resource_id'],request['columns'])
                     else:
                         from ..workspace.sqlite_retained_alter import generate
-                        desired=generate(provider.client,handle,baseline,context.endpoint_id,session.session_id,request['alterations'])[0]
+                        desired=generate(provider.client,handle,baseline,context.endpoint_id,session.session_id,
+                            request['alterations'],fts_rebindings=request.get('fts_rebindings',()))[0]
                     from ..workspace.firebird_catalog_export import build_export
                     resources=[{'resource_id':row['resource_id'],'resource_kind':row['kind'],'display_name':row['name'],
                         'display_path':row['path'],'native':row['native']} for row in desired['rows'].values()]
@@ -729,7 +730,8 @@ class DataStudioService:
                     desired=read_catalog(request['desired'],engine='sqlite')
                     live=native.observe(provider.client,handle,context.endpoint_id,session.session_id)
                     preview=native.plan(provider.client,handle,baseline,desired,live,context.endpoint_id,session.session_id,
-                        deletions=request.get('deletions',()),alterations=request.get('alterations',()))
+                        deletions=request.get('deletions',()),alterations=request.get('alterations',()),
+                        fts_rebindings=request.get('fts_rebindings',()),rebuilds=request.get('rebuilds',()))
                     if operation=='preview':return preview
                     if request['execution_sha256']!=preview['execution_sha256']:
                         raise ValueError('Original native preview changed; inspect it before preparing another review')

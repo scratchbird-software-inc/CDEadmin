@@ -140,6 +140,15 @@ def action(client, connection, request, manifest):
         connection.enable_load_extension(False)
         connection.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, True)
         connection.load_extension(str(staged), **({'entrypoint': entry['entrypoint']} if 'entrypoint' in entry else {}))
+        loaded_list = getattr(connection, '_cdeadmin_loaded_extensions', None)
+        if loaded_list is None:
+            loaded_list = connection._cdeadmin_loaded_extensions = []
+        loaded_list.append({
+            'id': entry['id'],
+            'staged': str(staged),
+            'entrypoint': entry.get('entrypoint'),
+            'sha256': entry['sha256'],
+        })
         review['state'] = 'loaded'
     except BaseException as error:
         review.update(state='unknown_outcome', native_error_type=type(error).__name__,

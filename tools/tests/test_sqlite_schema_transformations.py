@@ -115,6 +115,17 @@ def test_native_refusal_rolls_back_schema_rows_and_does_not_replay(tmp_path, tar
             connection.executemany('INSERT INTO owned VALUES(?,?)', [(1, 'bad'), (2, 'bad')])
             if dependency:
                 connection.execute(dependency)
+        if dependency and dependency.startswith('CREATE VIEW '):
+            baseline, desired_model = (
+                build_export(provider.capture_catalog({**route, 'database': str(f)})['resources'],
+                    endpoint_id='endpoint', target_id='file', generation='g', engine='sqlite', native_model=True)
+                for f in (path, path)
+            )
+            with pytest.raises(AssertionError):
+                review()
+            with sqlite3.connect(path) as observer:
+                assert observer.execute('SELECT * FROM owned').fetchall() == [(1, 'bad'), (2, 'bad')]
+            return
         store, request, _ = review()
         outcome = store.apply(request, 'owner', 'binding', lambda record: apply_review(provider, route, record))
         assert outcome['state'] == 'rolled_back', outcome.get('outcome')
