@@ -1,0 +1,36 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "compile-option"
+  ],
+  "form_reference": "SR-F-030577",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Compile option",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "option_value",
+      "label": "Assigned value",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "value"
+      ]
+    }
+  ]
+}

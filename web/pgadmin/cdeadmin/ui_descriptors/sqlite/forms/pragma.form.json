@@ -1,0 +1,66 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "pragma"
+  ],
+  "form_reference": "SR-F-030571",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "PRAGMA name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "schema_name",
+      "label": "Schema namespace",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "schema"
+      ]
+    },
+    {
+      "field_id": "value",
+      "label": "Observed value",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "value"
+      ]
+    },
+    {
+      "field_id": "classification",
+      "label": "Classification",
+      "tab": "Engine",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "classification"
+      ]
+    },
+    {
+      "field_id": "persistence_scope",
+      "label": "Persistence scope",
+      "tab": "Engine",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "scope"
+      ]
+    }
+  ]
+}

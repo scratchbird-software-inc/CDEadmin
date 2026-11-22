@@ -1,0 +1,56 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "extension"
+  ],
+  "form_reference": "SR-F-030572",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Module or extension name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "category",
+      "label": "Module category",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "category"
+      ]
+    },
+    {
+      "field_id": "creatable",
+      "label": "Supports CREATE VIRTUAL TABLE",
+      "tab": "Engine",
+      "control": "boolean",
+      "initial_value_path": [
+        "native",
+        "creatable"
+      ]
+    },
+    {
+      "field_id": "eponymous",
+      "label": "Table-valued function capable",
+      "tab": "Engine",
+      "control": "boolean",
+      "initial_value_path": [
+        "native",
+        "eponymous"
+      ]
+    }
+  ]
+}

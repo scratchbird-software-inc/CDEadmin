@@ -1,0 +1,36 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "collation"
+  ],
+  "form_reference": "SR-F-030576",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Collation sequence name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "sequence_id",
+      "label": "Catalog ordinal",
+      "tab": "Definition",
+      "control": "number",
+      "initial_value_path": [
+        "native",
+        "seq"
+      ]
+    }
+  ]
+}

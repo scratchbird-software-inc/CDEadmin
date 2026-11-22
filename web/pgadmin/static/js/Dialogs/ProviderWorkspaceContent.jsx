@@ -114,6 +114,7 @@ const DATABASE_SCOPED_TOP_LEVEL_ACTIONS = new Set([
   'mariadb_session_flagsets',
   'mariadb_session_variables',
   'mariadb_editor_context',
+  'sqlite_connection_settings', 'sqlite_connection_limits', 'sqlite_connection_pragmas', 'sqlite_connection_config', 'sqlite_connection_maintenance', 'sqlite_editor_operation',
 ]);
 
 const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
@@ -127,7 +128,7 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'mariadb_design_read', 'mariadb_design_save', 'mariadb_relational_review',
   'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt',
   'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_test_data', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt',
-  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_test_data', 'sqlite_fts_configuration_design', 'sqlite_schema_rename_design', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save', ...SQLITE_ADMIN_REQUEST_ACTIONS,
+  'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts', 'sqlite_test_data', 'sqlite_recipe_read', 'sqlite_recipe_save', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_object_design', 'sqlite_schema_rename_design', 'sqlite_relational_review', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save', ...SQLITE_ADMIN_REQUEST_ACTIONS,
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save',
   'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts',

@@ -19,8 +19,10 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   const [rebuilds, setRebuilds] = useState([]);
   const [columnRenames, setColumnRenames] = useState([]);
   const [nativeRenames,setNativeRenames]=useState([]),[renameKind,setRenameKind]=useState('table');
+  const [renameNamespace,setRenameNamespace]=useState('main');
   const [ftsRebindings,setFtsRebindings]=useState([]);
   const [ftsConfigId, setFtsConfigId] = useState(''), [ftsSettings, setFtsSettings] = useState('{}');
+  const [objectDesignId, setObjectDesignId] = useState(''), [viewQueryDraft, setViewQueryDraft] = useState('SELECT 1');
   const [renameTable,setRenameTable]=useState(''),[renameColumn,setRenameColumn]=useState(''),[renameTo,setRenameTo]=useState('');
   const [busy, setBusy] = useState(false), [includeSystem, setIncludeSystem] = useState(false);
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
@@ -83,7 +85,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     try {
       const value = await post({action: 'sqlite_schema_plan', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
-        deletions, rebuilds, column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
+        deletions, rebuilds, column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {}),...(renameNamespace !== 'main' ? {attachment_policy:{target_namespace:renameNamespace}} : {})}});
       if(token === serial.current) setSchemaPlan(value);
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite schema preview failed');
@@ -95,7 +97,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       const value = await post({action: 'sqlite_schema_review', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
         execution_sha256: schemaPlan.execution_sha256, deletions, rebuilds,
-        column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
+        column_renames: columnRenames,...(nativeRenames.length ? {renames:nativeRenames} : {}),...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {}),...(renameNamespace !== 'main' ? {attachment_policy:{target_namespace:renameNamespace}} : {})}});
       if(token === serial.current) {setSchemaReceipt(value); setConfirmApply(false);}
     } catch(failure) {
       if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'SQLite review failed');
@@ -120,9 +122,18 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     const token=++serial.current;setBusy(true);setError('');
     try {
       const value=await post({action:'sqlite_schema_rename_design',request:{database_target_id:databaseTargetId,
-        baseline:baselineSource,renames:[{kind:renameKind,table:renameTable,to:renameTo,...(renameKind==='column' ? {from:renameColumn} : {})}],...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {})}});
+        baseline:baselineSource,renames:[{kind:renameKind,table:renameTable,to:renameTo,...(renameKind==='column' ? {from:renameColumn} : {})}],...(ftsRebindings.length ? {fts_rebindings:ftsRebindings} : {}),...(renameNamespace !== 'main' ? {attachment_policy:{target_namespace:renameNamespace}} : {})}});
       if(token===serial.current) {setSource(JSON.stringify(value.snapshot,null,2));setNativeRenames(value.renames);setFtsRebindings(value.fts_rebindings || []);setDeletions([]);setRebuilds([]);setColumnRenames([]);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}
     } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'Native SQLite rename design generation failed');}
+    finally {if(token===serial.current)setBusy(false);}
+  };
+  const generateViewObjectDesign = async () => {
+    const token=++serial.current;setBusy(true);setError('');
+    try {
+      const value=await post({action:'sqlite_schema_object_design',request:{database_target_id:databaseTargetId,
+        baseline:baselineSource,resource_id:objectDesignId,operation:'replace',fields:{query:viewQueryDraft}}});
+      if(token===serial.current) {setSource(JSON.stringify(value.snapshot,null,2));setRebuilds(value.rebuilds || []);setNativeRenames([]);setFtsRebindings([]);setDeletions([]);setColumnRenames([]);setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}
+    } catch(failure) {if(token===serial.current)setError(failure.response?.data?.errormsg || failure.message || 'SQLite object design generation failed');}
     finally {if(token===serial.current)setBusy(false);}
   };
   const applySchema = async () => {
@@ -229,6 +240,20 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       tables={(result.objects || []).filter(item=>item.kind==='table' && item.path?.[0]==='main')}
       disabled={busy || includeSystem || !baselineSource} onGenerate={generateColumns} />}
     {result && <Box component="details" sx={{my: 1}}>
+      <summary>Structured view replacement prototype</summary>
+      <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', my: 1}}>
+        <TextField select size="small" label="Observed main view" value={objectDesignId} disabled={busy || includeSystem} sx={{minWidth: 200}}
+          onChange={event => setObjectDesignId(event.target.value)}>
+          <MenuItem value="">Select a view</MenuItem>
+          {(result.objects || []).filter(item => item.kind === 'view' && item.path?.[0] === 'main').map(item =>
+            <MenuItem key={item.resource_id} value={item.resource_id}>{item.name}</MenuItem>)}
+        </TextField>
+        <TextField size="small" label="Replacement SELECT query" value={viewQueryDraft} disabled={busy || includeSystem} sx={{minWidth: 320, flex: 1}}
+          onChange={event => setViewQueryDraft(event.target.value)} />
+        <Button disabled={busy || includeSystem || !objectDesignId || !viewQueryDraft.trim()} onClick={generateViewObjectDesign}>Generate view replacement design</Button>
+      </Box>
+    </Box>}
+    {result && <Box component="details" sx={{my: 1}}>
       <summary>Native FTS configuration</summary>
       <Alert severity="info">Generate native settings without changing this file. Preview, review and confirm the resulting DDN change before applying. Existing settings remain unless explicitly reset to another native value. Index content is preserved.</Alert>
       <TextField select size="small" label="FTS configuration table" value={ftsConfigId} disabled={busy || includeSystem}
@@ -260,9 +285,10 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     {result && <Box component="details" sx={{my:1}}><summary>Native table and column renames</summary>
       <Alert severity="info">Generate the desired design using native SQLite name and reference rewriting. This leaves the registered file unchanged. Preview and review the generated design before applying it.</Alert>
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
+        <TextField size="small" label="Target namespace" value={renameNamespace} disabled={busy} sx={{width:140}} onChange={event => {setRenameNamespace(event.target.value || 'main');setRenameTable('');setRenameColumn('');}} />
         <TextField select size="small" label="Native rename kind" value={renameKind} disabled={busy} onChange={event => {setRenameKind(event.target.value);setRenameTable('');setRenameColumn('');}}><MenuItem value="table">Table</MenuItem><MenuItem value="column">Column</MenuItem></TextField>
-        <TextField select size="small" label="Native rename table" value={renameTable} disabled={busy} sx={{minWidth:180}} onChange={event => {setRenameTable(event.target.value);setRenameColumn('');}}>{(result.objects || []).filter(item => (renameKind==='column' ? item.kind==='table' : ['table','fts-table','virtual-table'].includes(item.kind)) && item.path?.[0]==='main').map(item => <MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}</TextField>
-        {renameKind==='column' && <TextField select size="small" label="Native rename column" value={renameColumn} disabled={busy} sx={{minWidth:180}} onChange={event => setRenameColumn(event.target.value)}>{(result.objects || []).filter(item => item.kind==='column' && item.path?.[0]==='main' && item.path?.[1]===renameTable).map(item => <MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}</TextField>}
+        <TextField select size="small" label="Native rename table" value={renameTable} disabled={busy} sx={{minWidth:180}} onChange={event => {setRenameTable(event.target.value);setRenameColumn('');}}>{(result.objects || []).filter(item => (renameKind==='column' ? item.kind==='table' : ['table','fts-table','virtual-table'].includes(item.kind)) && item.path?.[0]===renameNamespace).map(item => <MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}</TextField>
+        {renameKind==='column' && <TextField select size="small" label="Native rename column" value={renameColumn} disabled={busy} sx={{minWidth:180}} onChange={event => setRenameColumn(event.target.value)}>{(result.objects || []).filter(item => item.kind==='column' && item.path?.[0]===renameNamespace && item.path?.[1]===renameTable).map(item => <MenuItem key={item.resource_id} value={item.name}>{item.name}</MenuItem>)}</TextField>}
         <TextField size="small" label="New native name" value={renameTo} disabled={busy} onChange={event => setRenameTo(event.target.value)} />
         <Button disabled={busy || includeSystem || !renameTable || !renameTo || renameKind==='column' && !renameColumn} onClick={generateRename}>Generate native rename design</Button>
         {nativeRenames.length>0 && <Button disabled={busy} onClick={() => {setNativeRenames([]);setFtsRebindings([]);setSource('');setSchemaPlan(null);setSchemaReceipt(null);setConfirmApply(false);}}>Discard native rename design</Button>}

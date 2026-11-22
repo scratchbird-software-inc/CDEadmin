@@ -107,6 +107,39 @@
       }
     },
     {
+      "command_id": "endpoint.sqlite.session_tuning",
+      "scope": "endpoint",
+      "label": "Session limits, PRAGMAs & db_config...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.edit",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "sqlite-session-tuning"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can configure connection limits and PRAGMAs."
+      }
+    },
+    {
+      "command_id": "database.sqlite.session_tuning",
+      "scope": "database",
+      "label": "Session limits, PRAGMAs & db_config...",
+      "handler": "open_workspace",
+      "slot": "pre_lifecycle",
+      "icon": "action.edit",
+      "group": "database",
+      "mutation": "admin",
+      "arguments": {
+        "tab": "sqlite-session-tuning"
+      }
+    },
+    {
       "command_id": "database.sqlite.recovery",
       "scope": "database",
       "label": "Recover SQLite file...",

@@ -75,6 +75,10 @@ import {
   SqlPostgresSessionDialog,
 } from './SqlPostgresDiagnostics';
 import {
+  SqlSqliteExplainDialog,
+  SqlSqliteSessionDialog,
+} from './SqlSqliteDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -95,6 +99,7 @@ const EMPTY_ARRAY = Object.freeze([]);
 const MYSQL_SURFACE_KEYS = new Set(['mysql', 'mysql-native', 'mysql-sql']);
 const MARIADB_SURFACE_KEYS = new Set(['mariadb', 'mariadb-native', 'mariadb-sql']);
 const POSTGRES_SURFACE_KEYS = new Set(['postgresql', 'postgresql-native', 'postgresql-sql']);
+const SQLITE_SURFACE_KEYS = new Set(['sqlite', 'sqlite-native', 'sqlite-sql']);
 
 export const SQL_SURFACE_VIEWS = Object.freeze({
   SQL: 'sql',
@@ -402,6 +407,8 @@ export default function SqlEditorSurface({
   const [mariadbAnalyzeConsentOpen, setMariadbAnalyzeConsentOpen] = useState(false);
   const [postgresSessionOpen, setPostgresSessionOpen] = useState(false);
   const [postgresAnalyzeConsentOpen, setPostgresAnalyzeConsentOpen] = useState(false);
+  const [sqliteSessionOpen, setSqliteSessionOpen] = useState(false);
+  const [sqliteExplainOpen, setSqliteExplainOpen] = useState(false);
   const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
   const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
   useEffect(() => {
@@ -467,6 +474,7 @@ export default function SqlEditorSurface({
   const isMySQL = MYSQL_SURFACE_KEYS.has(languageProfile) || MYSQL_SURFACE_KEYS.has(engineId);
   const isMariaDB = MARIADB_SURFACE_KEYS.has(languageProfile) || MARIADB_SURFACE_KEYS.has(engineId);
   const isPostgres = POSTGRES_SURFACE_KEYS.has(languageProfile) || POSTGRES_SURFACE_KEYS.has(engineId);
+  const isSQLite = SQLITE_SURFACE_KEYS.has(languageProfile) || SQLITE_SURFACE_KEYS.has(engineId);
   const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
     [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
@@ -3971,6 +3979,21 @@ export default function SqlEditorSurface({
               callback: () => setPostgresSessionOpen(true),
             },
           ] : []),
+          ...(isSQLite ? [
+            {
+              id: `${pfx}.m.sq_explain`,
+              label: gettext('Run SQLite EXPLAIN QUERY PLAN / VDBE Bytecode…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setSqliteExplainOpen(true),
+            },
+            {
+              id: `${pfx}.m.sq_session_diag`,
+              label: gettext('SQLite Session Tuning, ATTACH Namespaces, Captures & Grammar…'),
+              index: 37,
+              callback: () => setSqliteSessionOpen(true),
+            },
+          ] : []),
           {
             id: `${pfx}.m.hist_sensitive`,
             label: gettext('Suppress Sensitive SQL from Persistent History'),
@@ -5618,6 +5641,35 @@ export default function SqlEditorSurface({
             onConfirmAnalyze={(pgExplainOptions) => {
               setPostgresAnalyzeConsentOpen(false);
               runSql('statement', false, {analyzeMode: true, pgExplainOptions});
+            }}
+          />
+        </>
+      )}
+      {isSQLite && (
+        <>
+          <SqlSqliteSessionDialog
+            open={sqliteSessionOpen}
+            transaction={hostData?.transaction || null}
+            editorSource={sqlText}
+            sessionId={hostData?.session_id || null}
+            databaseTargetId={databaseTargetId}
+            ensureSession={ensureSurfaceSession}
+            callHost={callHost}
+            post={post}
+            onInsertSql={(snippet) => {
+              setSqlText((prev) => (prev ? `${prev}\n${snippet}` : snippet));
+              setSqliteSessionOpen(false);
+            }}
+            onClose={() => setSqliteSessionOpen(false)}
+          />
+          <SqlSqliteExplainDialog
+            open={sqliteExplainOpen}
+            editorSource={sqlText}
+            onClose={() => setSqliteExplainOpen(false)}
+            onRunExplain={(explainSql) => {
+              setSqliteExplainOpen(false);
+              setSqlText(explainSql);
+              runSql('statement', false);
             }}
           />
         </>

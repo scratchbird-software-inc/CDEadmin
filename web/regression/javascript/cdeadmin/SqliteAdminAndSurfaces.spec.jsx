@@ -13,8 +13,16 @@ import {
   SQLITE_ADMIN_TABS,
   renderSqliteAdminWorkspace,
 } from 'sources/cdeadmin_ui/modules/sqlite_admin';
+import {
+  SqlSqliteExplainDialog,
+  SqlSqliteSessionDialog,
+} from 'sources/cdeadmin_ui/surfaces/SqlSqliteDiagnostics';
+import {
+  DataSqliteCellInspectorModal,
+  DataSqliteRowSqlDialog,
+} from 'sources/cdeadmin_ui/surfaces/DataSqliteTools';
 
-describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15)', () => {
+describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15 & Full GUI Parity)', () => {
   it('SQ-AUD-09 (SR-F-030560): renders RBU workspace, opens vacuum/update, steps, pauses and resumes', async () => {
     expect(SQLITE_ADMIN_TABS).toEqual([
       'sqlite-rbu',
@@ -23,6 +31,7 @@ describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15
       'sqlite-blob-stream',
       'sqlite-shell',
       'sqlite-sql-dump',
+      'sqlite-session-tuning',
     ]);
 
     const api = {
@@ -297,5 +306,147 @@ describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15
     fireEvent.click(screen.getByLabelText('Confirm atomic SQLite script execution'));
     fireEvent.click(screen.getByText('Apply Reviewed SQL Script'));
     await waitFor(() => expect(screen.getByText(/2 statements verified/)).toBeInTheDocument());
+  });
+
+  it('SR-F-030566: exercises SqliteSessionTuningWorkspace across settings, limits, PRAGMAs, db_config, maintenance and descriptor tasks', async () => {
+    const api = {
+      post: jest.fn(async (_url, payload) => {
+        if (payload.action === 'open_session') {
+          return {data: {success: 1, data: {session_id: 'sq-sess-99'}}};
+        }
+        if (payload.action === 'sqlite_editor_operation') {
+          if (payload.request?.operation_id === 'describe') {
+            return {data: {success: 1, data: {operations: new Array(103).fill({})}}};
+          }
+          return {data: {success: 1, data: {state: 'ok', extensions: []}}};
+        }
+        if (payload.action === 'sqlite_connection_settings') {
+          return {data: {success: 1, data: {effective_code: payload.request?.operation === 'inspect' ? 2 : 1}}};
+        }
+        if (payload.action === 'sqlite_connection_limits') {
+          return {data: {success: 1, data: {effective_value: payload.request?.operation === 'inspect' ? 1000000 : 500000}}};
+        }
+        if (payload.action === 'sqlite_connection_pragmas') {
+          return {data: {success: 1, data: {effective_value: true}}};
+        }
+        if (payload.action === 'sqlite_connection_config') {
+          return {data: {success: 1, data: {native_constant: 'SQLITE_DBCONFIG_DEFENSIVE', effective_value: true}}};
+        }
+        if (payload.action === 'sqlite_connection_maintenance') {
+          return {data: {success: 1, data: {plan_id: 'maint-plan-1', state: 'ready'}}};
+        }
+        return {data: {success: 1, data: {}}};
+      }),
+    };
+
+    const Wrapped = withTheme(() =>
+      renderSqliteAdminWorkspace({
+        tab: 'sqlite-session-tuning',
+        endpointUrl: '/browser/server/cde_workspace/1/2',
+        databaseTargetId: 'db-target-1',
+        api,
+      })
+    );
+    render(<Wrapped />);
+    expect(screen.getByText('SR-F-030566')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('103')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Inspect Synchronous'));
+    await waitFor(() => expect(screen.getByText('Effective code: 2')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('Confirm connection-local synchronous change'));
+    fireEvent.click(screen.getByText('Apply Synchronous'));
+    await waitFor(() => expect(screen.getByText('Effective code: 1')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Inspect Limit'));
+    await waitFor(() => expect(screen.getByText('sql_length: 1000000')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Inspect PRAGMA'));
+    await waitFor(() => expect(screen.getByText('foreign_keys: true')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Inspect db_config'));
+    await waitFor(() => expect(screen.getByText('SQLITE_DBCONFIG_DEFENSIVE: true')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Prepare Retained Maintenance'));
+    await waitFor(() => expect(screen.getByText(/maint-plan-1/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Execute Session Descriptor Task'));
+    await waitFor(() => expect(screen.getByText(/"state": "ok"/)).toBeInTheDocument());
+  });
+
+  it('SR-F-030567..SR-F-030570: renders SQLite SQL & Data surface dialogs (Session, Explain, Row SQL, Cell Inspector)', async () => {
+    const callHost = jest.fn(async (subAction) => {
+      if (subAction === 'validate_source') return {grammar_valid: true};
+      return {resources: []};
+    });
+    const post = jest.fn(async (payload) => {
+      if (payload.action === 'sqlite_connection_pragmas') return {effective_value: true};
+      if (payload.action === 'sqlite_ops_blob_inspect') {
+        return {typeof: 'blob', byte_length: 64, streamable_blob: true};
+      }
+      return {};
+    });
+    const onRunExplain = jest.fn();
+
+    const SessionDlg = withTheme(() => (
+      <SqlSqliteSessionDialog
+        open
+        editorSource="SELECT * FROM items"
+        sessionId="sq-live-1"
+        databaseTargetId="db-target-1"
+        callHost={callHost}
+        post={post}
+        onClose={() => {}}
+      />
+    ));
+    const {unmount: u1} = render(<SessionDlg />);
+    expect(screen.getByText('SR-F-030567')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Validate SQLite Syntax Without Execution'));
+    await waitFor(() => expect(screen.getByText(/"grammar_valid": true/)).toBeInTheDocument());
+    u1();
+
+    const ExplainDlg = withTheme(() => (
+      <SqlSqliteExplainDialog
+        open
+        editorSource="SELECT * FROM items"
+        onClose={() => {}}
+        onRunExplain={onRunExplain}
+      />
+    ));
+    const {unmount: u2} = render(<ExplainDlg />);
+    expect(screen.getByText('SR-F-030568')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Execute SQLite Explain'));
+    expect(onRunExplain).toHaveBeenCalledWith('EXPLAIN QUERY PLAN SELECT * FROM items;', 'query_plan');
+    u2();
+
+    const RowSqlDlg = withTheme(() => (
+      <DataSqliteRowSqlDialog
+        open
+        tableLabel='"main"."orders"'
+        columns={[{name: 'id'}, {name: 'payload'}]}
+        row={{id: 42, payload: {encoding: 'base64', data: 'AP8='}}}
+        onClose={() => {}}
+      />
+    ));
+    const {unmount: u3} = render(<RowSqlDlg />);
+    expect(screen.getByText('SR-F-030569')).toBeInTheDocument();
+    expect(screen.getByText(/ON CONFLICT/)).toBeInTheDocument();
+    u3();
+
+    const CellDlg = withTheme(() => (
+      <DataSqliteCellInspectorModal
+        open
+        column={{name: 'payload', native_type: 'BLOB'}}
+        value="9007199254740993"
+        tableName="orders"
+        post={post}
+        databaseTargetId="db-target-1"
+        onClose={() => {}}
+      />
+    ));
+    render(<CellDlg />);
+    expect(screen.getByText('SR-F-030570')).toBeInTheDocument();
+    expect(screen.getByText('> 53-bit Exact Int64')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Probe sqlite3_blob_open Metadata'));
+    await waitFor(() => expect(screen.getByText('Streamable BLOB')).toBeInTheDocument());
   });
 });

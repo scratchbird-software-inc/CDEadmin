@@ -12,14 +12,19 @@ import gettext from 'sources/gettext';
 import {Panel, Stack} from '../../primitives/Layout';
 
 export function createSqliteWorkspaceCaller(api, endpointUrl, databaseTargetId) {
-  return async ({action, request = {}}) => {
-    const mergedRequest = databaseTargetId
-      ? {database_target_id: databaseTargetId, ...request}
-      : request;
-    const response = await api.post(endpointUrl, {
+  return async ({action, request = {}, sessionId = null, topLevel = {}}) => {
+    const mergedRequest =
+      databaseTargetId && !sessionId
+        ? {database_target_id: databaseTargetId, ...request}
+        : request;
+    const payload = {
       action,
+      ...(databaseTargetId ? {database_target_id: databaseTargetId} : {}),
+      ...(sessionId ? {session_id: sessionId} : {}),
+      ...topLevel,
       request: mergedRequest,
-    });
+    };
+    const response = await api.post(endpointUrl, payload);
     const env = response?.data;
     if (env && env.success === 0) {
       throw new Error(env.errormsg || gettext('SQLite workspace request failed.'));

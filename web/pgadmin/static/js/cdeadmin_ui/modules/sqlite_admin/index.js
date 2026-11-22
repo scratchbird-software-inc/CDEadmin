@@ -13,6 +13,7 @@ import SqliteIntckWorkspace from './SqliteIntckWorkspace';
 import SqliteBlobStreamWorkspace from './SqliteBlobStreamWorkspace';
 import SqliteShellWorkspace from './SqliteShellWorkspace';
 import SqliteSqlDumpWorkspace from './SqliteSqlDumpWorkspace';
+import SqliteSessionTuningWorkspace from './SqliteSessionTuningWorkspace';
 
 export const SQLITE_ADMIN_TABS = Object.freeze([
   'sqlite-rbu',
@@ -21,6 +22,7 @@ export const SQLITE_ADMIN_TABS = Object.freeze([
   'sqlite-blob-stream',
   'sqlite-shell',
   'sqlite-sql-dump',
+  'sqlite-session-tuning',
 ]);
 
 export const SQLITE_ADMIN_REQUEST_ACTIONS = Object.freeze([
@@ -75,6 +77,8 @@ export function renderSqliteAdminWorkspace({
       return <SqliteShellWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
     case 'sqlite-sql-dump':
       return <SqliteSqlDumpWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+    case 'sqlite-session-tuning':
+      return <SqliteSessionTuningWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
     default:
       return null;
   }
@@ -87,4 +91,5 @@ export {
   SqliteBlobStreamWorkspace,
   SqliteShellWorkspace,
   SqliteSqlDumpWorkspace,
+  SqliteSessionTuningWorkspace,
 };

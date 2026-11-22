@@ -1,0 +1,80 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "native-function"
+  ],
+  "form_reference": "SR-F-030575",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Function name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "function_type",
+      "label": "Function category",
+      "tab": "Definition",
+      "control": "select",
+      "initial_value_path": [
+        "native",
+        "type"
+      ],
+      "options": [
+        {
+          "value": "s",
+          "label": "Scalar (s)"
+        },
+        {
+          "value": "a",
+          "label": "Aggregate (a)"
+        },
+        {
+          "value": "w",
+          "label": "Window (w)"
+        }
+      ]
+    },
+    {
+      "field_id": "argument_count",
+      "label": "Argument count (-1 variadic)",
+      "tab": "Definition",
+      "control": "number",
+      "initial_value_path": [
+        "native",
+        "narg"
+      ]
+    },
+    {
+      "field_id": "encoding",
+      "label": "Text encoding",
+      "tab": "Engine",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "enc"
+      ]
+    },
+    {
+      "field_id": "flags",
+      "label": "Determinism / Innocuous flags",
+      "tab": "Engine",
+      "control": "number",
+      "initial_value_path": [
+        "native",
+        "flags"
+      ]
+    }
+  ]
+}

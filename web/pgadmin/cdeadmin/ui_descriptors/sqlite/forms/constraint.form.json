@@ -1,0 +1,79 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "constraint"
+  ],
+  "form_reference": "SR-F-030574",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Constraint name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "constraint_kind",
+      "label": "Constraint kind",
+      "tab": "Definition",
+      "control": "select",
+      "initial_value_path": [
+        "native",
+        "kind"
+      ],
+      "options": [
+        {
+          "value": "PRIMARY KEY",
+          "label": "PRIMARY KEY"
+        },
+        {
+          "value": "UNIQUE",
+          "label": "UNIQUE"
+        },
+        {
+          "value": "FOREIGN KEY",
+          "label": "FOREIGN KEY"
+        },
+        {
+          "value": "CHECK",
+          "label": "CHECK"
+        },
+        {
+          "value": "NOT NULL",
+          "label": "NOT NULL"
+        }
+      ]
+    },
+    {
+      "field_id": "definition_sql",
+      "label": "Constraint clause",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "initial_value_path": [
+        "native",
+        "ddl"
+      ]
+    },
+    {
+      "field_id": "referenced_table",
+      "label": "Referenced table (FK)",
+      "tab": "Engine",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "referenced_table"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "sqlite",
+  "family": "engine_object",
+  "resource_kinds": [
+    "column"
+  ],
+  "form_reference": "SR-F-030573",
+  "status": "complete",
+  "engine_tab_title": "SQLite",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "table",
+      "label": "Owning table",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "initial_value_path": [
+        "native",
+        "table"
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Column name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "name"
+      ]
+    },
+    {
+      "field_id": "new_name",
+      "label": "New column name",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "data_type",
+      "label": "Declared type / affinity",
+      "tab": "Definition",
+      "control": "select",
+      "default": "TEXT",
+      "initial_value_path": [
+        "native",
+        "type"
+      ],
+      "options": [
+        {
+          "value": "INTEGER",
+          "label": "INTEGER"
+        },
+        {
+          "value": "REAL",
+          "label": "REAL"
+        },
+        {
+          "value": "TEXT",
+          "label": "TEXT"
+        },
+        {
+          "value": "BLOB",
+          "label": "BLOB"
+        },
+        {
+          "value": "NUMERIC",
+          "label": "NUMERIC"
+        },
+        {
+          "value": "ANY",
+          "label": "ANY (STRICT tables)"
+        }
+      ]
+    },
+    {
+      "field_id": "nullable",
+      "label": "Nullable",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "native",
+        "nullable"
+      ]
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "default"
+      ]
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation sequence",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "collation"
+      ]
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": false,
+      "initial_value_path": [
+        "native",
+        "primary_key"
+      ]
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique constraint",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": false
+    },
+    {
+      "field_id": "check_expression",
+      "label": "CHECK expression",
+      "tab": "Engine",
+      "control": "text"
+    },
+    {
+      "field_id": "generated_storage",
+      "label": "Generated column storage",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "",
+          "label": "Not generated"
+        },
+        {
+          "value": "VIRTUAL",
+          "label": "VIRTUAL"
+        },
+        {
+          "value": "STORED",
+          "label": "STORED"
+        }
+      ]
+    },
+    {
+      "field_id": "generated_expression",
+      "label": "Generated AS expression",
+      "tab": "Engine",
+      "control": "text"
+    }
+  ]
+}

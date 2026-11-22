@@ -11,7 +11,7 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
   const [preview,setPreview]=useState(null),[receipt,setReceipt]=useState(null),[confirmed,setConfirmed]=useState(false);
   const [error,setError]=useState(''),[pending,setPending]=useState(false),[archiveBusy,setArchiveBusy]=useState(false);
   const [deletions,setDeletions]=useState([]),[listing,setListing]=useState(null),[offset,setOffset]=useState(0);
-  const [alterations,setAlterations]=useState([]);
+  const [alterations,setAlterations]=useState([]),[retainedRebuilds,setRetainedRebuilds]=useState([]);
   const [selected,setSelected]=useState(''),[removeConfirmed,setRemoveConfirmed]=useState(false);
   const serial=useRef(0),captured=useRef(null),live=useRef(false),active=useRef(true);
   const busyOwner=useRef(false);
@@ -46,7 +46,7 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
       if(!captured.current || captured.current!==sessionId)throw new Error('Capture this original query connection before reviewing DDL');
       let value;
       if(operation==='preview' || operation==='review') {
-        value=await invoke(operation,{baseline,desired,deletions,...(alterations.length ? {alterations}:{}),...(operation==='review' ? {execution_sha256:preview.execution_sha256}:{})});
+        value=await invoke(operation,{baseline,desired,deletions,...(alterations.length ? {alterations}:{}),...(retainedRebuilds.length ? {rebuilds:retainedRebuilds.map(id=>({resource_id:id}))}:{}),...(operation==='review' ? {execution_sha256:preview.execution_sha256}:{})});
       } else if(operation==='start') {
         value=await invoke('start',{review_id:receipt.review_id,review_digest:receipt.review_digest,confirmed:true});
       }
@@ -119,6 +119,11 @@ export default function SQLiteRetainedSchema({post,ensureSession,sessionId,datab
         {objects.filter(row=>['table','view','index','trigger','fts-table','virtual-table'].includes(row.kind)).map(row=>
           <FormControlLabel key={row.resource_id} label={`Remove ${row.kind}: ${row.path.join(' / ')}`} control={<Checkbox disabled={locked || !!alterations.length} checked={deletions.includes(row.resource_id)}
             onChange={event=>{setDeletions(current=>event.target.checked ? [...current,row.resource_id]:current.filter(id=>id!==row.resource_id));setPreview(null);setReceipt(null);setConfirmed(false);}} />} />)}
+      </Box>
+      <Box component="details"><summary>Explicit original-session table rebuilds ({retainedRebuilds.length})</summary>
+        {objects.filter(row=>row.kind==='table').map(row=>
+          <FormControlLabel key={row.resource_id} label={`Rebuild table: ${row.path.join(' / ')}`} control={<Checkbox disabled={locked || !!alterations.length || !!deletions.length} checked={retainedRebuilds.includes(row.resource_id)}
+            onChange={event=>{setRetainedRebuilds(current=>event.target.checked ? [...current,row.resource_id]:current.filter(id=>id!==row.resource_id));setPreview(null);setReceipt(null);setConfirmed(false);}} />} />)}
       </Box>
       <Button disabled={locked || !desired} onClick={()=>perform('preview')}>Preview original-session changes</Button>
     </>}

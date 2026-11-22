@@ -50,6 +50,7 @@ import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {DataFirebirdBlobDialog, DataFirebirdRowSqlDialog} from './DataFirebirdTools';
 import {DataMySQLRowSqlDialog, DataMySQLSpatialDialog, isMySQLSpatialType} from './DataMySQLTools';
 import {DataPostgresCellInspectorModal, DataPostgresRowSqlDialog} from './DataPostgresTools';
+import {DataSqliteCellInspectorModal, DataSqliteRowSqlDialog} from './DataSqliteTools';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
@@ -181,6 +182,8 @@ export default function DataEditSurface({
   const [mysqlRowSqlOpen, setMysqlRowSqlOpen] = useState(false);
   const [pgCellInspectorState, setPgCellInspectorState] = useState(null); // {column, rowIndex}
   const [pgRowSqlOpen, setPgRowSqlOpen] = useState(false);
+  const [sqCellInspectorState, setSqCellInspectorState] = useState(null); // {column, rowIndex}
+  const [sqRowSqlOpen, setSqRowSqlOpen] = useState(false);
 
   useEffect(() => {
     const el = areaRef.current;
@@ -387,6 +390,10 @@ export default function DataEditSurface({
   }, [engineId, languageProfile]);
   const isPostgres = useMemo(() => {
     const keys = new Set(['postgresql', 'postgresql-native', 'postgresql-sql']);
+    return keys.has(languageProfile) || keys.has(engineId);
+  }, [engineId, languageProfile]);
+  const isSQLite = useMemo(() => {
+    const keys = new Set(['sqlite', 'sqlite-native', 'sqlite-sql']);
     return keys.has(languageProfile) || keys.has(engineId);
   }, [engineId, languageProfile]);
   const conversionPairs = languageOptions.field_conversion_pairs;
@@ -2808,6 +2815,26 @@ export default function DataEditSurface({
               },
             ]
             : []),
+          ...(isSQLite
+            ? [
+              {
+                id: `${pfx}.mnu.sq_row_sql`,
+                label: gettext('Generate SQLite Row SQL (ON CONFLICT / INSERT OR REPLACE)…'),
+                iconKey: 'action.sql_preview',
+                disabled: rows.length === 0,
+                index: 225,
+                callback: () => setSqRowSqlOpen(true),
+              },
+              {
+                id: `${pfx}.mnu.sq_cell_inspector`,
+                label: gettext('Inspect SQLite Dynamic Storage Class, Int64 & BLOB Bytes…'),
+                iconKey: 'action.view',
+                disabled: !activeColObj || rows.length === 0,
+                index: 228,
+                callback: () => setSqCellInspectorState({column: activeColObj, rowIndex: activeRowIndex}),
+              },
+            ]
+            : []),
         ],
       },
       {
@@ -4354,6 +4381,31 @@ export default function DataEditSurface({
             columns={columns}
             row={rows[activeRowIndex]?.values || null}
             onClose={() => setPgRowSqlOpen(false)}
+          />
+        </>
+      )}
+
+      {isSQLite && (
+        <>
+          <DataSqliteCellInspectorModal
+            open={Boolean(sqCellInspectorState)}
+            column={sqCellInspectorState?.column || null}
+            value={
+              sqCellInspectorState
+                ? rows[sqCellInspectorState.rowIndex]?.values?.[sqCellInspectorState.column.name]
+                : null
+            }
+            tableName={targetResource?.display_name || targetResource?.name || ''}
+            post={post}
+            databaseTargetId={databaseTargetId}
+            onClose={() => setSqCellInspectorState(null)}
+          />
+          <DataSqliteRowSqlDialog
+            open={sqRowSqlOpen}
+            tableLabel={targetResource?.display_name || targetResource?.name || 'main.table'}
+            columns={columns}
+            row={rows[activeRowIndex]?.values || null}
+            onClose={() => setSqRowSqlOpen(false)}
           />
         </>
       )}

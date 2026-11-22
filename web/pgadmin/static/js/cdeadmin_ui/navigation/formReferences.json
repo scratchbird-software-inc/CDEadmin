@@ -8010,6 +8010,54 @@
       "reference": "SR-F-030565",
       "title": "SQLite database-wide native SQL script dump and import"
     },
+    "sqlite-session-tuning": {
+      "reference": "SR-F-030566",
+      "title": "SQLite original-session connection limits, PRAGMAs, db_config, maintenance and descriptor tasks"
+    },
+    "sqlite-sql-session-dialog": {
+      "reference": "SR-F-030567",
+      "title": "SQLite SQL editor session framing, ATTACH/DETACH, connection tuning and grammar check"
+    },
+    "sqlite-sql-explain-dialog": {
+      "reference": "SR-F-030568",
+      "title": "SQLite EXPLAIN QUERY PLAN and VDBE bytecode inspector"
+    },
+    "sqlite-data-row-sql": {
+      "reference": "SR-F-030569",
+      "title": "SQLite data grid row SQL generator (ON CONFLICT, INSERT OR REPLACE, rowid/PK)"
+    },
+    "sqlite-data-cell-inspector": {
+      "reference": "SR-F-030570",
+      "title": "SQLite data grid dynamic storage-class, int64, BLOB and byte inspector"
+    },
+    "sqlite-form-pragma": {
+      "reference": "SR-F-030571",
+      "title": "SQLite PRAGMA inspection form"
+    },
+    "sqlite-form-extension": {
+      "reference": "SR-F-030572",
+      "title": "SQLite extension inspection form"
+    },
+    "sqlite-form-column": {
+      "reference": "SR-F-030573",
+      "title": "SQLite column create, rename and inspection form"
+    },
+    "sqlite-form-constraint": {
+      "reference": "SR-F-030574",
+      "title": "SQLite table constraint inspection form"
+    },
+    "sqlite-form-native-function": {
+      "reference": "SR-F-030575",
+      "title": "SQLite built-in and loadable function inspection form"
+    },
+    "sqlite-form-collation": {
+      "reference": "SR-F-030576",
+      "title": "SQLite collation sequence inspection form"
+    },
+    "sqlite-form-compile-option": {
+      "reference": "SR-F-030577",
+      "title": "SQLite runtime compile-option inspection form"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"
