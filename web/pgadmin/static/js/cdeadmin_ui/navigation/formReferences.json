@@ -870,6 +870,70 @@
       "reference": "SR-F-030090",
       "title": "Firebird native service, session and audit trace workspace"
     },
+    "form:postgresql:access-method": {
+      "reference": "SR-F-030543",
+      "title": "PostgreSQL access method editor"
+    },
+    "form:postgresql:cast": {
+      "reference": "SR-F-030544",
+      "title": "PostgreSQL type cast editor"
+    },
+    "form:postgresql:collation": {
+      "reference": "SR-F-030545",
+      "title": "PostgreSQL collation editor"
+    },
+    "form:postgresql:conversion": {
+      "reference": "SR-F-030546",
+      "title": "PostgreSQL encoding conversion editor"
+    },
+    "form:postgresql:foreign-data-wrapper": {
+      "reference": "SR-F-030547",
+      "title": "PostgreSQL foreign data wrapper editor"
+    },
+    "form:postgresql:language": {
+      "reference": "SR-F-030548",
+      "title": "PostgreSQL procedural language editor"
+    },
+    "form:postgresql:operator-class": {
+      "reference": "SR-F-030549",
+      "title": "PostgreSQL operator class editor"
+    },
+    "form:postgresql:operator-family": {
+      "reference": "SR-F-030550",
+      "title": "PostgreSQL operator family editor"
+    },
+    "form:postgresql:publication": {
+      "reference": "SR-F-030551",
+      "title": "PostgreSQL logical replication publication editor"
+    },
+    "form:postgresql:subscription": {
+      "reference": "SR-F-030552",
+      "title": "PostgreSQL logical replication subscription editor"
+    },
+    "form:postgresql:text-search-configuration": {
+      "reference": "SR-F-030553",
+      "title": "PostgreSQL text search configuration editor"
+    },
+    "form:postgresql:text-search-dictionary": {
+      "reference": "SR-F-030554",
+      "title": "PostgreSQL text search dictionary editor"
+    },
+    "form:postgresql:text-search-parser": {
+      "reference": "SR-F-030555",
+      "title": "PostgreSQL text search parser editor"
+    },
+    "form:postgresql:text-search-template": {
+      "reference": "SR-F-030556",
+      "title": "PostgreSQL text search template editor"
+    },
+    "form:postgresql:transform": {
+      "reference": "SR-F-030557",
+      "title": "PostgreSQL language transform editor"
+    },
+    "form:postgresql:user-mapping": {
+      "reference": "SR-F-030558",
+      "title": "PostgreSQL foreign server user mapping editor"
+    },
     "inspector": {
       "reference": "SR-F-000002",
       "title": "Native object inspector"
@@ -7726,6 +7790,10 @@
       "reference": "SR-F-000003",
       "title": "Missing form"
     },
+    "postgresql-activity-locks": {
+      "reference": "SR-F-030540",
+      "title": "PostgreSQL sessions, lock chains and pg_stat_statements workspace"
+    },
     "postgresql-catalog-ddn": {
       "reference": "SR-F-001381",
       "title": "PostgreSQL native catalog DDN capture, design and comparison"
@@ -7753,6 +7821,14 @@
     "postgresql-host-tools": {
       "reference": "SR-F-030450",
       "title": "PostgreSQL supervised host utilities workspace"
+    },
+    "postgresql-listen-notify": {
+      "reference": "SR-F-030541",
+      "title": "PostgreSQL LISTEN / NOTIFY live pub-sub workspace"
+    },
+    "postgresql-logical-tools": {
+      "reference": "SR-F-030542",
+      "title": "PostgreSQL native logical backup/restore, COPY, object search and bulk grant workspace"
     },
     "postgresql-monitoring-policy": {
       "reference": "SR-F-001379",

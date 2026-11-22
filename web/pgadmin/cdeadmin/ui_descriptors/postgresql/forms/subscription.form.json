@@ -1,0 +1,407 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "subscription"
+  ],
+  "form_reference": "SR-F-030552",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "subscription_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "subowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ],
+      "initial_value_path": [
+        "subscription_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON SUBSCRIPTION"
+    },
+    {
+      "field_id": "host",
+      "label": "Publisher host",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "port",
+      "label": "Publisher port",
+      "tab": "Definition",
+      "control": "number",
+      "modes": [
+        "create"
+      ],
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "field_id": "db",
+      "label": "Publisher database",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "username",
+      "label": "Publisher user",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "passfile",
+      "label": "Passfile path on server host",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "connect_timeout",
+      "label": "Connection timeout (seconds)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslmode",
+      "label": "SSL mode",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslcert",
+      "label": "Client certificate",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslkey",
+      "label": "Client certificate key",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslrootcert",
+      "label": "Root certificate",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslcrl",
+      "label": "Certificate revocation list",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "sslcompression",
+      "label": "SSL compression?",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "pub",
+      "label": "Publications (comma-separated)",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "subscription_facts",
+        "pub"
+      ],
+      "native_keyword": "PUBLICATION"
+    },
+    {
+      "field_id": "connect",
+      "label": "Connect immediately?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "copy_data",
+      "label": "Copy initial data?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "create_slot",
+      "label": "Create replication slot?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "enabled",
+      "label": "Enabled?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "subscription_facts",
+        "enabled"
+      ]
+    },
+    {
+      "field_id": "slot_name",
+      "label": "Slot name",
+      "tab": "Engine",
+      "control": "text",
+      "initial_value_path": [
+        "subscription_facts",
+        "slot_name"
+      ],
+      "help": "Use NONE for no slot."
+    },
+    {
+      "field_id": "sync",
+      "label": "Synchronous commit",
+      "tab": "Engine",
+      "control": "select",
+      "initial_value_path": [
+        "subscription_facts",
+        "sync"
+      ],
+      "options": [
+        {
+          "value": "off",
+          "label": "off"
+        },
+        {
+          "value": "local",
+          "label": "local"
+        },
+        {
+          "value": "remote_write",
+          "label": "remote_write"
+        },
+        {
+          "value": "remote_apply",
+          "label": "remote_apply"
+        },
+        {
+          "value": "on",
+          "label": "on"
+        }
+      ]
+    },
+    {
+      "field_id": "streaming",
+      "label": "Streaming",
+      "tab": "Engine",
+      "control": "select",
+      "initial_value_path": [
+        "subscription_facts",
+        "streaming"
+      ],
+      "options": [
+        {
+          "value": "off",
+          "label": "off"
+        },
+        {
+          "value": "on",
+          "label": "on"
+        },
+        {
+          "value": "parallel",
+          "label": "parallel",
+          "version": {
+            "minimum": "16"
+          }
+        }
+      ]
+    },
+    {
+      "field_id": "binary",
+      "label": "Binary transfer?",
+      "tab": "Engine",
+      "control": "boolean",
+      "initial_value_path": [
+        "subscription_facts",
+        "binary"
+      ]
+    },
+    {
+      "field_id": "two_phase",
+      "label": "Two-phase commit?",
+      "tab": "Engine",
+      "control": "boolean",
+      "version": {
+        "minimum": "15"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "two_phase"
+      ]
+    },
+    {
+      "field_id": "disable_on_error",
+      "label": "Disable on error?",
+      "tab": "Engine",
+      "control": "boolean",
+      "version": {
+        "minimum": "15"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "disable_on_error"
+      ]
+    },
+    {
+      "field_id": "run_as_owner",
+      "label": "Run as owner?",
+      "tab": "Engine",
+      "control": "boolean",
+      "version": {
+        "minimum": "16"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "run_as_owner"
+      ]
+    },
+    {
+      "field_id": "password_required",
+      "label": "Password required?",
+      "tab": "Engine",
+      "control": "boolean",
+      "version": {
+        "minimum": "16"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "password_required"
+      ]
+    },
+    {
+      "field_id": "origin",
+      "label": "Origin filter",
+      "tab": "Engine",
+      "control": "select",
+      "version": {
+        "minimum": "16"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "origin"
+      ],
+      "options": [
+        {
+          "value": "any",
+          "label": "any"
+        },
+        {
+          "value": "none",
+          "label": "none"
+        }
+      ]
+    },
+    {
+      "field_id": "failover",
+      "label": "Failover slot synchronization?",
+      "tab": "Engine",
+      "control": "boolean",
+      "version": {
+        "minimum": "17"
+      },
+      "initial_value_path": [
+        "subscription_facts",
+        "failover"
+      ]
+    },
+    {
+      "field_id": "refresh_pub",
+      "label": "Refresh publication?",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "REFRESH PUBLICATION"
+    },
+    {
+      "field_id": "copy_data_after_refresh",
+      "label": "Copy data on refresh?",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "refresh_pub",
+        "truthy": true
+      }
+    }
+  ],
+  "notes": "PostgreSQL logical replication subscription form aligned with replication.py."
+}

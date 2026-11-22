@@ -1,0 +1,115 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "language"
+  ],
+  "form_reference": "SR-F-030548",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "language_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "lanowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "language_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON LANGUAGE"
+    },
+    {
+      "field_id": "is_template",
+      "label": "From server template?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ],
+      "help": "Use CREATE LANGUAGE name for built-in procedural languages."
+    },
+    {
+      "field_id": "trusted",
+      "label": "Trusted?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "is_template",
+        "truthy": false
+      },
+      "native_keyword": "TRUSTED"
+    },
+    {
+      "field_id": "lanproc",
+      "label": "Handler function",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "is_template",
+        "truthy": false
+      },
+      "native_keyword": "HANDLER"
+    },
+    {
+      "field_id": "laninl",
+      "label": "Inline function",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "is_template",
+        "truthy": false
+      },
+      "native_keyword": "INLINE"
+    },
+    {
+      "field_id": "lanval",
+      "label": "Validator function",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "visible_when": {
+        "field": "is_template",
+        "truthy": false
+      },
+      "native_keyword": "VALIDATOR"
+    }
+  ],
+  "notes": "PostgreSQL procedural language form aligned with catalog_objects.py."
+}

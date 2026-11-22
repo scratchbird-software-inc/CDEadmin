@@ -27,6 +27,17 @@ PROVIDER_TREE_IDS = {
     'reset_parallel_workers', 'add_options', 'set_options', 'drop_options',
     'revoke_membership', 'revoke_members', 'reset_variables', 'admin_only',
     'reset_parameters', 'no_minimum', 'no_maximum', 'owned_by_none',
+    # PG18 temporal/enforcement constraint fields and engine_object provider-native compiler fields:
+    'without_overlaps_column', 'local_period_column', 'referenced_period_column',
+    'not_enforced', 'conenforced',
+    'action', 'add_mappings', 'add_schemas', 'add_tables', 'alter_mappings',
+    'argument_types', 'castmethod', 'data_type', 'default', 'drop_mappings',
+    'drop_schemas', 'drop_tables', 'family', 'from_sql_args', 'from_sql_function',
+    'function', 'functions', 'handler', 'index_method', 'kind', 'language',
+    'members', 'method_type', 'no_handler', 'no_validator', 'number',
+    'operand_types', 'operators', 'option', 'refresh_version', 'replace',
+    'server', 'sort_family', 'source_encoding', 'storage_type', 'strategy',
+    'support', 'target_encoding', 'to_sql_args', 'to_sql_function', 'type_name',
 }
 
 

@@ -12,6 +12,9 @@ import PostgresqlConfigurationWorkspace from './PostgresqlConfigurationWorkspace
 import PostgresqlHaTopologyWorkspace from './PostgresqlHaTopologyWorkspace';
 import PostgresqlPreparedXactsWorkspace from './PostgresqlPreparedXactsWorkspace';
 import PostgresqlSnapshotCopyWorkspace from './PostgresqlSnapshotCopyWorkspace';
+import PostgresqlActivityLocksWorkspace from './PostgresqlActivityLocksWorkspace';
+import PostgresqlListenNotifyWorkspace from './PostgresqlListenNotifyWorkspace';
+import PostgresqlLogicalToolsWorkspace from './PostgresqlLogicalToolsWorkspace';
 
 export const POSTGRESQL_ADMIN_TABS = Object.freeze([
   'postgresql-host-tools',
@@ -19,6 +22,9 @@ export const POSTGRESQL_ADMIN_TABS = Object.freeze([
   'postgresql-ha-topology',
   'postgresql-prepared-xacts',
   'postgresql-snapshot-copy',
+  'postgresql-activity-locks',
+  'postgresql-listen-notify',
+  'postgresql-logical-tools',
 ]);
 
 export function renderPostgresqlAdminWorkspace({
@@ -37,6 +43,12 @@ export function renderPostgresqlAdminWorkspace({
       return <PostgresqlPreparedXactsWorkspace endpointUrl={endpointUrl} api={api} />;
     case 'postgresql-snapshot-copy':
       return <PostgresqlSnapshotCopyWorkspace endpointUrl={endpointUrl} api={api} />;
+    case 'postgresql-activity-locks':
+      return <PostgresqlActivityLocksWorkspace endpointUrl={endpointUrl} api={api} />;
+    case 'postgresql-listen-notify':
+      return <PostgresqlListenNotifyWorkspace endpointUrl={endpointUrl} api={api} />;
+    case 'postgresql-logical-tools':
+      return <PostgresqlLogicalToolsWorkspace endpointUrl={endpointUrl} api={api} />;
     default:
       return null;
   }
@@ -48,4 +60,7 @@ export {
   PostgresqlHaTopologyWorkspace,
   PostgresqlPreparedXactsWorkspace,
   PostgresqlSnapshotCopyWorkspace,
+  PostgresqlActivityLocksWorkspace,
+  PostgresqlListenNotifyWorkspace,
+  PostgresqlLogicalToolsWorkspace,
 };

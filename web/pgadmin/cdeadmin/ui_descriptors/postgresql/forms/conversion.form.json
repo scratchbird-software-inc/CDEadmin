@@ -1,0 +1,115 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "conversion"
+  ],
+  "form_reference": "SR-F-030546",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "action",
+      "label": "Alter action",
+      "tab": "General",
+      "control": "select",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "owner",
+          "label": "Change owner"
+        },
+        {
+          "value": "rename",
+          "label": "Rename"
+        },
+        {
+          "value": "schema",
+          "label": "Move to schema"
+        }
+      ]
+    },
+    {
+      "field_id": "value",
+      "label": "New owner, name or schema",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "source_encoding",
+      "label": "Source encoding",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FOR"
+    },
+    {
+      "field_id": "target_encoding",
+      "label": "Target encoding",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "TO"
+    },
+    {
+      "field_id": "function",
+      "label": "Conversion function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FROM",
+      "help": "Qualified conversion function (schema.function)."
+    },
+    {
+      "field_id": "default",
+      "label": "Default conversion?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "DEFAULT"
+    }
+  ],
+  "notes": "PostgreSQL encoding conversion form aligned with native_admin.py."
+}

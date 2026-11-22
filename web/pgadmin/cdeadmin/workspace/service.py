@@ -1744,6 +1744,14 @@ class ProviderWorkspaceService:
         except Exception as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def postgresql_ops(self, server, operation, request, *, host_authorized=False):
+        from .postgresql_operations_hub import action
+        from ..providers.postgresql.continuity import ContinuityError
+        try:
+            return action(self, server, operation, request or {}, host_authorized=host_authorized)
+        except (ValueError, OSError, ContinuityError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def postgresql_temporary_slots(self,server,operation,request):
         from psycopg import Error as NativeError
         from .postgresql_temporary_slot_service import action

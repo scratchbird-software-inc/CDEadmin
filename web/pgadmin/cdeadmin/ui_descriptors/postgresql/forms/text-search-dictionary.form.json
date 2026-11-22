@@ -1,0 +1,134 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "text-search-dictionary"
+  ],
+  "form_reference": "SR-F-030554",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "schema"
+      ]
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON TEXT SEARCH DICTIONARY"
+    },
+    {
+      "field_id": "template",
+      "label": "Template",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "TEMPLATE"
+    },
+    {
+      "field_id": "options",
+      "label": "Options",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "option",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "set_options",
+      "label": "Set options",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "option",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "drop_options",
+      "label": "Drop options",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "option",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL text search dictionary form aligned with text_search.py."
+}

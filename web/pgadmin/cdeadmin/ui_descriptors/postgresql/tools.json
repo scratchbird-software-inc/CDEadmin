@@ -702,6 +702,96 @@
         "requires_database_target": true,
         "not_system_object": true
       }
+    },
+    {
+      "command_id": "endpoint.postgresql.server_catalog_ddn",
+      "scope": "endpoint",
+      "label": "PostgreSQL server catalog DDN...",
+      "description": "Capture the server-wide PostgreSQL cluster catalog (databases, roles, tablespaces, replication, parameter ACLs) as DDN.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.export",
+      "group": "information",
+      "priority": 57,
+      "arguments": {
+        "tab": "export",
+        "server_catalog": true
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "endpoint.postgresql.activity_locks",
+      "scope": "endpoint",
+      "label": "Sessions, locks & query statistics...",
+      "description": "Inspect pg_stat_activity, blocking PIDs, pg_locks, pg_stat_statements top queries, and fenced cancel/terminate or statistics resets.",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "priority": 58,
+      "arguments": {
+        "tab": "postgresql-activity-locks"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.postgresql.activity_locks",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "Sessions, locks & query statistics...",
+      "description": "Inspect active sessions, lock wait chains, pg_stat_statements top queries, and fenced session signals for this database.",
+      "handler": "open_workspace",
+      "icon": "tool.dashboard",
+      "group": "availability",
+      "mutation": "admin",
+      "priority": 10,
+      "arguments": {
+        "tab": "postgresql-activity-locks"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.postgresql.listen_notify",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "LISTEN / NOTIFY channels...",
+      "description": "Subscribe a dedicated session to PostgreSQL LISTEN channels, poll asynchronous notifications, and publish pg_notify payloads.",
+      "handler": "open_workspace",
+      "icon": "action.script",
+      "group": "database",
+      "mutation": "write",
+      "priority": 50,
+      "arguments": {
+        "tab": "postgresql-listen-notify"
+      },
+      "enabled_when": [
+        "verified"
+      ]
+    },
+    {
+      "command_id": "database.postgresql.logical_tools",
+      "scope": "database",
+      "slot": "post_tasks",
+      "label": "Native backup, COPY, search & bulk grants...",
+      "description": "Run supervised pg_dump/pg_restore jobs, stream COPY import/export, search catalog objects, and review bulk GRANT/REVOKE statements.",
+      "handler": "open_workspace",
+      "icon": "action.backup",
+      "group": "backup",
+      "mutation": "admin",
+      "priority": 51,
+      "arguments": {
+        "tab": "postgresql-logical-tools"
+      },
+      "enabled_when": [
+        "verified"
+      ]
     }
   ]
 }

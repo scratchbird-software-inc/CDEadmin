@@ -728,6 +728,314 @@
           "tier": 2
         }
       ]
+    },
+    {
+      "resource_kind": "access-method",
+      "family": "engine_object",
+      "title": "Access method",
+      "form": "forms/access-method.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "cast",
+      "family": "engine_object",
+      "title": "Cast",
+      "form": "forms/cast.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "collation",
+      "family": "engine_object",
+      "title": "Collation",
+      "form": "forms/collation.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "conversion",
+      "family": "engine_object",
+      "title": "Conversion",
+      "form": "forms/conversion.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "foreign-data-wrapper",
+      "family": "engine_object",
+      "title": "Foreign data wrapper",
+      "form": "forms/foreign-data-wrapper.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "language",
+      "family": "engine_object",
+      "title": "Language",
+      "form": "forms/language.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "operator-class",
+      "family": "engine_object",
+      "title": "Operator class",
+      "form": "forms/operator-class.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "operator-family",
+      "family": "engine_object",
+      "title": "Operator family",
+      "form": "forms/operator-family.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "publication",
+      "family": "engine_object",
+      "title": "Publication",
+      "form": "forms/publication.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "subscription",
+      "family": "engine_object",
+      "title": "Subscription",
+      "form": "forms/subscription.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "text-search-configuration",
+      "family": "engine_object",
+      "title": "Text search configuration",
+      "form": "forms/text-search-configuration.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "text-search-dictionary",
+      "family": "engine_object",
+      "title": "Text search dictionary",
+      "form": "forms/text-search-dictionary.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "text-search-parser",
+      "family": "engine_object",
+      "title": "Text search parser",
+      "form": "forms/text-search-parser.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "text-search-template",
+      "family": "engine_object",
+      "title": "Text search template",
+      "form": "forms/text-search-template.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "transform",
+      "family": "engine_object",
+      "title": "Transform",
+      "form": "forms/transform.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "resource_kind": "user-mapping",
+      "family": "engine_object",
+      "title": "User mapping",
+      "form": "forms/user-mapping.form.json",
+      "operations": [
+        {
+          "operation_id": "create",
+          "tier": 1
+        },
+        {
+          "operation_id": "alter",
+          "tier": 1
+        },
+        {
+          "operation_id": "drop",
+          "tier": 1
+        }
+      ]
     }
   ]
 }

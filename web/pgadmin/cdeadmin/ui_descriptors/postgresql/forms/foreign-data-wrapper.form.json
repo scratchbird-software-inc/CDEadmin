@@ -1,0 +1,170 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "foreign-data-wrapper"
+  ],
+  "form_reference": "SR-F-030547",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "wrapper_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "fdwowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "wrapper_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON FOREIGN DATA WRAPPER"
+    },
+    {
+      "field_id": "fdwhan",
+      "label": "Handler function",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "HANDLER",
+      "help": "Optional handler function (schema.function)."
+    },
+    {
+      "field_id": "no_handler",
+      "label": "Remove handler?",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "NO HANDLER"
+    },
+    {
+      "field_id": "fdwvalue",
+      "label": "Validator function",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "VALIDATOR",
+      "help": "Optional validator function (schema.function)."
+    },
+    {
+      "field_id": "no_validator",
+      "label": "Remove validator?",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "NO VALIDATOR"
+    },
+    {
+      "field_id": "fdwoptions",
+      "label": "Options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "native_keyword": "OPTIONS"
+    },
+    {
+      "field_id": "add_options",
+      "label": "Add options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "set_options",
+      "label": "Set options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "drop_options",
+      "label": "Drop options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL foreign data wrapper form aligned with foreign_objects.py."
+}

@@ -714,6 +714,16 @@
             "field": "condeferrable",
             "truthy": true
           }
+        },
+        {
+          "field_id": "without_overlaps_column",
+          "label": "Temporal range column (WITHOUT OVERLAPS)",
+          "control": "text",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "WITHOUT OVERLAPS",
+          "help": "Optional range or multirange column for temporal WITHOUT OVERLAPS primary keys (PostgreSQL 18+)."
         }
       ],
       "editable_after_create": false
@@ -922,6 +932,49 @@
             }
           ],
           "native_keyword": "ON DELETE"
+        },
+        {
+          "field_id": "local_period_column",
+          "label": "Local PERIOD range column",
+          "control": "text",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "PERIOD",
+          "help": "Local range or multirange column for temporal PERIOD foreign keys (PostgreSQL 18+)."
+        },
+        {
+          "field_id": "referenced_period_column",
+          "label": "Referenced PERIOD range column",
+          "control": "text",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "REFERENCES ... (PERIOD ...)",
+          "help": "Referenced range or multirange column for temporal PERIOD foreign keys (PostgreSQL 18+)."
+        },
+        {
+          "field_id": "not_enforced",
+          "label": "Not enforced?",
+          "control": "boolean",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "NOT ENFORCED",
+          "help": "Create or alter the foreign key as NOT ENFORCED (PostgreSQL 18+)."
+        },
+        {
+          "field_id": "conenforced",
+          "label": "Enforced?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "version": {
+            "minimum": "18"
+          },
+          "help": "Observed catalog enforcement state (pg_constraint.conenforced)."
         }
       ],
       "editable_after_create": false
@@ -993,6 +1046,29 @@
           },
           "native_keyword": "NOT VALID",
           "help": "Read-only once an existing constraint is validated."
+        },
+        {
+          "field_id": "not_enforced",
+          "label": "Not enforced?",
+          "control": "boolean",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "NOT ENFORCED",
+          "help": "Create the check constraint as NOT ENFORCED (PostgreSQL 18+)."
+        },
+        {
+          "field_id": "conenforced",
+          "label": "Enforced?",
+          "control": "boolean",
+          "readonly": true,
+          "modes": [
+            "alter"
+          ],
+          "version": {
+            "minimum": "18"
+          },
+          "help": "Observed catalog enforcement state (pg_constraint.conenforced)."
         }
       ],
       "editable_after_create": false
@@ -1119,6 +1195,16 @@
             "minimum": "15"
           },
           "native_keyword": "NULLS NOT DISTINCT"
+        },
+        {
+          "field_id": "without_overlaps_column",
+          "label": "Temporal range column (WITHOUT OVERLAPS)",
+          "control": "text",
+          "version": {
+            "minimum": "18"
+          },
+          "native_keyword": "WITHOUT OVERLAPS",
+          "help": "Optional range or multirange column for temporal WITHOUT OVERLAPS unique constraints (PostgreSQL 18+)."
         }
       ],
       "editable_after_create": false

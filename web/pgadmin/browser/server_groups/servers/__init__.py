@@ -3453,6 +3453,12 @@ class ServerNode(PGChildNodeView):
                         'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture', 'mysql_data_plan', 'mysql_data_review', 'mysql_data_apply', 'mysql_data_receipt', 'mysql_data_receipts', 'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save', 'mysql_schema_plan', 'mysql_schema_validate', 'mysql_schema_review', 'mysql_schema_apply', 'mysql_schema_receipt', 'mysql_relational_review',
                         'firebird_recipe_read', 'firebird_recipe_save', 'postgresql_catalog_export', 'postgresql_catalog_compare', 'postgresql_schema_plan', 'postgresql_relational_review', 'sqlite_relational_review', 'duckdb_relational_review','postgresql_server_catalog', 'postgresql_test_data', 'postgresql_data_capture',
                         'postgresql_schema_review', 'postgresql_schema_apply', 'postgresql_schema_receipt',
+                        'postgresql_ops_activity_locks', 'postgresql_ops_session_signal_review', 'postgresql_ops_session_signal_start',
+                        'postgresql_ops_stat_statements', 'postgresql_ops_stats_reset_review', 'postgresql_ops_stats_reset_start',
+                        'postgresql_ops_pubsub_subscribe', 'postgresql_ops_pubsub_poll', 'postgresql_ops_pubsub_unsubscribe', 'postgresql_ops_pubsub_notify',
+                        'postgresql_ops_catalog_search', 'postgresql_ops_copy_export', 'postgresql_ops_copy_import_review', 'postgresql_ops_copy_import_start',
+                        'postgresql_ops_bulk_grant_review', 'postgresql_ops_bulk_grant_start',
+                        'postgresql_ops_logical_backup_catalog', 'postgresql_ops_logical_backup_review', 'postgresql_ops_logical_backup_start',
                         'firebird_catalog_export', 'firebird_catalog_compare', 'firebird_sql_export', 'firebird_data_export', 'firebird_data_import_plan',
                         'firebird_schema_plan', 'firebird_schema_review',
                         'firebird_schema_apply', 'firebird_schema_receipt',
@@ -3859,6 +3865,34 @@ class ServerNode(PGChildNodeView):
                 elif action == 'postgresql_runtime_capabilities':
                     try:
                         payload = service.postgresql_runtime_capabilities(server, data.get('request') or {})
+                    except ProviderWorkspaceError as error:
+                        return bad_request(errormsg=str(error))
+                elif action in {
+                    'postgresql_ops_activity_locks',
+                    'postgresql_ops_session_signal_review',
+                    'postgresql_ops_session_signal_start',
+                    'postgresql_ops_stat_statements',
+                    'postgresql_ops_stats_reset_review',
+                    'postgresql_ops_stats_reset_start',
+                    'postgresql_ops_pubsub_subscribe',
+                    'postgresql_ops_pubsub_poll',
+                    'postgresql_ops_pubsub_unsubscribe',
+                    'postgresql_ops_pubsub_notify',
+                    'postgresql_ops_catalog_search',
+                    'postgresql_ops_copy_export',
+                    'postgresql_ops_copy_import_review',
+                    'postgresql_ops_copy_import_start',
+                    'postgresql_ops_bulk_grant_review',
+                    'postgresql_ops_bulk_grant_start',
+                    'postgresql_ops_logical_backup_catalog',
+                    'postgresql_ops_logical_backup_review',
+                    'postgresql_ops_logical_backup_start',
+                }:
+                    host_authorized = bool(current_user.is_authenticated and (
+                        not config.SERVER_MODE or current_user.has_role('Administrator')))
+                    try:
+                        payload = service.postgresql_ops(
+                            server, action.removeprefix('postgresql_ops_'), data.get('request') or {}, host_authorized=host_authorized)
                     except ProviderWorkspaceError as error:
                         return bad_request(errormsg=str(error))
                 elif action in {'mysql_spatial_databases','mysql_spatial_tables','mysql_spatial_columns','mysql_spatial_read'}:

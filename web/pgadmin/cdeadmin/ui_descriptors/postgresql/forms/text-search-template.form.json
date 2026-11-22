@@ -1,0 +1,74 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "text-search-template"
+  ],
+  "form_reference": "SR-F-030556",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "schema"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON TEXT SEARCH TEMPLATE"
+    },
+    {
+      "field_id": "tmplinit",
+      "label": "Init function",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "tmplinit"
+      ],
+      "native_keyword": "INIT"
+    },
+    {
+      "field_id": "tmpllexize",
+      "label": "Lexize function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "tmpllexize"
+      ],
+      "native_keyword": "LEXIZE"
+    }
+  ],
+  "notes": "PostgreSQL text search template form aligned with text_search.py."
+}

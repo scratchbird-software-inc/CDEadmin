@@ -1,0 +1,116 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "transform"
+  ],
+  "form_reference": "SR-F-030557",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Transform",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "data_type",
+      "label": "Data type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "FOR"
+    },
+    {
+      "field_id": "language",
+      "label": "Language",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "LANGUAGE"
+    },
+    {
+      "field_id": "replace",
+      "label": "Replace existing transform?",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "CREATE OR REPLACE TRANSFORM"
+    },
+    {
+      "field_id": "from_sql_function",
+      "backend_field_id": "from_sql.function",
+      "label": "FROM SQL function",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FROM SQL WITH FUNCTION"
+    },
+    {
+      "field_id": "from_sql_args",
+      "backend_field_id": "from_sql.argument_types",
+      "label": "FROM SQL argument types",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "type_name",
+          "label": "Argument type",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "to_sql_function",
+      "backend_field_id": "to_sql.function",
+      "label": "TO SQL function",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "TO SQL WITH FUNCTION"
+    },
+    {
+      "field_id": "to_sql_args",
+      "backend_field_id": "to_sql.argument_types",
+      "label": "TO SQL argument types",
+      "tab": "Definition",
+      "control": "grid",
+      "item_kind": "string",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "type_name",
+          "label": "Argument type",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL transform form using dotted backend_field_id mappings without raw JSON controls."
+}

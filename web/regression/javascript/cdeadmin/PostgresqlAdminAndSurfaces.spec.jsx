@@ -27,7 +27,7 @@ import {
   DataPostgresRowSqlDialog,
 } from 'sources/cdeadmin_ui/surfaces/DataPostgresTools';
 
-describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Snapshot, SQL & Data Tools (PG-UI-01..09)', () => {
+describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Snapshot, Activity/Locks, LISTEN/NOTIFY, Logical Tools, SQL & Data Tools (PG-UI-01..12)', () => {
   it('PG-UI-01: loads catalog, reviews and starts supervised PostgreSQL 18 host utilities', async () => {
     expect(POSTGRESQL_ADMIN_TABS).toEqual([
       'postgresql-host-tools',
@@ -35,6 +35,9 @@ describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Sna
       'postgresql-ha-topology',
       'postgresql-prepared-xacts',
       'postgresql-snapshot-copy',
+      'postgresql-activity-locks',
+      'postgresql-listen-notify',
+      'postgresql-logical-tools',
     ]);
 
     const api = {
@@ -307,5 +310,106 @@ describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Sna
     );
     expect(screen.getByText(/SR-F-030458/i)).toBeVisible();
     expect(screen.getAllByText(/jsonb/i).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('PG-UI-10..12: renders Activity/Locks, LISTEN/NOTIFY & Native Logical Tools workspaces and dispatches fenced/reviewed operations', async () => {
+    const api = {
+      post: jest.fn(async (_url, payload) => {
+        if (payload.action === 'postgresql_ops_activity_locks') {
+          return {
+            data: {
+              success: 1,
+              data: {
+                server_version_num: 180003,
+                sessions: [
+                  {
+                    pid: 4120,
+                    usename: 'postgres',
+                    datname: 'postgres',
+                    state: 'active',
+                    backend_start_utc: '2026-11-21T19:00:00.000000Z',
+                    blocking_pids: [4101],
+                    query_preview: 'SELECT * FROM public.orders FOR UPDATE',
+                  },
+                ],
+                locks: [
+                  {pid: 4120, locktype: 'relation', relation: 'orders', mode: 'RowShareLock', granted: false},
+                ],
+              },
+            },
+          };
+        }
+        if (payload.action === 'postgresql_ops_stat_statements') {
+          return {
+            data: {
+              success: 1,
+              data: {
+                installed: true,
+                extversion: '1.11',
+                rows: [{queryid: '9988', calls: 12, total_exec_time_ms: '44.200', query: 'SELECT 1'}],
+              },
+            },
+          };
+        }
+        if (payload.action === 'postgresql_ops_pubsub_poll') {
+          return {
+            data: {
+              success: 1,
+              data: {subscribed_channels: [], backend_pid: null, notifications: []},
+            },
+          };
+        }
+        if (payload.action === 'postgresql_ops_pubsub_subscribe') {
+          return {
+            data: {
+              success: 1,
+              data: {
+                subscribed_channels: [payload.request.channel],
+                backend_pid: 5501,
+                notifications: [],
+              },
+            },
+          };
+        }
+        if (payload.action === 'postgresql_ops_logical_backup_catalog') {
+          return {
+            data: {
+              success: 1,
+              data: {
+                backup_dir: '/var/lib/scratchrobin/logical-backups',
+                pg_dump: '/usr/lib/postgresql/18/bin/pg_dump',
+                pg_restore: '/usr/lib/postgresql/18/bin/pg_restore',
+                archives: [{filename: 'prod.dump', size_bytes: 8192}],
+              },
+            },
+          };
+        }
+        return {data: {success: 1, data: {}}};
+      }),
+    };
+
+    const WrapAct = withTheme(() =>
+      renderPostgresqlAdminWorkspace({tab: 'postgresql-activity-locks', endpointUrl: '/ep', api})
+    );
+    const {unmount: uAct} = render(<WrapAct />);
+    expect(await screen.findByText(/SR-F-030540/i)).toBeVisible();
+    expect((await screen.findAllByText(/4120/)).length).toBeGreaterThanOrEqual(1);
+    uAct();
+
+    const WrapPub = withTheme(() =>
+      renderPostgresqlAdminWorkspace({tab: 'postgresql-listen-notify', endpointUrl: '/ep', api})
+    );
+    const {unmount: uPub} = render(<WrapPub />);
+    expect(await screen.findByText(/SR-F-030541/i)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', {name: /Subscribe \(LISTEN\)/i}));
+    expect(await screen.findByText(/Listener PID 5501/i)).toBeVisible();
+    uPub();
+
+    const WrapLog = withTheme(() =>
+      renderPostgresqlAdminWorkspace({tab: 'postgresql-logical-tools', endpointUrl: '/ep', api})
+    );
+    const {unmount: uLog} = render(<WrapLog />);
+    expect(await screen.findByText(/SR-F-030542/i)).toBeVisible();
+    uLog();
   });
 });

@@ -1,0 +1,130 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "cast"
+  ],
+  "form_reference": "SR-F-030544",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Cast",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ],
+      "initial_value_path": [
+        "cast_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "srctyp",
+      "label": "Source type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "initial_value_path": [
+        "cast_facts",
+        "srctyp"
+      ]
+    },
+    {
+      "field_id": "trgtyp",
+      "label": "Target type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "initial_value_path": [
+        "cast_facts",
+        "trgtyp"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "cast_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON CAST"
+    },
+    {
+      "field_id": "castmethod",
+      "label": "Method",
+      "tab": "Definition",
+      "control": "select",
+      "default": "function",
+      "editable_after_create": false,
+      "initial_value_path": [
+        "cast_facts",
+        "castmethod"
+      ],
+      "options": [
+        {
+          "value": "function",
+          "label": "With function"
+        },
+        {
+          "value": "binary",
+          "label": "Binary coercible (WITHOUT FUNCTION)"
+        },
+        {
+          "value": "inout",
+          "label": "With I/O conversion (WITH INOUT)"
+        }
+      ]
+    },
+    {
+      "field_id": "proname",
+      "label": "Function",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false,
+      "visible_when": {
+        "field": "castmethod",
+        "equals": "function"
+      },
+      "help": "Conversion function signature written as schema.function(argument types)."
+    },
+    {
+      "field_id": "castcontext",
+      "label": "Context",
+      "tab": "Definition",
+      "control": "select",
+      "default": "explicit",
+      "editable_after_create": false,
+      "initial_value_path": [
+        "cast_facts",
+        "castcontext"
+      ],
+      "options": [
+        {
+          "value": "explicit",
+          "label": "Explicit"
+        },
+        {
+          "value": "assignment",
+          "label": "Assignment"
+        },
+        {
+          "value": "implicit",
+          "label": "Implicit"
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL casts support CREATE CAST and DROP CAST aligned with catalog_objects.py."
+}

@@ -1,0 +1,55 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "access-method"
+  ],
+  "form_reference": "SR-F-030543",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE ACCESS METHOD"
+    },
+    {
+      "field_id": "method_type",
+      "label": "Method type",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "default": "INDEX",
+      "editable_after_create": false,
+      "options": [
+        {
+          "value": "INDEX",
+          "label": "Index"
+        },
+        {
+          "value": "TABLE",
+          "label": "Table"
+        }
+      ],
+      "native_keyword": "TYPE"
+    },
+    {
+      "field_id": "handler",
+      "label": "Handler function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "HANDLER",
+      "help": "Qualified access-method handler function (schema.function)."
+    }
+  ],
+  "notes": "PostgreSQL access methods are created and dropped in place without ALTER ACCESS METHOD."
+}

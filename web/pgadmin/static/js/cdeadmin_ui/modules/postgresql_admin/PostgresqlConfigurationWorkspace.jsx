@@ -50,6 +50,7 @@ export default function PostgresqlConfigurationWorkspace({
   const [reviewedDeploy, setReviewedDeploy] = useState(null);
   const [deployConfirmed, setDeployConfirmed] = useState(false);
   const [deployments, setDeployments] = useState([]);
+  const [selectedJobDetail, setSelectedJobDetail] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -129,13 +130,29 @@ export default function PostgresqlConfigurationWorkspace({
     }
   };
 
+  const handleInspectStatus = async (jobId) => {
+    setBusy(true);
+    setError('');
+    try {
+      const detail = await callServer({
+        action: 'postgresql_config_status',
+        request: {job_id: jobId},
+      });
+      setSelectedJobDetail(detail);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRollback = async (jobId) => {
     setBusy(true);
     setError('');
     try {
       await callServer({
         action: 'postgresql_config_rollback',
-        request: {job_id: jobId, confirmed: true, reload_after: true},
+        request: {job_id: jobId, confirmed: true},
       });
       await handleInspectFile();
       await loadList();
@@ -149,13 +166,13 @@ export default function PostgresqlConfigurationWorkspace({
   return (
     <Stack gap="md">
       <PostgresqlSectionCard
-        title={gettext('Server Configuration, HBA Rules & TLS Material')}
+        title={gettext('Cluster Configuration, HBA/Ident & TLS Certificate Deployment')}
         actions={<FormReference reference="SR-F-030451" />}
       >
         <Stack gap="sm">
           <Banner status="info">
             {gettext(
-              'Validates postgresql.conf via native postgres -C before atomic backup-staged deployment, redacts 0600 private keys on read, and supports one-click rollback.'
+              'Deploys validated configuration and 0600 TLS files to operator-granted cluster roots with automatic backup restoration if pg_file_settings or pg_hba_file_rules reports syntax errors.'
             )}
           </Banner>
           {error && <ValidationMessage status="error">{error}</ValidationMessage>}
@@ -166,7 +183,7 @@ export default function PostgresqlConfigurationWorkspace({
               onChange={(e) => setClusterId(e?.target ? e.target.value : e)}
             />
             <Select
-              label={gettext('Configuration or TLS File')}
+              label={gettext('Configuration / TLS File')}
               value={fileKind}
               options={FILE_KINDS}
               onChange={setFileKind}
@@ -174,67 +191,75 @@ export default function PostgresqlConfigurationWorkspace({
           </Grid>
           <Stack direction="row" gap="sm">
             <Button variant="secondary" disabled={busy} onClick={handleInspectFile}>
-              {gettext('Inspect File')}
+              {gettext('Inspect Current File')}
             </Button>
             <Checkbox
-              label={gettext('Reload server configuration after deploy (pg_ctl reload)')}
+              label={gettext('Reload PostgreSQL configuration after deployment (pg_reload_conf)')}
               checked={reloadAfter}
               onChange={setReloadAfter}
             />
           </Stack>
           {inspectedFile && (
             <Box>
-              <Badge status={inspectedFile.redacted ? 'warning' : 'success'} label={inspectedFile.redacted ? gettext('Private Key Redacted') : gettext('SHA-256 Verified')} />{' '}
-              <span>{inspectedFile.sha256 || gettext('No existing file')}</span>
+              <Badge status={inspectedFile.redacted ? 'warning' : 'info'} label={inspectedFile.file_kind} />{' '}
+              <span>SHA-256: {inspectedFile.sha256 || 'absent'}</span>
             </Box>
           )}
           <TextArea
-            label={gettext('Staged Replacement Content')}
-            rows={10}
+            label={gettext('Replacement File Content')}
+            rows={8}
             value={replacementText}
             onChange={(e) => setReplacementText(e?.target ? e.target.value : e)}
           />
-          <Button variant="primary" disabled={busy || !replacementText} onClick={handleReviewDeploy}>
-            {gettext('Validate & Review Deployment')}
+          <Button variant="primary" disabled={busy || !replacementText.trim()} onClick={handleReviewDeploy}>
+            {gettext('Review Configuration Deployment')}
           </Button>
         </Stack>
       </PostgresqlSectionCard>
 
       {reviewedDeploy && (
-        <PostgresqlSectionCard title={gettext('Validated Configuration Deployment Review')}>
+        <PostgresqlSectionCard title={gettext('Reviewed Configuration Deployment')}>
           <Stack gap="sm">
-            <CodeEditor
-              value={JSON.stringify(reviewedDeploy.validation || reviewedDeploy, null, 2)}
-              language="json"
-              readOnly
-              height="140px"
-            />
+            <Box>
+              <span>{gettext('Review Digest:')} {reviewedDeploy.review_digest}</span>
+            </Box>
             <Checkbox
-              label={gettext('Confirm atomic backup-staged deployment')}
+              label={gettext('Confirm atomic file replacement & live validation')}
               checked={deployConfirmed}
               onChange={setDeployConfirmed}
             />
             <Button variant="primary" disabled={busy || !deployConfirmed} onClick={handleStartDeploy}>
-              {gettext('Deploy Configuration')}
+              {gettext('Deploy & Validate Now')}
             </Button>
           </Stack>
         </PostgresqlSectionCard>
       )}
 
       {deployments.length > 0 && (
-        <PostgresqlSectionCard title={gettext('Deployment Receipts & Rollback')}>
-          <Stack gap="xs">
-            {deployments.slice(0, 6).map((d) => (
-              <Stack key={d.job_id} direction="row" gap="sm">
-                <Badge status="info" label={d.file_kind} />
-                <span>{d.state}</span>
-                {d.state === 'completed' && (
-                  <Button variant="secondary" disabled={busy} onClick={() => handleRollback(d.job_id)}>
-                    {gettext('Rollback to Backup')}
+        <PostgresqlSectionCard title={gettext('Deployment History, Status & Rollback')}>
+          <Stack gap="sm">
+            {deployments.slice(0, 8).map((job) => (
+              <Stack key={job.job_id} direction="row" gap="sm">
+                <Badge status="info" label={job.file_kind} />
+                <span>{job.state}</span>
+                <Button variant="secondary" disabled={busy} onClick={() => handleInspectStatus(job.job_id)}>
+                  {gettext('Inspect Status')}
+                </Button>
+                {job.state === 'completed' && (
+                  <Button variant="secondary" disabled={busy} onClick={() => handleRollback(job.job_id)}>
+                    {gettext('Rollback Prior File')}
                   </Button>
                 )}
               </Stack>
             ))}
+            {selectedJobDetail && (
+              <CodeEditor
+                value={JSON.stringify(selectedJobDetail, null, 2)}
+                language="json"
+                readOnly
+                height="180px"
+              />
+            )}
           </Stack>
         </PostgresqlSectionCard>
       )}

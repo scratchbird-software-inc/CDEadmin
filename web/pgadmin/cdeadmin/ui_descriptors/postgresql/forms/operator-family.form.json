@@ -1,0 +1,237 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "operator-family"
+  ],
+  "form_reference": "SR-F-030550",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "action",
+      "label": "Alter action",
+      "tab": "General",
+      "control": "select",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "owner",
+          "label": "Change owner"
+        },
+        {
+          "value": "rename",
+          "label": "Rename"
+        },
+        {
+          "value": "schema",
+          "label": "Move to schema"
+        },
+        {
+          "value": "add_members",
+          "label": "Add members"
+        },
+        {
+          "value": "drop_members",
+          "label": "Remove members"
+        }
+      ]
+    },
+    {
+      "field_id": "value",
+      "label": "New owner, name or schema",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "action",
+        "in": [
+          "owner",
+          "rename",
+          "schema"
+        ]
+      }
+    },
+    {
+      "field_id": "index_method",
+      "label": "Index access method",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "option_values_path": [
+        "dialect",
+        "index_methods"
+      ],
+      "native_keyword": "USING"
+    },
+    {
+      "field_id": "operators",
+      "label": "Added operators",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "action",
+        "equals": "add_members"
+      },
+      "columns": [
+        {
+          "field_id": "strategy",
+          "label": "Strategy number",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "operator",
+          "label": "Operator",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "operand_types",
+          "label": "Operand types",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "type_name",
+              "label": "Type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "functions",
+      "label": "Added functions",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "action",
+        "equals": "add_members"
+      },
+      "columns": [
+        {
+          "field_id": "support",
+          "label": "Support number",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "function",
+          "label": "Function",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "argument_types",
+          "label": "Argument types",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "type_name",
+              "label": "Type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "members",
+      "label": "Removed members",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "action",
+        "equals": "drop_members"
+      },
+      "columns": [
+        {
+          "field_id": "kind",
+          "label": "Member kind",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "OPERATOR",
+              "label": "OPERATOR"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "FUNCTION"
+            }
+          ]
+        },
+        {
+          "field_id": "number",
+          "label": "Strategy or support number",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "operand_types",
+          "label": "Operand types (2 types)",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "type_name",
+              "label": "Type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL operator family form aligned with native_admin.py."
+}

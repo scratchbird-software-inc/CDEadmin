@@ -1,0 +1,194 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "operator-class"
+  ],
+  "form_reference": "SR-F-030549",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "action",
+      "label": "Alter action",
+      "tab": "General",
+      "control": "select",
+      "modes": [
+        "alter"
+      ],
+      "options": [
+        {
+          "value": "owner",
+          "label": "Change owner"
+        },
+        {
+          "value": "rename",
+          "label": "Rename"
+        },
+        {
+          "value": "schema",
+          "label": "Move to schema"
+        }
+      ]
+    },
+    {
+      "field_id": "value",
+      "label": "New owner, name or schema",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "index_method",
+      "label": "Index access method",
+      "tab": "Definition",
+      "control": "select",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "option_values_path": [
+        "dialect",
+        "index_methods"
+      ],
+      "native_keyword": "USING"
+    },
+    {
+      "field_id": "data_type",
+      "label": "Indexed data type",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FOR TYPE"
+    },
+    {
+      "field_id": "family",
+      "label": "Operator family",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FAMILY"
+    },
+    {
+      "field_id": "default",
+      "label": "Default operator class?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "DEFAULT"
+    },
+    {
+      "field_id": "storage_type",
+      "label": "Storage data type",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "STORAGE"
+    },
+    {
+      "field_id": "operators",
+      "label": "Strategy operators",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "strategy",
+          "label": "Strategy number",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "operator",
+          "label": "Operator",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "sort_family",
+          "label": "Sort family (FOR ORDER BY)",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "functions",
+      "label": "Support functions",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "support",
+          "label": "Support number",
+          "control": "number",
+          "required": true,
+          "min": 1
+        },
+        {
+          "field_id": "function",
+          "label": "Support function",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "argument_types",
+          "label": "Argument types",
+          "control": "grid",
+          "item_kind": "string",
+          "columns": [
+            {
+              "field_id": "type_name",
+              "label": "Type",
+              "control": "text",
+              "required": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL operator class form using structured strategy and support-function grids without raw JSON controls."
+}

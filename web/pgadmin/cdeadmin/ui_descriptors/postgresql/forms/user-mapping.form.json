@@ -1,0 +1,130 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "user-mapping"
+  ],
+  "form_reference": "SR-F-030558",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "User or role",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "initial_value_path": [
+        "mapping_facts",
+        "name"
+      ],
+      "help": "Role name, PUBLIC, or CURRENT_USER."
+    },
+    {
+      "field_id": "server",
+      "label": "Foreign server",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "foreign-server",
+      "reference_value": "display_name",
+      "required": true,
+      "editable_after_create": false,
+      "initial_value_path": [
+        "mapping_facts",
+        "server"
+      ]
+    },
+    {
+      "field_id": "umoptions",
+      "label": "Options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "native_keyword": "OPTIONS"
+    },
+    {
+      "field_id": "add_options",
+      "label": "Add options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "set_options",
+      "label": "Set options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "drop_options",
+      "label": "Drop options",
+      "tab": "Engine",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL foreign-server user mapping form aligned with foreign_objects.py."
+}

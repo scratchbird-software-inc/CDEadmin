@@ -1,0 +1,110 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "text-search-parser"
+  ],
+  "form_reference": "SR-F-030555",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "schema"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON TEXT SEARCH PARSER"
+    },
+    {
+      "field_id": "prsstart",
+      "label": "Start function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "prsstart"
+      ],
+      "native_keyword": "START"
+    },
+    {
+      "field_id": "prstoken",
+      "label": "Get next token function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "prstoken"
+      ],
+      "native_keyword": "GETTOKEN"
+    },
+    {
+      "field_id": "prsend",
+      "label": "End function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "prsend"
+      ],
+      "native_keyword": "END"
+    },
+    {
+      "field_id": "prslextype",
+      "label": "Lextypes function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "prslextype"
+      ],
+      "native_keyword": "LEXTYPES"
+    },
+    {
+      "field_id": "prsheadline",
+      "label": "Headline function",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "prsheadline"
+      ],
+      "native_keyword": "HEADLINE"
+    }
+  ],
+  "notes": "PostgreSQL text search parser form aligned with text_search.py."
+}

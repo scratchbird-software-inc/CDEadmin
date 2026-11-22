@@ -1,0 +1,283 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "publication"
+  ],
+  "form_reference": "SR-F-030551",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "publication_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "pubowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "publication_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON PUBLICATION"
+    },
+    {
+      "field_id": "all_table",
+      "label": "All tables?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "editable_after_create": false,
+      "initial_value_path": [
+        "publication_facts",
+        "all_table"
+      ],
+      "native_keyword": "FOR ALL TABLES"
+    },
+    {
+      "field_id": "only_table",
+      "label": "Only listed tables (exclude partitions and children)?",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": false,
+      "native_keyword": "ONLY"
+    },
+    {
+      "field_id": "pubtable",
+      "label": "Tables",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "table_name",
+          "label": "Table (schema.table)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns (comma-separated)",
+          "control": "text"
+        },
+        {
+          "field_id": "where",
+          "label": "Row filter",
+          "control": "text"
+        }
+      ],
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      },
+      "initial_value_path": [
+        "publication_facts",
+        "pubtable"
+      ],
+      "help": "Supports column lists and WHERE row filters (PostgreSQL 15+)."
+    },
+    {
+      "field_id": "add_tables",
+      "label": "Add tables",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "table_name",
+          "label": "Table (schema.table)",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "columns",
+          "label": "Columns (comma-separated)",
+          "control": "text"
+        },
+        {
+          "field_id": "where",
+          "label": "Row filter",
+          "control": "text"
+        }
+      ],
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "drop_tables",
+      "label": "Drop tables",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "table_name",
+          "label": "Table (schema.table)",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "pubschema",
+      "label": "Tables in schemas",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "15"
+      },
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      },
+      "initial_value_path": [
+        "publication_facts",
+        "pubschema"
+      ],
+      "native_keyword": "TABLES IN SCHEMA"
+    },
+    {
+      "field_id": "add_schemas",
+      "label": "Add tables in schemas",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "15"
+      },
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "drop_schemas",
+      "label": "Drop tables in schemas",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "version": {
+        "minimum": "15"
+      },
+      "visible_when": {
+        "field": "all_table",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "evnt_insert",
+      "label": "Publish INSERT?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "publication_facts",
+        "evnt_insert"
+      ]
+    },
+    {
+      "field_id": "evnt_update",
+      "label": "Publish UPDATE?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "publication_facts",
+        "evnt_update"
+      ]
+    },
+    {
+      "field_id": "evnt_delete",
+      "label": "Publish DELETE?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "publication_facts",
+        "evnt_delete"
+      ]
+    },
+    {
+      "field_id": "evnt_truncate",
+      "label": "Publish TRUNCATE?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": true,
+      "initial_value_path": [
+        "publication_facts",
+        "evnt_truncate"
+      ]
+    },
+    {
+      "field_id": "publish_via_partition_root",
+      "label": "Publish via partition root?",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": false,
+      "initial_value_path": [
+        "publication_facts",
+        "publish_via_partition_root"
+      ],
+      "native_keyword": "publish_via_partition_root"
+    }
+  ],
+  "notes": "PostgreSQL logical replication publication form aligned with replication.py."
+}

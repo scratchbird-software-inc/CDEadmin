@@ -46,6 +46,7 @@ export default function PostgresqlSnapshotCopyWorkspace({
   const [sourceSchema, setSourceSchema] = useState('public');
   const [sourceTable, setSourceTable] = useState('');
   const [cutoverMode, setCutoverMode] = useState('atomic_swap');
+  const [activeLoadId, setActiveLoadId] = useState('');
   const [lastPayload, setLastPayload] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +116,63 @@ export default function PostgresqlSnapshotCopyWorkspace({
     }
   };
 
+  const handlePreviewConsumerCopy = async () => {
+    if (!openConsumer || !sourceTable.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const copied = await callServer({
+        action: 'postgresql_snapshot_consumer_copy',
+        request: {
+          consumer_id: openConsumer.consumer_id,
+          schema: sourceSchema.trim() || 'public',
+          table: sourceTable.trim(),
+          max_rows: 200,
+        },
+      });
+      setLastPayload(copied);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConsumerStatus = async () => {
+    if (!openConsumer) return;
+    setBusy(true);
+    setError('');
+    try {
+      const status = await callServer({
+        action: 'postgresql_snapshot_consumer_status',
+        request: {consumer_id: openConsumer.consumer_id},
+      });
+      setLastPayload(status);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReleaseConsumer = async () => {
+    if (!openConsumer) return;
+    setBusy(true);
+    setError('');
+    try {
+      const released = await callServer({
+        action: 'postgresql_snapshot_consumer_release',
+        request: {consumer_id: openConsumer.consumer_id, confirmed: true},
+      });
+      setLastPayload(released);
+      setOpenConsumer(null);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCoordinatedLoad = async () => {
     if (!openConsumer || !sourceTable.trim()) return;
     setBusy(true);
@@ -140,7 +198,25 @@ export default function PostgresqlSnapshotCopyWorkspace({
           confirmed: true,
         },
       });
+      setActiveLoadId(done.load_id || rev.load_id);
       setLastPayload(done);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLoadStatus = async () => {
+    if (!activeLoadId.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await callServer({
+        action: 'postgresql_snapshot_load_status',
+        request: {load_id: activeLoadId.trim()},
+      });
+      setLastPayload(res);
     } catch (err) {
       setError(err?.message || String(err));
     } finally {
@@ -163,7 +239,7 @@ export default function PostgresqlSnapshotCopyWorkspace({
           {error && <ValidationMessage status="error">{error}</ValidationMessage>}
           {runtimeCaps && (
             <Box>
-              <Badge status="success" label={runtimeCaps.encoding?.server_encoding} />{' '}
+              <Badge status="success" label={runtimeCaps.encoding?.server_encoding || 'UTF8'} />{' '}
               <span>
                 {gettext('Version:')} {runtimeCaps.version_capabilities?.public_version} | {gettext('Installed Extensions:')} {(runtimeCaps.installed_extensions || []).length} | {gettext('Output Plugins:')} {(outputPlugins?.plugins || []).filter((p) => p.installed).map((p) => p.plugin).join(', ')}
               </span>
@@ -214,7 +290,7 @@ export default function PostgresqlSnapshotCopyWorkspace({
       )}
 
       {openConsumer && (
-        <PostgresqlSectionCard title={gettext('Coordinated Destination Table Load & Atomic Cutover')}>
+        <PostgresqlSectionCard title={gettext('Snapshot Table Read, Coordinated Load & Lifecycle')}>
           <Stack gap="sm">
             <Grid columns={3} gap="sm">
               <TextField
@@ -237,9 +313,25 @@ export default function PostgresqlSnapshotCopyWorkspace({
                 onChange={setCutoverMode}
               />
             </Grid>
-            <Button variant="primary" disabled={busy || !sourceTable.trim()} onClick={handleCoordinatedLoad}>
-              {gettext('Run Coordinated Snapshot Load')}
-            </Button>
+            <Stack direction="row" gap="sm">
+              <Button variant="secondary" disabled={busy || !sourceTable.trim()} onClick={handlePreviewConsumerCopy}>
+                {gettext('Read Snapshot Rows')}
+              </Button>
+              <Button variant="primary" disabled={busy || !sourceTable.trim()} onClick={handleCoordinatedLoad}>
+                {gettext('Run Coordinated Snapshot Load')}
+              </Button>
+              <Button variant="secondary" disabled={busy} onClick={handleConsumerStatus}>
+                {gettext('Inspect Consumer Status')}
+              </Button>
+              {activeLoadId && (
+                <Button variant="secondary" disabled={busy} onClick={handleLoadStatus}>
+                  {gettext('Inspect Load Status')}
+                </Button>
+              )}
+              <Button variant="secondary" disabled={busy} onClick={handleReleaseConsumer}>
+                {gettext('Release Snapshot Consumer')}
+              </Button>
+            </Stack>
           </Stack>
         </PostgresqlSectionCard>
       )}
@@ -250,7 +342,7 @@ export default function PostgresqlSnapshotCopyWorkspace({
             value={JSON.stringify(lastPayload || {runtime_capabilities: runtimeCaps, output_plugins: outputPlugins}, null, 2)}
             language="json"
             readOnly
-            height="200px"
+            height="220px"
           />
         </PostgresqlSectionCard>
       )}

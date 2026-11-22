@@ -23,7 +23,7 @@ export function postgresqlAdministrationContext(tree, item, kind) {
     if (data?._type === 'server') { server = data; serverItem = current; break; }
   }
   if (!database?.connected || !server?.connected || server.cde_endpoint ||
-      Number(server.version) !== 180003) return null;
+      Number(server.version) < 150000) return null;
   const oid = selected._type === kind ? Number(selected._id) : undefined;
   if (oid !== undefined && (!Number.isInteger(oid) || oid < 1 || oid > 4294967295)) return null;
   return {server, serverItem, context: {

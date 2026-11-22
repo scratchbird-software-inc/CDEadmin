@@ -1,0 +1,166 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "text-search-configuration"
+  ],
+  "form_reference": "SR-F-030553",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "name"
+      ]
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "required": true,
+      "initial_value_path": [
+        "text_search_facts",
+        "schema"
+      ]
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "role",
+      "reference_value": "display_name",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "text_search_facts",
+        "description"
+      ],
+      "native_keyword": "COMMENT ON TEXT SEARCH CONFIGURATION"
+    },
+    {
+      "field_id": "prsname",
+      "label": "Parser",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "PARSER"
+    },
+    {
+      "field_id": "copy_config",
+      "label": "Copy configuration",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "COPY"
+    },
+    {
+      "field_id": "tokens",
+      "label": "Token mappings",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "create"
+      ],
+      "columns": [
+        {
+          "field_id": "token",
+          "label": "Token",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dictname",
+          "label": "Dictionaries (comma-separated)",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "add_mappings",
+      "label": "Add mappings",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "token",
+          "label": "Token",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dictname",
+          "label": "Dictionaries (comma-separated)",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "alter_mappings",
+      "label": "Alter mappings",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "token",
+          "label": "Token",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "dictname",
+          "label": "Dictionaries (comma-separated)",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "drop_mappings",
+      "label": "Drop mappings",
+      "tab": "Definition",
+      "control": "grid",
+      "modes": [
+        "alter"
+      ],
+      "columns": [
+        {
+          "field_id": "token",
+          "label": "Token",
+          "control": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "notes": "PostgreSQL text search configuration form aligned with text_search.py."
+}
