@@ -17,6 +17,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {PostgresqlSectionCard, createPostgresqlServerCaller} from './postgresqlAdminHelpers';
 
 /**
@@ -189,20 +190,49 @@ export default function PostgresqlActivityLocksWorkspace({
             <Badge status="info" label={`${sessions.length} ${gettext('Sessions')}`} />{' '}
             <Badge status={locks.some((l) => !l.granted) ? 'warning' : 'success'} label={`${locks.length} ${gettext('Locks')}`} />
           </Box>
-          {sessions.slice(0, 15).map((s) => (
-            <Stack key={s.pid} direction="row" gap="sm">
-              <Badge status={s.blocking_pids?.length ? 'error' : 'info'} label={`PID ${s.pid}`} />
-              <span>
-                {`${s.usename || 'bg'}@${s.datname || '-'} [${s.state || s.backend_type}]`}
-                {s.blocking_pids?.length ? ` | Blocked by: ${s.blocking_pids.join(',')}` : ''}
-              </span>
-              {s.usename && (
-                <Button variant="secondary" disabled={busy} onClick={() => handleReviewSignal(s.pid)}>
-                  {signalKind === 'terminate' ? gettext('Review Terminate') : gettext('Review Cancel')}
-                </Button>
-              )}
-            </Stack>
-          ))}
+          {sessions.length > 0 && (
+            <UnifiedDataGrid
+              caption={gettext('Active Backend Sessions')}
+              searchable
+              exportable
+              facets={[{id: 'state', column: 'state', label: gettext('State')}]}
+              minHeight={160}
+              maxHeight={300}
+              rows={sessions}
+              rowKeyGetter={(s) => s.pid}
+              columns={[
+                {
+                  name: 'pid',
+                  label: gettext('PID'),
+                  width: 110,
+                  render: (_val, s) => (
+                    <Badge status={s.blocking_pids?.length ? 'error' : 'info'} label={`PID ${s.pid}`} />
+                  ),
+                },
+                {name: 'usename', label: gettext('User'), width: 120, accessorFn: (s) => s.usename || 'bg'},
+                {name: 'datname', label: gettext('Database'), width: 120, accessorFn: (s) => s.datname || '-'},
+                {name: 'state', label: gettext('State'), width: 130, accessorFn: (s) => s.state || s.backend_type || ''},
+                {
+                  name: 'blocking_pids',
+                  label: gettext('Blocked By'),
+                  width: 120,
+                  accessorFn: (s) => (s.blocking_pids?.length ? s.blocking_pids.join(',') : ''),
+                },
+                {name: 'query_preview', label: gettext('Query Preview'), width: 260, mono: true},
+                {
+                  name: 'signal_action',
+                  label: gettext('Action'),
+                  width: 170,
+                  render: (_val, s) =>
+                    s.usename ? (
+                      <Button variant="secondary" disabled={busy} onClick={() => handleReviewSignal(s.pid)}>
+                        {signalKind === 'terminate' ? gettext('Review Terminate') : gettext('Review Cancel')}
+                      </Button>
+                    ) : null,
+                },
+              ]}
+            />
+          )}
           {reviewedSignal && (
             <Stack direction="row" gap="sm">
               <Checkbox
@@ -265,20 +295,33 @@ export default function PostgresqlActivityLocksWorkspace({
               </Button>
             </Stack>
           )}
-          <CodeEditor
-            value={JSON.stringify(
-              lastOutcome || {
-                pg_stat_statements_installed: Boolean(statements?.installed),
-                top_statements: stmtRows.slice(0, 15),
-                waiting_locks: locks.filter((l) => !l.granted),
-              },
-              null,
-              2
-            )}
-            language="json"
-            readOnly
-            height="220px"
-          />
+          {stmtRows.length > 0 && (
+            <UnifiedDataGrid
+              caption={gettext('pg_stat_statements Top Queries')}
+              searchable
+              exportable
+              minHeight={160}
+              maxHeight={280}
+              rows={stmtRows}
+              rowKeyGetter={(r, idx) => r.queryid ?? idx}
+              columns={[
+                {name: 'queryid', label: gettext('Query ID'), width: 130, mono: true},
+                {name: 'calls', label: gettext('Calls'), width: 90, numeric: true},
+                {name: 'total_exec_time_ms', label: gettext('Total ms'), width: 110, numeric: true},
+                {name: 'mean_exec_time_ms', label: gettext('Mean ms'), width: 110, numeric: true},
+                {name: 'rows', label: gettext('Rows'), width: 90, numeric: true},
+                {name: 'query', label: gettext('Normalized SQL'), width: 320, mono: true},
+              ]}
+            />
+          )}
+          {lastOutcome && (
+            <CodeEditor
+              value={JSON.stringify(lastOutcome, null, 2)}
+              language="json"
+              readOnly
+              height="160px"
+            />
+          )}
         </Stack>
       </PostgresqlSectionCard>
     </Stack>

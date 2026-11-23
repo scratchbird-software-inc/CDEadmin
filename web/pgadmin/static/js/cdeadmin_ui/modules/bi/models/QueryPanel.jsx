@@ -14,6 +14,7 @@ import {Box, Stack} from '../../../primitives/Layout';
 import {Button} from '../../../primitives/Button';
 import {Banner} from '../../../feedback/Indicators';
 import {EmptyState} from '../../../feedback/EmptyState';
+import {serializeGridData} from '../../../data/gridIO';
 import ModelFields from './ModelFields';
 import {modelOptionContext, queryForm} from './modelForm';
 import {emptyQuery, queryErrors, toQuery} from './queryDraft';
@@ -43,10 +44,14 @@ export function CellsetGrid({rendered}) {
     return found === null || found === undefined ? '' : String(found);
   };
   const exportCsv = () => {
-    const quote = (item) => `"${String(item ?? '').replaceAll('"', '""')}"`;
-    const rows = [[...levels, ...measures], ...cells.map((cell) => [
-      ...levels.map((name) => cell.coordinates?.[name]), ...measures.map((name) => cell.measures?.[name])])];
-    download('cellset.csv', rows.map((row) => row.map(quote).join(',')).join('\n'), 'text/csv');
+    const allCols = [...levels, ...measures].map((name) => ({key: name, label: name}));
+    const rowObjs = cells.map((cell) =>
+      Object.fromEntries([
+        ...levels.map((name) => [name, cell.coordinates?.[name]]),
+        ...measures.map((name) => [name, cell.measures?.[name]]),
+      ])
+    );
+    download('cellset.csv', serializeGridData(allCols, rowObjs, 'csv'), 'text/csv');
   };
   return <Stack gap="compact" aria-label={gettext('Cube pivot results')}>
     <Stack direction="row" gap="compact" sx={{flexWrap: 'wrap'}}>

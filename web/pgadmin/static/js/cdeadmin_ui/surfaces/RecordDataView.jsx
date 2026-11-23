@@ -192,7 +192,7 @@ export default function RecordDataView({model}) {
           return (
             <div
               key={col.name}
-              role="gridcell"
+              role={model.gridRole === 'table' ? 'cell' : 'gridcell'}
               data-grid-nav-cell={`${rIdx}:${col.name}`}
               tabIndex={isActiveCell ? 0 : -1}
               onClick={(ev) => {
@@ -341,7 +341,21 @@ export default function RecordDataView({model}) {
                 overflow: 'hidden',
               }}
             >
-              {formatted.isComplex ? (
+              {typeof col.render === 'function' ? (
+                <div
+                  onClick={(ev) => ev.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 4,
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  {col.render(rawVal, row.__raw || row, rIdx)}
+                </div>
+              ) : formatted.isComplex ? (
                 <button
                   type="button"
                   className="sr-btn"
@@ -530,7 +544,7 @@ export default function RecordDataView({model}) {
         }}
       >
         <div
-          role="grid"
+          role={model.gridRole || 'grid'}
           aria-label={model.ariaLabel || gettext('Data Surface Grid')}
           data-cdeadmin-qa-key={model.qaKey || 'data-surface-standard-grid'}
           style={{minWidth: 'max-content', width: '100%'}}
@@ -721,7 +735,7 @@ export default function RecordDataView({model}) {
           </div>
 
           {!rows.length ? (
-            <EmptyState message={gettext('No matching rows.')} />
+            <EmptyState message={model.emptyMessage || gettext('No matching rows.')} />
           ) : (
             rows.map((row, rIdx) => {
               if (

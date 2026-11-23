@@ -4,7 +4,7 @@
 
 import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box} from '@mui/material';
+import {Box} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {NumberField, TextArea, TextField} from '../../primitives/Field';
 import {Checkbox, Select} from '../../primitives/Choice';
@@ -14,6 +14,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {
   CDC_CAPTURE_MECHANISMS, CDC_DELIVERY_GUARANTEES, CDC_EVOLUTION_ACTIONS,
@@ -151,10 +152,20 @@ function DefinitionEditor({session, invoke, service, currentUser, onNavigate}) {
     <Box sx={{flex: 1, minHeight: 260}}><GraphSurface label="CDC flow" nodes={nodes} edges={edges}
       mode="graph" selectedId={session.selection.stage}
       onSelect={(stage) => service.select(session.id, {stage})} /></Box>
-    <Box role="table" aria-label="CDC flow text alternative" sx={{p: 1}}>
-      {nodes.map((node) => <Box role="row" key={node.id} sx={{display: 'flex', gap: 1}}>
-        <Box role="cell">{node.id}</Box><Box role="cell">{node.name}</Box>
-        <Box role="cell">{node.namespace}</Box></Box>)}
+    <Box sx={{p: 1}}>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="CDC flow text alternative"
+        minHeight={130}
+        maxHeight={220}
+        rows={nodes}
+        rowKeyGetter={(node) => node.id}
+        columns={[
+          {name: 'id', label: 'Stage', width: 120},
+          {name: 'name', label: 'Target / Summary', width: 280},
+          {name: 'namespace', label: 'Mechanism / Guarantee', width: 180},
+        ]}
+      />
     </Box>
   </Box>;
 }

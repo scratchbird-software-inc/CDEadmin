@@ -15,35 +15,34 @@ import {Button} from '../../../primitives/Button';
 import {Checkbox} from '../../../primitives/Choice';
 import {Badge, Banner} from '../../../feedback/Indicators';
 import {EmptyState} from '../../../feedback/EmptyState';
+import UnifiedDataGrid from '../../../data/UnifiedDataGrid';
 import {embeddedContent} from './modelDraft';
 
 const message = (error) => error?.message || String(error);
 
 function Table({label, columns, rows, empty}) {
   if(!rows.length) return <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>{empty}</Box>;
-  return <Box sx={{overflowX: 'auto'}}>
-    <Box component="table" aria-label={label} sx={{borderCollapse: 'collapse', width: '100%', fontSize: '0.8125rem'}}>
-      <Box component="thead"><Box component="tr">
-        {columns.map((column) => <Box key={column.key} component="th" scope="col" sx={headerSx}>{column.label}</Box>)}
-      </Box></Box>
-      <Box component="tbody">
-        {rows.map((row, index) => <Box component="tr" key={row.id ?? index}>
-          {columns.map((column) => <Box key={column.key} component="td" sx={cellSx}>
-            {column.render ? column.render(row) : row[column.key]}</Box>)}
-        </Box>)}
-      </Box>
-    </Box>
-  </Box>;
+  return (
+    <UnifiedDataGrid
+      gridRole="table"
+      ariaLabel={label}
+      minHeight={120}
+      maxHeight={300}
+      rows={rows}
+      rowKeyGetter={(row, index) => row.id ?? index}
+      columns={columns.map((column) => ({
+        name: column.key,
+        label: column.label,
+        render: column.render ? (_val, row) => column.render(row) : undefined,
+      }))}
+    />
+  );
 }
 
 Table.propTypes = {
   label: PropTypes.string.isRequired, columns: PropTypes.array.isRequired, rows: PropTypes.array.isRequired,
   empty: PropTypes.node,
 };
-
-const headerSx = {textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, p: 0.5, borderBottom: '1px solid',
-  borderColor: 'divider', whiteSpace: 'nowrap'};
-const cellSx = {p: 0.5, verticalAlign: 'top', borderBottom: '1px solid', borderColor: 'divider'};
 
 function Part({title, children}) {
   return <Box component="section" aria-label={title} sx={{border: '1px solid', borderColor: 'divider', p: 1}}>

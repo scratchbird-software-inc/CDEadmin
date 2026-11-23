@@ -16,6 +16,7 @@ import {Button} from '../../primitives/Button';
 import {Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 
 /**
  * Strip or set `database_target_id` on an endpoint workspace URL so that
@@ -289,49 +290,77 @@ export function ReceiptHistoryPanel({items = [], onInspectReceipt, selectedRecei
             {gettext('No retained reviews or receipts recorded for this owner and scope.')}
           </Box>
         ) : (
-          <Box component="table" sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}>
-            <thead>
-              <tr>
-                <th style={{textAlign: 'left', padding: '4px 8px'}}>{gettext('Created')}</th>
-                <th style={{textAlign: 'left', padding: '4px 8px'}}>{gettext('Operation')}</th>
-                <th style={{textAlign: 'left', padding: '4px 8px'}}>{gettext('State')}</th>
-                <th style={{textAlign: 'left', padding: '4px 8px'}}>{gettext('Review ID')}</th>
-                <th style={{textAlign: 'right', padding: '4px 8px'}}>{gettext('Inspect')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const rid = item.review_id || item.trace_id;
-                const st = item.outcome?.state || item.outcome_summary?.state || item.state || 'unknown';
-                return (
-                  <tr key={rid} style={{borderTop: '1px solid rgba(128,128,128,0.2)'}}>
-                    <td style={{padding: '4px 8px'}}>{formatUnixTimestamp(item.created_at || item.started_at)}</td>
-                    <td style={{padding: '4px 8px'}}>{item.operation || item.payload?.options?.mode || 'execute'}</td>
-                    <td style={{padding: '4px 8px'}}>
-                      <Badge
-                        label={st}
-                        status={
-                          ['completed', 'submitted', 'active', 'stopped'].includes(st)
-                            ? 'success'
-                            : ['rejected', 'failed', 'expired', 'unknown_outcome'].includes(st)
-                              ? 'error'
-                              : 'info'
-                        }
-                      />
-                    </td>
-                    <td style={{padding: '4px 8px'}}><code>{String(rid).slice(0, 12)}…</code></td>
-                    <td style={{padding: '4px 8px', textAlign: 'right'}}>
-                      {onInspectReceipt && (
+          <UnifiedDataGrid
+            gridRole="table"
+            ariaLabel={gettext('Durable Operation Reviews & Outcome Receipts')}
+            searchable
+            exportable
+            minHeight={160}
+            maxHeight={320}
+            rows={items}
+            rowKeyGetter={(item) => item.review_id || item.trace_id}
+            columns={[
+              {
+                name: 'created_at',
+                label: gettext('Created'),
+                width: 175,
+                accessorFn: (item) => formatUnixTimestamp(item.created_at || item.started_at),
+              },
+              {
+                name: 'operation',
+                label: gettext('Operation'),
+                width: 170,
+                accessorFn: (item) => item.operation || item.payload?.options?.mode || 'execute',
+              },
+              {
+                name: 'state',
+                label: gettext('State'),
+                width: 140,
+                accessorFn: (item) =>
+                  item.outcome?.state || item.outcome_summary?.state || item.state || 'unknown',
+                render: (_val, item) => {
+                  const st =
+                    item.outcome?.state || item.outcome_summary?.state || item.state || 'unknown';
+                  return (
+                    <Badge
+                      label={st}
+                      status={
+                        ['completed', 'submitted', 'active', 'stopped'].includes(st)
+                          ? 'success'
+                          : ['rejected', 'failed', 'expired', 'unknown_outcome'].includes(st)
+                            ? 'error'
+                            : 'info'
+                      }
+                    />
+                  );
+                },
+              },
+              {
+                name: 'review_id',
+                label: gettext('Review ID'),
+                width: 180,
+                mono: true,
+                accessorFn: (item) => String(item.review_id || item.trace_id || ''),
+              },
+              ...(onInspectReceipt
+                ? [
+                  {
+                    name: 'inspect',
+                    label: gettext('Inspect'),
+                    width: 120,
+                    render: (_val, item) => {
+                      const rid = item.review_id || item.trace_id;
+                      return (
                         <Button intent="neutral" size="small" onClick={() => onInspectReceipt(rid)}>
                           {gettext('Details')}
                         </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Box>
+                      );
+                    },
+                  },
+                ]
+                : []),
+            ]}
+          />
         )}
         {selectedReceipt && (
           <CodeEditor

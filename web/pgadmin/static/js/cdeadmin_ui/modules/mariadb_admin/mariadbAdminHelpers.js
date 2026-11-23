@@ -14,6 +14,7 @@ import getApiInstance from 'sources/api_instance';
 import {Box, Panel, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Badge, Banner} from '../../feedback/Indicators';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 
 export function stripQueryParams(url) {
   return String(url || '').split('?')[0];
@@ -153,75 +154,92 @@ export function MariaDBJobsTable({
         {jobs.length === 0 ? (
           <Banner status="info">{gettext('No MariaDB supervised jobs recorded yet.')}</Banner>
         ) : (
-          <Box style={{overflowX: 'auto'}}>
-            <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem'}}>
-              <thead>
-                <tr style={{textAlign: 'left', borderBottom: '1px solid var(--cde-border-subtle, #d0d7de)'}}>
-                  <th style={{padding: '6px'}}>{gettext('ID')}</th>
-                  <th style={{padding: '6px'}}>{gettext('Operation / Phase')}</th>
-                  <th style={{padding: '6px'}}>{gettext('State')}</th>
-                  <th style={{padding: '6px'}}>{gettext('Created')}</th>
-                  <th style={{padding: '6px'}}>{gettext('Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map((job) => {
-                  const jid = job[idKey] || job.job_id;
-                  const opLabel =
+          <UnifiedDataGrid
+            gridRole="table"
+            ariaLabel={title || gettext('Supervised Job Receipts')}
+            searchable
+            exportable
+            minHeight={160}
+            maxHeight={340}
+            rows={jobs}
+            rowKeyGetter={(job) => job[idKey] || job.job_id}
+            columns={[
+              {
+                name: 'id',
+                label: gettext('ID'),
+                width: 170,
+                mono: true,
+                accessorFn: (job) => job[idKey] || job.job_id,
+              },
+              {
+                name: 'operation',
+                label: gettext('Operation / Phase'),
+                width: 180,
+                accessorFn: (job) =>
+                  String(
                     job[kindKey] ||
-                    job.phase ||
-                    job.host_operation ||
-                    job.galera_operation ||
-                    job.operation ||
-                    '—';
+                      job.phase ||
+                      job.host_operation ||
+                      job.galera_operation ||
+                      job.operation ||
+                      '—'
+                  ),
+              },
+              {
+                name: 'state',
+                label: gettext('State'),
+                width: 130,
+                render: (_val, job) => {
                   const badgeStatus =
                     job.state === 'completed' || job.state === 'succeeded'
                       ? 'success'
                       : job.state === 'failed'
                         ? 'error'
                         : 'info';
+                  return <Badge label={String(job.state || 'unknown')} status={badgeStatus} />;
+                },
+              },
+              {
+                name: 'created_at',
+                label: gettext('Created'),
+                width: 175,
+                accessorFn: (job) => formatEpoch(job.created_at),
+              },
+              {
+                name: 'actions',
+                label: gettext('Actions'),
+                width: 260,
+                render: (_val, job) => {
+                  const jid = job[idKey] || job.job_id;
                   return (
-                    <tr
-                      key={jid}
-                      style={{borderBottom: '1px solid var(--cde-border-subtle, #eaeef2)'}}
-                    >
-                      <td style={{padding: '6px', fontFamily: 'monospace'}}>{jid}</td>
-                      <td style={{padding: '6px'}}>{String(opLabel)}</td>
-                      <td style={{padding: '6px'}}>
-                        <Badge label={String(job.state || 'unknown')} status={badgeStatus} />
-                      </td>
-                      <td style={{padding: '6px'}}>{formatEpoch(job.created_at)}</td>
-                      <td style={{padding: '6px'}}>
-                        <Stack direction="row" gap={1} style={{flexWrap: 'wrap'}}>
-                          {onSelect && (
-                            <Button intent="neutral" disabled={busy} onClick={() => onSelect(job)}>
-                              {gettext('Inspect')}
-                            </Button>
-                          )}
-                          {onRefreshJob && (
-                            <Button intent="neutral" disabled={busy} onClick={() => onRefreshJob(jid)}>
-                              {gettext('Status')}
-                            </Button>
-                          )}
-                          {onCancelJob && (job.state === 'running' || job.state === 'dispatching') && (
-                            <Button intent="destructive" disabled={busy} onClick={() => onCancelJob(jid)}>
-                              {gettext('Cancel')}
-                            </Button>
-                          )}
-                          {onReconcileJob && (
-                            <Button intent="neutral" disabled={busy} onClick={() => onReconcileJob(jid)}>
-                              {gettext('Reconcile')}
-                            </Button>
-                          )}
-                          {extraActions ? extraActions(job) : null}
-                        </Stack>
-                      </td>
-                    </tr>
+                    <Stack direction="row" gap={1} style={{flexWrap: 'wrap'}}>
+                      {onSelect && (
+                        <Button intent="neutral" disabled={busy} onClick={() => onSelect(job)}>
+                          {gettext('Inspect')}
+                        </Button>
+                      )}
+                      {onRefreshJob && (
+                        <Button intent="neutral" disabled={busy} onClick={() => onRefreshJob(jid)}>
+                          {gettext('Status')}
+                        </Button>
+                      )}
+                      {onCancelJob && (job.state === 'running' || job.state === 'dispatching') && (
+                        <Button intent="destructive" disabled={busy} onClick={() => onCancelJob(jid)}>
+                          {gettext('Cancel')}
+                        </Button>
+                      )}
+                      {onReconcileJob && (
+                        <Button intent="neutral" disabled={busy} onClick={() => onReconcileJob(jid)}>
+                          {gettext('Reconcile')}
+                        </Button>
+                      )}
+                      {extraActions ? extraActions(job) : null}
+                    </Stack>
                   );
-                })}
-              </tbody>
-            </table>
-          </Box>
+                },
+              },
+            ]}
+          />
         )}
         {selectedJob && (
           <Box

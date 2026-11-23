@@ -18,6 +18,9 @@ import {Checkbox} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import RecordGrid from '../../objects/RecordGrid';
+import KeyValueEditor from '../../objects/KeyValueEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {DuckdbSectionCard, createDuckdbWorkspaceCaller} from './duckdbAdminHelpers';
 
 const textVal = (e) => (e?.target ? e.target.value : String(e ?? ''));
@@ -45,14 +48,14 @@ export default function DuckdbRetainedSchemaWorkspace({
   const desiredJsonRef = useRef('');
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [deletionsText, setDeletionsText] = useState('');
-  const [alterationsJson, setAlterationsJson] = useState('');
+  const [alterationRows, setAlterationRows] = useState([]);
   const [rebuildResourceId, setRebuildResourceId] = useState('');
   const [rebuildPreserveRows, setRebuildPreserveRows] = useState(true);
   const [rebuildCompleteDef, setRebuildCompleteDef] = useState(true);
   const [rebuildLossAck, setRebuildLossAck] = useState(false);
   const [rebuildDiscardCols, setRebuildDiscardCols] = useState(false);
-  const [rebuildConversionsJson, setRebuildConversionsJson] = useState('');
-  const [rebuildRenamesJson, setRebuildRenamesJson] = useState('');
+  const [rebuildConversions, setRebuildConversions] = useState({});
+  const [rebuildRenames, setRebuildRenames] = useState({});
   const [previewResult, setPreviewResult] = useState(null);
   const [reviewedPlan, setReviewedPlan] = useState(null);
   const [confirmApply, setConfirmApply] = useState(false);
@@ -81,7 +84,13 @@ export default function DuckdbRetainedSchemaWorkspace({
 
   const buildRetainedModifiers = () => {
     const deletions = deletionsText.split(',').map((s) => s.trim()).filter(Boolean);
-    const alterations = alterationsJson.trim() ? JSON.parse(alterationsJson) : [];
+    const alterations = alterationRows
+      .filter((r) => r?.resource_id?.trim())
+      .map((r) => ({
+        resource_id: r.resource_id.trim(),
+        action: r.action || 'alter_column_type',
+        ...(r.expression?.trim() ? {expression: r.expression.trim()} : {}),
+      }));
     const rebuilds = [];
     if (rebuildResourceId.trim()) {
       rebuilds.push({
@@ -90,8 +99,8 @@ export default function DuckdbRetainedSchemaWorkspace({
         complete_definition_confirmed: rebuildCompleteDef,
         ...(rebuildLossAck ? {loss_acknowledged: true} : {}),
         ...(rebuildDiscardCols ? {discard_columns_confirmed: true} : {}),
-        ...(rebuildConversionsJson.trim() ? {column_conversions: JSON.parse(rebuildConversionsJson)} : {}),
-        ...(rebuildRenamesJson.trim() ? {column_renames: JSON.parse(rebuildRenamesJson)} : {}),
+        ...(Object.keys(rebuildConversions).length ? {column_conversions: rebuildConversions} : {}),
+        ...(Object.keys(rebuildRenames).length ? {column_renames: rebuildRenames} : {}),
       });
     }
     return {
@@ -273,33 +282,61 @@ export default function DuckdbRetainedSchemaWorkspace({
             }}
             minHeight={180}
           />
-          <Grid columns={3} gap="sm">
+          <Grid columns={2} gap="sm">
             <TextField
               label={gettext('Explicit Deletions (comma-separated resource IDs)')}
               value={deletionsText}
               onChange={(e) => setDeletionsText(textVal(e))}
             />
             <TextField
-              label={gettext('Explicit Alterations JSON Array')}
-              value={alterationsJson}
-              onChange={(e) => setAlterationsJson(textVal(e))}
-            />
-            <TextField
               label={gettext('Retained Rebuild Table Resource ID')}
               value={rebuildResourceId}
               onChange={(e) => setRebuildResourceId(textVal(e))}
             />
-            <TextField
-              label={gettext('Rebuild Column Conversions JSON')}
-              value={rebuildConversionsJson}
-              onChange={(e) => setRebuildConversionsJson(textVal(e))}
-            />
-            <TextField
-              label={gettext('Rebuild Column Renames JSON')}
-              value={rebuildRenamesJson}
-              onChange={(e) => setRebuildRenamesJson(textVal(e))}
-            />
           </Grid>
+          <RecordGrid
+            field={{
+              field_id: 'retained_alterations',
+              label: gettext('Explicit Alterations'),
+              control: 'grid',
+              columns: [
+                {field_id: 'resource_id', label: gettext('Resource ID'), control: 'text', required: true},
+                {
+                  field_id: 'action',
+                  label: gettext('Alteration Action'),
+                  control: 'select',
+                  default: 'alter_column_type',
+                  options: [
+                    {value: 'alter_column_type', label: gettext('Alter Column Type')},
+                    {value: 'set_default', label: gettext('Set Default')},
+                    {value: 'drop_default', label: gettext('Drop Default')},
+                    {value: 'set_not_null', label: gettext('Set NOT NULL')},
+                    {value: 'drop_not_null', label: gettext('Drop NOT NULL')},
+                  ],
+                },
+                {field_id: 'expression', label: gettext('Type / Expression'), control: 'text'},
+              ],
+            }}
+            rows={alterationRows}
+            onChange={setAlterationRows}
+            disabled={busy}
+          />
+          {rebuildResourceId.trim() && (
+            <Grid columns={2} gap="sm">
+              <KeyValueEditor
+                field={{field_id: 'column_conversions', label: gettext('Rebuild Column Conversions (Column → Expression)')}}
+                value={rebuildConversions}
+                onChange={setRebuildConversions}
+                disabled={busy}
+              />
+              <KeyValueEditor
+                field={{field_id: 'column_renames', label: gettext('Rebuild Column Renames (Old → New)')}}
+                value={rebuildRenames}
+                onChange={setRebuildRenames}
+                disabled={busy}
+              />
+            </Grid>
+          )}
           {rebuildResourceId.trim() && (
             <Stack direction="row" gap="sm" style={{flexWrap: 'wrap'}}>
               <Checkbox
@@ -360,6 +397,17 @@ export default function DuckdbRetainedSchemaWorkspace({
           <div>
             <Badge status="info" label={`Archived retained receipts: ${receipts.length}`} />
           </div>
+          {receipts.length > 0 && (
+            <UnifiedDataGrid
+              caption={gettext('Retained Schema Application Receipts')}
+              searchable
+              exportable
+              minHeight={140}
+              maxHeight={260}
+              rows={receipts}
+              rowKeyGetter={(r, idx) => r.application_id || r.review_id || idx}
+            />
+          )}
         </DuckdbSectionCard>
       </Stack>
     </Box>

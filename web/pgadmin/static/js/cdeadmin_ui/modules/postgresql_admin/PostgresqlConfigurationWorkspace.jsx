@@ -18,6 +18,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {PostgresqlSectionCard, createPostgresqlServerCaller} from './postgresqlAdminHelpers';
 
 const FILE_KINDS = [
@@ -238,20 +239,42 @@ export default function PostgresqlConfigurationWorkspace({
       {deployments.length > 0 && (
         <PostgresqlSectionCard title={gettext('Deployment History, Status & Rollback')}>
           <Stack gap="sm">
-            {deployments.slice(0, 8).map((job) => (
-              <Stack key={job.job_id} direction="row" gap="sm">
-                <Badge status="info" label={job.file_kind} />
-                <span>{job.state}</span>
-                <Button variant="secondary" disabled={busy} onClick={() => handleInspectStatus(job.job_id)}>
-                  {gettext('Inspect Status')}
-                </Button>
-                {job.state === 'completed' && (
-                  <Button variant="secondary" disabled={busy} onClick={() => handleRollback(job.job_id)}>
-                    {gettext('Rollback Prior File')}
-                  </Button>
-                )}
-              </Stack>
-            ))}
+            <UnifiedDataGrid
+              caption={gettext('Configuration Deployment Jobs')}
+              searchable
+              exportable
+              minHeight={140}
+              maxHeight={280}
+              rows={deployments}
+              rowKeyGetter={(job) => job.job_id}
+              columns={[
+                {name: 'job_id', label: gettext('Job ID'), width: 170, mono: true},
+                {
+                  name: 'file_kind',
+                  label: gettext('File'),
+                  width: 150,
+                  render: (_val, job) => <Badge status="info" label={job.file_kind} />,
+                },
+                {name: 'state', label: gettext('State'), width: 120},
+                {
+                  name: 'actions',
+                  label: gettext('Actions'),
+                  width: 280,
+                  render: (_val, job) => (
+                    <Stack direction="row" gap="sm">
+                      <Button variant="secondary" disabled={busy} onClick={() => handleInspectStatus(job.job_id)}>
+                        {gettext('Inspect Status')}
+                      </Button>
+                      {job.state === 'completed' && (
+                        <Button variant="secondary" disabled={busy} onClick={() => handleRollback(job.job_id)}>
+                          {gettext('Rollback Prior File')}
+                        </Button>
+                      )}
+                    </Stack>
+                  ),
+                },
+              ]}
+            />
             {selectedJobDetail && (
               <CodeEditor
                 value={JSON.stringify(selectedJobDetail, null, 2)}

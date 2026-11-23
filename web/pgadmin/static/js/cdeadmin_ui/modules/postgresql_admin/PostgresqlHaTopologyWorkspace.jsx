@@ -18,6 +18,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {PostgresqlSectionCard, createPostgresqlServerCaller} from './postgresqlAdminHelpers';
 
 /**
@@ -522,13 +523,30 @@ export default function PostgresqlHaTopologyWorkspace({
             </Button>
           </Stack>
           {haJobs.length > 0 && (
-            <Stack direction="row" gap="sm">
-              {haJobs.slice(0, 5).map((j) => (
-                <Button key={j.job_id} variant="secondary" onClick={() => handleInspectHaJob(j.job_id)}>
-                  {`${j.operation} (${j.state})`}
-                </Button>
-              ))}
-            </Stack>
+            <UnifiedDataGrid
+              caption={gettext('Retained HA Operation Jobs')}
+              searchable
+              exportable
+              minHeight={140}
+              maxHeight={260}
+              rows={haJobs}
+              rowKeyGetter={(j) => j.job_id}
+              columns={[
+                {name: 'job_id', label: gettext('Job ID'), width: 170, mono: true},
+                {name: 'operation', label: gettext('Operation'), width: 180},
+                {name: 'state', label: gettext('State'), width: 120},
+                {
+                  name: 'actions',
+                  label: gettext('Inspect'),
+                  width: 140,
+                  render: (_val, j) => (
+                    <Button variant="secondary" onClick={() => handleInspectHaJob(j.job_id)}>
+                      {gettext('Inspect')}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           )}
         </Stack>
       </PostgresqlSectionCard>

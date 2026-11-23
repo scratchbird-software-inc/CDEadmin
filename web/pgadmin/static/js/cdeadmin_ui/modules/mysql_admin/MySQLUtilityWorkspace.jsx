@@ -18,6 +18,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 
 function stripQueryParams(url) {
   return String(url || '').split('?')[0];
@@ -698,30 +699,41 @@ export default function MySQLUtilityWorkspace({
             {jobs.length === 0 ? (
               <Box sx={{fontSize: '0.8125rem'}}>{gettext('No MySQL utility jobs recorded for this server yet.')}</Box>
             ) : (
-              <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem'}} aria-label={gettext('MySQL utility job history')}>
-                <thead>
-                  <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
-                    <th style={{padding: 6}}>{gettext('Job ID')}</th>
-                    <th style={{padding: 6}}>{gettext('Utility')}</th>
-                    <th style={{padding: 6}}>{gettext('State')}</th>
-                    <th style={{padding: 6}}>{gettext('Actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jobs.map((job) => (
-                    <tr key={job.job_id} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
-                      <td style={{padding: 6}}><code>{job.job_id}</code></td>
-                      <td style={{padding: 6}}>{job.utility || job.operation_id}</td>
-                      <td style={{padding: 6}}>{job.state}</td>
-                      <td style={{padding: 6}}>
-                        <Button size="small" intent="neutral" disabled={busy} onClick={() => handlePollJob(job.job_id)}>
-                          {gettext('Inspect')}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <UnifiedDataGrid
+                gridRole="table"
+                ariaLabel={gettext('MySQL utility job history')}
+                searchable
+                exportable
+                minHeight={160}
+                maxHeight={320}
+                rows={jobs}
+                rowKeyGetter={(job) => job.job_id}
+                columns={[
+                  {name: 'job_id', label: gettext('Job ID'), width: 180, mono: true},
+                  {
+                    name: 'utility',
+                    label: gettext('Utility'),
+                    width: 170,
+                    accessorFn: (job) => job.utility || job.operation_id,
+                  },
+                  {name: 'state', label: gettext('State'), width: 120},
+                  {
+                    name: 'actions',
+                    label: gettext('Actions'),
+                    width: 130,
+                    render: (_val, job) => (
+                      <Button
+                        size="small"
+                        intent="neutral"
+                        disabled={busy}
+                        onClick={() => handlePollJob(job.job_id)}
+                      >
+                        {gettext('Inspect')}
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
             )}
           </Stack>
         </Panel>

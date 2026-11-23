@@ -18,6 +18,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {PostgresqlSectionCard, createPostgresqlServerCaller} from './postgresqlAdminHelpers';
 
 const UTILITY_OPTIONS = [
@@ -367,17 +368,32 @@ export default function PostgresqlHostToolsWorkspace({
                 height="220px"
               />
             )}
-            <Stack direction="row" gap="sm">
-              {jobs.slice(0, 6).map((j) => (
-                <Button
-                  key={j.job_id}
-                  variant="secondary"
-                  onClick={() => handleRefreshJob(j.job_id)}
-                >
-                  {`${j.operation_id} (${j.state})`}
-                </Button>
-              ))}
-            </Stack>
+            {jobs.length > 0 && (
+              <UnifiedDataGrid
+                caption={gettext('Supervised Utility Jobs')}
+                searchable
+                exportable
+                minHeight={140}
+                maxHeight={260}
+                rows={jobs}
+                rowKeyGetter={(j) => j.job_id}
+                columns={[
+                  {name: 'job_id', label: gettext('Job ID'), width: 170, mono: true},
+                  {name: 'operation_id', label: gettext('Utility Operation'), width: 200},
+                  {name: 'state', label: gettext('State'), width: 120},
+                  {
+                    name: 'actions',
+                    label: gettext('Inspect'),
+                    width: 140,
+                    render: (_val, j) => (
+                      <Button variant="secondary" onClick={() => handleRefreshJob(j.job_id)}>
+                        {gettext('Inspect')}
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            )}
           </Stack>
         </PostgresqlSectionCard>
       )}

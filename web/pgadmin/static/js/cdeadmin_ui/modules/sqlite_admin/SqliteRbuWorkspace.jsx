@@ -13,10 +13,12 @@ import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
 import {Box, Grid, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
-import {TextArea, TextField} from '../../primitives/Field';
+import {TextField} from '../../primitives/Field';
 import {Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
+import RecordGrid from '../../objects/RecordGrid';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {SqliteSectionCard, createSqliteWorkspaceCaller} from './sqliteAdminHelpers';
 
 const textVal = (e) => (e?.target ? e.target.value : String(e ?? ''));
@@ -38,7 +40,9 @@ export default function SqliteRbuWorkspace({
   const [catalog, setCatalog] = useState(null);
   const [mode, setMode] = useState('update');
   const [targetTable, setTargetTable] = useState('');
-  const [opsText, setOpsText] = useState('[{"op":"insert","values":{"id":1}}]');
+  const [opRows, setOpRows] = useState([
+    {op: 'insert', values_json: '{"id":1}', where_json: ''},
+  ]);
   const [stepBudget, setStepBudget] = useState('250');
   const [activeJob, setActiveJob] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +76,16 @@ export default function SqliteRbuWorkspace({
       if (mode === 'vacuum') {
         job = await callSqlite({action: 'sqlite_ops_rbu_open_vacuum', request: {}});
       } else {
-        const parsedOps = JSON.parse(opsText);
+        const parsedOps = opRows.map((row) => {
+          const entry = {op: row.op || 'insert'};
+          if (String(row.values_json || '').trim()) {
+            entry.values = JSON.parse(row.values_json);
+          }
+          if (String(row.where_json || '').trim()) {
+            entry.where = JSON.parse(row.where_json);
+          }
+          return entry;
+        });
         job = await callSqlite({
           action: 'sqlite_ops_rbu_open_update',
           request: {
@@ -159,11 +172,39 @@ export default function SqliteRbuWorkspace({
                 value={targetTable}
                 onChange={(e) => setTargetTable(textVal(e))}
               />
-              <TextArea
-                label={gettext('Typed Row Operations (insert / update / delete)')}
-                rows={4}
-                value={opsText}
-                onChange={(e) => setOpsText(textVal(e))}
+              <RecordGrid
+                field={{
+                  field_id: 'rbu_operations',
+                  label: gettext('Typed Row Operations (insert / update / delete)'),
+                  control: 'grid',
+                  columns: [
+                    {
+                      field_id: 'op',
+                      label: gettext('Operation'),
+                      control: 'select',
+                      default: 'insert',
+                      options: [
+                        {value: 'insert', label: 'INSERT'},
+                        {value: 'update', label: 'UPDATE'},
+                        {value: 'delete', label: 'DELETE'},
+                      ],
+                    },
+                    {
+                      field_id: 'values_json',
+                      label: gettext('Column Values (JSON object)'),
+                      control: 'text',
+                      default: '{"id":1}',
+                    },
+                    {
+                      field_id: 'where_json',
+                      label: gettext('Key Match (JSON object)'),
+                      control: 'text',
+                    },
+                  ],
+                }}
+                rows={opRows}
+                onChange={setOpRows}
+                disabled={busy}
               />
             </Stack>
           )}
@@ -215,6 +256,36 @@ export default function SqliteRbuWorkspace({
                 {gettext('Abort & Clean Sidecars')}
               </Button>
             </Stack>
+          </SqliteSectionCard>
+        )}
+
+        {(catalog?.jobs || []).length > 0 && (
+          <SqliteSectionCard title={gettext('Retained RBU Sessions')}>
+            <UnifiedDataGrid
+              caption={gettext('RBU Sessions')}
+              searchable
+              exportable
+              minHeight={140}
+              maxHeight={260}
+              rows={catalog.jobs}
+              rowKeyGetter={(j) => j.job_id}
+              columns={[
+                {name: 'job_id', label: gettext('Job ID'), width: 170, mono: true},
+                {name: 'state', label: gettext('State'), width: 110},
+                {name: 'rbu_state', label: gettext('RBU Stage'), width: 110},
+                {name: 'total_steps', label: gettext('Steps'), width: 90, numeric: true},
+                {
+                  name: 'select',
+                  label: gettext('Select'),
+                  width: 120,
+                  render: (_val, j) => (
+                    <Button variant="secondary" disabled={busy} onClick={() => setActiveJob(j)}>
+                      {gettext('Select')}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           </SqliteSectionCard>
         )}
       </Stack>

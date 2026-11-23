@@ -4,7 +4,7 @@
 
 import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box} from '@mui/material';
+import {Box} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {Select} from '../../primitives/Choice';
 import {TextArea, TextField} from '../../primitives/Field';
@@ -14,6 +14,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
 import {createReplicationContent, validateFailoverPlan} from './contracts';
 import {topologyGraph} from './ReplicationEngine';
@@ -120,12 +121,26 @@ function TopologyExplorer({session, service, invoke, currentUser, onNavigate}) {
         'replication.plan_failover') ?
         (participantId, position) => service.updateLayout(session.id, topology.id,
           participantId, position, {currentUser}) : undefined} /></Box>
-    <Box role="table" aria-label="Replication topology text alternative" sx={{p: 1}}>
-      {topology.participants.map((item) => <Box role="row" key={item.id}
-        sx={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr'}}>
-        <Box role="cell">{item.name}</Box><Box role="cell">{item.normalizedRole}</Box>
-        <Box role="cell">{item.nativeRole}</Box><Box role="cell">{item.health.overall}</Box>
-      </Box>)}
+    <Box sx={{p: 1}}>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Replication topology text alternative"
+        minHeight={130}
+        maxHeight={220}
+        rows={topology.participants}
+        rowKeyGetter={(item) => item.id}
+        columns={[
+          {name: 'name', label: 'Participant', width: 180},
+          {name: 'normalizedRole', label: 'Role', width: 130},
+          {name: 'nativeRole', label: 'Native Role', width: 150},
+          {
+            name: 'health',
+            label: 'Health',
+            width: 130,
+            accessorFn: (item) => item.health?.overall ?? '',
+          },
+        ]}
+      />
     </Box>
   </Box>;
 }
