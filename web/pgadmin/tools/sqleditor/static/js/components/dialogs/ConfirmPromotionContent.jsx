@@ -1,59 +1,87 @@
-import { useState } from 'react';
-import {
-  DialogContent as ModalContent,
-} from 'sources/cdeadmin_ui/overlays/DialogLayout';
-import gettext from 'sources/gettext';
-import { Box } from '@mui/material';
-import { DefaultButton, PrimaryButton } from '../../../../../../static/js/components/Buttons';
-import CloseIcon from '@mui/icons-material/CloseRounded';
+/////////////////////////////////////////////////////////////
+//
+// CDEadmin - Multi-engine Database Administration
+//
+// Copyright (C) 2013 - 2026, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
+import {useState} from 'react';
+import PropTypes from 'prop-types';
 import HTMLReactParser from 'html-react-parser';
 import DOMPurify from 'dompurify';
-import PropTypes from 'prop-types';
-import CheckRounded from '@mui/icons-material/CheckRounded';
-import { InputCheckbox } from '../../../../../../static/js/components/FormComponents';
-import { styled } from '@mui/material/styles';
+import gettext from 'sources/gettext';
+import {
+  DialogContent as ModalContent,
+  DialogFooter as ModalFooter,
+} from 'sources/cdeadmin_ui/overlays/DialogLayout';
+import {Box} from '../../../../../../static/js/cdeadmin_ui/primitives/Layout';
+import {Button} from '../../../../../../static/js/cdeadmin_ui/primitives/Button';
+import {Checkbox} from '../../../../../../static/js/cdeadmin_ui/primitives/Choice';
 
-const StyledFooter = styled('div')(({theme})=>({
-  display: 'flex',
-  justifyContent: 'space-between',
-  padding: '0.5rem',
-  ...theme.mixins.panelBorder?.top,
-  '& .margin': {
-    marginLeft: '0.25rem',
-  },
-}));
-
-export default function ConfirmPromotionContent({ onContinue, onClose, closeModal, text }) {
-  const [formData, setFormData] = useState({
-    save_user_choice: false
-  });
+export default function ConfirmPromotionContent({
+  onContinue,
+  onClose,
+  closeModal,
+  text,
+}) {
+  const [saveUserChoice, setSaveUserChoice] = useState(false);
 
   return (
     <ModalContent>
-      <Box flexGrow="1" p={2}>{typeof (text) == 'string' ? HTMLReactParser(DOMPurify.sanitize(text)) : text}</Box>
-      <StyledFooter>
-        <InputCheckbox controlProps={{ label: gettext('Don\'t ask again') }} value={formData['save_user_choice']}
-          onChange={(e) => setFormData((prev) => ({ ...prev, 'save_user_choice': e.target.checked }))} />
-        <Box>
-          <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={() => {
-            onClose?.();
-            closeModal();
-          }} >{gettext('Cancel')}</DefaultButton>
-          <PrimaryButton data-test="Continue" className={'margin'} startIcon={<CheckRounded />} onClick={() => {
-            let postFormData = new FormData();
-            postFormData.append('pref_data', JSON.stringify([{ 'name': 'view_edit_promotion_warning', 'value': !formData.save_user_choice, 'module': 'sqleditor' }]));
-            onContinue?.(postFormData);
-            closeModal();
-          }} autoFocus={true} >{gettext('Continue')}</PrimaryButton>
+      <Box style={{flexGrow: 1, padding: 16}}>
+        {typeof text === 'string'
+          ? HTMLReactParser(DOMPurify.sanitize(text))
+          : text}
+      </Box>
+      <ModalFooter>
+        <Box style={{marginRight: 'auto'}}>
+          <Checkbox
+            label={gettext('Don\'t ask again')}
+            checked={saveUserChoice}
+            onChange={(checked) => setSaveUserChoice(Boolean(checked))}
+          />
         </Box>
-      </StyledFooter>
+        <Button
+          data-test="close"
+          onClick={() => {
+            onClose?.();
+            closeModal?.();
+          }}
+        >
+          {gettext('Cancel')}
+        </Button>
+        <Button
+          data-test="Continue"
+          variant="primary"
+          autoFocus
+          onClick={() => {
+            const postFormData = new FormData();
+            postFormData.append(
+              'pref_data',
+              JSON.stringify([
+                {
+                  name: 'view_edit_promotion_warning',
+                  value: !saveUserChoice,
+                  module: 'sqleditor',
+                },
+              ])
+            );
+            onContinue?.(postFormData);
+            closeModal?.();
+          }}
+        >
+          {gettext('Continue')}
+        </Button>
+      </ModalFooter>
     </ModalContent>
   );
 }
 
 ConfirmPromotionContent.propTypes = {
   closeModal: PropTypes.func,
-  text: PropTypes.string,
+  text: PropTypes.node,
   onContinue: PropTypes.func,
-  onClose: PropTypes.func
+  onClose: PropTypes.func,
 };

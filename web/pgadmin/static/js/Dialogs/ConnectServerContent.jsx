@@ -7,21 +7,26 @@
 //
 //////////////////////////////////////////////////////////////
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import gettext from 'sources/gettext';
-import { Box } from '@mui/material';
-import { DefaultButton, PrimaryButton } from '../components/Buttons';
-import CloseIcon from '@mui/icons-material/CloseRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import { FormFooterMessage, InputCheckbox, InputText, MESSAGE_TYPE } from '../components/FormComponents';
+import gettext from 'sources/gettext';
 import {
   DialogContent as ModalContent,
   DialogFooter as ModalFooter,
 } from 'sources/cdeadmin_ui/overlays/DialogLayout';
+import {Box, Stack} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
+import {TextField} from '../cdeadmin_ui/primitives/Field';
+import {Checkbox} from '../cdeadmin_ui/primitives/Choice';
+import {Banner} from '../cdeadmin_ui/feedback/Indicators';
 
-export default function ConnectServerContent({closeModal, data, onOK, setHeight, hideSavePassword=false}) {
-
+export default function ConnectServerContent({
+  closeModal,
+  data,
+  onOK,
+  setHeight,
+  hideSavePassword = false,
+}) {
   const containerRef = useRef();
   const firstEleRef = useRef();
   const okBtnRef = useRef();
@@ -38,146 +43,227 @@ export default function ConnectServerContent({closeModal, data, onOK, setHeight,
   const [tunnelPasswordVisible, setTunnelPasswordVisible] = useState(false);
 
   const onTextChange = (e, id) => {
-    let val = e;
-    if(e?.target) {
-      val = e.target.value;
-    }
-    setFormData((prev)=>({...prev, [id]: val}));
+    const val = e?.target ? e.target.value : e;
+    setFormData((prev) => ({...prev, [id]: val}));
   };
 
   const onKeyDown = (e) => {
-    // If enter key is pressed then click on OK button
     if (e.key === 'Enter') {
       okBtnRef.current?.click();
     }
   };
 
-
-  useLayoutEffect(()=>{
+  useLayoutEffect(() => {
     firstEleRef.current?.focus();
   }, []);
 
-  useEffect(()=>{
+  useEffect(() => {
     setHeight?.(containerRef.current?.offsetHeight);
-  }, [containerRef.current]);
+  }, [setHeight]);
 
-  if(!data) {
+  if (!data) {
     return <>No data</>;
   }
 
+  const isSubmitDisabled =
+    (requiresUserInput || formData.use_alternate_user) &&
+    (!formData.connect_as.trim() || !formData.password);
+
   return (
     <ModalContent ref={containerRef}>
-      <Box flexGrow="1" p={2}>
-        {data.prompt_tunnel_password && <>
-          <Box>
-            <span style={{fontWeight: 'bold'}}>
-              {data.tunnel_identity_file ?
-                gettext('Please enter the SSH Tunnel password for the identity file \'%s\' to connect the server "%s"', data.tunnel_identity_file, data.tunnel_host)
-                : gettext('Please enter the SSH Tunnel password for the user \'%s\' to connect the server "%s"', data.tunnel_username, data.tunnel_host)
-              }
-            </span>
-          </Box>
-          <Box marginTop='12px'>
-            <InputText inputRef={firstEleRef}
-              type={tunnelPasswordVisible ? 'text' : 'password'} value={formData['tunnel_password']} controlProps={{maxLength:null, autoComplete:'new-password'}}
-              onChange={(e)=>onTextChange(e, 'tunnel_password')} onKeyDown={(e)=>onKeyDown(e)} />
-            <DefaultButton data-test="toggle-tunnel-password-visibility"
-              onClick={() => setTunnelPasswordVisible(!tunnelPasswordVisible)}>
-              {tunnelPasswordVisible ? gettext('Hide password') :
-                gettext('Show password')}
-            </DefaultButton>
-          </Box>
-          <Box marginTop='12px' marginBottom='12px' visibility={hideSavePassword ? 'hidden' : 'unset'}>
-            <InputCheckbox controlProps={{label: gettext('Save Password')}} value={formData['save_tunnel_password']}
-              onChange={(e)=>onTextChange(e.target.checked, 'save_tunnel_password')} disabled={!data.allow_save_tunnel_password} />
-          </Box>
-        </>}
-        {data.prompt_password && <>
-          {requiresUserInput && <Box marginBottom='12px'>
-            <Box marginBottom='4px' style={{fontWeight: 600}}>{gettext('User or principal')}</Box>
-            <InputText value={formData.connect_as}
-              controlProps={{maxLength: 255, autoComplete: 'username',
-                placeholder: data.suggested_username || 'e.g. SYSDBA',
-                'aria-label': gettext('User or principal')}}
-              onChange={(event) => onTextChange(event, 'connect_as')}
-              onKeyDown={(event) => onKeyDown(event)} />
-          </Box>}
-          {data.allow_user_override && !requiresUserInput && <Box marginBottom='12px'>
-            <InputCheckbox controlProps={{label: gettext('Connect as a different user')}}
-              value={formData.use_alternate_user} onChange={(event) => {
-                const checked = event.target.checked;
-                setFormData((previous) => ({...previous,
-                  use_alternate_user: checked,
-                  connect_as: checked ? previous.connect_as : '',
-                  save_password: checked ? false : previous.save_password,
-                }));
-              }} />
-            {formData.use_alternate_user && <Box marginTop='12px'>
-              <Box marginBottom='4px'>{gettext('Alternate user or principal')}</Box>
-              <InputText value={formData.connect_as}
-                controlProps={{maxLength: 255, autoComplete: 'username',
-                  'aria-label': gettext('Alternate user or principal')}}
-                onChange={(event) => onTextChange(event, 'connect_as')}
-                onKeyDown={(event) => onKeyDown(event)} />
-            </Box>}
-          </Box>}
-          <Box>
-            <span style={{fontWeight: 'bold'}}>
-              {((requiresUserInput || formData.use_alternate_user) ? formData.connect_as.trim() : data.username) ?
-                gettext('Please enter the password for the user \'%s\' to connect the server - "%s"', (requiresUserInput || formData.use_alternate_user) ? formData.connect_as.trim() : data.username, data.server_label)
-                : gettext('Please enter the password for the user to connect the server - "%s"', data.server_label)
-              }
-            </span>
-          </Box>
-          <Box marginTop='12px'>
-            <InputText inputRef={(ele)=>{
-              if(!data.prompt_tunnel_password) {
-                /* Set only if no tunnel password asked */
-                firstEleRef.current = ele;
-              }
-            }} type={passwordVisible ? 'text' : 'password'} value={formData['password']} controlProps={{maxLength:null, autoComplete: 'current-password', 'aria-label': gettext('Password')}}
-            onChange={(e)=>onTextChange(e, 'password')} onKeyDown={(e)=>onKeyDown(e)}/>
-            <DefaultButton data-test="toggle-password-visibility"
-              onClick={() => setPasswordVisible(!passwordVisible)}>
-              {passwordVisible ? gettext('Hide password') :
-                gettext('Show password')}
-            </DefaultButton>
-          </Box>
-          <Box marginTop='12px' visibility={hideSavePassword ? 'hidden' : 'unset'}>
-            <InputCheckbox controlProps={{label: gettext('Save Password')}} value={formData['save_password']}
-              onChange={(e)=>onTextChange(e.target.checked, 'save_password')}
-              disabled={!data.allow_save_password || (formData.use_alternate_user && !requiresUserInput)} />
-          </Box>
-        </>}
-        <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={_.escape(data.errmsg)} closable={false} style={{
-          position: 'unset', padding: '12px 0px 0px'
-        }}/>
+      <Box style={{flexGrow: 1, padding: 16}}>
+        <Stack spacing={1.5}>
+          {data.prompt_tunnel_password && (
+            <>
+              <div style={{fontWeight: 600}}>
+                {data.tunnel_identity_file
+                  ? gettext(
+                    'Please enter the SSH Tunnel password for the identity file \'%s\' to connect the server "%s"',
+                    data.tunnel_identity_file,
+                    data.tunnel_host
+                  )
+                  : gettext(
+                    'Please enter the SSH Tunnel password for the user \'%s\' to connect the server "%s"',
+                    data.tunnel_username,
+                    data.tunnel_host
+                  )}
+              </div>
+              <Box style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <TextField
+                  ref={firstEleRef}
+                  style={{flex: 1}}
+                  type={tunnelPasswordVisible ? 'text' : 'password'}
+                  value={formData.tunnel_password}
+                  inputProps={{
+                    'data-testid': 'input-text',
+                    autoComplete: 'new-password',
+                  }}
+                  onChange={(e) => onTextChange(e, 'tunnel_password')}
+                  onKeyDown={onKeyDown}
+                />
+                <Button
+                  data-test="toggle-tunnel-password-visibility"
+                  onClick={() => setTunnelPasswordVisible(!tunnelPasswordVisible)}
+                >
+                  {tunnelPasswordVisible ? gettext('Hide password') : gettext('Show password')}
+                </Button>
+              </Box>
+              {!hideSavePassword && (
+                <Checkbox
+                  label={gettext('Save Password')}
+                  checked={Boolean(formData.save_tunnel_password)}
+                  disabled={!data.allow_save_tunnel_password}
+                  onChange={(checked) => onTextChange(Boolean(checked), 'save_tunnel_password')}
+                />
+              )}
+            </>
+          )}
+
+          {data.prompt_password && (
+            <>
+              {requiresUserInput && (
+                <TextField
+                  label={gettext('User or principal')}
+                  value={formData.connect_as}
+                  inputProps={{
+                    'data-testid': 'input-text',
+                    maxLength: 255,
+                    autoComplete: 'username',
+                    placeholder: data.suggested_username || 'e.g. SYSDBA',
+                    'aria-label': gettext('User or principal'),
+                  }}
+                  onChange={(event) => onTextChange(event, 'connect_as')}
+                  onKeyDown={onKeyDown}
+                />
+              )}
+              {data.allow_user_override && !requiresUserInput && (
+                <Stack spacing={1}>
+                  <Checkbox
+                    label={gettext('Connect as a different user')}
+                    checked={Boolean(formData.use_alternate_user)}
+                    onChange={(checked) => {
+                      const nextChecked = Boolean(checked);
+                      setFormData((previous) => ({
+                        ...previous,
+                        use_alternate_user: nextChecked,
+                        connect_as: nextChecked ? previous.connect_as : '',
+                        save_password: nextChecked ? false : previous.save_password,
+                      }));
+                    }}
+                  />
+                  {formData.use_alternate_user && (
+                    <TextField
+                      label={gettext('Alternate user or principal')}
+                      value={formData.connect_as}
+                      inputProps={{
+                        'data-testid': 'input-text',
+                        maxLength: 255,
+                        autoComplete: 'username',
+                        'aria-label': gettext('Alternate user or principal'),
+                      }}
+                      onChange={(event) => onTextChange(event, 'connect_as')}
+                      onKeyDown={onKeyDown}
+                    />
+                  )}
+                </Stack>
+              )}
+              <div style={{fontWeight: 600}}>
+                {((requiresUserInput || formData.use_alternate_user)
+                  ? formData.connect_as.trim()
+                  : data.username)
+                  ? gettext(
+                    'Please enter the password for the user \'%s\' to connect the server - "%s"',
+                    (requiresUserInput || formData.use_alternate_user)
+                      ? formData.connect_as.trim()
+                      : data.username,
+                    data.server_label
+                  )
+                  : gettext(
+                    'Please enter the password for the user to connect the server - "%s"',
+                    data.server_label
+                  )}
+              </div>
+              <Box style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <TextField
+                  ref={(ele) => {
+                    if (!data.prompt_tunnel_password) {
+                      firstEleRef.current = ele;
+                    }
+                  }}
+                  style={{flex: 1}}
+                  type={passwordVisible ? 'text' : 'password'}
+                  value={formData.password}
+                  inputProps={{
+                    'data-testid': 'input-text',
+                    autoComplete: 'current-password',
+                    'aria-label': gettext('Password'),
+                  }}
+                  onChange={(e) => onTextChange(e, 'password')}
+                  onKeyDown={onKeyDown}
+                />
+                <Button
+                  data-test="toggle-password-visibility"
+                  onClick={() => setPasswordVisible(!passwordVisible)}
+                >
+                  {passwordVisible ? gettext('Hide password') : gettext('Show password')}
+                </Button>
+              </Box>
+              {!hideSavePassword && (
+                <Checkbox
+                  label={gettext('Save Password')}
+                  checked={Boolean(formData.save_password)}
+                  disabled={
+                    !data.allow_save_password ||
+                    (formData.use_alternate_user && !requiresUserInput)
+                  }
+                  onChange={(checked) => onTextChange(Boolean(checked), 'save_password')}
+                />
+              )}
+            </>
+          )}
+
+          {data.errmsg && <Banner tone="error">{data.errmsg}</Banner>}
+        </Stack>
       </Box>
       <ModalFooter>
-        <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={()=>{
-          closeModal();
-        }} >{gettext('Cancel')}</DefaultButton>
-        {(data.prompt_password || data.prompt_tunnel_password) && <>
-          <PrimaryButton ref={okBtnRef} data-test="save" startIcon={<CheckRoundedIcon />}
-            disabled={(requiresUserInput || formData.use_alternate_user) && (!formData.connect_as.trim() || !formData.password)} onClick={()=>{
-              let postFormData = new FormData();
-              if(data.prompt_tunnel_password) {
+        <Button
+          data-test="close"
+          onClick={() => {
+            closeModal();
+          }}
+        >
+          {gettext('Cancel')}
+        </Button>
+        {(data.prompt_password || data.prompt_tunnel_password) && (
+          <Button
+            ref={okBtnRef}
+            data-test="save"
+            variant="primary"
+            disabled={isSubmitDisabled}
+            onClick={() => {
+              const postFormData = new FormData();
+              if (data.prompt_tunnel_password) {
                 postFormData.append('tunnel_password', formData.tunnel_password);
-                formData.save_tunnel_password &&
-                postFormData.append('save_tunnel_password', formData.save_tunnel_password);
+                if (formData.save_tunnel_password) {
+                  postFormData.append('save_tunnel_password', formData.save_tunnel_password);
+                }
               }
-              if(data.prompt_password) {
+              if (data.prompt_password) {
                 postFormData.append('password', formData.password);
-                if((requiresUserInput || formData.use_alternate_user) && formData.connect_as.trim()) {
+                if ((requiresUserInput || formData.use_alternate_user) && formData.connect_as.trim()) {
                   postFormData.append('connect_as', formData.connect_as.trim());
                 }
-                formData.save_password && (!formData.use_alternate_user || requiresUserInput) &&
-                postFormData.append('save_password', formData.save_password);
+                if (formData.save_password && (!formData.use_alternate_user || requiresUserInput)) {
+                  postFormData.append('save_password', formData.save_password);
+                }
               }
               onOK?.(postFormData);
               closeModal();
-            }} >{gettext('OK')}</PrimaryButton>
-        </>}
+            }}
+          >
+            {gettext('OK')}
+          </Button>
+        )}
       </ModalFooter>
     </ModalContent>
   );
@@ -188,5 +274,5 @@ ConnectServerContent.propTypes = {
   data: PropTypes.object,
   onOK: PropTypes.func,
   setHeight: PropTypes.func,
-  hideSavePassword: PropTypes.bool
+  hideSavePassword: PropTypes.bool,
 };

@@ -6,289 +6,341 @@
 // This software is released under the PostgreSQL Licence
 //
 //////////////////////////////////////////////////////////////
-import React, { useState } from 'react';
-import BaseUISchema from '../../../../../../static/js/SchemaView/base_schema.ui';
-import gettext from 'sources/gettext';
-import { QueryToolContext } from '../QueryToolComponent';
-import url_for from 'sources/url_for';
-import _ from 'lodash';
-import { flattenSelectOptions } from '../../../../../../static/js/components/FormComponents';
+
+import {useCallback, useContext, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
+import _ from 'lodash';
+import gettext from 'sources/gettext';
+import url_for from 'sources/url_for';
+import {
+  DialogContent as ModalContent,
+  DialogFooter as ModalFooter,
+} from 'sources/cdeadmin_ui/overlays/DialogLayout';
+import {Box, Stack} from '../../../../../../static/js/cdeadmin_ui/primitives/Layout';
+import {Button} from '../../../../../../static/js/cdeadmin_ui/primitives/Button';
+import {Select} from '../../../../../../static/js/cdeadmin_ui/primitives/Choice';
+import {Banner} from '../../../../../../static/js/cdeadmin_ui/feedback/Indicators';
 import ConnectServerContent from '../../../../../../static/js/Dialogs/ConnectServerContent';
-import SchemaView from '../../../../../../static/js/SchemaView';
-import { usePgAdmin } from '../../../../../../static/js/PgAdminProvider';
-
-class NewConnectionSchema extends BaseUISchema {
-  constructor(api, params, connectServer) {
-    super({
-      sid: null,
-      did: null,
-      user: null,
-      role: null,
-      server_name: null,
-      database_name: null,
-      connected: false,
-    });
-    // Regenerate the fields on every render.
-    this._dynamicFields = true;
-    this.flatServers = [];
-    this.groupedServers = [];
-    this.dbs = [];
-    this.params = params;
-    this.api = api;
-    this.warningText = gettext('By changing the connection you will lose all your unsaved data for the current connection. <br> Do you want to continue?');
-    this.connectServer = connectServer;
-  }
-
-  setServerConnected(sid, icon) {
-    for(const group of this.groupedServers) {
-      for(const opt of group.options) {
-        if(opt.value == sid) {
-          opt.connected = true;
-          opt.image = icon || 'icon-pg';
-          break;
-        }
-      }
-    }
-  }
-
-  isServerConnected(sid) {
-    return _.find(this.flatServers, (s) => s.value == sid)?.connected;
-  }
-
-  getServerList() {
-    let obj = this;
-    if(this.groupedServers?.length != 0) {
-      return Promise.resolve(this.groupedServers);
-    }
-    return new Promise((resolve, reject) => {
-      this.api.get(url_for('sqleditor.get_new_connection_servers'))
-        .then(({data: respData})=>{
-          let groupedOptions = [];
-          _.forIn(respData.data.result.server_list, (v, k)=>{
-            if(v.length == 0) {
-              return;
-            }
-            /* initial selection */
-            let foundServer = _.find(v, (o) => o.value == obj.params.sid);
-            foundServer && (foundServer.selected = true);
-            groupedOptions.push({
-              label: k,
-              options: v,
-            });
-          });
-          /* Will be re-used for changing icon when connected */
-          this.groupedServers = groupedOptions.map((group) => {
-            return {
-              label: group.label,
-              options: group.options.map((o)=>({...o, selected: false})),
-            };
-          });
-          resolve(groupedOptions);
-        })
-        .catch((error)=>{
-          reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
-        });
-    });
-  }
-
-  getOtherOptions(sid, type) {
-    if(!sid) {
-      return [];
-    }
-
-    if(!this.isServerConnected(sid)) {
-      return [];
-    }
-    return new Promise((resolve, reject)=>{
-      this.api.get(url_for(`sqleditor.${type}`, {
-        'sid': sid,
-        'sgid': 0,
-      }))
-        .then(({data: respData})=>{
-          resolve(respData.data.result.data);
-        })
-        .catch((error)=>{
-          reject(error instanceof Error ? error : Error(gettext('Something went wrong')));
-        });
-    });
-  }
-
-  get baseFields() {
-    let self = this;
-    return [
-      {
-        id: 'sid', label: gettext('Server'), deps: ['connected'],
-        noEmpty: true,
-        controlProps: { allowClear: false },
-        type: () => ({
-          type: 'select',
-          options: () => self.getServerList(),
-          optionsLoaded: (res) => self.flatServers = flattenSelectOptions(res),
-          optionsReloadBasis: self.flatServers.map((s) => s.connected).join(''),
-        }),
-        depChange: (state) => {
-          /* Once the option is selected get the name */
-          /* Force sid to null, and set only if connected */
-          let selectedServer = _.find(
-            self.flatServers, (s) => s.value == state.sid
-          );
-
-          return {
-            server_name: selectedServer?.label,
-            did: null,
-            user: null,
-            role: null,
-            sid: state.sid,
-            fgcolor: selectedServer?.fgcolor,
-            bgcolor: selectedServer?.bgcolor,
-            connected: selectedServer?.connected,
-          };
-        },
-        deferredDepChange: (state, source, topState, actionObj) => {
-          return new Promise((resolve) => {
-            let sid = actionObj.value;
-
-            if(!_.find(self.flatServers, (s) => s.value == sid)?.connected) {
-              this.connectServer(sid, state.user, null, (data) => {
-                self.setServerConnected(sid, data.icon);
-                resolve(() => ({ sid: sid, connected: true }));
-              });
-            } else {
-              resolve(()=>({ sid: sid, connected: true }));
-            }
-          });
-        },
-      }, {
-        id: 'did', label: gettext('Database'), deps: ['sid', 'connected'],
-        noEmpty: true,
-        controlProps: {
-          allowClear: false,
-        },
-        type: (state) => {
-          return {
-            type: 'select',
-            options: () => this.getOtherOptions(
-              state.sid, 'get_new_connection_database'
-            ),
-            optionsReloadBasis: `${state.sid} ${this.isServerConnected(state.sid)}`,
-          };
-        },
-        optionsLoaded: (res) => this.dbs = res,
-        depChange: (state) => {
-          /* Once the option is selected get the name */
-          return {
-            database_name: _.find(this.dbs, (s) => s.value == state.did)?.label
-          };
-        }
-      }, {
-        id: 'user', label: gettext('User'), deps: ['sid', 'connected'],
-        noEmpty: true,
-        type: (state) => ({
-          type: 'select',
-          controlProps: { allowClear: false },
-          options: () => this.getOtherOptions(
-            state.sid, 'get_new_connection_user'
-          ),
-          optionsReloadBasis: `${state.sid} ${this.isServerConnected(state.sid)}`,
-        }),
-      }, {
-        id: 'role', label: gettext('Role'), deps: ['sid', 'connected'],
-        type: (state) => ({
-          type: 'select',
-          controlProps: { allowClear: false },
-          options: () => this.getOtherOptions(
-            state.sid, 'get_new_connection_role'
-          ),
-          optionsReloadBasis: `${state.sid} ${this.isServerConnected(state.sid)}`,
-        }),
-      }, {
-        id: 'server_name', label: '', type: 'text', visible: false,
-      }, {
-        id: 'database_name', label: '', type: 'text', visible: false,
-      }, {
-        id: 'bgcolor', label: '', type: 'text', visible: false,
-      }, {
-        id: 'fgcolor', label: '', type: 'text', visible: false,
-      }, {
-        id: 'connected', label: '', type: 'text', visible: false,
-      }
-    ];
-  }
-}
-
+import {usePgAdmin} from '../../../../../../static/js/PgAdminProvider';
+import {QueryToolContext} from '../QueryToolComponent';
 
 export default function NewConnectionDialog({onClose, onSave}) {
-
-  const [connecting, setConnecting] = useState(false);
-  const queryToolCtx = React.useContext(QueryToolContext);
+  const queryToolCtx = useContext(QueryToolContext);
   const pgAdmin = usePgAdmin();
 
-  const connectServer = async (sid, user, formData, connectCallback) => {
-    setConnecting(true);
-    try {
-      let {data: respData} = await queryToolCtx.api({
-        method: 'POST',
-        url: url_for('sqleditor.connect_server', {
-          'sid': sid,
-          ...(user ? {
-            'usr': user,
-          }:{}),
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        data: formData
-      });
-      setConnecting(false);
-      connectCallback?.(respData.data);
-    } catch (error) {
-      if(!error.response) {
-        pgAdmin.Browser.notifier.pgNotifier('error', error, 'Connection error', gettext('Connection to ScratchRobin server has been lost.'));
-      } else {
-        queryToolCtx.modal.showModal(gettext('Connect to server'), (closeModal)=>{
-          return (
-            <ConnectServerContent
-              closeModal={()=>{
-                setConnecting(false);
-                closeModal();
-              }}
-              data={error.response?.data?.result}
-              onOK={(formData)=>{
-                connectServer(sid, null, formData, connectCallback);
-              }}
-            />
+  const [servers, setServers] = useState([]);
+  const [sid, setSid] = useState('');
+  const [did, setDid] = useState('');
+  const [user, setUser] = useState('');
+  const [role, setRole] = useState('');
+  const [databases, setDatabases] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [connecting, setConnecting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
+  const [error, setError] = useState('');
+
+  const connectServer = useCallback(
+    async (targetSid, targetUser, formData, connectCallback) => {
+      setConnecting(true);
+      setError('');
+      try {
+        const {data: respData} = await queryToolCtx.api({
+          method: 'POST',
+          url: url_for('sqleditor.connect_server', {
+            sid: targetSid,
+            ...(targetUser ? {usr: targetUser} : {}),
+          }),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          data: formData,
+        });
+        setConnecting(false);
+        connectCallback?.(respData.data);
+      } catch (err) {
+        if (!err.response) {
+          setConnecting(false);
+          pgAdmin.Browser.notifier.pgNotifier(
+            'error',
+            err,
+            'Connection error',
+            gettext('Connection to ScratchRobin server has been lost.')
           );
+        } else {
+          queryToolCtx.modal.showModal(
+            gettext('Connect to server'),
+            (closeModal) => (
+              <ConnectServerContent
+                closeModal={() => {
+                  setConnecting(false);
+                  closeModal();
+                }}
+                data={err.response?.data?.result}
+                onOK={(nextFormData) => {
+                  connectServer(targetSid, null, nextFormData, connectCallback);
+                }}
+              />
+            )
+          );
+        }
+      }
+    },
+    [pgAdmin, queryToolCtx]
+  );
+
+  const loadDependentOptions = useCallback(
+    async (targetSid) => {
+      if (!targetSid) return;
+      try {
+        const [dbResp, userResp, roleResp] = await Promise.all([
+          queryToolCtx.api.get(
+            url_for('sqleditor.get_new_connection_database', {
+              sid: targetSid,
+              sgid: 0,
+            })
+          ),
+          queryToolCtx.api.get(
+            url_for('sqleditor.get_new_connection_user', {
+              sid: targetSid,
+              sgid: 0,
+            })
+          ),
+          queryToolCtx.api.get(
+            url_for('sqleditor.get_new_connection_role', {
+              sid: targetSid,
+              sgid: 0,
+            })
+          ),
+        ]);
+        const dbList = dbResp.data?.data?.result?.data || [];
+        const userList = userResp.data?.data?.result?.data || [];
+        const roleList = roleResp.data?.data?.result?.data || [];
+        setDatabases(dbList);
+        setUsers(userList);
+        setRoles(roleList);
+        const selDb = dbList.find((d) => d.selected) || dbList[0];
+        const selUser = userList.find((u) => u.selected) || userList[0];
+        setDid(selDb ? String(selDb.value) : '');
+        setUser(selUser ? String(selUser.value) : '');
+        setRole('');
+      } catch (err) {
+        setError(
+          err?.response?.data?.errormsg ||
+            err?.message ||
+            gettext('Something went wrong')
+        );
+      }
+    },
+    [queryToolCtx]
+  );
+
+  const handleSelectServer = useCallback(
+    (nextSidStr, serverListOverride = null) => {
+      setSid(nextSidStr);
+      setDid('');
+      setUser('');
+      setRole('');
+      setDatabases([]);
+      setUsers([]);
+      setRoles([]);
+      setConfirmSwitch(false);
+      const list = serverListOverride || servers;
+      const found = list.find((s) => String(s.value) === String(nextSidStr));
+      if (!found) return;
+      if (found.connected) {
+        loadDependentOptions(found.value);
+      } else {
+        connectServer(found.value, null, null, (connInfo) => {
+          setServers((prev) =>
+            prev.map((item) =>
+              String(item.value) === String(found.value)
+                ? {...item, connected: true, image: connInfo?.icon || item.image}
+                : item
+            )
+          );
+          loadDependentOptions(found.value);
         });
       }
+    },
+    [connectServer, loadDependentOptions, servers]
+  );
+
+  useEffect(() => {
+    let active = true;
+    queryToolCtx.api
+      .get(url_for('sqleditor.get_new_connection_servers'))
+      .then(({data: respData}) => {
+        if (!active) return;
+        const flat = [];
+        _.forIn(respData.data?.result?.server_list || {}, (groupItems, groupName) => {
+          (groupItems || []).forEach((item) => {
+            flat.push({
+              ...item,
+              group: groupName,
+              displayLabel: groupName ? `${groupName} — ${item.label}` : item.label,
+            });
+          });
+        });
+        setServers(flat);
+        const defaultServer =
+          flat.find((s) => String(s.value) === String(queryToolCtx.params?.sid)) ||
+          flat[0];
+        if (defaultServer) {
+          handleSelectServer(String(defaultServer.value), flat);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err?.message || gettext('Something went wrong'));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [queryToolCtx]);
+
+  const selectedServer = useMemo(
+    () => servers.find((s) => String(s.value) === String(sid)),
+    [servers, sid]
+  );
+  const selectedDatabase = useMemo(
+    () => databases.find((d) => String(d.value) === String(did)),
+    [databases, did]
+  );
+
+  const canSave =
+    !connecting &&
+    !saving &&
+    Boolean(selectedServer?.connected) &&
+    Boolean(sid) &&
+    Boolean(did) &&
+    Boolean(user);
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    if (!confirmSwitch) {
+      setConfirmSwitch(true);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave?.(true, {
+        sid: selectedServer.value,
+        did: selectedDatabase?.value ?? did,
+        user,
+        role: role || null,
+        server_name: selectedServer.label,
+        database_name: selectedDatabase?.label ?? '',
+        bgcolor: selectedServer.bgcolor,
+        fgcolor: selectedServer.fgcolor,
+        connected: true,
+      });
+    } catch (err) {
+      setError(err?.message || gettext('Something went wrong'));
+      setConfirmSwitch(false);
+    } finally {
+      setSaving(false);
     }
   };
-  const schema = React.useRef(null);
 
-  if (!schema.current)
-    schema.current = new NewConnectionSchema(queryToolCtx.api, {
-      sid: queryToolCtx.params.sid, sgid: 0,
-    }, connectServer);
-
-  return <>
-    {
-      schema.current &&
-        <SchemaView
-          formType={'dialog'}
-          getInitData={()=>Promise.resolve({})}
-          schema={schema.current}
-          viewHelperProps={{
-            mode: 'create',
+  return (
+    <ModalContent>
+      <Box style={{flexGrow: 1, padding: 16, overflow: 'auto'}}>
+        <Stack spacing={1.5}>
+          {connecting && (
+            <Banner tone="info">{gettext('Connecting...')}</Banner>
+          )}
+          <Select
+            label={gettext('Server')}
+            value={String(sid)}
+            disabled={connecting || saving}
+            required
+            options={servers.map((s) => ({
+              value: String(s.value),
+              label: s.displayLabel || s.label,
+            }))}
+            onChange={(val) => handleSelectServer(val)}
+          />
+          <Select
+            label={gettext('Database')}
+            value={String(did)}
+            disabled={connecting || saving || !selectedServer?.connected}
+            required
+            options={databases.map((d) => ({
+              value: String(d.value),
+              label: d.label,
+            }))}
+            onChange={(val) => {
+              setDid(val);
+              setConfirmSwitch(false);
+            }}
+          />
+          <Select
+            label={gettext('User')}
+            value={String(user)}
+            disabled={connecting || saving || !selectedServer?.connected}
+            required
+            options={users.map((u) => ({
+              value: String(u.value),
+              label: u.label,
+            }))}
+            onChange={(val) => {
+              setUser(val);
+              setConfirmSwitch(false);
+            }}
+          />
+          <Select
+            label={gettext('Role')}
+            value={String(role)}
+            disabled={connecting || saving || !selectedServer?.connected}
+            options={[
+              {value: '', label: ''},
+              ...roles.map((r) => ({
+                value: String(r.value),
+                label: r.label,
+              })),
+            ]}
+            onChange={(val) => {
+              setRole(val);
+              setConfirmSwitch(false);
+            }}
+          />
+          {confirmSwitch && (
+            <Banner tone="warning">
+              {gettext(
+                'By changing the connection you will lose all your unsaved data for the current connection. Click "Save" again to continue.'
+              )}
+            </Banner>
+          )}
+          {error && <Banner tone="error">{error}</Banner>}
+        </Stack>
+      </Box>
+      <ModalFooter>
+        <Button
+          data-test="Close"
+          disabled={saving}
+          onClick={() => {
+            if (confirmSwitch) {
+              setConfirmSwitch(false);
+            } else {
+              onClose?.();
+            }
           }}
-          loadingText={connecting ? 'Connecting...' : ''}
-          onSave={onSave}
-          onClose={onClose}
-          hasSQL={false}
-          disableSqlHelp={true}
-          disableDialogHelp={true}
-          isTabView={false}
-          Notifier={queryToolCtx.modal}
-        />
-    }
-  </>;
+        >
+          {gettext('Cancel')}
+        </Button>
+        <Button
+          data-test="Save"
+          variant="primary"
+          disabled={!canSave}
+          onClick={handleSave}
+        >
+          {gettext('Save')}
+        </Button>
+      </ModalFooter>
+    </ModalContent>
+  );
 }
 
 NewConnectionDialog.propTypes = {

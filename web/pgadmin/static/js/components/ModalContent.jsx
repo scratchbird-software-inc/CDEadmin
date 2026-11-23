@@ -7,55 +7,73 @@
 //
 //////////////////////////////////////////////////////////////
 
-import { styled } from '@mui/material/styles';
+import {forwardRef, useEffect} from 'react';
 import CustomPropTypes from '../custom_prop_types';
-import { Box } from '@mui/material';
+import {ensureScratchBaseStyles} from '../cdeadmin_ui/base/ScratchBaseStyles';
 
-const StyledBox = styled(Box)(({theme})=>({
-  backgroundColor: theme.palette.background.default,
-  display: 'flex',
-  flexDirection: 'column',
-  '& .ModalContent-footer': {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    padding: '0.5rem',
-    ...theme.mixins.panelBorder?.top,
-    gap: '5px',
-    '&.ModalContent-iconButtonStyle': {
-      marginLeft: 'auto',
-      marginRight: '4px'
-    },
-  },
-}));
-
-export function ModalContent(
-  {
-    ref,
-    children,
-    ...props
-  }
+export const ModalContent = forwardRef(function ModalContent(
+  {children, style, className, ...props},
+  ref
 ) {
+  useEffect(() => {
+    ensureScratchBaseStyles();
+  }, []);
+
   return (
-    <StyledBox style={{height: '100%'}} ref={ref}  {...props}>{children}</StyledBox>
+    <div
+      ref={ref}
+      className={['sr-modal-content', className].filter(Boolean).join(' ')}
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: 'var(--sr-surface, var(--sr-bg, inherit))',
+        color: 'var(--sr-text, inherit)',
+        ...style,
+      }}
+      {...props}
+    >
+      {children}
+    </div>
   );
-};
+});
 ModalContent.displayName = 'ModalContent';
 ModalContent.propTypes = {
   children: CustomPropTypes.children,
+  style: CustomPropTypes.style,
+  className: CustomPropTypes.className,
 };
 
+export function ModalFooter({children, classNameRoot, style, ...props}) {
+  useEffect(() => {
+    ensureScratchBaseStyles();
+  }, []);
 
-export function ModalFooter({children, classNameRoot, ...props}) {
   return (
-    <StyledBox className={[classNameRoot]} {...props}>
-      <Box className='ModalContent-footer'>
+    <div
+      className={[classNameRoot].filter(Boolean).join(' ') || undefined}
+      style={style}
+      {...props}
+    >
+      <div
+        className="ModalContent-footer sr-dialog-footer"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          padding: '8px 12px',
+          borderTop: '1px solid var(--sr-border, rgba(128, 128, 128, 0.25))',
+          gap: 6,
+        }}
+      >
         {children}
-      </Box>
-    </StyledBox>
+      </div>
+    </div>
   );
 }
 
 ModalFooter.propTypes = {
   children: CustomPropTypes.children,
-  classNameRoot: CustomPropTypes.className
+  classNameRoot: CustomPropTypes.className,
+  style: CustomPropTypes.style,
 };

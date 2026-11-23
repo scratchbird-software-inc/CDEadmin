@@ -7,78 +7,79 @@
 //
 //////////////////////////////////////////////////////////////
 
-import { useState, useRef, useEffect } from 'react';
-import gettext from 'sources/gettext';
-import { Box } from '@mui/material';
-import { DefaultButton, PrimaryButton } from '../components/Buttons';
-import CloseIcon from '@mui/icons-material/CloseRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
 import {
   DialogContent as ModalContent,
   DialogFooter as ModalFooter,
 } from 'sources/cdeadmin_ui/overlays/DialogLayout';
-import { InputText } from '../components/FormComponents';
-import { isEmptyString } from '../../../static/js/validators';
+import {Box, Stack} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
+import {TextField} from '../cdeadmin_ui/primitives/Field';
+import {isEmptyString} from '../validators';
 
 export default function NamedRestoreContent({closeModal, onOK, setHeight}) {
   const containerRef = useRef();
   const firstEleRef = useRef();
-  const okBtnRef = useRef();
-  const [formData, setFormData] = useState({
-    namedRestorePoint: ''
-  });
+  const [namedRestorePoint, setNamedRestorePoint] = useState('');
 
-  const onTextChange = (e, id) => {
-    let val = e;
-    if(e?.target) {
-      val = e.target.value;
-    }
-    setFormData((prev)=>({...prev, [id]: val}));
+  const isOKDisabled = isEmptyString(namedRestorePoint);
+
+  const submit = () => {
+    if (isOKDisabled) return;
+    const postFormData = new FormData();
+    postFormData.append('value', namedRestorePoint);
+    onOK?.(postFormData);
+    closeModal();
   };
 
-  const onKeyDown = (e) => {
-    // If enter key is pressed then click on OK button
-    if (e.key === 'Enter') {
-      okBtnRef.current?.click();
-    }
-  };
-
-  useEffect(()=>{
-    setTimeout(()=>{
+  useEffect(() => {
+    const timer = setTimeout(() => {
       firstEleRef.current?.focus();
     }, 275);
+    return () => clearTimeout(timer);
   }, []);
 
-  useEffect(()=>{
+  useEffect(() => {
     setHeight?.(containerRef.current?.offsetHeight);
-  }, [containerRef.current]);
-
-  const isOKDisabled = isEmptyString(formData.namedRestorePoint);
+  }, [setHeight]);
 
   return (
     <ModalContent ref={containerRef}>
-      <Box flexGrow="1" p={2}>
-        <Box>
-          <span style={{fontWeight: 'bold'}}>
-            {gettext('Enter the name of the restore point to add')}
-          </span>
-        </Box>
-        <Box marginTop='12px'>
-          <InputText inputRef={firstEleRef} type="text" value={formData['namedRestorePoint']}
-            onChange={(e)=>onTextChange(e, 'namedRestorePoint')} onKeyDown={(e)=>onKeyDown(e)}/>
-        </Box>
+      <Box style={{flexGrow: 1, padding: 16}}>
+        <Stack spacing={1.5}>
+          <TextField
+            ref={firstEleRef}
+            label={gettext('Enter the name of the restore point to add')}
+            value={namedRestorePoint}
+            onChange={(e) => setNamedRestorePoint(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isOKDisabled) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+        </Stack>
       </Box>
       <ModalFooter>
-        <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={()=>{
-          closeModal();
-        }} >{gettext('Cancel')}</DefaultButton>
-        <PrimaryButton ref={okBtnRef} data-test="save" disabled={isOKDisabled} startIcon={<CheckRoundedIcon />} onClick={()=>{
-          let postFormData = new FormData();
-          postFormData.append('value', formData.namedRestorePoint);
-          onOK?.(postFormData);
-          closeModal();
-        }} >{gettext('OK')}</PrimaryButton>
+        <Button
+          data-test="close"
+          onClick={() => {
+            closeModal();
+          }}
+        >
+          {gettext('Cancel')}
+        </Button>
+        <Button
+          data-test="save"
+          variant="primary"
+          disabled={isOKDisabled}
+          onClick={submit}
+        >
+          {gettext('OK')}
+        </Button>
       </ModalFooter>
     </ModalContent>
   );
@@ -87,5 +88,5 @@ export default function NamedRestoreContent({closeModal, onOK, setHeight}) {
 NamedRestoreContent.propTypes = {
   closeModal: PropTypes.func,
   onOK: PropTypes.func,
-  setHeight: PropTypes.func
+  setHeight: PropTypes.func,
 };

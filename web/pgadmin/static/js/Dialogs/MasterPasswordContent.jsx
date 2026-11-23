@@ -7,132 +7,146 @@
 //
 //////////////////////////////////////////////////////////////
 
-import { useState, useRef, useEffect } from 'react';
+import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import url_for from 'sources/url_for';
-import { Box } from '@mui/material';
-import CloseIcon from '@mui/icons-material/CloseRounded';
-import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import HelpIcon from '@mui/icons-material/Help';
-import { DefaultButton, PrimaryButton, PgIconButton } from '../components/Buttons';
-import { FormFooterMessage, FormNote, InputText, MESSAGE_TYPE } from '../components/FormComponents';
 import {
   DialogContent as ModalContent,
   DialogFooter as ModalFooter,
 } from 'sources/cdeadmin_ui/overlays/DialogLayout';
+import {Box, Stack} from '../cdeadmin_ui/primitives/Layout';
+import {Button, IconButton} from '../cdeadmin_ui/primitives/Button';
+import {SecretField} from '../cdeadmin_ui/primitives/Field';
+import {Banner} from '../cdeadmin_ui/feedback/Indicators';
 
-export default function MasterPasswordContent({ closeModal, onResetPassowrd, onOK, onCancel, setHeight, isPWDPresent, data, keyringName}) {
+export default function MasterPasswordContent({
+  closeModal,
+  onResetPassowrd,
+  onOK,
+  onCancel,
+  setHeight,
+  isPWDPresent,
+  data,
+  keyringName = '',
+}) {
   const containerRef = useRef();
   const firstEleRef = useRef();
-  const okBtnRef = useRef();
   const isKeyring = keyringName.length > 0;
-  const [formData, setFormData] = useState({
-    password: ''
-  });
+  const [password, setPassword] = useState('');
 
-  const onTextChange = (e, id) => {
-    let val = e;
-    if (e?.target) {
-      val = e.target.value;
-    }
-    setFormData((prev) => ({ ...prev, [id]: val }));
-  };
-
-  const onKeyDown = (e) => {
-    // If enter key is pressed then click on OK button
-    if (e.key === 'Enter') {
-      okBtnRef.current?.click();
-    }
+  const submit = () => {
+    if (!password.length) return;
+    const postFormData = new FormData();
+    postFormData.append('password', password);
+    postFormData.append('submit_password', true);
+    onOK?.(postFormData);
+    closeModal();
   };
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       firstEleRef.current?.focus();
     }, 350);
-  }, [firstEleRef.current]);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     setHeight?.(containerRef.current?.offsetHeight);
-  }, [containerRef.current]);
+  }, [setHeight]);
 
   return (
     <ModalContent ref={containerRef}>
-      {isKeyring ?
-        <Box flexGrow="1" p={2}>
-          <Box>
-            <span style={{ fontWeight: 'bold' }}>
-              {gettext('Please enter your master password.')}
-            </span>
-            <br />
-            <span style={{ fontWeight: 'bold' }}>
-              <FormNote text={gettext(`Saved passwords are encrypted using an encryption key stored in ${keyringName}. Enter the master password for your existing ScratchRobin saved passwords; they will be re-encrypted when you click OK.`)}></FormNote>
-            </span>
-          </Box>
-          <Box marginTop='12px'>
-            <InputText inputRef={firstEleRef} type="password" value={formData['password']} maxLength={null}
-              onChange={(e) => onTextChange(e, 'password')} onKeyDown={(e) => onKeyDown(e)}/>
-          </Box>
-          <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={data.errmsg} closable={false} style={{
-            position: 'unset', padding: '12px 0px 0px'
-          }} />
-        </Box> :
-        <Box flexGrow="1" p={2}>
-          <Box>
-            <span style={{ fontWeight: 'bold' }}>
-              {isPWDPresent ? gettext('Please enter your master password.') : gettext('Please set a master password for ScratchRobin.')}
-            </span>
-            <br />
-            <span style={{ fontWeight: 'bold' }}>
-              {isPWDPresent ? gettext('This is required to unlock saved passwords and reconnect to the database server(s).') : gettext('This will be used to secure and later unlock saved passwords and other credentials.')}
-            </span>
-          </Box>
-          <Box marginTop='12px'>
-            <InputText inputRef={firstEleRef} type="password" value={formData['password']} maxLength={null}
-              onChange={(e) => onTextChange(e, 'password')} onKeyDown={(e) => onKeyDown(e)} controlProps={{autoComplete: 'new-password'}}/>
-          </Box>
-          <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={data.errmsg} closable={false} style={{
-            position: 'unset', padding: '12px 0px 0px'
-          }} />
-        </Box>
-      }
+      <Box style={{flexGrow: 1, padding: 16}}>
+        <Stack spacing={1.5}>
+          {isKeyring ? (
+            <>
+              <div style={{fontWeight: 600}}>
+                {gettext('Please enter your master password.')}
+              </div>
+              <Banner tone="info">
+                {gettext(
+                  `Saved passwords are encrypted using an encryption key stored in ${keyringName}. Enter the master password for your existing ScratchRobin saved passwords; they will be re-encrypted when you click OK.`
+                )}
+              </Banner>
+            </>
+          ) : (
+            <>
+              <div style={{fontWeight: 600}}>
+                {isPWDPresent
+                  ? gettext('Please enter your master password.')
+                  : gettext('Please set a master password for ScratchRobin.')}
+              </div>
+              <div style={{fontSize: '0.8125rem', color: 'var(--sr-text-muted)'}}>
+                {isPWDPresent
+                  ? gettext('This is required to unlock saved passwords and reconnect to the database server(s).')
+                  : gettext('This will be used to secure and later unlock saved passwords and other credentials.')}
+              </div>
+            </>
+          )}
+          <SecretField
+            ref={firstEleRef}
+            label={gettext('Master password')}
+            allowReveal
+            autoComplete={isKeyring ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && password.length > 0) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
+          {data?.errmsg && <Banner tone="error">{data.errmsg}</Banner>}
+        </Stack>
+      </Box>
       <ModalFooter>
-        <Box style={{ marginRight: 'auto' }}>
-          <PgIconButton data-test="help-masterpassword" title={gettext('Help')} style={{ padding: '0.3rem', paddingLeft: '0.7rem' }} startIcon={<HelpIcon />} onClick={() => {
-            let _url = url_for('help.static', {
-              'filename': 'master_password.html',
-            });
-            window.open(_url, 'pgadmin_help');
-          }} >
-          </PgIconButton>
-          {isPWDPresent &&
-            <DefaultButton data-test="reset-masterpassword" style={{ marginLeft: '0.5rem' }} startIcon={<DeleteForeverIcon />}
-              onClick={() => {onResetPassowrd?.(isKeyring);}} >
+        <Box style={{marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6}}>
+          <IconButton
+            data-test="help-masterpassword"
+            label={gettext('Help')}
+            onClick={() => {
+              const _url = url_for('help.static', {filename: 'master_password.html'});
+              window.open(_url, 'pgadmin_help');
+            }}
+          >
+            ?
+          </IconButton>
+          {isPWDPresent && (
+            <Button
+              data-test="reset-masterpassword"
+              variant="danger"
+              onClick={() => {
+                onResetPassowrd?.(isKeyring);
+              }}
+            >
               {gettext('Reset Master Password')}
-            </DefaultButton>
-          }
+            </Button>
+          )}
         </Box>
-        {
-          !isKeyring && <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={() => {
-            onCancel?.();
-            closeModal();
-          }} >{gettext('Cancel')}</DefaultButton>
-        }
-        <PrimaryButton ref={okBtnRef} data-test="save" startIcon={<CheckRoundedIcon />}
-          disabled={formData.password.length == 0}
-          onClick={() => {
-            let postFormData = new FormData();
-            postFormData.append('password', formData.password);
-            postFormData.append('submit_password', true);
-            onOK?.(postFormData);
-            closeModal();
-          }}
+        {!isKeyring && (
+          <Button
+            data-test="close"
+            onClick={() => {
+              onCancel?.();
+              closeModal();
+            }}
+          >
+            {gettext('Cancel')}
+          </Button>
+        )}
+        <Button
+          data-test="save"
+          variant="primary"
+          disabled={password.length === 0}
+          onClick={submit}
         >
           {gettext('OK')}
-        </PrimaryButton>
+        </Button>
       </ModalFooter>
-    </ModalContent>);
+    </ModalContent>
+  );
 }
 
 MasterPasswordContent.propTypes = {

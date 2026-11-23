@@ -1,33 +1,59 @@
+/////////////////////////////////////////////////////////////
+//
+// CDEadmin - Multi-engine Database Administration
+//
+// Copyright (C) 2013 - 2026, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
+import PropTypes from 'prop-types';
+import HTMLReactParser from 'html-react-parser';
+import DOMPurify from 'dompurify';
+import gettext from 'sources/gettext';
 import {
   DialogContent as ModalContent,
   DialogFooter as ModalFooter,
 } from 'sources/cdeadmin_ui/overlays/DialogLayout';
-import gettext from 'sources/gettext';
-import { Box } from '@mui/material';
-import { DefaultButton, PrimaryButton } from '../components/Buttons';
-import CloseIcon from '@mui/icons-material/CloseRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
-import HTMLReactParser from 'html-react-parser';
-import DOMPurify from 'dompurify';
-import PropTypes from 'prop-types';
+import {Box} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
 
 export default function ConfirmSaveContent({closeModal, text, onDontSave, onSave}) {
   return (
     <ModalContent>
-      <Box flexGrow="1" p={2}>{typeof(text) == 'string' ? HTMLReactParser(DOMPurify.sanitize(text)) : text}</Box>
+      <Box style={{flexGrow: 1, padding: 16}}>
+        {typeof text === 'string' ? HTMLReactParser(DOMPurify.sanitize(text)) : text}
+      </Box>
       <ModalFooter>
-        <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={()=>{
-          closeModal();
-        }} >{gettext('Cancel')}</DefaultButton>
-        <DefaultButton data-test="dont-save"  startIcon={<DeleteRoundedIcon />} onClick={()=>{
-          onDontSave?.();
-          closeModal();
-        }} >{gettext('Don\'t save')}</DefaultButton>
-        <PrimaryButton data-test="save" startIcon={<CheckRoundedIcon />} onClick={()=>{
-          onSave?.();
-          closeModal();
-        }} autoFocus={true} >{gettext('Save')}</PrimaryButton>
+        <Button
+          data-test="close"
+          onClick={() => {
+            closeModal();
+          }}
+        >
+          {gettext('Cancel')}
+        </Button>
+        <Button
+          data-test="dont-save"
+          variant="danger"
+          onClick={() => {
+            onDontSave?.();
+            closeModal();
+          }}
+        >
+          {gettext('Don\'t save')}
+        </Button>
+        <Button
+          data-test="save"
+          variant="primary"
+          autoFocus
+          onClick={() => {
+            onSave?.();
+            closeModal();
+          }}
+        >
+          {gettext('Save')}
+        </Button>
       </ModalFooter>
     </ModalContent>
   );
@@ -35,7 +61,7 @@ export default function ConfirmSaveContent({closeModal, text, onDontSave, onSave
 
 ConfirmSaveContent.propTypes = {
   closeModal: PropTypes.func,
-  text: PropTypes.string,
+  text: PropTypes.node,
   onDontSave: PropTypes.func,
-  onSave: PropTypes.func
+  onSave: PropTypes.func,
 };

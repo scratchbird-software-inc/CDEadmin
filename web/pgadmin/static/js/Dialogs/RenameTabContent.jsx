@@ -8,78 +8,82 @@
 //////////////////////////////////////////////////////////////
 
 import _ from 'lodash';
-import { useState, useRef, useMemo } from 'react';
+import {useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-
-import { Box } from '@mui/material';
-import CloseIcon from '@mui/icons-material/CloseRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-
 import gettext from 'sources/gettext';
-
-import { DefaultButton, PrimaryButton } from '../components/Buttons';
 import {
   DialogContent as ModalContent,
   DialogFooter as ModalFooter,
 } from 'sources/cdeadmin_ui/overlays/DialogLayout';
-import { FormFooterMessage, InputText, MESSAGE_TYPE } from '../components/FormComponents';
+import {Box, Stack} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
+import {TextField} from '../cdeadmin_ui/primitives/Field';
+import {Banner} from '../cdeadmin_ui/feedback/Indicators';
 
-export default function RenameTabContent({ panelId, panelDocker, closeModal}) {
+export default function RenameTabContent({panelId, panelDocker, closeModal}) {
   const containerRef = useRef();
-  const okBtnRef = useRef();
-  const panelData = useMemo(()=>panelDocker.find(panelId));
-  const initialTitle = panelData.internal?.isDirty ? panelData?.internal?.title.slice(0, -1) : panelData?.internal?.title;
-  const [formData, setFormData] = useState({
-    title: initialTitle,
-  });
+  const panelData = useMemo(() => panelDocker.find(panelId), [panelDocker, panelId]);
+  const initialTitle = panelData.internal?.isDirty
+    ? panelData?.internal?.title.slice(0, -1)
+    : panelData?.internal?.title;
+  const [title, setTitle] = useState(initialTitle || '');
 
-  const onTextChange = (e, id) => {
-    let val = e;
-    if (e?.target) {
-      val = e.target.value;
-    }
-    setFormData((prev) => ({ ...prev, [id]: val }));
-  };
+  const isValid = title.length !== 0;
 
-  const onKeyDown = (e) => {
-    // If enter key is pressed then click on OK button
-    if (e.key === 'Enter') {
-      okBtnRef.current?.click();
-    }
-  };
-
-  const onOkClick = ()=>{
-    if(panelData.internal.isDirty) {
-      panelDocker.setTitle(panelId, formData.title+'*');
+  const onOkClick = () => {
+    if (!isValid) return;
+    if (panelData.internal.isDirty) {
+      panelDocker.setTitle(panelId, `${title}*`);
     } else {
-      panelDocker.setTitle(panelId, formData.title);
+      panelDocker.setTitle(panelId, title);
     }
-    if(_.isUndefined(panelData.internal.orig_title)) {
+    if (_.isUndefined(panelData.internal.orig_title)) {
       panelDocker.setInternalAttrs(panelId, {
-        orig_title: initialTitle
+        orig_title: initialTitle,
       });
     }
     closeModal();
   };
 
-  const isValid = formData['title'].length != 0;
-
   return (
     <ModalContent ref={containerRef}>
-      <Box padding="8px">
-        <Box marginBottom="4px">Current: {initialTitle}</Box>
-        <InputText type="text" value={formData['title']} controlProps={{ maxLength: null }}
-          onChange={(e) => onTextChange(e, 'title')} onKeyDown={(e) => onKeyDown(e)} autoFocus />
+      <Box style={{flexGrow: 1, padding: 12}}>
+        <Stack spacing={1}>
+          <div style={{fontSize: '0.8125rem', color: 'var(--sr-text-muted)'}}>
+            {gettext('Current')}: {initialTitle}
+          </div>
+          <TextField
+            label={gettext('New tab title')}
+            value={title}
+            autoFocus
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && isValid) {
+                e.preventDefault();
+                onOkClick();
+              }
+            }}
+          />
+          {!isValid && <Banner tone="error">{gettext('Title cannot be empty')}</Banner>}
+        </Stack>
       </Box>
-      <FormFooterMessage type={MESSAGE_TYPE.ERROR} message={!isValid ? gettext('Title cannot be empty') : ''}
-        closable={false} style={{position: 'initial'}} />
       <ModalFooter>
-        <DefaultButton data-test="close" startIcon={<CloseIcon />} onClick={() => {
-          closeModal();
-        }} >{gettext('Cancel')}</DefaultButton>
-        <PrimaryButton data-test="save" startIcon={<CheckRoundedIcon />} onClick={onOkClick} disabled={!isValid}>
+        <Button
+          data-test="close"
+          onClick={() => {
+            closeModal();
+          }}
+        >
+          {gettext('Cancel')}
+        </Button>
+        <Button
+          data-test="save"
+          variant="primary"
+          disabled={!isValid}
+          onClick={onOkClick}
+        >
           {gettext('OK')}
-        </PrimaryButton>
+        </Button>
       </ModalFooter>
     </ModalContent>
   );
