@@ -25,7 +25,12 @@ import {
   resolveRecordPresentation,
 } from '../surfaces/dataEditSurfaceHelpers';
 import GridNavigation from './GridNavigation';
-import {serializeGridData} from './gridIO';
+import {downloadGridExport, serializeGridData} from './gridIO';
+import {
+  formatScalarForClipboard,
+  summarizeGridSelection,
+  useGridSelection,
+} from './gridSelection';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500].map((val) => ({
   value: String(val),
@@ -190,8 +195,8 @@ export default function UnifiedDataGrid({
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [activeRowIndex, setActiveRowIndex] = useState(0);
   const [activeColName, setActiveColName] = useState(() => normalizedColumns[0]?.name || null);
-  const [selectedCells, setSelectedCells] = useState([]);
   const [bookmarkedGlobals, setBookmarkedGlobals] = useState(() => new Set());
+  const pendingFocusRef = useRef(null);
   const [, setScrollRowRange] = useState({start: 0, end: 50});
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
   const [columnPickerScope, setColumnPickerScope] = useState('grid');
@@ -418,30 +423,49 @@ export default function UnifiedDataGrid({
         setPage(0);
         setActiveRowIndex(0);
         if (nextColName) setActiveColName(nextColName);
+        pendingFocusRef.current = {rowIndex: 0, colName: nextColName || activeColName};
         return;
       }
       if (pageAction === 'last_record') {
+        const lastIdx = Math.max(0, visibleRows.length - 1);
         setPage(totalPages - 1);
-        setActiveRowIndex(Math.max(0, visibleRows.length - 1));
+        setActiveRowIndex(lastIdx);
         if (nextColName) setActiveColName(nextColName);
+        pendingFocusRef.current = {rowIndex: lastIdx, colName: nextColName || activeColName};
         return;
       }
       if (pageAction === 'next_page' && safePage < totalPages - 1) {
         setPage(safePage + 1);
         setActiveRowIndex(0);
+        pendingFocusRef.current = {rowIndex: 0, colName: nextColName || activeColName};
         return;
       }
       if (pageAction === 'prev_page' && safePage > 0) {
         setPage(safePage - 1);
         setActiveRowIndex(0);
+        pendingFocusRef.current = {rowIndex: 0, colName: nextColName || activeColName};
         return;
       }
       const clamped = Math.max(0, Math.min(nextRowIdx, Math.max(0, visibleRows.length - 1)));
       setActiveRowIndex(clamped);
       if (nextColName) setActiveColName(nextColName);
+      pendingFocusRef.current = {rowIndex: clamped, colName: nextColName || activeColName};
     },
-    [totalPages, visibleRows.length, safePage]
+    [totalPages, visibleRows.length, safePage, activeColName]
   );
+
+  useEffect(() => {
+    const req = pendingFocusRef.current;
+    if (!req || !containerRef.current) return;
+    pendingFocusRef.current = null;
+    const escCol = String(req.colName || '').replaceAll('"', '\\"');
+    const el = containerRef.current.querySelector(
+      `[data-grid-nav-cell="${req.rowIndex}:${escCol}"]`
+    );
+    if (el && typeof el.focus === 'function') {
+      el.focus({preventScroll: false});
+    }
+  }, [activeRowIndex, activeColName, visibleRows]);
 
   const setColumnPref = useCallback((colName, patch) => {
     setLayout((prev) => ({
@@ -453,15 +477,84 @@ export default function UnifiedDataGrid({
     }));
   }, []);
 
-  const copyExport = async (fmt) => {
-    const exportCols = gridCols.map((c) => ({key: c.name, label: c.label}));
-    const exportRows = sortedRecords.map((r) => r.values);
-    const text = serializeGridData(exportCols, exportRows, fmt);
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
+  const gridSelection = useGridSelection({
+    rows: visibleRows,
+    gridColumns: gridCols,
+    activeRowIndex: safeActiveRowIndex,
+    activeColName,
+    selectRowAtIndex,
+    setActiveColName,
+    tableName: caption || 'GRID_RESULT',
+  });
+  const {selectionSlice} = gridSelection;
+
+  const resolveExportPayload = useCallback(() => {
+    if (selectionSlice.hasMultiSelection) {
+      const targetCols = selectionSlice.selectedColumns.map((c) => ({
+        key: c.name,
+        label: c.label || c.name,
+      }));
+      const sourceRows = selectionSlice.allRowsSelected
+        ? sortedRecords
+        : selectionSlice.slicedRows;
+      const targetRows = sourceRows.map((r) => {
+        const obj = {};
+        for (const col of selectionSlice.selectedColumns) {
+          obj[col.name] = r.values?.[col.name] ?? null;
+        }
+        return obj;
+      });
+      return {exportCols: targetCols, exportRows: targetRows};
     }
-    return text;
-  };
+    if (selectionSlice.explicitSingleCell) {
+      const targetCols = selectionSlice.selectedColumns.map((c) => ({
+        key: c.name,
+        label: c.label || c.name,
+      }));
+      const targetRows = selectionSlice.slicedRows.map((r) => r.values);
+      return {exportCols: targetCols, exportRows: targetRows};
+    }
+    return {
+      exportCols: gridCols.map((c) => ({key: c.name, label: c.label || c.name})),
+      exportRows: sortedRecords.map((r) => r.values),
+    };
+  }, [selectionSlice, sortedRecords, gridCols]);
+
+  const copyExport = useCallback(
+    async (fmt = 'auto') => {
+      if (fmt === 'auto' && !selectionSlice.hasMultiSelection) {
+        const scalar = formatScalarForClipboard(selectionSlice.scalarValue);
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(scalar).catch(() => {});
+        }
+        return scalar;
+      }
+      const resolvedFmt = fmt === 'auto' ? 'tsv' : fmt;
+      const {exportCols, exportRows} = resolveExportPayload();
+      const text = serializeGridData(exportCols, exportRows, resolvedFmt, {
+        newline: '\n',
+      });
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text).catch(() => {});
+      }
+      return text;
+    },
+    [selectionSlice, resolveExportPayload]
+  );
+
+  const downloadExport = useCallback(
+    (fmt = 'csv') => {
+      const {exportCols, exportRows} = resolveExportPayload();
+      const text = serializeGridData(exportCols, exportRows, fmt);
+      const stem = String(caption || 'grid_export')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'grid_export';
+      downloadGridExport(`${stem}.${fmt}`, text);
+      return text;
+    },
+    [resolveExportPayload, caption]
+  );
 
   const columnLabelsMap = useMemo(
     () => Object.fromEntries(normalizedColumns.map((c) => [c.name, c.label])),
@@ -485,6 +578,7 @@ export default function UnifiedDataGrid({
     effectiveDisplayMode,
     formColumns: formCols,
     gridColumns: gridCols,
+    gridSelection,
     gridViewportRef,
     handleKeyboardCellNavigate,
     handleToggleColumnSort,
@@ -496,8 +590,10 @@ export default function UnifiedDataGrid({
     },
     isEditingRow,
     layout,
+    onCopySelection: (fmt) => copyExport(fmt),
+    onOpenExportSelection: exportable ? () => downloadExport('csv') : null,
     openFormFieldContextMenu: () => {},
-    openHeaderContextMenu: (ev) => ev.preventDefault(),
+    openHeaderContextMenu: null,
     openMiniFormContextMenu: () => {},
     openRightDrawerWith: ({rowIndex, column}) => {
       if (visibleRows[rowIndex]) {
@@ -508,15 +604,14 @@ export default function UnifiedDataGrid({
     rowDraft,
     rows: visibleRows,
     selectRowAtIndex,
-    selectedCells,
     setActiveColName,
     setColumnPickerOpen,
     setColumnPickerScope,
     setColumnPref,
     setRowDraft,
     setScrollRowRange,
-    setSelectedCells,
     sharedFormLayout,
+    tableName: caption || 'GRID_RESULT',
     toggleBookmarkAtRow,
     viewportWidth,
   };
@@ -527,6 +622,7 @@ export default function UnifiedDataGrid({
     facets.length > 0 ||
     allowModeSwitch ||
     exportable ||
+    selectionSlice.hasMultiSelection ||
     Boolean(toolbarLeading) ||
     Boolean(toolbarTrailing);
 
@@ -633,6 +729,21 @@ export default function UnifiedDataGrid({
           </div>
 
           <div style={{display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 6}}>
+            {selectionSlice.hasMultiSelection && (
+              <span
+                className="sr-bui-pill"
+                data-tone="info"
+                data-cdeadmin-qa-key="unified-grid-selection-badge"
+                style={{padding: '2px 8px', fontSize: '0.73rem'}}
+              >
+                {summarizeGridSelection(
+                  selectionSlice,
+                  safeActiveRowIndex,
+                  activeColName,
+                  safePage * pageSize
+                )}
+              </span>
+            )}
             {exportable && sortedRecords.length > 0 && (
               <Stack direction="row" gap="compact">
                 <Button size="small" intent="neutral" onClick={() => copyExport('csv')}>
@@ -643,6 +754,9 @@ export default function UnifiedDataGrid({
                 </Button>
                 <Button size="small" intent="neutral" onClick={() => copyExport('json')}>
                   {gettext('Copy JSON')}
+                </Button>
+                <Button size="small" intent="neutral" onClick={() => downloadExport('csv')}>
+                  {gettext('Export CSV')}
                 </Button>
               </Stack>
             )}

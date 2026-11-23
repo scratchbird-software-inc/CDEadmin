@@ -67,11 +67,23 @@ export default function SurfaceExportDialog({
   tableName = 'EXPORT_TABLE',
   rows = [],
   columns = [],
+  selectedRows = null,
+  selectedColumns = null,
+  hasMultiSelection = false,
+  allRowsSelected = false,
+  selectionLabel = '',
   onExportHost = null,
 }) {
+  const canUseSelection =
+    Array.isArray(selectedRows) &&
+    selectedRows.length > 0 &&
+    Array.isArray(selectedColumns) &&
+    selectedColumns.length > 0;
   const [format, setFormat] = useState(initialFormat || 'csv');
   const [filename, setFilename] = useState(defaultFilename || 'query_result');
-  const [scope, setScope] = useState('filtered');
+  const [scope, setScope] = useState(
+    hasMultiSelection && canUseSelection ? 'selection' : 'filtered'
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -112,8 +124,22 @@ export default function SurfaceExportDialog({
     setFilename(defaultFilename || 'query_result');
     setPdfTitle(defaultTitle || defaultFilename || 'Query Report');
     setSqlTable(tableName || 'EXPORT_TABLE');
+    setScope(hasMultiSelection && canUseSelection ? 'selection' : 'filtered');
     setError('');
-  }, [open, initialFormat, defaultFilename, defaultTitle, tableName]);
+  }, [
+    open,
+    initialFormat,
+    defaultFilename,
+    defaultTitle,
+    tableName,
+    hasMultiSelection,
+    canUseSelection,
+  ]);
+
+  const effectiveRows =
+    scope === 'selection' && canUseSelection ? selectedRows : rows;
+  const effectiveColumns =
+    scope === 'selection' && canUseSelection ? selectedColumns : columns;
 
   const selectFormat = (nextFmt) => {
     setFormat(nextFmt);
@@ -127,8 +153,8 @@ export default function SurfaceExportDialog({
     setError('');
     if (format === 'sql_insert' || format === 'sql_update' || !onExportHost) {
       const content = formatRowsForExport(
-        rows,
-        columns,
+        effectiveRows,
+        effectiveColumns,
         format,
         sqlTable || tableName || 'EXPORT_TABLE'
       );
@@ -142,6 +168,14 @@ export default function SurfaceExportDialog({
     setBusy(true);
     try {
       const settings = {scope};
+      if (scope === 'selection' && canUseSelection) {
+        settings.selected_column_names = effectiveColumns.map((c) => c.name);
+        if (!allRowsSelected) {
+          settings.selected_rows_payload = effectiveRows.map((r) => ({
+            values: r?.values || r || {},
+          }));
+        }
+      }
       if (format === 'csv' || format === 'tsv') {
         Object.assign(settings, {
           delimiter: format === 'tsv' && delimiter === ',' ? '\t' : delimiter,
@@ -270,6 +304,13 @@ export default function SurfaceExportDialog({
             >
               <option value="filtered">{gettext('Current Filtered / Sorted View')}</option>
               <option value="all">{gettext('All Host-Buffered Rows')}</option>
+              {canUseSelection && (
+                <option value="selection">
+                  {selectionLabel
+                    ? `${gettext('Current Selection')} (${selectionLabel})`
+                    : `${gettext('Current Selection')} (${selectedRows.length} × ${selectedColumns.length})`}
+                </option>
+              )}
             </select>
           </div>
         </div>
@@ -506,13 +547,13 @@ export default function SurfaceExportDialog({
         )}
 
         {/* Text Preview when applicable */}
-        {isTextPreviewable && rows.length > 0 && (
+        {isTextPreviewable && effectiveRows.length > 0 && (
           <TextArea
             rows={6}
             label={gettext('Preview (first 15 rows)')}
             value={formatRowsForExport(
-              rows.slice(0, 15),
-              columns,
+              effectiveRows.slice(0, 15),
+              effectiveColumns,
               format,
               sqlTable || tableName || 'EXPORT_TABLE'
             )}
@@ -533,5 +574,10 @@ SurfaceExportDialog.propTypes = {
   tableName: PropTypes.string,
   rows: PropTypes.array,
   columns: PropTypes.array,
+  selectedRows: PropTypes.array,
+  selectedColumns: PropTypes.array,
+  hasMultiSelection: PropTypes.bool,
+  allRowsSelected: PropTypes.bool,
+  selectionLabel: PropTypes.string,
   onExportHost: PropTypes.func,
 };

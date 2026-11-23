@@ -41,6 +41,11 @@ import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
 import UnifiedDataGrid from '../data/UnifiedDataGrid';
+import {
+  formatSelectionForClipboard,
+  summarizeGridSelection,
+  useGridSelection,
+} from '../data/gridSelection';
 import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
@@ -127,7 +132,6 @@ export default function DataEditSurface({
   // Navigation & Editing state
   const [activeRowIndex, setActiveRowIndex] = useState(0);
   const [activeColName, setActiveColName] = useState('');
-  const [selectedCells, setSelectedCells] = useState([]); // [{rowIndex, colName}]
   const [isEditingRow, setIsEditingRow] = useState(false);
   const [editingRowIndex, setEditingRowIndex] = useState(null);
   const [rowDraft, setRowDraft] = useState(null); // { [colName]: rawValue }
@@ -503,11 +507,21 @@ export default function DataEditSurface({
       setActiveRowIndex(clamped);
       if (nextColName) {
         setActiveColName(nextColName);
-        setSelectedCells([{rowIndex: clamped, colName: nextColName}]);
       }
     },
     [rows.length, isEditingRow, editingRowIndex, acceptCurrentRow]
   );
+
+  const gridSelection = useGridSelection({
+    rows,
+    gridColumns,
+    activeRowIndex,
+    activeColName,
+    selectRowAtIndex,
+    setActiveColName,
+    tableName: targetResource?.display_name || 'TABLE',
+  });
+  const {selectionSlice} = gridSelection;
 
   const beginEditRow = useCallback(
     (targetIdx = activeRowIndex) => {
@@ -894,23 +908,19 @@ export default function DataEditSurface({
   }, []);
 
   const copySelection = useCallback(
-    (fmt = 'tsv') => {
-      const targetRows = currentRow ? [currentRow] : rows;
-      const text = formatRowsForExport(
-        fmt === 'tsv' && currentRow && activeColName
-          ? [{values: {[activeColName]: currentRow.values?.[activeColName]}}]
-          : targetRows,
-        fmt === 'tsv' && currentRow && activeColName && activeColObj
-          ? [activeColObj]
-          : gridColumns,
+    (fmt = 'auto', options = {}) => {
+      const text = formatSelectionForClipboard(
+        selectionSlice,
         fmt,
-        targetResource?.display_name || 'TABLE'
+        targetResource?.display_name || 'TABLE',
+        options
       );
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text).catch(() => {});
       }
+      return text;
     },
-    [currentRow, rows, activeColName, activeColObj, gridColumns, targetResource?.display_name]
+    [selectionSlice, targetResource?.display_name]
   );
 
   // Determine effective layout mode (handling (e) Hybrid-When-Editing!)
@@ -1033,6 +1043,7 @@ export default function DataEditSurface({
     handleToggleSortLocation,
     setColumnPref,
     copySelection,
+    gridSelection,
     initialLoad,
     refreshFromServer,
     beforeSurfaceClose,
@@ -1486,25 +1497,13 @@ export default function DataEditSurface({
     const timings = hostData?.metrics_view?.timings_ms || {};
     const autoCommitOn = Boolean(hostData?.autocommit);
 
-    // Multi-cell numeric selection summary
-    let selectionLabel = activeColName
-      ? `${gettext('Row')} ${globalRowNum} · ${activeColName}`
-      : `${gettext('Row')} ${globalRowNum}`;
-    if (selectedCells.length > 1) {
-      let sum = 0;
-      let numCnt = 0;
-      for (const sc of selectedCells) {
-        const v = rows[sc.rowIndex]?.values?.[sc.colName];
-        if (v !== null && v !== undefined && Number.isFinite(Number(v))) {
-          sum += Number(v);
-          numCnt += 1;
-        }
-      }
-      selectionLabel =
-        numCnt > 0
-          ? `${selectedCells.length} ${gettext('cells')} · ${gettext('Sum')}: ${sum.toLocaleString()}`
-          : `${selectedCells.length} ${gettext('cells selected')}`;
-    }
+    // Unified 2D selection summary (cells / rows / columns / all + numeric sum)
+    const selectionLabel = summarizeGridSelection(
+      selectionSlice,
+      activeRowIndex,
+      activeColName,
+      hostData?.window_offset || 0
+    );
 
     const chipStyle = {
       display: 'inline-flex',
@@ -1587,7 +1586,7 @@ export default function DataEditSurface({
     effectiveDisplayMode,
     scrollRowRange,
     activeColName,
-    selectedCells,
+    selectionSlice,
     isEditingRow,
     stagedTotal,
     errorWarnCount,
@@ -1939,15 +1938,15 @@ export default function DataEditSurface({
       'copy',
       'action.copy',
       gettext('Copy'),
-      () => handlersRef.current.copySelection('tsv'),
-      {enabled: rows.length > 0}
+      () => handlersRef.current.copySelection('auto'),
+      {enabled: rows.length > 0, shortcut: 'Ctrl+C'}
     );
     const cutId = reg(
       'cut',
       'action.cut',
       gettext('Cut Cell Value'),
       () => {
-        handlersRef.current.copySelection('tsv');
+        handlersRef.current.copySelection('auto');
         const col = handlersRef.current.activeColName;
         if (col && canMutate) {
           if (!handlersRef.current.isEditingRow) handlersRef.current.beginEditRow();
@@ -2933,16 +2932,25 @@ export default function DataEditSurface({
           {
             id: `${pfx}.mnu.sel_row`,
             label: gettext('Select Current Row'),
+            shortcut: 'Shift+Space',
             index: 70,
             disabled: rows.length === 0,
             callback: () => {
               const rIdx = handlersRef.current.activeRowIndex;
-              setSelectedCells(
-                (handlersRef.current.hostData?.columns || []).map((c) => ({
-                  rowIndex: rIdx,
-                  colName: c.name,
-                }))
-              );
+              handlersRef.current.gridSelection.handleRowHeaderClick(rIdx, {});
+            },
+          },
+          {
+            id: `${pfx}.mnu.sel_col`,
+            label: gettext('Select Current Column'),
+            shortcut: 'Ctrl+Space',
+            index: 75,
+            disabled: rows.length === 0 || !activeColName,
+            callback: () => {
+              const col = handlersRef.current.activeColName;
+              if (col) {
+                handlersRef.current.gridSelection.handleColumnSelectClick(col, {});
+              }
             },
           },
           {
@@ -2952,13 +2960,17 @@ export default function DataEditSurface({
             index: 80,
             disabled: rows.length === 0,
             callback: () => {
-              const all = [];
-              rows.forEach((_r, rIdx) => {
-                gridColumns.forEach((c) => {
-                  all.push({rowIndex: rIdx, colName: c.name});
-                });
-              });
-              setSelectedCells(all);
+              handlersRef.current.gridSelection.selectAll();
+            },
+          },
+          {
+            id: `${pfx}.mnu.sel_clear`,
+            label: gettext('Clear Selection'),
+            shortcut: 'Esc',
+            index: 85,
+            disabled: !selectionSlice.hasMultiSelection,
+            callback: () => {
+              handlersRef.current.gridSelection.clearSelection();
             },
           },
         ],
@@ -3196,7 +3208,8 @@ export default function DataEditSurface({
     isInsertDraft,
     rowDraft,
     drawerState,
-    selectedCells.length,
+    selectionSlice.cellCount,
+    selectionSlice.hasMultiSelection,
     scrollRowRange.start,
     scrollRowRange.end,
     currentRow,
@@ -3323,9 +3336,26 @@ export default function DataEditSurface({
           label: gettext('Select Column Values'),
           icon: 'action.select_marquee',
           callback: () =>
-            setSelectedCells(
-              rows.map((_, idx) => ({rowIndex: idx, colName: col.name}))
-            ),
+            gridSelection.handleColumnSelectClick(col.name, {}),
+        },
+        {
+          label: gettext('Toggle Column in Selection'),
+          icon: 'action.select_marquee',
+          callback: () =>
+            gridSelection.handleColumnSelectClick(col.name, {ctrlKey: true}),
+        },
+        {
+          label: gettext('Copy Column (TSV)'),
+          icon: 'action.copy',
+          callback: () => {
+            const text = formatRowsForExport(
+              rows,
+              [col],
+              'tsv',
+              targetResource?.display_name || 'TABLE'
+            );
+            navigator.clipboard?.writeText?.(text).catch(() => {});
+          },
         },
       ]);
       setContextPos({x: ev.clientX, y: ev.clientY});
@@ -3339,6 +3369,8 @@ export default function DataEditSurface({
       columns,
       rows,
       callHost,
+      gridSelection,
+      targetResource?.display_name,
     ]
   );
 
@@ -3469,12 +3501,18 @@ export default function DataEditSurface({
     effectiveDisplayMode: resolveRecordPresentation(mode || layout.displayMode, isEditingRow, layout.hybridEditTarget),
     formColumns,
     gridColumns,
+    gridSelection,
     gridViewportRef: secondary ? companionGridRef : gridViewportRef,
     handleKeyboardCellNavigate,
     handleToggleColumnSort,
     hostData,
     isEditingRow,
     layout,
+    onCopySelection: copySelection,
+    onOpenExportSelection: () => {
+      setExportFormat('csv');
+      setExportDialogOpen(true);
+    },
     openFormFieldContextMenu,
     openHeaderContextMenu,
     openMiniFormContextMenu,
@@ -3483,15 +3521,14 @@ export default function DataEditSurface({
     rowDraft,
     rows,
     selectRowAtIndex,
-    selectedCells,
     setActiveColName,
     setColumnPickerOpen,
     setColumnPickerScope,
     setColumnPref,
     setRowDraft,
     setScrollRowRange,
-    setSelectedCells,
     sharedFormLayout,
+    tableName: targetResource?.display_name || 'TABLE',
     toggleBookmarkAtRow,
     viewportWidth
   }}/>;
@@ -4206,6 +4243,16 @@ export default function DataEditSurface({
         tableName={targetResource?.display_name || 'EXPORT_TABLE'}
         rows={rows}
         columns={gridColumns}
+        selectedRows={selectionSlice.slicedRows}
+        selectedColumns={selectionSlice.selectedColumns}
+        hasMultiSelection={selectionSlice.hasMultiSelection}
+        allRowsSelected={selectionSlice.allRowsSelected}
+        selectionLabel={summarizeGridSelection(
+          selectionSlice,
+          activeRowIndex,
+          activeColName,
+          hostData?.window_offset || 0
+        )}
         onExportHost={(req) => callHost('export_formatted', req)}
       />
 
@@ -4298,8 +4345,8 @@ export default function DataEditSurface({
             columns={columns}
             fetchedRows={rows}
             initialSelectedIndices={
-              selectedCells.length
-                ? [...new Set(selectedCells.map((c) => c.rowIndex))]
+              selectionSlice.hasMultiSelection && selectionSlice.rowIndices.length
+                ? selectionSlice.rowIndices
                 : [activeRowIndex]
             }
             callHost={callHost}
@@ -4350,8 +4397,8 @@ export default function DataEditSurface({
             columns={columns}
             fetchedRows={rows}
             initialSelectedIndices={
-              selectedCells.length
-                ? [...new Set(selectedCells.map((c) => c.rowIndex))]
+              selectionSlice.hasMultiSelection && selectionSlice.rowIndices.length
+                ? selectionSlice.rowIndices
                 : [activeRowIndex]
             }
             callHost={callHost}

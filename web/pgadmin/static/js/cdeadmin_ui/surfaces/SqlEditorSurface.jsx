@@ -48,6 +48,11 @@ import {RobinTiledCanvas} from '../integrations/ddn/RobinTiledCanvas';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
 import UnifiedDataGrid from '../data/UnifiedDataGrid';
+import {
+  formatSelectionForClipboard,
+  summarizeGridSelection,
+  useGridSelection,
+} from '../data/gridSelection';
 import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
@@ -95,6 +100,7 @@ import {
   isValidJsonDraft,
   inferColumnMeta,
   formatBytes,
+  formatRowsForExport,
   serializeValueForEdit,
 } from './dataEditSurfaceHelpers';
 
@@ -331,7 +337,6 @@ export default function SqlEditorSurface({
   const pendingCellFocusRef = useRef(null);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [columnPickerScope, setColumnPickerScope] = useState('grid');
-  const [selectedCells, setSelectedCells] = useState([]);
   const gridViewportRef = useRef(null);
   const companionGridRef = useRef(null);
   const focusedDisplayAreaRef = useRef(null);
@@ -1509,6 +1514,38 @@ export default function SqlEditorSurface({
     [acceptCurrentRow, editingRowIndex, isEditingRow, rows.length]
   );
 
+  const sqlTableName =
+    activeResult?.target_resource?.display_name ||
+    targetResource?.display_name ||
+    'QUERY_RESULT';
+
+  const gridSelection = useGridSelection({
+    rows,
+    gridColumns,
+    activeRowIndex,
+    activeColName,
+    selectRowAtIndex: selectSqlRowAtIndex,
+    setActiveColName,
+    tableName: sqlTableName,
+  });
+  const {selectionSlice} = gridSelection;
+
+  const copySqlSelection = useCallback(
+    (fmt = 'auto', options = {}) => {
+      const text = formatSelectionForClipboard(
+        selectionSlice,
+        fmt,
+        sqlTableName,
+        options
+      );
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+      return text;
+    },
+    [selectionSlice, sqlTableName]
+  );
+
   const toggleSqlBookmark = useCallback(
     (localIdx = activeRowIndex) => {
       if (rows.length === 0) return;
@@ -2055,6 +2092,8 @@ export default function SqlEditorSurface({
     isEditingRow,
     rows,
     gridColumns,
+    gridSelection,
+    copySqlSelection,
     activeRowIndex,
     activeColName,
     navigateResultPage,
@@ -3129,6 +3168,16 @@ export default function SqlEditorSurface({
           activeResult?.total_view_rows ?? 0
         )
       );
+      if (selectionSlice.hasMultiSelection) {
+        parts.push(
+          summarizeGridSelection(
+            selectionSlice,
+            activeRowIndex,
+            activeColName,
+            hostData?.window_offset || 0
+          )
+        );
+      }
     }
     if (hostData?.timings_ms?.total_ms) {
       parts.push(`${hostData.timings_ms.total_ms} ms`);
@@ -3137,7 +3186,9 @@ export default function SqlEditorSurface({
     return parts.join(' · ');
   }, [
     localeRevision,
+    activeColName,
     activeResult?.total_view_rows,
+    activeRowIndex,
     autocommit,
     cursorPos.col,
     cursorPos.line,
@@ -3150,6 +3201,8 @@ export default function SqlEditorSurface({
     hostData?.staged_count,
     hostData?.transaction_prepare_state,
     hostData?.timings_ms?.total_ms,
+    hostData?.window_offset,
+    selectionSlice,
     terminator,
   ]);
 
@@ -4055,7 +4108,65 @@ export default function SqlEditorSurface({
         items: [
           {id: `${pfx}.m.fmt`, actionId: formatSqlId, label: gettext('Format SQL'), index: 10},
           {id: `${pfx}.m.sep_e1`, type: 'separator', index: 15},
-          {id: `${pfx}.m.edit_row`, actionId: editAcceptRowId, label: isEditingRow ? gettext('Accept Row') : gettext('Edit Row'), index: 20},
+          {
+            id: `${pfx}.m.copy_res`,
+            label: gettext('Copy Result Selection'),
+            shortcut: 'Ctrl+C',
+            disabled: rows.length === 0,
+            index: 16,
+            callback: () => handlersRef.current.copySqlSelection('auto'),
+          },
+          {
+            id: `${pfx}.m.copy_special`,
+            name: 'copy_special',
+            label: gettext('Copy Result Special'),
+            disabled: rows.length === 0,
+            index: 17,
+            items: [
+              {id: `${pfx}.m.cp_tsv`, label: gettext('Copy as TSV'), index: 10, callback: () => handlersRef.current.copySqlSelection('tsv')},
+              {id: `${pfx}.m.cp_csv`, label: gettext('Copy as CSV'), index: 20, callback: () => handlersRef.current.copySqlSelection('csv')},
+              {id: `${pfx}.m.cp_json`, label: gettext('Copy as JSON'), index: 30, callback: () => handlersRef.current.copySqlSelection('json')},
+              {id: `${pfx}.m.cp_ins`, label: gettext('Copy as SQL INSERT'), index: 40, callback: () => handlersRef.current.copySqlSelection('sql_insert')},
+              {id: `${pfx}.m.cp_upd`, label: gettext('Copy as SQL UPDATE'), index: 50, callback: () => handlersRef.current.copySqlSelection('sql_update')},
+            ],
+          },
+          {
+            id: `${pfx}.m.sel_row`,
+            label: gettext('Select Current Row'),
+            shortcut: 'Shift+Space',
+            disabled: rows.length === 0,
+            index: 18,
+            callback: () =>
+              handlersRef.current.gridSelection.handleRowHeaderClick(
+                handlersRef.current.activeRowIndex,
+                {}
+              ),
+          },
+          {
+            id: `${pfx}.m.sel_col`,
+            label: gettext('Select Current Column'),
+            shortcut: 'Ctrl+Space',
+            disabled: rows.length === 0 || !activeColName,
+            index: 19,
+            callback: () => {
+              if (handlersRef.current.activeColName) {
+                handlersRef.current.gridSelection.handleColumnSelectClick(
+                  handlersRef.current.activeColName,
+                  {}
+                );
+              }
+            },
+          },
+          {
+            id: `${pfx}.m.sel_all_res`,
+            label: gettext('Select Entire Result Set'),
+            shortcut: 'Ctrl+A',
+            disabled: rows.length === 0,
+            index: 20,
+            callback: () => handlersRef.current.gridSelection.selectAll(),
+          },
+          {id: `${pfx}.m.sep_e1b`, type: 'separator', index: 22},
+          {id: `${pfx}.m.edit_row`, actionId: editAcceptRowId, label: isEditingRow ? gettext('Accept Row') : gettext('Edit Row'), index: 25},
           {id: `${pfx}.m.ins_row`, actionId: insertRowId, label: gettext('Insert Row'), index: 30},
           {id: `${pfx}.m.dup_row`, actionId: duplicateRowId, label: gettext('Duplicate Row'), index: 40},
           {id: `${pfx}.m.del_row`, actionId: deleteRowId, label: gettext('Delete Row'), index: 50},
@@ -4160,6 +4271,7 @@ export default function SqlEditorSurface({
   }, [
     localeRevision,
     activeBookmarks,
+    activeColName,
     activeRowIndex,
     autocommit,
     canCancel,
@@ -4336,6 +4448,13 @@ export default function SqlEditorSurface({
     event.preventDefault();
     setActiveColName(col.name);
     setContextMenuState({open:true,x:event.clientX,y:event.clientY,items:[
+      {id:'select_col',label:gettext('Select Column Values'),onSelect:()=>gridSelection.handleColumnSelectClick(col.name,{})},
+      {id:'toggle_col',label:gettext('Toggle Column in Selection'),onSelect:()=>gridSelection.handleColumnSelectClick(col.name,{ctrlKey:true})},
+      {id:'copy_col',label:gettext('Copy Column (TSV)'),onSelect:()=>{
+        const text = formatRowsForExport(rows, [col], 'tsv', sqlTableName);
+        navigator.clipboard?.writeText?.(text).catch(()=>{});
+      }},
+      {id:'sep_col',separator:true},
       {id:'columns',label:gettext('Visible Columns & Field Order…'),onSelect:()=>{setColumnPickerScope('grid');setColPickerOpen(true);}},
       {id:'freeze',label:gettext('Freeze / Unfreeze Column'),onSelect:()=>setRecordColumnPref(col.name,{pinned:!layout.gridColPrefs[col.name]?.pinned})},
       {id:'filter',label:gettext('Filter Options…'),onSelect:()=>openRightDrawerWith({panel:'filter_builder',filterColumn:col.name})},
@@ -4395,12 +4514,18 @@ export default function SqlEditorSurface({
     effectiveDisplayMode: resolveRecordPresentation(mode || layout.displayMode, isEditingRow, layout.hybridEditTarget),
     formColumns,
     gridColumns,
+    gridSelection,
     gridViewportRef: secondary ? companionGridRef : gridViewportRef,
     handleKeyboardCellNavigate: handleSqlKeyboardCellNavigate,
     handleToggleColumnSort: handleToggleSort,
     hostData: {...hostData,sorts:(activeResult?.sort || []).map(s=>({...s,direction:s.dir||s.direction})),filters:activeResult?.filters||[]},
     isEditingRow,
     layout,
+    onCopySelection: copySqlSelection,
+    onOpenExportSelection: () => {
+      setExportInitialFormat('csv');
+      setExportDialogOpen(true);
+    },
     openFormFieldContextMenu: recordFieldMenu,
     openHeaderContextMenu: recordHeaderMenu,
     openMiniFormContextMenu: recordFormMenu,
@@ -4409,15 +4534,14 @@ export default function SqlEditorSurface({
     rowDraft,
     rows,
     selectRowAtIndex: selectSqlRowAtIndex,
-    selectedCells,
     setActiveColName,
     setColumnPickerOpen: setColPickerOpen,
     setColumnPickerScope,
     setColumnPref: setRecordColumnPref,
     setRowDraft,
     setScrollRowRange,
-    setSelectedCells,
     sharedFormLayout,
+    tableName: sqlTableName,
     toggleBookmarkAtRow: toggleSqlBookmark,
     viewportWidth
   }}/>;
@@ -5550,9 +5674,19 @@ export default function SqlEditorSurface({
         initialFormat={exportInitialFormat}
         defaultFilename={activeQuickQueryName || targetResource?.display_name || 'sql_result'}
         defaultTitle={activeQuickQueryName || endpointLabel || 'SQL Query Report'}
-        tableName={activeResult?.target_resource?.display_name || targetResource?.display_name || 'QUERY_RESULT'}
+        tableName={sqlTableName}
         rows={rows}
         columns={gridColumns}
+        selectedRows={selectionSlice.slicedRows}
+        selectedColumns={selectionSlice.selectedColumns}
+        hasMultiSelection={selectionSlice.hasMultiSelection}
+        allRowsSelected={selectionSlice.allRowsSelected}
+        selectionLabel={summarizeGridSelection(
+          selectionSlice,
+          activeRowIndex,
+          activeColName,
+          hostData?.window_offset || 0
+        )}
         onExportHost={(req) => callHost('export_formatted', req)}
       />
 

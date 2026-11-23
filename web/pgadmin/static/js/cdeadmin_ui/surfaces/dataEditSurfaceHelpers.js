@@ -422,8 +422,11 @@ export function formatRowsForExport(rows, columns, format, tableName = 'TARGET_T
     const sep = format === 'tsv' ? '\t' : ',';
     const esc = (v, isHeader = false) => {
       if (v === null || v === undefined) return '';
-      const rawStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
-      const raw = isHeader ? rawStr : String(safeSpreadsheetValue(rawStr));
+      const raw = isHeader
+        ? String(v)
+        : typeof v === 'object'
+          ? String(safeSpreadsheetValue(JSON.stringify(v)))
+          : String(safeSpreadsheetValue(v));
       if (format === 'csv' && (raw.includes(',') || raw.includes('"') || raw.includes('\n'))) {
         return `"${raw.replaceAll('"', '""')}"`;
       }

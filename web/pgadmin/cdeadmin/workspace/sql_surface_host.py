@@ -5930,17 +5930,43 @@ class SqlSurfaceHostService:
                 )
                 if not active_rs:
                     raise ValueError('No active result set to export.')
-                scope = str((request.get('settings') or {}).get('scope') or 'filtered')
-                export_rows = (
-                    [active_rs.raw_rows[i] for i in active_rs.view_indices]
-                    if scope == 'filtered'
-                    else list(active_rs.raw_rows)
-                )
+                req_settings = dict(request.get('settings') or {})
+                scope = str(req_settings.get('scope') or 'filtered')
+                export_cols = list(active_rs.columns)
+                if scope == 'selection':
+                    sel_col_names = [
+                        str(c)
+                        for c in (req_settings.get('selected_column_names') or [])
+                        if c
+                    ]
+                    if sel_col_names:
+                        col_by_name = {c.get('name'): c for c in active_rs.columns}
+                        matched_cols = [
+                            col_by_name[n] for n in sel_col_names if n in col_by_name
+                        ]
+                        if matched_cols:
+                            export_cols = matched_cols
+                    raw_sel_rows = req_settings.get('selected_rows_payload')
+                    if isinstance(raw_sel_rows, list):
+                        export_rows = [
+                            dict(r) if isinstance(r, dict) else {'values': {}}
+                            for r in raw_sel_rows
+                        ]
+                    else:
+                        export_rows = [
+                            active_rs.raw_rows[i] for i in active_rs.view_indices
+                        ]
+                elif scope == 'filtered':
+                    export_rows = [
+                        active_rs.raw_rows[i] for i in active_rs.view_indices
+                    ]
+                else:
+                    export_rows = list(active_rs.raw_rows)
                 return export_tabular_dataset(
-                    active_rs.columns,
+                    export_cols,
                     export_rows,
                     fmt=str(request.get('format') or 'csv'),
-                    settings=dict(request.get('settings') or {}),
+                    settings=req_settings,
                     sql_text=active_rs.statement_sql or surface.sql_source,
                     base_filename=str(request.get('filename') or 'sql_result'),
                 )

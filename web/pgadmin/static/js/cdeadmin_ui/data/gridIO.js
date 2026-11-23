@@ -76,3 +76,24 @@ export function parseGridData(text, format='csv', options={}) {
     fields: parsed.meta.fields || [],
   };
 }
+
+export function downloadGridExport(
+  filename,
+  content,
+  mimeType = 'text/csv;charset=utf-8'
+) {
+  if (
+    typeof Blob === 'undefined' ||
+    typeof URL?.createObjectURL !== 'function' ||
+    typeof document === 'undefined'
+  ) {
+    return;
+  }
+  const blob = new Blob([String(content ?? '')], {type: mimeType});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename || 'grid_export.csv';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

@@ -1834,17 +1834,41 @@ class DataSurfaceHostService:
 
             if sub_action == 'export_formatted':
                 from .sql_surface_host import export_tabular_dataset
-                scope = str((request.get('settings') or {}).get('scope') or 'filtered')
-                export_rows = (
-                    [surface.raw_rows[i] for i in surface.view_indices]
-                    if scope == 'filtered'
-                    else list(surface.raw_rows)
-                )
+                req_settings = dict(request.get('settings') or {})
+                scope = str(req_settings.get('scope') or 'filtered')
+                export_cols = list(surface.columns)
+                if scope == 'selection':
+                    sel_col_names = [
+                        str(c)
+                        for c in (req_settings.get('selected_column_names') or [])
+                        if c
+                    ]
+                    if sel_col_names:
+                        col_by_name = {c.get('name'): c for c in surface.columns}
+                        matched_cols = [
+                            col_by_name[n] for n in sel_col_names if n in col_by_name
+                        ]
+                        if matched_cols:
+                            export_cols = matched_cols
+                    raw_sel_rows = req_settings.get('selected_rows_payload')
+                    if isinstance(raw_sel_rows, list):
+                        export_rows = [
+                            dict(r) if isinstance(r, dict) else {'values': {}}
+                            for r in raw_sel_rows
+                        ]
+                    else:
+                        export_rows = [
+                            surface.raw_rows[i] for i in surface.view_indices
+                        ]
+                elif scope == 'filtered':
+                    export_rows = [surface.raw_rows[i] for i in surface.view_indices]
+                else:
+                    export_rows = list(surface.raw_rows)
                 return export_tabular_dataset(
-                    surface.columns,
+                    export_cols,
                     export_rows,
                     fmt=str(request.get('format') or 'csv'),
-                    settings=dict(request.get('settings') or {}),
+                    settings=req_settings,
                     sql_text=surface.server_sql or '',
                     base_filename=str(
                         request.get('filename')

@@ -546,3 +546,70 @@ def test_specific_layout_and_shareable_templates(tmp_path):
     )
     assert fresh['saved_specific_layout']['displayMode'] == 'hybrid'
     assert fresh['saved_specific_layout']['booleanFormat'] == 'YN'
+
+
+def test_export_formatted_selection_scope_slices_rows_and_columns(tmp_path):
+    import base64
+
+    store = SurfaceLayoutStore(tmp_path / 'layouts.db')
+    host = DataSurfaceHostService(layout_store=store)
+    ws = FakeFirebirdWorkspaceService()
+    srv = _make_server()
+
+    host.dispatch(
+        ws,
+        srv,
+        {
+            'surface_id': 'ds-export-sel',
+            'surface_action': 'open',
+            'target_resource': _target(),
+            'database_target_id': 'frappe_suite.fdb',
+            'language_profile': 'firebird-sql',
+            'engine_id': 'firebird',
+        },
+    )
+
+    # 1. Row x Column intersection selection payload
+    res_slice = host.dispatch(
+        ws,
+        srv,
+        {
+            'surface_id': 'ds-export-sel',
+            'surface_action': 'export_formatted',
+            'format': 'csv',
+            'filename': 'account_slice',
+            'settings': {
+                'scope': 'selection',
+                'selected_column_names': ['ACCOUNT_NAME', 'BALANCE'],
+                'selected_rows_payload': [
+                    {'values': {'ACCOUNT_NAME': 'Cash On Hand', 'BALANCE': 1500.5}},
+                ],
+            },
+        },
+    )
+    csv_text = base64.b64decode(res_slice['content_base64']).decode('utf-8')
+    assert csv_text.splitlines() == [
+        'ACCOUNT_NAME,BALANCE',
+        'Cash On Hand,1500.5',
+    ]
+
+    # 2. Full-column selection across all filtered host-buffered rows (no selected_rows_payload)
+    res_cols = host.dispatch(
+        ws,
+        srv,
+        {
+            'surface_id': 'ds-export-sel',
+            'surface_action': 'export_formatted',
+            'format': 'csv',
+            'filename': 'account_cols',
+            'settings': {
+                'scope': 'selection',
+                'selected_column_names': ['ACCOUNT_NAME'],
+            },
+        },
+    )
+    col_csv = base64.b64decode(res_cols['content_base64']).decode('utf-8')
+    lines = col_csv.splitlines()
+    assert lines[0] == 'ACCOUNT_NAME'
+    assert len(lines) == 4
+

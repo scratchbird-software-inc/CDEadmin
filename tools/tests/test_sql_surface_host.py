@@ -1435,3 +1435,19 @@ def test_columnar_pages_survive_empty_terminal_result_and_respect_buffer_limit(t
     })
     assert [row['values']['VALUE'] for row in state['active_result']['rows']] == [42, 43]
     assert state['retrieval_limited'] is True
+
+    # Selection-scoped export_formatted slices columns & rows cleanly on SqlSurfaceHostService
+    exp = host.dispatch(workspace, SimpleNamespace(id=45, user_id=1), {
+        'surface_id': 'duck-test',
+        'sub_action': 'export_formatted',
+        'format': 'csv',
+        'filename': 'duck_slice',
+        'settings': {
+            'scope': 'selection',
+            'selected_column_names': ['VALUE'],
+            'selected_rows_payload': [{'values': {'VALUE': 43}}],
+        },
+    })
+    decoded = base64.b64decode(exp['content_base64']).decode('utf-8')
+    assert decoded.splitlines() == ['VALUE', '43']
+
