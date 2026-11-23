@@ -1,7 +1,9 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TextField,Typography} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField,Typography} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import {ScratchDiffTable} from '../cdeadmin_ui/data/beautiful';
 
 const defaults={consistency:'innodb_snapshot',replica:false,channel:'',seconds:300,disk_mib:256,examples:50};
 
@@ -95,9 +97,34 @@ export default function MySQLDataDrift({post,databaseTargetId=null}) {
       const pair={source_table:names[0],target_table:names[1],source_fingerprint:observed[0].fingerprint,target_fingerprint:observed[1].fingerprint};
       setPairs(current => [...current.filter(old => old.source_table!==pair.source_table && old.target_table!==pair.target_table),pair]);setConsent(false);
     }}>Add complete table pair</Button>
-    <Table size="small" aria-label="Selected complete table pairs"><TableHead><TableRow><TableCell>Source</TableCell><TableCell>Target</TableCell><TableCell>Selection</TableCell></TableRow></TableHead>
-      <TableBody>{pairs.map(pair => <TableRow key={pair.source_table}><TableCell>{pair.source_table}</TableCell><TableCell>{pair.target_table}</TableCell>
-        <TableCell><Button disabled={fixed} onClick={() => {setPairs(current => current.filter(old => old!==pair));setConsent(false);}}>Remove pair</Button></TableCell></TableRow>)}</TableBody></Table>
+    <UnifiedDataGrid
+      gridRole="table"
+      ariaLabel="Selected complete table pairs"
+      minHeight={120}
+      maxHeight={240}
+      rows={pairs}
+      rowKeyGetter={(pair) => pair.source_table}
+      columns={[
+        {name: 'source_table', label: 'Source', width: 200},
+        {name: 'target_table', label: 'Target', width: 200},
+        {
+          name: 'selection',
+          label: 'Selection',
+          width: 140,
+          render: (_v, pair) => (
+            <Button
+              disabled={fixed}
+              onClick={() => {
+                setPairs((current) => current.filter((old) => old !== pair));
+                setConsent(false);
+              }}
+            >
+              Remove pair
+            </Button>
+          ),
+        },
+      ]}
+    />
     <Box sx={{display:'flex',flexWrap:'wrap',gap:1,my:1}}>
       <TextField select size="small" label="Native comparison consistency" value={options.consistency} disabled={fixed}
         onChange={event => {setOptions(current => ({...current,consistency:event.target.value}));setConsent(false);}}>
@@ -127,6 +154,25 @@ export default function MySQLDataDrift({post,databaseTargetId=null}) {
       <Typography>Private sort peak: {job.disk_peak_bytes} bytes. Repairs dispatched: {String(job.repair_dispatched)}.</Typography>
       <Alert severity="info">Mismatches identify source-only and target-only row versions, including duplicate multiplicity.
         A changed key can appear on both sides. Use the native table data editor for a separate exact-target repair review; verification never applies repairs.</Alert>
+      {job.coverage.length > 0 && (
+        <ScratchDiffTable
+          caption="Full-table comparison drift summary"
+          showIncludeToggle={false}
+          searchable
+          filterable
+          items={job.coverage.map((report, idx) => ({
+            id: `${report.source_table}:${report.target_table}:${idx}`,
+            name: `${report.source_table} → ${report.target_table}`,
+            kind: report.state || 'table_pair',
+            delta:
+              Number(report.source_only_rows || 0) > 0 || Number(report.target_only_rows || 0) > 0
+                ? 'modify'
+                : 'identical',
+            before: `Source-only: ${report.source_only_rows ?? 'unavailable'}`,
+            after: `Target-only: ${report.target_only_rows ?? 'unavailable'}`,
+          }))}
+        />
+      )}
       {job.coverage.map((report,index) => <Box key={index} sx={{my:1}}>
         <Typography component="h4">{report.source_table} → {report.target_table}: {report.state}</Typography>
         <Typography>{report.reason} Source scanned: {report.source_rows ?? report.source_scanned_rows ?? 'unavailable'};

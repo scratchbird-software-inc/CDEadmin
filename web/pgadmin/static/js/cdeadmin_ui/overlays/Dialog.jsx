@@ -19,6 +19,7 @@ const WIDTHS = Object.freeze({
   medium: 640,
   large: 960,
   xlarge: 1120,
+  fullscreen: '96vw',
 });
 
 export function Dialog({
@@ -59,6 +60,7 @@ export function Dialog({
           className={['sr-dialog-popup', props.className].filter(Boolean).join(' ')}
           style={{
             width: WIDTHS[size] || WIDTHS.small,
+            ...(size === 'fullscreen' ? {maxWidth: '96vw', height: '94vh', maxHeight: '94vh'} : {}),
             ...props.style,
           }}
           onKeyDown={(event) => {
@@ -123,7 +125,7 @@ Dialog.propTypes = {
   children: PropTypes.node,
   actions: PropTypes.node,
   onClose: PropTypes.func,
-  size: PropTypes.oneOf(['small', 'medium', 'large', 'xlarge']),
+  size: PropTypes.oneOf(['small', 'medium', 'large', 'xlarge', 'fullscreen']),
   busy: PropTypes.bool,
   validationError: PropTypes.node,
   defaultAction: PropTypes.func,

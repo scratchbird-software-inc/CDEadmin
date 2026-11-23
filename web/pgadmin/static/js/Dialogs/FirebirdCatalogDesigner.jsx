@@ -1,9 +1,9 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Dialog} from '@mui/material';
+import {Alert, Box, Button} from '@mui/material';
 import {DDNDesignerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
-import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {Dialog} from '../cdeadmin_ui/overlays/Dialog';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import {refreshDesign} from '../cdeadmin_ui/integrations/ddn/designMerge';
 
@@ -62,17 +62,23 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
       capture={() => ({snapshot: draft || initial, baseline: original.current})}
       onLoad={value => {setDraft(value.snapshot); original.current = value.baseline; setError('');
         setChanged(JSON.stringify(value.baseline) !== JSON.stringify(initial));}} />}
-    <Dialog fullScreen open={open} onClose={() => {if (ready && !disabled) capture(false);}}>
-      <Box sx={{display: 'flex', alignItems: 'center', gap: 1, p: 1}}>
-        <FormReference formKey={`${engine}-catalog-designer`} />
-        <Box sx={{flex: 1}}>Catalog design — native changes require separate review and confirmation.</Box>
-        <Button disabled={!ready || disabled} onClick={() => capture(true)}>Use design for native review</Button>
-        <Button disabled={!ready || disabled} onClick={() => capture(false)}>Keep draft and return</Button>
-        <Button disabled={disabled} onClick={() => {setOpen(false); editor.current = null; setReady(false); setError('');}}>Discard editor changes</Button>
-      </Box>
+    <Dialog
+      open={open}
+      size="fullscreen"
+      formKey={`${engine}-catalog-designer`}
+      title="Catalog design — native changes require separate review and confirmation."
+      onClose={() => {if (ready && !disabled) capture(false); else {setOpen(false); editor.current = null; setReady(false); setError('');}}}
+      actions={
+        <>
+          <Button disabled={!ready || disabled} onClick={() => capture(true)}>Use design for native review</Button>
+          <Button disabled={!ready || disabled} onClick={() => capture(false)}>Keep draft and return</Button>
+          <Button disabled={disabled} onClick={() => {setOpen(false); editor.current = null; setReady(false); setError('');}}>Discard editor changes</Button>
+        </>
+      }
+    >
       <Alert severity="info">Edit native_json for database definitions. Diagram labels and layout do not rename database objects. The complete catalog is retained across inventory views.</Alert>
       {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{flex: 1, minHeight: 0}}>
+      <Box sx={{height: '72vh', minHeight: 360}}>
         {open && <DDNDesignerSurface snapshot={seed.current}
           onReady={value => {editor.current = value; setReady(true);}}
           onError={failure => {setReady(false); setError(failure.message || 'DDN editor unavailable.');}} />}

@@ -1,7 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, Dialog, FormControlLabel, MenuItem, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {Dialog} from '../cdeadmin_ui/overlays/Dialog';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import {ScratchDiffTable} from '../cdeadmin_ui/data/beautiful';
 import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import NativeDataImport from './NativeDataImport';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
@@ -14,7 +17,7 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
   const [view, setView] = useState('inventory_1'), [scope, setScope] = useState('');
   const [source, setSource] = useState(''), [comparison, setComparison] = useState(null);
   const [baseline, setBaseline] = useState(''), [plan, setPlan] = useState(null);
-  const [page, setPage] = useState(0), [editing, setEditing] = useState(false), [ready, setReady] = useState(false);
+  const [editing, setEditing] = useState(false), [ready, setReady] = useState(false);
   const editor = useRef(null), seed = useRef(null), serial = useRef(0), relationalOriginal = useRef(null);
   const [relationalEditing, setRelationalEditing] = useState(false);
   const [receipt, setReceipt] = useState(null), [confirmed, setConfirmed] = useState(false);
@@ -32,8 +35,8 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
         request: {database_target_id: databaseTargetId, include_system: includeSystem,
           ...(scope ? {resource_id: scope} : {}), ...(compare || planning ? {source} : {}), ...(planning ? {baseline} : {})}});
       if(token !== serial.current) return;
-      if(planning) {setPlan(response); setComparison(null); setPage(0);}
-      else if(compare) {setComparison(response); setPlan(null); setPage(0);}
+      if(planning) {setPlan(response); setComparison(null);}
+      else if(compare) {setComparison(response); setPlan(null);}
       else {setResult(response); setDisplay('inventory'); setView(response.snapshot.view); setComparison(null); setPlan(null);
         if(!baseline) setBaseline(JSON.stringify(response.snapshot));}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'Catalog capture failed');}
@@ -127,13 +130,30 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
         onClick={() => application('postgresql_schema_review')}>Prepare application</Button>}
       {plan.blockers.length > 0 && <Box component="details"><summary>Unresolved native changes</summary>
         <ul>{plan.blockers.map(item => <li key={item.resource_id}>{item.resource_id}: {item.reason}</li>)}</ul></Box>}
-      <Table size="small" aria-label="PostgreSQL native change preview"><TableHead><TableRow>
-        <TableCell>Object</TableCell><TableCell>Native statement</TableCell>
-      </TableRow></TableHead><TableBody>{plan.operations.slice(page * 25, page * 25 + 25).map(item =>
-        <TableRow key={item.resource_id}><TableCell>{item.name}</TableCell>
-          <TableCell><Box component="pre" sx={{m: 0, whiteSpace: 'pre-wrap'}}>{item.statement}</Box></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={plan.operations.length} page={page} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} showFirstButton showLastButton />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="PostgreSQL native change preview"
+        searchable
+        exportable
+        pagination={plan.operations.length > 25}
+        defaultPageSize={25}
+        minHeight={140}
+        maxHeight={320}
+        rows={plan.operations}
+        rowKeyGetter={(item) => item.resource_id}
+        columns={[
+          {name: 'name', label: 'Object', width: 200},
+          {
+            name: 'statement',
+            label: 'Native statement',
+            width: 480,
+            mono: true,
+            render: (_val, item) => (
+              <Box component="pre" sx={{m: 0, whiteSpace: 'pre-wrap'}}>{item.statement}</Box>
+            ),
+          },
+        ]}
+      />
     </Box>}
     {receipt && <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center'}}>
       <Alert severity={receipt.state === 'unknown_outcome' ? 'warning' : 'info'}>
@@ -178,24 +198,37 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
     </>}
     {comparison && <Box sx={{overflow: 'auto'}}>
       <Alert severity="info">Documentary differences only; missing objects are not deletion instructions.</Alert>
-      <Table size="small" aria-label="PostgreSQL native catalog differences"><TableHead><TableRow>
-        {['Object', 'Kind', 'Difference', 'Native fields'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{comparison.changes.slice(page * 25, page * 25 + 25).map(item =>
-        <TableRow key={item.resource_id}><TableCell>{item.name}</TableCell><TableCell>{item.kind}</TableCell>
-          <TableCell>{item.status}</TableCell><TableCell>{item.fields.join(', ')}</TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={comparison.changes.length} page={page} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} showFirstButton showLastButton />
+      <ScratchDiffTable
+        caption="PostgreSQL native catalog differences"
+        showIncludeToggle={false}
+        searchable
+        filterable
+        exportable
+        items={comparison.changes.map((item) => ({
+          id: item.resource_id,
+          name: item.name,
+          kind: item.kind,
+          delta: item.status,
+          summary: (item.fields || []).join(', '),
+        }))}
+      />
     </Box>}
-    <Dialog fullScreen open={editing}>
-      <Box sx={{display: 'flex', p: 1, gap: 1, alignItems: 'center'}}>
-        <FormReference formKey="postgresql-catalog-ddn" />
-        <Box sx={{flex: 1}}>{relationalEditing ? 'PostgreSQL relational DDN draft' : 'PostgreSQL native catalog DDN draft'}</Box>
-        <Button disabled={!ready || busy} onClick={keepDraft}>Keep draft</Button>
-        <Button disabled={busy} onClick={() => {setEditing(false); editor.current = null;}}>Discard editor changes</Button>
-      </Box>
+    <Dialog
+      open={editing}
+      size="fullscreen"
+      formKey="postgresql-catalog-ddn"
+      title={relationalEditing ? 'PostgreSQL relational DDN draft' : 'PostgreSQL native catalog DDN draft'}
+      onClose={() => {setEditing(false); editor.current = null;}}
+      actions={
+        <>
+          <Button disabled={!ready || busy} onClick={keepDraft}>Keep draft</Button>
+          <Button disabled={busy} onClick={() => {setEditing(false); editor.current = null;}}>Discard editor changes</Button>
+        </>
+      }
+    >
       {error && <Alert severity="error">{error}</Alert>}
       <Alert severity="info">Native definitions are in native_json. Labels, layout and hidden objects do not alter database metadata.</Alert>
-      <Box sx={{flex: 1, minHeight: 0}}>{editing && <DDNDesignerSurface snapshot={seed.current}
+      <Box sx={{height: '72vh', minHeight: 360}}>{editing && <DDNDesignerSurface snapshot={seed.current}
         onReady={value => {editor.current = value; setReady(true);}}
         onError={failure => {setReady(false); setError(failure.message);}} />}</Box>
     </Dialog>

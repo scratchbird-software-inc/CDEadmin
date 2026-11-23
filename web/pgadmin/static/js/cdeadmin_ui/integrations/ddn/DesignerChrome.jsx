@@ -17,7 +17,7 @@ import {
 } from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import {Box, ScrollArea, Stack} from '../../primitives/Layout';
+import {Box, Stack} from '../../primitives/Layout';
 import {Button, IconButton} from '../../primitives/Button';
 import {TextField} from '../../primitives/Field';
 import {Select} from '../../primitives/Choice';
@@ -35,6 +35,7 @@ import {
   t_actions,
 } from '../../actions/t_actions';
 import RecordGrid from '../../objects/RecordGrid';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {ScratchDiffTable} from '../../data/beautiful';
 import {
   useProjectInstanceScope,
@@ -1790,106 +1791,96 @@ export function DesignCheckpointHistoryDrawer({
               versions.length === 0 ? (
                 <EmptyState message={gettext('No checkpoints recorded yet.')} />
               ) : (
-                <ScrollArea label={gettext('Checkpoints list')} sx={{maxHeight: 380}}>
-                  <Box className="sr-bui-table-card">
-                    <Box
-                      component="table"
-                      className="sr-bui-table"
-                      aria-label={gettext('Design checkpoints')}
-                      sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}
-                    >
-                      <Box component="thead">
-                        <Box component="tr">
-                          {[
-                            gettext('Version'),
-                            gettext('Status'),
-                            gettext('Parent'),
-                            gettext('Summary / Note'),
-                            gettext('Created'),
-                            gettext('Actions'),
-                          ].map((h) => (
-                            <Box
-                              key={h}
-                              component="th"
-                              className="sr-bui-th"
-                              sx={{textAlign: 'left'}}
-                            >
-                              {h}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                      <Box component="tbody">
-                        {versions
-                          .slice()
-                          .reverse()
-                          .map((item) => (
-                            <Box key={item.version} component="tr" className="sr-bui-tr">
-                              <Box component="td" className="sr-bui-td">
-                                <strong>v{item.version}</strong>
-                                {Number(item.version) === Number(activeVersion)
-                                  ? ` (${gettext('Active')})`
-                                  : ''}
-                                {Number(item.version) === Number(currentVersion)
-                                  ? ` · ${gettext('Loaded')}`
-                                  : ''}
-                              </Box>
-                              <Box component="td" className="sr-bui-td">
-                                <StatusBadge
-                                  status={
-                                    item.status === 'accepted'
-                                      ? 'success'
-                                      : item.status === 'in_review'
-                                        ? 'warning'
-                                        : 'info'
-                                  }
-                                  label={item.status}
-                                />
-                              </Box>
-                              <Box component="td" className="sr-bui-td">
-                                {(item.parent_version ?? item.base_version)
-                                  ? `v${item.parent_version ?? item.base_version}`
-                                  : '—'}
-                              </Box>
-                              <Box component="td" className="sr-bui-td">
-                                {item.note || '—'}
-                              </Box>
-                              <Box
-                                component="td"
-                                className="sr-bui-td"
-                                sx={{fontSize: '0.75rem', color: 'text.secondary'}}
-                              >
-                                {item.created_at || item.saved_at || '—'}
-                              </Box>
-                              <Box
-                                component="td"
-                                className="sr-bui-td"
-                                sx={{whiteSpace: 'nowrap'}}
-                              >
-                                <Stack direction="row" gap="compact">
-                                  <Button
-                                    size="small"
-                                    onClick={() => {
-                                      onOpenVersion?.(Number(item.version));
-                                      onClose?.();
-                                    }}
-                                  >
-                                    {gettext('Inspect')}
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    onClick={() => restoreAsDraft(item.version)}
-                                  >
-                                    {gettext('Branch Draft')}
-                                  </Button>
-                                </Stack>
-                              </Box>
-                            </Box>
-                          ))}
-                      </Box>
-                    </Box>
-                  </Box>
-                </ScrollArea>
+                <UnifiedDataGrid
+                  gridRole="table"
+                  ariaLabel={gettext('Design checkpoints')}
+                  searchable
+                  exportable
+                  minHeight={180}
+                  maxHeight={380}
+                  rows={versions.slice().reverse()}
+                  rowKeyGetter={(item) => item.version}
+                  columns={[
+                    {
+                      name: 'version',
+                      label: gettext('Version'),
+                      width: 150,
+                      render: (_val, item) => (
+                        <span>
+                          <strong>v{item.version}</strong>
+                          {Number(item.version) === Number(activeVersion)
+                            ? ` (${gettext('Active')})`
+                            : ''}
+                          {Number(item.version) === Number(currentVersion)
+                            ? ` · ${gettext('Loaded')}`
+                            : ''}
+                        </span>
+                      ),
+                    },
+                    {
+                      name: 'status',
+                      label: gettext('Status'),
+                      width: 120,
+                      render: (_val, item) => (
+                        <StatusBadge
+                          status={
+                            item.status === 'accepted'
+                              ? 'success'
+                              : item.status === 'in_review'
+                                ? 'warning'
+                                : 'info'
+                          }
+                          label={item.status}
+                        />
+                      ),
+                    },
+                    {
+                      name: 'parent_version',
+                      label: gettext('Parent'),
+                      width: 90,
+                      accessorFn: (item) =>
+                        (item.parent_version ?? item.base_version)
+                          ? `v${item.parent_version ?? item.base_version}`
+                          : '—',
+                    },
+                    {
+                      name: 'note',
+                      label: gettext('Summary / Note'),
+                      width: 220,
+                      accessorFn: (item) => item.note || '—',
+                    },
+                    {
+                      name: 'created_at',
+                      label: gettext('Created'),
+                      width: 170,
+                      accessorFn: (item) => item.created_at || item.saved_at || '—',
+                    },
+                    {
+                      name: 'actions',
+                      label: gettext('Actions'),
+                      width: 210,
+                      render: (_val, item) => (
+                        <Stack direction="row" gap="compact">
+                          <Button
+                            size="small"
+                            onClick={() => {
+                              onOpenVersion?.(Number(item.version));
+                              onClose?.();
+                            }}
+                          >
+                            {gettext('Inspect')}
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() => restoreAsDraft(item.version)}
+                          >
+                            {gettext('Branch Draft')}
+                          </Button>
+                        </Stack>
+                      ),
+                    },
+                  ]}
+                />
               ),
           },
           {
@@ -2079,67 +2070,61 @@ export function WhereUsedDialog({
         {results.length === 0 ? (
           <EmptyState message={gettext('No cross-design references matched this filter.')} />
         ) : (
-          <ScrollArea label={gettext('Cross-design usage results')} sx={{maxHeight: 340}}>
-            <Box className="sr-bui-table-card">
-              <Box
-                component="table"
-                className="sr-bui-table"
-                aria-label={gettext('Where used results')}
-                sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}
-              >
-                <Box component="thead">
-                  <Box component="tr">
-                    {[
-                      gettext('Design Kind'),
-                      gettext('Design Title'),
-                      gettext('Element'),
-                      gettext('Target Reference'),
-                      gettext('Validity'),
-                    ].map((h) => (
-                      <Box
-                        key={h}
-                        component="th"
-                        className="sr-bui-th"
-                        sx={{textAlign: 'left'}}
-                      >
-                        {h}
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-                <Box component="tbody">
-                  {results.map((item, idx) => (
-                    <Box key={item.binding_id || idx} component="tr" className="sr-bui-tr">
-                      <Box component="td" className="sr-bui-td">
-                        <strong>{item.design_kind || item.kind || 'design'}</strong>
-                      </Box>
-                      <Box component="td" className="sr-bui-td">
-                        {item.design_title || item.title || item.design_id}
-                      </Box>
-                      <Box component="td" className="sr-bui-td">
-                        {item.element_label || item.element_id || '—'}
-                      </Box>
-                      <Box component="td" className="sr-bui-td">
-                        <code>{item.target_ref || '—'}</code>
-                      </Box>
-                      <Box component="td" className="sr-bui-td">
-                        <StatusBadge
-                          status={
-                            item.validity === 'suspect'
-                              ? 'warning'
-                              : item.validity === 'valid'
-                                ? 'success'
-                                : 'info'
-                          }
-                          label={item.validity || 'referenced'}
-                        />
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            </Box>
-          </ScrollArea>
+          <UnifiedDataGrid
+            gridRole="table"
+            ariaLabel={gettext('Where used results')}
+            searchable
+            exportable
+            minHeight={160}
+            maxHeight={340}
+            rows={results}
+            rowKeyGetter={(item, idx) => item.binding_id || idx}
+            columns={[
+              {
+                name: 'design_kind',
+                label: gettext('Design Kind'),
+                width: 130,
+                accessorFn: (item) => item.design_kind || item.kind || 'design',
+              },
+              {
+                name: 'design_title',
+                label: gettext('Design Title'),
+                width: 190,
+                accessorFn: (item) => item.design_title || item.title || item.design_id,
+              },
+              {
+                name: 'element',
+                label: gettext('Element'),
+                width: 170,
+                accessorFn: (item) => item.element_label || item.element_id || '—',
+              },
+              {
+                name: 'target_ref',
+                label: gettext('Target Reference'),
+                width: 220,
+                mono: true,
+                accessorFn: (item) => item.target_ref || '—',
+              },
+              {
+                name: 'validity',
+                label: gettext('Validity'),
+                width: 120,
+                accessorFn: (item) => item.validity || 'referenced',
+                render: (_val, item) => (
+                  <StatusBadge
+                    status={
+                      item.validity === 'suspect'
+                        ? 'warning'
+                        : item.validity === 'valid'
+                          ? 'success'
+                          : 'info'
+                    }
+                    label={item.validity || 'referenced'}
+                  />
+                ),
+              },
+            ]}
+          />
         )}
       </Stack>
     </Dialog>

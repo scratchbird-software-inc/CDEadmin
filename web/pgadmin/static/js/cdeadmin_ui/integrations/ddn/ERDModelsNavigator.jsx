@@ -9,7 +9,7 @@
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Box, ScrollArea, Stack} from '../../primitives/Layout';
+import {Box, Stack} from '../../primitives/Layout';
 import {Icon} from '../../icons';
 import {ProjectAssetClient} from '../../projects/ProjectAssetClient';
 import {Toolbar} from '../../layout/WorkbenchChrome';
@@ -23,6 +23,7 @@ import {EmptyState} from '../../feedback/EmptyState';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {
   DesignerModalTabs,
   FormGrid,
@@ -898,95 +899,34 @@ export function ERDModelsNavigator({
                         Imported cleanly with zero unsupported clauses or losses.
                       </Banner>
                     ) : (
-                      <ScrollArea
-                        label="Import loss report items"
-                        sx={{maxHeight: 260}}
-                      >
-                        <Box
-                          data-testid="erd-import-loss-report"
-                          component="table"
-                          aria-label="ERD import loss report"
-                          sx={{
-                            width: '100%',
-                            borderCollapse: 'collapse',
-                            fontSize: '0.8125rem',
-                          }}
-                        >
-                          <Box component="thead">
-                            <Box component="tr">
-                              {['Code', 'Severity', 'Object', 'Detail'].map(
-                                (h) => (
-                                  <Box
-                                    key={h}
-                                    component="th"
-                                    sx={{
-                                      textAlign: 'left',
-                                      p: 0.75,
-                                      borderBottom: '1px solid',
-                                      borderColor: 'divider',
-                                    }}
-                                  >
-                                    {h}
-                                  </Box>
-                                )
-                              )}
-                            </Box>
-                          </Box>
-                          <Box component="tbody">
-                            {importResult.loss_report.items.map((item, idx) => (
-                              <Box key={idx} component="tr">
-                                <Box
-                                  component="td"
-                                  sx={{
-                                    p: 0.75,
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  <code>{item.code}</code>
-                                </Box>
-                                <Box
-                                  component="td"
-                                  sx={{
-                                    p: 0.75,
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  <StatusBadge
-                                    status={
-                                      item.severity === 'warning'
-                                        ? 'warning'
-                                        : 'info'
-                                    }
-                                    label={item.severity || 'info'}
-                                  />
-                                </Box>
-                                <Box
-                                  component="td"
-                                  sx={{
-                                    p: 0.75,
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  {item.object}
-                                </Box>
-                                <Box
-                                  component="td"
-                                  sx={{
-                                    p: 0.75,
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  {item.detail}
-                                </Box>
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
-                      </ScrollArea>
+                      <Box data-testid="erd-import-loss-report">
+                        <UnifiedDataGrid
+                          gridRole="table"
+                          ariaLabel="ERD import loss report"
+                          searchable
+                          exportable
+                          minHeight={140}
+                          maxHeight={260}
+                          rows={importResult.loss_report.items}
+                          rowKeyGetter={(_item, idx) => idx}
+                          columns={[
+                            {name: 'code', label: 'Code', width: 150, mono: true},
+                            {
+                              name: 'severity',
+                              label: 'Severity',
+                              width: 110,
+                              render: (_val, item) => (
+                                <StatusBadge
+                                  status={item.severity === 'warning' ? 'warning' : 'info'}
+                                  label={item.severity || 'info'}
+                                />
+                              ),
+                            },
+                            {name: 'object', label: 'Object', width: 180},
+                            {name: 'detail', label: 'Detail', width: 280},
+                          ]}
+                        />
+                      </Box>
                     )}
                   </Stack>
                 ),

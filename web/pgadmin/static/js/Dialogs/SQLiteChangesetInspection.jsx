@@ -1,7 +1,8 @@
 /* global BigInt */
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import {startBrowserFileDownload} from './browserFileDownload';
 const active=state => ['dispatching','active','publishing','cancel_requested'].includes(state);
 
@@ -87,12 +88,61 @@ export default function SQLiteChangesetInspection({post,databaseTargetId,referen
     </>}
     {page && <>
       <Alert severity="info">{page.column_name_scope}. {page.validation_scope}.</Alert>
-      <Table size="small" aria-label="Native SQLite changeset rows"><TableHead><TableRow>{['Record','Table','Operation','Indirect','Primary-key positions','Values'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {page.rows.map(value => <TableRow key={value.record_number}><TableCell>{value.record_number}</TableCell><TableCell>{typeof value.table==='string' ? value.table:JSON.stringify(value.table)}</TableCell><TableCell>{value.operation}</TableCell><TableCell>{String(value.indirect)}</TableCell><TableCell>{value.primary_key.map((key,index) => key ? index+1:null).filter(Boolean).join(', ')}</TableCell><TableCell>
-          <Button disabled={blocked} onClick={() => selectRow(value)}>Select native record {value.record_number}</Button>
-          <details><summary>Inspect typed native record {value.record_number}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:260,overflow:'auto'}}>{JSON.stringify(value,null,2)}</Box></details>
-        </TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native SQLite changeset rows"
+        searchable
+        exportable
+        minHeight={150}
+        maxHeight={340}
+        rows={page.rows}
+        rowKeyGetter={(val) => val.record_number}
+        columns={[
+          {name: 'record_number', label: 'Record', width: 150, mono: true},
+          {
+            name: 'table',
+            label: 'Table',
+            width: 150,
+            accessorFn: (val) =>
+              typeof val.table === 'string' ? val.table : JSON.stringify(val.table),
+          },
+          {name: 'operation', label: 'Operation', width: 110},
+          {
+            name: 'indirect',
+            label: 'Indirect',
+            width: 90,
+            accessorFn: (val) => String(val.indirect),
+          },
+          {
+            name: 'primary_key',
+            label: 'Primary-key positions',
+            width: 160,
+            accessorFn: (val) =>
+              val.primary_key
+                .map((key, index) => (key ? index + 1 : null))
+                .filter(Boolean)
+                .join(', '),
+          },
+          {
+            name: 'values',
+            label: 'Values',
+            width: 340,
+            render: (_v, val) => (
+              <Box>
+                <Button disabled={blocked} onClick={() => selectRow(val)}>
+                  Select native record {val.record_number}
+                </Button>
+                <details>
+                  <summary>Inspect typed native record {val.record_number}</summary>
+                  <Box component="pre" sx={{whiteSpace: 'pre-wrap', maxHeight: 260, overflow: 'auto'}}>
+                    {JSON.stringify(val, null, 2)}
+                  </Box>
+                </details>
+              </Box>
+            ),
+          },
+        ]}
+      />
       <Button disabled={blocked || !page.more} onClick={() => {const next=(BigInt(page.offset)+BigInt(page.rows_returned)).toString();setOffset(next);inspect({mode:'page',offset:next,limit,preview_bytes:preview,max_json_bytes:1048576,timeout_seconds:3600},result.source.input.reference);}}>Next native record inspection page</Button>
     </>}
     {catalog && <Box sx={{my:1}}>

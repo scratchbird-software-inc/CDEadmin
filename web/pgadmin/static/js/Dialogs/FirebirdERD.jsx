@@ -1,9 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, Dialog, FormControlLabel} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel} from '@mui/material';
 import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import {Dialog} from '../cdeadmin_ui/overlays/Dialog';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
 import {refreshDesign} from '../cdeadmin_ui/integrations/ddn/designMerge';
 
@@ -114,18 +115,24 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     {engine === 'firebird' && <Alert severity="info">Field datatype, nullable and description edits can prepare native review for existing columns. Domains, arrays, computed values, identities and explicit lifecycle changes retain their native definitions. Labels, layout and hidden fields never imply rename or deletion.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}
     {!editing && <DDNViewerSurface snapshot={draft} onSelectionChange={value => {selected.current = value;}} />}
-    <Dialog fullScreen open={editing} onClose={closeEditor}>
-      <Box sx={{display: 'flex', alignItems: 'center', gap: 2, p: 1}}>
-        <FormReference formKey={`${engine}-relational-diagram`} />
-        <Box sx={{flex: 1}}>Relational design — database changes require separate native review and explicit application.</Box>
-        <Button onClick={async () => {
-          try {download(JSON.stringify(await captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json');}
-          catch {setError('Unable to capture the current design. Keep the editor open and retry.');}
-        }}>Download edited design</Button>
-        <Button onClick={closeEditor}>Return to diagram viewer</Button>
-      </Box>
+    <Dialog
+      open={editing}
+      size="fullscreen"
+      formKey={`${engine}-relational-diagram`}
+      title="Relational design — database changes require separate native review and explicit application."
+      onClose={closeEditor}
+      actions={
+        <>
+          <Button onClick={async () => {
+            try {download(JSON.stringify(await captureEditor()), `${engine}-relations.ddn-workspace.json`, 'application/json');}
+            catch {setError('Unable to capture the current design. Keep the editor open and retry.');}
+          }}>Download edited design</Button>
+          <Button onClick={closeEditor}>Return to diagram viewer</Button>
+        </>
+      }
+    >
       {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{flex: 1, minHeight: 0}}>
+      <Box sx={{height: '74vh', minHeight: 380}}>
         {editing && <DDNDesignerSurface snapshot={seed.current} onReady={value => {editor.current = value;}}
           onChange={value => {setDraft(value); selected.current = {entry: value.entry, view: value.view};}}
           onExport={svg => download(svg, `${engine}-relations.svg`, 'image/svg+xml')} />}

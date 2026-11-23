@@ -1,21 +1,22 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function PostgresqlServerCatalog({post}) {
   const [inventory, setInventory] = useState(null), [result, setResult] = useState(null);
   const [selected, setSelected] = useState([]), [includeSystem, setIncludeSystem] = useState(false);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [page, setPage] = useState(0);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [documentId, setDocumentId] = useState('server'), [view, setView] = useState('inventory_1');
   const [display, setDisplay] = useState('inventory');
-  const [section, setSection] = useState(''), [objectPage, setObjectPage] = useState(0);
+  const [section, setSection] = useState('');
   const [selectedObject, setSelectedObject] = useState('');
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setInventory(null); setResult(null); setSelected([]);
-    setSelectedObject(''); setSection(''); setPage(0); setObjectPage(0);
+    setSelectedObject(''); setSection('');
     setDocumentId('server'); setView('inventory_1'); setDisplay('inventory'); setBusy(false); setError('');
     return () => {serial.current++;};
   }, [post]);
@@ -28,10 +29,10 @@ export default function PostgresqlServerCatalog({post}) {
       if(capture) {
         setResult(response); setDocumentId('server'); setDisplay('inventory'); setView(response.server.document.snapshot.view);
         if (response.server?.resources && response.server?.databases) setInventory(response.server);
-        setObjectPage(0); setSection(''); setSelectedObject('');
+        setSection(''); setSelectedObject('');
       }
       else {
-        setInventory(response); setSelected([]); setPage(0); setSection(''); setObjectPage(0); setSelectedObject('');
+        setInventory(response); setSelected([]); setSection(''); setSelectedObject('');
         setResult(response.document ? {server: response, databases: [], all_selected_captured: true} : null);
         setDocumentId('server'); setDisplay('inventory'); setView(response.document?.snapshot.view || 'inventory_1');
       }
@@ -68,7 +69,7 @@ export default function PostgresqlServerCatalog({post}) {
       </Alert>}
       <Box sx={{display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap'}}>
         <TextField select size="small" label="Server object section" value={section} onChange={event => {
-          setSection(event.target.value); setObjectPage(0); setSelectedObject('');
+          setSection(event.target.value); setSelectedObject('');
         }}><MenuItem value="">All observed sections</MenuItem>
           {objectSections.map(name => <MenuItem key={name} value={name}>{name}</MenuItem>)}
         </TextField>
@@ -76,27 +77,97 @@ export default function PostgresqlServerCatalog({post}) {
       {inventory.coverage?.state === 'partial' && <Alert severity="warning">
         Unavailable native sections: {inventory.coverage.unavailable_sections.join(', ')}
       </Alert>}
-      <Table size="small" aria-label="PostgreSQL native server objects"><TableHead><TableRow>
-        {['Object', 'Kind', 'Native identity', 'Properties'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{filteredObjects.slice(objectPage * 25, objectPage * 25 + 25).map(item =>
-        <TableRow key={item.resource_id}><TableCell>{item.display_name}</TableCell><TableCell>{item.resource_kind}</TableCell>
-          <TableCell>{item.native?.native_identity}</TableCell><TableCell>
-            <Button onClick={() => setSelectedObject(item.resource_id)} aria-label={`Inspect PostgreSQL ${item.resource_kind} ${item.display_name}`}>Inspect</Button>
-          </TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={filteredObjects.length} page={objectPage} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setObjectPage(value)} showFirstButton showLastButton />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="PostgreSQL native server objects"
+        searchable
+        pagination={filteredObjects.length > 25}
+        defaultPageSize={25}
+        minHeight={140}
+        maxHeight={300}
+        rows={filteredObjects}
+        rowKeyGetter={(item) => item.resource_id}
+        columns={[
+          {name: 'display_name', label: 'Object', width: 210},
+          {name: 'resource_kind', label: 'Kind', width: 140},
+          {
+            name: 'native_identity',
+            label: 'Native identity',
+            width: 150,
+            mono: true,
+            accessorFn: (item) => item.native?.native_identity ?? '',
+          },
+          {
+            name: 'properties',
+            label: 'Properties',
+            width: 140,
+            render: (_val, item) => (
+              <Button
+                onClick={() => setSelectedObject(item.resource_id)}
+                aria-label={`Inspect PostgreSQL ${item.resource_kind} ${item.display_name}`}
+              >
+                Inspect
+              </Button>
+            ),
+          },
+        ]}
+      />
       {inspectedObject && <Box component="pre" aria-label="PostgreSQL native server object properties"
         sx={{overflow: 'auto', maxHeight: 320, whiteSpace: 'pre-wrap'}}>{JSON.stringify(inspectedObject.native, null, 2)}</Box>}
-      <Table size="small" aria-label="PostgreSQL server database selection"><TableHead><TableRow>
-        {['Select', 'Database', 'Native OID', 'Template', 'Connection'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{inventory.databases.slice(page * 25, page * 25 + 25).map(item =>
-        <TableRow key={item.oid}><TableCell><Checkbox inputProps={{'aria-label': `Select PostgreSQL database ${item.name}`}}
-          checked={selected.includes(item.oid)} disabled={busy || !item.allows_connections || !item.connect_privilege || (!selected.includes(item.oid) && selected.length >= 32)}
-          onChange={event => setSelected(current => event.target.checked ? [...current, item.oid] : current.filter(oid => oid !== item.oid))} /></TableCell>
-        <TableCell>{item.name}</TableCell><TableCell>{item.oid}</TableCell><TableCell>{item.template ? 'Yes' : 'No'}</TableCell>
-        <TableCell>{item.allows_connections && item.connect_privilege ? 'CONNECT admitted; attachment checked during capture' : 'Unavailable'}</TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={inventory.databases.length} page={page} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} showFirstButton showLastButton />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="PostgreSQL server database selection"
+        searchable
+        pagination={inventory.databases.length > 25}
+        defaultPageSize={25}
+        minHeight={140}
+        maxHeight={300}
+        rows={inventory.databases}
+        rowKeyGetter={(item) => item.oid}
+        columns={[
+          {
+            name: 'select',
+            label: 'Select',
+            width: 80,
+            render: (_val, item) => (
+              <Checkbox
+                inputProps={{'aria-label': `Select PostgreSQL database ${item.name}`}}
+                checked={selected.includes(item.oid)}
+                disabled={
+                  busy ||
+                  !item.allows_connections ||
+                  !item.connect_privilege ||
+                  (!selected.includes(item.oid) && selected.length >= 32)
+                }
+                onChange={(event) =>
+                  setSelected((current) =>
+                    event.target.checked
+                      ? [...current, item.oid]
+                      : current.filter((oid) => oid !== item.oid)
+                  )
+                }
+              />
+            ),
+          },
+          {name: 'name', label: 'Database', width: 190},
+          {name: 'oid', label: 'Native OID', width: 110, mono: true},
+          {
+            name: 'template',
+            label: 'Template',
+            width: 100,
+            accessorFn: (item) => (item.template ? 'Yes' : 'No'),
+          },
+          {
+            name: 'connection',
+            label: 'Connection',
+            width: 300,
+            accessorFn: (item) =>
+              item.allows_connections && item.connect_privilege
+                ? 'CONNECT admitted; attachment checked during capture'
+                : 'Unavailable',
+          },
+        ]}
+      />
     </>}
     {result && <>
       <Alert severity={result.all_selected_captured ? 'info' : 'warning'}>{!result.databases.length ? 'Server catalog captured.' : result.all_selected_captured ? 'All selected databases captured; review coverage and exclusions in each document.' : 'Some selected databases were unavailable; no substitute database was used.'}</Alert>

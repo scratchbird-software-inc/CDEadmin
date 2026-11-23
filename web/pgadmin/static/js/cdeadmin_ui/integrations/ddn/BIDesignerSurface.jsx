@@ -10,7 +10,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import {Box, Divider, Panel, ScrollArea, Stack} from '../../primitives/Layout';
+import {Box, Divider, Panel, Stack} from '../../primitives/Layout';
 import {Badge, Banner} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import {Button} from '../../primitives/Button';
@@ -21,6 +21,7 @@ import {StatusBadge} from '../../status/StatusBadge';
 import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import CodeEditor from '../../editors/CodeEditor';
 import FormReference from '../../navigation/FormReference';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {t_actions} from '../../actions/t_actions';
 import {
   useQueryExecutionController,
@@ -2938,58 +2939,31 @@ export function BIDesignerSurface({
                 qaKeyPrefix="bi-question-preview"
               />
             </Box>
-            <ScrollArea label="Accessible BI data table region" sx={{flex: 1}}>
-              <Box className="sr-bui-table-card">
-                <Box
-                  component="table"
-                  role="table"
-                  className="sr-bui-table"
-                  aria-label="Accessible BI data table"
-                  sx={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <Box component="thead">
-                    <Box component="tr">
-                      {accessibleTableData.headers.map((h) => (
-                        <Box
-                          key={h}
-                          component="th"
-                          className="sr-bui-th"
-                          scope="col"
-                          sx={{textAlign: 'left'}}
-                        >
-                          {h}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                  <Box component="tbody">
-                    {accessibleTableData.rows
-                      .slice(0, biQueryController.maxRows)
-                      .map((r, rIdx) => (
-                        <Box key={rIdx} component="tr" className="sr-bui-tr">
-                          {r.map((cell, cIdx) => (
-                            <Box
-                              key={cIdx}
-                              component="td"
-                              className="sr-bui-td"
-                            >
-                              {cell}
-                            </Box>
-                          ))}
-                        </Box>
-                      ))}
-                  </Box>
-                </Box>
-                <QueryStepStatusFooter
-                  controller={biQueryController}
-                  qaKey="bi-question-preview-footer"
-                />
-              </Box>
-            </ScrollArea>
+            <Box sx={{flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
+              <UnifiedDataGrid
+                gridRole="table"
+                ariaLabel="Accessible BI data table"
+                searchable
+                exportable
+                minHeight={140}
+                rows={accessibleTableData.rows
+                  .slice(0, biQueryController.maxRows)
+                  .map((r) =>
+                    Object.fromEntries(
+                      accessibleTableData.headers.map((h, idx) => [h, r[idx]])
+                    )
+                  )}
+                rowKeyGetter={(_r, idx) => idx}
+                columns={accessibleTableData.headers.map((h) => ({
+                  name: h,
+                  label: h,
+                }))}
+              />
+              <QueryStepStatusFooter
+                controller={biQueryController}
+                qaKey="bi-question-preview-footer"
+              />
+            </Box>
           </Panel>
         )}
       </Box>
@@ -4467,84 +4441,63 @@ export function BIDesignerSurface({
                       </Box>
                     </FormGrid>
                   )}
-                  <ScrollArea label="Kiosk device token fleet" sx={{maxHeight: 200}}>
-                    <Box
-                      component="table"
-                      aria-label="Kiosk device fleet"
-                      sx={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        fontSize: '0.8125rem',
-                      }}
-                    >
-                      <Box component="thead">
-                        <Box component="tr">
-                          {[
-                            'Device',
-                            'Status',
-                            'Locked Filters',
-                            'Last Used',
-                            'Action',
-                          ].map((h) => (
-                            <Box
-                              key={h}
-                              component="th"
-                              scope="col"
-                              sx={{
-                                textAlign: 'left',
-                                p: 0.5,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              {h}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                      <Box component="tbody">
-                        {outwardDraft.fleetTokens.map((tok) => (
-                          <Box key={tok.token_id} component="tr">
-                            <Box component="td" sx={{p: 0.5}}>
-                              {tok.device_label}
-                            </Box>
-                            <Box component="td" sx={{p: 0.5}}>
-                              <StatusBadge
-                                status={
-                                  tok.status === 'active'
-                                    ? 'success'
-                                    : tok.status === 'revoked'
-                                      ? 'error'
-                                      : 'warning'
-                                }
-                                label={tok.status}
-                              />
-                            </Box>
-                            <Box component="td" sx={{p: 0.5}}>
-                              <code>
-                                {JSON.stringify(tok.locked_filters || {})}
-                              </code>
-                            </Box>
-                            <Box component="td" sx={{p: 0.5}}>
-                              {tok.last_used_at || 'Never'}
-                            </Box>
-                            <Box component="td" sx={{p: 0.5}}>
-                              <Button
-                                size="small"
-                                intent="destructive"
-                                disabled={tok.status === 'revoked'}
-                                onClick={() =>
-                                  handleRevokeDeviceToken(tok.token_id)
-                                }
-                              >
-                                Revoke
-                              </Button>
-                            </Box>
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </ScrollArea>
+                  <UnifiedDataGrid
+                    gridRole="table"
+                    ariaLabel="Kiosk device fleet"
+                    searchable
+                    minHeight={140}
+                    maxHeight={220}
+                    rows={outwardDraft.fleetTokens}
+                    rowKeyGetter={(tok) => tok.token_id}
+                    columns={[
+                      {name: 'device_label', label: 'Device', width: 160},
+                      {
+                        name: 'status',
+                        label: 'Status',
+                        width: 110,
+                        render: (_val, tok) => (
+                          <StatusBadge
+                            status={
+                              tok.status === 'active'
+                                ? 'success'
+                                : tok.status === 'revoked'
+                                  ? 'error'
+                                  : 'warning'
+                            }
+                            label={tok.status}
+                          />
+                        ),
+                      },
+                      {
+                        name: 'locked_filters',
+                        label: 'Locked Filters',
+                        width: 210,
+                        mono: true,
+                        accessorFn: (tok) => JSON.stringify(tok.locked_filters || {}),
+                      },
+                      {
+                        name: 'last_used_at',
+                        label: 'Last Used',
+                        width: 150,
+                        accessorFn: (tok) => tok.last_used_at || 'Never',
+                      },
+                      {
+                        name: 'action',
+                        label: 'Action',
+                        width: 110,
+                        render: (_val, tok) => (
+                          <Button
+                            size="small"
+                            intent="destructive"
+                            disabled={tok.status === 'revoked'}
+                            onClick={() => handleRevokeDeviceToken(tok.token_id)}
+                          >
+                            Revoke
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
                 </Stack>
               ),
             },

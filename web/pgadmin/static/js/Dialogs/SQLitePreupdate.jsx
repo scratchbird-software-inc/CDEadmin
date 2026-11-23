@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,TextField} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function SQLitePreupdate({post,ensureSession,sessionId,databaseTargetId,disabled,onBusyChange}) {
   const [inventory,setInventory]=useState(null),[status,setStatus]=useState(null),[events,setEvents]=useState([]),[more,setMore]=useState(false);
@@ -49,9 +50,48 @@ export default function SQLitePreupdate({post,ensureSession,sessionId,databaseTa
       <Button disabled={blocked || !more || !events.length} onClick={() => page(events.at(-1).sequence)}>Next native preupdate events</Button>
       <FormControlLabel label="Discard retained before-change observations" control={<Checkbox checked={confirm} disabled={blocked} onChange={event => setConfirm(event.target.checked)} />} />
       <Button disabled={blocked || !confirm || !status.run_id} onClick={() => run({operation:'clear',run_id:status.run_id,confirmed:true})}>Clear native preupdate observations</Button>
-      <Table size="small" aria-label="Native SQLite before-change events"><TableHead><TableRow>{['Sequence','Operation','Database','Table','Trigger depth','Typed values'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {events.map(event => <TableRow key={event.sequence}><TableCell>{event.sequence}</TableCell><TableCell>{event.operation}</TableCell><TableCell>{typeof event.database==='string' ? event.database:JSON.stringify(event.database)}</TableCell><TableCell>{typeof event.table==='string' ? event.table:JSON.stringify(event.table)}</TableCell><TableCell>{event.depth}</TableCell><TableCell><details><summary>Inspect native event {event.sequence}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(event,null,2)}</Box></details></TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native SQLite before-change events"
+        searchable
+        exportable
+        minHeight={140}
+        maxHeight={320}
+        rows={events}
+        rowKeyGetter={(ev) => ev.sequence}
+        columns={[
+          {name: 'sequence', label: 'Sequence', width: 150, mono: true},
+          {name: 'operation', label: 'Operation', width: 110},
+          {
+            name: 'database',
+            label: 'Database',
+            width: 130,
+            accessorFn: (ev) =>
+              typeof ev.database === 'string' ? ev.database : JSON.stringify(ev.database),
+          },
+          {
+            name: 'table',
+            label: 'Table',
+            width: 150,
+            accessorFn: (ev) =>
+              typeof ev.table === 'string' ? ev.table : JSON.stringify(ev.table),
+          },
+          {name: 'depth', label: 'Trigger depth', width: 110, numeric: true},
+          {
+            name: 'typed_values',
+            label: 'Typed values',
+            width: 300,
+            render: (_val, ev) => (
+              <details>
+                <summary>Inspect native event {ev.sequence}</summary>
+                <Box component="pre" sx={{whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto'}}>
+                  {JSON.stringify(ev, null, 2)}
+                </Box>
+              </details>
+            ),
+          },
+        ]}
+      />
       <Alert severity="info">Raw native rowid fields are undefined for WITHOUT ROWID tables, old rowid on INSERT, and new rowid on DELETE. Use the typed column values and the table definition when interpreting identities. Closing the connection releases observations.</Alert>
       <Box component="pre" aria-label="Native SQLite preupdate state" sx={{whiteSpace:'pre-wrap',maxHeight:180,overflow:'auto'}}>{JSON.stringify(status,null,2)}</Box>
     </>}

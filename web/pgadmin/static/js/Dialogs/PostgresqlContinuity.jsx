@@ -1,7 +1,9 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 import {startBrowserFileDownload} from './browserFileDownload';
 import PostgresqlTemporarySlots from './PostgresqlTemporarySlots';
 import PostgresqlLogicalStream from './PostgresqlLogicalStream';
@@ -143,26 +145,134 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
       <Button disabled={busy || replicationOnly} onClick={() => loadSlots(slotPage)}>Load replication slots</Button>
     </Box>
     {slotCatalog && <>
-      <Table size="small" aria-label="Native replication slots"><TableHead><TableRow>
-        {['Slot','Type','Database','Active','WAL status','Native properties','Input'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{slotCatalog.slots.map(slot => <TableRow key={slot.slot_name}>
-        <TableCell>{slot.slot_name}</TableCell><TableCell>{slot.slot_type}</TableCell><TableCell>{slot.database ?? '—'}</TableCell>
-        <TableCell>{String(slot.active)}</TableCell><TableCell>{slot.wal_status ?? '—'}</TableCell>
-        <TableCell><Box component="details"><summary>Inspect {slot.slot_name}</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{JSON.stringify(slot,null,2)}</Box></Box></TableCell>
-        <TableCell><Button disabled={busy || (!slots && !sqlSlots && operation!=='wal_capture')} onClick={() => (sqlSlots ? editSqlSlot : slots ? editSlot : editWal)(sqlSlots && operation.endsWith('_copy') ? 'source_slot' : 'slot',slot.slot_name)}>Use slot {slot.slot_name}</Button></TableCell>
-      </TableRow>)}</TableBody></Table>
-      <TablePagination component="div" count={slotCatalog.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={slotPage} onPageChange={(_event,next) => loadSlots(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native replication slots"
+        searchable
+        minHeight={140}
+        maxHeight={300}
+        rows={slotCatalog.slots}
+        rowKeyGetter={(slot) => slot.slot_name}
+        columns={[
+          {name: 'slot_name', label: 'Slot', width: 170, mono: true},
+          {name: 'slot_type', label: 'Type', width: 110},
+          {name: 'database', label: 'Database', width: 140, accessorFn: (slot) => slot.database ?? '—'},
+          {name: 'active', label: 'Active', width: 90, accessorFn: (slot) => String(slot.active)},
+          {name: 'wal_status', label: 'WAL status', width: 120, accessorFn: (slot) => slot.wal_status ?? '—'},
+          {
+            name: 'native_properties',
+            label: 'Native properties',
+            width: 260,
+            render: (_v, slot) => (
+              <Box component="details">
+                <summary>Inspect {slot.slot_name}</summary>
+                <Box component="pre" sx={{whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto'}}>
+                  {JSON.stringify(slot, null, 2)}
+                </Box>
+              </Box>
+            ),
+          },
+          {
+            name: 'input_action',
+            label: 'Input',
+            width: 170,
+            render: (_v, slot) => (
+              <Button
+                disabled={busy || (!slots && !sqlSlots && operation !== 'wal_capture')}
+                onClick={() =>
+                  (sqlSlots ? editSqlSlot : slots ? editSlot : editWal)(
+                    sqlSlots && operation.endsWith('_copy') ? 'source_slot' : 'slot',
+                    slot.slot_name
+                  )
+                }
+              >
+                Use slot {slot.slot_name}
+              </Button>
+            ),
+          },
+        ]}
+      />
+      {slotCatalog.total > 25 && (
+        <GridNavigation
+          busy={busy}
+          page={slotPage}
+          pages={Math.max(1, Math.ceil(slotCatalog.total / 25))}
+          endKnown
+          canNext={(slotPage + 1) * 25 < slotCatalog.total}
+          onFirst={() => loadSlots(0)}
+          onPrevious={() => loadSlots(Math.max(0, slotPage - 1))}
+          onNext={() => loadSlots(slotPage + 1)}
+          onLast={() => loadSlots(Math.max(0, Math.ceil(slotCatalog.total / 25) - 1))}
+        />
+      )}
     </>}
     {catalog && <>
-      <Table size="small" aria-label="Native physical backup jobs"><TableHead><TableRow>
-        {['Operation','Job','State','Input','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{catalog.jobs.map(job => <TableRow key={job.job_id}>
-        <TableCell>{job.operation}</TableCell><TableCell>{job.job_id}</TableCell><TableCell>{job.state}</TableCell>
-        <TableCell><Button disabled={busy || NO_INPUT.has(operation) || job.operation.startsWith('wal_') || (operation!=='verify' && job.state!=='verified') || ACTIVE.has(job.state) || inputs.includes(job.job_id)}
-          onClick={() => {setInputs(current => operation==='combine' ? [...current,job.job_id] : [job.job_id]);setReview(null);}}>Select input</Button></TableCell>
-        <TableCell><Button disabled={busy} aria-label={'Inspect backup '+job.job_id} onClick={() => run('status',{job_id:job.job_id},setReceipt)}>Inspect</Button></TableCell>
-      </TableRow>)}</TableBody></Table>
-      <TablePagination component="div" count={catalog.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native physical backup jobs"
+        searchable
+        minHeight={140}
+        maxHeight={300}
+        rows={catalog.jobs}
+        rowKeyGetter={(job) => job.job_id}
+        columns={[
+          {name: 'operation', label: 'Operation', width: 170},
+          {name: 'job_id', label: 'Job', width: 170, mono: true},
+          {name: 'state', label: 'State', width: 120},
+          {
+            name: 'input_action',
+            label: 'Input',
+            width: 140,
+            render: (_v, job) => (
+              <Button
+                disabled={
+                  busy ||
+                  NO_INPUT.has(operation) ||
+                  job.operation.startsWith('wal_') ||
+                  (operation !== 'verify' && job.state !== 'verified') ||
+                  ACTIVE.has(job.state) ||
+                  inputs.includes(job.job_id)
+                }
+                onClick={() => {
+                  setInputs((current) =>
+                    operation === 'combine' ? [...current, job.job_id] : [job.job_id]
+                  );
+                  setReview(null);
+                }}
+              >
+                Select input
+              </Button>
+            ),
+          },
+          {
+            name: 'receipt_action',
+            label: 'Receipt',
+            width: 130,
+            render: (_v, job) => (
+              <Button
+                disabled={busy}
+                aria-label={`Inspect backup ${job.job_id}`}
+                onClick={() => run('status', {job_id: job.job_id}, setReceipt)}
+              >
+                Inspect
+              </Button>
+            ),
+          },
+        ]}
+      />
+      {catalog.total > 25 && (
+        <GridNavigation
+          busy={busy}
+          page={page}
+          pages={Math.max(1, Math.ceil(catalog.total / 25))}
+          endKnown
+          canNext={(page + 1) * 25 < catalog.total}
+          onFirst={() => load(0)}
+          onPrevious={() => load(Math.max(0, page - 1))}
+          onNext={() => load(page + 1)}
+          onLast={() => load(Math.max(0, Math.ceil(catalog.total / 25) - 1))}
+        />
+      )}
       {catalog.unavailable_job_ids?.length>0 && <Alert severity="warning">Some backup receipts could not be read: {catalog.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {!NO_INPUT.has(operation) && <Box><b>{operation==='combine' ? 'Ordered chain (full backup first)' : 'Selected input'}</b>
@@ -296,9 +406,35 @@ export default function PostgresqlContinuity({post,databaseTargetId,endpointUrl}
         <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={() => run('change_reconcile',{job_id:receipt.job_id},value => {setReceipt(value);setChangePreview(null);setChangeOffsets(['0']);})}>Inspect and reconcile captured bytes</Button>
         {changePreview && <>
           <Alert severity="info">Preview limits each data cell to 4096 characters. Large or incomplete records retain their byte location for exact file download.</Alert>
-          <Table size="small" aria-label="Captured native logical changes"><TableHead><TableRow>{['LSN','Transaction ID','Encoding','Data preview'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead>
-            <TableBody>{changePreview.rows.map((row,index) => <TableRow key={index}><TableCell>{row.lsn ?? '—'}</TableCell><TableCell>{row.xid ?? '—'}</TableCell><TableCell>{row.data_encoding ?? 'raw record'}</TableCell>
-              <TableCell sx={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',maxWidth:600}}>{row.data ?? `Byte offset ${row.record_offset}, ${row.record_bytes} bytes: ${row.message}`}{row.data_preview_truncated ? ' [preview truncated]' : ''}</TableCell></TableRow>)}</TableBody></Table>
+          <UnifiedDataGrid
+            gridRole="table"
+            ariaLabel="Captured native logical changes"
+            searchable
+            minHeight={140}
+            maxHeight={300}
+            rows={changePreview.rows}
+            rowKeyGetter={(_r, idx) => idx}
+            columns={[
+              {name: 'lsn', label: 'LSN', width: 130, mono: true, accessorFn: (r) => r.lsn ?? '—'},
+              {name: 'xid', label: 'Transaction ID', width: 120, mono: true, accessorFn: (r) => r.xid ?? '—'},
+              {
+                name: 'data_encoding',
+                label: 'Encoding',
+                width: 120,
+                accessorFn: (r) => r.data_encoding ?? 'raw record',
+              },
+              {
+                name: 'data_preview',
+                label: 'Data preview',
+                width: 480,
+                mono: true,
+                accessorFn: (r) =>
+                  `${r.data ?? `Byte offset ${r.record_offset}, ${r.record_bytes} bytes: ${r.message}`}${
+                    r.data_preview_truncated ? ' [preview truncated]' : ''
+                  }`,
+              },
+            ]}
+          />
           <Button disabled={busy || changeOffsets.length<2} onClick={() => previewChanges(changeOffsets.at(-2),changeOffsets.slice(0,-1))}>Previous change page</Button>
           <Button disabled={busy || changePreview.next_offset===null} onClick={() => previewChanges(changePreview.next_offset,[...changeOffsets,changePreview.next_offset])}>Next change page</Button>
         </>}

@@ -23,6 +23,7 @@ import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
 import {ScratchDiffTable} from '../../data/beautiful';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
   DesignCheckpointHistoryDrawer,
@@ -3000,127 +3001,62 @@ export function ScreenMeshDesignerSurface({
               {filteredSpecRows.length === 0 ? (
                 <EmptyState message="No Screen Mesh fields matched the current filter." />
               ) : (
-                <Box
-                  component="table"
-                  aria-label="Field Specification Table"
-                  sx={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <Box component="thead">
-                    <Box component="tr">
-                      {[
-                        'Screen',
-                        'Control / Column / Region',
-                        'Widget Kind',
-                        'Target Table.Column',
-                        'Type',
-                        'Nullable',
-                        'Binding Validity',
-                      ].map((hdr) => (
-                        <Box
-                          key={hdr}
-                          component="th"
-                          scope="col"
-                          sx={{
-                            textAlign: 'left',
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {hdr}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                  <Box component="tbody">
-                    {filteredSpecRows.map((row, idx) => (
-                      <Box key={`${row.element_id}-${idx}`} component="tr">
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          {row.screen_title}
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <strong>{row.label}</strong>
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
+                <UnifiedDataGrid
+                  gridRole="table"
+                  ariaLabel="Field Specification Table"
+                  minHeight={180}
+                  rows={filteredSpecRows}
+                  rowKeyGetter={(row, idx) => `${row.element_id}-${idx}`}
+                  columns={[
+                    {name: 'screen_title', label: 'Screen', width: 150},
+                    {name: 'label', label: 'Control / Column / Region', width: 200},
+                    {
+                      name: 'element_kind',
+                      label: 'Widget Kind',
+                      width: 170,
+                      render: (_val, row) => (
+                        <span>
                           <code>{row.element_kind}</code> ({row.access_mode})
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <code>{row.target_ref || '—'}</code>
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          {row.catalog_type || '—'}
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          {row.nullable === null || row.nullable === undefined
-                            ? '—'
-                            : row.nullable
-                              ? 'YES'
-                              : 'NO'}
-                        </Box>
-                        <Box
-                          component="td"
-                          sx={{
-                            p: 0.75,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <StatusBadge
-                            status={bindingBadgeStatus(row.binding_state)}
-                            label={row.binding_state}
-                          />
-                        </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
+                        </span>
+                      ),
+                    },
+                    {
+                      name: 'target_ref',
+                      label: 'Target Table.Column',
+                      width: 190,
+                      mono: true,
+                      accessorFn: (row) => row.target_ref || '—',
+                    },
+                    {
+                      name: 'catalog_type',
+                      label: 'Type',
+                      width: 120,
+                      accessorFn: (row) => row.catalog_type || '—',
+                    },
+                    {
+                      name: 'nullable',
+                      label: 'Nullable',
+                      width: 95,
+                      accessorFn: (row) =>
+                        row.nullable === null || row.nullable === undefined
+                          ? '—'
+                          : row.nullable
+                            ? 'YES'
+                            : 'NO',
+                    },
+                    {
+                      name: 'binding_state',
+                      label: 'Binding Validity',
+                      width: 130,
+                      render: (_val, row) => (
+                        <StatusBadge
+                          status={bindingBadgeStatus(row.binding_state)}
+                          label={row.binding_state}
+                        />
+                      ),
+                    },
+                  ]}
+                />
               )}
             </ScrollArea>
           </Box>

@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import {startBrowserFileDownload} from './browserFileDownload';
 
 export default function SQLiteConflictDecisions({post,databaseTargetId,receipt,endpointUrl,disabled,onReceipt}) {
@@ -37,9 +38,38 @@ export default function SQLiteConflictDecisions({post,databaseTargetId,receipt,e
       <Alert severity="info">Native {event.kind_name} conflict {event.sequence}. Incoming values include the reviewed inversion flag. Apply change sequence is separate from a source-file record ordinal.</Alert>
       {event.kind_name==='foreign_key' && <Alert severity="warning">Native foreign-key violations: {event.foreign_key_count}. OMIT can keep those violations when the owned transaction commits.</Alert>}
       <Box component="pre" aria-label="Native SQLite live conflict" sx={{whiteSpace:'pre-wrap',maxHeight:360,overflow:'auto'}}>{JSON.stringify(event,null,2)}</Box>
-      {event.byte_values?.length>0 && <Table size="small" aria-label="Native conflict byte values"><TableHead><TableRow>{['Values','Column position','Type','Bytes','Download'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {event.byte_values.map(value => <TableRow key={value.side+':'+value.column_index}><TableCell>{value.side}</TableCell><TableCell>{value.column_index+1}</TableCell><TableCell>{value.native_type}</TableCell><TableCell>{value.byte_length}</TableCell><TableCell><Button disabled={busy || !endpointUrl} onClick={() => download(value)}>Download {value.side} column {value.column_index+1} bytes</Button></TableCell></TableRow>)}
-      </TableBody></Table>}
+      {event.byte_values?.length > 0 && (
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Native conflict byte values"
+          minHeight={130}
+          maxHeight={260}
+          rows={event.byte_values}
+          rowKeyGetter={(val) => `${val.side}:${val.column_index}`}
+          columns={[
+            {name: 'side', label: 'Values', width: 100},
+            {
+              name: 'column_index',
+              label: 'Column position',
+              width: 130,
+              numeric: true,
+              accessorFn: (val) => val.column_index + 1,
+            },
+            {name: 'native_type', label: 'Type', width: 120},
+            {name: 'byte_length', label: 'Bytes', width: 120, mono: true},
+            {
+              name: 'download',
+              label: 'Download',
+              width: 240,
+              render: (_v, val) => (
+                <Button disabled={busy || !endpointUrl} onClick={() => download(val)}>
+                  Download {val.side} column {val.column_index + 1} bytes
+                </Button>
+              ),
+            },
+          ]}
+        />
+      )}
       <FormControlLabel label="Use this choice for remaining conflicts of this kind" control={<Checkbox checked={remember} disabled={blocked} onChange={input => setRemember(input.target.checked)} />} />
       {event.allowed_choices.map(choice => <Button key={choice} disabled={blocked} color={choice==='abort' ? 'warning':'primary'} onClick={() => decide(choice)}>Use native {choice} for this conflict</Button>)}
       {receipt.conflict_response?.challenge===challenge && <Alert severity="info">Response admitted. Native consumption and database commit have separate acknowledgements.</Alert>}

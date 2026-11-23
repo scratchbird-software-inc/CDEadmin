@@ -1,15 +1,16 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 
 export default function DuckDBServerCatalog({post, engine = 'duckdb'}) {
   const label = engine === 'sqlite' ? 'SQLite' : 'DuckDB';
   const [inventory, setInventory] = useState(null), [result, setResult] = useState(null);
   const [selected, setSelected] = useState([]), [includeSystem, setIncludeSystem] = useState(false);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [page, setPage] = useState(0);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [documentId, setDocumentId] = useState('endpoint'), [view, setView] = useState('inventory_1');
   const [display, setDisplay] = useState('inventory');
   const serial = useRef(0);
@@ -21,7 +22,7 @@ export default function DuckDBServerCatalog({post, engine = 'duckdb'}) {
         database_target_ids: selected, include_system: includeSystem} : {}});
       if(token !== serial.current) return;
       if(capture) {setResult(response); setDocumentId('endpoint'); setDisplay('inventory'); setView(response.server.document.snapshot.view);}
-      else {setInventory(response); setSelected([]); setResult(null); setPage(0);}
+      else {setInventory(response); setSelected([]); setResult(null);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || `${label} endpoint capture failed`);}
     finally {if(token === serial.current) setBusy(false);}
   };
@@ -54,16 +55,45 @@ export default function DuckDBServerCatalog({post, engine = 'duckdb'}) {
           onClick={() => setSelected(inventory.files.map(item => item.target_id))}>Select all registered files</Button>
         <Button disabled={busy || !selected.length} onClick={() => setSelected([])}>Clear selection</Button>
       </Box>
-      <Table size="small" aria-label={`${label} registered file selection`}><TableHead><TableRow>
-        <TableCell>Select</TableCell><TableCell>Registered file</TableCell><TableCell>Active</TableCell>
-      </TableRow></TableHead><TableBody>{inventory.files.slice(page * 25, page * 25 + 25).map(item =>
-        <TableRow key={item.target_id}><TableCell><Checkbox inputProps={{'aria-label': `Select ${label} file ${item.display_name}`}}
-          checked={selected.includes(item.target_id)} disabled={busy || (!selected.includes(item.target_id) && selected.length >= 32)}
-          onChange={event => setSelected(current => event.target.checked ? [...current, item.target_id] :
-            current.filter(identity => identity !== item.target_id))} /></TableCell>
-        <TableCell>{item.display_name}</TableCell><TableCell>{item.active ? 'Yes' : 'No'}</TableCell></TableRow>)}</TableBody></Table>
-      <TablePagination component="div" count={inventory.files.length} page={page} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} showFirstButton showLastButton />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={`${label} registered file selection`}
+        searchable
+        pagination={inventory.files.length > 25}
+        defaultPageSize={25}
+        minHeight={150}
+        maxHeight={320}
+        rows={inventory.files}
+        rowKeyGetter={(item) => item.target_id}
+        columns={[
+          {
+            name: 'select',
+            label: 'Select',
+            width: 80,
+            render: (_val, item) => (
+              <Checkbox
+                inputProps={{'aria-label': `Select ${label} file ${item.display_name}`}}
+                checked={selected.includes(item.target_id)}
+                disabled={busy || (!selected.includes(item.target_id) && selected.length >= 32)}
+                onChange={(event) =>
+                  setSelected((current) =>
+                    event.target.checked
+                      ? [...current, item.target_id]
+                      : current.filter((identity) => identity !== item.target_id)
+                  )
+                }
+              />
+            ),
+          },
+          {name: 'display_name', label: 'Registered file', width: 280},
+          {
+            name: 'active',
+            label: 'Active',
+            width: 100,
+            accessorFn: (item) => (item.active ? 'Yes' : 'No'),
+          },
+        ]}
+      />
     </>}
     {result && <>
       <Alert severity={result.all_selected_captured ? 'info' : 'warning'}>{result.all_selected_captured ?

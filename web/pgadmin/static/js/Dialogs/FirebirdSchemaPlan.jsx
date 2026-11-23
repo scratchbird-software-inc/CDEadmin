@@ -1,9 +1,10 @@
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 
 export default function FirebirdSchemaPlan({baseline, post, generation, onCatalogRefresh, disabled, databaseTargetId, designRequest}) {
@@ -13,7 +14,6 @@ export default function FirebirdSchemaPlan({baseline, post, generation, onCatalo
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [page, setPage] = useState(0);
   const [review, setReview] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -52,7 +52,7 @@ export default function FirebirdSchemaPlan({baseline, post, generation, onCatalo
     try {
       const response = await post({action: 'firebird_schema_plan', request: {generation, baseline: designBaseline || baseline, desired, refresh: true}});
       if(token.current !== requestToken) return;
-      setPlan(response); setPage(0);
+      setPlan(response);
       await onCatalogRefresh?.();
     } catch(err) {
       if(token.current === requestToken) setError(err.response?.data?.errormsg || err.message || gettext('Schema planning failed.'));
@@ -138,23 +138,41 @@ export default function FirebirdSchemaPlan({baseline, post, generation, onCatalo
         <Button onClick={() => download(JSON.stringify(review, null, 2), 'firebird-schema-application.json')}>{gettext('Download application receipt')}</Button>
         {review.outcome && <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(review.outcome, null, 2)}</Box>}
       </Box>}
-      <Table size="small" aria-label={gettext('Native schema plan')}>
-        <TableHead><TableRow><TableCell>{gettext('Object')}</TableCell><TableCell>{gettext('State')}</TableCell><TableCell>{gettext('SQL or blocker')}</TableCell></TableRow></TableHead>
-        <TableBody>{rows.slice(page * 25, (page + 1) * 25).map((item) => <TableRow key={item.resource_id}>
-          <TableCell>{item.resource_id}</TableCell><TableCell>{item.state}</TableCell><TableCell sx={{whiteSpace: 'pre-wrap'}}>
-            {item.detail}
-            {item.security_changes && <Box sx={{mt: 1}}>
-              <Box>{gettext('System privileges added')}: {item.security_changes.added_system_privileges.join(', ') || gettext('None')}</Box>
-              <Box>{gettext('System privileges removed')}: {item.security_changes.removed_system_privileges.join(', ') || gettext('None')}</Box>
-              <Box>{gettext('Ownership')}: {item.security_changes.ownership}</Box>
-              <Box>{gettext('Memberships')}: {item.security_changes.memberships}</Box>
-              <Box>{gettext('Required authority')}: {item.permissions}</Box>
-            </Box>}
-          </TableCell>
-        </TableRow>)}</TableBody>
-      </Table>
-      <TablePagination component="div" count={rows.length} page={page} rowsPerPage={25}
-        rowsPerPageOptions={[25]} onPageChange={(_event, value) => setPage(value)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={gettext('Native schema plan')}
+        searchable
+        exportable
+        pagination={rows.length > 25}
+        defaultPageSize={25}
+        minHeight={150}
+        maxHeight={360}
+        rows={rows}
+        rowKeyGetter={(item) => item.resource_id}
+        columns={[
+          {name: 'resource_id', label: gettext('Object'), width: 190, mono: true},
+          {name: 'state', label: gettext('State'), width: 120},
+          {
+            name: 'detail',
+            label: gettext('SQL or blocker'),
+            width: 460,
+            render: (_val, item) => (
+              <Box sx={{whiteSpace: 'pre-wrap'}}>
+                {item.detail}
+                {item.security_changes && (
+                  <Box sx={{mt: 1}}>
+                    <Box>{gettext('System privileges added')}: {item.security_changes.added_system_privileges.join(', ') || gettext('None')}</Box>
+                    <Box>{gettext('System privileges removed')}: {item.security_changes.removed_system_privileges.join(', ') || gettext('None')}</Box>
+                    <Box>{gettext('Ownership')}: {item.security_changes.ownership}</Box>
+                    <Box>{gettext('Memberships')}: {item.security_changes.memberships}</Box>
+                    <Box>{gettext('Required authority')}: {item.permissions}</Box>
+                  </Box>
+                )}
+              </Box>
+            ),
+          },
+        ]}
+      />
     </>}
   </Box>;
 }

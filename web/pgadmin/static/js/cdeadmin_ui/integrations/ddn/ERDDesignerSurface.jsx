@@ -22,6 +22,7 @@ import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
 import {ScratchDiffTable} from '../../data/beautiful';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {t_actions} from '../../actions/t_actions';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
@@ -3134,115 +3135,43 @@ export function ERDDesignerSurface({
                     )}
                   </Banner>
                 ) : (
-                  <ScrollArea
-                    label={gettext('Naming violations')}
-                    sx={{maxHeight: 320}}
-                  >
-                    <Box
-                      component="table"
-                      aria-label={gettext('Naming standard violations')}
-                      sx={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        fontSize: '0.8125rem',
-                      }}
-                    >
-                      <Box component="thead">
-                        <Box component="tr">
-                          {[
-                            gettext('Rule'),
-                            gettext('Current Name'),
-                            gettext('Suggested Fix'),
-                            gettext('Status'),
-                            gettext('Action'),
-                          ].map((h) => (
-                            <Box
-                              key={h}
-                              component="th"
-                              sx={{
-                                textAlign: 'left',
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              {h}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                      <Box component="tbody">
-                        {standardsData.violations.map((v) => (
-                          <Box key={v.id} component="tr">
-                            <Box
-                              component="td"
-                              sx={{
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <code>{v.rule}</code>
-                            </Box>
-                            <Box
-                              component="td"
-                              sx={{
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              {v.current_name}
-                            </Box>
-                            <Box
-                              component="td"
-                              sx={{
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <strong>{v.suggested_name}</strong>
-                            </Box>
-                            <Box
-                              component="td"
-                              sx={{
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <StatusBadge
-                                status={v.waived ? 'info' : 'warning'}
-                                label={
-                                  v.waived
-                                    ? gettext('Waived')
-                                    : gettext('Violation')
-                                }
-                              />
-                            </Box>
-                            <Box
-                              component="td"
-                              sx={{
-                                p: 0.75,
-                                borderBottom: '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              {!v.waived && !readOnly && (
-                                <Button
-                                  size="small"
-                                  onClick={() => quickWaiveViolation(v)}
-                                >
-                                  {gettext('Waive')}
-                                </Button>
-                              )}
-                            </Box>
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </ScrollArea>
+                  <UnifiedDataGrid
+                    gridRole="table"
+                    ariaLabel={gettext('Naming standard violations')}
+                    searchable
+                    exportable
+                    minHeight={160}
+                    maxHeight={320}
+                    rows={standardsData.violations}
+                    rowKeyGetter={(v) => v.id}
+                    columns={[
+                      {name: 'rule', label: gettext('Rule'), width: 150, mono: true},
+                      {name: 'current_name', label: gettext('Current Name'), width: 170},
+                      {name: 'suggested_name', label: gettext('Suggested Fix'), width: 180},
+                      {
+                        name: 'waived',
+                        label: gettext('Status'),
+                        width: 120,
+                        render: (_val, v) => (
+                          <StatusBadge
+                            status={v.waived ? 'info' : 'warning'}
+                            label={v.waived ? gettext('Waived') : gettext('Violation')}
+                          />
+                        ),
+                      },
+                      {
+                        name: 'action',
+                        label: gettext('Action'),
+                        width: 120,
+                        render: (_val, v) =>
+                          !v.waived && !readOnly ? (
+                            <Button size="small" onClick={() => quickWaiveViolation(v)}>
+                              {gettext('Waive')}
+                            </Button>
+                          ) : null,
+                      },
+                    ]}
+                  />
                 ),
             },
             {
@@ -3907,148 +3836,79 @@ export function ERDDesignerSurface({
                       message={gettext('No environment records loaded yet.')}
                     />
                   ) : (
-                    <ScrollArea
-                      label={gettext('Environment matrix')}
-                      sx={{maxHeight: 320}}
-                    >
-                      <Box
-                        component="table"
-                        aria-label={gettext('Deployment environment matrix')}
-                        sx={{
-                          width: '100%',
-                          borderCollapse: 'collapse',
-                          fontSize: '0.8125rem',
-                        }}
-                      >
-                        <Box component="thead">
-                          <Box component="tr">
-                            {[
-                              gettext('Environment'),
-                              gettext('Endpoint / Target'),
-                              gettext('Deployed'),
-                              gettext('Desired'),
-                              gettext('Drift Status'),
-                              gettext('Actions'),
-                            ].map((h) => (
-                              <Box
-                                key={h}
-                                component="th"
-                                sx={{
-                                  textAlign: 'left',
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                {h}
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
-                        <Box component="tbody">
-                          {environments.map((env) => (
-                            <Box key={env.environment} component="tr">
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                <strong>{env.label}</strong>
-                              </Box>
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                <code>
-                                  {env.endpoint_id} / {env.database_target_id}
-                                </code>
-                              </Box>
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                {env.deployed_version
-                                  ? `v${env.deployed_version}`
-                                  : '—'}
-                              </Box>
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                v{env.desired_version}
-                              </Box>
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                }}
-                              >
-                                <StatusBadge
-                                  status={
-                                    env.drift_status === 'in_sync'
-                                      ? 'success'
-                                      : env.drift_status === 'behind'
-                                        ? 'warning'
-                                        : 'info'
-                                  }
-                                  label={env.drift_status}
-                                />
-                              </Box>
-                              <Box
-                                component="td"
-                                sx={{
-                                  p: 0.75,
-                                  borderBottom: '1px solid',
-                                  borderColor: 'divider',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {!readOnly && (
-                                  <Stack direction="row" gap="compact">
-                                    <Button
-                                      size="small"
-                                      onClick={() =>
-                                        submitAlterToOperationReview(
-                                          env.environment
-                                        )
-                                      }
-                                    >
-                                      {gettext('Queue Review')}
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      intent="primary"
-                                      onClick={() =>
-                                        recordVerifiedDeployment(env)
-                                      }
-                                    >
-                                      {gettext('Record Verified')}
-                                    </Button>
-                                  </Stack>
-                                )}
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                    </ScrollArea>
+                    <UnifiedDataGrid
+                      gridRole="table"
+                      ariaLabel={gettext('Deployment environment matrix')}
+                      searchable
+                      exportable
+                      minHeight={160}
+                      maxHeight={320}
+                      rows={environments}
+                      rowKeyGetter={(env) => env.environment}
+                      columns={[
+                        {name: 'label', label: gettext('Environment'), width: 150},
+                        {
+                          name: 'target',
+                          label: gettext('Endpoint / Target'),
+                          width: 210,
+                          mono: true,
+                          accessorFn: (env) => `${env.endpoint_id} / ${env.database_target_id}`,
+                        },
+                        {
+                          name: 'deployed_version',
+                          label: gettext('Deployed'),
+                          width: 100,
+                          accessorFn: (env) =>
+                            env.deployed_version ? `v${env.deployed_version}` : '—',
+                        },
+                        {
+                          name: 'desired_version',
+                          label: gettext('Desired'),
+                          width: 100,
+                          accessorFn: (env) => `v${env.desired_version}`,
+                        },
+                        {
+                          name: 'drift_status',
+                          label: gettext('Drift Status'),
+                          width: 130,
+                          render: (_val, env) => (
+                            <StatusBadge
+                              status={
+                                env.drift_status === 'in_sync'
+                                  ? 'success'
+                                  : env.drift_status === 'behind'
+                                    ? 'warning'
+                                    : 'info'
+                              }
+                              label={env.drift_status}
+                            />
+                          ),
+                        },
+                        {
+                          name: 'actions',
+                          label: gettext('Actions'),
+                          width: 250,
+                          render: (_val, env) =>
+                            !readOnly ? (
+                              <Stack direction="row" gap="compact">
+                                <Button
+                                  size="small"
+                                  onClick={() => submitAlterToOperationReview(env.environment)}
+                                >
+                                  {gettext('Queue Review')}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  intent="primary"
+                                  onClick={() => recordVerifiedDeployment(env)}
+                                >
+                                  {gettext('Record Verified')}
+                                </Button>
+                              </Stack>
+                            ) : null,
+                        },
+                      ]}
+                    />
                   )}
                 </Stack>
               ),

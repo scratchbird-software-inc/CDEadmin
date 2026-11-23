@@ -21,6 +21,7 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {t_actions} from '../../actions/t_actions';
 import {
   useQueryExecutionController,
@@ -3909,55 +3910,26 @@ export function CubeDesignerSurface({
                       />
                     </Box>
                     {tryResult.preview_rows?.length > 0 && (
-                      <ScrollArea label="Query preview rows" sx={{maxHeight: 180}}>
-                        <Box className="sr-bui-table-card">
-                          <Box
-                            component="table"
-                            className="sr-bui-table"
-                            sx={{
-                              width: '100%',
-                              borderCollapse: 'collapse',
-                              fontSize: '0.8125rem',
-                            }}
-                          >
-                            <Box component="thead">
-                              <Box component="tr">
-                                {(tryResult.columns || []).map((col) => (
-                                  <Box
-                                    key={col.id}
-                                    component="th"
-                                    className="sr-bui-th"
-                                    sx={{textAlign: 'left'}}
-                                  >
-                                    {col.label}
-                                  </Box>
-                                ))}
-                              </Box>
-                            </Box>
-                            <Box component="tbody">
-                              {tryResult.preview_rows
-                                .slice(0, cubeQueryController.maxRows)
-                                .map((row, rIdx) => (
-                                  <Box key={rIdx} component="tr" className="sr-bui-tr">
-                                    {(tryResult.columns || []).map((col) => (
-                                      <Box
-                                        key={col.id}
-                                        component="td"
-                                        className="sr-bui-td"
-                                      >
-                                        {String(row[col.id] ?? 'NULL')}
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                ))}
-                            </Box>
-                          </Box>
-                          <QueryStepStatusFooter
-                            controller={cubeQueryController}
-                            qaKey="cube-try-query-footer"
-                          />
-                        </Box>
-                      </ScrollArea>
+                      <Box>
+                        <UnifiedDataGrid
+                          gridRole="table"
+                          ariaLabel="Query preview rows"
+                          searchable
+                          exportable
+                          minHeight={140}
+                          maxHeight={220}
+                          rows={tryResult.preview_rows.slice(0, cubeQueryController.maxRows)}
+                          rowKeyGetter={(_r, idx) => idx}
+                          columns={(tryResult.columns || []).map((col) => ({
+                            name: col.id,
+                            label: col.label,
+                          }))}
+                        />
+                        <QueryStepStatusFooter
+                          controller={cubeQueryController}
+                          qaKey="cube-try-query-footer"
+                        />
+                      </Box>
                     )}
                   </Stack>
                 ),
@@ -4138,52 +4110,31 @@ export function CubeDesignerSurface({
                     />
                   </FormGrid>
                   {reducerResult?.generated_plans?.length > 0 && (
-                    <ScrollArea label="Generated cuboid plans" sx={{maxHeight: 200}}>
-                      <Box
-                        component="table"
-                        sx={{
-                          width: '100%',
-                          borderCollapse: 'collapse',
-                          fontSize: '0.8125rem',
-                        }}
-                      >
-                        <Box component="thead">
-                          <Box component="tr">
-                            {['Plan ID', 'Grain Dimensions', 'Refresh'].map(
-                              (h) => (
-                                <Box
-                                  key={h}
-                                  component="th"
-                                  sx={{
-                                    textAlign: 'left',
-                                    p: 0.5,
-                                    borderBottom: '1px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  {h}
-                                </Box>
-                              )
-                            )}
-                          </Box>
-                        </Box>
-                        <Box component="tbody">
-                          {reducerResult.generated_plans.map((p) => (
-                            <Box key={p.id} component="tr">
-                              <Box component="td" sx={{p: 0.5}}>
-                                <code>{p.id}</code>
-                              </Box>
-                              <Box component="td" sx={{p: 0.5}}>
-                                {(p.grain_dimensions || []).join(' × ')}
-                              </Box>
-                              <Box component="td" sx={{p: 0.5}}>
-                                {p.refresh_policy} ({p.partition_grain})
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
-                    </ScrollArea>
+                    <UnifiedDataGrid
+                      gridRole="table"
+                      ariaLabel="Generated cuboid plans"
+                      searchable
+                      exportable
+                      minHeight={140}
+                      maxHeight={220}
+                      rows={reducerResult.generated_plans}
+                      rowKeyGetter={(p) => p.id}
+                      columns={[
+                        {name: 'id', label: 'Plan ID', width: 160, mono: true},
+                        {
+                          name: 'grain_dimensions',
+                          label: 'Grain Dimensions',
+                          width: 240,
+                          accessorFn: (p) => (p.grain_dimensions || []).join(' × '),
+                        },
+                        {
+                          name: 'refresh',
+                          label: 'Refresh',
+                          width: 190,
+                          accessorFn: (p) => `${p.refresh_policy} (${p.partition_grain})`,
+                        },
+                      ]}
+                    />
                   )}
                 </Stack>
               ),
@@ -4385,75 +4336,45 @@ export function CubeDesignerSurface({
           </FormGrid>
           {checkConnResult?.dimensions?.length > 0 && (
             <>
-              <ScrollArea label="Dimension probe results" sx={{maxHeight: 200}}>
-                <Box
-                  component="table"
-                  sx={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <Box component="thead">
-                    <Box component="tr">
-                      {[
-                        'Dimension',
-                        'Key',
-                        'Status',
-                        'Dup Keys',
-                        'Orphan FKs',
-                        'Diagnostic',
-                      ].map((h) => (
-                        <Box
-                          key={h}
-                          component="th"
-                          sx={{
-                            textAlign: 'left',
-                            p: 0.5,
-                            borderBottom: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          {h}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                  <Box component="tbody">
-                    {checkConnResult.dimensions.map((d) => (
-                      <Box key={d.dimension_id} component="tr">
-                        <Box component="td" sx={{p: 0.5}}>
-                          <strong>{d.dimension_name || d.dimension_id}</strong>
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          <code>{d.key_field}</code>
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          <StatusBadge
-                            status={
-                              d.status === 'valid'
-                                ? 'success'
-                                : d.status === 'fanout_risk'
-                                  ? 'error'
-                                  : 'warning'
-                            }
-                            label={d.status}
-                          />
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          {d.duplicate_keys}
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          {d.orphan_fact_rows}
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          {d.message}
-                        </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              </ScrollArea>
+              <UnifiedDataGrid
+                gridRole="table"
+                ariaLabel="Dimension probe results"
+                searchable
+                exportable
+                minHeight={140}
+                maxHeight={220}
+                rows={checkConnResult.dimensions}
+                rowKeyGetter={(d) => d.dimension_id}
+                columns={[
+                  {
+                    name: 'dimension_name',
+                    label: 'Dimension',
+                    width: 160,
+                    accessorFn: (d) => d.dimension_name || d.dimension_id,
+                  },
+                  {name: 'key_field', label: 'Key', width: 130, mono: true},
+                  {
+                    name: 'status',
+                    label: 'Status',
+                    width: 120,
+                    render: (_val, d) => (
+                      <StatusBadge
+                        status={
+                          d.status === 'valid'
+                            ? 'success'
+                            : d.status === 'fanout_risk'
+                              ? 'error'
+                              : 'warning'
+                        }
+                        label={d.status}
+                      />
+                    ),
+                  },
+                  {name: 'duplicate_keys', label: 'Dup Keys', width: 95, numeric: true},
+                  {name: 'orphan_fact_rows', label: 'Orphan FKs', width: 95, numeric: true},
+                  {name: 'message', label: 'Diagnostic', width: 240},
+                ]}
+              />
               <Box sx={{height: 160}}>
                 <CodeEditor
                   label="Generated Connection Probe SQL"
