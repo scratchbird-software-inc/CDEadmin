@@ -1,10 +1,11 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Typography} from '@mui/material';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {dashboardPanelFiles} from '../cdeadmin_ui/integrations/ddn/dashboardPanels';
 import MySQLQueryPlan from './MySQLQueryPlan';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 const rankings = {total_latency: 'Total latency', mean_latency: 'Mean latency', executions: 'Execution count',
   rows_examined: 'Rows examined', temporary_tables: 'Temporary tables', disk_temporary_tables: 'Disk temporary tables'};
@@ -36,10 +37,21 @@ export function workloadDashboardFiles(snapshot) {
 
 function NativeRows({rows, label}) {
   const keys = [...new Set((rows || []).flatMap(Object.keys))];
-  return <Box sx={{overflow: 'auto', maxHeight: 400}}><Table size="small" aria-label={label}>
-    <TableHead><TableRow>{keys.map(key => <TableCell key={key}>{key}</TableCell>)}</TableRow></TableHead>
-    <TableBody>{rows?.map((row, index) => <TableRow key={index}>{keys.map(key => <TableCell key={key}>{valueText(row[key])}</TableCell>)}</TableRow>)}</TableBody>
-  </Table>{!rows?.length && <Typography>No retained native rows were observed. Check coverage.</Typography>}</Box>;
+  return <Box sx={{overflow: 'auto', maxHeight: 400}}>
+    <UnifiedDataGrid
+      gridRole="table"
+      ariaLabel={label}
+      rows={(rows || []).map((row, index) => ({
+        id: String(index),
+        ...Object.fromEntries(keys.map(k => [k, valueText(row[k])])),
+      }))}
+      columns={keys.length ? keys.map(key => ({key, name: key})) : [{key: '_empty', name: label}]}
+      compact
+      searchable={false}
+      exportable={false}
+    />
+    {!rows?.length && <Typography>No retained native rows were observed. Check coverage.</Typography>}
+  </Box>;
 }
 NativeRows.propTypes = {rows: PropTypes.array, label: PropTypes.string};
 
@@ -90,13 +102,29 @@ export default function MySQLWorkload({post, databaseTargetId=null}) {
       <Alert severity={digests?.status === 'available' ? 'info' : 'warning'}>Digest source: {digests?.status || 'Unavailable'}.
         {digests?.truncated ? ' Showing the top 100; more native digests exist.' : ''}
         {' '}A NULL digest is the native overflow bucket and cannot be drilled into. Empty or disabled instrumentation does not mean no workload.</Alert>
-      <Box sx={{overflow: 'auto', maxHeight: 440}}><Table size="small" aria-label="Ranked native statement digests">
-        <TableHead><TableRow><TableCell>Inspect</TableCell>{Object.values(fields).map(label => <TableCell key={label} sx={{whiteSpace: 'nowrap'}}>{label}</TableCell>)}</TableRow></TableHead>
-        <TableBody>{digests?.rows?.map((row, index) => <TableRow key={index} selected={selected === row}>
-          <TableCell><Button size="small" disabled={busy || !row.digest} aria-label={`Inspect digest ${index + 1}`} onClick={() => choose(row)}>Inspect</Button></TableCell>
-          {Object.keys(fields).map(key => <TableCell key={key} sx={{whiteSpace: key === 'digest_text' ? 'pre-wrap' : 'nowrap', minWidth: key === 'digest_text' ? 260 : undefined}}>{valueText(row[key])}</TableCell>)}
-        </TableRow>)}</TableBody>
-      </Table></Box>
+      <Box sx={{overflow: 'auto', maxHeight: 440}}>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Ranked native statement digests"
+          rows={(digests?.rows || []).map((row, index) => ({
+            id: String(index),
+            _idx: index,
+            _raw: row,
+            ...Object.fromEntries(Object.keys(fields).map(key => [key, valueText(row[key])])),
+          }))}
+          columns={[
+            {
+              key: '_inspect',
+              name: 'Inspect',
+              render: (_val, r) => <Button size="small" disabled={busy || !r._raw.digest} aria-label={`Inspect digest ${r._idx + 1}`} onClick={() => choose(r._raw)}>Inspect</Button>,
+            },
+            ...Object.entries(fields).map(([key, label]) => ({key, name: label})),
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+      </Box>
       <Box sx={{height: 480, overflow: 'auto', my: 1}}><DDNViewerSurface presentation files={files} entry="dashboard.ddn" view="dashboard" /></Box>
       <Box component="details"><Box component="summary">All native wait and index observations / coverage</Box>
         {['workload_waits', 'workload_indexes', 'workload_consumers', 'workload_instruments', 'workload_settings', 'workload_epoch'].map(name => <Box key={name}>

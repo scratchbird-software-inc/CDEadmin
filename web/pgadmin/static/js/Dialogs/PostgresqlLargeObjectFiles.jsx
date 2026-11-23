@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,MenuItem,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['reviewing','dispatching','active','cancel_requested']);
 const CHUNK=1024*1024;
@@ -94,10 +96,41 @@ export default function PostgresqlLargeObjectFiles({post,databaseTargetId,endpoi
       <Button disabled={busy} onClick={() => load(page)}>Load file transfer receipts</Button>
     </Box>
     {catalog && <>
-      <Table size="small" aria-label="PostgreSQL file transfers"><TableHead><TableRow>{['File','Operation','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead>
-        <TableBody>{catalog.jobs.map(item => <TableRow key={item.job_id}><TableCell>{item.options.filename}</TableCell><TableCell>{item.options.operation}</TableCell><TableCell>{item.state}</TableCell>
-          <TableCell><Button disabled={busy} onClick={() => run('status',{job_id:item.job_id})}>Inspect {item.job_id}</Button></TableCell></TableRow>)}</TableBody></Table>
-      <TablePagination component="div" count={catalog.total} page={page} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="PostgreSQL file transfers"
+        rows={(catalog.jobs || []).map(item => ({
+          id: item.job_id,
+          filename: item.options.filename,
+          operation: item.options.operation,
+          state: item.state,
+          _raw: item,
+        }))}
+        columns={[
+          {key: 'filename', name: 'File'},
+          {key: 'operation', name: 'Operation'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} onClick={() => run('status',{job_id:row._raw.job_id})}>Inspect {row._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={page}
+        pages={Math.max(1, Math.ceil((catalog.total || 0) / 25))}
+        endKnown
+        canNext={(page + 1) * 25 < (catalog.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, page - 1))}
+        onNext={() => load(page + 1)}
+        onLast={() => load(Math.max(0, Math.ceil((catalog.total || 0) / 25) - 1))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.state==='committed' ? 'success' : ['unknown','failed','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>

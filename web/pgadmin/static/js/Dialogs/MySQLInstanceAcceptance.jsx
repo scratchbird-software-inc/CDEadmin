@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId,targetUuid,targetConfirmation}) {
@@ -50,18 +52,63 @@ export default function MySQLInstanceAcceptance({post,sourceServerId,backupJobId
     </Box>}
     <Button disabled={busy} onClick={()=>load(0)}>Load independent acceptance jobs</Button>
     {page && <>
-      <Table size="small" aria-label="Independent acceptance jobs"><TableHead><TableRow>{['Job','Target','State','Inspect'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {page.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.target.server_uuid}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy} onClick={()=>run('status',{job_id:row.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect acceptance {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={page.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page.offset/25} onPageChange={(_event,next)=>load(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Independent acceptance jobs"
+        rows={(page.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          server_uuid: row.target.server_uuid,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'server_uuid', name: 'Target'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={()=>run('status',{job_id:r._raw.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect acceptance {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((page.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((page.total || 0) / 25))}
+        endKnown
+        canNext={(page.offset || 0) + 25 < (page.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (page.offset || 0) - 25))}
+        onNext={() => load((page.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((page.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.acceptance_outcome==='matched' ? 'success' : ['not_matched','unconfirmed'].includes(receipt.acceptance_outcome) ? 'warning' : 'info'}>Independent acceptance {receipt.job_id}: {receipt.state}. Recorded outcome: {receipt.acceptance_outcome}. No restore was issued.</Alert>
       {receipt.physical_recovery && <Alert severity="info">Managed physical recovery {receipt.physical_recovery.job_id}: comparison against the selected expected dump. This does not authorize production cutover.</Alert>}
       {receipt.native_error_code && <Alert severity="error">Native acceptance failure code: {receipt.native_error_code}</Alert>}
       {receipt.result && <>
-        <Table size="small" aria-label="Recorded dump acceptance surfaces"><TableHead><TableRow><TableCell>Exported surface</TableCell><TableCell>Recorded result</TableCell></TableRow></TableHead><TableBody>
-          {['data','definitions','accounts','system_state'].map(key=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{!receipt.result[key]?.requested ? 'Not exported / not checked' : receipt.result[key]?.matched===true ? 'Matched' : receipt.result[key]?.matched===false ? 'Different' : 'Unconfirmed'}</TableCell></TableRow>)}
-        </TableBody></Table>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Recorded dump acceptance surfaces"
+          rows={['data','definitions','accounts','system_state'].map(key => ({
+            id: key,
+            surface: key,
+            result: !receipt.result[key]?.requested ? 'Not exported / not checked' : receipt.result[key]?.matched===true ? 'Matched' : receipt.result[key]?.matched===false ? 'Different' : 'Unconfirmed',
+          }))}
+          columns={[
+            {key: 'surface', name: 'Exported surface'},
+            {key: 'result', name: 'Recorded result'},
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
         {receipt.result.server_locks_released===false && (receipt.recovery_fence_release_confirmed===true ?
           <Alert severity="info">The original unlock replies were unconfirmed. A later native observation confirmed that the private SQL session and its server locks are gone. Original check results are unchanged.</Alert> :
           <Alert severity="warning">Private server-lock cleanup is unconfirmed. Target protection remains active. Observe the acceptance target to check the original private SQL session.</Alert>)}

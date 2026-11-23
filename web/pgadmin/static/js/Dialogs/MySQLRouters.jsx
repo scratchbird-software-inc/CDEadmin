@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const initial={connection:{host:'',port:22,username:'',host_key:'',authentication:'password',platform:'posix',python:'python3'},
@@ -96,7 +98,43 @@ export default function MySQLRouters({post}) {
       <FormControlLabel label="Authorize the exact reviewed native Router request" control={<Checkbox checked={confirmed} disabled={busy || review.state!=='reviewed'} onChange={event=>setConfirmed(event.target.checked)} />} />
       <Button disabled={busy || !confirmed || review.state!=='reviewed'} onClick={()=>run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials(),...secret()},value=>{setReceipt(value);setReview(null);setConfirmed(false);clearSecrets();})}>Confirm native Router request</Button>
     </Box>}
-    {jobs && <Box><Table size="small" aria-label="Native Router receipts"><TableHead><TableRow><TableCell>Job</TableCell><TableCell>Operation</TableCell><TableCell>State</TableCell><TableCell>Inspect</TableCell></TableRow></TableHead><TableBody>{jobs.jobs.map(job=><TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.options.operation || 'bootstrap'}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button aria-label={'Inspect Router job '+job.job_id} onClick={()=>run('status',{job_id:job.job_id},inspect)}>Inspect</Button></TableCell></TableRow>)}</TableBody></Table><TablePagination component="div" count={jobs.total} page={Math.floor(jobs.offset/25)} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_event,page)=>load(page*25)} /></Box>}
+    {jobs && <Box>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native Router receipts"
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          operation: job.options.operation || 'bootstrap',
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'operation', name: 'Operation'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button aria-label={'Inspect Router job '+r._raw.job_id} onClick={()=>run('status',{job_id:r._raw.job_id},inspect)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => load((jobs.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
+    </Box>}
     {receipt && <Box>
       <Alert severity={receipt.state==='unknown' ? 'warning' : 'info'}>Native Router job {receipt.job_id}: {receipt.state}. Original SSH acknowledgement: {receipt.ssh_reply_observed ? 'observed' : 'unconfirmed'}. Routed SQL readiness is unconfirmed by this receipt.</Alert>
       <Button disabled={busy} onClick={()=>run('reconcile',{job_id:receipt.job_id,credentials:credentials()},setReceipt)}>Inspect original Router invocation</Button>

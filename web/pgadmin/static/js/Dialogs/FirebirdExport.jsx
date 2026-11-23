@@ -1,10 +1,12 @@
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Table, TableBody, TableCell, TableHead, TableRow, TablePagination} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import gettext from 'sources/gettext';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import {DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 import FirebirdSchemaPlan from './FirebirdSchemaPlan';
 import FirebirdERD from './FirebirdERD';
 import FirebirdDataImport from './FirebirdDataImport';
@@ -152,12 +154,22 @@ export default function FirebirdExport({post, generation, selectedResource, reso
       {(sqlResult.provenance.warnings || []).map((warning, index) => <Alert severity="warning" key={index}>{warning}</Alert>)}
       {sqlResult.blockers.map((item, index) => <Alert severity="error" key={index}>{item.kind}: {item.name} — {item.reason}</Alert>)}
       {sqlResult.external_prerequisites.map((item, index) => <Alert severity="warning" key={index}>{gettext('External prerequisite')}: {item.name} ({item.kinds.join(', ')})</Alert>)}
-      {!!sqlResult.ownership_requirements.length && <Table size="small" aria-label={gettext('Metadata ownership requirements')}>
-        <TableHead><TableRow><TableCell>{gettext('Resource')}</TableCell><TableCell>{gettext('Create as user')}</TableCell></TableRow></TableHead>
-        <TableBody>{sqlResult.ownership_requirements.map(item => <TableRow key={item.resource_id}>
-          <TableCell>{item.resource_id}</TableCell><TableCell>{item.execute_as_user}</TableCell>
-        </TableRow>)}</TableBody>
-      </Table>}
+      {!!sqlResult.ownership_requirements.length && <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={gettext('Metadata ownership requirements')}
+        rows={sqlResult.ownership_requirements.map(item => ({
+          id: item.resource_id,
+          resource_id: item.resource_id,
+          execute_as_user: item.execute_as_user,
+        }))}
+        columns={[
+          {key: 'resource_id', name: gettext('Resource')},
+          {key: 'execute_as_user', name: gettext('Create as user')},
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />}
       {sqlResult.download_text && <>
         <Button onClick={() => download(sqlResult)}>{gettext('Download native SQL')}</Button>
         <TextField multiline minRows={6} maxRows={18} label={gettext('Native metadata SQL')} value={sqlResult.download_text} InputProps={{readOnly: true}} />
@@ -166,14 +178,36 @@ export default function FirebirdExport({post, generation, selectedResource, reso
     {comparison && <>
       {(comparison.warnings || []).map((warning, index) => <Alert severity="warning" key={index}>{warning}</Alert>)}
       <Box>{Object.entries(comparison.counts).map(([key, count]) => `${key}: ${count}`).join(' · ')}</Box>
-      <Table size="small" aria-label={gettext('Catalog differences')}>
-        <TableHead><TableRow>{['Object', 'Native kind', 'Difference', 'Changed fields'].map((label) => <TableCell key={label}>{gettext(label)}</TableCell>)}</TableRow></TableHead>
-        <TableBody>{comparison.changes.slice(page * 50, (page + 1) * 50).map((item) => <TableRow key={item.resource_id}>
-          <TableCell>{item.name}</TableCell><TableCell>{item.kind}</TableCell><TableCell>{item.status}</TableCell><TableCell>{item.fields.join(', ')}</TableCell>
-        </TableRow>)}</TableBody>
-      </Table>
-      <TablePagination component="div" count={comparison.changes.length} page={page} rowsPerPage={50}
-        rowsPerPageOptions={[50]} onPageChange={(_event, value) => setPage(value)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={gettext('Catalog differences')}
+        rows={comparison.changes.slice(page * 50, (page + 1) * 50).map((item) => ({
+          id: item.resource_id,
+          name: item.name,
+          kind: item.kind,
+          status: item.status,
+          fields: item.fields.join(', '),
+        }))}
+        columns={[
+          {key: 'name', name: gettext('Object')},
+          {key: 'kind', name: gettext('Native kind')},
+          {key: 'status', name: gettext('Difference')},
+          {key: 'fields', name: gettext('Changed fields')},
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        page={page}
+        pages={Math.max(1, Math.ceil(comparison.changes.length / 50))}
+        endKnown
+        canNext={(page + 1) * 50 < comparison.changes.length}
+        onFirst={() => setPage(0)}
+        onPrevious={() => setPage(Math.max(0, page - 1))}
+        onNext={() => setPage(page + 1)}
+        onLast={() => setPage(Math.max(0, Math.ceil(comparison.changes.length / 50) - 1))}
+      />
     </>}
     {result && <>
       <Alert severity={result.provenance.coverage === 'visible-catalog' ? 'info' : 'warning'}>

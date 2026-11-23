@@ -1,7 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
 import FirebirdBlobChunk from './FirebirdBlobChunk';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Table, TableBody, TableCell, TableHead, TableRow} from '@mui/material';
+import {Box} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
+import {Banner} from '../cdeadmin_ui/feedback/Indicators';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import gettext from 'sources/gettext';
 import {saveFirebirdBlob} from './firebirdBlobFile';
 import {saveFirebirdArray} from './firebirdArrayFile';
@@ -285,16 +288,16 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
           uploadFile(file, 'array');
         }} />
     </label>
-    {(upload?.blob_upload || upload?.array_upload) && <Alert severity="info">
+    {(upload?.blob_upload || upload?.array_upload) && <Banner tone="info">
       {gettext('Use this object as one query parameter. The upload is consumed once; transaction commit or rollback remains explicit.')}
       {' '}{gettext('Staged uploads expire after five minutes without stream requests.')}
       <code>{JSON.stringify(upload)}</code>
-    </Alert>}
-    {owned && <Alert severity="info">
+    </Banner>}
+    {owned && <Banner tone="info">
       {gettext('Pull-based pages: at most 100 rows per fetch. Advancing discards the previous page and its BLOB and ARRAY references. Close the stream before other session operations. Closing does not commit or roll back. Cancellation does not confirm rollback.')}
       {' '}{gettext('Stream resources expire after five idle minutes. An expired stream must be closed. Expiry does not commit or roll back the transaction.')}
-    </Alert>}
-    {error && <Alert severity="error">{error}</Alert>}
+    </Banner>}
+    {error && <Banner tone="error">{error}</Banner>}
     {download && <Box role="status">
       {download.portable ? <>{download.sent ? gettext('File sent to browser. Verify completion in browser downloads. Bytes:') : gettext('File delivery bytes:')} {download.bytes}</> : download.kind === 'array' ? <>
         {download.saved ? gettext('ARRAY file saved. Elements:') : gettext('ARRAY elements written:')} {download.elements}
@@ -303,26 +306,34 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
         if (downloadTask.current) downloadTask.current.stopped = true;
       }}>{download.portable ? gettext('Stop file delivery') : download.kind === 'array' ? gettext('Stop ARRAY save') : gettext('Stop BLOB save')}</Button>}
     </Box>}
-    {page && typeof window.showSaveFilePicker !== 'function' && <Alert severity="info">
+    {page && typeof window.showSaveFilePicker !== 'function' && <Banner tone="info">
       {gettext('Use Download to browser for complete BLOB and ARRAY files. The browser controls the destination and partial-file cleanup.')}
-    </Alert>}
+    </Banner>}
     {page && <>
       <div>{gettext('Rows fetched:')} {page.rows_read}
         {page.end_of_cursor ? ' — ' + gettext('End of cursor') : ''}</div>
-      <Box sx={{overflow: 'auto', maxHeight: 480}}>
-        <Table size="small" aria-label={gettext('Streaming rows')}>
-          <TableHead><TableRow>{page.columns.map((column, i) =>
-            <TableCell key={i}>{column.name}</TableCell>)}</TableRow></TableHead>
-          <TableBody>{page.rows.map((row, i) => <TableRow key={i}>
-            {row.map((value, j) => <TableCell key={j}>
-              {value?.blob_reference ? <><Button disabled={busy || blobOffsets.current[value.blob_reference]?.complete}
-                onClick={() => run('blob', value.blob_reference)}>
-                {gettext('Read BLOB chunk')}</Button>
-              {typeof window.showSaveFilePicker === 'function' && <Button
-                disabled={busy || !!blobOffsets.current[value.blob_reference]}
-                onClick={() => saveBlob(value.blob_reference)}>{gettext('Save BLOB to file')}</Button>}
-              {downloadUrl && <Button disabled={busy || !!blobOffsets.current[value.blob_reference]}
-                onClick={() => browserDownload('blob', value.blob_reference)}>{gettext('Download BLOB to browser')}</Button>}
+      <Box style={{overflow: 'auto', maxHeight: 480}}>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel={gettext('Streaming rows')}
+          rows={(page.rows || []).map((row, i) => ({
+            id: String(i),
+            _raw: row,
+          }))}
+          columns={(page.columns || []).map((column, j) => ({
+            key: `c_${j}`,
+            name: column.name,
+            render: (_val, rowObj) => {
+              const value = rowObj._raw[j];
+              return value?.blob_reference ? <>
+                <Button disabled={busy || blobOffsets.current[value.blob_reference]?.complete}
+                  onClick={() => run('blob', value.blob_reference)}>
+                  {gettext('Read BLOB chunk')}</Button>
+                {typeof window.showSaveFilePicker === 'function' && <Button
+                  disabled={busy || !!blobOffsets.current[value.blob_reference]}
+                  onClick={() => saveBlob(value.blob_reference)}>{gettext('Save BLOB to file')}</Button>}
+                {downloadUrl && <Button disabled={busy || !!blobOffsets.current[value.blob_reference]}
+                  onClick={() => browserDownload('blob', value.blob_reference)}>{gettext('Download BLOB to browser')}</Button>}
               </> : value?.array_reference ? <>
                 <div>{gettext('ARRAY bounds:')} {JSON.stringify(value.bounds)}</div>
                 <div>{gettext('Elements:')} {value.element_count}</div>
@@ -333,10 +344,13 @@ export default function FirebirdResultStream({post, ensureSession, databaseTarge
                   onClick={() => saveArray(value)}>{gettext('Save ARRAY to file')}</Button>}
                 {downloadUrl && <Button disabled={busy || !!arrayOffsets.current[value.array_reference]}
                   onClick={() => browserDownload('array', value.array_reference)}>{gettext('Download ARRAY to browser')}</Button>}
-              </> : JSON.stringify(value)}
-            </TableCell>)}
-          </TableRow>)}</TableBody>
-        </Table>
+              </> : JSON.stringify(value);
+            },
+          }))}
+          compact
+          searchable={false}
+          exportable={false}
+        />
       </Box>
     </>}
     {chunk?.blob_reference && <Box>

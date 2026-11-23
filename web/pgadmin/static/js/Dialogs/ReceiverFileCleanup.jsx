@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,Table,TableBody,TableCell,TableHead,TableRow} from '@mui/material';
+import {Alert,Box,Button,Checkbox} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 
@@ -38,9 +39,28 @@ export default function ReceiverFileCleanup({post,engine,receiverJobId}) {
     <Button disabled={busy} onClick={() => inspect(null)}>Inspect private receiver files</Button>
     <Button disabled={busy} onClick={() => load(0)}>Load private cleanup receipts</Button>
     {catalog && <>
-      <Table size="small" aria-label="Private receiver files"><TableHead><TableRow><TableCell>Select</TableCell><TableCell>File</TableCell><TableCell>Bytes</TableCell></TableRow></TableHead><TableBody>
-        {catalog.files.map(row => <TableRow key={row.name}><TableCell><Checkbox inputProps={{'aria-label':'Remove '+row.name}} disabled={busy} checked={files.includes(row.name)} onChange={event => {setFiles(current => event.target.checked ? [...current,row.name] : current.filter(name => name!==row.name));setReview(null);}} /></TableCell><TableCell>{row.name}</TableCell><TableCell>{row.bytes}</TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Private receiver files"
+        rows={(catalog.files || []).map(row => ({
+          id: row.name,
+          name: row.name,
+          bytes: row.bytes,
+          _raw: row,
+        }))}
+        columns={[
+          {
+            key: '_select',
+            name: 'Select',
+            render: (_val, row) => <Checkbox inputProps={{'aria-label':'Remove '+row._raw.name}} disabled={busy} checked={files.includes(row._raw.name)} onChange={event => {setFiles(current => event.target.checked ? [...current,row._raw.name] : current.filter(name => name!==row._raw.name));setReview(null);}} />,
+          },
+          {key: 'name', name: 'File'},
+          {key: 'bytes', name: 'Bytes'},
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
       <Button disabled={busy} onClick={() => inspect(null)}>First private-file page</Button>
       <Button disabled={busy || !catalog.more} onClick={() => inspect(catalog.next_after)}>Next private-file page</Button>
       <Button disabled={busy || !files.length} onClick={() => run('review',{job_id:receiverJobId,file_names:files},setReview)}>Review private-file removal</Button>

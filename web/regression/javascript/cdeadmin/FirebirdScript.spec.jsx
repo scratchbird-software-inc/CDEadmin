@@ -1,4 +1,4 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import FirebirdScript from '../../../pgadmin/static/js/Dialogs/FirebirdScript';
 
 const preview = {total_entries: 2, entries: [
@@ -46,11 +46,11 @@ describe('Firebird script workspace', () => {
     render(<FirebirdScript {...props} />);
     expect(screen.getByText(/A script outcome is unknown/)).toBeVisible();
     expect(screen.getByText(/Entries marked not_run/)).toBeVisible();
-    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(100);
+    expect(within(screen.getByRole('table')).getAllByRole('row').slice(1)).toHaveLength(100);
     fireEvent.click(screen.getByRole('button', {name: 'Next result page'}));
-    expect(screen.getByRole('table').querySelector('tbody td')).toHaveTextContent('100');
+    expect(within(screen.getByRole('table')).getAllByRole('cell')[0]).toHaveTextContent('100');
     fireEvent.click(screen.getByRole('button', {name: 'Next result page'}));
-    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(within(screen.getByRole('table')).getAllByRole('row').slice(1)).toHaveLength(1);
     expect(props.onRun).not.toHaveBeenCalled();
     expect(props.onPreview).not.toHaveBeenCalled();
   });

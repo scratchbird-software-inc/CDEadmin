@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function MySQLRetentionSchedule({post,prefix,sourceArchive,days,keep,onOccurrence}) {
   const [interval,setIntervalMinutes]=useState(60),[lifetime,setLifetime]=useState(30);
@@ -51,9 +52,30 @@ export default function MySQLRetentionSchedule({post,prefix,sourceArchive,days,k
       <Button disabled={busy || !ack || review.state!=='reviewed'} onClick={() => run('enable',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));})}>Confirm and enable scheduled retention</Button>
     </Box>}
     {page && <Box>
-      <Table size="small" aria-label="Scheduled retention policies"><TableHead><TableRow><TableCell>Policy</TableCell><TableCell>State</TableCell><TableCell>Source</TableCell><TableCell>Inspect</TableCell></TableRow></TableHead><TableBody>
-        {page.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.state}</TableCell><TableCell>{job.source.server_uuid}</TableCell><TableCell><Button disabled={busy} onClick={() => run('status',{job_id:job.job_id},setReceipt)}>Inspect policy {job.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Scheduled retention policies"
+        rows={(page.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          state: job.state,
+          server_uuid: job.source.server_uuid,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Policy'},
+          {key: 'state', name: 'State'},
+          {key: 'server_uuid', name: 'Source'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={() => run('status',{job_id:r._raw.job_id},setReceipt)}>Inspect policy {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
       <Button disabled={busy || page.offset===0} onClick={() => load(Math.max(0,page.offset-25))}>Previous retention policies</Button>
       <Button disabled={busy || !page.more} onClick={() => load(page.offset+25)}>Next retention policies</Button>
       {page.unavailable_job_ids?.length>0 && <Alert severity="warning">Some policy receipts could not be read.</Alert>}

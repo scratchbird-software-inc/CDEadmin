@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
@@ -101,12 +102,49 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
       <Button disabled={busy} onClick={() => {setStart(null);setStop(null);setMode('all');setReview(null);}}>Use whole archive</Button>
       <Box>Start: {start ? start.file+' @ '+start.position : 'archive beginning'}. Stop: {mode==='all' ? 'archive end' : mode+' '+(stop ? stop.file+' @ '+stop.position : 'select a native group')}.</Box>
       {boundaries && <>
-        <Table size="small" aria-label="Native raw transaction groups"><TableHead><TableRow>{['Group','File','Position','Event time (UTC)','Native group','Selection'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>{boundaries.groups.map((group,index) => <TableRow key={group.file+'@'+group.position}><TableCell>{boundaries.offset+index+1}</TableCell><TableCell>{group.file}</TableCell><TableCell>{group.position}</TableCell><TableCell>{group.event_time_utc}</TableCell><TableCell>{group.event_type===34 ? 'anonymous' : group.event_type===42 ? 'tagged GTID' : 'GTID'}</TableCell><TableCell>
-          <Button disabled={busy || !['OFF','OFF_PERMISSIVE'].includes(target?.state?.gtid_mode)} aria-label={'Start raw replay at '+group.file+'@'+group.position} onClick={() => {setStart(group);setReview(null);}}>Start here</Button>
-          <Button disabled={busy} aria-label={'Stop raw replay before '+group.file+'@'+group.position} onClick={() => {setStop(group);setMode('before');setReview(null);}}>Stop before</Button>
-          <Button disabled={busy} aria-label={'Stop raw replay after '+group.file+'@'+group.position} onClick={() => {setStop(group);setMode('after');setReview(null);}}>Stop after</Button>
-        </TableCell></TableRow>)}</TableBody></Table>
-        <TablePagination component="div" count={boundaries.total} rowsPerPage={100} rowsPerPageOptions={[100]} page={boundaries.offset/100} onPageChange={(_event,next) => loadBoundaries(next*100)} />
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Native raw transaction groups"
+          rows={(boundaries.groups || []).map((group, index) => ({
+            id: `${group.file}@${group.position}`,
+            ordinal: boundaries.offset + index + 1,
+            file: group.file,
+            position: group.position,
+            event_time_utc: group.event_time_utc,
+            native_group: group.event_type===34 ? 'anonymous' : group.event_type===42 ? 'tagged GTID' : 'GTID',
+            _raw: group,
+          }))}
+          columns={[
+            {key: 'ordinal', name: 'Group'},
+            {key: 'file', name: 'File'},
+            {key: 'position', name: 'Position'},
+            {key: 'event_time_utc', name: 'Event time (UTC)'},
+            {key: 'native_group', name: 'Native group'},
+            {
+              key: '_selection',
+              name: 'Selection',
+              render: (_val, row) => <>
+                <Button disabled={busy || !['OFF','OFF_PERMISSIVE'].includes(target?.state?.gtid_mode)} aria-label={'Start raw replay at '+row._raw.file+'@'+row._raw.position} onClick={() => {setStart(row._raw);setReview(null);}}>Start here</Button>
+                <Button disabled={busy} aria-label={'Stop raw replay before '+row._raw.file+'@'+row._raw.position} onClick={() => {setStop(row._raw);setMode('before');setReview(null);}}>Stop before</Button>
+                <Button disabled={busy} aria-label={'Stop raw replay after '+row._raw.file+'@'+row._raw.position} onClick={() => {setStop(row._raw);setMode('after');setReview(null);}}>Stop after</Button>
+              </>,
+            },
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+        <GridNavigation
+          busy={busy}
+          page={Math.floor((boundaries.offset || 0) / 100)}
+          pages={Math.max(1, Math.ceil((boundaries.total || 0) / 100))}
+          endKnown
+          canNext={(boundaries.offset || 0) + 100 < (boundaries.total || 0)}
+          onFirst={() => loadBoundaries(0)}
+          onPrevious={() => loadBoundaries(Math.max(0, (boundaries.offset || 0) - 100))}
+          onNext={() => loadBoundaries((boundaries.offset || 0) + 100)}
+          onLast={() => loadBoundaries(Math.max(0, (Math.ceil((boundaries.total || 0) / 100) - 1) * 100))}
+        />
         <Box>Times describe event headers; they are not commit-time recovery targets. Sealed bytes and selected boundaries are checked before execution.</Box>
       </>}
     </Box>}
@@ -123,8 +161,41 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setFacts(null);setAck('');setReview(current => ({...current,state:value.state}));})}>Confirm and start replay</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label={'Native '+(engine==='mariadb' ? 'MariaDB' : 'MySQL')+' replay jobs'}><TableHead><TableRow>{['Job','State','Native load','Receipt'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>{jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.state}</TableCell><TableCell>{job.native_load_outcome}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect replay '+job.job_id} onClick={() => inspect(job)}>Inspect</Button></TableCell></TableRow>)}</TableBody></Table>
-      <TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next) => loadJobs(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={'Native '+(engine==='mariadb' ? 'MariaDB' : 'MySQL')+' replay jobs'}
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          state: job.state,
+          native_load_outcome: job.native_load_outcome,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'state', name: 'State'},
+          {key: 'native_load_outcome', name: 'Native load'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} aria-label={'Inspect replay '+row._raw.job_id} onClick={() => inspect(row._raw)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => loadJobs(0)}
+        onPrevious={() => loadJobs(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => loadJobs((jobs.offset || 0) + 25)}
+        onLast={() => loadJobs(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
       {jobs.unavailable_job_ids?.length>0 && <Alert severity="warning">Some replay receipts are unavailable: {jobs.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {receipt && <Box sx={{my:1}}>

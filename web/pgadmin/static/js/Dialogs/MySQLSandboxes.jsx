@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLSandboxes({post}) {
@@ -81,9 +83,43 @@ export default function MySQLSandboxes({post}) {
     </Box>}
     <Button disabled={busy} onClick={()=>loadJobs(0)}>Load native sandbox jobs</Button>
     {jobs && <>
-      <Table size="small" aria-label="Native sandbox jobs"><TableHead><TableRow>{['Job','Method','Port','State','Inspect'].map(value=><TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.options.operation}</TableCell><TableCell>{row.sandbox.port}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy} onClick={()=>run('status',{job_id:row.job_id},value=>{setReceipt(value);setObserved(null);})}>Inspect sandbox job {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next)=>loadJobs(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native sandbox jobs"
+        rows={(jobs.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          operation: row.options.operation,
+          port: row.sandbox.port,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'operation', name: 'Method'},
+          {key: 'port', name: 'Port'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={()=>run('status',{job_id:r._raw.job_id},value=>{setReceipt(value);setObserved(null);})}>Inspect sandbox job {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => loadJobs(0)}
+        onPrevious={() => loadJobs(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => loadJobs((jobs.offset || 0) + 25)}
+        onLast={() => loadJobs(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.native_operation_outcome==='unknown' ? 'warning' : 'info'}>Native sandbox job {receipt.job_id}: {receipt.state}. Original native outcome: {receipt.native_operation_outcome}. SQL readiness is unverified.</Alert>

@@ -1,7 +1,9 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TablePagination,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 function example(operation,member) {
@@ -101,9 +103,47 @@ export default function MySQLTopologies({post:basePost}) {
     {operation?.option_names && <Alert severity="info">Native option names: {operation.option_names.join(', ')}. Router tags are managed through native routing options.</Alert>}
     <Button disabled={busy} onClick={()=>loadMembers(0)}>Load registered topology instances</Button>
     {members && <>
-      <Table size="small" aria-label="Registered topology instances"><TableHead><TableRow><TableCell>ID</TableCell><TableCell>Instance</TableCell><TableCell>Use</TableCell><TableCell>Recovery observation</TableCell></TableRow></TableHead><TableBody>
-        {members.instances.map(row=><TableRow key={row.server_id}><TableCell>{row.server_id}</TableCell><TableCell>{row.name}</TableCell><TableCell><Button disabled={busy} onClick={()=>{setMember(row);setReview(null);}}>Select topology instance {row.name}</Button><Button disabled={busy} onClick={()=>setExecution(row)}>Use execution registration {row.name}</Button></TableCell><TableCell><Checkbox disabled={busy} inputProps={{'aria-label':'Observe recovery member '+row.name}} checked={witnessIds.includes(row.server_id)} onChange={event=>{setWitnessIds(current=>event.target.checked ? [...current,row.server_id] : current.filter(value=>value!==row.server_id));setReview(null);}} /></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={members.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={members.offset/25} onPageChange={(_event,next)=>loadMembers(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Registered topology instances"
+        rows={(members.instances || []).map(row => ({
+          id: String(row.server_id),
+          server_id: row.server_id,
+          name: row.name,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'server_id', name: 'ID'},
+          {key: 'name', name: 'Instance'},
+          {
+            key: '_use',
+            name: 'Use',
+            render: (_val, r) => <>
+              <Button disabled={busy} onClick={()=>{setMember(r._raw);setReview(null);}}>Select topology instance {r._raw.name}</Button>
+              <Button disabled={busy} onClick={()=>setExecution(r._raw)}>Use execution registration {r._raw.name}</Button>
+            </>,
+          },
+          {
+            key: '_obs',
+            name: 'Recovery observation',
+            render: (_val, r) => <Checkbox disabled={busy} inputProps={{'aria-label':'Observe recovery member '+r._raw.name}} checked={witnessIds.includes(r._raw.server_id)} onChange={event=>{setWitnessIds(current=>event.target.checked ? [...current,r._raw.server_id] : current.filter(value=>value!==r._raw.server_id));setReview(null);}} />,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((members.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((members.total || 0) / 25))}
+        endKnown
+        canNext={(members.offset || 0) + 25 < (members.total || 0)}
+        onFirst={() => loadMembers(0)}
+        onPrevious={() => loadMembers(Math.max(0, (members.offset || 0) - 25))}
+        onNext={() => loadMembers((members.offset || 0) + 25)}
+        onLast={() => loadMembers(Math.max(0, (Math.ceil((members.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
     <Alert severity="info">For native SQL fanout or clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
@@ -152,9 +192,41 @@ export default function MySQLTopologies({post:basePost}) {
     </Box>}
     <Button disabled={busy} onClick={()=>loadJobs(0)}>Load native topology jobs</Button>
     {jobs && <>
-      <Table size="small" aria-label="Native topology jobs"><TableHead><TableRow>{['Job','Method','State','Inspect'].map(value=><TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.options.operation}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy} onClick={()=>run('status',{job_id:row.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect topology job {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next)=>loadJobs(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native topology jobs"
+        rows={(jobs.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          operation: row.options.operation,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'operation', name: 'Method'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={()=>run('status',{job_id:r._raw.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect topology job {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => loadJobs(0)}
+        onPrevious={() => loadJobs(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => loadJobs((jobs.offset || 0) + 25)}
+        onLast={() => loadJobs(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.native_operation_outcome==='unknown' ? 'warning' : 'info'}>Native topology job {receipt.job_id}: {receipt.state}. Original operation outcome: {receipt.native_operation_outcome}. Workload readiness is unverified.</Alert>
@@ -177,9 +249,24 @@ export default function MySQLTopologies({post:basePost}) {
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('reconcile',{job_id:receipt.job_id},value=>{setReceipt(value);setObservation(value.observation_digest);})}>Observe current topology target</Button>
       {recovery && <>
         <Alert severity={recovery.qualified && recovery.idle ? 'info' : 'warning'}>{recovery.qualified && recovery.idle ? 'Original native utility sessions have ended and observed clone activity is idle. The original operation outcome is unchanged.' : 'Server-side recovery clearance is unconfirmed. The native target remains protected.'}</Alert>
-        <Table size="small" aria-label="Native recovery member observations"><TableHead><TableRow><TableCell>Member</TableCell><TableCell>Visibility</TableCell><TableCell>Idle</TableCell></TableRow></TableHead><TableBody>
-          {Object.entries(recovery.targets || {}).map(([key,value])=><TableRow key={key}><TableCell>{key}</TableCell><TableCell>{value.qualified ? 'Observed' : 'Unconfirmed'}</TableCell><TableCell>{value.idle===true ? 'Yes' : value.idle===false ? 'No' : 'Unconfirmed'}</TableCell></TableRow>)}
-        </TableBody></Table>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Native recovery member observations"
+          rows={Object.entries(recovery.targets || {}).map(([key, value]) => ({
+            id: key,
+            member: key,
+            visibility: value.qualified ? 'Observed' : 'Unconfirmed',
+            idle: value.idle===true ? 'Yes' : value.idle===false ? 'No' : 'Unconfirmed',
+          }))}
+          columns={[
+            {key: 'member', name: 'Member'},
+            {key: 'visibility', name: 'Visibility'},
+            {key: 'idle', name: 'Idle'},
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
       </>}
       {receipt.state==='unknown' && receipt.remote_database_mutation && observation && <>
         <TextField fullWidth label="Confirm uncertain topology target UUID" value={confirmation} onChange={event=>setConfirmation(event.target.value)} />

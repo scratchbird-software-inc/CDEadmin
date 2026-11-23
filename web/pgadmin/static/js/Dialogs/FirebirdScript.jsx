@@ -3,8 +3,8 @@ import {useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {readFirebirdScriptFile, saveFirebirdScriptFile} from './firebirdScriptFiles';
-import {Alert, Box, Button, MenuItem, Table, TableBody, TableCell,
-  TableHead, TableRow, TextField} from '@mui/material';
+import {Alert, Box, Button, MenuItem, TextField} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function FirebirdScript({source, disabled, onPreview, onRun, result, onSourceChange}) {
   const [preview, setPreview] = useState(null);
@@ -88,14 +88,24 @@ export default function FirebirdScript({source, disabled, onPreview, onRun, resu
       {entry?.result?.payload?.fetch_observation?.limit_reached &&
         <Alert severity="warning">{gettext('Fetch limit reached for this statement. Further rows may exist; no total was counted.')}</Alert>}
       {entry?.result && <Box sx={{overflow: 'auto', maxHeight: 420}}>
-        <Table size="small" aria-label={gettext('Script statement result')}>
-          <TableHead><TableRow>{columns.map((column, index) =>
-            <TableCell key={index}>{column.name} ({column.native_type || ''})</TableCell>)}</TableRow></TableHead>
-          <TableBody>{rows.slice(currentPage * 100, (currentPage + 1) * 100).map((row, index) =>
-            <TableRow key={index}>{row.map((cell, ordinal) => <TableCell key={ordinal}>
-              {cell === null ? 'NULL' : typeof cell === 'object' ? JSON.stringify(cell) : String(cell)}
-            </TableCell>)}</TableRow>)}</TableBody>
-        </Table>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel={gettext('Script statement result')}
+          rows={rows.slice(currentPage * 100, (currentPage + 1) * 100).map((row, index) => ({
+            id: String(index),
+            ...Object.fromEntries(row.map((cell, ordinal) => [
+              `c_${ordinal}`,
+              cell === null ? 'NULL' : typeof cell === 'object' ? JSON.stringify(cell) : String(cell),
+            ])),
+          }))}
+          columns={columns.map((column, index) => ({
+            key: `c_${index}`,
+            name: `${column.name} (${column.native_type || ''})`,
+          }))}
+          compact
+          searchable={false}
+          exportable={false}
+        />
       </Box>}
       {rows.length > 100 && <Box>
         <Button disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>{gettext('Previous result page')}</Button>

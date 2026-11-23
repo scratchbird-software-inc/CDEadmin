@@ -1,8 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TablePagination} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel} from '@mui/material';
 import MySQLRecoveryChains from './MySQLRecoveryChains';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 export default function MySQLBackupProtection({post}) {
   const [page,setPage]=useState(null),[review,setReview]=useState(null),[confirmed,setConfirmed]=useState(false);
@@ -24,11 +26,47 @@ export default function MySQLBackupProtection({post}) {
     <FormControlLabel label="Show backup holds from all my registrations, including removed registrations" control={<Checkbox disabled={busy} checked={allRegistrations} onChange={event=>{setAllRegistrations(event.target.checked);setPage(null);setReview(null);setConfirmed(false);setRetired(null);}} />} />
     <Button disabled={busy} onClick={() => load(0)}>Load managed backup protection</Button>
     {page && <>
-      <Table size="small" aria-label="Managed backup protection"><TableHead><TableRow>{['Backup','Kind / database','State','Native source','Protection'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {page.backups.map(backup => <TableRow key={(backup.protection_endpoint_id || '')+backup.backup_id}><TableCell>{backup.backup_id}{backup.protection_endpoint_id && <Box>Registration: {backup.protection_endpoint_id}</Box>}</TableCell><TableCell>{backup.backup_kind==='mysql_native_physical_clone' ? 'Physical clone / '+backup.clone_role : backup.database}</TableCell><TableCell>{backup.state}</TableCell><TableCell>{backup.source.server_uuid}</TableCell><TableCell>
-          <Button disabled={busy || backup.state==='retired'} aria-label={'Review retirement of backup '+backup.backup_id} onClick={() => run('review_retire',{backup_id:backup.backup_id,...(backup.protection_endpoint_id ? {protection_endpoint_id:backup.protection_endpoint_id} : {})},value => {setReview(value);setConfirmed(false);setRetired(null);})}>Review retirement</Button>
-        </TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={page.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page.offset/25} onPageChange={(_event,next) => load(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Managed backup protection"
+        rows={(page.backups || []).map(backup => ({
+          id: (backup.protection_endpoint_id || '') + backup.backup_id,
+          backup_id: backup.backup_id,
+          kind_db: backup.backup_kind==='mysql_native_physical_clone' ? 'Physical clone / '+backup.clone_role : backup.database,
+          state: backup.state,
+          server_uuid: backup.source.server_uuid,
+          _raw: backup,
+        }))}
+        columns={[
+          {
+            key: 'backup_id',
+            name: 'Backup',
+            render: (_val, row) => <>{row._raw.backup_id}{row._raw.protection_endpoint_id && <Box>Registration: {row._raw.protection_endpoint_id}</Box>}</>,
+          },
+          {key: 'kind_db', name: 'Kind / database'},
+          {key: 'state', name: 'State'},
+          {key: 'server_uuid', name: 'Native source'},
+          {
+            key: '_protection',
+            name: 'Protection',
+            render: (_val, row) => <Button disabled={busy || row._raw.state==='retired'} aria-label={'Review retirement of backup '+row._raw.backup_id} onClick={() => run('review_retire',{backup_id:row._raw.backup_id,...(row._raw.protection_endpoint_id ? {protection_endpoint_id:row._raw.protection_endpoint_id} : {})},value => {setReview(value);setConfirmed(false);setRetired(null);})}>Review retirement</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((page.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((page.total || 0) / 25))}
+        endKnown
+        canNext={(page.offset || 0) + 25 < (page.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (page.offset || 0) - 25))}
+        onNext={() => load((page.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((page.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {review && <Box>
       <Alert severity="warning">{review.warning} Retiring a pending backup abandons its archive protection even if its native operation later returns.</Alert>

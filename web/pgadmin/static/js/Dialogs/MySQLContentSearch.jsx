@@ -1,7 +1,8 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Typography} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 const modes = {text_contains: 'Text contains (literal)', text_exact: 'Text equals', text_prefix: 'Text starts with (literal)',
   numeric_equal: 'Numeric equals', binary_exact: 'Binary equals (hex)', binary_contains: 'Binary contains (hex)', is_null: 'Is NULL'};
@@ -93,10 +94,31 @@ export default function MySQLContentSearch({post, databaseTargetId=null}) {
     <Alert severity="info">Catalog visibility is permission filtered. Invisible tables are unknown; a catalog page is not proof of full database coverage.
       Select tables and columns below. One search admits at most 64 tables and 256 columns.</Alert>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 2fr'},gap:1,my:1}}>
-      <Box sx={{maxHeight:300,overflow:'auto'}}><Table size="small" aria-label="Native search tables"><TableHead><TableRow>
-        <TableCell>Table</TableCell><TableCell>Selected columns</TableCell><TableCell>Scope</TableCell></TableRow></TableHead>
-      <TableBody>{tables.map(item => <TableRow key={item.name}><TableCell><Button disabled={busy || active || Boolean(job) || item.kind!=='BASE TABLE'} onClick={() => loadColumns(item.name)}>{item.name}</Button></TableCell>
-        <TableCell>{selections[item.name]?.columns.length || 0}</TableCell><TableCell>{item.kind} / {item.engine}</TableCell></TableRow>)}</TableBody></Table></Box>
+      <Box sx={{maxHeight:300,overflow:'auto'}}>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Native search tables"
+          rows={tables.map(item => ({
+            id: item.name,
+            name: item.name,
+            selected_cols: selections[item.name]?.columns.length || 0,
+            scope: `${item.kind} / ${item.engine}`,
+            _raw: item,
+          }))}
+          columns={[
+            {
+              key: 'name',
+              name: 'Table',
+              render: (_val, r) => <Button disabled={busy || active || Boolean(job) || r._raw.kind!=='BASE TABLE'} onClick={() => loadColumns(r._raw.name)}>{r._raw.name}</Button>,
+            },
+            {key: 'selected_cols', name: 'Selected columns'},
+            {key: 'scope', name: 'Scope'},
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+      </Box>
       {details && <Box sx={{maxHeight:300,overflow:'auto'}}>
         <Typography component="h4">{details.table_name}: select columns</Typography>
         <Typography>Native unique-key navigation: {details.key.length ? details.key.join(', ') : 'Unavailable'}</Typography>
@@ -131,13 +153,38 @@ export default function MySQLContentSearch({post, databaseTargetId=null}) {
     {job && <>
       <Alert severity={job.state==='completed' ? 'success' : 'info'}>Search: {job.state}. {job.matches.length} returned matches. {job.elapsed_seconds} seconds.
         Source server: {job.identity.server_uuid}. Cancellation: {JSON.stringify(job.cancellation)}</Alert>
-      <Box sx={{maxHeight:400,overflow:'auto'}}><Table size="small" aria-label="Native content matches"><TableHead><TableRow>
-        {['Table','Column','Preview (256 characters / binary bytes)','Native value bytes','Navigate'].map(label => <TableCell key={label}>{label}</TableCell>)}
-      </TableRow></TableHead><TableBody>{job.matches.map(match => <TableRow key={match.match_id}>
-        <TableCell>{match.table_name}</TableCell><TableCell>{match.column_name}</TableCell><TableCell sx={{overflowWrap:'anywhere'}}>{shown(match.preview)} ({match.preview_encoding})</TableCell>
-        <TableCell>{match.value_bytes}</TableCell><TableCell><Button disabled={busy || !job.terminal || !match.navigation_available}
-          onClick={() => run('row',{job_id:job.job_id,match_id:match.match_id},setRow)}>Open current row</Button>
-        {!match.navigation_available && 'No readable native unique key'}</TableCell></TableRow>)}</TableBody></Table></Box>
+      <Box sx={{maxHeight:400,overflow:'auto'}}>
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Native content matches"
+          rows={(job.matches || []).map(match => ({
+            id: match.match_id,
+            table_name: match.table_name,
+            column_name: match.column_name,
+            preview_text: `${shown(match.preview)} (${match.preview_encoding})`,
+            value_bytes: match.value_bytes,
+            _raw: match,
+          }))}
+          columns={[
+            {key: 'table_name', name: 'Table'},
+            {key: 'column_name', name: 'Column'},
+            {key: 'preview_text', name: 'Preview (256 characters / binary bytes)'},
+            {key: 'value_bytes', name: 'Native value bytes'},
+            {
+              key: '_navigate',
+              name: 'Navigate',
+              render: (_val, r) => <>
+                <Button disabled={busy || !job.terminal || !r._raw.navigation_available}
+                  onClick={() => run('row',{job_id:job.job_id,match_id:r._raw.match_id},setRow)}>Open current row</Button>
+                {!r._raw.navigation_available && 'No readable native unique key'}
+              </>,
+            },
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+      </Box>
       <Typography component="h4">Selected-scope coverage</Typography>
       <Box sx={{maxHeight:300,overflow:'auto'}}>{job.coverage.map((table,index) => <Box key={index} sx={{my:1}}>
         <Typography>{table.table_name}: {table.state} {table.reason} {table.error_code ? `Native error ${table.error_code}` : ''}</Typography>
@@ -146,8 +193,24 @@ export default function MySQLContentSearch({post, databaseTargetId=null}) {
       </Box>)}</Box>
     </>}
     {row && <Box aria-label="Current native search row"><Alert severity="info">{row.state}: {row.table_name}. {row.basis}</Alert>
-      <Table size="small"><TableBody>{row.values.map(cell => <TableRow key={cell.column_name}><TableCell>{cell.column_name}</TableCell>
-        <TableCell>{cell.data_type}</TableCell><TableCell sx={{overflowWrap:'anywhere'}}>{shown(cell.preview)}</TableCell></TableRow>)}</TableBody></Table></Box>}
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Current native search row values"
+        rows={(row.values || []).map(cell => ({
+          id: cell.column_name,
+          column_name: cell.column_name,
+          data_type: cell.data_type,
+          preview: shown(cell.preview),
+        }))}
+        columns={[
+          {key: 'column_name', name: 'Column'},
+          {key: 'data_type', name: 'Type'},
+          {key: 'preview', name: 'Value'},
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      /></Box>}
   </Box>;
 }
 MySQLContentSearch.propTypes = {post:PropTypes.func.isRequired,databaseTargetId:PropTypes.string};

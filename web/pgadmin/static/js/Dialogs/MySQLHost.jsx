@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLHost({post}) {
@@ -145,9 +147,43 @@ export default function MySQLHost({post}) {
       <FormControlLabel label={operation==='validate_config' ? 'Authorize the reviewed native mysqld configuration check on this database SSH host' : operation==='deploy_config' ? 'Authorize the reviewed option-file installation on this database SSH host' : operation==='initialize_data' ? 'Authorize the reviewed native data-directory initialization on this SSH host' : 'Authorize the reviewed native MySQL service action on this database SSH host'} control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
       <Button disabled={busy || !confirmed || review.state!=='reviewed' || (review.remote_observation?.upgrade_plan?.preflight?.report?.errorCount || 0)>0} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials(),...(operation==='upgrade_service' ? {upgrade_check_secret:checkSecret()} : {})},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{operation==='validate_config' ? 'Confirm native host configuration check' : operation==='deploy_config' ? 'Confirm native option-file installation' : operation==='initialize_data' ? 'Confirm native data-directory initialization' : 'Confirm native host service action'}</Button>
     </Box>}
-    {jobs && <><Table size="small" aria-label="Native host diagnostic receipts"><TableHead><TableRow>{['Job','Host','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-      {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.execution_host.hostname}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect native host job '+job.job_id} onClick={() => run('status',{job_id:job.job_id},inspect)}>Inspect</Button></TableCell></TableRow>)}
-    </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next) => load(next*25)} /></>}
+    {jobs && <>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native host diagnostic receipts"
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          hostname: job.execution_host.hostname,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'hostname', name: 'Host'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} aria-label={'Inspect native host job '+row._raw.job_id} onClick={() => run('status',{job_id:row._raw.job_id},inspect)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => load((jobs.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
+    </>}
     {receipt && <Box>
       <Alert severity={receipt.state==='native_process_returned' && observed?.result?.return_code===0 ? 'success' : 'warning'}>Native host job {receipt.job_id}: {receipt.state}. {receipt.state==='unknown' && 'The original SSH reply is unconfirmed. Reconciliation never repeats the native command.'}</Alert>
       {receipt.options?.operation==='initialize_data' && <Box>

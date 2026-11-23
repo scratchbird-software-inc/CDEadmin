@@ -1,7 +1,9 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLClone({post}) {
@@ -70,11 +72,41 @@ export default function MySQLClone({post}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));})}>Confirm and start {review.operation==='remote_clone' ? 'remote' : 'local'} clone</Button>
     </Box>}
     {catalog && <>
-      <Table size="small" aria-label="Native MySQL clone jobs"><TableHead><TableRow>{['Job','Destination','State','Receipt'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead>
-        <TableBody>{catalog.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.options.destination}</TableCell><TableCell>{job.state}</TableCell>
-          <TableCell><Button disabled={busy} aria-label={'Inspect clone '+job.job_id} onClick={() => run('status',{job_id:job.job_id},setReceipt)}>Inspect</Button></TableCell></TableRow>)}</TableBody>
-      </Table>
-      <TablePagination component="div" count={catalog.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native MySQL clone jobs"
+        rows={(catalog.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          destination: job.options.destination,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'destination', name: 'Destination'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} aria-label={'Inspect clone '+row._raw.job_id} onClick={() => run('status',{job_id:row._raw.job_id},setReceipt)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={page}
+        pages={Math.max(1, Math.ceil((catalog.total || 0) / 25))}
+        endKnown
+        canNext={(page + 1) * 25 < (catalog.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, page - 1))}
+        onNext={() => load(page + 1)}
+        onLast={() => load(Math.max(0, Math.ceil((catalog.total || 0) / 25) - 1))}
+      />
       {catalog.unavailable_job_ids?.length>0 && <Alert severity="warning">Some clone receipts could not be read: {catalog.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {receipt && <Box sx={{my:1}}>

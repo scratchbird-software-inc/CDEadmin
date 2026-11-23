@@ -1,11 +1,12 @@
 import {useEffect, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField} from '@mui/material';
+import {Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField} from '@mui/material';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import MySQLPhysicalBatchRetention from './MySQLPhysicalBatchRetention';
 import MySQLPhysicalBackupSchedule from './MySQLPhysicalBackupSchedule';
 import MySQLRecoveryCutover from './MySQLRecoveryCutover';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 const initial = {connection: {host: '', port: 22, username: '', host_key: '', authentication: 'private_key', platform: 'posix', python: '/usr/bin/python3'},
   workspace: '/var/backups/scratchrobin/physical', executable: '/usr/bin/xtrabackup', mysql: '/usr/bin/mysql', phase: 'backup',
@@ -176,10 +177,32 @@ export default function MySQLPhysical({post, onTargetRegistered = () => {}}) {
       <Button disabled={busy || !confirmed || review.state !== 'reviewed' || ['backup', 'incremental', 'recover'].includes(review.options.phase) && !delegate} onClick={() => run('start',
         {job_id: review.job_id, review_digest: review.review_digest, confirmed, delegate_database_credentials: delegate, credentials}, value => {setReceipt(value); setReview(null);})}>Start reviewed physical job</Button>
     </Box>}
-    {jobs && <><Table size="small" aria-label="Native physical jobs"><TableHead><TableRow>{['Job', 'Operation', 'State', 'Inspect'].map(name => <TableCell key={name}>{name}</TableCell>)}</TableRow></TableHead>
-      <TableBody>{jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.options.phase}</TableCell><TableCell>{job.state}</TableCell>
-        <TableCell><Button disabled={busy} aria-label={'Inspect physical job ' + job.job_id} onClick={() => run('status', {job_id: job.job_id}, inspect)}>Inspect</Button></TableCell></TableRow>)}</TableBody></Table>
-    {jobs.more && <Button disabled={busy} onClick={() => run('list', {offset: jobs.offset + jobs.limit, limit: jobs.limit}, next => setJobs(current => ({...next, jobs: [...current.jobs, ...next.jobs]})))}>More physical jobs</Button>}
+    {jobs && <>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native physical jobs"
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          phase: job.options.phase,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'phase', name: 'Operation'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} aria-label={'Inspect physical job ' + r._raw.job_id} onClick={() => run('status', {job_id: r._raw.job_id}, inspect)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      {jobs.more && <Button disabled={busy} onClick={() => run('list', {offset: jobs.offset + jobs.limit, limit: jobs.limit}, next => setJobs(current => ({...next, jobs: [...current.jobs, ...next.jobs]})))}>More physical jobs</Button>}
     </>}
     {receipt && <Box sx={{my: 1}}>
       <Alert severity={receipt.file_verification_confirmed || receipt.recovery_running ? 'success' : ['unknown', 'native_failed', 'native_returned'].includes(receipt.state) ? 'warning' : 'info'}>Physical job {receipt.job_id}: {receipt.state}. {receipt.options.phase === 'recover' ? `SQL startup readiness: ${receipt.recovery_sql_startup_observed ? 'observed' : 'unconfirmed'}. Original native process: ${receipt.recovery_running ? 'present' : 'unconfirmed'}.` : `File verification: ${receipt.file_verification_confirmed ? 'confirmed' : 'unconfirmed'}.`} Original dispatch, native completion, file verification and database recovery are separate facts.</Alert>

@@ -1,9 +1,11 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,TextField} from '@mui/material';
 import MySQLRetentionSchedule from './MySQLRetentionSchedule';
 import MySQLBackupProtection from './MySQLBackupProtection';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLArchiveRetention({post,prefix,sourceArchive}) {
@@ -47,16 +49,63 @@ export default function MySQLArchiveRetention({post,prefix,sourceArchive}) {
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
       <Alert severity="warning">This review removes {review.continuation.archives.length} archives ({review.continuation.total_bytes} bytes). {review.continuation.eligible_count} archives matched the policy when reviewed.</Alert>
-      <Table size="small" aria-label="Reviewed archive retention candidates"><TableHead><TableRow>{['Archive','Native source','Created','Bytes'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {review.continuation.archives.map(row => <TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.source.server_uuid} / {row.source.authenticated_principal}</TableCell><TableCell>{new Date(row.created_at*1000).toISOString()}</TableCell><TableCell>{row.bytes}</TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Reviewed archive retention candidates"
+        rows={(review.continuation.archives || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          source: `${row.source.server_uuid} / ${row.source.authenticated_principal}`,
+          created_at: new Date(row.created_at*1000).toISOString(),
+          bytes: row.bytes,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Archive'},
+          {key: 'source', name: 'Native source'},
+          {key: 'created_at', name: 'Created'},
+          {key: 'bytes', name: 'Bytes'},
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
       <Box component="details"><summary>Retention exclusions and execution host</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify({excluded:review.continuation.excluded,execution_host:review.execution_host},null,2)}</Box></Box>
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('retention_start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));})}>Confirm removal of reviewed archives</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label="Archive retention receipts"><TableHead><TableRow>{['Retention job','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect retention '+job.job_id} onClick={() => run('retention_status',{job_id:job.job_id},setReceipt)}>Inspect</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next) => load(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Archive retention receipts"
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Retention job'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} aria-label={'Inspect retention '+row._raw.job_id} onClick={() => run('retention_status',{job_id:row._raw.job_id},setReceipt)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => load((jobs.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
       {jobs.unavailable_job_ids?.length>0 && <Alert severity="warning">Some retention receipts could not be read: {jobs.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {receipt && <Box sx={{my:1}}>

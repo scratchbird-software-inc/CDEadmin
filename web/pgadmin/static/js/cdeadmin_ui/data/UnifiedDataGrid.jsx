@@ -34,10 +34,12 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500].map((val) => ({
 
 function normalizeColumnSpec(col, idx) {
   if (typeof col === 'string') {
-    return {name: col, label: col, editable: true};
+    return {name: col, label: col, fieldKey: col, editable: true};
   }
-  const name = String(col.name ?? col.key ?? col.accessorKey ?? col.id ?? `col_${idx + 1}`);
-  const label = String(col.label ?? col.header ?? col.title ?? col.name ?? col.key ?? name);
+  const stringKey = typeof col.key === 'string' && col.key ? col.key : null;
+  const name = String(stringKey ?? col.accessorKey ?? col.name ?? col.id ?? `col_${idx + 1}`);
+  const label = String(col.label ?? col.header ?? col.title ?? col.name ?? stringKey ?? name);
+  const fieldKey = stringKey || col.accessorKey || col.name || name;
   const inferredType =
     col.native_type ||
     col.data_type ||
@@ -47,6 +49,7 @@ function normalizeColumnSpec(col, idx) {
     ...col,
     name,
     label,
+    fieldKey,
     native_type: inferredType,
     key: Boolean(col.key === true || col.primary_key),
     editable: col.editable !== false,
@@ -69,8 +72,8 @@ function extractRawRowValues(row, normalizedCols) {
       values[col.name] = col.accessorFn(row);
     } else if (col.accessorKey && row[col.accessorKey] !== undefined) {
       values[col.name] = row[col.accessorKey];
-    } else if (col.key && typeof col.key === 'string' && row[col.key] !== undefined) {
-      values[col.name] = row[col.key];
+    } else if (col.fieldKey && row[col.fieldKey] !== undefined) {
+      values[col.name] = row[col.fieldKey];
     } else {
       values[col.name] = row[col.name];
     }

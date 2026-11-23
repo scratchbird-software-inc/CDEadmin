@@ -1,8 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,TextField} from '@mui/material';
 import MySQLInstanceAcceptance from './MySQLInstanceAcceptance';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
@@ -63,9 +64,39 @@ export default function MySQLInstanceRestores({post}) {
     </>}
     {source && <Box><Box>Backup source: {source.name}</Box><Button disabled={busy} onClick={()=>loadBackups(0)}>Load source instance backups</Button></Box>}
     {backups && <>
-      <Table size="small" aria-label="Restore source instance backups"><TableHead><TableRow>{['Backup','State','Use'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {backups.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy || !['completed','artifact_verified'].includes(row.state) || row.artifact_removed} onClick={()=>{setBackup(row);setReview(null);}}>Use instance backup {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={backups.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={backups.offset/25} onPageChange={(_event,next)=>loadBackups(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Restore source instance backups"
+        rows={(backups.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Backup'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_use',
+            name: 'Use',
+            render: (_val, r) => <Button disabled={busy || !['completed','artifact_verified'].includes(r._raw.state) || r._raw.artifact_removed} onClick={()=>{setBackup(r._raw);setReview(null);}}>Use instance backup {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((backups.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((backups.total || 0) / 25))}
+        endKnown
+        canNext={(backups.offset || 0) + 25 < (backups.total || 0)}
+        onFirst={() => loadBackups(0)}
+        onPrevious={() => loadBackups(Math.max(0, (backups.offset || 0) - 25))}
+        onNext={() => loadBackups((backups.offset || 0) + 25)}
+        onLast={() => loadBackups(Math.max(0, (Math.ceil((backups.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {backup && <Alert severity="info">Selected instance backup: {backup.job_id}</Alert>}
     <TextField fullWidth label="Confirm native restore target UUID" value={confirmation} disabled={busy} onChange={event=>{setConfirmation(event.target.value);setReview(null);}} />
@@ -83,9 +114,41 @@ export default function MySQLInstanceRestores({post}) {
     </Box>}
     <Button disabled={busy} onClick={()=>loadJobs(0)}>Load instance restore jobs</Button>
     {jobs && <>
-      <Table size="small" aria-label="Instance restore jobs"><TableHead><TableRow>{['Job','Target','State','Inspect'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.target.server_uuid}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy} onClick={()=>run('status',{job_id:row.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect instance restore {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={jobs.offset/25} onPageChange={(_event,next)=>loadJobs(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Instance restore jobs"
+        rows={(jobs.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          server_uuid: row.target.server_uuid,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'server_uuid', name: 'Target'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={()=>run('status',{job_id:r._raw.job_id},value=>{setReceipt(value);setObservation(null);})}>Inspect instance restore {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((jobs.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(jobs.offset || 0) + 25 < (jobs.total || 0)}
+        onFirst={() => loadJobs(0)}
+        onPrevious={() => loadJobs(Math.max(0, (jobs.offset || 0) - 25))}
+        onNext={() => loadJobs((jobs.offset || 0) + 25)}
+        onLast={() => loadJobs(Math.max(0, (Math.ceil((jobs.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.state==='native_load_returned' ? 'info' : receipt.state==='unknown' ? 'warning' : 'info'}>Instance restore {receipt.job_id}: {receipt.state}. Original native load outcome: {receipt.native_load_outcome}. Review independent acceptance receipts for data and definitions. Production cutover remains unverified.</Alert>

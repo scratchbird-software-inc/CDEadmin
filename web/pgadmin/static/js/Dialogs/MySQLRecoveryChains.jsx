@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 export default function MySQLRecoveryChains({post}) {
   const [backups,setBackups]=useState(null),[archives,setArchives]=useState(null),[chains,setChains]=useState(null);
@@ -35,14 +37,76 @@ export default function MySQLRecoveryChains({post}) {
     <Button disabled={busy} onClick={()=>loadArchives(0)}>Load recovery chain archives</Button>
     <Button disabled={busy} onClick={()=>loadChains(0)}>Load recovery chains</Button>
     {backups && <>
-      <Table size="small" aria-label="Recovery base backups"><TableHead><TableRow>{['Backup','Database','State','Select'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {backups.backups.map(row=><TableRow key={row.backup_id}><TableCell>{row.backup_id}</TableCell><TableCell>{row.database}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy || !(row.native_dump_completion_acknowledged || row.native_artifact_completion_observed) || !row.native_consistent || row.native_gtid_snapshot_inconsistent!==false} onClick={()=>{clear();setBase(row.backup_id);}}>Use backup {row.backup_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={backups.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={backups.offset/25} onPageChange={(_event,page)=>loadBackups(page*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Recovery base backups"
+        rows={(backups.backups || []).map(row => ({
+          id: row.backup_id,
+          backup_id: row.backup_id,
+          database: row.database,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'backup_id', name: 'Backup'},
+          {key: 'database', name: 'Database'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_select',
+            name: 'Select',
+            render: (_val, r) => <Button disabled={busy || !(r._raw.native_dump_completion_acknowledged || r._raw.native_artifact_completion_observed) || !r._raw.native_consistent || r._raw.native_gtid_snapshot_inconsistent!==false} onClick={()=>{clear();setBase(r._raw.backup_id);}}>Use backup {r._raw.backup_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((backups.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((backups.total || 0) / 25))}
+        endKnown
+        canNext={(backups.offset || 0) + 25 < (backups.total || 0)}
+        onFirst={() => loadBackups(0)}
+        onPrevious={() => loadBackups(Math.max(0, (backups.offset || 0) - 25))}
+        onNext={() => loadBackups((backups.offset || 0) + 25)}
+        onLast={() => loadBackups(Math.max(0, (Math.ceil((backups.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {archives && <>
-      <Table size="small" aria-label="Recovery chain archive choices"><TableHead><TableRow>{['Archive','State','Select'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {archives.jobs.map(row=><TableRow key={row.job_id}><TableCell>{row.job_id}</TableCell><TableCell>{row.state}</TableCell><TableCell><Button disabled={busy || selected.includes(row.job_id) || row.artifact_removed || !['completed','artifact_verified'].includes(row.state)} onClick={()=>{clear();setSelected(values=>[...values,row.job_id]);}}>Append archive {row.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={archives.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={archives.offset/25} onPageChange={(_event,page)=>loadArchives(page*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Recovery chain archive choices"
+        rows={(archives.jobs || []).map(row => ({
+          id: row.job_id,
+          job_id: row.job_id,
+          state: row.state,
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Archive'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_select',
+            name: 'Select',
+            render: (_val, r) => <Button disabled={busy || selected.includes(r._raw.job_id) || r._raw.artifact_removed || !['completed','artifact_verified'].includes(r._raw.state)} onClick={()=>{clear();setSelected(values=>[...values,r._raw.job_id]);}}>Append archive {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((archives.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((archives.total || 0) / 25))}
+        endKnown
+        canNext={(archives.offset || 0) + 25 < (archives.total || 0)}
+        onFirst={() => loadArchives(0)}
+        onPrevious={() => loadArchives(Math.max(0, (archives.offset || 0) - 25))}
+        onNext={() => loadArchives((archives.offset || 0) + 25)}
+        onLast={() => loadArchives(Math.max(0, (Math.ceil((archives.total || 0) / 25) - 1) * 25))}
+      />
       {archives.unavailable_job_ids?.length>0 && <Alert severity="warning">Some archive receipts are unavailable: {archives.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     <Box>Recovery base: {base || 'None selected'}</Box>
@@ -62,9 +126,43 @@ export default function MySQLRecoveryChains({post}) {
     </Box>}
     {created && <Alert severity="success">Recovery chain {created.chain_id}: {created.state}. Its selected archives are protected. Existing backup holds remain. Recovery and cutover have not been verified.</Alert>}
     {chains && <>
-      <Table size="small" aria-label="Retained recovery chains"><TableHead><TableRow>{['Chain','Database','State','Archives','Protection'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {chains.chains.map(row=><TableRow key={row.chain_id}><TableCell>{row.chain_id}</TableCell><TableCell>{row.database}</TableCell><TableCell>{row.state}</TableCell><TableCell>{row.archives.map(item=>item.job_id).join(' → ')}</TableCell><TableCell><Button disabled={busy || row.state!=='active'} onClick={()=>run('recovery_chain_review_retire',{chain_id:row.chain_id},value=>{setRetirement(value);setRetireConfirmed(false);})}>Review retirement of chain {row.chain_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={chains.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={chains.offset/25} onPageChange={(_event,page)=>loadChains(page*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Retained recovery chains"
+        rows={(chains.chains || []).map(row => ({
+          id: row.chain_id,
+          chain_id: row.chain_id,
+          database: row.database,
+          state: row.state,
+          archives: row.archives.map(item=>item.job_id).join(' → '),
+          _raw: row,
+        }))}
+        columns={[
+          {key: 'chain_id', name: 'Chain'},
+          {key: 'database', name: 'Database'},
+          {key: 'state', name: 'State'},
+          {key: 'archives', name: 'Archives'},
+          {
+            key: '_protection',
+            name: 'Protection',
+            render: (_val, r) => <Button disabled={busy || r._raw.state!=='active'} onClick={()=>run('recovery_chain_review_retire',{chain_id:r._raw.chain_id},value=>{setRetirement(value);setRetireConfirmed(false);})}>Review retirement of chain {r._raw.chain_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((chains.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((chains.total || 0) / 25))}
+        endKnown
+        canNext={(chains.offset || 0) + 25 < (chains.total || 0)}
+        onFirst={() => loadChains(0)}
+        onPrevious={() => loadChains(Math.max(0, (chains.offset || 0) - 25))}
+        onNext={() => loadChains((chains.offset || 0) + 25)}
+        onLast={() => loadChains(Math.max(0, (Math.ceil((chains.total || 0) / 25) - 1) * 25))}
+      />
     </>}
     {retirement && <Box>
       <Alert severity="warning">Retiring this chain releases its archive dependencies. Other holds and explicit archive pins still apply. Files remain until a separate removal action; deleting needed inputs can prevent recovery.</Alert>

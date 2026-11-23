@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function SQLiteNativeArrays({post,ensureSession,sessionId,databaseTargetId,disabled,onBusyChange,onLoad}) {
   const [inventory,setInventory]=useState(null),[selected,setSelected]=useState(null),[page,setPage]=useState(0);
@@ -44,9 +45,32 @@ export default function SQLiteNativeArrays({post,ensureSession,sessionId,databas
         <TextField multiline minRows={3} size="small" label="Native array values (JSON)" value={values} disabled={blocked} onChange={event => setValues(event.target.value)} />
         <Button disabled={blocked || !inventory.helper_available} onClick={create}>Create native array</Button>
       </Box>
-      <Table size="small" aria-label="Native SQLite arrays"><TableHead><TableRow>{['Array','Type','Elements','Native data bytes','Inspect'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {inventory.arrays.map(item => <TableRow key={item.array_id}><TableCell>{item.array_id}</TableCell><TableCell>{item.type_name}</TableCell><TableCell>{item.element_count}</TableCell><TableCell>{item.native_data_bytes}</TableCell><TableCell><Button disabled={blocked} onClick={() => run({operation:'status',array_id:item.array_id})}>Inspect array {item.array_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native SQLite arrays"
+        rows={(inventory.arrays || []).map(item => ({
+          id: item.array_id,
+          array_id: item.array_id,
+          type_name: item.type_name,
+          element_count: item.element_count,
+          native_data_bytes: item.native_data_bytes,
+          _raw: item,
+        }))}
+        columns={[
+          {key: 'array_id', name: 'Array'},
+          {key: 'type_name', name: 'Type'},
+          {key: 'element_count', name: 'Elements'},
+          {key: 'native_data_bytes', name: 'Native data bytes'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, row) => <Button disabled={blocked} onClick={() => run({operation:'status',array_id:row._raw.array_id})}>Inspect array {row._raw.array_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
       <Button disabled={blocked || page===0} onClick={() => run({operation:'inventory',offset:(page-1)*25,limit:25})}>Previous native arrays</Button>
       <Button disabled={blocked || !inventory.more} onClick={() => run({operation:'inventory',offset:(page+1)*25,limit:25})}>Next native arrays</Button>
     </>}

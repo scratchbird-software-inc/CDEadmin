@@ -1,8 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({users:true,consistent:true,checksum:true,threads:4,compression:'zstd;level=1',timeout_seconds:3600},null,2);
@@ -55,9 +57,41 @@ export default function MySQLInstanceBackups({post,endpointUrl}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={()=>run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value=>{setReceipt(value);setReview(current=>({...current,state:value.state}));})}>Confirm and start instance backup</Button>
     </Box>}
     {page && <>
-      <Table size="small" aria-label="Instance backup jobs"><TableHead><TableRow>{['Job','Source','State','Inspect'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {page.jobs.map(job=><TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.source.server_uuid}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} onClick={()=>inspect(job)}>Inspect instance backup {job.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={page.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page.offset/25} onPageChange={(_event,next)=>load(next*25)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Instance backup jobs"
+        rows={(page.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          server_uuid: job.source.server_uuid,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'server_uuid', name: 'Source'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, r) => <Button disabled={busy} onClick={()=>inspect(r._raw)}>Inspect instance backup {r._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={Math.floor((page.offset || 0) / 25)}
+        pages={Math.max(1, Math.ceil((page.total || 0) / 25))}
+        endKnown
+        canNext={(page.offset || 0) + 25 < (page.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, (page.offset || 0) - 25))}
+        onNext={() => load((page.offset || 0) + 25)}
+        onLast={() => load(Math.max(0, (Math.ceil((page.total || 0) / 25) - 1) * 25))}
+      />
       {page.unavailable_job_ids?.length>0 && <Alert severity="warning">Some backup receipts are unavailable: {page.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {receipt && <Box sx={{my:1}}>
@@ -78,9 +112,41 @@ export default function MySQLInstanceBackups({post,endpointUrl}) {
       <Button disabled={busy || !receipt.result?.artifact || receipt.artifact_removed} onClick={()=>run('files',{job_id:receipt.job_id,offset:0,limit:100},setFiles)}>Load instance backup files</Button>
       <Button disabled={busy || !receipt.result?.artifact || receipt.artifact_removed} onClick={()=>run('pin',{job_id:receipt.job_id,pinned:!receipt.retention_pinned},setReceipt)}>{receipt.retention_pinned ? 'Unprotect instance backup from removal' : 'Protect instance backup from removal'}</Button>
       {files && <>
-        <Table size="small" aria-label="Verified instance backup files"><TableHead><TableRow>{['File','Bytes','SHA256','Download'].map(label=><TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-          {files.files.map(row=><TableRow key={row.path}><TableCell>{row.path}</TableCell><TableCell>{row.size}</TableCell><TableCell>{row.sha256}</TableCell><TableCell><Button onClick={()=>download(row)}>Download {row.path}</Button></TableCell></TableRow>)}
-        </TableBody></Table><TablePagination component="div" count={files.total} rowsPerPage={100} rowsPerPageOptions={[100]} page={files.offset/100} onPageChange={(_event,next)=>run('files',{job_id:receipt.job_id,offset:next*100,limit:100},setFiles)} />
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Verified instance backup files"
+          rows={(files.files || []).map(row => ({
+            id: row.path,
+            path: row.path,
+            size: row.size,
+            sha256: row.sha256,
+            _raw: row,
+          }))}
+          columns={[
+            {key: 'path', name: 'File'},
+            {key: 'size', name: 'Bytes'},
+            {key: 'sha256', name: 'SHA256'},
+            {
+              key: '_download',
+              name: 'Download',
+              render: (_val, r) => <Button onClick={()=>download(r._raw)}>Download {r._raw.path}</Button>,
+            },
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+        <GridNavigation
+          busy={busy}
+          page={Math.floor((files.offset || 0) / 100)}
+          pages={Math.max(1, Math.ceil((files.total || 0) / 100))}
+          endKnown
+          canNext={(files.offset || 0) + 100 < (files.total || 0)}
+          onFirst={() => run('files',{job_id:receipt.job_id,offset:0,limit:100},setFiles)}
+          onPrevious={() => run('files',{job_id:receipt.job_id,offset:Math.max(0,(files.offset||0)-100),limit:100},setFiles)}
+          onNext={() => run('files',{job_id:receipt.job_id,offset:(files.offset||0)+100,limit:100},setFiles)}
+          onLast={() => run('files',{job_id:receipt.job_id,offset:Math.max(0,(Math.ceil((files.total||0)/100)-1)*100),limit:100},setFiles)}
+        />
       </>}
       {!receipt.artifact_removed && !ACTIVE.has(receipt.state) && <Box sx={{my:1,display:'flex',gap:1}}>
         <TextField size="small" label="Confirm instance backup job identity for removal" value={confirmation} onChange={event=>setConfirmation(event.target.value)} />

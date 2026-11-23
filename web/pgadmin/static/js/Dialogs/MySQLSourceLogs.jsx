@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLSourceLogs({post,reset=false}) {
@@ -65,10 +67,41 @@ export default function MySQLSourceLogs({post,reset=false}) {
         job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{`Confirm ${nativeAction}`}</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label={'Native '+topic+' receipts'}><TableHead><TableRow>{['Job','Condition','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{reset ? 'RESET TO '+(job.options.to_sequence ?? 'native default') : job.options.mode+': '+(job.options.to_file || job.options.before_utc)}</TableCell><TableCell>{job.state}</TableCell>
-          <TableCell><Button disabled={busy} aria-label={'Inspect '+topic+' '+job.job_id} onClick={() => run('status',{job_id:job.job_id},setReceipt)}>Inspect</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={'Native '+topic+' receipts'}
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          condition: reset ? 'RESET TO '+(job.options.to_sequence ?? 'native default') : job.options.mode+': '+(job.options.to_file || job.options.before_utc),
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'condition', name: 'Condition'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, r) => <Button disabled={busy} aria-label={'Inspect '+topic+' '+r._raw.job_id} onClick={() => run('status',{job_id:r._raw.job_id},setReceipt)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={page}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(page + 1) * 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, page - 1))}
+        onNext={() => load(page + 1)}
+        onLast={() => load(Math.max(0, Math.ceil((jobs.total || 0) / 25) - 1))}
+      />
     </>}
     {receipt && <Box>
       <Alert severity={receipt.state==='native_acknowledged' ? 'success' : ['unknown','native_failed','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>

@@ -1,7 +1,12 @@
-import {useId, useState} from 'react';
+import {useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField, Typography} from '@mui/material';
 import gettext from 'sources/gettext';
+import {Box, Stack} from '../cdeadmin_ui/primitives/Layout';
+import {Button} from '../cdeadmin_ui/primitives/Button';
+import {TextField} from '../cdeadmin_ui/primitives/Field';
+import {Select} from '../cdeadmin_ui/primitives/Choice';
+import {Banner} from '../cdeadmin_ui/feedback/Indicators';
+import {Dialog} from '../cdeadmin_ui/overlays/Dialog';
 
 export function arrayShape(spec) {
   if (!spec?.bounds?.length || spec.bounds.length > 16) throw new Error(gettext('Array bounds unavailable.'));
@@ -32,7 +37,6 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
   const [expanded, setExpanded] = useState(false);
   const [page, setPage] = useState(0);
   const [error, setError] = useState(null);
-  const titleId = useId();
   let value;
   try { value = draft.text ? JSON.parse(draft.text) : null; } catch { value = null; }
   const lengths = arrayShape(spec);
@@ -56,25 +60,36 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
       setError(null);
     } catch (failure) { setError(failure.message); }
   };
-  return <Box sx={{minWidth: 260}}>
+  const titleText = `${label} [${spec.bounds.map((bound) => bound.join(':')).join(', ')}]`;
+  return <Box style={{minWidth: 260}}>
     <Button aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-      {label} [{spec.bounds.map((bound) => bound.join(':')).join(', ')}]
+      {titleText}
     </Button>
-    <Dialog open={expanded} onClose={() => setExpanded(false)} fullWidth maxWidth="md" aria-labelledby={titleId}>
-      <DialogTitle id={titleId}>{label} [{spec.bounds.map((bound) => bound.join(':')).join(', ')}]</DialogTitle>
-      <DialogContent>
-        <Typography>{gettext('Element type')}: {spec.element_kind}{spec.precision ? `(${spec.precision})` : ''}; {gettext('Scale')}: {spec.scale}</Typography>
-        {spec.length && <Typography>{gettext('Declared length')}: {spec.length} {spec.element_kind === 'binary' ? gettext('bytes') : gettext('characters')}; {gettext('Character set')}: {spec.charset}</Typography>}
-        {spec.element_kind?.startsWith('firebird-') && <Typography>{gettext('Each element is a JSON object with encoding, utc and time_zone fields. UTC preserves distinct DST instants.')}</Typography>}
-        {spec.element_kind === 'binary' && <Typography>{gettext('Enter each element as canonical Base64. Fixed-width values are zero-padded by the engine.')}</Typography>}
-        <Typography>{gettext('Changes remain in the row draft. Save the row, then explicitly commit or roll back the data session.')}</Typography>
-        <TextField select size="small" value={draft.isNull ? 'null' : 'value'} disabled={disabled}
-          SelectProps={{inputProps: {'aria-label': `${label} mode`}}}
-          onChange={(event) => onChange({...draft, isNull: event.target.value === 'null'})}>
-          <MenuItem value="value">{gettext('Value')}</MenuItem><MenuItem value="null">NULL</MenuItem>
-        </TextField>
+    <Dialog
+      open={expanded}
+      onClose={() => setExpanded(false)}
+      size="large"
+      title={titleText}
+      actions={<Button onClick={() => setExpanded(false)}>{gettext('Close array editor')}</Button>}
+    >
+      <Stack spacing={1}>
+        <div>{gettext('Element type')}: {spec.element_kind}{spec.precision ? `(${spec.precision})` : ''}; {gettext('Scale')}: {spec.scale}</div>
+        {spec.length && <div>{gettext('Declared length')}: {spec.length} {spec.element_kind === 'binary' ? gettext('bytes') : gettext('characters')}; {gettext('Character set')}: {spec.charset}</div>}
+        {spec.element_kind?.startsWith('firebird-') && <div>{gettext('Each element is a JSON object with encoding, utc and time_zone fields. UTC preserves distinct DST instants.')}</div>}
+        {spec.element_kind === 'binary' && <div>{gettext('Enter each element as canonical Base64. Fixed-width values are zero-padded by the engine.')}</div>}
+        <div>{gettext('Changes remain in the row draft. Save the row, then explicitly commit or roll back the data session.')}</div>
+        <Select
+          aria-label={`${label} mode`}
+          value={draft.isNull ? 'null' : 'value'}
+          disabled={disabled}
+          options={[
+            {value: 'value', label: gettext('Value')},
+            {value: 'null', label: 'NULL'},
+          ]}
+          onChange={(nextValue) => onChange({...draft, isNull: nextValue === 'null'})}
+        />
         {!value && <Button disabled={disabled} onClick={initialize}>{gettext('Initialize array')}</Button>}
-        {error && <Alert severity="error">{error}</Alert>}
+        {error && <Banner tone="error">{error}</Banner>}
         {value && <>
           {Array.from({length: Math.min(25, count - currentPage * 25)}, (_, offset) => {
             const index = currentPage * 25 + offset;
@@ -82,27 +97,46 @@ export default function ProviderArrayInput({draft, spec, label, disabled, onChan
             const element = coordinates.reduce((items, coordinate, dimension) =>
               items[coordinate - spec.bounds[dimension][0]], value);
             const name = `${label} [${coordinates.join(', ')}]`;
-            return <TextField key={index} size="small" fullWidth helperText={name}
-              select={spec.element_kind === 'boolean'}
-              multiline={spec.element_kind === 'text' || spec.element_kind?.startsWith('firebird-')}
-              value={spec.element_kind?.startsWith('firebird-') && typeof element === 'object' ? JSON.stringify(element) : spec.element_kind === 'binary' && element?.encoding === 'base64' ? element.data : String(element)}
-              disabled={disabled || draft.isNull}
-              inputProps={{'aria-label': name}}
-              SelectProps={{inputProps: {'aria-label': name}}}
-              onChange={(event) => change(index, spec.element_kind === 'boolean' ?
-                event.target.value === 'true' : event.target.value)}>
-              {spec.element_kind === 'boolean' && [
-                <MenuItem key="true" value="true">{gettext('True')}</MenuItem>,
-                <MenuItem key="false" value="false">{gettext('False')}</MenuItem>,
-              ]}
-            </TextField>;
+            const displayValue = spec.element_kind?.startsWith('firebird-') && typeof element === 'object' ?
+              JSON.stringify(element) :
+              spec.element_kind === 'binary' && element?.encoding === 'base64' ?
+                element.data :
+                String(element);
+            if (spec.element_kind === 'boolean') {
+              return (
+                <Select
+                  key={index}
+                  aria-label={name}
+                  helperText={name}
+                  value={displayValue}
+                  disabled={disabled || draft.isNull}
+                  options={[
+                    {value: 'true', label: gettext('True')},
+                    {value: 'false', label: gettext('False')},
+                  ]}
+                  onChange={(nextValue) => change(index, nextValue === 'true')}
+                />
+              );
+            }
+            return (
+              <TextField
+                key={index}
+                helperText={name}
+                multiline={spec.element_kind === 'text' || spec.element_kind?.startsWith('firebird-')}
+                value={displayValue}
+                disabled={disabled || draft.isNull}
+                inputProps={{'aria-label': name}}
+                onChange={(event) => change(index, event.target.value)}
+              />
+            );
           })}
-          <Button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{gettext('Previous elements')}</Button>
-          <Typography component="span">{currentPage + 1} / {lastPage + 1}</Typography>
-          <Button disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>{gettext('Next elements')}</Button>
+          <Box style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <Button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{gettext('Previous elements')}</Button>
+            <span>{currentPage + 1} / {lastPage + 1}</span>
+            <Button disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>{gettext('Next elements')}</Button>
+          </Box>
         </>}
-      </DialogContent>
-      <DialogActions><Button onClick={() => setExpanded(false)}>{gettext('Close array editor')}</Button></DialogActions>
+      </Stack>
     </Dialog>
   </Box>;
 }

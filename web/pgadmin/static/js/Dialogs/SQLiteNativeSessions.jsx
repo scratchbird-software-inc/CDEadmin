@@ -2,7 +2,8 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import SQLiteCaptureExports from './SQLiteCaptureExports';
 import SQLiteChangesetApply from './SQLiteChangesetApply';
-import {Alert,Box,Button,Checkbox,FormControlLabel,Table,TableBody,TableCell,TableHead,TableRow,TextField,MenuItem} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,TextField,MenuItem} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 
 export default function SQLiteNativeSessions({post,ensureSession,sessionId,databaseTargetId,endpointUrl,disabled,onBusyChange}) {
   const [inventory,setInventory]=useState(null),[capture,setCapture]=useState(null),[page,setPage]=useState(0);
@@ -44,9 +45,32 @@ export default function SQLiteNativeSessions({post,ensureSession,sessionId,datab
         <FormControlLabel label="Track tables through native rowids" control={<Checkbox checked={rowids} disabled={blocked} onChange={event => setRowids(event.target.checked)} />} />
         <Button disabled={blocked || !inventory.helper_available} onClick={() => run({operation:'open',database,estimate_size:estimate,track_rowids:rowids})}>Open native capture</Button>
       </Box>
-      <Table size="small" aria-label="Native SQLite captures"><TableHead><TableRow>{['Capture','Database','Native memory bytes','Enabled','Inspect'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {inventory.captures.map(item => <TableRow key={item.capture_id}><TableCell>{item.capture_id}</TableCell><TableCell>{item.database}</TableCell><TableCell>{item.memory_bytes}</TableCell><TableCell>{String(item.enabled)}</TableCell><TableCell><Button disabled={blocked} onClick={() => run({operation:'status',capture_id:item.capture_id})}>Inspect capture {item.capture_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table>
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native SQLite captures"
+        rows={(inventory.captures || []).map(item => ({
+          id: item.capture_id,
+          capture_id: item.capture_id,
+          database: item.database,
+          memory_bytes: item.memory_bytes,
+          enabled: String(item.enabled),
+          _raw: item,
+        }))}
+        columns={[
+          {key: 'capture_id', name: 'Capture'},
+          {key: 'database', name: 'Database'},
+          {key: 'memory_bytes', name: 'Native memory bytes'},
+          {key: 'enabled', name: 'Enabled'},
+          {
+            key: '_inspect',
+            name: 'Inspect',
+            render: (_val, row) => <Button disabled={blocked} onClick={() => run({operation:'status',capture_id:row._raw.capture_id})}>Inspect capture {row._raw.capture_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
       <Button disabled={blocked || page===0} onClick={() => run({operation:'inventory',offset:(page-1)*25,limit:25})}>Previous native captures</Button>
       <Button disabled={blocked || !inventory.more} onClick={() => run({operation:'inventory',offset:(page+1)*25,limit:25})}>Next native captures</Button>
     </>}

@@ -1,7 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import ReceiverFileCleanup from './ReceiverFileCleanup';
-import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mui/material';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 
@@ -61,10 +63,41 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));})}>Confirm and start continuous receiver</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label="Native binary-log receivers"><TableHead><TableRow>{['Job','Starting log','State','Receipt'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{job.options.start_file}</TableCell><TableCell>{job.state}</TableCell>
-          <TableCell><Button disabled={busy} onClick={() => run('status',{job_id:job.job_id},setReceipt)}>Inspect receiver {job.job_id}</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel="Native binary-log receivers"
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          start_file: job.options.start_file,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'start_file', name: 'Starting log'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} onClick={() => run('status',{job_id:row._raw.job_id},setReceipt)}>Inspect receiver {row._raw.job_id}</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={page}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(page + 1) * 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, page - 1))}
+        onNext={() => load(page + 1)}
+        onLast={() => load(Math.max(0, Math.ceil((jobs.total || 0) / 25) - 1))}
+      />
     </>}
     {receipt && <Box sx={{my:1}}>
       <Alert severity={['unknown','failed','not_dispatched'].includes(receipt.state) ? 'warning' : 'info'}>Receiver {receipt.job_id}: {receipt.state}. Published archive batches: {receipt.result?.published_batches ?? receipt.progress?.published_batches ?? 0}. Automatic restart: disabled.</Alert>
@@ -106,12 +139,32 @@ export default function ContinuousBinlog({post,engine,onInspectArchive}) {
         <Button disabled={busy} onClick={() => run('tail_catalog',{job_id:receipt.job_id},value => {setTails(value);setTailFiles([]);setTailReview(null);})}>Inspect stopped receiver files</Button>
         {tails && <>
           <Alert severity="info">Only complete native closed files can be adopted. Each adoption creates a separate verified archive; the receiver outcome and active tails remain independent.</Alert>
-          <Table size="small" aria-label="Stopped native receiver files"><TableHead><TableRow>{['Select','Native log','Local bytes','Native bytes','Eligibility'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
-            {tails.logs.map(row => <TableRow key={row.Log_name}>
-              <TableCell><Checkbox inputProps={{'aria-label':'Adopt '+row.Log_name}} disabled={busy || !row.eligible} checked={tailFiles.includes(row.Log_name)} onChange={event => {setTailFiles(current => event.target.checked ? [...current,row.Log_name] : current.filter(name => name!==row.Log_name));setTailReview(null);}} /></TableCell>
-              <TableCell>{row.Log_name}</TableCell><TableCell>{row.local_bytes}</TableCell><TableCell>{row.File_size}</TableCell><TableCell>{row.eligible ? 'Complete closed candidate' : row.reason}</TableCell>
-            </TableRow>)}
-          </TableBody></Table>
+          <UnifiedDataGrid
+            gridRole="table"
+            ariaLabel="Stopped native receiver files"
+            rows={(tails.logs || []).map(row => ({
+              id: row.Log_name,
+              Log_name: row.Log_name,
+              local_bytes: row.local_bytes,
+              File_size: row.File_size,
+              eligibility: row.eligible ? 'Complete closed candidate' : row.reason,
+              _raw: row,
+            }))}
+            columns={[
+              {
+                key: '_select',
+                name: 'Select',
+                render: (_val, row) => <Checkbox inputProps={{'aria-label':'Adopt '+row._raw.Log_name}} disabled={busy || !row._raw.eligible} checked={tailFiles.includes(row._raw.Log_name)} onChange={event => {setTailFiles(current => event.target.checked ? [...current,row._raw.Log_name] : current.filter(name => name!==row._raw.Log_name));setTailReview(null);}} />,
+              },
+              {key: 'Log_name', name: 'Native log'},
+              {key: 'local_bytes', name: 'Local bytes'},
+              {key: 'File_size', name: 'Native bytes'},
+              {key: 'eligibility', name: 'Eligibility'},
+            ]}
+            compact
+            searchable={false}
+            exportable={false}
+          />
           <Button disabled={busy || !tailFiles.length} onClick={() => run('tail_review',{job_id:receipt.job_id,options:{log_names:tails.logs.filter(row => tailFiles.includes(row.Log_name)).map(row => row.Log_name),timeout_seconds:timeout}},setTailReview)}>Review stopped-file adoption</Button>
         </>}
         {tailReview && <Box>

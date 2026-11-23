@@ -1,11 +1,13 @@
 import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
-import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
+import {Alert,Box,Button,MenuItem,TextField} from '@mui/material';
 import {startBrowserFileDownload} from './browserFileDownload';
 import ContinuousBinlog from './ContinuousBinlog';
 import MySQLArchiveRetention from './MySQLArchiveRetention';
 import MySQLSourceLogs from './MySQLSourceLogs';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw=false}) {
@@ -86,9 +88,41 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
       <Button disabled={busy || review.state!=='reviewed'} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value => {setReceipt(value);setFiles(null);setReview(current => ({...current,state:value.state}));})}>Confirm and start archive</Button>
     </Box>}
     {jobs && <>
-      <Table size="small" aria-label={'Native '+engineLabel+' archive jobs'}><TableHead><TableRow>{['Job','Starting point','State','Receipt'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>
-        {jobs.jobs.map(job => <TableRow key={job.job_id}><TableCell>{job.job_id}</TableCell><TableCell>{closed ? job.options.log_names.join(' → ') : job.options.since_job_id || job.options.start_file+':'+job.options.start_position}</TableCell><TableCell>{job.state}</TableCell><TableCell><Button disabled={busy} aria-label={'Inspect archive '+job.job_id} onClick={() => inspect(job)}>Inspect</Button></TableCell></TableRow>)}
-      </TableBody></Table><TablePagination component="div" count={jobs.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={page} onPageChange={(_event,next) => load(next)} />
+      <UnifiedDataGrid
+        gridRole="table"
+        ariaLabel={'Native '+engineLabel+' archive jobs'}
+        rows={(jobs.jobs || []).map(job => ({
+          id: job.job_id,
+          job_id: job.job_id,
+          starting_point: closed ? job.options.log_names.join(' → ') : job.options.since_job_id || job.options.start_file+':'+job.options.start_position,
+          state: job.state,
+          _raw: job,
+        }))}
+        columns={[
+          {key: 'job_id', name: 'Job'},
+          {key: 'starting_point', name: 'Starting point'},
+          {key: 'state', name: 'State'},
+          {
+            key: '_receipt',
+            name: 'Receipt',
+            render: (_val, row) => <Button disabled={busy} aria-label={'Inspect archive '+row._raw.job_id} onClick={() => inspect(row._raw)}>Inspect</Button>,
+          },
+        ]}
+        compact
+        searchable={false}
+        exportable={false}
+      />
+      <GridNavigation
+        busy={busy}
+        page={page}
+        pages={Math.max(1, Math.ceil((jobs.total || 0) / 25))}
+        endKnown
+        canNext={(page + 1) * 25 < (jobs.total || 0)}
+        onFirst={() => load(0)}
+        onPrevious={() => load(Math.max(0, page - 1))}
+        onNext={() => load(page + 1)}
+        onLast={() => load(Math.max(0, Math.ceil((jobs.total || 0) / 25) - 1))}
+      />
       {jobs.unavailable_job_ids?.length>0 && <Alert severity="warning">Some archive receipts could not be read: {jobs.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {receipt && <Box sx={{my:1}}>
@@ -108,8 +142,41 @@ export default function MySQLBinlogArchives({post,endpointUrl,engine='mysql',raw
       {!maria && !receipt.artifact_removed && !receipt.artifact_removal && ['completed','artifact_verified'].includes(receipt.state) && <Button disabled={busy} onClick={() => run('pin',{job_id:receipt.job_id,pinned:!receipt.retention_pinned},setReceipt)}>{receipt.retention_pinned ? 'Unprotect archive from removal' : 'Protect archive from removal'}</Button>}
       {!maria && receipt.artifact_removal?.state==='pending' && <Button disabled={busy} onClick={() => run('removal_reconcile',{job_id:receipt.job_id,confirmation:receipt.job_id},setReceipt)}>Reconcile archive file removal</Button>}
       {files && !receipt.artifact_removed && <>
-        <Table size="small" aria-label="Verified native archive files"><TableHead><TableRow>{['Relative path','Bytes','SHA256','Download'].map(value => <TableCell key={value}>{value}</TableCell>)}</TableRow></TableHead><TableBody>{files.files.map(row => <TableRow key={row.path}><TableCell>{row.path}</TableCell><TableCell>{row.size}</TableCell><TableCell>{row.sha256}</TableCell><TableCell><Button aria-label={'Download '+row.path} onClick={() => download(row)}>Download file</Button></TableCell></TableRow>)}</TableBody></Table>
-        <TablePagination component="div" count={files.total} rowsPerPage={100} rowsPerPageOptions={[100]} page={files.offset/100} onPageChange={(_event,next) => loadFiles(next*100)} />
+        <UnifiedDataGrid
+          gridRole="table"
+          ariaLabel="Verified native archive files"
+          rows={(files.files || []).map(row => ({
+            id: row.path,
+            path: row.path,
+            size: row.size,
+            sha256: row.sha256,
+            _raw: row,
+          }))}
+          columns={[
+            {key: 'path', name: 'Relative path'},
+            {key: 'size', name: 'Bytes'},
+            {key: 'sha256', name: 'SHA256'},
+            {
+              key: '_download',
+              name: 'Download',
+              render: (_val, row) => <Button aria-label={'Download '+row._raw.path} onClick={() => download(row._raw)}>Download file</Button>,
+            },
+          ]}
+          compact
+          searchable={false}
+          exportable={false}
+        />
+        <GridNavigation
+          busy={busy}
+          page={Math.floor((files.offset || 0) / 100)}
+          pages={Math.max(1, Math.ceil((files.total || 0) / 100))}
+          endKnown
+          canNext={(files.offset || 0) + 100 < (files.total || 0)}
+          onFirst={() => loadFiles(0)}
+          onPrevious={() => loadFiles(Math.max(0, (files.offset || 0) - 100))}
+          onNext={() => loadFiles((files.offset || 0) + 100)}
+          onLast={() => loadFiles(Math.max(0, (Math.ceil((files.total || 0) / 100) - 1) * 100))}
+        />
       </>}
       {!receipt.artifact_removed && !receipt.artifact_removal && !receipt.retention_pinned && !ACTIVE.has(receipt.state) && <Box sx={{display:'flex',gap:1,my:1}}>
         <TextField size="small" label="Confirm job identity to remove archive files" value={confirmation} onChange={event => setConfirmation(event.target.value)} />

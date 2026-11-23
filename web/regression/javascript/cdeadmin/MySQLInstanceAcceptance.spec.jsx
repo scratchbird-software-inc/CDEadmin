@@ -69,7 +69,7 @@ it('shows a system-table difference independently of matching exported data',asy
   render(<Component post={post} />);fireEvent.click(screen.getByText('Independent dump acceptance'));
   fireEvent.click(screen.getByRole('button',{name:'Load independent acceptance jobs'}));fireEvent.click(await screen.findByRole('button',{name:'Inspect acceptance system-difference'}));
   await screen.findByRole('table',{name:'Recorded dump acceptance surfaces'});
-  expect(screen.getByText('system_state').closest('tr')).toHaveTextContent('Different');
-  expect(screen.getByText('data').closest('tr')).toHaveTextContent('Matched');
+  expect(screen.getByText('system_state').closest('[role="row"]')).toHaveTextContent('Different');
+  expect(screen.getByText('data').closest('[role="row"]')).toHaveTextContent('Matched');
   expect(post.mock.calls.some(([value])=>value.action==='mysql_instance_acceptance_start')).toBe(false);
 });
