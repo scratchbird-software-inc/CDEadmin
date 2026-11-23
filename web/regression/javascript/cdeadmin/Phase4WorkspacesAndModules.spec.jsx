@@ -25,7 +25,6 @@ import {
   buildSqlStudioShellConfig,
 } from '../../../pgadmin/static/js/BrowserComponent';
 import {showProviderWorkspace} from '../../../pgadmin/static/js/Dialogs/index';
-import ProviderWorkspaceContent from '../../../pgadmin/static/js/Dialogs/ProviderWorkspaceContent';
 import {bootstrap as sampleBootstrap} from './providerWorkspaceContentShared';
 
 jest.mock('../../../pgadmin/static/js/api_instance');

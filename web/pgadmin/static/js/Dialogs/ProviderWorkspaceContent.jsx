@@ -5645,9 +5645,9 @@ export default function ProviderWorkspaceContent({
       } : queryDatabaseTargetId &&
       DATABASE_SCOPED_TOP_LEVEL_ACTIONS.has(payload.action) &&
       payload.database_target_id === undefined ? {
-        ...payload,
-        database_target_id: queryDatabaseTargetId,
-      } : payload;
+          ...payload,
+          database_target_id: queryDatabaseTargetId,
+        } : payload;
     const submit = () => api.post(endpointUrl, scopedPayload)
       .then((response) => response.data.data);
     return submit().catch((requestError) => {

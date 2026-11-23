@@ -763,7 +763,8 @@ def _reconcile_manifests(out_dir: Path) -> dict:
     manifest_path = ROOT / 'web/pgadmin/cdeadmin/providers/duckdb/provider_manifest.json'
     manifest_doc = json.loads(manifest_path.read_text(encoding='utf-8'))
     manifest_doc['provenance'].update({
-        'live_evidence_reference': 'duckdb-qualification/summary.json',
+        'live_evidence_reference': 'cde-rel-live:duckdb-1.5.2:20260910',
+        'audit_qualification_summary': 'duckdb-qualification/summary.json',
         'provider_live_evidence_sha256': _sha256_file(dialect_live_path),
         'object_evidence_sha256': _sha256_file(obj_api_path),
         'strict_object_evidence_sha256': _sha256_file(refusal_path),

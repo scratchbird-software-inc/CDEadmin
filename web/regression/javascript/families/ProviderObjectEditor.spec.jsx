@@ -75,7 +75,10 @@ describe('family editor tree glue', () => {
       runtime_verification_state: 'legacy', verified_runtime_version: '18.3', cde_context_actions: []};
     installTree({pgserver: {data: pgServer}, column: {data: column, parent: 'pgserver'}, columns: {data: columns, parent: 'pgserver'}});
     resetDescriptorClient();
-    const client = descriptorClient({get: async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}}), post: async () => ({})});
+    const pgBundle = loadEngineBundle('postgresql');
+    delete pgBundle.forms['engine_object:column'];
+    pgBundle.kinds.column = {...pgBundle.kinds.column, form_status: null};
+    const client = descriptorClient({get: async () => ({data: {success: 1, data: pgBundle}}), post: async () => ({})});
     await client.bundle('postgresql', {version: '18.3'});
     expect(familyEditorContextActions(column, 'column').map((entry) => entry.id)).toContain('family-editor-edit');
     expect(familyEditorContextActions(columns, 'columns').map((entry) => entry.id)).toContain('family-editor-create-column');

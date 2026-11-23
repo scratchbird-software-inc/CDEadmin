@@ -59,24 +59,24 @@ export function renderPostgresqlAdminWorkspace({
   api = null,
 }) {
   switch (tab) {
-    case 'postgresql-host-tools':
-      return <PostgresqlHostToolsWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-configuration':
-      return <PostgresqlConfigurationWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-ha-topology':
-      return <PostgresqlHaTopologyWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-prepared-xacts':
-      return <PostgresqlPreparedXactsWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-snapshot-copy':
-      return <PostgresqlSnapshotCopyWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-activity-locks':
-      return <PostgresqlActivityLocksWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-listen-notify':
-      return <PostgresqlListenNotifyWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'postgresql-logical-tools':
-      return <PostgresqlLogicalToolsWorkspace endpointUrl={endpointUrl} api={api} />;
-    default:
-      return null;
+  case 'postgresql-host-tools':
+    return <PostgresqlHostToolsWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-configuration':
+    return <PostgresqlConfigurationWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-ha-topology':
+    return <PostgresqlHaTopologyWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-prepared-xacts':
+    return <PostgresqlPreparedXactsWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-snapshot-copy':
+    return <PostgresqlSnapshotCopyWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-activity-locks':
+    return <PostgresqlActivityLocksWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-listen-notify':
+    return <PostgresqlListenNotifyWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'postgresql-logical-tools':
+    return <PostgresqlLogicalToolsWorkspace endpointUrl={endpointUrl} api={api} />;
+  default:
+    return null;
   }
 }
 

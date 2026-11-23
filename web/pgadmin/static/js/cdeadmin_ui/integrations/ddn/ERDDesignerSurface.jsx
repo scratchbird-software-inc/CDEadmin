@@ -3675,7 +3675,7 @@ export function ERDDesignerSurface({
                 <Stack gap="standard">
                   <Banner status="info">
                     {gettext(
-                      "Schema changes are queued into ScratchRobin's OperationBus in awaiting_approval state and are never executed directly by the ERD designer."
+                      'Schema changes are queued into ScratchRobin\'s OperationBus in awaiting_approval state and are never executed directly by the ERD designer.'
                     )}
                   </Banner>
                   <FormGrid columns={3}>

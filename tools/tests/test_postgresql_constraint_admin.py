@@ -70,7 +70,7 @@ def test_create_each_kind_as_the_inherited_templates():
         'name': 'qty_ok', 'contype': 'c', 'consrc': 'qty > 0',
         'not_valid': True, 'connoinherit': True}) == [
         'ALTER TABLE "shop"."orders" ADD CONSTRAINT "qty_ok" CHECK (qty > 0) '
-        'NOT VALID NO INHERIT']
+        'NO INHERIT NOT VALID']
     assert statements('create', {
         'name': 'no_overlap', 'contype': 'x', 'amname': 'gist',
         'elements': [{'column': 'room', 'operator': '='},

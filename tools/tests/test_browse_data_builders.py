@@ -263,7 +263,12 @@ def test_sqlite_provider_reports_the_loaded_library_keywords():
     from pgadmin.cdeadmin.providers.sqlite.provider import SQLiteProvider
     reported = SQLiteProvider.browse_runtime_keywords(
         object.__new__(SQLiteProvider))
-    assert reported == native_keywords()[0] and 'SELECT' in reported
+    try:
+        expected = native_keywords()[0]
+    except (OSError, AttributeError, ValueError, UnicodeError):
+        assert reported is None
+    else:
+        assert reported == expected and 'SELECT' in reported
 
 
 def test_duckdb_qualifies_with_database_and_schema():

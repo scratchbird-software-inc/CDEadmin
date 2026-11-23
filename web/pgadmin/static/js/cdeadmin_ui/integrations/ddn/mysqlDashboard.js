@@ -78,7 +78,7 @@ export function mysqlDashboardFiles(snapshot, scope, engine='mysql') {
     const grFlowControl = sample?.groups?.component_group_replication_flow_control;
     const applierUnit = key => key.endsWith('_duration') || key.endsWith('_sum_time') ? 'nanoseconds'
       : key.includes('_bytes') ? 'bytes' : key.endsWith('_count') ? 'count'
-      : key === 'last_applier_start' ? 'timestamp' : 'server';
+        : key === 'last_applier_start' ? 'timestamp' : 'server';
     panels.push({id: 'component_metrics', title: 'MySQL component metrics', rows: [
       binding('mysql_component_summary_0', ['component_replication_applier_metrics', applierMetrics?.status || 'Unavailable', applierMetrics?.component_urn || 'file://component_replication_applier_metrics']),
       binding('mysql_component_summary_1', ['component_replication_applier_worker_progress', workerMetrics?.status || 'Unavailable', workerMetrics?.component_urn || 'file://component_replication_applier_metrics']),

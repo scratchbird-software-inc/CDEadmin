@@ -401,9 +401,9 @@ function sqlLiteral(val) {
   if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
   if (typeof val === 'number' && Number.isFinite(val)) return String(val);
   if (typeof val === 'object') {
-    return `'${JSON.stringify(val).replaceAll("'", "''")}'`;
+    return `'${JSON.stringify(val).replaceAll('\'', '\'\'')}'`;
   }
-  return `'${String(val).replaceAll("'", "''")}'`;
+  return `'${String(val).replaceAll('\'', '\'\'')}'`;
 }
 
 export function formatRowsForExport(rows, columns, format, tableName = 'TARGET_TABLE') {

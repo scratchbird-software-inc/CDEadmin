@@ -50,26 +50,26 @@ export function renderMariaDBAdminWorkspace({
   api = null,
 }) {
   switch (tab) {
-    case 'mariadb-physical':
-      return <MariaDBPhysicalWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'mariadb-archive-retention':
-      return <MariaDBArchiveRetentionWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'mariadb-host':
-      return <MariaDBHostWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'mariadb-upgrade':
-      return <MariaDBUpgradeWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'mariadb-galera':
-      return <MariaDBGaleraWorkspace endpointUrl={endpointUrl} api={api} />;
-    case 'mariadb-utilities':
-      return (
-        <MariaDBUtilityWorkspace
-          endpointUrl={endpointUrl}
-          databaseTargetId={databaseTargetId}
-          api={api}
-        />
-      );
-    default:
-      return null;
+  case 'mariadb-physical':
+    return <MariaDBPhysicalWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'mariadb-archive-retention':
+    return <MariaDBArchiveRetentionWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'mariadb-host':
+    return <MariaDBHostWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'mariadb-upgrade':
+    return <MariaDBUpgradeWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'mariadb-galera':
+    return <MariaDBGaleraWorkspace endpointUrl={endpointUrl} api={api} />;
+  case 'mariadb-utilities':
+    return (
+      <MariaDBUtilityWorkspace
+        endpointUrl={endpointUrl}
+        databaseTargetId={databaseTargetId}
+        api={api}
+      />
+    );
+  default:
+    return null;
   }
 }
 

@@ -2025,35 +2025,35 @@ export function ScreenMeshDesignerSurface({
         !selectedControlObj &&
         !selectedRegionObj &&
         !selectedNavigationObj && (
-          <EmptyState
-            message={gettext(
-              'Select a Screen, Control, Region, or Navigation in the navigator to inspect its properties.'
-            )}
-          />
-        )}
+        <EmptyState
+          message={gettext(
+            'Select a Screen, Control, Region, or Navigation in the navigator to inspect its properties.'
+          )}
+        />
+      )}
       {bindings.some((b) => b.state === 'suspect' && b.store_binding_id) &&
         !readOnly && (
-          <Stack gap="compact">
-            <Box sx={{fontWeight: 600, fontSize: '0.75rem'}}>
-              {gettext('Suspect Bindings')}
-            </Box>
-            {bindings
-              .filter((b) => b.state === 'suspect' && b.store_binding_id)
-              .map((bnd) => (
-                <Box key={bnd.id} sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, fontSize: '0.75rem'}}>
-                  <code>{bnd.target_ref}</code>
-                  <Button
-                    size="small"
-                    onClick={() =>
-                      handleConfirmSuspect(bnd.store_binding_id, bnd.target_ref)
-                    }
-                  >
-                    {gettext('Confirm Binding')}
-                  </Button>
-                </Box>
-              ))}
-          </Stack>
-        )}
+        <Stack gap="compact">
+          <Box sx={{fontWeight: 600, fontSize: '0.75rem'}}>
+            {gettext('Suspect Bindings')}
+          </Box>
+          {bindings
+            .filter((b) => b.state === 'suspect' && b.store_binding_id)
+            .map((bnd) => (
+              <Box key={bnd.id} sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, fontSize: '0.75rem'}}>
+                <code>{bnd.target_ref}</code>
+                <Button
+                  size="small"
+                  onClick={() =>
+                    handleConfirmSuspect(bnd.store_binding_id, bnd.target_ref)
+                  }
+                >
+                  {gettext('Confirm Binding')}
+                </Button>
+              </Box>
+            ))}
+        </Stack>
+      )}
     </Box>
   );
 

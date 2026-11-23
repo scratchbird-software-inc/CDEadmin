@@ -46,9 +46,9 @@ function formatSqliteLiteral(val) {
     if (typeof val.decimal === 'string' || typeof val.int64 === 'string') {
       return val.decimal || val.int64;
     }
-    return `'${JSON.stringify(val).replace(/'/g, "''")}'`;
+    return `'${JSON.stringify(val).replace(/'/g, '\'\'')}'`;
   }
-  return `'${String(val).replace(/'/g, "''")}'`;
+  return `'${String(val).replace(/'/g, '\'\'')}'`;
 }
 
 /**
@@ -103,26 +103,26 @@ export function DataSqliteRowSqlDialog({
     const pkVal = formatSqliteLiteral(valuesMap[pkName] ?? 1);
 
     switch (mode) {
-      case 'replace':
-        return `INSERT OR REPLACE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
-      case 'ignore':
-        return `INSERT OR IGNORE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
-      case 'update': {
-        const sets = colNames
-          .filter((c) => c !== pkName)
-          .map((c) => `${quoteSqliteIdent(c)} = ${formatSqliteLiteral(valuesMap[c])}`)
-          .join(',\n    ');
-        return `UPDATE ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal};`;
-      }
-      case 'delete':
-        return `DELETE FROM ${tableLabel}\nWHERE ${pk} = ${pkVal};`;
-      default: {
-        const updates = colNames
-          .filter((c) => c !== pkName)
-          .map((c) => `${quoteSqliteIdent(c)} = excluded.${quoteSqliteIdent(c)}`)
-          .join(',\n    ');
-        return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = excluded.${pk}`};`;
-      }
+    case 'replace':
+      return `INSERT OR REPLACE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
+    case 'ignore':
+      return `INSERT OR IGNORE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
+    case 'update': {
+      const sets = colNames
+        .filter((c) => c !== pkName)
+        .map((c) => `${quoteSqliteIdent(c)} = ${formatSqliteLiteral(valuesMap[c])}`)
+        .join(',\n    ');
+      return `UPDATE ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal};`;
+    }
+    case 'delete':
+      return `DELETE FROM ${tableLabel}\nWHERE ${pk} = ${pkVal};`;
+    default: {
+      const updates = colNames
+        .filter((c) => c !== pkName)
+        .map((c) => `${quoteSqliteIdent(c)} = excluded.${quoteSqliteIdent(c)}`)
+        .join(',\n    ');
+      return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = excluded.${pk}`};`;
+    }
     }
   }, [columns, keyCol, mode, row, tableLabel]);
   const sqlText = hostSql ?? fallbackSql;
@@ -195,8 +195,8 @@ function classifySqliteCell(value) {
     let unsafe = false;
     if (isExactIntStr) {
       try {
-        const bi = BigInt(value);
-        unsafe = bi > BigInt(Number.MAX_SAFE_INTEGER) || bi < BigInt(Number.MIN_SAFE_INTEGER);
+        const bi = window.BigInt(value);
+        unsafe = bi > window.BigInt(Number.MAX_SAFE_INTEGER) || bi < window.BigInt(Number.MIN_SAFE_INTEGER);
       } catch {
         unsafe = false;
       }

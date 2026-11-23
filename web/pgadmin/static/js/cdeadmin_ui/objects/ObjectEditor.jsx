@@ -182,38 +182,38 @@ function AdaptiveFieldGroupGrid({
           width: '100%',
         }}
       >
-      {fields.map((field) => {
-        const show = shownError(field.field_id);
-        const placement = placementByField.get(field.field_id) || {row: 1, colStart: 1, span: 1};
-        return (
-          <div
-            key={field.field_id}
-            data-cell-span={placement.span}
-            style={{
-              gridRow: placement.row,
-              gridColumn: `${placement.colStart} / span ${placement.span}`,
-              minWidth: 0,
-            }}
-          >
-            <FieldControl
-              field={field}
-              value={draft[field.field_id]}
-              draft={draft}
-              context={context}
-              resourceKind={resourceKind}
-              error={show ? errors[field.field_id] : undefined}
-              cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined}
-              mode={mode}
-              disabled={
-                disabled ||
+        {fields.map((field) => {
+          const show = shownError(field.field_id);
+          const placement = placementByField.get(field.field_id) || {row: 1, colStart: 1, span: 1};
+          return (
+            <div
+              key={field.field_id}
+              data-cell-span={placement.span}
+              style={{
+                gridRow: placement.row,
+                gridColumn: `${placement.colStart} / span ${placement.span}`,
+                minWidth: 0,
+              }}
+            >
+              <FieldControl
+                field={field}
+                value={draft[field.field_id]}
+                draft={draft}
+                context={context}
+                resourceKind={resourceKind}
+                error={show ? errors[field.field_id] : undefined}
+                cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined}
+                mode={mode}
+                disabled={
+                  disabled ||
                 fixedFields.includes(field.field_id) ||
                 (mode === 'alter' && field.editable_after_create === false)
-              }
-              onChange={(value) => onFieldChange(field.field_id, value)}
-            />
-          </div>
-        );
-      })}
+                }
+                onChange={(value) => onFieldChange(field.field_id, value)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

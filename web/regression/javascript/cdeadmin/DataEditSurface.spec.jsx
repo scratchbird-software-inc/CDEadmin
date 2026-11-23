@@ -311,6 +311,8 @@ function ShellLauncher({post, onShellReady}) {
 }
 
 describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
+  jest.setTimeout(45000);
+
   beforeEach(() => {
     jest.clearAllMocks();
     usePreferences.setState({

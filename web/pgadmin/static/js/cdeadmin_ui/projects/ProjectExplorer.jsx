@@ -907,7 +907,6 @@ export function ProjectExplorer({
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, variant]);
 
   // Refresh host root slice when query changes in host-navigator mode

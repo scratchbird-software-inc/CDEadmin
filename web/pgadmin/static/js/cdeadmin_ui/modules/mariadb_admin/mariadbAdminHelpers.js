@@ -178,8 +178,8 @@ export function MariaDBJobsTable({
                     job.state === 'completed' || job.state === 'succeeded'
                       ? 'success'
                       : job.state === 'failed'
-                      ? 'error'
-                      : 'info';
+                        ? 'error'
+                        : 'info';
                   return (
                     <tr
                       key={jid}

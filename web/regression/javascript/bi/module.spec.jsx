@@ -147,7 +147,7 @@ describe('open_tool handler', () => {
 
   it('reports a missing tool host instead of failing silently', () => {
     pgAdmin.Browser.CDEadminCommandContext = () => undefined;
-    expect(() => openRegisteredTool('bi.questions', endpoint, 'BI questions')).toThrow(/tool host is unavailable/);
+    expect(() => openRegisteredTool('bi.questions', null, 'BI questions')).toThrow(/tool host is unavailable/);
     expect(() => openRegisteredTool('', endpoint, 'BI questions')).toThrow(/does not name a surface/);
   });
 

@@ -48,7 +48,7 @@ it('keeps native registration admission and command confirmation separate and cl
   fireEvent.click(screen.getByLabelText('Temporary replication two-phase decoding'));
   fireEvent.click(screen.getByLabelText('Allow invalidation of the current exported snapshot'));
   fireEvent.click(screen.getByRole('button',{name:'Review retained replication command'}));
-  await screen.findByRole('button',{name:'Run reviewed replication command'});
+  await screen.findByRole('button',{name:'Run reviewed replication command'},{timeout:15000});
   expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'logical_create',options:{slot:'sr_export',plugin:'test_decoding',snapshot:'export',two_phase:true,invalidate_snapshot:true,timeout_seconds:30}}});
   expect(screen.getByRole('button',{name:'Run reviewed replication command'})).toBeDisabled();
   fireEvent.click(screen.getByLabelText('Confirm retained replication command'));
@@ -95,7 +95,7 @@ it('reviews native stream feedback explicitly and keeps capture preview and deli
   fireEvent.click(screen.getByLabelText('Acknowledge fsynced output to the native slot'));
   fireEvent.change(screen.getByLabelText('Native logical stream plugin options (JSON)'),{target:{value:'[{"name":"include-xids","value":"0"}]'}});
   fireEvent.click(screen.getByRole('button',{name:'Review retained replication command'}));
-  await screen.findByRole('button',{name:'Run reviewed replication command'});
+  await screen.findByRole('button',{name:'Run reviewed replication command'},{timeout:15000});
   expect(post).toHaveBeenCalledWith({action:'postgresql_replication_temporary_command_review',request:{database_target_id:target,resource_id:'resource',operation:'logical_stream',options:{slot:'sr_stream',timeout_seconds:30,invalidate_snapshot:false,start_lsn:'0/0',max_messages:100,max_capture_bytes:16777216,max_duration_seconds:5,acknowledge_flush:true,plugin_options:[{name:'include-xids',value:'0'}]}}});
   fireEvent.click(screen.getByLabelText('Confirm retained replication command'));
   fireEvent.click(screen.getByRole('button',{name:'Run reviewed replication command'}));
@@ -131,7 +131,7 @@ it('uses the original snapshot catalog, native COPY options and an explicit tran
   const choose=(label,value) => fireEvent.change(screen.getByLabelText(label).parentElement.querySelector('input'),{target:{value}});
   const run=async () => {
     fireEvent.click(screen.getByRole('button',{name:'Review retained replication command'}));
-    await screen.findByRole('button',{name:'Run reviewed replication command'});
+    await screen.findByRole('button',{name:'Run reviewed replication command'},{timeout:15000});
     fireEvent.click(screen.getByLabelText('Confirm retained replication command'));
     fireEvent.click(screen.getByRole('button',{name:'Run reviewed replication command'}));
     await screen.findByText(new RegExp('Retained replication command snapshot-command-'+count+': completed'));

@@ -88,22 +88,22 @@ export function renderSqliteAdminWorkspace({
   api = null,
 }) {
   switch (tab) {
-    case 'sqlite-rbu':
-      return <SqliteRbuWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-expert':
-      return <SqliteExpertWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-intck':
-      return <SqliteIntckWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-blob-stream':
-      return <SqliteBlobStreamWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-shell':
-      return <SqliteShellWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-sql-dump':
-      return <SqliteSqlDumpWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'sqlite-session-tuning':
-      return <SqliteSessionTuningWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    default:
-      return null;
+  case 'sqlite-rbu':
+    return <SqliteRbuWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-expert':
+    return <SqliteExpertWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-intck':
+    return <SqliteIntckWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-blob-stream':
+    return <SqliteBlobStreamWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-shell':
+    return <SqliteShellWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-sql-dump':
+    return <SqliteSqlDumpWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'sqlite-session-tuning':
+    return <SqliteSessionTuningWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  default:
+    return null;
   }
 }
 

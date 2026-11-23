@@ -566,33 +566,33 @@ export function ProjectVerticalDock({
           {shell.authorizedApps
             .filter((app) => app.showInSideMenu !== false)
             .map((app) => {
-            const localizedAppTitle = translateShell(
-              locale,
-              `app.${app.id}.label`,
-              app.label
-            );
-            const openLabel = translateShell(
-              locale,
-              'shell.side.open_app',
-              'Open %s',
-              localizedAppTitle
-            );
+              const localizedAppTitle = translateShell(
+                locale,
+                `app.${app.id}.label`,
+                app.label
+              );
+              const openLabel = translateShell(
+                locale,
+                'shell.side.open_app',
+                'Open %s',
+                localizedAppTitle
+              );
 
-            return (
-              <VerticalDockItem
-                key={app.id}
-                id={`app-${app.id}`}
-                anchor="middle"
-                iconKey={app.iconKey || 'command.default'}
-                label={openLabel}
-                tooltipText={localizedAppTitle}
-                onClick={() => shell.openApplication(app.id)}
-                buttonProps={{
-                  'data-cdeadmin-qa-key': `side-menu-app-${app.id}`,
-                }}
-              />
-            );
-          })}
+              return (
+                <VerticalDockItem
+                  key={app.id}
+                  id={`app-${app.id}`}
+                  anchor="middle"
+                  iconKey={app.iconKey || 'command.default'}
+                  label={openLabel}
+                  tooltipText={localizedAppTitle}
+                  onClick={() => shell.openApplication(app.id)}
+                  buttonProps={{
+                    'data-cdeadmin-qa-key': `side-menu-app-${app.id}`,
+                  }}
+                />
+              );
+            })}
         </div>
 
         {/* 4. Bottom-Aligned Isolated Item: Settings Gear */}

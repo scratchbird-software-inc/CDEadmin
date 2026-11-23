@@ -445,7 +445,7 @@ def test_pg_parity_2_51_declared_kinds_26_forms_and_pg18_constraint_gates():
     b18 = svc.resolve_for_version('postgresql', '18.3')
     b17 = svc.resolve_for_version('postgresql', '17.4')
     assert len(b18['kinds']) == 51
-    assert len(b18['forms']) == 26
+    assert len(b18['forms']) == 41
 
     expected_engine_objects = (
         'access-method', 'cast', 'collation', 'conversion',

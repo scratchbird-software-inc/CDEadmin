@@ -11,11 +11,7 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {
   POSTGRESQL_ADMIN_TABS,
-  PostgresqlConfigurationWorkspace,
-  PostgresqlHaTopologyWorkspace,
   PostgresqlHostToolsWorkspace,
-  PostgresqlPreparedXactsWorkspace,
-  PostgresqlSnapshotCopyWorkspace,
   renderPostgresqlAdminWorkspace,
 } from 'sources/cdeadmin_ui/modules/postgresql_admin';
 import {
@@ -128,7 +124,7 @@ describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Sna
               success: 1,
               data: {
                 file_kind: 'postgresql.conf',
-                content: "shared_buffers = '256MB'\n",
+                content: 'shared_buffers = \'256MB\'\n',
                 sha256: 'abc123',
                 redacted: false,
               },
@@ -163,7 +159,7 @@ describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Sna
               data: {
                 plan_id: 'plan-2pc-1',
                 plan_digest: 'digest-2pc-1',
-                command_preview: {statement: "ROLLBACK PREPARED 'gid_orphan_1'"},
+                command_preview: {statement: 'ROLLBACK PREPARED \'gid_orphan_1\''},
               },
             },
           };
@@ -292,7 +288,7 @@ describe('PostgreSQL surfaced Administration, Host Utilities, Continuity/HA, Sna
         open
         tableLabel='"public"."orders"'
         columns={[{name: 'id'}, {name: 'note'}]}
-        row={{id: 42, note: "it's ok"}}
+        row={{id: 42, note: 'it\'s ok'}}
         onClose={jest.fn()}
       />
     );

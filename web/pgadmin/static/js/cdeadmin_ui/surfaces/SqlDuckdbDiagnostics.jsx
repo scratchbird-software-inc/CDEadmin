@@ -156,7 +156,7 @@ export function SqlDuckdbSessionDialog({
   };
 
   const quotedAlias = `"${String(attachAlias || 'aux_catalog').replace(/"/g, '""')}"`;
-  const escapedPath = `'${String(attachPath || ':memory:').replace(/'/g, "''")}'`;
+  const escapedPath = `'${String(attachPath || ':memory:').replace(/'/g, '\'\'')}'`;
   const attachSql = `ATTACH ${escapedPath} AS ${quotedAlias}${attachReadOnly ? ' (READ_ONLY)' : ''};`;
   const detachSql = `DETACH ${quotedAlias};`;
 

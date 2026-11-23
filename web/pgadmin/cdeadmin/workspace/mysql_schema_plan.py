@@ -2,7 +2,6 @@
 from copy import deepcopy
 import json
 import re
-from ..providers.mysql_family.mysql_catalog import identifier,SYSTEM
 from .firebird_catalog_import import _equal
 from .firebird_schema_plan import digest
 from .mysql_table_clauses import table_layout
@@ -13,21 +12,6 @@ HEADER=re.compile(r'^\s*CREATE\s+TABLE\s+('+TOKEN+r')(?:\s*\.\s*('+TOKEN+r'))?\s
 
 
 def name(token):return token[1:-1].replace(token[0]*2,token[0])
-
-
-def root(model):
-    if model['provenance'].get('mapping')!='scratchrobin.mysql.catalog@1':raise ValueError('Native MySQL catalog is required')
-    rows=[row for row in model['rows'].values() if row['kind']=='database']
-    if len(rows)!=1:raise ValueError('Capture one exact MySQL database for native review')
-    facts=rows[0]['native'].get('catalog_row',{})
-    database=rows[0]['name']
-    if database in SYSTEM or facts.get('database_name')!=database or str(facts.get('version','')).split('-')[0]!='9.7.0' or not facts.get('server_uuid'):
-        raise ValueError('Native MySQL database/server identity is unavailable')
-    return database,facts
-
-
-def schema(row):
-    return {key:deepcopy(row['native'].get(key)) for key in (('definition','definition_context','trigger_identity') if row['kind']=='trigger' else ('definition','definition_context'))}
 
 
 def parts(row,sql_mode):
@@ -54,6 +38,24 @@ def parts(row,sql_mode):
         if key in clauses:raise ValueError('Duplicate native table clause identity')
         clauses[key]=stripped
     return layout,clauses,order
+
+
+from ..providers.mysql_family.mysql_catalog import identifier,SYSTEM  # noqa: E402
+
+
+def root(model):
+    if model['provenance'].get('mapping')!='scratchrobin.mysql.catalog@1':raise ValueError('Native MySQL catalog is required')
+    rows=[row for row in model['rows'].values() if row['kind']=='database']
+    if len(rows)!=1:raise ValueError('Capture one exact MySQL database for native review')
+    facts=rows[0]['native'].get('catalog_row',{})
+    database=rows[0]['name']
+    if database in SYSTEM or facts.get('database_name')!=database or str(facts.get('version','')).split('-')[0]!='9.7.0' or not facts.get('server_uuid'):
+        raise ValueError('Native MySQL database/server identity is unavailable')
+    return database,facts
+
+
+def schema(row):
+    return {key:deepcopy(row['native'].get(key)) for key in (('definition','definition_context','trigger_identity') if row['kind']=='trigger' else ('definition','definition_context'))}
 
 
 def address(row,database):

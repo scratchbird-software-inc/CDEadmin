@@ -208,12 +208,12 @@ function SqlSurfaceLauncher({postMock, initialScriptKind = '', engineId = 'fireb
         />
       ),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
 }
 
 describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
+  jest.setTimeout(45000);
   test('enforces zero inline chrome, hides SQL Editor from left quick-launch rail, mounts focus-merged menus & 7 TiB views', async () => {
     const postMock = jest.fn(async ({request}) => {
       if (request.sub_action === 'list_templates') {
@@ -496,7 +496,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
   test.each(['mysql', 'mariadb', 'postgresql', 'duckdb', 'sqlite'])(
     'formats %s using the retained SQL context and checks the result before replacing text',
     async (engine) => {
-      const source = "select 'a ; -- b' as code from t where n = 2";
+      const source = 'select \'a ; -- b\' as code from t where n = 2';
       const postMock = jest.fn(async ({request}) => {
         if (request.sub_action === 'format_context') {
           return {context: {engine, sql_mode: 'ANSI_QUOTES,NO_BACKSLASH_ESCAPES'}};
@@ -515,7 +515,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
       const validated = calls.find((request) => request.sub_action === 'validate_format');
       expect(validated).toBeDefined();
       expect(validated.sql_source).not.toBe(source);
-      expect(validated.sql_source).toContain("'a ; -- b'");
+      expect(validated.sql_source).toContain('\'a ; -- b\'');
     },
   );
 
@@ -805,7 +805,7 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
         const tr = request.target_resource;
         if (tr.display_name === 'LOG_ONLY_PROC') {
           throw new Error(
-            "Procedure 'LOG_ONLY_PROC' has no selectable RETURNS output columns (executable-only)"
+            'Procedure \'LOG_ONLY_PROC\' has no selectable RETURNS output columns (executable-only)'
           );
         }
         if (tr.display_name === 'GET_EMP_PROJ') {

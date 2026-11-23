@@ -232,7 +232,7 @@ function formatMySQLScalarLiteral(val) {
   if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
   if (typeof val === 'number' && Number.isFinite(val)) return String(val);
   const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
-  return "'" + str.replaceAll('\\', '\\\\').replaceAll("'", "''") + "'";
+  return '\'' + str.replaceAll('\\', '\\\\').replaceAll('\'', '\'\'') + '\'';
 }
 
 /**

@@ -83,20 +83,20 @@ export function assetIcon(assetType) {
 
 export function dbObjectIcon(kind) {
   switch (String(kind || 'table').toLowerCase()) {
-    case 'table':
-      return 'object.table';
-    case 'view':
-      return 'object.view';
-    case 'procedure':
-      return 'object.procedure';
-    case 'package':
-      return 'object.package';
-    case 'function':
-      return 'object.function';
-    case 'sequence':
-      return 'object.sequence';
-    default:
-      return 'object.table';
+  case 'table':
+    return 'object.table';
+  case 'view':
+    return 'object.view';
+  case 'procedure':
+    return 'object.procedure';
+  case 'package':
+    return 'object.package';
+  case 'function':
+    return 'object.function';
+  case 'sequence':
+    return 'object.sequence';
+  default:
+    return 'object.table';
   }
 }
 

@@ -60,7 +60,7 @@ function formatDuckdbLiteral(val) {
     const entries = Object.entries(val).map(([k, v]) => `${quoteDuckdbIdent(k)}: ${formatDuckdbLiteral(v)}`);
     return `{${entries.join(', ')}}`;
   }
-  return `'${String(val).replace(/'/g, "''")}'`;
+  return `'${String(val).replace(/'/g, '\'\'')}'`;
 }
 
 /**
@@ -115,28 +115,28 @@ export function DataDuckdbRowSqlDialog({
     const pkVal = formatDuckdbLiteral(valuesMap[pkName] ?? 1);
 
     switch (mode) {
-      case 'insert':
-        return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
-      case 'replace':
-        return `INSERT OR REPLACE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
-      case 'update': {
-        const sets = colNames
-          .filter((c) => c !== pkName)
-          .map((c) => `${quoteDuckdbIdent(c)} = ${formatDuckdbLiteral(valuesMap[c])}`)
-          .join(',\n    ');
-        return `UPDATE ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal};`;
-      }
-      case 'delete':
-        return `DELETE FROM ${tableLabel}\nWHERE ${pk} = ${pkVal};`;
-      case 'copy_parquet':
-        return `COPY (SELECT * FROM ${tableLabel} WHERE ${pk} = ${pkVal}) TO 'row_export.parquet' (FORMAT PARQUET);`;
-      default: {
-        const updates = colNames
-          .filter((c) => c !== pkName)
-          .map((c) => `${quoteDuckdbIdent(c)} = EXCLUDED.${quoteDuckdbIdent(c)}`)
-          .join(',\n    ');
-        return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = EXCLUDED.${pk}`};`;
-      }
+    case 'insert':
+      return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
+    case 'replace':
+      return `INSERT OR REPLACE INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals});`;
+    case 'update': {
+      const sets = colNames
+        .filter((c) => c !== pkName)
+        .map((c) => `${quoteDuckdbIdent(c)} = ${formatDuckdbLiteral(valuesMap[c])}`)
+        .join(',\n    ');
+      return `UPDATE ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal};`;
+    }
+    case 'delete':
+      return `DELETE FROM ${tableLabel}\nWHERE ${pk} = ${pkVal};`;
+    case 'copy_parquet':
+      return `COPY (SELECT * FROM ${tableLabel} WHERE ${pk} = ${pkVal}) TO 'row_export.parquet' (FORMAT PARQUET);`;
+    default: {
+      const updates = colNames
+        .filter((c) => c !== pkName)
+        .map((c) => `${quoteDuckdbIdent(c)} = EXCLUDED.${quoteDuckdbIdent(c)}`)
+        .join(',\n    ');
+      return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = EXCLUDED.${pk}`};`;
+    }
     }
   }, [columns, keyCol, mode, row, tableLabel]);
   const sqlText = hostSql ?? fallbackSql;

@@ -310,7 +310,6 @@ export default function DataEditSurface({
     // Do NOT close_surface on React unmount: switching Surface tabs in ProjectShell
     // unmounts inactive work areas while preserving the host session, buffered rows,
     // and uncommitted Firebird transaction state until explicit Surface close.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetResourceId, databaseTargetId]);
 
   const columns = useMemo(
@@ -2728,7 +2727,7 @@ export default function DataEditSurface({
             actionId: clearFiltersId,
             label: gettext('Clear All Filters & Sorts'),
             iconKey: 'action.close',
-            disabled: !Boolean(hostData?.filters?.length || hostData?.sorts?.length),
+            disabled: !(hostData?.filters?.length || hostData?.sorts?.length),
             index: 170,
           },
           {
@@ -3106,7 +3105,7 @@ export default function DataEditSurface({
             label: gettext('Pin / Freeze Selected Column'),
             iconKey: 'action.pin_node',
             checked: Boolean(activeColPrefs.pinned),
-            disabled: !Boolean(activeColName),
+            disabled: !activeColName,
             index: 130,
           },
           {
@@ -4299,8 +4298,8 @@ export default function DataEditSurface({
                     (editingRowIndex ?? activeRowIndex) === fbBlobModalState.rowIndex &&
                     rowDraft &&
                     Object.prototype.hasOwnProperty.call(rowDraft, fbBlobModalState.column.name)
-                    ? rowDraft[fbBlobModalState.column.name]
-                    : rows[fbBlobModalState.rowIndex]?.values?.[fbBlobModalState.column.name])
+                  ? rowDraft[fbBlobModalState.column.name]
+                  : rows[fbBlobModalState.rowIndex]?.values?.[fbBlobModalState.column.name])
                 : null
             }
             readOnly={
@@ -4351,8 +4350,8 @@ export default function DataEditSurface({
                     (editingRowIndex ?? activeRowIndex) === mysqlSpatialModalState.rowIndex &&
                     rowDraft &&
                     Object.prototype.hasOwnProperty.call(rowDraft, mysqlSpatialModalState.column.name)
-                    ? rowDraft[mysqlSpatialModalState.column.name]
-                    : rows[mysqlSpatialModalState.rowIndex]?.values?.[mysqlSpatialModalState.column.name])
+                  ? rowDraft[mysqlSpatialModalState.column.name]
+                  : rows[mysqlSpatialModalState.rowIndex]?.values?.[mysqlSpatialModalState.column.name])
                 : null
             }
             readOnly={

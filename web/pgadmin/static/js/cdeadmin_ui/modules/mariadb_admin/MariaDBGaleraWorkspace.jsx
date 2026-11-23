@@ -220,8 +220,8 @@ export default function MariaDBGaleraWorkspace({endpointUrl, api = null}) {
           <MariaDBSectionCard title={gettext('Live wsrep Node Observation')}>
             <Stack direction="row" gap={2} style={{flexWrap: 'wrap', alignItems: 'center'}}>
               <Badge status={nodeObservation.galera_available ? 'success' : 'warning'} label={nodeObservation.galera_available
-                  ? gettext('wsrep Provider Loaded')
-                  : nodeObservation.availability_reason || gettext('wsrep Inactive')} />
+                ? gettext('wsrep Provider Loaded')
+                : nodeObservation.availability_reason || gettext('wsrep Inactive')} />
               {nodeObservation.cluster?.wsrep_cluster_status && (
                 <Badge status="info" label={nodeObservation.cluster.wsrep_cluster_status} />
               )}

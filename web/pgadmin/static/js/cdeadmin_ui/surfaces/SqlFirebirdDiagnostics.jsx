@@ -310,7 +310,6 @@ export function SqlPersistentHistoryPanel({
 
   useEffect(() => {
     callHistory('query_history_read');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [databaseTargetId, clientSqlDialect]);
 
   const entries = data?.entries || [];

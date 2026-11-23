@@ -30,7 +30,6 @@ import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import ContextMenu from '../navigation/ContextMenu';
 import {Dialog} from '../overlays/Dialog';
 import {EmptyState} from '../feedback/EmptyState';
-import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import {
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
@@ -672,7 +671,6 @@ export default function SqlEditorSurface({
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [databaseTargetId, targetResource?.resource_id, initialScriptKind, initialQuickQueryId]);
 
   // Auto-heal initial opaque UUID tab title (`sql: 146d6c07-...`) to human-readable database name
@@ -690,7 +688,6 @@ export default function SqlEditorSurface({
 
   useEffect(() => {
     refreshSnippets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippetSearch, selectedTags, snippetTagMode, snippetFavoritesOnly, snippetAllEngines]);
 
   // Active Result Set & Surface 1 Data Columns / Rows
@@ -3324,20 +3321,20 @@ export default function SqlEditorSurface({
     );
     const recoveryId = languageOptions.syntax_family === 'postgresql' &&
       languageOptions.native_transaction_prepare && reg(
-        'recover_prepared_transaction',
-        'action.prepare_transaction',
-        gettext('Recover Prepared Transaction…'),
-        () => {
-          setTransactionStartError('');
-          setRecovery({transactions: [], gid: ''});
-          setExecuting(true);
-          callHost('recover_prepared_transaction').then((response) => {
-            setRecovery({transactions: response.transactions || [], gid: ''});
-          }).catch((error) => setTransactionStartError(error?.message || String(error)))
-            .finally(() => setExecuting(false));
-        },
-        {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
-      );
+      'recover_prepared_transaction',
+      'action.prepare_transaction',
+      gettext('Recover Prepared Transaction…'),
+      () => {
+        setTransactionStartError('');
+        setRecovery({transactions: [], gid: ''});
+        setExecuting(true);
+        callHost('recover_prepared_transaction').then((response) => {
+          setRecovery({transactions: response.transactions || [], gid: ''});
+        }).catch((error) => setTransactionStartError(error?.message || String(error)))
+          .finally(() => setExecuting(false));
+      },
+      {status: executing ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED}
+    );
     const commitId = reg(
       'commit',
       'action.commit',
@@ -4425,456 +4422,456 @@ export default function SqlEditorSurface({
   }}/>;
 
   const renderDesigner = () => (
-        <div
-          data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"
-          onDragEnter={(e) => {
-            e.preventDefault();
-            setCanvasDropActive(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            if (e.dataTransfer) {
-              e.dataTransfer.dropEffect = 'copy';
-            }
-            if (!canvasDropActive) setCanvasDropActive(true);
-          }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget)) {
-              setCanvasDropActive(false);
-            }
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setCanvasDropActive(false);
-            if (!e.dataTransfer) return;
+    <div
+      data-cdeadmin-qa-key="sql-surface-visual-builder-canvas"
+      onDragEnter={(e) => {
+        e.preventDefault();
+        setCanvasDropActive(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        if (!canvasDropActive) setCanvasDropActive(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          setCanvasDropActive(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setCanvasDropActive(false);
+        if (!e.dataTransfer) return;
 
-            let droppedObj = null;
-            try {
-              const rawCustom = e.dataTransfer.getData(
-                'application/x-scratchrobin-catalog-object'
-              );
-              if (rawCustom) {
-                droppedObj = JSON.parse(rawCustom);
-              }
-            } catch {
-              droppedObj = null;
-            }
+        let droppedObj = null;
+        try {
+          const rawCustom = e.dataTransfer.getData(
+            'application/x-scratchrobin-catalog-object'
+          );
+          if (rawCustom) {
+            droppedObj = JSON.parse(rawCustom);
+          }
+        } catch {
+          droppedObj = null;
+        }
 
-            if (!droppedObj) {
-              let rawText = '';
-              try {
-                rawText =
+        if (!droppedObj) {
+          let rawText = '';
+          try {
+            rawText =
                   e.dataTransfer.getData('text') ||
                   e.dataTransfer.getData('text/plain') ||
                   '';
-              } catch {
-                rawText = '';
+          } catch {
+            rawText = '';
+          }
+          if (rawText) {
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed?.scratchrobinCatalogObject) {
+                droppedObj = parsed.scratchrobinCatalogObject;
+              } else if (parsed?.text) {
+                const ident = String(parsed.text)
+                  .split('.')
+                  .pop()
+                  .replace(/^["`]|["`]$/g, '')
+                  .replace(/\([^)]*\)\s*$/, '')
+                  .trim();
+                const kindAliases = {
+                  mview: 'materialized-view',
+                  foreign_table: 'foreign-table',
+                  partition: 'partitioned-table',
+                  edbfunc: 'function',
+                  edbproc: 'procedure',
+                };
+                const rk = String(parsed.nodeType || 'table').toLowerCase();
+                droppedObj = {
+                  resource_id: '',
+                  resource_kind: kindAliases[rk] || rk,
+                  display_name: ident,
+                };
               }
-              if (rawText) {
-                try {
-                  const parsed = JSON.parse(rawText);
-                  if (parsed?.scratchrobinCatalogObject) {
-                    droppedObj = parsed.scratchrobinCatalogObject;
-                  } else if (parsed?.text) {
-                    const ident = String(parsed.text)
-                      .split('.')
-                      .pop()
-                      .replace(/^["`]|["`]$/g, '')
-                      .replace(/\([^)]*\)\s*$/, '')
-                      .trim();
-                    const kindAliases = {
-                      mview: 'materialized-view',
-                      foreign_table: 'foreign-table',
-                      partition: 'partitioned-table',
-                      edbfunc: 'function',
-                      edbproc: 'procedure',
-                    };
-                    const rk = String(parsed.nodeType || 'table').toLowerCase();
-                    droppedObj = {
-                      resource_id: '',
-                      resource_kind: kindAliases[rk] || rk,
-                      display_name: ident,
-                    };
-                  }
-                } catch {
-                  const ident = rawText
-                    .split('.')
-                    .pop()
-                    .replace(/^["`]|["`]$/g, '')
-                    .trim();
-                  if (ident) {
-                    droppedObj = {
-                      resource_id: '',
-                      resource_kind: 'table',
-                      display_name: ident,
-                    };
-                  }
-                }
+            } catch {
+              const ident = rawText
+                .split('.')
+                .pop()
+                .replace(/^["`]|["`]$/g, '')
+                .trim();
+              if (ident) {
+                droppedObj = {
+                  resource_id: '',
+                  resource_kind: 'table',
+                  display_name: ident,
+                };
               }
             }
+          }
+        }
 
-            if (!droppedObj?.display_name) return;
-            const wp = canvasApiRef.current?.clientToWorld?.(e.clientX, e.clientY);
-            const dropCoords = wp
-              ? {x: Math.max(24, wp.x - 90), y: Math.max(24, wp.y - 18)}
-              : null;
-            addCatalogObjectToCanvas(droppedObj, dropCoords);
-          }}
+        if (!droppedObj?.display_name) return;
+        const wp = canvasApiRef.current?.clientToWorld?.(e.clientX, e.clientY);
+        const dropCoords = wp
+          ? {x: Math.max(24, wp.x - 90), y: Math.max(24, wp.y - 18)}
+          : null;
+        addCatalogObjectToCanvas(droppedObj, dropCoords);
+      }}
+      style={{
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        position: 'relative',
+        display: 'flex',
+        outline: canvasDropActive
+          ? '2px dashed var(--sr-accent-primary, #2563eb)'
+          : 'none',
+        outlineOffset: -4,
+      }}
+    >
+      <RobinTiledCanvas
+        scene={visualScene}
+        selectedNodeId={selectedCanvasNodeId}
+        onSelectNode={(node) => {
+          const nid = typeof node === 'object' ? node?.id || '' : String(node || '');
+          setSelectedCanvasNodeId(nid);
+        }}
+        onSelectEdge={() => {
+          setVbInspectorTab('joins');
+          openRightDrawerWith({panel: 'visual_inspector'});
+        }}
+        onToggleField={handleToggleCanvasField}
+        onCreateFieldJoin={handleCreateCanvasJoin}
+        onRemoveNode={handleRemoveCanvasNode}
+        editable
+        onPinNode={(nodeId, x, y) => {
+          const cur = visualModelRef.current;
+          const next = {
+            ...cur,
+            tables: (cur.tables || []).map((t) =>
+              t.id === nodeId ? {...t, x, y} : t
+            ),
+          };
+          pushVisualModelUpdate(next, false);
+        }}
+        canvasApiRef={canvasApiRef}
+        ariaLabel={gettext('DDN Visual Query Builder Canvas')}
+      />
+
+      {canvasDropActive && (
+        <div
+          data-cdeadmin-qa-key="visual-builder-drop-indicator"
           style={{
-            flex: 1,
-            minHeight: 0,
-            minWidth: 0,
-            position: 'relative',
-            display: 'flex',
-            outline: canvasDropActive
-              ? '2px dashed var(--sr-accent-primary, #2563eb)'
-              : 'none',
-            outlineOffset: -4,
+            position: 'absolute',
+            top: 14,
+            right: 16,
+            padding: '6px 14px',
+            borderRadius: 999,
+            background: 'var(--sr-accent-primary, #2563eb)',
+            color: '#ffffff',
+            fontWeight: 600,
+            fontSize: '0.78rem',
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
+            pointerEvents: 'none',
           }}
         >
-          <RobinTiledCanvas
-            scene={visualScene}
-            selectedNodeId={selectedCanvasNodeId}
-            onSelectNode={(node) => {
-              const nid = typeof node === 'object' ? node?.id || '' : String(node || '');
-              setSelectedCanvasNodeId(nid);
-            }}
-            onSelectEdge={() => {
-              setVbInspectorTab('joins');
-              openRightDrawerWith({panel: 'visual_inspector'});
-            }}
-            onToggleField={handleToggleCanvasField}
-            onCreateFieldJoin={handleCreateCanvasJoin}
-            onRemoveNode={handleRemoveCanvasNode}
-            editable
-            onPinNode={(nodeId, x, y) => {
-              const cur = visualModelRef.current;
-              const next = {
-                ...cur,
-                tables: (cur.tables || []).map((t) =>
-                  t.id === nodeId ? {...t, x, y} : t
-                ),
-              };
-              pushVisualModelUpdate(next, false);
-            }}
-            canvasApiRef={canvasApiRef}
-            ariaLabel={gettext('DDN Visual Query Builder Canvas')}
-          />
+          {gettext('Drop Table, View, or Selectable Procedure onto Canvas')}
+        </div>
+      )}
 
-          {canvasDropActive && (
-            <div
-              data-cdeadmin-qa-key="visual-builder-drop-indicator"
-              style={{
-                position: 'absolute',
-                top: 14,
-                right: 16,
-                padding: '6px 14px',
-                borderRadius: 999,
-                background: 'var(--sr-accent-primary, #2563eb)',
-                color: '#ffffff',
-                fontWeight: 600,
-                fontSize: '0.78rem',
-                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
-                pointerEvents: 'none',
-              }}
-            >
-              {gettext('Drop Table, View, or Selectable Procedure onto Canvas')}
-            </div>
-          )}
-
-          {canvasNotice && (
-            <div
-              role="alert"
-              data-cdeadmin-qa-key="visual-builder-canvas-notice"
-              style={{
-                position: 'absolute',
-                top: 14,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '7px 14px',
-                borderRadius: 8,
-                background: 'rgba(254, 242, 242, 0.97)',
-                border: '1px solid #ef4444',
-                color: '#991b1b',
-                fontSize: '0.78rem',
-                fontWeight: 500,
-                boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
-              }}
-            >
-              <span>⚠ {canvasNotice}</span>
-              <button
-                type="button"
-                aria-label={gettext('Dismiss')}
-                onClick={() => setCanvasNotice('')}
-                style={{
-                  border: 0,
-                  background: 'transparent',
-                  color: '#991b1b',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                }}
-              >
+      {canvasNotice && (
+        <div
+          role="alert"
+          data-cdeadmin-qa-key="visual-builder-canvas-notice"
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '7px 14px',
+            borderRadius: 8,
+            background: 'rgba(254, 242, 242, 0.97)',
+            border: '1px solid #ef4444',
+            color: '#991b1b',
+            fontSize: '0.78rem',
+            fontWeight: 500,
+            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
+          }}
+        >
+          <span>⚠ {canvasNotice}</span>
+          <button
+            type="button"
+            aria-label={gettext('Dismiss')}
+            onClick={() => setCanvasNotice('')}
+            style={{
+              border: 0,
+              background: 'transparent',
+              color: '#991b1b',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.95rem',
+            }}
+          >
                 ×
-              </button>
-            </div>
-          )}
+          </button>
+        </div>
+      )}
 
-          {visualModel.tables.length === 0 && !canvasNotice && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 14,
-                left: 14,
-                padding: '7px 14px',
-                borderRadius: 999,
-                background: 'var(--sr-island-bg, rgba(255,255,255,0.95))',
-                border: '1px solid var(--sr-border-default, #cbd5e1)',
-                fontSize: '0.78rem',
-                pointerEvents: 'none',
-              }}
-            >
-              {gettext(
-                'Drag Tables, Views, or Selectable Stored Procedures from Data Navigator (left) or Builder Palette (right) onto this canvas'
-              )}
-            </div>
+      {visualModel.tables.length === 0 && !canvasNotice && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: 14,
+            padding: '7px 14px',
+            borderRadius: 999,
+            background: 'var(--sr-island-bg, rgba(255,255,255,0.95))',
+            border: '1px solid var(--sr-border-default, #cbd5e1)',
+            fontSize: '0.78rem',
+            pointerEvents: 'none',
+          }}
+        >
+          {gettext(
+            'Drag Tables, Views, or Selectable Stored Procedures from Data Navigator (left) or Builder Palette (right) onto this canvas'
           )}
         </div>
+      )}
+    </div>
   );
   const renderMetrics = () => (
-        <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
-          <Box
-            data-cdeadmin-qa-key="sql-surface-metrics-plan"
-            sx={{p: 2, display: 'grid', gap: 2}}
-          >
+    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+      <Box
+        data-cdeadmin-qa-key="sql-surface-metrics-plan"
+        sx={{p: 2, display: 'grid', gap: 2}}
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: 10,
+          }}
+        >
+          {[
+            [gettext('Prepare'), `${hostData?.timings_ms?.prepare_ms ?? 0} ms`],
+            [gettext('Execute'), `${hostData?.timings_ms?.execute_ms ?? 0} ms`],
+            [gettext('Fetch'), `${hostData?.timings_ms?.fetch_ms ?? 0} ms`],
+            [gettext('Total Elapsed'), `${hostData?.timings_ms?.total_ms ?? 0} ms`],
+            [gettext('Active Terminator'), terminator],
+            [gettext('Result Sets'), String(hostData?.result_count ?? 0)],
+          ].map(([lbl, val]) => (
             <div
+              key={lbl}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--sr-border-subtle)',
               }}
             >
-              {[
-                [gettext('Prepare'), `${hostData?.timings_ms?.prepare_ms ?? 0} ms`],
-                [gettext('Execute'), `${hostData?.timings_ms?.execute_ms ?? 0} ms`],
-                [gettext('Fetch'), `${hostData?.timings_ms?.fetch_ms ?? 0} ms`],
-                [gettext('Total Elapsed'), `${hostData?.timings_ms?.total_ms ?? 0} ms`],
-                [gettext('Active Terminator'), terminator],
-                [gettext('Result Sets'), String(hostData?.result_count ?? 0)],
-              ].map(([lbl, val]) => (
-                <div
-                  key={lbl}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--sr-border-subtle)',
-                  }}
-                >
-                  <div style={{fontSize: '0.74rem', opacity: 0.72}}>{lbl}</div>
-                  <strong style={{fontSize: '1rem'}}>{val}</strong>
-                </div>
-              ))}
+              <div style={{fontSize: '0.74rem', opacity: 0.72}}>{lbl}</div>
+              <strong style={{fontSize: '1rem'}}>{val}</strong>
             </div>
+          ))}
+        </div>
 
-            <div>
-              <strong>{gettext('Execution Plan')}</strong>
-              <pre
-                style={{
-                  marginTop: 6,
-                  padding: 12,
-                  borderRadius: 8,
-                  border: '1px solid var(--sr-border-subtle)',
-                  background: 'var(--sr-surface-subtle, rgba(15,23,42,0.04))',
-                  whiteSpace: 'pre-wrap',
-                  fontSize: '0.8rem',
-                }}
-              >
-                {activeResult?.plan_text ||
+        <div>
+          <strong>{gettext('Execution Plan')}</strong>
+          <pre
+            style={{
+              marginTop: 6,
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid var(--sr-border-subtle)',
+              background: 'var(--sr-surface-subtle, rgba(15,23,42,0.04))',
+              whiteSpace: 'pre-wrap',
+              fontSize: '0.8rem',
+            }}
+          >
+            {activeResult?.plan_text ||
                   hostData?.plan_text ||
                   gettext('Run Explain Plan on the TiB or Query menu to capture the native execution plan.')}
-              </pre>
-            </div>
+          </pre>
+        </div>
 
-            <SqlProfilerAndStatsView
-              profiling={hostData?.profiling}
-              statistics={hostData?.query_statistics}
-            />
+        <SqlProfilerAndStatsView
+          profiling={hostData?.profiling}
+          statistics={hostData?.query_statistics}
+        />
 
-            {(isMySQL || isMariaDB) && (
-              <SqlMySQLPlanGraphView
-                planText={activeResult?.plan_text || hostData?.plan_text || ''}
-                mysqlDiagnostics={hostData?.mysql_diagnostics || null}
-              />
-            )}
+        {(isMySQL || isMariaDB) && (
+          <SqlMySQLPlanGraphView
+            planText={activeResult?.plan_text || hostData?.plan_text || ''}
+            mysqlDiagnostics={hostData?.mysql_diagnostics || null}
+          />
+        )}
 
-            {(hostData?.statement_summaries || []).length > 0 && (
-              <div>
-                <strong>{gettext('Script Statement Execution Summary')}</strong>
-                <table style={{width: '100%', marginTop: 6, borderCollapse: 'collapse', fontSize: '0.8rem'}}>
-                  <thead>
-                    <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
-                      <th style={{padding: 6}}>#</th>
-                      <th style={{padding: 6}}>{gettext('Line')}</th>
-                      <th style={{padding: 6}}>{gettext('Status')}</th>
-                      <th style={{padding: 6}}>{gettext('Rows')}</th>
-                      <th style={{padding: 6}}>{gettext('Elapsed')}</th>
-                      <th style={{padding: 6}}>SQL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {hostData.statement_summaries.map((st, idx) => (
-                      <tr key={idx} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
-                        <td style={{padding: 6}}>{st.ordinal}</td>
-                        <td style={{padding: 6}}>{st.start_line}</td>
-                        <td style={{padding: 6}}>{st.status}</td>
-                        <td style={{padding: 6}}>{st.rows_returned ?? st.rows_affected ?? 0}</td>
-                        <td style={{padding: 6}}>{st.elapsed_ms} ms</td>
-                        <td style={{padding: 6, maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                          {st.sql_preview}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Box>
-        </ScratchScrollArea>
+        {(hostData?.statement_summaries || []).length > 0 && (
+          <div>
+            <strong>{gettext('Script Statement Execution Summary')}</strong>
+            <table style={{width: '100%', marginTop: 6, borderCollapse: 'collapse', fontSize: '0.8rem'}}>
+              <thead>
+                <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
+                  <th style={{padding: 6}}>#</th>
+                  <th style={{padding: 6}}>{gettext('Line')}</th>
+                  <th style={{padding: 6}}>{gettext('Status')}</th>
+                  <th style={{padding: 6}}>{gettext('Rows')}</th>
+                  <th style={{padding: 6}}>{gettext('Elapsed')}</th>
+                  <th style={{padding: 6}}>SQL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hostData.statement_summaries.map((st, idx) => (
+                  <tr key={idx} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
+                    <td style={{padding: 6}}>{st.ordinal}</td>
+                    <td style={{padding: 6}}>{st.start_line}</td>
+                    <td style={{padding: 6}}>{st.status}</td>
+                    <td style={{padding: 6}}>{st.rows_returned ?? st.rows_affected ?? 0}</td>
+                    <td style={{padding: 6}}>{st.elapsed_ms} ms</td>
+                    <td style={{padding: 6, maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                      {st.sql_preview}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Box>
+    </ScratchScrollArea>
   );
   const renderFields = () => (
-        <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
-          <Box data-cdeadmin-qa-key="sql-surface-fields" sx={{p: 2}}>
-            {columns.length === 0 ? (
-              <EmptyState
-                title={gettext('No Result Columns')}
-                description={gettext('Execute a query returning columns to inspect result field metadata.')}
-              />
-            ) : (
-              <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}>
-                <thead>
-                  <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
-                    <th style={{padding: 8}}>#</th>
-                    <th style={{padding: 8}}>{gettext('Column')}</th>
-                    <th style={{padding: 8}}>{gettext('Native Type')}</th>
-                    <th style={{padding: 8}}>{gettext('Domain')}</th>
-                    <th style={{padding: 8}}>{gettext('Nullable')}</th>
-                    <th style={{padding: 8}}>{gettext('Key')}</th>
-                    <th style={{padding: 8}}>{gettext('Profile')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {columns.map((c, idx) => (
-                    <tr key={c.name} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
-                      <td style={{padding: 8}}>{idx + 1}</td>
-                      <td style={{padding: 8}}>
-                        <strong>{c.name}</strong>
-                      </td>
-                      <td style={{padding: 8}}>{c.native_type || c.logical_type || 'TEXT'}</td>
-                      <td style={{padding: 8}}>{c.domain_type || '—'}</td>
-                      <td style={{padding: 8}}>{c.nullable === false ? 'NOT NULL' : 'NULL'}</td>
-                      <td style={{padding: 8}}>{c.key ? 'PK' : '—'}</td>
-                      <td style={{padding: 8}}>
-                        <Button
-                          size="small"
-                          onClick={async () => {
-                            const prof = await callHost('column_profile', {column: c.name});
-                            openRightDrawerWith({panel: 'column_profile', profileData: prof});
-                          }}
-                        >
-                          {gettext('Profile')}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Box>
-        </ScratchScrollArea>
+    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+      <Box data-cdeadmin-qa-key="sql-surface-fields" sx={{p: 2}}>
+        {columns.length === 0 ? (
+          <EmptyState
+            title={gettext('No Result Columns')}
+            description={gettext('Execute a query returning columns to inspect result field metadata.')}
+          />
+        ) : (
+          <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}>
+            <thead>
+              <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
+                <th style={{padding: 8}}>#</th>
+                <th style={{padding: 8}}>{gettext('Column')}</th>
+                <th style={{padding: 8}}>{gettext('Native Type')}</th>
+                <th style={{padding: 8}}>{gettext('Domain')}</th>
+                <th style={{padding: 8}}>{gettext('Nullable')}</th>
+                <th style={{padding: 8}}>{gettext('Key')}</th>
+                <th style={{padding: 8}}>{gettext('Profile')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {columns.map((c, idx) => (
+                <tr key={c.name} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
+                  <td style={{padding: 8}}>{idx + 1}</td>
+                  <td style={{padding: 8}}>
+                    <strong>{c.name}</strong>
+                  </td>
+                  <td style={{padding: 8}}>{c.native_type || c.logical_type || 'TEXT'}</td>
+                  <td style={{padding: 8}}>{c.domain_type || '—'}</td>
+                  <td style={{padding: 8}}>{c.nullable === false ? 'NOT NULL' : 'NULL'}</td>
+                  <td style={{padding: 8}}>{c.key ? 'PK' : '—'}</td>
+                  <td style={{padding: 8}}>
+                    <Button
+                      size="small"
+                      onClick={async () => {
+                        const prof = await callHost('column_profile', {column: c.name});
+                        openRightDrawerWith({panel: 'column_profile', profileData: prof});
+                      }}
+                    >
+                      {gettext('Profile')}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Box>
+    </ScratchScrollArea>
   );
   const renderMessages = () => (
-        <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
-          <Box data-cdeadmin-qa-key="sql-surface-messages" sx={{p: 2, display: 'grid', gap: 1}}>
-            {surfaceError && (
-              <div
-                role="alert"
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  background: 'rgba(220, 38, 38, 0.1)',
-                  border: '1px solid var(--sr-status-danger, #dc2626)',
-                  color: 'var(--sr-status-danger, #dc2626)',
-                }}
-              >
-                {surfaceError}
-              </div>
-            )}
-            {(hostData?.messages || []).length === 0 && !surfaceError ? (
-              <EmptyState
-                title={gettext('No Execution Messages')}
-                description={gettext('Statement diagnostics, row counts, and script logs appear here.')}
-              />
-            ) : (
-              (hostData?.messages || []).map((msg) => (
-                <div
-                  key={msg.id}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--sr-border-subtle)',
-                    background:
+    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
+      <Box data-cdeadmin-qa-key="sql-surface-messages" sx={{p: 2, display: 'grid', gap: 1}}>
+        {surfaceError && (
+          <div
+            role="alert"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'rgba(220, 38, 38, 0.1)',
+              border: '1px solid var(--sr-status-danger, #dc2626)',
+              color: 'var(--sr-status-danger, #dc2626)',
+            }}
+          >
+            {surfaceError}
+          </div>
+        )}
+        {(hostData?.messages || []).length === 0 && !surfaceError ? (
+          <EmptyState
+            title={gettext('No Execution Messages')}
+            description={gettext('Statement diagnostics, row counts, and script logs appear here.')}
+          />
+        ) : (
+          (hostData?.messages || []).map((msg) => (
+            <div
+              key={msg.id}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--sr-border-subtle)',
+                background:
                       msg.severity === 'error'
                         ? 'rgba(220, 38, 38, 0.08)'
                         : msg.severity === 'warning'
                           ? 'rgba(217, 119, 6, 0.08)'
                           : 'transparent',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 12,
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <div>
-                    <div style={{fontSize: '0.72rem', opacity: 0.72}}>
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                fontSize: '0.8125rem',
+              }}
+            >
+              <div>
+                <div style={{fontSize: '0.72rem', opacity: 0.72}}>
                       [{String(msg.timestamp || '').slice(11, 19)}] <strong>{msg.operation}</strong>
-                      {msg.elapsed_ms != null ? ` · ${msg.elapsed_ms} ms` : ''}
-                      {msg.sqlstate ? ` · SQLSTATE ${msg.sqlstate}` : ''}
-                    </div>
-                    <div>{msg.message}</div>
-                  </div>
-                  <div style={{display: 'flex', gap: 6, flexShrink: 0}}>
-                    {msg.line ? (
-                      <Button
-                        size="small"
-                        data-cdeadmin-qa-key={`msg-jump-line-${msg.line}`}
-                        onClick={() => jumpToSqlPosition(msg.line, msg.column || 1)}
-                      >
-                        {gettext('Line %s:%s', msg.line, msg.column || 1)}
-                      </Button>
-                    ) : null}
-                    {msg.row_index != null ? (
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setActiveRowIndex(msg.row_index);
-                          setSurfaceView(SQL_SURFACE_VIEWS.DATA);
-                        }}
-                      >
-                        {gettext('Row %s', msg.row_index + 1)}
-                      </Button>
-                    ) : null}
-                  </div>
+                  {msg.elapsed_ms != null ? ` · ${msg.elapsed_ms} ms` : ''}
+                  {msg.sqlstate ? ` · SQLSTATE ${msg.sqlstate}` : ''}
                 </div>
-              ))
-            )}
-          </Box>
-        </ScratchScrollArea>
+                <div>{msg.message}</div>
+              </div>
+              <div style={{display: 'flex', gap: 6, flexShrink: 0}}>
+                {msg.line ? (
+                  <Button
+                    size="small"
+                    data-cdeadmin-qa-key={`msg-jump-line-${msg.line}`}
+                    onClick={() => jumpToSqlPosition(msg.line, msg.column || 1)}
+                  >
+                    {gettext('Line %s:%s', msg.line, msg.column || 1)}
+                  </Button>
+                ) : null}
+                {msg.row_index != null ? (
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setActiveRowIndex(msg.row_index);
+                      setSurfaceView(SQL_SURFACE_VIEWS.DATA);
+                    }}
+                  >
+                    {gettext('Row %s', msg.row_index + 1)}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </Box>
+    </ScratchScrollArea>
   );
 
   const metadataResources = activeResult?.metadata_resources || EMPTY_ARRAY;
@@ -4964,12 +4961,12 @@ export default function SqlEditorSurface({
       />
 
       {surfaceView === SQL_SURFACE_VIEWS.SQL_DATA ? (
-          <SurfaceDisplayAreas
-            first={renderView(upperView, upperMode)}
-            second={renderView(lowerView, lowerMode, true)}
-            onActivate={(event) => { focusedDisplayAreaRef.current = event.currentTarget; }}
-            ratio={46}
-          />
+        <SurfaceDisplayAreas
+          first={renderView(upperView, upperMode)}
+          second={renderView(lowerView, lowerMode, true)}
+          onActivate={(event) => { focusedDisplayAreaRef.current = event.currentTarget; }}
+          ratio={46}
+        />
       ) : renderView(surfaceView)}
 
       {/* Right-Click Context Menu */}

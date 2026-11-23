@@ -12,7 +12,6 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Box, Grid, Panel, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
-import {TextField} from '../primitives/Field';
 import {Checkbox, Select} from '../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../feedback/Indicators';
 import {Dialog} from '../overlays/Dialog';

@@ -77,8 +77,8 @@ describe('provider selection inspector', () => {
       post: jest.fn().mockImplementation((_url, payload) =>
         payload.request.resource_id === 'first'
           ? new Promise((resolve) => {
-              finishFirst = resolve;
-            })
+            finishFirst = resolve;
+          })
           : Promise.resolve({data: {data: {display_name: 'Second'}}})
       ),
     };

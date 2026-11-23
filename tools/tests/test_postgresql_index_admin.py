@@ -160,6 +160,7 @@ def test_reindex_still_routes_to_maintenance_and_forms_follow_ids():
     routes = {op['operation_id']: op['execution_route']
               for op in index['operations']}
     assert routes == {'create': 'provider-native', 'alter': 'provider-native',
+                      'attach-partition': 'provider-native',
                       'drop': 'provider-native',
                       'inspect': 'legacy-preserved',
                       'reindex': 'provider-native'}

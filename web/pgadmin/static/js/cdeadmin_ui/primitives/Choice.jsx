@@ -23,7 +23,7 @@ export function Checkbox({
   inputProps,
   className = '',
   style,
-  // eslint-disable-next-line no-unused-vars
+   
   sx,
   ...props
 }) {
@@ -98,7 +98,7 @@ export function Switch({
   inputProps,
   className = '',
   style,
-  // eslint-disable-next-line no-unused-vars
+   
   sx,
   ...props
 }) {
@@ -162,11 +162,11 @@ export function Select({
   style,
   sx,
   // Strip legacy MUI-only props
-  // eslint-disable-next-line no-unused-vars
+   
   InputLabelProps,
-  // eslint-disable-next-line no-unused-vars
+   
   size,
-  // eslint-disable-next-line no-unused-vars
+   
   fullWidth,
   ...props
 }) {
@@ -240,42 +240,44 @@ export function Select({
             </svg>
           </BaseSelect.Icon>
         </BaseSelect.Trigger>
-        {open && (
-          <BaseSelect.Portal>
-            <BaseSelect.Positioner sideOffset={4} alignItemWithTrigger={false} style={{zIndex: 'var(--cde-layer-popover, 2400)'}}>
-              <BaseSelect.Popup className="sr-select-popup">
-                <BaseSelect.List>
-                  {options.map((option) => (
-                    <BaseSelect.Item
-                      key={String(option.value)}
-                      value={option.value}
-                      disabled={option.disabled}
-                      className="sr-select-item"
-                      onClick={(event) => {
-                        if (!disabled && !option.disabled) {
-                          if (selectedViaBaseRef.current) {
-                            selectedViaBaseRef.current = false;
-                            setOpen(false);
-                            return;
-                          }
-                          if (option.value !== value) {
-                            onChange?.(option.value, event);
-                          }
+        <BaseSelect.Portal>
+          <BaseSelect.Positioner sideOffset={4} alignItemWithTrigger={false} style={{zIndex: 'var(--cde-layer-popover, 2400)'}}>
+            <BaseSelect.Popup
+              className="sr-select-popup"
+              hidden={!open || undefined}
+              style={{display: open ? undefined : 'none'}}
+            >
+              <BaseSelect.List>
+                {options.map((option) => (
+                  <BaseSelect.Item
+                    key={String(option.value)}
+                    value={option.value}
+                    disabled={option.disabled}
+                    className="sr-select-item"
+                    onClick={(event) => {
+                      if (!disabled && !option.disabled) {
+                        if (selectedViaBaseRef.current) {
+                          selectedViaBaseRef.current = false;
                           setOpen(false);
+                          return;
                         }
-                      }}
-                    >
-                      <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
-                      <BaseSelect.ItemIndicator style={{display: 'inline-flex', color: 'var(--sr-accent)'}}>
-                        ✓
-                      </BaseSelect.ItemIndicator>
-                    </BaseSelect.Item>
-                  ))}
-                </BaseSelect.List>
-              </BaseSelect.Popup>
-            </BaseSelect.Positioner>
-          </BaseSelect.Portal>
-        )}
+                        if (option.value !== value) {
+                          onChange?.(option.value, event);
+                        }
+                        setOpen(false);
+                      }
+                    }}
+                  >
+                    <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
+                    <BaseSelect.ItemIndicator style={{display: 'inline-flex', color: 'var(--sr-accent)'}}>
+                      ✓
+                    </BaseSelect.ItemIndicator>
+                  </BaseSelect.Item>
+                ))}
+              </BaseSelect.List>
+            </BaseSelect.Popup>
+          </BaseSelect.Positioner>
+        </BaseSelect.Portal>
       </BaseSelect.Root>
       {effectiveHelp && (
         <div id={helpId} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>

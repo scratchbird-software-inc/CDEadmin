@@ -2399,12 +2399,12 @@ export function CubeDesignerSurface({
       {!selectedMeasureObj &&
         !selectedDimensionObj &&
         !selectedMeasureGroupObj && (
-          <EmptyState
-            message={gettext(
-              'Select a Measure Group, Measure, or Dimension in the navigator to inspect its properties.'
-            )}
-          />
-        )}
+        <EmptyState
+          message={gettext(
+            'Select a Measure Group, Measure, or Dimension in the navigator to inspect its properties.'
+          )}
+        />
+      )}
       {!readOnly && cubeModel && (
         <Button size="small" onClick={openPropertiesDialog}>
           {gettext('Cube Properties…')}

@@ -12,6 +12,13 @@ jest.mock('sources/Dialogs/FirebirdERD', () => function MockDiagramReview({onRev
 });
 
 const Component = withTheme(SQLiteCatalog);
+const origInnerHeight = window.innerHeight;
+beforeAll(() => {
+  window.innerHeight = 1800;
+});
+afterAll(() => {
+  window.innerHeight = origInnerHeight;
+});
 const snapshot = {format: 'ddn-source-workspace@1', entry: 'catalog.ddn',
   view: 'inventory_1', files: {'catalog.ddn': 'native facts'}};
 

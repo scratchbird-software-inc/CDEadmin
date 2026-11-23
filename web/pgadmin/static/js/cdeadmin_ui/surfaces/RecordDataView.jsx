@@ -481,8 +481,8 @@ export default function RecordDataView({model}) {
                     columns={formColumns}
                     formLayout={sharedFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
-          fieldTypeDefaults={hostData?.field_type_defaults}
-          conversions={conversions}
+                    fieldTypeDefaults={hostData?.field_type_defaults}
+                    conversions={conversions}
                     booleanFormat={layout.booleanFormat}
                     localeDateFormat={layout.localeDateFormat}
                     totalRowsInPage={rows.length}
@@ -753,8 +753,8 @@ export default function RecordDataView({model}) {
                       columns={formColumns}
                       formLayout={sharedFormLayout}
                       formFieldPrefs={layout.formFieldPrefs}
-          fieldTypeDefaults={hostData?.field_type_defaults}
-          conversions={conversions}
+                      fieldTypeDefaults={hostData?.field_type_defaults}
+                      conversions={conversions}
                       booleanFormat={layout.booleanFormat}
                       localeDateFormat={layout.localeDateFormat}
                       maxHeight="46vh"

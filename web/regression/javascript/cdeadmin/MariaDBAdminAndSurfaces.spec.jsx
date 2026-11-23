@@ -11,11 +11,7 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import {
   MARIADB_ADMIN_TABS,
-  MariaDBArchiveRetentionWorkspace,
-  MariaDBGaleraWorkspace,
-  MariaDBHostWorkspace,
   MariaDBPhysicalWorkspace,
-  MariaDBUpgradeWorkspace,
   MariaDBUtilityWorkspace,
   renderMariaDBAdminWorkspace,
 } from 'sources/cdeadmin_ui/modules/mariadb_admin';
@@ -330,7 +326,7 @@ describe('MariaDB surfaced Administration, Continuity, Host Utilities, SQL & Dat
     fireEvent.click(screen.getByRole('button', {name: /Load into SQL Editor/i}));
     expect(onOpenInSqlEditor).toHaveBeenCalledWith(
       expect.objectContaining({
-        source: "INSERT INTO `orders` (`id`, `status`) VALUES (10, 'shipped');",
+        source: 'INSERT INTO `orders` (`id`, `status`) VALUES (10, \'shipped\');',
       })
     );
   });

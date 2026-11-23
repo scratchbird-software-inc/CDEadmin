@@ -28,10 +28,10 @@ function formatPgLiteral(val) {
   if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
   if (typeof val === 'number' && Number.isFinite(val)) return String(val);
   if (typeof val === 'object') {
-    const jsonText = JSON.stringify(val).replace(/'/g, "''");
+    const jsonText = JSON.stringify(val).replace(/'/g, '\'\'');
     return `'${jsonText}'::jsonb`;
   }
-  return `'${String(val).replace(/'/g, "''")}'`;
+  return `'${String(val).replace(/'/g, '\'\'')}'`;
 }
 
 /**
@@ -85,24 +85,24 @@ export function DataPostgresRowSqlDialog({
     const pkVal = formatPgLiteral(valuesMap[conflictCol || colNames[0]]);
 
     switch (mode) {
-      case 'insert_overriding':
-        return `INSERT INTO ${tableLabel} (${quotedCols})\nOVERRIDING SYSTEM VALUE\nVALUES (${formattedVals})\nRETURNING *;`;
-      case 'update_returning': {
-        const sets = colNames
-          .filter((c) => c !== conflictCol)
-          .map((c) => `${quotePgIdent(c)} = ${formatPgLiteral(valuesMap[c])}`)
-          .join(',\n    ');
-        return `UPDATE ONLY ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal}\nRETURNING *;`;
-      }
-      case 'where_in':
-        return `SELECT *\nFROM ONLY ${tableLabel}\nWHERE ${pk} IN (${pkVal});`;
-      default: {
-        const updates = colNames
-          .filter((c) => c !== conflictCol)
-          .map((c) => `${quotePgIdent(c)} = EXCLUDED.${quotePgIdent(c)}`)
-          .join(',\n    ');
-        return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = EXCLUDED.${pk}`}\nRETURNING *;`;
-      }
+    case 'insert_overriding':
+      return `INSERT INTO ${tableLabel} (${quotedCols})\nOVERRIDING SYSTEM VALUE\nVALUES (${formattedVals})\nRETURNING *;`;
+    case 'update_returning': {
+      const sets = colNames
+        .filter((c) => c !== conflictCol)
+        .map((c) => `${quotePgIdent(c)} = ${formatPgLiteral(valuesMap[c])}`)
+        .join(',\n    ');
+      return `UPDATE ONLY ${tableLabel}\nSET ${sets || `${pk} = ${pkVal}`}\nWHERE ${pk} = ${pkVal}\nRETURNING *;`;
+    }
+    case 'where_in':
+      return `SELECT *\nFROM ONLY ${tableLabel}\nWHERE ${pk} IN (${pkVal});`;
+    default: {
+      const updates = colNames
+        .filter((c) => c !== conflictCol)
+        .map((c) => `${quotePgIdent(c)} = EXCLUDED.${quotePgIdent(c)}`)
+        .join(',\n    ');
+      return `INSERT INTO ${tableLabel} (${quotedCols})\nVALUES (${formattedVals})\nON CONFLICT (${pk}) DO UPDATE\nSET ${updates || `${pk} = EXCLUDED.${pk}`}\nRETURNING *;`;
+    }
     }
   }, [columns, conflictCol, mode, row, tableLabel]);
   const sqlText = hostSql ?? fallbackSql;

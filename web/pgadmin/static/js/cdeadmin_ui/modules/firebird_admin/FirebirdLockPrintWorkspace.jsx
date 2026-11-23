@@ -14,7 +14,7 @@ import {Box, Grid, Panel, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
 import {NumberField, TextField} from '../../primitives/Field';
 import {Checkbox, Select} from '../../primitives/Choice';
-import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
+import {Badge, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
 import {

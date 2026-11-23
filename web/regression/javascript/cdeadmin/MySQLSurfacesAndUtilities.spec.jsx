@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {withTheme} from '../fake_theme';
 import MySQLUtilityWorkspace from 'sources/cdeadmin_ui/modules/mysql_admin/MySQLUtilityWorkspace';
 import {

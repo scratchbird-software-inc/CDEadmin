@@ -75,18 +75,18 @@ export function renderDuckdbAdminWorkspace({
   api = null,
 }) {
   switch (tab) {
-    case 'duckdb-runtime-settings':
-      return <DuckdbRuntimeSettingsWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'duckdb-retained-schema':
-      return <DuckdbRetainedSchemaWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'duckdb-shell':
-      return <DuckdbShellWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'duckdb-sql-dump':
-      return <DuckdbSqlDumpWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    case 'duckdb-continuity-storage':
-      return <DuckdbContinuityStorageWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
-    default:
-      return null;
+  case 'duckdb-runtime-settings':
+    return <DuckdbRuntimeSettingsWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'duckdb-retained-schema':
+    return <DuckdbRetainedSchemaWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'duckdb-shell':
+    return <DuckdbShellWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'duckdb-sql-dump':
+    return <DuckdbSqlDumpWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  case 'duckdb-continuity-storage':
+    return <DuckdbContinuityStorageWorkspace endpointUrl={endpointUrl} databaseTargetId={databaseTargetId} api={api} />;
+  default:
+    return null;
   }
 }
 

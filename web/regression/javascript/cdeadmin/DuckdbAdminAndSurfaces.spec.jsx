@@ -49,7 +49,7 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
           }
         }
         if (payload.action === 'duckdb_copy_plan') {
-          return {data: {success: 1, data: {sql: "COPY \"main\".\"events\" TO 'exports/events.ndjson' (FORMAT JSON);"}}};
+          return {data: {success: 1, data: {sql: 'COPY "main"."events" TO \'exports/events.ndjson\' (FORMAT JSON);'}}};
         }
         if (payload.action === 'duckdb_attachments') {
           return {data: {success: 1, data: {adapters: ['duckdb', 'sqlite', 'postgres', 'mysql', 'httpfs']}}};
@@ -351,7 +351,7 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
     await waitFor(() => expect(screen.getByText(/HUGEINT/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Insert ATTACH'));
-    expect(onInsertSql).toHaveBeenCalledWith("ATTACH ':memory:' AS \"aux_catalog\";");
+    expect(onInsertSql).toHaveBeenCalledWith('ATTACH \':memory:\' AS "aux_catalog";');
 
     const ExplainWrapped = withTheme(() => (
       <SqlDuckdbExplainDialog
@@ -388,7 +388,7 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
     ));
     render(<RowSqlWrapped />);
     expect(screen.getByText('SR-F-030594')).toBeInTheDocument();
-    expect(document.body.textContent).toContain("from_hex('4869')");
+    expect(document.body.textContent).toContain('from_hex(\'4869\')');
 
     const CellWrapped = withTheme(() => (
       <DataDuckdbCellInspectorModal

@@ -222,7 +222,7 @@ export function SqlSqliteSessionDialog({
   };
 
   const quotedAlias = `"${String(attachAlias || 'aux_db').replace(/"/g, '""')}"`;
-  const escapedPath = `'${String(attachPath || ':memory:').replace(/'/g, "''")}'`;
+  const escapedPath = `'${String(attachPath || ':memory:').replace(/'/g, '\'\'')}'`;
   const attachSql = `ATTACH DATABASE ${escapedPath} AS ${quotedAlias};`;
   const detachSql = `DETACH DATABASE ${quotedAlias};`;
 

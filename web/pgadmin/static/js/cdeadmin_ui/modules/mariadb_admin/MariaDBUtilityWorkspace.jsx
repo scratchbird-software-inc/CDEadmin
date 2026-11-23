@@ -438,25 +438,25 @@ export default function MariaDBUtilityWorkspace({
                     options={
                       operationId === 'run_aria_chk'
                         ? [
-                            {value: 'check', label: '--check'},
-                            {value: 'extend_check', label: '--extend-check'},
-                            {value: 'describe', label: '--description'},
-                            {value: 'analyze', label: '--analyze (mutating)'},
-                            {value: 'recover', label: '--recover (mutating)'},
-                            {value: 'safe_recover', label: '--safe-recover (mutating)'},
-                            {value: 'zerofill', label: '--zerofill (mutating)'},
-                          ]
+                          {value: 'check', label: '--check'},
+                          {value: 'extend_check', label: '--extend-check'},
+                          {value: 'describe', label: '--description'},
+                          {value: 'analyze', label: '--analyze (mutating)'},
+                          {value: 'recover', label: '--recover (mutating)'},
+                          {value: 'safe_recover', label: '--safe-recover (mutating)'},
+                          {value: 'zerofill', label: '--zerofill (mutating)'},
+                        ]
                         : [
-                            {value: 'check', label: '--check'},
-                            {value: 'medium_check', label: '--medium-check'},
-                            {value: 'extend_check', label: '--extend-check'},
-                            {value: 'information', label: '--check --information'},
-                            {value: 'describe', label: '--description'},
-                            {value: 'analyze', label: '--analyze (mutating)'},
-                            {value: 'recover', label: '--recover (mutating)'},
-                            {value: 'safe_recover', label: '--safe-recover (mutating)'},
-                            {value: 'sort_index', label: '--sort-index (mutating)'},
-                          ]
+                          {value: 'check', label: '--check'},
+                          {value: 'medium_check', label: '--medium-check'},
+                          {value: 'extend_check', label: '--extend-check'},
+                          {value: 'information', label: '--check --information'},
+                          {value: 'describe', label: '--description'},
+                          {value: 'analyze', label: '--analyze (mutating)'},
+                          {value: 'recover', label: '--recover (mutating)'},
+                          {value: 'safe_recover', label: '--safe-recover (mutating)'},
+                          {value: 'sort_index', label: '--sort-index (mutating)'},
+                        ]
                     }
                     onChange={(val) => setCheckMode(val)}
                   />

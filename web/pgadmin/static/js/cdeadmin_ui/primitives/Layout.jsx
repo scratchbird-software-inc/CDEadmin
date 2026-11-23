@@ -38,25 +38,25 @@ export function Box({
   overflow,
   position,
   // Strip MUI-only theme props if passed directly
-  // eslint-disable-next-line no-unused-vars
+   
   bgcolor,
-  // eslint-disable-next-line no-unused-vars
+   
   borderColor,
-  // eslint-disable-next-line no-unused-vars
+   
   p,
-  // eslint-disable-next-line no-unused-vars
+   
   px,
-  // eslint-disable-next-line no-unused-vars
+   
   py,
-  // eslint-disable-next-line no-unused-vars
+   
   m,
-  // eslint-disable-next-line no-unused-vars
+   
   mt,
-  // eslint-disable-next-line no-unused-vars
+   
   mb,
-  // eslint-disable-next-line no-unused-vars
+   
   ml,
-  // eslint-disable-next-line no-unused-vars
+   
   mr,
   ...props
 }) {

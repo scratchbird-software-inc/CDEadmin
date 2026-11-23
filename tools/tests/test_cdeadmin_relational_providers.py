@@ -610,7 +610,7 @@ class RelationalInventoryTests(unittest.TestCase):
             item for item in resources
             if item['resource_kind'] == 'metric'
         ]
-        self.assertEqual(28, len(metrics))
+        self.assertEqual(43, len(metrics))
         connected = next(
             item for item in metrics
             if item['display_name'] == 'THREADS_CONNECTED'
@@ -695,12 +695,17 @@ class RelationalInventoryTests(unittest.TestCase):
             source = ''
             description = ()
             executed = []
+            cdeadmin_lossless_text = False
+            cdeadmin_checked_fetch_errors = True
+            metadata = {'charset': (33, 63, 33, 63, 63, 33)}
 
             def execute(self, source):
                 self.source = source
                 self.executed.append(source)
                 if source == 'SHOW BINARY LOGS':
                     self.description = (('Log_name',), ('File_size',))
+                elif source == 'SELECT @@sql_mode':
+                    self.description = (('@@sql_mode',),)
                 elif source.startswith('SHOW BINLOG EVENTS IN '):
                     self.description = (
                         ('Log_name',), ('Pos',), ('Event_type',),
@@ -708,6 +713,11 @@ class RelationalInventoryTests(unittest.TestCase):
                     )
                 else:
                     self.description = ()
+
+            def fetchone(self):
+                if self.source == 'SELECT @@sql_mode':
+                    return ('',)
+                return None
 
             def fetchall(self):
                 if self.source == 'SHOW BINARY LOGS':
@@ -744,7 +754,7 @@ class RelationalInventoryTests(unittest.TestCase):
         )
         self.assertEqual(256, event['native']['end_log_pos'])
         self.assertIn(
-            "SHOW BINLOG EVENTS IN 'mariadb-bin.000001' LIMIT 200",
+            "SHOW BINLOG EVENTS IN 'mariadb-bin.000001' LIMIT 201",
             cursor.executed,
         )
 
@@ -1610,7 +1620,10 @@ class RelationalInventoryTests(unittest.TestCase):
 
     def test_mariadb_client_retires_private_pool_after_checked_out_handle(self):
         native = mock.Mock(connection_id=7)
-        native.cursor.return_value.fetchone.return_value = ('server-one', 7)
+        native.cursor.return_value.fetchone.side_effect = [
+            ('server-one', 7),
+            ('server-one', 'operator@db.example', '12.2.2-MariaDB', 7),
+        ]
         module = SimpleNamespace(connect=mock.Mock(return_value=native),
                                  ConnectionPool=mock.Mock())
         client = MariaDBDBAPIClient(RelationalClientConfig(

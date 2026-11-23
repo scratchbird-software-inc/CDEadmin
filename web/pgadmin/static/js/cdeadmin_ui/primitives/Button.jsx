@@ -55,13 +55,13 @@ export const Button = forwardRef(function Button({
   sx,
   disabled = false,
   // Strip legacy MUI-only presentation props so DOM attributes stay clean
-  // eslint-disable-next-line no-unused-vars
+   
   variant,
-  // eslint-disable-next-line no-unused-vars
+   
   size,
-  // eslint-disable-next-line no-unused-vars
+   
   color,
-  // eslint-disable-next-line no-unused-vars
+   
   disableElevation,
   ...props
 }, ref) {
@@ -73,10 +73,12 @@ export const Button = forwardRef(function Button({
   const isDisabled = Boolean(loading || disabled);
   const invokeOnce = (event) => {
     if (isDisabled) return;
-    if (event.isTrusted && event.detail > 0) {
+    if (event.detail > 1) {
       const now = Date.now();
       if (now - lastMouseActivation.current <= 500) return;
-      lastMouseActivation.current = now;
+    }
+    if (event.detail > 0) {
+      lastMouseActivation.current = Date.now();
     }
     onClick?.(event);
   };
@@ -135,11 +137,11 @@ export const IconButton = forwardRef(function IconButton({
   sx,
   disabled = false,
   // Strip legacy MUI-only presentation props
-  // eslint-disable-next-line no-unused-vars
+   
   edge,
-  // eslint-disable-next-line no-unused-vars
+   
   size,
-  // eslint-disable-next-line no-unused-vars
+   
   color,
   ...props
 }, ref) {

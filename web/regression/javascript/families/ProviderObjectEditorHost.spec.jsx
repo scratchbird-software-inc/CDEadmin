@@ -66,6 +66,8 @@ describe('ProviderObjectEditorHost', () => {
 
   it('falls back to the provider\'s own form for a kind without a bundle form (owner decision 2026-11-11)', async () => {
     const bundle = loadEngineBundle('postgresql');
+    delete bundle.forms['engine_object:column'];
+    bundle.kinds.column = {...bundle.kinds.column, form_status: null};
     expect(bundle.forms['engine_object:column']).toBeUndefined();
     const column = {resource_id: 'col-1', resource_kind: 'column', display_name: 'amount', display_path: ['demo', 'shop', 'orders', 'amount'],
       extensions: {postgresql: {native: {name: 'amount', column_facts: {name: 'amount', cltype: 'numeric(10,2)', attnotnull: true}}},
@@ -122,6 +124,8 @@ describe('ProviderObjectEditorHost', () => {
 
   it('explains when the engine declares no editor for the kind', async () => {
     const bundle = loadEngineBundle('sqlite');
+    delete bundle.forms['engine_object:pragma'];
+    bundle.kinds.pragma = {...bundle.kinds.pragma, form_status: null};
     const api = fakeApi(bundle, resource);
     render(<Theme><ProviderObjectEditorHost api={api} endpointUrl="/x" engine="sqlite" resourceId="r" resourceKind="pragma"
       mode="alter" onClose={() => {}} /></Theme>);

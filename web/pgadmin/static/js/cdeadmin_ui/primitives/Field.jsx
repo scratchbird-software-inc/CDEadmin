@@ -44,15 +44,15 @@ export const TextField = forwardRef(function TextField({
   InputProps,
   inputProps,
   // Strip legacy MUI-only props cleanly
-  // eslint-disable-next-line no-unused-vars
+   
   InputLabelProps,
-  // eslint-disable-next-line no-unused-vars
+   
   fullWidth,
-  // eslint-disable-next-line no-unused-vars
+   
   size,
-  // eslint-disable-next-line no-unused-vars
+   
   variant,
-  // eslint-disable-next-line no-unused-vars
+   
   sx,
   className = '',
   style,

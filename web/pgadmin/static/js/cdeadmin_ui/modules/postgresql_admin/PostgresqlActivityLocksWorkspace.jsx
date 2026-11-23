@@ -239,11 +239,11 @@ export default function PostgresqlActivityLocksWorkspace({
               value={resetTarget}
               options={[
                 {value: 'pg_stat_statements', label: 'pg_stat_statements_reset()'},
-                {value: 'io', label: "pg_stat_reset_shared('io')"},
-                {value: 'wal', label: "pg_stat_reset_shared('wal')"},
-                {value: 'bgwriter', label: "pg_stat_reset_shared('bgwriter')"},
-                {value: 'checkpointer', label: "pg_stat_reset_shared('checkpointer')"},
-                {value: 'archiver', label: "pg_stat_reset_shared('archiver')"},
+                {value: 'io', label: 'pg_stat_reset_shared(\'io\')'},
+                {value: 'wal', label: 'pg_stat_reset_shared(\'wal\')'},
+                {value: 'bgwriter', label: 'pg_stat_reset_shared(\'bgwriter\')'},
+                {value: 'checkpointer', label: 'pg_stat_reset_shared(\'checkpointer\')'},
+                {value: 'archiver', label: 'pg_stat_reset_shared(\'archiver\')'},
               ]}
               onChange={setResetTarget}
             />

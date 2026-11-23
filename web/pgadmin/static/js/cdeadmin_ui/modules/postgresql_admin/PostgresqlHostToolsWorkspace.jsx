@@ -99,60 +99,60 @@ export default function PostgresqlHostToolsWorkspace({
 
   const buildDraft = () => {
     switch (operationId) {
-      case 'host_initdb':
-        return {
-          init_root_id: initRootId,
-          subdir: subdir.trim(),
-          auth_host: 'scram-sha-256',
-          auth_local: 'peer',
-          confirmation: `${initRootId}/${subdir.trim()}`,
-        };
-      case 'host_pg_amcheck':
-        return {
-          database: databaseName.trim() || 'postgres',
-          heapallindexed: true,
-        };
-      case 'host_pg_archivecleanup':
-        return {
-          archive_id: archiveId,
-          oldest_kept_wal_file: oldestKeptWal.trim(),
-          dry_run: Boolean(dryRun),
-          confirmation: confirmation.trim() || archiveId,
-        };
-      case 'host_pg_upgrade':
-        return {
-          upgrade_pair_id: upgradePairId,
-          mode: upgradeMode,
-          confirmation: confirmation.trim() || upgradePairId,
-        };
-      case 'host_pgbench':
-        return {
-          database: databaseName.trim() || 'postgres',
-          initialize: true,
-          scale: 1,
-          clients: 2,
-          transactions: 10,
-          scratch_schema_acknowledged: Boolean(destructiveAck),
-          confirmation: confirmation.trim() || databaseName.trim(),
-        };
-      case 'host_pg_test_timing':
-        return {
-          duration_seconds: Number(durationSeconds) || 3,
-          hostname_confirmation: confirmation.trim() || catalog?.hostname || '',
-        };
-      case 'host_pg_resetwal':
-        return {
-          cluster_id: clusterId,
-          dry_run: Boolean(dryRun),
-          stopped_cluster_acknowledged: true,
-          destructive_data_loss_acknowledged: Boolean(destructiveAck),
-          confirmation: confirmation.trim() || clusterId,
-        };
-      default:
-        return {
-          cluster_id: clusterId,
-          ...(confirmation.trim() ? {confirmation: confirmation.trim()} : {}),
-        };
+    case 'host_initdb':
+      return {
+        init_root_id: initRootId,
+        subdir: subdir.trim(),
+        auth_host: 'scram-sha-256',
+        auth_local: 'peer',
+        confirmation: `${initRootId}/${subdir.trim()}`,
+      };
+    case 'host_pg_amcheck':
+      return {
+        database: databaseName.trim() || 'postgres',
+        heapallindexed: true,
+      };
+    case 'host_pg_archivecleanup':
+      return {
+        archive_id: archiveId,
+        oldest_kept_wal_file: oldestKeptWal.trim(),
+        dry_run: Boolean(dryRun),
+        confirmation: confirmation.trim() || archiveId,
+      };
+    case 'host_pg_upgrade':
+      return {
+        upgrade_pair_id: upgradePairId,
+        mode: upgradeMode,
+        confirmation: confirmation.trim() || upgradePairId,
+      };
+    case 'host_pgbench':
+      return {
+        database: databaseName.trim() || 'postgres',
+        initialize: true,
+        scale: 1,
+        clients: 2,
+        transactions: 10,
+        scratch_schema_acknowledged: Boolean(destructiveAck),
+        confirmation: confirmation.trim() || databaseName.trim(),
+      };
+    case 'host_pg_test_timing':
+      return {
+        duration_seconds: Number(durationSeconds) || 3,
+        hostname_confirmation: confirmation.trim() || catalog?.hostname || '',
+      };
+    case 'host_pg_resetwal':
+      return {
+        cluster_id: clusterId,
+        dry_run: Boolean(dryRun),
+        stopped_cluster_acknowledged: true,
+        destructive_data_loss_acknowledged: Boolean(destructiveAck),
+        confirmation: confirmation.trim() || clusterId,
+      };
+    default:
+      return {
+        cluster_id: clusterId,
+        ...(confirmation.trim() ? {confirmation: confirmation.trim()} : {}),
+      };
     }
   };
 
