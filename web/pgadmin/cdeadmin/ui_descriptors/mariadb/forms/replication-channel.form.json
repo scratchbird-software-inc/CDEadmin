@@ -1,0 +1,289 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "replication-channel"
+  ],
+  "form_reference": "SR-F-030633",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Connection name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CHANGE MASTER"
+    },
+    {
+      "field_id": "master_host",
+      "label": "Primary host",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "MASTER_HOST"
+    },
+    {
+      "field_id": "master_port",
+      "label": "Primary port",
+      "tab": "General",
+      "control": "number",
+      "native_keyword": "MASTER_PORT"
+    },
+    {
+      "field_id": "use_gtid",
+      "label": "GTID mode",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "CURRENT_POS",
+          "label": "Current Pos"
+        },
+        {
+          "value": "SLAVE_POS",
+          "label": "Slave Pos"
+        },
+        {
+          "value": "NO",
+          "label": "No"
+        }
+      ],
+      "default": "UNCHANGED",
+      "native_keyword": "MASTER_USE_GTID"
+    },
+    {
+      "field_id": "master_log_file",
+      "label": "Primary binary log file",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "MASTER_LOG_FILE"
+    },
+    {
+      "field_id": "master_log_position",
+      "label": "Primary binary log position",
+      "tab": "Definition",
+      "control": "number",
+      "native_keyword": "MASTER_LOG_POS"
+    },
+    {
+      "field_id": "relay_log_file",
+      "label": "Relay log file",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "RELAY_LOG_FILE"
+    },
+    {
+      "field_id": "relay_log_position",
+      "label": "Relay log position",
+      "tab": "Definition",
+      "control": "number",
+      "native_keyword": "RELAY_LOG_POS"
+    },
+    {
+      "field_id": "connect_retry",
+      "label": "Connect retry (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "MASTER_CONNECT_RETRY"
+    },
+    {
+      "field_id": "retry_count",
+      "label": "Retry count",
+      "tab": "Engine",
+      "control": "number"
+    },
+    {
+      "field_id": "replication_delay",
+      "label": "Replication delay (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "MASTER_DELAY"
+    },
+    {
+      "field_id": "heartbeat_period",
+      "label": "Heartbeat period (seconds)",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "MASTER_HEARTBEAT_PERIOD"
+    },
+    {
+      "field_id": "ignore_server_ids",
+      "label": "Ignored server IDs",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Server ID",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "item_kind": "string",
+      "native_keyword": "IGNORE_SERVER_IDS"
+    },
+    {
+      "field_id": "do_domain_ids",
+      "label": "Included GTID domain IDs",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Domain ID",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "item_kind": "string",
+      "native_keyword": "DO_DOMAIN_IDS"
+    },
+    {
+      "field_id": "ignore_domain_ids",
+      "label": "Ignored GTID domain IDs",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Domain ID",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "item_kind": "string",
+      "native_keyword": "IGNORE_DOMAIN_IDS"
+    },
+    {
+      "field_id": "demote_to_slave",
+      "label": "Demote current primary",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ON",
+          "label": "On"
+        },
+        {
+          "value": "OFF",
+          "label": "Off"
+        }
+      ],
+      "default": "UNCHANGED"
+    },
+    {
+      "field_id": "master_user",
+      "label": "Replication user",
+      "tab": "Security",
+      "control": "text",
+      "required": true,
+      "native_keyword": "MASTER_USER"
+    },
+    {
+      "field_id": "master_password",
+      "label": "Replication password",
+      "tab": "Security",
+      "control": "password",
+      "native_keyword": "MASTER_PASSWORD"
+    },
+    {
+      "field_id": "master_ssl",
+      "label": "Use TLS for replication",
+      "tab": "Security",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ON",
+          "label": "On"
+        },
+        {
+          "value": "OFF",
+          "label": "Off"
+        }
+      ],
+      "default": "UNCHANGED",
+      "native_keyword": "MASTER_SSL"
+    },
+    {
+      "field_id": "ssl_ca",
+      "label": "TLS CA file",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_ca_path",
+      "label": "TLS CA directory",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_certificate",
+      "label": "TLS client certificate",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_key",
+      "label": "TLS client key",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_cipher",
+      "label": "TLS cipher",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_crl",
+      "label": "TLS CRL file",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "ssl_crl_path",
+      "label": "TLS CRL directory",
+      "tab": "Security",
+      "control": "text"
+    },
+    {
+      "field_id": "verify_server_certificate",
+      "label": "Verify server certificate",
+      "tab": "Security",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ON",
+          "label": "On"
+        },
+        {
+          "value": "OFF",
+          "label": "Off"
+        }
+      ],
+      "default": "UNCHANGED"
+    }
+  ]
+}

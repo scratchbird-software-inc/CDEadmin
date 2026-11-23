@@ -1,0 +1,82 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "session"
+  ],
+  "form_reference": "SR-F-030639",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Session ID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "processlist_id"
+      ]
+    },
+    {
+      "field_id": "user",
+      "label": "User",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "user"
+      ]
+    },
+    {
+      "field_id": "host",
+      "label": "Client host",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "host"
+      ]
+    },
+    {
+      "field_id": "db",
+      "label": "Default database",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "db"
+      ]
+    },
+    {
+      "field_id": "command",
+      "label": "Command",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "command"
+      ]
+    },
+    {
+      "field_id": "info",
+      "label": "Active SQL statement",
+      "tab": "Engine",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "info"
+      ]
+    }
+  ]
+}

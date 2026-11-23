@@ -309,7 +309,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/loadable-function.form.json"
     },
     {
       "resource_kind": "trigger",
@@ -510,7 +511,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/plugin.form.json"
     },
     {
       "resource_kind": "replication-channel",
@@ -531,7 +533,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/replication-channel.form.json"
     },
     {
       "resource_kind": "server-link",
@@ -557,7 +560,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/server-link.form.json"
     },
     {
       "resource_kind": "server",
@@ -697,7 +701,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/column.form.json"
     },
     {
       "resource_kind": "constraint",
@@ -719,7 +724,8 @@
           "tier": 1,
           "mutation_class": "destructive"
         }
-      ]
+      ],
+      "form": "forms/constraint.form.json"
     },
     {
       "resource_kind": "partition",
@@ -741,7 +747,8 @@
           "tier": 1,
           "mutation_class": "admin"
         }
-      ]
+      ],
+      "form": "forms/partition.form.json"
     },
     {
       "resource_kind": "tablespace",
@@ -753,7 +760,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/tablespace.form.json"
     },
     {
       "resource_kind": "session",
@@ -765,7 +773,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/session.form.json"
     },
     {
       "resource_kind": "system-variable",
@@ -777,7 +786,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/system-variable.form.json"
     },
     {
       "resource_kind": "lock",
@@ -789,7 +799,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/lock.form.json"
     },
     {
       "resource_kind": "lock-wait",
@@ -801,7 +812,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/lock-wait.form.json"
     },
     {
       "resource_kind": "table-storage",
@@ -813,7 +825,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/table-storage.form.json"
     },
     {
       "resource_kind": "binary-log",
@@ -825,7 +838,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/binary-log.form.json"
     },
     {
       "resource_kind": "binary-log-event",
@@ -837,7 +851,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/binary-log-event.form.json"
     },
     {
       "resource_kind": "binary-log-status",
@@ -849,7 +864,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/binary-log-status.form.json"
     },
     {
       "resource_kind": "log-configuration",
@@ -861,7 +877,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/log-configuration.form.json"
     },
     {
       "resource_kind": "general-log-entry",
@@ -873,7 +890,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/general-log-entry.form.json"
     },
     {
       "resource_kind": "slow-query",
@@ -885,7 +903,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/slow-query.form.json"
     },
     {
       "resource_kind": "metric",
@@ -897,7 +916,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/metric.form.json"
     },
     {
       "resource_kind": "tls-configuration",
@@ -909,7 +929,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/tls-configuration.form.json"
     },
     {
       "resource_kind": "available-plugin",
@@ -921,7 +942,8 @@
           "tier": 1,
           "mutation_class": "read"
         }
-      ]
+      ],
+      "form": "forms/available-plugin.form.json"
     }
   ],
   "sql_builder": {

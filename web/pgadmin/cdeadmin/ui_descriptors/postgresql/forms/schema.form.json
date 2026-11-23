@@ -1,0 +1,178 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "schema"
+  ],
+  "form_reference": "SR-F-030600",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE SCHEMA"
+    },
+    {
+      "field_id": "namespaceowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "text",
+      "native_keyword": "AUTHORIZATION"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "nspacl",
+      "label": "Grant privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "text"
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean"
+        }
+      ]
+    },
+    {
+      "field_id": "revoke",
+      "label": "Revoke privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "default_privileges",
+      "label": "Default privileges for new objects",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "options": [
+            {
+              "value": "TABLES",
+              "label": "Tables"
+            },
+            {
+              "value": "SEQUENCES",
+              "label": "Sequences"
+            },
+            {
+              "value": "FUNCTIONS",
+              "label": "Functions"
+            },
+            {
+              "value": "TYPES",
+              "label": "Types"
+            }
+          ]
+        },
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "text"
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean"
+        }
+      ]
+    },
+    {
+      "field_id": "default_revoke",
+      "label": "Revoke default privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "options": [
+            {
+              "value": "TABLES",
+              "label": "Tables"
+            },
+            {
+              "value": "SEQUENCES",
+              "label": "Sequences"
+            },
+            {
+              "value": "FUNCTIONS",
+              "label": "Functions"
+            },
+            {
+              "value": "TYPES",
+              "label": "Types"
+            }
+          ]
+        },
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Label",
+          "control": "text"
+        }
+      ]
+    }
+  ]
+}

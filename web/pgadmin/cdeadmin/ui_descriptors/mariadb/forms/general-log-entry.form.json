@@ -1,0 +1,70 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "general-log-entry"
+  ],
+  "form_reference": "SR-F-030648",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "General log entry",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "event_time",
+      "label": "Event timestamp",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "event_time"
+      ]
+    },
+    {
+      "field_id": "command_type",
+      "label": "Command type",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "command_type"
+      ]
+    },
+    {
+      "field_id": "argument",
+      "label": "Command argument",
+      "tab": "Engine",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "argument"
+      ]
+    },
+    {
+      "field_id": "user_host",
+      "label": "User @ host",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "user_host"
+      ]
+    }
+  ]
+}

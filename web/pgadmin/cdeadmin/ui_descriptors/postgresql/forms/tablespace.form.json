@@ -1,0 +1,125 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "tablespace"
+  ],
+  "form_reference": "SR-F-030601",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE TABLESPACE"
+    },
+    {
+      "field_id": "spcuser",
+      "label": "Owner",
+      "tab": "General",
+      "control": "text",
+      "native_keyword": "OWNER"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "spclocation",
+      "label": "Filesystem directory",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "LOCATION"
+    },
+    {
+      "field_id": "spcoptions",
+      "label": "Tablespace options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "native_keyword": "WITH"
+    },
+    {
+      "field_id": "reset_options",
+      "label": "Reset options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "spcacl",
+      "label": "Grant CREATE privilege",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "revoke",
+      "label": "Revoke privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    }
+  ]
+}

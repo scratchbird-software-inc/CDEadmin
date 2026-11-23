@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useEffect, useId, useState} from 'react';
+import {useEffect, useId, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Checkbox as BaseCheckbox} from '@base-ui/react/checkbox';
 import {Switch as BaseSwitch} from '@base-ui/react/switch';
@@ -175,6 +175,7 @@ export function Select({
   }, []);
 
   const [open, setOpen] = useState(false);
+  const selectedViaBaseRef = useRef(false);
   const labelId = useId();
   const isInvalid = Boolean(validationMessage) || Boolean(error);
   const effectiveHelp = validationMessage || helperText;
@@ -191,9 +192,9 @@ export function Select({
   return (
     <div className={['sr-field', className].filter(Boolean).join(' ')} style={wrapperStyle}>
       {label && (
-        <span id={labelId} className="sr-field-label">
-          {label}
-          {required ? ' *' : ''}
+        <span className="sr-field-label">
+          <span id={labelId}>{label}</span>
+          {required ? <span aria-hidden="true">{' *'}</span> : null}
         </span>
       )}
       <BaseSelect.Root
@@ -207,6 +208,7 @@ export function Select({
         required={required}
         modal={false}
         onValueChange={(nextValue, details) => {
+          selectedViaBaseRef.current = true;
           onChange?.(nextValue, details?.event);
         }}
       >
@@ -238,33 +240,42 @@ export function Select({
             </svg>
           </BaseSelect.Icon>
         </BaseSelect.Trigger>
-        <BaseSelect.Portal>
-          <BaseSelect.Positioner sideOffset={4} alignItemWithTrigger={false} style={{zIndex: 'var(--cde-layer-popover, 2400)'}}>
-            <BaseSelect.Popup className="sr-select-popup">
-              <BaseSelect.List>
-                {options.map((option) => (
-                  <BaseSelect.Item
-                    key={String(option.value)}
-                    value={option.value}
-                    disabled={option.disabled}
-                    className="sr-select-item"
-                    onClick={(event) => {
-                      if (!disabled && !option.disabled && event.detail === 0 && !event.currentTarget.hasAttribute('data-highlighted')) {
-                        onChange?.(option.value, event);
-                        setOpen(false);
-                      }
-                    }}
-                  >
-                    <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
-                    <BaseSelect.ItemIndicator style={{display: 'inline-flex', color: 'var(--sr-accent)'}}>
-                      ✓
-                    </BaseSelect.ItemIndicator>
-                  </BaseSelect.Item>
-                ))}
-              </BaseSelect.List>
-            </BaseSelect.Popup>
-          </BaseSelect.Positioner>
-        </BaseSelect.Portal>
+        {open && (
+          <BaseSelect.Portal>
+            <BaseSelect.Positioner sideOffset={4} alignItemWithTrigger={false} style={{zIndex: 'var(--cde-layer-popover, 2400)'}}>
+              <BaseSelect.Popup className="sr-select-popup">
+                <BaseSelect.List>
+                  {options.map((option) => (
+                    <BaseSelect.Item
+                      key={String(option.value)}
+                      value={option.value}
+                      disabled={option.disabled}
+                      className="sr-select-item"
+                      onClick={(event) => {
+                        if (!disabled && !option.disabled) {
+                          if (selectedViaBaseRef.current) {
+                            selectedViaBaseRef.current = false;
+                            setOpen(false);
+                            return;
+                          }
+                          if (option.value !== value) {
+                            onChange?.(option.value, event);
+                          }
+                          setOpen(false);
+                        }
+                      }}
+                    >
+                      <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
+                      <BaseSelect.ItemIndicator style={{display: 'inline-flex', color: 'var(--sr-accent)'}}>
+                        ✓
+                      </BaseSelect.ItemIndicator>
+                    </BaseSelect.Item>
+                  ))}
+                </BaseSelect.List>
+              </BaseSelect.Popup>
+            </BaseSelect.Positioner>
+          </BaseSelect.Portal>
+        )}
       </BaseSelect.Root>
       {effectiveHelp && (
         <div id={helpId} className="sr-field-help" data-error={isInvalid ? 'true' : undefined}>

@@ -1,0 +1,387 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "constraint"
+  ],
+  "form_reference": "SR-F-030605",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Constraint name",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "contype",
+      "label": "Constraint kind",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "p",
+          "label": "Primary Key"
+        },
+        {
+          "value": "u",
+          "label": "Unique"
+        },
+        {
+          "value": "f",
+          "label": "Foreign Key"
+        },
+        {
+          "value": "c",
+          "label": "Check"
+        },
+        {
+          "value": "x",
+          "label": "Exclude"
+        },
+        {
+          "value": "n",
+          "label": "Not Null"
+        }
+      ],
+      "required": true
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "columns",
+      "label": "Columns",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "without_overlaps_column",
+      "label": "Temporal range column (WITHOUT OVERLAPS, 18+)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "index",
+      "label": "Existing unique index",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "not_null_column",
+      "label": "Target column (named NOT NULL, 18+)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "fk_columns",
+      "label": "Foreign key column pairs",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "local_column",
+          "label": "Local column",
+          "control": "text"
+        },
+        {
+          "field_id": "referenced",
+          "label": "Referenced column",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "local_period_column",
+      "label": "Local PERIOD column (18+)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "referenced_period_column",
+      "label": "Referenced PERIOD column (18+)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "remote_schema",
+      "label": "Referenced schema",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "remote_table",
+      "label": "Referenced table",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "confmatchtype",
+      "label": "Match full",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "confupdtype",
+      "label": "On update",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "a",
+          "label": "No Action"
+        },
+        {
+          "value": "r",
+          "label": "Restrict"
+        },
+        {
+          "value": "c",
+          "label": "Cascade"
+        },
+        {
+          "value": "n",
+          "label": "Set Null"
+        },
+        {
+          "value": "d",
+          "label": "Set Default"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "confdeltype",
+      "label": "On delete",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "a",
+          "label": "No Action"
+        },
+        {
+          "value": "r",
+          "label": "Restrict"
+        },
+        {
+          "value": "c",
+          "label": "Cascade"
+        },
+        {
+          "value": "n",
+          "label": "Set Null"
+        },
+        {
+          "value": "d",
+          "label": "Set Default"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "consrc",
+      "label": "Check expression",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "connoinherit",
+      "label": "No inherit",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "elements",
+      "label": "Exclusion elements",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "column",
+          "label": "Column/expression",
+          "control": "text"
+        },
+        {
+          "field_id": "is_exp",
+          "label": "Expression?",
+          "control": "boolean"
+        },
+        {
+          "field_id": "oper_class",
+          "label": "Operator class",
+          "control": "text"
+        },
+        {
+          "field_id": "order",
+          "label": "ASC?",
+          "control": "boolean"
+        },
+        {
+          "field_id": "nulls_order",
+          "label": "NULLS FIRST?",
+          "control": "boolean"
+        },
+        {
+          "field_id": "operator",
+          "label": "Operator",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "indconstraint",
+      "label": "Predicate (WHERE)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "include",
+      "label": "Include columns",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "enforcement",
+      "label": "Enforcement (PostgreSQL 18+)",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "ENFORCED",
+          "label": "Enforced"
+        },
+        {
+          "value": "NOT ENFORCED",
+          "label": "Not enforced"
+        }
+      ]
+    },
+    {
+      "field_id": "not_enforced",
+      "label": "Not enforced (PostgreSQL 18+)",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "not_valid",
+      "label": "Skip initial validation (NOT VALID)",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "validate",
+      "label": "Validate constraint now",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "condeferrable",
+      "label": "Deferrable",
+      "tab": "Engine",
+      "control": "boolean"
+    },
+    {
+      "field_id": "condeferred",
+      "label": "Initially deferred",
+      "tab": "Engine",
+      "control": "boolean"
+    },
+    {
+      "field_id": "amname",
+      "label": "Index access method",
+      "tab": "Engine",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "fillfactor",
+      "label": "Fill factor",
+      "tab": "Engine",
+      "control": "number"
+    },
+    {
+      "field_id": "reset_fillfactor",
+      "label": "Reset fill factor",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "spcname",
+      "label": "Index tablespace",
+      "tab": "Engine",
+      "control": "text"
+    }
+  ]
+}

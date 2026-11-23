@@ -1,0 +1,47 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "binary-log"
+  ],
+  "form_reference": "SR-F-030644",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Log file name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "file_size",
+      "label": "File size (bytes)",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "file_size"
+      ]
+    },
+    {
+      "field_id": "encrypted",
+      "label": "Encrypted",
+      "tab": "Security",
+      "control": "boolean",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "encrypted"
+      ]
+    }
+  ]
+}

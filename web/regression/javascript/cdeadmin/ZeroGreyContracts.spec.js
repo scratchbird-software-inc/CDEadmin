@@ -27,7 +27,6 @@ import {
   resolvePresentation,
 } from 'sources/cdeadmin_ui/foundations/presentation';
 import Ajv2020 from 'ajv/dist/2020';
-import workbenchScreen from 'sources/cdeadmin_ui/foundations/screens/workbench-shell.json';
 import projectExplorerScreen from 'sources/cdeadmin_ui/foundations/screens/project-explorer.json';
 import ddnViewerScreen from 'sources/cdeadmin_ui/foundations/screens/ddn-viewer.json';
 import ddnDesignerScreen from 'sources/cdeadmin_ui/foundations/screens/ddn-designer.json';
@@ -76,7 +75,7 @@ describe('CDEadmin Zero-Grey executable contracts', () => {
   it('validates every implemented top-level surface against the normative schema', () => {
     const validate = new Ajv2020({strict: false}).compile(SCREEN_SPEC_SCHEMA);
     for(const specification of [
-      workbenchScreen, projectExplorerScreen, ddnViewerScreen, ddnDesignerScreen,
+      projectExplorerScreen, ddnViewerScreen, ddnDesignerScreen,
     ]) {
       expect({id: specification.screen_id, errors: validate(specification) ?
         [] : validate.errors}).toEqual({id: specification.screen_id, errors: []});

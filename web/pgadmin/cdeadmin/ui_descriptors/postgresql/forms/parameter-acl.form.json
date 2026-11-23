@@ -1,0 +1,101 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "parameter-acl"
+  ],
+  "form_reference": "SR-F-030607",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Parameter name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "parameter"
+      ]
+    },
+    {
+      "field_id": "parameter",
+      "label": "Target parameter",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "parameter"
+      ]
+    },
+    {
+      "field_id": "privileges",
+      "label": "Parameter privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "privilege",
+          "label": "Privilege",
+          "control": "select",
+          "options": [
+            {
+              "value": "SET",
+              "label": "SET"
+            },
+            {
+              "value": "ALTER SYSTEM",
+              "label": "ALTER SYSTEM"
+            },
+            {
+              "value": "ALL PRIVILEGES",
+              "label": "ALL PRIVILEGES"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "roles",
+      "label": "Grantee roles",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "with_grant",
+      "label": "With grant option",
+      "tab": "Security",
+      "control": "boolean"
+    },
+    {
+      "field_id": "grant_option_only",
+      "label": "Revoke grant option only",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "cascade",
+      "label": "Cascade dependent grants",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "tablespace"
+  ],
+  "form_reference": "SR-F-030613",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Tablespace name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE TABLESPACE"
+    },
+    {
+      "field_id": "space_type",
+      "label": "Tablespace type",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "General",
+          "label": "General"
+        },
+        {
+          "value": "Undo",
+          "label": "Undo"
+        },
+        {
+          "value": "NDB",
+          "label": "NDB"
+        }
+      ],
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": "General"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "change",
+      "label": "Alter operation",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "AUTOEXTEND_SIZE",
+          "label": "Autoextend Size"
+        },
+        {
+          "value": "ENCRYPTION",
+          "label": "Encryption"
+        },
+        {
+          "value": "ENGINE_ATTRIBUTE",
+          "label": "Engine Attribute"
+        },
+        {
+          "value": "ACTIVE",
+          "label": "Active"
+        },
+        {
+          "value": "INACTIVE",
+          "label": "Inactive"
+        },
+        {
+          "value": "ADD_DATAFILE",
+          "label": "Add Datafile"
+        },
+        {
+          "value": "DROP_DATAFILE",
+          "label": "Drop Datafile"
+        }
+      ],
+      "modes": [
+        "alter"
+      ],
+      "required": true
+    },
+    {
+      "field_id": "datafile",
+      "label": "Datafile path",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "ADD DATAFILE"
+    },
+    {
+      "field_id": "logfile_group",
+      "label": "Logfile group",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "USE LOGFILE GROUP"
+    },
+    {
+      "field_id": "initial_size",
+      "label": "Initial size (bytes)",
+      "tab": "Engine",
+      "control": "number"
+    },
+    {
+      "field_id": "autoextend_size",
+      "label": "Autoextend size (bytes)",
+      "tab": "Engine",
+      "control": "number"
+    },
+    {
+      "field_id": "extent_size",
+      "label": "Extent size (bytes)",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "max_size",
+      "label": "Maximum size (bytes)",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "file_block_size",
+      "label": "File block size (bytes)",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "nodegroup",
+      "label": "NDB nodegroup",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "engine_attribute",
+      "label": "ENGINE_ATTRIBUTE JSON",
+      "tab": "Engine",
+      "control": "code",
+      "language": "json"
+    },
+    {
+      "field_id": "encryption",
+      "label": "Encryption",
+      "tab": "Security",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "Y",
+          "label": "Enabled (Y)"
+        },
+        {
+          "value": "N",
+          "label": "Disabled (N)"
+        }
+      ],
+      "default": "UNCHANGED"
+    }
+  ]
+}

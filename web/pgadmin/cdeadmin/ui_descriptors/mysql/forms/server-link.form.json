@@ -1,0 +1,127 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "server-link"
+  ],
+  "form_reference": "SR-F-030624",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Server name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE SERVER"
+    },
+    {
+      "field_id": "wrapper",
+      "label": "Foreign data wrapper",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": "mysql",
+      "native_keyword": "FOREIGN DATA WRAPPER"
+    },
+    {
+      "field_id": "include_host",
+      "label": "Specify host",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "host",
+      "label": "Remote host",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "HOST"
+    },
+    {
+      "field_id": "include_port",
+      "label": "Specify port",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "port",
+      "label": "Remote port",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "PORT"
+    },
+    {
+      "field_id": "include_database",
+      "label": "Specify database",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "database",
+      "label": "Remote database",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "DATABASE"
+    },
+    {
+      "field_id": "include_socket",
+      "label": "Specify socket",
+      "tab": "Engine",
+      "control": "boolean"
+    },
+    {
+      "field_id": "socket",
+      "label": "Remote socket",
+      "tab": "Engine",
+      "control": "text",
+      "native_keyword": "SOCKET"
+    },
+    {
+      "field_id": "include_owner",
+      "label": "Specify owner",
+      "tab": "Security",
+      "control": "boolean"
+    },
+    {
+      "field_id": "owner",
+      "label": "Remote owner",
+      "tab": "Security",
+      "control": "text",
+      "native_keyword": "OWNER"
+    },
+    {
+      "field_id": "include_username",
+      "label": "Specify user",
+      "tab": "Security",
+      "control": "boolean"
+    },
+    {
+      "field_id": "username",
+      "label": "Remote user",
+      "tab": "Security",
+      "control": "text",
+      "native_keyword": "USER"
+    },
+    {
+      "field_id": "include_password",
+      "label": "Specify password",
+      "tab": "Security",
+      "control": "boolean"
+    },
+    {
+      "field_id": "password",
+      "label": "Remote password",
+      "tab": "Security",
+      "control": "password",
+      "native_keyword": "PASSWORD"
+    }
+  ]
+}

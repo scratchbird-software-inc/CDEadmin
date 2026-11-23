@@ -7,11 +7,28 @@
 //
 //////////////////////////////////////////////////////////////
 
-import DuckdbRuntimeSettingsWorkspace from './DuckdbRuntimeSettingsWorkspace';
-import DuckdbRetainedSchemaWorkspace from './DuckdbRetainedSchemaWorkspace';
-import DuckdbShellWorkspace from './DuckdbShellWorkspace';
-import DuckdbSqlDumpWorkspace from './DuckdbSqlDumpWorkspace';
-import DuckdbContinuityStorageWorkspace from './DuckdbContinuityStorageWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const DuckdbRuntimeSettingsWorkspace = lazySurface(
+  () => import('./DuckdbRuntimeSettingsWorkspace'),
+  'DuckdbRuntimeSettingsWorkspace',
+);
+const DuckdbRetainedSchemaWorkspace = lazySurface(
+  () => import('./DuckdbRetainedSchemaWorkspace'),
+  'DuckdbRetainedSchemaWorkspace',
+);
+const DuckdbShellWorkspace = lazySurface(
+  () => import('./DuckdbShellWorkspace'),
+  'DuckdbShellWorkspace',
+);
+const DuckdbSqlDumpWorkspace = lazySurface(
+  () => import('./DuckdbSqlDumpWorkspace'),
+  'DuckdbSqlDumpWorkspace',
+);
+const DuckdbContinuityStorageWorkspace = lazySurface(
+  () => import('./DuckdbContinuityStorageWorkspace'),
+  'DuckdbContinuityStorageWorkspace',
+);
 
 export const DUCKDB_ADMIN_TABS = Object.freeze([
   'duckdb-runtime-settings',

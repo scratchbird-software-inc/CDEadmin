@@ -7,13 +7,36 @@
 //
 //////////////////////////////////////////////////////////////
 
-import SqliteRbuWorkspace from './SqliteRbuWorkspace';
-import SqliteExpertWorkspace from './SqliteExpertWorkspace';
-import SqliteIntckWorkspace from './SqliteIntckWorkspace';
-import SqliteBlobStreamWorkspace from './SqliteBlobStreamWorkspace';
-import SqliteShellWorkspace from './SqliteShellWorkspace';
-import SqliteSqlDumpWorkspace from './SqliteSqlDumpWorkspace';
-import SqliteSessionTuningWorkspace from './SqliteSessionTuningWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const SqliteRbuWorkspace = lazySurface(
+  () => import('./SqliteRbuWorkspace'),
+  'SqliteRbuWorkspace',
+);
+const SqliteExpertWorkspace = lazySurface(
+  () => import('./SqliteExpertWorkspace'),
+  'SqliteExpertWorkspace',
+);
+const SqliteIntckWorkspace = lazySurface(
+  () => import('./SqliteIntckWorkspace'),
+  'SqliteIntckWorkspace',
+);
+const SqliteBlobStreamWorkspace = lazySurface(
+  () => import('./SqliteBlobStreamWorkspace'),
+  'SqliteBlobStreamWorkspace',
+);
+const SqliteShellWorkspace = lazySurface(
+  () => import('./SqliteShellWorkspace'),
+  'SqliteShellWorkspace',
+);
+const SqliteSqlDumpWorkspace = lazySurface(
+  () => import('./SqliteSqlDumpWorkspace'),
+  'SqliteSqlDumpWorkspace',
+);
+const SqliteSessionTuningWorkspace = lazySurface(
+  () => import('./SqliteSessionTuningWorkspace'),
+  'SqliteSessionTuningWorkspace',
+);
 
 export const SQLITE_ADMIN_TABS = Object.freeze([
   'sqlite-rbu',

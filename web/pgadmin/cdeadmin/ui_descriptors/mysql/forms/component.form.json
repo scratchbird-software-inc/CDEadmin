@@ -1,0 +1,66 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "component"
+  ],
+  "form_reference": "SR-F-030615",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Component URN",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "urns",
+      "label": "Component URNs",
+      "tab": "General",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Component URN",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "item_kind": "string",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "INSTALL COMPONENT"
+    },
+    {
+      "field_id": "settings",
+      "label": "Install-time variable assignments",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "value",
+          "label": "Variable assignment",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "item_kind": "string",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "SET"
+    }
+  ]
+}

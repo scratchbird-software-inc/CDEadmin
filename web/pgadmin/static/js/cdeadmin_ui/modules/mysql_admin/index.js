@@ -7,7 +7,12 @@
 //
 //////////////////////////////////////////////////////////////
 
-import MySQLUtilityWorkspace from './MySQLUtilityWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const MySQLUtilityWorkspace = lazySurface(
+  () => import('./MySQLUtilityWorkspace'),
+  'MySQLUtilityWorkspace',
+);
 
 export const MYSQL_ADMIN_TABS = Object.freeze(['mysql-utilities']);
 
@@ -17,3 +22,5 @@ export function renderMySQLAdminWorkspace({tab, endpointUrl, databaseTargetId}) 
   }
   return null;
 }
+
+export {MySQLUtilityWorkspace};

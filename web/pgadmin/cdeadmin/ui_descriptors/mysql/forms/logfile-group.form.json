@@ -1,0 +1,68 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "logfile-group"
+  ],
+  "form_reference": "SR-F-030628",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Logfile group name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE LOGFILE GROUP"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "undofile",
+      "label": "Undofile path",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "native_keyword": "ADD UNDOFILE"
+    },
+    {
+      "field_id": "initial_size",
+      "label": "Initial size (bytes)",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "INITIAL_SIZE"
+    },
+    {
+      "field_id": "undo_buffer_size",
+      "label": "Undo buffer size (bytes)",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "UNDO_BUFFER_SIZE"
+    },
+    {
+      "field_id": "nodegroup",
+      "label": "Nodegroup ID",
+      "tab": "Engine",
+      "control": "number",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "NODEGROUP"
+    }
+  ]
+}

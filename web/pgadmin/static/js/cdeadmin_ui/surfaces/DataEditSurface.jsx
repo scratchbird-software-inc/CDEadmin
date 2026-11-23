@@ -4333,6 +4333,7 @@ export default function DataEditSurface({
                 ? [...new Set(selectedCells.map((c) => c.rowIndex))]
                 : [activeRowIndex]
             }
+            callHost={callHost}
             onOpenInSqlEditor={onOpenInSqlEditor}
             onClose={() => setFbRowSqlOpen(false)}
           />
@@ -4384,6 +4385,7 @@ export default function DataEditSurface({
                 ? [...new Set(selectedCells.map((c) => c.rowIndex))]
                 : [activeRowIndex]
             }
+            callHost={callHost}
             onOpenInSqlEditor={onOpenInSqlEditor}
             onClose={() => setMysqlRowSqlOpen(false)}
           />
@@ -4407,6 +4409,7 @@ export default function DataEditSurface({
             tableLabel={targetResource?.display_name || targetResource?.name || 'public.table'}
             columns={columns}
             row={rows[activeRowIndex]?.values || null}
+            callHost={callHost}
             onClose={() => setPgRowSqlOpen(false)}
           />
         </>
@@ -4432,6 +4435,7 @@ export default function DataEditSurface({
             tableLabel={targetResource?.display_name || targetResource?.name || 'main.table'}
             columns={columns}
             row={rows[activeRowIndex]?.values || null}
+            callHost={callHost}
             onClose={() => setSqRowSqlOpen(false)}
           />
         </>
@@ -4454,6 +4458,7 @@ export default function DataEditSurface({
             tableLabel={targetResource?.display_name || targetResource?.name || 'main.table'}
             columns={columns}
             row={rows[activeRowIndex]?.values || null}
+            callHost={callHost}
             onClose={() => setDuRowSqlOpen(false)}
           />
         </>

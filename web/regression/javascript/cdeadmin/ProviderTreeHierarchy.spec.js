@@ -53,7 +53,7 @@ describe('CDEadmin provider tree hierarchy', () => {
     await nodes.updateNode('/browser/endpoint',{...endpoint,children_url:'/browser/server/children/2/9'});
     reply.resolve({data:{data:[child('old-route')]}});
     expect((await loaded).map(node=>node.name)).toEqual(['new-route']);
-    expect(get).toHaveBeenLastCalledWith('/browser/server/children/2/9',{timeout:30000});
+    expect(get).toHaveBeenLastCalledWith('/browser/server/children/2/9',{timeout:90000});
   });
 
   it('loads retained databases from the endpoint-owned child URL', async () => {
@@ -83,7 +83,7 @@ describe('CDEadmin provider tree hierarchy', () => {
 
     expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith(
-      '/browser/server/children/1/7', {timeout: 30000},
+      '/browser/server/children/1/7', {timeout: 90000},
     );
     expect(children).toHaveLength(1);
     expect(children[0].metadata.data).toMatchObject({
@@ -158,7 +158,7 @@ describe('CDEadmin provider tree hierarchy', () => {
     pgAdmin.Browser.URL = previousUrl;
 
     expect(get).toHaveBeenCalledWith(
-      '/browser/database/nodes/2/2/', {timeout: 30000},
+      '/browser/database/nodes/2/2/', {timeout: 90000},
     );
     expect(children[0].metadata.data.label).toBe('cdeadmin');
   });

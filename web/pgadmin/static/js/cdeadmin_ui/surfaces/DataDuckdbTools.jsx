@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Grid, Panel, Stack} from '../primitives/Layout';
@@ -72,12 +72,37 @@ export function DataDuckdbRowSqlDialog({
   tableLabel = 'main.table',
   columns = [],
   row = null,
+  callHost = null,
   onClose,
 }) {
   const [mode, setMode] = useState('upsert');
   const [keyCol, setKeyCol] = useState(columns?.[0]?.name || 'id');
+  const [hostSql, setHostSql] = useState(null);
 
-  const sqlText = useMemo(() => {
+  useEffect(() => {
+    let active = true;
+    if (!open || !callHost || !row || !columns?.length) {
+      setHostSql(null);
+      return undefined;
+    }
+    callHost('generate_row_sql', {
+      table_label: tableLabel,
+      columns,
+      rows: [row],
+      mode,
+      key_columns: [keyCol || columns?.[0]?.name || 'id'],
+      inline_literals: true,
+    })
+      .then((res) => {
+        if (active && typeof res?.sql === 'string') setHostSql(res.sql);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [callHost, columns, keyCol, mode, open, row, tableLabel]);
+
+  const fallbackSql = useMemo(() => {
     const colNames = (columns || []).map((c) => c.name).filter(Boolean);
     if (!colNames.length || !row) return '-- Select a row to generate DuckDB SQL';
     const valuesMap = Array.isArray(row)
@@ -114,6 +139,7 @@ export function DataDuckdbRowSqlDialog({
       }
     }
   }, [columns, keyCol, mode, row, tableLabel]);
+  const sqlText = hostSql ?? fallbackSql;
 
   if (!open) return null;
 
@@ -160,6 +186,7 @@ DataDuckdbRowSqlDialog.propTypes = {
   tableLabel: PropTypes.string,
   columns: PropTypes.array,
   row: PropTypes.oneOfType([PropTypes.object, PropTypes.array]),
+  callHost: PropTypes.func,
   onClose: PropTypes.func.isRequired,
 };
 

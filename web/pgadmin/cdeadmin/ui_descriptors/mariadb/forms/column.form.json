@@ -1,0 +1,65 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "column"
+  ],
+  "form_reference": "SR-F-030635",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Column name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "data_type",
+      "label": "Data type",
+      "tab": "Definition",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "nullable",
+      "label": "Nullable",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "Definition",
+      "control": "text"
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "tab": "Definition",
+      "control": "boolean"
+    }
+  ]
+}

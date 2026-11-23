@@ -301,6 +301,7 @@ export function DataFirebirdRowSqlDialog({
   fetchedRows = [],
   initialSelectedIndices = [],
   clientSqlDialect = 3,
+  callHost = null,
   onOpenInSqlEditor,
   onClose,
 }) {
@@ -379,10 +380,29 @@ export function DataFirebirdRowSqlDialog({
     );
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setError('');
     try {
       const chosenRows = cleanRows.filter((_r, idx) => selectedIndices.includes(idx));
+      if (!chosenRows.length) throw new Error(gettext('Select at least one fetched row.'));
+      if ((operation === 'update' || operation === 'upsert') && !matchingKeys.length) {
+        throw new Error(gettext('Select at least one explicit matching key column.'));
+      }
+      if (callHost) {
+        const hostRes = await callHost('generate_row_sql', {
+          table_label: tableName,
+          columns: normalizedCols,
+          rows: chosenRows,
+          mode: operation,
+          key_columns: matchingKeys,
+          in_column: inColumn,
+          inline_literals: inlineLiterals,
+        });
+        if (Array.isArray(hostRes?.plans) && hostRes.plans.length) {
+          setPlans(hostRes.plans);
+          return;
+        }
+      }
       const generated = generateRowSql({
         table: tableName,
         columns: normalizedCols,
@@ -563,6 +583,7 @@ DataFirebirdRowSqlDialog.propTypes = {
   fetchedRows: PropTypes.array,
   initialSelectedIndices: PropTypes.array,
   clientSqlDialect: PropTypes.number,
+  callHost: PropTypes.func,
   onOpenInSqlEditor: PropTypes.func,
   onClose: PropTypes.func.isRequired,
 };

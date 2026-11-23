@@ -1,0 +1,72 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "x-collection"
+  ],
+  "form_reference": "SR-F-030630",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Collection name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "database",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "reuse_existing",
+      "label": "Reuse existing collection if present",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "validation_level",
+      "label": "JSON Schema validation level",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "OFF",
+          "label": "OFF"
+        },
+        {
+          "value": "STRICT",
+          "label": "STRICT"
+        }
+      ],
+      "default": "OFF"
+    },
+    {
+      "field_id": "validation_schema",
+      "label": "JSON Schema document",
+      "tab": "Definition",
+      "control": "code",
+      "language": "json"
+    },
+    {
+      "field_id": "mysqlx_port",
+      "label": "X Protocol port override",
+      "tab": "Engine",
+      "control": "number"
+    }
+  ]
+}

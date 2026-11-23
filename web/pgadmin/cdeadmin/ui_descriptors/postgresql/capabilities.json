@@ -224,7 +224,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/operator.form.json"
     },
     {
       "resource_kind": "trigger",
@@ -281,7 +282,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/rule.form.json"
     },
     {
       "resource_kind": "sequence",
@@ -392,7 +394,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/row-policy.form.json"
     },
     {
       "resource_kind": "database",
@@ -443,7 +446,8 @@
           "tier": 1,
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/large-object.form.json"
     },
     {
       "resource_kind": "schema",
@@ -461,7 +465,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/schema.form.json"
     },
     {
       "resource_kind": "tablespace",
@@ -479,7 +484,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/tablespace.form.json"
     },
     {
       "resource_kind": "extension",
@@ -497,7 +503,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/extension.form.json"
     },
     {
       "resource_kind": "server",
@@ -534,7 +541,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/pgagent-job.form.json"
     },
     {
       "resource_kind": "column",
@@ -552,7 +560,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/column.form.json"
     },
     {
       "resource_kind": "constraint",
@@ -570,7 +579,8 @@
           "operation_id": "drop",
           "tier": 1
         }
-      ]
+      ],
+      "form": "forms/constraint.form.json"
     },
     {
       "resource_kind": "partitioned-table",
@@ -615,7 +625,8 @@
           "operation_id": "inspect",
           "tier": 2
         }
-      ]
+      ],
+      "form": "forms/extended-statistics.form.json"
     },
     {
       "resource_kind": "parameter-acl",
@@ -646,7 +657,8 @@
             "minimum": "15"
           }
         }
-      ]
+      ],
+      "form": "forms/parameter-acl.form.json"
     },
     {
       "resource_kind": "default-privileges",
@@ -668,7 +680,8 @@
           "operation_id": "inspect",
           "tier": 2
         }
-      ]
+      ],
+      "form": "forms/default-privileges.form.json"
     },
     {
       "resource_kind": "prepared-transaction",
@@ -686,7 +699,8 @@
           "operation_id": "resolve",
           "tier": 2
         }
-      ]
+      ],
+      "form": "forms/prepared-transaction.form.json"
     },
     {
       "resource_kind": "foreign-server",
@@ -712,7 +726,8 @@
           "operation_id": "import-foreign-schema",
           "tier": 2
         }
-      ]
+      ],
+      "form": "forms/foreign-server.form.json"
     },
     {
       "resource_kind": "partitioned-index",

@@ -38,6 +38,16 @@ PROVIDER_TREE_IDS = {
     'operand_types', 'operators', 'option', 'refresh_version', 'replace',
     'server', 'sort_family', 'source_encoding', 'storage_type', 'strategy',
     'support', 'target_encoding', 'to_sql_args', 'to_sql_function', 'type_name',
+    # Remaining 15 PostgreSQL engine_object provider-native compiler fields:
+    'contype', 'coordinator_reference', 'decision', 'default_privileges',
+    'default_revoke', 'elements', 'enforcement', 'expected_database',
+    'expected_owner', 'expected_xid', 'fdwname', 'fk_columns',
+    'generated_action', 'grant_option_only', 'grantees', 'kinds',
+    'large_object_data_base64', 'left_type', 'not_null_column', 'not_valid',
+    'object_type', 'owner_kind', 'owner_mode', 'owners', 'parameter',
+    'privilege', 'remote_schema', 'remote_table', 'reset_options',
+    'right_type', 'roles', 'schemas', 'scope', 'table', 'table_schema',
+    'target', 'validate', 'with_grant',
 }
 
 

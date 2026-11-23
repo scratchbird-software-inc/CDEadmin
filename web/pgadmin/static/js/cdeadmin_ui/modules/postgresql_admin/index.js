@@ -7,14 +7,40 @@
 //
 //////////////////////////////////////////////////////////////
 
-import PostgresqlHostToolsWorkspace from './PostgresqlHostToolsWorkspace';
-import PostgresqlConfigurationWorkspace from './PostgresqlConfigurationWorkspace';
-import PostgresqlHaTopologyWorkspace from './PostgresqlHaTopologyWorkspace';
-import PostgresqlPreparedXactsWorkspace from './PostgresqlPreparedXactsWorkspace';
-import PostgresqlSnapshotCopyWorkspace from './PostgresqlSnapshotCopyWorkspace';
-import PostgresqlActivityLocksWorkspace from './PostgresqlActivityLocksWorkspace';
-import PostgresqlListenNotifyWorkspace from './PostgresqlListenNotifyWorkspace';
-import PostgresqlLogicalToolsWorkspace from './PostgresqlLogicalToolsWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const PostgresqlHostToolsWorkspace = lazySurface(
+  () => import('./PostgresqlHostToolsWorkspace'),
+  'PostgresqlHostToolsWorkspace',
+);
+const PostgresqlConfigurationWorkspace = lazySurface(
+  () => import('./PostgresqlConfigurationWorkspace'),
+  'PostgresqlConfigurationWorkspace',
+);
+const PostgresqlHaTopologyWorkspace = lazySurface(
+  () => import('./PostgresqlHaTopologyWorkspace'),
+  'PostgresqlHaTopologyWorkspace',
+);
+const PostgresqlPreparedXactsWorkspace = lazySurface(
+  () => import('./PostgresqlPreparedXactsWorkspace'),
+  'PostgresqlPreparedXactsWorkspace',
+);
+const PostgresqlSnapshotCopyWorkspace = lazySurface(
+  () => import('./PostgresqlSnapshotCopyWorkspace'),
+  'PostgresqlSnapshotCopyWorkspace',
+);
+const PostgresqlActivityLocksWorkspace = lazySurface(
+  () => import('./PostgresqlActivityLocksWorkspace'),
+  'PostgresqlActivityLocksWorkspace',
+);
+const PostgresqlListenNotifyWorkspace = lazySurface(
+  () => import('./PostgresqlListenNotifyWorkspace'),
+  'PostgresqlListenNotifyWorkspace',
+);
+const PostgresqlLogicalToolsWorkspace = lazySurface(
+  () => import('./PostgresqlLogicalToolsWorkspace'),
+  'PostgresqlLogicalToolsWorkspace',
+);
 
 export const POSTGRESQL_ADMIN_TABS = Object.freeze([
   'postgresql-host-tools',

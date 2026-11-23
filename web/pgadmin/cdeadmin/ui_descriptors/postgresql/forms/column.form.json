@@ -1,0 +1,328 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "column"
+  ],
+  "form_reference": "SR-F-030604",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Column name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "cltype",
+      "label": "Data type",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "collspcname",
+      "label": "Collation",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "attnotnull",
+      "label": "Not NULL",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "defval",
+      "label": "Default expression",
+      "tab": "Definition",
+      "control": "text"
+    },
+    {
+      "field_id": "using",
+      "label": "Type conversion (USING)",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "colconstype",
+      "label": "Identity / generated mode",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "n",
+          "label": "None"
+        },
+        {
+          "value": "i",
+          "label": "Identity"
+        },
+        {
+          "value": "g",
+          "label": "Generated"
+        }
+      ],
+      "default": "n"
+    },
+    {
+      "field_id": "attidentity",
+      "label": "Identity generation",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "a",
+          "label": "Always"
+        },
+        {
+          "value": "d",
+          "label": "By default"
+        }
+      ]
+    },
+    {
+      "field_id": "seqincrement",
+      "label": "Identity increment",
+      "tab": "Definition",
+      "control": "number"
+    },
+    {
+      "field_id": "seqstart",
+      "label": "Identity start",
+      "tab": "Definition",
+      "control": "number"
+    },
+    {
+      "field_id": "seqmin",
+      "label": "Identity minimum",
+      "tab": "Definition",
+      "control": "number"
+    },
+    {
+      "field_id": "seqmax",
+      "label": "Identity maximum",
+      "tab": "Definition",
+      "control": "number"
+    },
+    {
+      "field_id": "seqcache",
+      "label": "Identity cache",
+      "tab": "Definition",
+      "control": "number"
+    },
+    {
+      "field_id": "seqcycle",
+      "label": "Identity cycle",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "genexpr",
+      "label": "Generated expression",
+      "tab": "Definition",
+      "control": "text"
+    },
+    {
+      "field_id": "generated_kind",
+      "label": "Generation storage",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "s",
+          "label": "Stored"
+        },
+        {
+          "value": "v",
+          "label": "Virtual (18+)"
+        }
+      ]
+    },
+    {
+      "field_id": "generated_action",
+      "label": "Generated expression change",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "KEEP",
+          "label": "Keep"
+        },
+        {
+          "value": "SET",
+          "label": "Replace expression (17+)"
+        },
+        {
+          "value": "DROP",
+          "label": "Remove stored expression (13+)"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "attstattarget",
+      "label": "Statistics target",
+      "tab": "Engine",
+      "control": "number"
+    },
+    {
+      "field_id": "attstorage",
+      "label": "TOAST storage",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "p",
+          "label": "Plain"
+        },
+        {
+          "value": "m",
+          "label": "Main"
+        },
+        {
+          "value": "e",
+          "label": "External"
+        },
+        {
+          "value": "x",
+          "label": "Extended"
+        }
+      ]
+    },
+    {
+      "field_id": "attcompression",
+      "label": "Compression",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "pglz",
+          "label": "Pglz"
+        },
+        {
+          "value": "lz4",
+          "label": "Lz4"
+        }
+      ]
+    },
+    {
+      "field_id": "attoptions",
+      "label": "Attribute options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "select",
+          "options": [
+            {
+              "value": "n_distinct",
+              "label": "n_distinct"
+            },
+            {
+              "value": "n_distinct_inherited",
+              "label": "n_distinct_inherited"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "reset_options",
+      "label": "Reset attribute options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "attacl",
+      "label": "Column privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "text"
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean"
+        }
+      ]
+    },
+    {
+      "field_id": "revoke",
+      "label": "Revoke column privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "grantee",
+          "label": "Grantee",
+          "control": "text"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "seclabels",
+      "label": "Security labels",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "provider",
+          "label": "Provider",
+          "control": "text"
+        },
+        {
+          "field_id": "label",
+          "label": "Label",
+          "control": "text"
+        }
+      ]
+    }
+  ]
+}

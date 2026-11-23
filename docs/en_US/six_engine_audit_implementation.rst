@@ -4164,3 +4164,40 @@ DuckDB remaining 34-item backend, DDN, continuity/storage, UI & 1.5.2 qualificat
   (``DU-AUD-38``) remains ``owner_deferred`` and was not run, while human UI
   signoff and Windows/macOS native qualification (``DU-AUD-39``) remain
   ``external_acceptance_pending``.
+
+Six-engine cross-regression audit, 100% declarative form coverage & host-first client loading
+---------------------------------------------------------------------------------------------
+
+A repository-wide cross-engine regression and GUI parity audit verified that
+all six core engines (PostgreSQL, MySQL, MariaDB, Firebird network/embedded,
+SQLite and DuckDB) are surfaced end to end without cross-commit regressions:
+
+* **183 / 183 complete declarative UI descriptor forms**: authored and
+  registered the remaining ``57`` ``engine_object`` forms
+  (``SR-F-030596``..``SR-F-030652`` across PostgreSQL ``15``, MySQL ``20`` and
+  MariaDB ``22``) with zero raw ``json`` controls, bringing every declared
+  resource kind across all six core engines to ``form_status: "complete"``
+  (PostgreSQL ``51/51``, MySQL ``36/36``, MariaDB ``36/36``, Firebird ``28/28``,
+  SQLite ``16/16``, DuckDB ``16/16``) and ``781 / 781`` HTTP route actions wired
+  in client UI surfaces.
+* **Host-first database processing & on-demand client form/workspace loading**:
+  added ``compile_host_row_sql`` (``sub_action="generate_row_sql"``) in
+  ``web/pgadmin/cdeadmin/workspace/data_surface_host.py`` so dialect-accurate
+  ``INSERT``, ``UPSERT``, ``REPLACE``, ``UPDATE``, ``DELETE`` and ``COPY`` row
+  SQL and bound parameter arrays are compiled on the Python host alongside
+  host-owned connection pooling, retained sessions, result-set buffering,
+  local/server sort & filter and server-side DDN layout/tiling; and wrapped all
+  ``34`` engine administration workspaces (``*_admin/index.js``) plus ``74``
+  workspace and dialog panels (``ProviderWorkspaceContent.jsx`` and
+  ``Dialogs/index.jsx``) in ``lazySurface`` (``React.lazy`` + ``<Suspense>``) so
+  the browser loads forms and workspaces on demand as separate async webpack
+  chunks.
+* **Full regression verification**: all ``7`` core provider
+  ``engine_contract_descriptor()`` checks pass; ``validate_ui_descriptors.py
+  --strict-pending --counts --enforce-counts tools/ui_lint_maximums.json``
+  passes with zero errors and zero lint ceiling increases; ``2,712`` graphical
+  operations across ``27`` provider profiles pass
+  ``test_cdeadmin_provider_object_coverage_gate.py``; and all ``371 / 371``
+  CDEadmin Jest suites pass. Detailed receipts are recorded in
+  ``SIX_ENGINE_FULL_AUDIT_AND_GUI_PARITY.md`` and
+  ``six-engine-full-audit-and-gui-parity.json`` in the designated work area.

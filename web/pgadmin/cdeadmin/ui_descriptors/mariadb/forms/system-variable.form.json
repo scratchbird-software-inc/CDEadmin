@@ -1,0 +1,61 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "system-variable"
+  ],
+  "form_reference": "SR-F-030640",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Variable name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "global_value",
+      "label": "Global value",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "catalog_row",
+        "global_value"
+      ]
+    },
+    {
+      "field_id": "session_value",
+      "label": "Session value",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "catalog_row",
+        "session_value"
+      ]
+    },
+    {
+      "field_id": "scope",
+      "label": "Scope",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "native_variable",
+        "scope"
+      ]
+    }
+  ]
+}

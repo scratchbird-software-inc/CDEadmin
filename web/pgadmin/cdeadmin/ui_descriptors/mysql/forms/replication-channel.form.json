@@ -1,0 +1,36 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "replication-channel"
+  ],
+  "form_reference": "SR-F-030616",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Channel name (blank for default channel)",
+      "tab": "General",
+      "control": "text",
+      "editable_after_create": false,
+      "native_keyword": "FOR CHANNEL"
+    },
+    {
+      "field_id": "source_options",
+      "label": "Source connection options",
+      "tab": "Definition",
+      "control": "keyvalue",
+      "native_keyword": "CHANGE REPLICATION SOURCE TO"
+    },
+    {
+      "field_id": "source_password",
+      "label": "Replication user password",
+      "tab": "Security",
+      "control": "password"
+    }
+  ]
+}

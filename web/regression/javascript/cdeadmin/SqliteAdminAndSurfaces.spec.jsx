@@ -215,7 +215,7 @@ describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15
       })
     );
     render(<Wrapped />);
-    expect(screen.getByText('SR-F-030563')).toBeInTheDocument();
+    expect(await screen.findByText('SR-F-030563')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Rowid Table'), {target: {value: 'media_store'}});
     fireEvent.change(screen.getByLabelText('BLOB Column'), {target: {value: 'payload'}});
@@ -296,7 +296,7 @@ describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15
       })
     );
     render(<DumpWrapped />);
-    expect(screen.getByText('SR-F-030565')).toBeInTheDocument();
+    expect(await screen.findByText('SR-F-030565')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Generate Native SQL Dump'));
     await waitFor(() => expect(screen.getByText('512 bytes')).toBeInTheDocument());
@@ -348,7 +348,7 @@ describe('SQLite Native Administration Workspaces (SQ-AUD-09, 10, 11, 12, 13, 15
       })
     );
     render(<Wrapped />);
-    expect(screen.getByText('SR-F-030566')).toBeInTheDocument();
+    expect(await screen.findByText('SR-F-030566')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('103')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Inspect Synchronous'));

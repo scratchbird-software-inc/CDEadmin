@@ -1,0 +1,68 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "loadable-function"
+  ],
+  "form_reference": "SR-F-030612",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Function name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE FUNCTION ... SONAME"
+    },
+    {
+      "field_id": "return_type",
+      "label": "Return type",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "STRING",
+          "label": "String"
+        },
+        {
+          "value": "REAL",
+          "label": "Real"
+        },
+        {
+          "value": "INTEGER",
+          "label": "Integer"
+        },
+        {
+          "value": "DECIMAL",
+          "label": "Decimal"
+        }
+      ],
+      "required": true,
+      "editable_after_create": false,
+      "default": "STRING"
+    },
+    {
+      "field_id": "aggregate",
+      "label": "Aggregate function",
+      "tab": "Definition",
+      "control": "boolean",
+      "editable_after_create": false,
+      "native_keyword": "AGGREGATE"
+    },
+    {
+      "field_id": "library",
+      "label": "Shared library (SONAME)",
+      "tab": "Engine",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "SONAME"
+    }
+  ]
+}

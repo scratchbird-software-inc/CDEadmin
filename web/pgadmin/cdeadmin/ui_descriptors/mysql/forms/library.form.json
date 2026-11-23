@@ -1,0 +1,81 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "library"
+  ],
+  "form_reference": "SR-F-030611",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Library name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE LIBRARY"
+    },
+    {
+      "field_id": "database",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "IF NOT EXISTS",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "source_format",
+      "label": "Source format",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "text",
+          "label": "Text"
+        },
+        {
+          "value": "binary_base64",
+          "label": "Binary Base64"
+        }
+      ],
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": "text"
+    },
+    {
+      "field_id": "body",
+      "label": "Library source or Base64 payload",
+      "tab": "Definition",
+      "control": "code",
+      "language": "javascript",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    }
+  ]
+}

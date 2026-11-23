@@ -192,7 +192,7 @@ describe('provider endpoint verification', () => {
       expect(pgAdmin.Browser.notifier.showModal).not.toHaveBeenCalled();
       expect(workspace.openTab).toHaveBeenNthCalledWith(1,
         expect.objectContaining({id: first, title: 'Editor', closable: true,
-          floatable: true}), BROWSER_PANELS.MAIN, 'middle');
+          floatable: true}), BROWSER_PANELS.MAIN, 'middle', false);
       const content = workspace.openTab.mock.calls[0][0].content.props.children.props.children;
       expect(content.props.initialContext).toBe(context);
       expect(content.props.initialTab).toBe('object');

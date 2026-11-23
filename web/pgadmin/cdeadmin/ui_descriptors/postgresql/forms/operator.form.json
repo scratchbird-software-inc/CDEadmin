@@ -1,0 +1,110 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "operator"
+  ],
+  "form_reference": "SR-F-030596",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Operator symbol",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE OPERATOR"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "action",
+      "label": "Alter action",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "owner",
+          "label": "Change owner"
+        },
+        {
+          "value": "schema",
+          "label": "Move to schema"
+        },
+        {
+          "value": "comment",
+          "label": "Set or remove comment"
+        },
+        {
+          "value": "options",
+          "label": "Change optimization options"
+        }
+      ],
+      "modes": [
+        "alter"
+      ],
+      "required": true
+    },
+    {
+      "field_id": "value",
+      "label": "Target owner, schema or comment",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "function",
+      "label": "Implementation function",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "FUNCTION"
+    },
+    {
+      "field_id": "left_type",
+      "label": "Left operand type",
+      "tab": "Definition",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "LEFTARG"
+    },
+    {
+      "field_id": "right_type",
+      "label": "Right operand type",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "RIGHTARG"
+    },
+    {
+      "field_id": "options",
+      "label": "Optimization options",
+      "tab": "Engine",
+      "control": "keyvalue",
+      "native_keyword": "COMMUTATOR / NEGATOR / RESTRICT / JOIN"
+    }
+  ]
+}

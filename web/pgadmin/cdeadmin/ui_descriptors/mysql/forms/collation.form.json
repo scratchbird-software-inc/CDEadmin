@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "collation"
+  ],
+  "form_reference": "SR-F-030626",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Collation name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "character_set_name",
+      "label": "Character set",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "character_set_name"
+      ]
+    },
+    {
+      "field_id": "is_default",
+      "label": "Default for character set",
+      "tab": "Definition",
+      "control": "boolean",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "is_default"
+      ]
+    },
+    {
+      "field_id": "is_compiled",
+      "label": "Compiled",
+      "tab": "Engine",
+      "control": "boolean",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "is_compiled"
+      ]
+    },
+    {
+      "field_id": "pad_attribute",
+      "label": "Pad attribute",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "pad_attribute"
+      ]
+    }
+  ]
+}

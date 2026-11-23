@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "available-plugin"
+  ],
+  "form_reference": "SR-F-030652",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Plugin name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "plugin_status",
+      "label": "Install status",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "plugin_status"
+      ]
+    },
+    {
+      "field_id": "plugin_type",
+      "label": "Plugin type",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "plugin_type"
+      ]
+    },
+    {
+      "field_id": "plugin_library",
+      "label": "Library SONAME",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "plugin_library"
+      ]
+    },
+    {
+      "field_id": "plugin_license",
+      "label": "License",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "plugin_license"
+      ]
+    }
+  ]
+}

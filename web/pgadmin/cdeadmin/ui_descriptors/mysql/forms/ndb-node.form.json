@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "ndb-node"
+  ],
+  "form_reference": "SR-F-030629",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Node ID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "node_type",
+      "label": "Node type",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "node_type"
+      ]
+    },
+    {
+      "field_id": "status",
+      "label": "Node status",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "status"
+      ]
+    },
+    {
+      "field_id": "start_phase",
+      "label": "Start phase",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "start_phase"
+      ]
+    },
+    {
+      "field_id": "config_generation",
+      "label": "Config generation",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "config_generation"
+      ]
+    }
+  ]
+}

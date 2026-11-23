@@ -846,7 +846,8 @@
           "support_state": "implemented",
           "notes": "Native SQL library-definition metadata only; closed Enterprise MLE body execution is post beta."
         }
-      ]
+      ],
+      "form": "forms/library.form.json"
     },
     {
       "resource_kind": "loadable-function",
@@ -871,7 +872,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/loadable-function.form.json"
     },
     {
       "resource_kind": "partition",
@@ -968,7 +970,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/tablespace.form.json"
     },
     {
       "resource_kind": "user",
@@ -1101,7 +1104,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/plugin.form.json"
     },
     {
       "resource_kind": "component",
@@ -1125,7 +1129,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/component.form.json"
     },
     {
       "resource_kind": "replication-channel",
@@ -1197,7 +1202,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/replication-channel.form.json"
     },
     {
       "resource_kind": "group-replication",
@@ -1269,7 +1275,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/group-replication.form.json"
     },
     {
       "resource_kind": "group-replication-member",
@@ -1281,7 +1288,8 @@
           "mutation_class": "read",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/group-replication-member.form.json"
     },
     {
       "resource_kind": "resource-group",
@@ -1317,7 +1325,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/resource-group.form.json"
     },
     {
       "resource_kind": "metric",
@@ -1329,7 +1338,8 @@
           "mutation_class": "read",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/metric.form.json"
     },
     {
       "resource_kind": "session",
@@ -1359,7 +1369,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/session.form.json"
     },
     {
       "resource_kind": "system-variable",
@@ -1395,7 +1406,8 @@
           "mutation_class": "admin",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/system-variable.form.json"
     },
     {
       "resource_kind": "spatial-reference-system",
@@ -1425,7 +1437,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/spatial-reference-system.form.json"
     },
     {
       "resource_kind": "server-link",
@@ -1455,25 +1468,29 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/server-link.form.json"
     },
     {
       "resource_kind": "character-set",
       "family": "engine_object",
       "title": "Character sets",
-      "operations": []
+      "operations": [],
+      "form": "forms/character-set.form.json"
     },
     {
       "resource_kind": "collation",
       "family": "engine_object",
       "title": "Collations",
-      "operations": []
+      "operations": [],
+      "form": "forms/collation.form.json"
     },
     {
       "resource_kind": "storage-engine",
       "family": "engine_object",
       "title": "Storage engines",
-      "operations": []
+      "operations": [],
+      "form": "forms/storage-engine.form.json"
     },
     {
       "resource_kind": "logfile-group",
@@ -1507,7 +1524,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/logfile-group.form.json"
     },
     {
       "resource_kind": "ndb-node",
@@ -1535,7 +1553,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/ndb-node.form.json"
     },
     {
       "resource_kind": "x-collection",
@@ -1611,7 +1630,8 @@
           "mutation_class": "destructive",
           "support_state": "implemented"
         }
-      ]
+      ],
+      "form": "forms/x-collection.form.json"
     }
   ],
   "sql_builder": {

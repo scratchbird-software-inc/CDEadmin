@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "table-storage"
+  ],
+  "form_reference": "SR-F-030643",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Table storage object",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "engine",
+      "label": "Storage engine",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "engine"
+      ]
+    },
+    {
+      "field_id": "row_format",
+      "label": "Row format",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "row_format"
+      ]
+    },
+    {
+      "field_id": "data_length",
+      "label": "Data bytes",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "data_length"
+      ]
+    },
+    {
+      "field_id": "index_length",
+      "label": "Index bytes",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "index_length"
+      ]
+    }
+  ]
+}

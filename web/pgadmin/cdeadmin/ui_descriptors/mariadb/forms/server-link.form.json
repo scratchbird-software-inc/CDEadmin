@@ -1,0 +1,148 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "server-link"
+  ],
+  "form_reference": "SR-F-030634",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Server name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE SERVER"
+    },
+    {
+      "field_id": "wrapper",
+      "label": "Foreign data wrapper",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": "mariadb",
+      "native_keyword": "FOREIGN DATA WRAPPER"
+    },
+    {
+      "field_id": "change_host",
+      "label": "Update remote host",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "host",
+      "label": "Remote host",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "HOST"
+    },
+    {
+      "field_id": "change_port",
+      "label": "Update remote port",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "port",
+      "label": "Remote port",
+      "tab": "Definition",
+      "control": "number",
+      "native_keyword": "PORT"
+    },
+    {
+      "field_id": "change_database",
+      "label": "Update remote database",
+      "tab": "Definition",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "database",
+      "label": "Remote database",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "DATABASE"
+    },
+    {
+      "field_id": "change_socket",
+      "label": "Update remote socket",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "socket",
+      "label": "Remote socket",
+      "tab": "Engine",
+      "control": "text",
+      "native_keyword": "SOCKET"
+    },
+    {
+      "field_id": "change_owner",
+      "label": "Update remote owner",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "owner",
+      "label": "Remote owner",
+      "tab": "Security",
+      "control": "text",
+      "native_keyword": "OWNER"
+    },
+    {
+      "field_id": "change_username",
+      "label": "Update remote username",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "username",
+      "label": "Remote username",
+      "tab": "Security",
+      "control": "text",
+      "native_keyword": "USER"
+    },
+    {
+      "field_id": "change_password",
+      "label": "Update remote password",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "password",
+      "label": "Remote password",
+      "tab": "Security",
+      "control": "password",
+      "native_keyword": "PASSWORD"
+    }
+  ]
+}

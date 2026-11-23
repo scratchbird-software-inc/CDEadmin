@@ -71,7 +71,7 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
     );
     render(<Wrapped />);
 
-    expect(screen.getByText('SR-F-030587')).toBeInTheDocument();
+    expect(await screen.findByText('SR-F-030587')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Inspect Runtime Settings'));
     await waitFor(() => expect(screen.getByText('Settings observed: 1')).toBeInTheDocument());
@@ -132,7 +132,7 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
     );
     render(<Wrapped />);
 
-    expect(screen.getByText('SR-F-030588')).toBeInTheDocument();
+    expect(await screen.findByText('SR-F-030588')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Observe Retained Session'));
     await waitFor(() =>

@@ -245,6 +245,7 @@ export function DataMySQLRowSqlDialog({
   columns = [],
   fetchedRows = [],
   initialSelectedIndices = [],
+  callHost = null,
   onOpenInSqlEditor,
   onClose,
 }) {
@@ -283,11 +284,35 @@ export function DataMySQLRowSqlDialog({
 
   if (!open) return null;
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setError('');
     try {
       const chosen = cleanRows.filter((_r, idx) => selectedIndices.includes(idx));
       if (!chosen.length) throw new Error(gettext('Select at least one fetched row.'));
+      if (operation === 'in' && !inColumn) {
+        throw new Error(gettext('Select a column for IN-list generation.'));
+      }
+      if (operation === 'update' && !keyColumns.length) {
+        throw new Error(gettext('Select at least one matching key column for UPDATE.'));
+      }
+      if (callHost) {
+        const hostRes = await callHost('generate_row_sql', {
+          table_label: backtickIdent(tableName),
+          columns,
+          rows: chosen,
+          mode: operation,
+          key_columns: keyColumns,
+          in_column: inColumn,
+          inline_literals: inlineLiterals,
+        });
+        if (hostRes?.sql) {
+          setGenerated({
+            sql: hostRes.sql,
+            parameters: hostRes.parameters || [],
+          });
+          return;
+        }
+      }
       const tbl = backtickIdent(tableName);
       const statements = [];
       const paramsList = [];
@@ -477,6 +502,7 @@ DataMySQLRowSqlDialog.propTypes = {
   columns: PropTypes.array,
   fetchedRows: PropTypes.array,
   initialSelectedIndices: PropTypes.array,
+  callHost: PropTypes.func,
   onOpenInSqlEditor: PropTypes.func,
   onClose: PropTypes.func.isRequired,
 };

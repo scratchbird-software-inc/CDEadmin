@@ -1,0 +1,104 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "resource-group"
+  ],
+  "form_reference": "SR-F-030619",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Resource group name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE RESOURCE GROUP"
+    },
+    {
+      "field_id": "resource_type",
+      "label": "Group type",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "USER",
+          "label": "User"
+        },
+        {
+          "value": "SYSTEM",
+          "label": "System"
+        }
+      ],
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "default": "USER",
+      "native_keyword": "TYPE"
+    },
+    {
+      "field_id": "enabled",
+      "label": "Enabled",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "default": true
+    },
+    {
+      "field_id": "state",
+      "label": "Enabled state",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "UNCHANGED",
+          "label": "Unchanged"
+        },
+        {
+          "value": "ENABLE",
+          "label": "Enable"
+        },
+        {
+          "value": "DISABLE",
+          "label": "Disable"
+        }
+      ],
+      "modes": [
+        "alter"
+      ],
+      "default": "UNCHANGED"
+    },
+    {
+      "field_id": "vcpu",
+      "label": "VCPU IDs / ranges",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "VCPU"
+    },
+    {
+      "field_id": "priority",
+      "label": "Thread priority",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "THREAD_PRIORITY"
+    },
+    {
+      "field_id": "force",
+      "label": "Move assigned threads to default group (FORCE)",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "FORCE"
+    }
+  ]
+}

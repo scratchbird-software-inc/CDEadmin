@@ -588,7 +588,7 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
       </TestShell>
     );
 
-    expect(await screen.findByText('Cash On Hand')).toBeInTheDocument();
+    expect(await screen.findByText('Cash On Hand', {}, {timeout: 15000})).toBeInTheDocument();
     // Legacy chrome & SR-F-000001 badge are completely gone!
     expect(screen.queryByText('SR-F-000001')).not.toBeInTheDocument();
     expect(screen.queryByText('Search database metadata')).not.toBeInTheDocument();

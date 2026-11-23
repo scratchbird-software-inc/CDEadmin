@@ -1,12 +1,9 @@
 import {requestedAdministrationResource} from '../cdeadmin_ui/navigation/postgresqlAdministration';
-import PostgresqlTestData from './PostgresqlTestData';
-import MySQLQueryOptions from '../cdeadmin_ui/editors/MySQLQueryOptions';
-import SQLNotebook from '../cdeadmin_ui/projects/SQLNotebook';
+import {lazySurface} from '../cdeadmin_ui/foundations/lazySurface';
 import {QueryToolFrame, QueryToolToolbar, QueryToolAction} from '../cdeadmin_ui/editors/QueryToolControls';
 import {SQLConnectionSlot, takeSQLSourceRequest, useSQLSourceRequest} from '../cdeadmin_ui/editors/SQLConnections';
 import {Dialog as InfoDialog} from '../cdeadmin_ui/overlays/Dialog';
 import useNativeRowPages from '../cdeadmin_ui/data/useNativeRowPages';
-import BIModelsTool from '../cdeadmin_ui/modules/bi/models/BIModelsTool';
 /////////////////////////////////////////////////////////////
 //
 // CDEadmin - Multi-engine Database Administration
@@ -21,43 +18,6 @@ import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import UndoIcon from '@mui/icons-material/Undo';
 import CheckIcon from '@mui/icons-material/Check';
-import FirebirdTemplates from './FirebirdTemplates';
-import FirebirdPrivilegeQueue from './FirebirdPrivilegeQueue';
-import FirebirdParameters from './FirebirdParameters';
-import FirebirdIsql from './FirebirdIsql';
-import FirebirdEvents from './FirebirdEvents';
-import FirebirdRowSql from './FirebirdRowSql';
-import FirebirdTestData from './FirebirdTestData';
-import FirebirdMetadataSearch from './FirebirdMetadataSearch';
-import FirebirdServerCatalog from './FirebirdServerCatalog';
-import FirebirdExport from './FirebirdExport';
-import PostgresqlCatalog from './PostgresqlCatalog';
-import MySQLCatalog from './MySQLCatalog';
-import MySQLQueryPlan from './MySQLQueryPlan';
-import MariaDBCatalog from './MariaDBCatalog';
-import DuckDBCatalog from './DuckDBCatalog';
-import SQLiteCatalog from './SQLiteCatalog';
-import SQLiteExtensions from './SQLiteExtensions';
-import SQLiteNativeSessions from './SQLiteNativeSessions';
-import SQLiteNativeArrays from './SQLiteNativeArrays';
-import SQLitePreupdate from './SQLitePreupdate';
-import SQLiteSessionFTS from './SQLiteSessionFTS';
-import SQLiteRetainedSchema from './SQLiteRetainedSchema';
-import DuckDBServerCatalog from './DuckDBServerCatalog';
-import DuckDBTestData from './DuckDBTestData';
-import DuckDBCopy from './DuckDBCopy';
-import DuckDBAttachment from './DuckDBAttachment';
-import DuckDBDatabaseCopy from './DuckDBDatabaseCopy';
-import DuckDBOperationReceipts from './DuckDBOperationReceipts';
-import MariaDBBackupStages from './MariaDBBackupStages';
-import FirebirdEDSPool from './FirebirdEDSPool';
-import DuckDBExtensions from './DuckDBExtensions';
-import DuckDBSessionSecrets from './DuckDBSessionSecrets';
-import MySQLServerCatalog from './MySQLServerCatalog';
-import MySQLTestData from './MySQLTestData';
-import PostgresqlServerCatalog from './PostgresqlServerCatalog';
-import PostgresqlContinuity from './PostgresqlContinuity';
-import PostgresqlLargeObjectFiles from './PostgresqlLargeObjectFiles';
 import FirebirdFormLayout from './FirebirdFormLayout';
 import MissingForm from '../cdeadmin_ui/navigation/MissingForm';
 import LanguageSourceEditor from '../cdeadmin_ui/editors/LanguageSourceEditor';
@@ -67,8 +27,6 @@ import {resolveSectionIconKey} from '../cdeadmin_ui/icons/registry';
 import {useProjectInstanceScope, useProjectShell} from '../cdeadmin_ui/shell/ProjectShell';
 import {T_ACTION_STATUS, T_ACTION_TARGET_KIND} from '../cdeadmin_ui/actions/t_actions';
 import {administrationResourceLabel} from '../cdeadmin_ui/navigation/resourceLabels';
-import FirebirdQueryHistory from './FirebirdQueryHistory';
-import FirebirdProfiler from './FirebirdProfiler';
 import {PostgresqlBinaryField} from './PostgresqlBinaryChunk';
 import NativeNavigation from '../cdeadmin_ui/navigation/NativeNavigation';
 import {
@@ -87,11 +45,6 @@ import getApiInstance from '../api_instance';
 import { ModalContent, ModalFooter } from '../components/ModalContent';
 import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
-import FirebirdSessionTraps from './FirebirdSessionTraps';
-import FirebirdScript from './FirebirdScript';
-import FirebirdQueryPlan from './FirebirdQueryPlan';
-import FirebirdResultStream from './FirebirdResultStream';
-import FirebirdRecoveryGroup from './FirebirdRecoveryGroup';
 import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
 import {MARIADB_ADMIN_TABS, renderMariaDBAdminWorkspace} from '../cdeadmin_ui/modules/mariadb_admin';
@@ -109,11 +62,60 @@ import ProviderAdministrationResult from './ProviderAdministrationResult';
 import {mysqlQueryAttributes} from '../cdeadmin_ui/editors/mysqlQueryAttributes';
 import {useModalCloseGuard} from '../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../cdeadmin_ui/overlays/UncommittedWorkDialog';
-import SqlBuilderDialog from '../cdeadmin_ui/editors/SqlBuilderDialog';
-import DataEditSurface from '../cdeadmin_ui/surfaces/DataEditSurface';
-import SqlEditorSurface from '../cdeadmin_ui/surfaces/SqlEditorSurface';
 import {providerConnectionFieldGridSx} from
   'sources/cdeadmin_ui/foundations/providerConnectionLayout';
+
+const PostgresqlTestData = lazySurface(() => import('./PostgresqlTestData'), 'PostgresqlTestData');
+const MySQLQueryOptions = lazySurface(() => import('../cdeadmin_ui/editors/MySQLQueryOptions'), 'MySQLQueryOptions');
+const SQLNotebook = lazySurface(() => import('../cdeadmin_ui/projects/SQLNotebook'), 'SQLNotebook');
+const BIModelsTool = lazySurface(() => import('../cdeadmin_ui/modules/bi/models/BIModelsTool'), 'BIModelsTool');
+const FirebirdTemplates = lazySurface(() => import('./FirebirdTemplates'), 'FirebirdTemplates');
+const FirebirdPrivilegeQueue = lazySurface(() => import('./FirebirdPrivilegeQueue'), 'FirebirdPrivilegeQueue');
+const FirebirdParameters = lazySurface(() => import('./FirebirdParameters'), 'FirebirdParameters');
+const FirebirdIsql = lazySurface(() => import('./FirebirdIsql'), 'FirebirdIsql');
+const FirebirdEvents = lazySurface(() => import('./FirebirdEvents'), 'FirebirdEvents');
+const FirebirdRowSql = lazySurface(() => import('./FirebirdRowSql'), 'FirebirdRowSql');
+const FirebirdTestData = lazySurface(() => import('./FirebirdTestData'), 'FirebirdTestData');
+const FirebirdMetadataSearch = lazySurface(() => import('./FirebirdMetadataSearch'), 'FirebirdMetadataSearch');
+const FirebirdServerCatalog = lazySurface(() => import('./FirebirdServerCatalog'), 'FirebirdServerCatalog');
+const FirebirdExport = lazySurface(() => import('./FirebirdExport'), 'FirebirdExport');
+const PostgresqlCatalog = lazySurface(() => import('./PostgresqlCatalog'), 'PostgresqlCatalog');
+const MySQLCatalog = lazySurface(() => import('./MySQLCatalog'), 'MySQLCatalog');
+const MySQLQueryPlan = lazySurface(() => import('./MySQLQueryPlan'), 'MySQLQueryPlan');
+const MariaDBCatalog = lazySurface(() => import('./MariaDBCatalog'), 'MariaDBCatalog');
+const DuckDBCatalog = lazySurface(() => import('./DuckDBCatalog'), 'DuckDBCatalog');
+const SQLiteCatalog = lazySurface(() => import('./SQLiteCatalog'), 'SQLiteCatalog');
+const SQLiteExtensions = lazySurface(() => import('./SQLiteExtensions'), 'SQLiteExtensions');
+const SQLiteNativeSessions = lazySurface(() => import('./SQLiteNativeSessions'), 'SQLiteNativeSessions');
+const SQLiteNativeArrays = lazySurface(() => import('./SQLiteNativeArrays'), 'SQLiteNativeArrays');
+const SQLitePreupdate = lazySurface(() => import('./SQLitePreupdate'), 'SQLitePreupdate');
+const SQLiteSessionFTS = lazySurface(() => import('./SQLiteSessionFTS'), 'SQLiteSessionFTS');
+const SQLiteRetainedSchema = lazySurface(() => import('./SQLiteRetainedSchema'), 'SQLiteRetainedSchema');
+const DuckDBServerCatalog = lazySurface(() => import('./DuckDBServerCatalog'), 'DuckDBServerCatalog');
+const DuckDBTestData = lazySurface(() => import('./DuckDBTestData'), 'DuckDBTestData');
+const DuckDBCopy = lazySurface(() => import('./DuckDBCopy'), 'DuckDBCopy');
+const DuckDBAttachment = lazySurface(() => import('./DuckDBAttachment'), 'DuckDBAttachment');
+const DuckDBDatabaseCopy = lazySurface(() => import('./DuckDBDatabaseCopy'), 'DuckDBDatabaseCopy');
+const DuckDBOperationReceipts = lazySurface(() => import('./DuckDBOperationReceipts'), 'DuckDBOperationReceipts');
+const MariaDBBackupStages = lazySurface(() => import('./MariaDBBackupStages'), 'MariaDBBackupStages');
+const FirebirdEDSPool = lazySurface(() => import('./FirebirdEDSPool'), 'FirebirdEDSPool');
+const DuckDBExtensions = lazySurface(() => import('./DuckDBExtensions'), 'DuckDBExtensions');
+const DuckDBSessionSecrets = lazySurface(() => import('./DuckDBSessionSecrets'), 'DuckDBSessionSecrets');
+const MySQLServerCatalog = lazySurface(() => import('./MySQLServerCatalog'), 'MySQLServerCatalog');
+const MySQLTestData = lazySurface(() => import('./MySQLTestData'), 'MySQLTestData');
+const PostgresqlServerCatalog = lazySurface(() => import('./PostgresqlServerCatalog'), 'PostgresqlServerCatalog');
+const PostgresqlContinuity = lazySurface(() => import('./PostgresqlContinuity'), 'PostgresqlContinuity');
+const PostgresqlLargeObjectFiles = lazySurface(() => import('./PostgresqlLargeObjectFiles'), 'PostgresqlLargeObjectFiles');
+const FirebirdQueryHistory = lazySurface(() => import('./FirebirdQueryHistory'), 'FirebirdQueryHistory');
+const FirebirdProfiler = lazySurface(() => import('./FirebirdProfiler'), 'FirebirdProfiler');
+const FirebirdSessionTraps = lazySurface(() => import('./FirebirdSessionTraps'), 'FirebirdSessionTraps');
+const FirebirdScript = lazySurface(() => import('./FirebirdScript'), 'FirebirdScript');
+const FirebirdQueryPlan = lazySurface(() => import('./FirebirdQueryPlan'), 'FirebirdQueryPlan');
+const FirebirdResultStream = lazySurface(() => import('./FirebirdResultStream'), 'FirebirdResultStream');
+const FirebirdRecoveryGroup = lazySurface(() => import('./FirebirdRecoveryGroup'), 'FirebirdRecoveryGroup');
+const SqlBuilderDialog = lazySurface(() => import('../cdeadmin_ui/editors/SqlBuilderDialog'), 'SqlBuilderDialog');
+const DataEditSurface = lazySurface(() => import('../cdeadmin_ui/surfaces/DataEditSurface'), 'DataEditSurface');
+const SqlEditorSurface = lazySurface(() => import('../cdeadmin_ui/surfaces/SqlEditorSurface'), 'SqlEditorSurface');
 
 const DATABASE_SCOPED_TOP_LEVEL_ACTIONS = new Set([
   'mariadb_backup_stages',
@@ -134,7 +136,7 @@ const DATABASE_SCOPED_REQUEST_ACTIONS = new Set([
   'mariadb_data_plan', 'mariadb_data_review', 'mariadb_data_apply', 'mariadb_data_receipt', 'mariadb_data_receipts',
   'mariadb_design_read', 'mariadb_design_save', 'mariadb_relational_review',
   'mariadb_schema_plan', 'mariadb_schema_validate', 'mariadb_schema_review', 'mariadb_schema_apply', 'mariadb_schema_receipt',
-  'duckdb_catalog_export', 'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts', 'duckdb_test_data', 'duckdb_recipe_read', 'duckdb_recipe_save', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_relational_review', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt', ...DUCKDB_ADMIN_REQUEST_ACTIONS,
+  'duckdb_catalog_compare', 'duckdb_data_capture', 'duckdb_data_plan', 'duckdb_data_review', 'duckdb_data_apply', 'duckdb_data_receipt', 'duckdb_data_receipts', 'duckdb_test_data', 'duckdb_recipe_read', 'duckdb_recipe_save', 'duckdb_copy_plan', 'duckdb_attachment_plan', 'duckdb_design_read', 'duckdb_design_save', 'duckdb_relational_review', 'duckdb_schema_plan', 'duckdb_schema_review', 'duckdb_schema_apply', 'duckdb_schema_receipt', ...DUCKDB_ADMIN_REQUEST_ACTIONS,
   'sqlite_catalog_export', 'sqlite_catalog_compare', 'sqlite_data_capture', 'sqlite_data_script', 'sqlite_data_plan', 'sqlite_data_review', 'sqlite_data_apply', 'sqlite_data_receipt', 'sqlite_data_receipts', 'sqlite_test_data', 'sqlite_recipe_read', 'sqlite_recipe_save', 'sqlite_fts_configuration_design', 'sqlite_schema_column_design', 'sqlite_schema_object_design', 'sqlite_schema_rename_design', 'sqlite_relational_review', 'sqlite_schema_plan', 'sqlite_schema_review', 'sqlite_schema_apply', 'sqlite_schema_receipt', 'sqlite_design_read', 'sqlite_design_save', ...SQLITE_ADMIN_REQUEST_ACTIONS,
   'mysql_catalog_export', 'mysql_catalog_compare', 'mysql_sql_export', 'mysql_design_read', 'mysql_design_save', 'mysql_data_capture',
   'mysql_test_data', 'mysql_recipe_read', 'mysql_recipe_save',

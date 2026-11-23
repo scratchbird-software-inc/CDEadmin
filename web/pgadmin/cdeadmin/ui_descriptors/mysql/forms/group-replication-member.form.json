@@ -1,0 +1,81 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "group-replication-member"
+  ],
+  "form_reference": "SR-F-030618",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Member ID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_id"
+      ]
+    },
+    {
+      "field_id": "member_host",
+      "label": "Member host",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_host"
+      ]
+    },
+    {
+      "field_id": "member_port",
+      "label": "Member port",
+      "tab": "General",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_port"
+      ]
+    },
+    {
+      "field_id": "member_state",
+      "label": "Member state",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_state"
+      ]
+    },
+    {
+      "field_id": "member_role",
+      "label": "Member role",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_role"
+      ]
+    },
+    {
+      "field_id": "member_version",
+      "label": "Member version",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "member_version"
+      ]
+    }
+  ]
+}

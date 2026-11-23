@@ -1,0 +1,58 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "lock"
+  ],
+  "form_reference": "SR-F-030641",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Lock ID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "lock_mode",
+      "label": "Lock mode",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "lock_mode"
+      ]
+    },
+    {
+      "field_id": "lock_type",
+      "label": "Lock type",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "lock_type"
+      ]
+    },
+    {
+      "field_id": "lock_table",
+      "label": "Target table",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "lock_table"
+      ]
+    }
+  ]
+}

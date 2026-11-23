@@ -1,0 +1,47 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "lock-wait"
+  ],
+  "form_reference": "SR-F-030642",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Lock-wait edge",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "requesting_trx_id",
+      "label": "Waiting transaction",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "requesting_trx_id"
+      ]
+    },
+    {
+      "field_id": "blocking_trx_id",
+      "label": "Blocking transaction",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "blocking_trx_id"
+      ]
+    }
+  ]
+}

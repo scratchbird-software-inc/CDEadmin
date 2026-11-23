@@ -138,6 +138,308 @@ def _qualified_target(target: dict[str, Any], engine_id: str) -> str:
     return '.'.join(_quote_ident(p, engine_id) for p in parts)
 
 
+def _base64_to_hex(b64_text: str) -> str:
+    import base64
+    try:
+        return base64.b64decode(b64_text.encode('ascii')).hex().upper()
+    except Exception:
+        return ''
+
+
+def _format_host_row_literal(val: Any, engine_id: str) -> str:
+    if val is None:
+        return 'NULL'
+    if isinstance(val, bool):
+        if engine_id == 'sqlite':
+            return '1' if val else '0'
+        return 'TRUE' if val else 'FALSE'
+    if isinstance(val, (int, float)):
+        import math
+        if isinstance(val, float) and not math.isfinite(val):
+            return 'NULL'
+        return str(val)
+    if engine_id == 'duckdb' and isinstance(val, list):
+        return '[' + ', '.join(_format_host_row_literal(item, engine_id) for item in val) + ']'
+    if isinstance(val, dict):
+        if val.get('encoding') == 'base64' and isinstance(val.get('data'), str):
+            hx = _base64_to_hex(val['data'])
+            if engine_id == 'duckdb':
+                return f"from_hex('{hx}')"
+            if engine_id in ('sqlite', 'firebird', 'firebird-embedded'):
+                return f"X'{hx}'"
+            if engine_id == 'postgresql':
+                b64_esc = val['data'].replace("'", "''")
+                return f"decode('{b64_esc}', 'base64')"
+            return f"0x{hx}" if hx else "X''"
+        for exact_key in ('hugeint', 'uhugeint', 'decimal', 'int64'):
+            if isinstance(val.get(exact_key), str):
+                return val[exact_key]
+        if engine_id == 'duckdb':
+            if val.get('duckdb_type') == 'MAP' and isinstance(val.get('entries'), list):
+                ks = ', '.join(_format_host_row_literal(e.get('key'), engine_id) for e in val['entries'])
+                vs = ', '.join(_format_host_row_literal(e.get('value'), engine_id) for e in val['entries'])
+                return f'MAP([{ks}], [{vs}])'
+            if val.get('duckdb_type') == 'UNION' and val.get('tag'):
+                tag_q = _quote_ident(str(val['tag']), 'duckdb')
+                return f"union_value({tag_q} := {_format_host_row_literal(val.get('value'), engine_id)})"
+            entries = ', '.join(
+                f"{_quote_ident(str(k), 'duckdb')}: {_format_host_row_literal(v, engine_id)}"
+                for k, v in val.items()
+            )
+            return '{' + entries + '}'
+        json_text = json.dumps(val, ensure_ascii=False)
+        if engine_id == 'postgresql':
+            esc = json_text.replace("'", "''")
+            return f"'{esc}'::jsonb"
+        if engine_id in ('mysql', 'mariadb'):
+            esc = json_text.replace('\\', '\\\\').replace("'", "''")
+            return f"'{esc}'"
+        esc = json_text.replace("'", "''")
+        return f"'{esc}'"
+    text = str(val)
+    if engine_id in ('mysql', 'mariadb'):
+        esc = text.replace('\\', '\\\\').replace("'", "''")
+        return f"'{esc}'"
+    esc = text.replace("'", "''")
+    return f"'{esc}'"
+
+
+def compile_host_row_sql(
+    engine_id: str,
+    table_label: str,
+    columns: list[dict[str, Any]],
+    rows: list[Any],
+    *,
+    mode: str = 'upsert',
+    key_columns: list[str] | None = None,
+    in_column: str = '',
+    inline_literals: bool = True,
+) -> dict[str, Any]:
+    """Compile dialect-authoritative row SQL statements and bound parameter arrays on the Python host."""
+    eng = str(engine_id or 'postgresql').lower()
+    if eng.startswith('postgres'):
+        eng = 'postgresql'
+    elif eng.startswith('mariadb'):
+        eng = 'mariadb'
+    elif eng.startswith('mysql'):
+        eng = 'mysql'
+    elif eng.startswith('firebird'):
+        eng = 'firebird'
+    elif eng.startswith('sqlite'):
+        eng = 'sqlite'
+    elif eng.startswith('duckdb'):
+        eng = 'duckdb'
+
+    col_names = [str(c.get('name')) for c in (columns or []) if isinstance(c, dict) and c.get('name')]
+    if not col_names or not rows:
+        return {
+            'sql': f'-- Select a row to generate {eng} SQL',
+            'statements': [],
+            'parameters': [],
+            'plans': [],
+            'engine_id': eng,
+            'mode': mode,
+            'compiled_on_host': True,
+        }
+
+    norm_rows: list[dict[str, Any]] = []
+    for raw in rows:
+        if isinstance(raw, list):
+            norm_rows.append({col_names[idx]: raw[idx] for idx in range(min(len(col_names), len(raw)))})
+        elif isinstance(raw, dict):
+            vals = raw.get('values') if isinstance(raw.get('values'), dict) else raw
+            norm_rows.append(dict(vals))
+
+    keys = [str(k) for k in (key_columns or []) if k] or [col_names[0]]
+    pk_name = keys[0]
+    statements: list[str] = []
+    params_list: list[list[Any]] = []
+    plans: list[dict[str, Any]] = []
+
+    if eng in ('mysql', 'mariadb'):
+        tbl = table_label if ('`' in table_label or '.' in table_label) else _quote_ident(table_label, eng)
+
+        def bind_mysql(v: Any, rp: list[Any]) -> str:
+            if inline_literals:
+                return _format_host_row_literal(v, eng)
+            rp.append(v)
+            return '%s'
+
+        if mode == 'in':
+            target_col = in_column or pk_name
+            rp: list[Any] = []
+            col_q = _quote_ident(target_col, eng)
+            non_null = [r.get(target_col) for r in norm_rows if r.get(target_col) is not None]
+            clauses: list[str] = []
+            if non_null:
+                clauses.append(f"{col_q} IN ({', '.join(bind_mysql(v, rp) for v in non_null)})")
+            if any(r.get(target_col) is None for r in norm_rows):
+                clauses.append(f'{col_q} IS NULL')
+            stmt = f"SELECT * FROM {tbl} WHERE {' OR '.join(clauses or ['1=0'])};"
+            statements.append(stmt)
+            params_list.append(rp)
+            plans.append({'source': stmt, 'parameters': rp})
+        elif mode == 'update':
+            set_cols = [c for c in col_names if c not in keys] or [pk_name]
+            for r in norm_rows:
+                rp = []
+                sets = [f"{_quote_ident(c, eng)} = {bind_mysql(r.get(c), rp)}" for c in set_cols]
+                wheres = [f"{_quote_ident(k, eng)} <=> {bind_mysql(r.get(k), rp)}" for k in keys]
+                stmt = f"UPDATE {tbl} SET {', '.join(sets)} WHERE {' AND '.join(wheres)};"
+                statements.append(stmt)
+                params_list.append(rp)
+                plans.append({'source': stmt, 'parameters': rp})
+        else:
+            write_cols = [
+                str(c['name']) for c in columns
+                if isinstance(c, dict) and c.get('name') and c.get('insertable') is not False
+            ] or col_names
+            for r in norm_rows:
+                rp = []
+                col_list = ', '.join(_quote_ident(c, eng) for c in write_cols)
+                val_list = ', '.join(bind_mysql(r.get(c), rp) for c in write_cols)
+                verb = 'REPLACE INTO' if mode == 'replace' else 'INSERT INTO'
+                sql = f'{verb} {tbl} ({col_list}) VALUES ({val_list})'
+                if mode == 'upsert':
+                    upd_cols = [c for c in write_cols if c not in keys] or write_cols
+                    updates = [f"{_quote_ident(c, eng)} = VALUES({_quote_ident(c, eng)})" for c in upd_cols]
+                    sql += f" ON DUPLICATE KEY UPDATE {', '.join(updates)}"
+                stmt = f'{sql};'
+                statements.append(stmt)
+                params_list.append(rp)
+                plans.append({'source': stmt, 'parameters': rp})
+    elif eng == 'firebird':
+        tbl = _quote_ident(table_label, 'firebird') if '"' not in table_label else table_label
+
+        def bind_fb(v: Any, rp: list[Any]) -> str:
+            if inline_literals:
+                return _format_host_row_literal(v, 'firebird')
+            rp.append(v)
+            return '?'
+
+        if mode == 'in':
+            target_col = in_column or pk_name
+            rp = []
+            col_q = _quote_ident(target_col, 'firebird')
+            non_null = [r.get(target_col) for r in norm_rows if r.get(target_col) is not None]
+            clauses = []
+            if non_null:
+                clauses.append(f"{col_q} IN ({', '.join(bind_fb(v, rp) for v in non_null)})")
+            if any(r.get(target_col) is None for r in norm_rows):
+                clauses.append(f'{col_q} IS NULL')
+            stmt = f"SELECT * FROM {tbl} WHERE {' OR '.join(clauses or ['1=0'])};"
+            statements.append(stmt)
+            params_list.append(rp)
+            plans.append({'source': stmt, 'parameters': rp})
+        elif mode == 'update':
+            set_cols = [c for c in col_names if c not in keys] or [pk_name]
+            for r in norm_rows:
+                rp = []
+                sets = [f"{_quote_ident(c, 'firebird')} = {bind_fb(r.get(c), rp)}" for c in set_cols]
+                wheres = [f"{_quote_ident(k, 'firebird')} IS NOT DISTINCT FROM {bind_fb(r.get(k), rp)}" for k in keys]
+                stmt = f"UPDATE {tbl} SET {', '.join(sets)} WHERE {' AND '.join(wheres)};"
+                statements.append(stmt)
+                params_list.append(rp)
+                plans.append({'source': stmt, 'parameters': rp})
+        elif mode == 'upsert':
+            for r in norm_rows:
+                rp = []
+                col_list = ', '.join(_quote_ident(c, 'firebird') for c in col_names)
+                val_list = ', '.join(bind_fb(r.get(c), rp) for c in col_names)
+                match_list = ', '.join(_quote_ident(k, 'firebird') for k in keys)
+                stmt = f'UPDATE OR INSERT INTO {tbl} ({col_list}) VALUES ({val_list}) MATCHING ({match_list});'
+                statements.append(stmt)
+                params_list.append(rp)
+                plans.append({'source': stmt, 'parameters': rp})
+        else:
+            for r in norm_rows:
+                rp = []
+                col_list = ', '.join(_quote_ident(c, 'firebird') for c in col_names)
+                val_list = ', '.join(bind_fb(r.get(c), rp) for c in col_names)
+                stmt = f'INSERT INTO {tbl} ({col_list}) VALUES ({val_list});'
+                statements.append(stmt)
+                params_list.append(rp)
+                plans.append({'source': stmt, 'parameters': rp})
+    else:
+        r = norm_rows[0]
+        quoted_cols = ', '.join(_quote_ident(c, eng) for c in col_names)
+        formatted_vals = ', '.join(_format_host_row_literal(r.get(c), eng) for c in col_names)
+        pk_q = _quote_ident(pk_name, eng)
+        pk_val = _format_host_row_literal(r.get(pk_name, 1 if eng in ('sqlite', 'duckdb') and r.get(pk_name) is None else None), eng)
+
+        if eng == 'postgresql':
+            if mode == 'insert_overriding':
+                stmt = f'INSERT INTO {table_label} ({quoted_cols})\nOVERRIDING SYSTEM VALUE\nVALUES ({formatted_vals})\nRETURNING *;'
+            elif mode == 'update_returning':
+                sets = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = {_format_host_row_literal(r.get(c), eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = {pk_val}'
+                stmt = f'UPDATE ONLY {table_label}\nSET {sets}\nWHERE {pk_q} = {pk_val}\nRETURNING *;'
+            elif mode == 'where_in':
+                stmt = f'SELECT *\nFROM ONLY {table_label}\nWHERE {pk_q} IN ({pk_val});'
+            else:
+                updates = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = EXCLUDED.{_quote_ident(c, eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = EXCLUDED.{pk_q}'
+                stmt = f'INSERT INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals})\nON CONFLICT ({pk_q}) DO UPDATE\nSET {updates}\nRETURNING *;'
+        elif eng == 'sqlite':
+            if mode == 'replace':
+                stmt = f'INSERT OR REPLACE INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals});'
+            elif mode == 'ignore':
+                stmt = f'INSERT OR IGNORE INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals});'
+            elif mode == 'update':
+                sets = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = {_format_host_row_literal(r.get(c), eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = {pk_val}'
+                stmt = f'UPDATE {table_label}\nSET {sets}\nWHERE {pk_q} = {pk_val};'
+            elif mode == 'delete':
+                stmt = f'DELETE FROM {table_label}\nWHERE {pk_q} = {pk_val};'
+            else:
+                updates = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = excluded.{_quote_ident(c, eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = excluded.{pk_q}'
+                stmt = f'INSERT INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals})\nON CONFLICT ({pk_q}) DO UPDATE\nSET {updates};'
+        else:  # duckdb
+            if mode == 'insert':
+                stmt = f'INSERT INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals});'
+            elif mode == 'replace':
+                stmt = f'INSERT OR REPLACE INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals});'
+            elif mode == 'update':
+                sets = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = {_format_host_row_literal(r.get(c), eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = {pk_val}'
+                stmt = f'UPDATE {table_label}\nSET {sets}\nWHERE {pk_q} = {pk_val};'
+            elif mode == 'delete':
+                stmt = f'DELETE FROM {table_label}\nWHERE {pk_q} = {pk_val};'
+            elif mode == 'copy_parquet':
+                stmt = f"COPY (SELECT * FROM {table_label} WHERE {pk_q} = {pk_val}) TO 'row_export.parquet' (FORMAT PARQUET);"
+            else:
+                updates = ',\n    '.join(
+                    f"{_quote_ident(c, eng)} = EXCLUDED.{_quote_ident(c, eng)}"
+                    for c in col_names if c != pk_name
+                ) or f'{pk_q} = EXCLUDED.{pk_q}'
+                stmt = f'INSERT INTO {table_label} ({quoted_cols})\nVALUES ({formatted_vals})\nON CONFLICT ({pk_q}) DO UPDATE\nSET {updates};'
+        statements.append(stmt)
+        params_list.append([])
+        plans.append({'source': stmt, 'parameters': []})
+
+    flat_params = params_list[0] if len(params_list) == 1 else [p for sub in params_list for p in sub]
+    return {
+        'sql': '\n'.join(statements),
+        'statements': statements,
+        'parameters': flat_params,
+        'plans': plans,
+        'engine_id': eng,
+        'mode': mode,
+        'compiled_on_host': True,
+    }
+
+
 def _comparable_sort_key(val: Any) -> tuple[int, Any]:
     if val is None:
         return (0, '')
@@ -1616,6 +1918,35 @@ class DataSurfaceHostService:
                     f'Saved specific layout for {object_key}.',
                 )
                 return res
+
+            if sub_action == 'generate_row_sql':
+                req_rows = request.get('rows')
+                if not isinstance(req_rows, list) or not req_rows:
+                    row_indices = request.get('row_indices') or []
+                    req_rows = [
+                        surface.raw_rows[i]
+                        for i in row_indices
+                        if isinstance(i, int) and 0 <= i < len(surface.raw_rows)
+                    ]
+                req_cols = (
+                    request.get('columns')
+                    if isinstance(request.get('columns'), list) and request.get('columns')
+                    else surface.columns
+                )
+                tbl_label = str(
+                    request.get('table_label')
+                    or _qualified_target(surface.target_resource, surface.engine_id)
+                )
+                return compile_host_row_sql(
+                    surface.engine_id,
+                    tbl_label,
+                    req_cols,
+                    req_rows or [],
+                    mode=str(request.get('mode') or 'upsert'),
+                    key_columns=list(request.get('key_columns') or []),
+                    in_column=str(request.get('in_column') or ''),
+                    inline_literals=bool(request.get('inline_literals', True)),
+                )
 
             if sub_action == 'close_surface':
                 with self._lock:

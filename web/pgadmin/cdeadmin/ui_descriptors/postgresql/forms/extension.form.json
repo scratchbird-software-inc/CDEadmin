@@ -1,0 +1,54 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "extension"
+  ],
+  "form_reference": "SR-F-030602",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Extension name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "CREATE EXTENSION"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "native_keyword": "SCHEMA"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "version",
+      "label": "Target version",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "VERSION"
+    },
+    {
+      "field_id": "cascade",
+      "label": "Install required extensions (CASCADE)",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "CASCADE"
+    }
+  ]
+}

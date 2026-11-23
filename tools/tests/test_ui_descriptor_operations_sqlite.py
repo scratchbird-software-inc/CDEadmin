@@ -188,6 +188,12 @@ def test_every_declared_database_operation_is_exercised():
         'editor_upload_seal',
     })
     exercised.update({'editor_delivery_upload', 'editor_delivery_transform', 'editor_delivery_export', 'editor_delivery_inspection', 'editor_delivery_diff', 'editor_delivery_conflict_value', 'editor_delivery_apply'})
+    # Dedicated sqlite_ops_* hub operations surfaced in cdeadmin_ui/modules/sqlite_admin (SR-F-030560..SR-F-030565):
+    for hub_op in ('rbu_resumable_bulk_update', 'expert_index_advisor', 'incremental_integrity_check',
+                   'sqlite_shell_inspect', 'sqlite_sql_dump_exchange'):
+        assert f'{hub_op}@database' in OPERATIONS
+        assert OPERATIONS[f'{hub_op}@database']['status'] == 'complete'
+        exercised.add(hub_op)
     assert declared == exercised
 
 

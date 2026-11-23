@@ -1,0 +1,45 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "constraint"
+  ],
+  "form_reference": "SR-F-030636",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Constraint name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "properties",
+      "label": "Constraint properties",
+      "tab": "Definition",
+      "control": "keyvalue"
+    }
+  ]
+}

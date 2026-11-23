@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Box, Grid, Panel, Stack} from '../primitives/Layout';
@@ -43,12 +43,37 @@ export function DataPostgresRowSqlDialog({
   tableLabel = 'public.table',
   columns = [],
   row = null,
+  callHost = null,
   onClose,
 }) {
   const [mode, setMode] = useState('upsert');
   const [conflictCol, setConflictCol] = useState(columns?.[0]?.name || 'id');
+  const [hostSql, setHostSql] = useState(null);
 
-  const sqlText = useMemo(() => {
+  useEffect(() => {
+    let active = true;
+    if (!open || !callHost || !row || !columns?.length) {
+      setHostSql(null);
+      return undefined;
+    }
+    callHost('generate_row_sql', {
+      table_label: tableLabel,
+      columns,
+      rows: [row],
+      mode,
+      key_columns: [conflictCol || columns?.[0]?.name || 'id'],
+      inline_literals: true,
+    })
+      .then((res) => {
+        if (active && typeof res?.sql === 'string') setHostSql(res.sql);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [callHost, columns, conflictCol, mode, open, row, tableLabel]);
+
+  const fallbackSql = useMemo(() => {
     const colNames = (columns || []).map((c) => c.name).filter(Boolean);
     if (!colNames.length || !row) return '-- Select a row to generate PostgreSQL SQL';
     const valuesMap = Array.isArray(row)
@@ -80,6 +105,7 @@ export function DataPostgresRowSqlDialog({
       }
     }
   }, [columns, conflictCol, mode, row, tableLabel]);
+  const sqlText = hostSql ?? fallbackSql;
 
   if (!open) return null;
 
@@ -124,6 +150,7 @@ DataPostgresRowSqlDialog.propTypes = {
   tableLabel: PropTypes.string,
   columns: PropTypes.array,
   row: PropTypes.oneOfType([PropTypes.object, PropTypes.array]),
+  callHost: PropTypes.func,
   onClose: PropTypes.func.isRequired,
 };
 

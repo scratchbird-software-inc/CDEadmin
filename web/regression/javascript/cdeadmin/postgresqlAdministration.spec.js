@@ -35,7 +35,11 @@ describe('native PostgreSQL Explorer administration', () => {
     expect(postgresqlAdministrationContext(tree, 0, 'aggregate')).toBeNull();
   });
   it('refuses disconnected, incompatible or unrelated selections', () => {
-    for (const change of [{connected: false}, {version: 170000}, {cde_endpoint: true}]) {
+    for (const supportedVersion of [150000, 170000]) {
+      const {tree, data} = makeTree(); data[3].version = supportedVersion;
+      expect(postgresqlAdministrationContext(tree, 0, 'aggregate')).not.toBeNull();
+    }
+    for (const change of [{connected: false}, {version: 140000}, {cde_endpoint: true}]) {
       const {tree,data} = makeTree(); Object.assign(data[3], change);
       expect(postgresqlAdministrationContext(tree, 0, 'aggregate')).toBeNull();
     }

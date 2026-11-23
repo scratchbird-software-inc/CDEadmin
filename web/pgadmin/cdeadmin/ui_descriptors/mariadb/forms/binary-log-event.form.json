@@ -1,0 +1,70 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "binary-log-event"
+  ],
+  "form_reference": "SR-F-030645",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Event identity",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "event_type",
+      "label": "Event type",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "event_type"
+      ]
+    },
+    {
+      "field_id": "pos",
+      "label": "Start position",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "pos"
+      ]
+    },
+    {
+      "field_id": "end_log_pos",
+      "label": "End position",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "end_log_pos"
+      ]
+    },
+    {
+      "field_id": "info",
+      "label": "Event payload / statement",
+      "tab": "Engine",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "info"
+      ]
+    }
+  ]
+}

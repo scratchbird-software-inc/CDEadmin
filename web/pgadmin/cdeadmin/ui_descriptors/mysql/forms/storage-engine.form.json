@@ -1,0 +1,80 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "storage-engine"
+  ],
+  "form_reference": "SR-F-030627",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Storage engine",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "support",
+      "label": "Support state",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "support"
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Description",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "comment"
+      ]
+    },
+    {
+      "field_id": "transactions",
+      "label": "Transactions",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "transactions"
+      ]
+    },
+    {
+      "field_id": "xa",
+      "label": "XA support",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "xa"
+      ]
+    },
+    {
+      "field_id": "savepoints",
+      "label": "Savepoints",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "savepoints"
+      ]
+    }
+  ]
+}

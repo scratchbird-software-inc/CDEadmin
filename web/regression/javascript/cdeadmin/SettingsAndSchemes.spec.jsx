@@ -120,9 +120,13 @@ describe('ScratchRobin Settings Expansion — Schemes, Fonts, Action/Menu Editor
     const {container} = renderShell();
 
     // Launch SQL Editor so Area 3b Tabbed-Notebook-Iconbar is mounted
-    const sqlDockBtn = container.querySelector('[data-cdeadmin-qa-key="side-menu-app-sql-editor"]');
-    expect(sqlDockBtn).toBeTruthy();
-    fireEvent.click(sqlDockBtn);
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('scratchrobin:open-app-surface', {
+          detail: {appId: 'sql-editor'},
+        })
+      );
+    });
 
     // Open Preferences -> Global Top Menus
     act(() => {

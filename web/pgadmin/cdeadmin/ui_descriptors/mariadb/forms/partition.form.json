@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "partition"
+  ],
+  "form_reference": "SR-F-030637",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Partition name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "partition_method",
+      "label": "Partition method",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "partition_method"
+      ]
+    },
+    {
+      "field_id": "partition_expression",
+      "label": "Partition expression",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "partition_expression"
+      ]
+    },
+    {
+      "field_id": "partition_description",
+      "label": "Boundary value / description",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "partition_description"
+      ]
+    },
+    {
+      "field_id": "table_rows",
+      "label": "Estimated rows",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "table_rows"
+      ]
+    }
+  ]
+}

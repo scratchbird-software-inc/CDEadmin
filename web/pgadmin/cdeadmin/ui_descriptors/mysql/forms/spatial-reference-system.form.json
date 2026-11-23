@@ -1,0 +1,85 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "spatial-reference-system"
+  ],
+  "form_reference": "SR-F-030623",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "srs_id",
+      "label": "SRID",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "CREATE SPATIAL REFERENCE SYSTEM"
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "IF NOT EXISTS",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "SRS name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "NAME"
+    },
+    {
+      "field_id": "definition",
+      "label": "WKT definition",
+      "tab": "Definition",
+      "control": "code",
+      "language": "text",
+      "required": true,
+      "native_keyword": "DEFINITION"
+    },
+    {
+      "field_id": "include_organization",
+      "label": "Specify organization",
+      "tab": "Definition",
+      "control": "boolean"
+    },
+    {
+      "field_id": "organization",
+      "label": "Organization",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "ORGANIZATION"
+    },
+    {
+      "field_id": "organization_id",
+      "label": "Organization coordinate-system ID",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "IDENTIFIED BY"
+    },
+    {
+      "field_id": "include_description",
+      "label": "Specify description",
+      "tab": "Engine",
+      "control": "boolean"
+    },
+    {
+      "field_id": "description",
+      "label": "Description",
+      "tab": "Engine",
+      "control": "text",
+      "native_keyword": "DESCRIPTION"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "tls-configuration"
+  ],
+  "form_reference": "SR-F-030651",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "TLS configuration",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "have_ssl",
+      "label": "TLS availability",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "have_ssl"
+      ]
+    },
+    {
+      "field_id": "ssl_ca",
+      "label": "CA bundle path",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "ssl_ca"
+      ]
+    },
+    {
+      "field_id": "ssl_cert",
+      "label": "Server certificate path",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "ssl_cert"
+      ]
+    },
+    {
+      "field_id": "tls_version",
+      "label": "Admitted TLS protocol versions",
+      "tab": "Security",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "tls_version"
+      ]
+    }
+  ]
+}

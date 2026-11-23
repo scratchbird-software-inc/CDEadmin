@@ -1,0 +1,147 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "foreign-server"
+  ],
+  "form_reference": "SR-F-030610",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Server name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE SERVER"
+    },
+    {
+      "field_id": "fdwname",
+      "label": "Foreign data wrapper",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "FOREIGN DATA WRAPPER"
+    },
+    {
+      "field_id": "fsrvowner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "text",
+      "native_keyword": "OWNER TO"
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "fsrvtype",
+      "label": "Server type",
+      "tab": "Definition",
+      "control": "text",
+      "editable_after_create": false,
+      "native_keyword": "TYPE"
+    },
+    {
+      "field_id": "fsrvversion",
+      "label": "Server version",
+      "tab": "Definition",
+      "control": "text",
+      "native_keyword": "VERSION"
+    },
+    {
+      "field_id": "fsrvoptions",
+      "label": "Server options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "OPTIONS"
+    },
+    {
+      "field_id": "add_options",
+      "label": "Add options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "set_options",
+      "label": "Set options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Option",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "drop_options",
+      "label": "Drop options",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    }
+  ]
+}

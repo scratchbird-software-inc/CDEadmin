@@ -1,0 +1,58 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "binary-log-status"
+  ],
+  "form_reference": "SR-F-030646",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Binary log status",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "file",
+      "label": "Active binary log file",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "file"
+      ]
+    },
+    {
+      "field_id": "position",
+      "label": "Current byte position",
+      "tab": "Definition",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "position"
+      ]
+    },
+    {
+      "field_id": "gtid_current_pos",
+      "label": "GTID current position",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "gtid_current_pos"
+      ]
+    }
+  ]
+}

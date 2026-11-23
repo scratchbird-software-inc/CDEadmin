@@ -8122,6 +8122,234 @@
       "reference": "SR-F-030595",
       "title": "DuckDB data grid Arrow 19-family, HUGEINT, DECIMAL, BLOB and nested container cell inspector"
     },
+    "postgresql-form-operator": {
+      "reference": "SR-F-030596",
+      "title": "PostgreSQL operator create, alter and optimization form"
+    },
+    "postgresql-form-rule": {
+      "reference": "SR-F-030597",
+      "title": "PostgreSQL rewrite rule create and alter form"
+    },
+    "postgresql-form-row-policy": {
+      "reference": "SR-F-030598",
+      "title": "PostgreSQL row-level security policy form"
+    },
+    "postgresql-form-large-object": {
+      "reference": "SR-F-030599",
+      "title": "PostgreSQL large object create and metadata alter form"
+    },
+    "postgresql-form-schema": {
+      "reference": "SR-F-030600",
+      "title": "PostgreSQL schema create, alter and default privileges form"
+    },
+    "postgresql-form-tablespace": {
+      "reference": "SR-F-030601",
+      "title": "PostgreSQL tablespace create, options and ACL form"
+    },
+    "postgresql-form-extension": {
+      "reference": "SR-F-030602",
+      "title": "PostgreSQL extension install, schema relocation and update form"
+    },
+    "postgresql-form-pgagent-job": {
+      "reference": "SR-F-030603",
+      "title": "PostgreSQL pgAgent job, steps and schedules form"
+    },
+    "postgresql-form-column": {
+      "reference": "SR-F-030604",
+      "title": "PostgreSQL table column, identity, generated expression and storage form"
+    },
+    "postgresql-form-constraint": {
+      "reference": "SR-F-030605",
+      "title": "PostgreSQL table constraint and PostgreSQL 18 temporal/enforcement form"
+    },
+    "postgresql-form-extended-statistics": {
+      "reference": "SR-F-030606",
+      "title": "PostgreSQL multivariate extended statistics form"
+    },
+    "postgresql-form-parameter-acl": {
+      "reference": "SR-F-030607",
+      "title": "PostgreSQL configuration parameter ACL inspection and grant form"
+    },
+    "postgresql-form-default-privileges": {
+      "reference": "SR-F-030608",
+      "title": "PostgreSQL ALTER DEFAULT PRIVILEGES inspection and grant form"
+    },
+    "postgresql-form-prepared-transaction": {
+      "reference": "SR-F-030609",
+      "title": "PostgreSQL two-phase prepared transaction inspection and resolution form"
+    },
+    "postgresql-form-foreign-server": {
+      "reference": "SR-F-030610",
+      "title": "PostgreSQL foreign server create, alter and options form"
+    },
+    "mysql-form-library": {
+      "reference": "SR-F-030611",
+      "title": "MySQL 9 JavaScript/Wasm library create, alter and inspection form"
+    },
+    "mysql-form-loadable-function": {
+      "reference": "SR-F-030612",
+      "title": "MySQL loadable UDF create and inspection form"
+    },
+    "mysql-form-tablespace": {
+      "reference": "SR-F-030613",
+      "title": "MySQL general, undo and NDB tablespace create and alter form"
+    },
+    "mysql-form-plugin": {
+      "reference": "SR-F-030614",
+      "title": "MySQL server plugin install and inspection form"
+    },
+    "mysql-form-component": {
+      "reference": "SR-F-030615",
+      "title": "MySQL server component URN install and inspection form"
+    },
+    "mysql-form-replication-channel": {
+      "reference": "SR-F-030616",
+      "title": "MySQL replication channel source configuration and failover form"
+    },
+    "mysql-form-group-replication": {
+      "reference": "SR-F-030617",
+      "title": "MySQL Group Replication cluster status and topology inspection form"
+    },
+    "mysql-form-group-replication-member": {
+      "reference": "SR-F-030618",
+      "title": "MySQL Group Replication member inspection form"
+    },
+    "mysql-form-resource-group": {
+      "reference": "SR-F-030619",
+      "title": "MySQL CPU resource group create, alter and thread priority form"
+    },
+    "mysql-form-metric": {
+      "reference": "SR-F-030620",
+      "title": "MySQL server status metric inspection form"
+    },
+    "mysql-form-session": {
+      "reference": "SR-F-030621",
+      "title": "MySQL processlist session inspection form"
+    },
+    "mysql-form-system-variable": {
+      "reference": "SR-F-030622",
+      "title": "MySQL system variable metadata and runtime value inspection form"
+    },
+    "mysql-form-spatial-reference-system": {
+      "reference": "SR-F-030623",
+      "title": "MySQL spatial reference system (SRS) create and alter form"
+    },
+    "mysql-form-server-link": {
+      "reference": "SR-F-030624",
+      "title": "MySQL FEDERATED foreign server link create and alter form"
+    },
+    "mysql-form-character-set": {
+      "reference": "SR-F-030625",
+      "title": "MySQL character set inspection form"
+    },
+    "mysql-form-collation": {
+      "reference": "SR-F-030626",
+      "title": "MySQL collation inspection form"
+    },
+    "mysql-form-storage-engine": {
+      "reference": "SR-F-030627",
+      "title": "MySQL storage engine capability inspection form"
+    },
+    "mysql-form-logfile-group": {
+      "reference": "SR-F-030628",
+      "title": "MySQL NDB Cluster logfile group create and alter form"
+    },
+    "mysql-form-ndb-node": {
+      "reference": "SR-F-030629",
+      "title": "MySQL NDB Cluster node status inspection form"
+    },
+    "mysql-form-x-collection": {
+      "reference": "SR-F-030630",
+      "title": "MySQL X DevAPI document collection create and JSON Schema validation form"
+    },
+    "mariadb-form-loadable-function": {
+      "reference": "SR-F-030631",
+      "title": "MariaDB loadable UDF create and inspection form"
+    },
+    "mariadb-form-plugin": {
+      "reference": "SR-F-030632",
+      "title": "MariaDB server plugin install and inspection form"
+    },
+    "mariadb-form-replication-channel": {
+      "reference": "SR-F-030633",
+      "title": "MariaDB named multi-source replication connection create and alter form"
+    },
+    "mariadb-form-server-link": {
+      "reference": "SR-F-030634",
+      "title": "MariaDB CONNECT / Spider / FederatedX foreign server create and alter form"
+    },
+    "mariadb-form-column": {
+      "reference": "SR-F-030635",
+      "title": "MariaDB table column create and inspection form"
+    },
+    "mariadb-form-constraint": {
+      "reference": "SR-F-030636",
+      "title": "MariaDB table constraint create and inspection form"
+    },
+    "mariadb-form-partition": {
+      "reference": "SR-F-030637",
+      "title": "MariaDB table partition inspection form"
+    },
+    "mariadb-form-tablespace": {
+      "reference": "SR-F-030638",
+      "title": "MariaDB tablespace inspection form"
+    },
+    "mariadb-form-session": {
+      "reference": "SR-F-030639",
+      "title": "MariaDB processlist session inspection form"
+    },
+    "mariadb-form-system-variable": {
+      "reference": "SR-F-030640",
+      "title": "MariaDB system variable metadata and runtime value inspection form"
+    },
+    "mariadb-form-lock": {
+      "reference": "SR-F-030641",
+      "title": "MariaDB metadata and InnoDB lock inspection form"
+    },
+    "mariadb-form-lock-wait": {
+      "reference": "SR-F-030642",
+      "title": "MariaDB blocking lock-wait edge inspection form"
+    },
+    "mariadb-form-table-storage": {
+      "reference": "SR-F-030643",
+      "title": "MariaDB InnoDB / Aria per-table physical storage inspection form"
+    },
+    "mariadb-form-binary-log": {
+      "reference": "SR-F-030644",
+      "title": "MariaDB binary log file inspection form"
+    },
+    "mariadb-form-binary-log-event": {
+      "reference": "SR-F-030645",
+      "title": "MariaDB binary log event inspection form"
+    },
+    "mariadb-form-binary-log-status": {
+      "reference": "SR-F-030646",
+      "title": "MariaDB primary binary log coordinate status inspection form"
+    },
+    "mariadb-form-log-configuration": {
+      "reference": "SR-F-030647",
+      "title": "MariaDB general, slow and error log configuration inspection form"
+    },
+    "mariadb-form-general-log-entry": {
+      "reference": "SR-F-030648",
+      "title": "MariaDB mysql.general_log entry inspection form"
+    },
+    "mariadb-form-slow-query": {
+      "reference": "SR-F-030649",
+      "title": "MariaDB mysql.slow_log entry inspection form"
+    },
+    "mariadb-form-metric": {
+      "reference": "SR-F-030650",
+      "title": "MariaDB server status metric inspection form"
+    },
+    "mariadb-form-tls-configuration": {
+      "reference": "SR-F-030651",
+      "title": "MariaDB TLS certificate and cipher posture inspection form"
+    },
+    "mariadb-form-available-plugin": {
+      "reference": "SR-F-030652",
+      "title": "MariaDB catalog available plugin inspection form"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

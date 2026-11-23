@@ -1,0 +1,93 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "session"
+  ],
+  "form_reference": "SR-F-030621",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Processlist ID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "processlist_id"
+      ]
+    },
+    {
+      "field_id": "user",
+      "label": "User",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "user"
+      ]
+    },
+    {
+      "field_id": "host",
+      "label": "Client host",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "host"
+      ]
+    },
+    {
+      "field_id": "db",
+      "label": "Default schema",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "db"
+      ]
+    },
+    {
+      "field_id": "command",
+      "label": "Command",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "command"
+      ]
+    },
+    {
+      "field_id": "state",
+      "label": "State",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "state"
+      ]
+    },
+    {
+      "field_id": "info",
+      "label": "Active SQL statement",
+      "tab": "Engine",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "info"
+      ]
+    }
+  ]
+}

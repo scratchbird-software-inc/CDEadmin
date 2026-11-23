@@ -1,0 +1,33 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "plugin"
+  ],
+  "form_reference": "SR-F-030632",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Plugin name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "INSTALL SONAME / INSTALL PLUGIN"
+    },
+    {
+      "field_id": "library",
+      "label": "Shared library (SONAME)",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "editable_after_create": false,
+      "native_keyword": "SONAME"
+    }
+  ]
+}

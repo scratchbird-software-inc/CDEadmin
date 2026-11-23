@@ -7,12 +7,32 @@
 //
 //////////////////////////////////////////////////////////////
 
-import MariaDBPhysicalWorkspace from './MariaDBPhysicalWorkspace';
-import MariaDBArchiveRetentionWorkspace from './MariaDBArchiveRetentionWorkspace';
-import MariaDBHostWorkspace from './MariaDBHostWorkspace';
-import MariaDBUpgradeWorkspace from './MariaDBUpgradeWorkspace';
-import MariaDBGaleraWorkspace from './MariaDBGaleraWorkspace';
-import MariaDBUtilityWorkspace from './MariaDBUtilityWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const MariaDBPhysicalWorkspace = lazySurface(
+  () => import('./MariaDBPhysicalWorkspace'),
+  'MariaDBPhysicalWorkspace',
+);
+const MariaDBArchiveRetentionWorkspace = lazySurface(
+  () => import('./MariaDBArchiveRetentionWorkspace'),
+  'MariaDBArchiveRetentionWorkspace',
+);
+const MariaDBHostWorkspace = lazySurface(
+  () => import('./MariaDBHostWorkspace'),
+  'MariaDBHostWorkspace',
+);
+const MariaDBUpgradeWorkspace = lazySurface(
+  () => import('./MariaDBUpgradeWorkspace'),
+  'MariaDBUpgradeWorkspace',
+);
+const MariaDBGaleraWorkspace = lazySurface(
+  () => import('./MariaDBGaleraWorkspace'),
+  'MariaDBGaleraWorkspace',
+);
+const MariaDBUtilityWorkspace = lazySurface(
+  () => import('./MariaDBUtilityWorkspace'),
+  'MariaDBUtilityWorkspace',
+);
 
 export const MARIADB_ADMIN_TABS = [
   'mariadb-physical',

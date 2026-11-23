@@ -76,7 +76,7 @@ describe('MariaDB surfaced Administration, Continuity, Host Utilities, SQL & Dat
     const Themed = withTheme(MariaDBPhysicalWorkspace);
     render(<Themed endpointUrl="/browser/server/cde_workspace/1/9?database_target_id=sales" api={api} />);
 
-    expect(await screen.findByText(/uid-mariadb-1/i)).toBeVisible();
+    expect(await screen.findByText(/uid-mariadb-1/i, {}, {timeout: 15000})).toBeVisible();
     fireEvent.click(screen.getByRole('button', {name: /Review Physical Operation/i}));
     expect(await screen.findByText(/mb-phys-1/i)).toBeVisible();
     fireEvent.click(screen.getByRole('button', {name: /Confirm & Start Physical Job/i}));

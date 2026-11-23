@@ -1,0 +1,131 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "extended-statistics"
+  ],
+  "form_reference": "SR-F-030606",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Statistics name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE STATISTICS"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "table_schema",
+      "label": "Target table schema",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "table",
+      "label": "Target table",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "elements",
+      "label": "Columns / expressions",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "kind",
+          "label": "Element kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "column",
+              "label": "Column"
+            },
+            {
+              "value": "expression",
+              "label": "Expression"
+            }
+          ]
+        },
+        {
+          "field_id": "value",
+          "label": "Column or expression",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "kinds",
+      "label": "Statistics kinds",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "kind",
+          "label": "Kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "ndistinct",
+              "label": "ndistinct"
+            },
+            {
+              "value": "dependencies",
+              "label": "dependencies"
+            },
+            {
+              "value": "mcv",
+              "label": "mcv"
+            }
+          ]
+        }
+      ],
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "target",
+      "label": "Statistics target",
+      "tab": "Engine",
+      "control": "number",
+      "native_keyword": "SET STATISTICS"
+    }
+  ]
+}

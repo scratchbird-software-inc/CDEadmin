@@ -1,0 +1,89 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "prepared-transaction"
+  ],
+  "form_reference": "SR-F-030609",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Prepared transaction GID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "gid"
+      ]
+    },
+    {
+      "field_id": "gid",
+      "label": "Transaction GID",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "initial_value_path": [
+        "native",
+        "gid"
+      ]
+    },
+    {
+      "field_id": "expected_database",
+      "label": "Database",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "database"
+      ]
+    },
+    {
+      "field_id": "expected_owner",
+      "label": "Owner role",
+      "tab": "General",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "owner"
+      ]
+    },
+    {
+      "field_id": "expected_xid",
+      "label": "Transaction XID",
+      "tab": "Definition",
+      "control": "text",
+      "initial_value_path": [
+        "native",
+        "transaction"
+      ]
+    },
+    {
+      "field_id": "decision",
+      "label": "Resolution decision",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "COMMIT",
+          "label": "COMMIT PREPARED"
+        },
+        {
+          "value": "ROLLBACK",
+          "label": "ROLLBACK PREPARED"
+        }
+      ]
+    },
+    {
+      "field_id": "coordinator_reference",
+      "label": "Coordinator / incident ticket",
+      "tab": "Engine",
+      "control": "text"
+    }
+  ]
+}

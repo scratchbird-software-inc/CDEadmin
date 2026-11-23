@@ -1,0 +1,206 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "pgagent-job"
+  ],
+  "form_reference": "SR-F-030603",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "jobname",
+      "label": "Job name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "jobenabled",
+      "label": "Enabled",
+      "tab": "General",
+      "control": "boolean",
+      "default": true
+    },
+    {
+      "field_id": "jobjclid",
+      "label": "Job class ID",
+      "tab": "General",
+      "control": "number",
+      "default": 1
+    },
+    {
+      "field_id": "jobhostagent",
+      "label": "Host agent",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "jobdesc",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "jsteps",
+      "label": "Steps",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "jstid",
+          "label": "Step ID",
+          "control": "number"
+        },
+        {
+          "field_id": "jstname",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "jstenabled",
+          "label": "Enabled",
+          "control": "boolean"
+        },
+        {
+          "field_id": "jstkind",
+          "label": "Kind",
+          "control": "select",
+          "options": [
+            {
+              "value": "s",
+              "label": "SQL"
+            },
+            {
+              "value": "b",
+              "label": "Batch"
+            }
+          ]
+        },
+        {
+          "field_id": "jstconntype",
+          "label": "Connection type",
+          "control": "select",
+          "options": [
+            {
+              "value": "l",
+              "label": "Local"
+            },
+            {
+              "value": "r",
+              "label": "Remote"
+            }
+          ]
+        },
+        {
+          "field_id": "jstdbname",
+          "label": "Database",
+          "control": "text"
+        },
+        {
+          "field_id": "jstconnstr",
+          "label": "Connection string",
+          "control": "text"
+        },
+        {
+          "field_id": "jstonerror",
+          "label": "On error",
+          "control": "select",
+          "options": [
+            {
+              "value": "f",
+              "label": "Fail"
+            },
+            {
+              "value": "s",
+              "label": "Succeed"
+            },
+            {
+              "value": "i",
+              "label": "Ignore"
+            }
+          ]
+        },
+        {
+          "field_id": "jstcode",
+          "label": "Code",
+          "control": "code",
+          "language": "sql"
+        },
+        {
+          "field_id": "jstdesc",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    },
+    {
+      "field_id": "jschedules",
+      "label": "Schedules",
+      "tab": "Engine",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "jscid",
+          "label": "Schedule ID",
+          "control": "number"
+        },
+        {
+          "field_id": "jscname",
+          "label": "Name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "jscenabled",
+          "label": "Enabled",
+          "control": "boolean"
+        },
+        {
+          "field_id": "jscstart",
+          "label": "Start timestamp",
+          "control": "text"
+        },
+        {
+          "field_id": "jscend",
+          "label": "End timestamp",
+          "control": "text"
+        },
+        {
+          "field_id": "jscminutes",
+          "label": "Minutes mask",
+          "control": "text"
+        },
+        {
+          "field_id": "jschours",
+          "label": "Hours mask",
+          "control": "text"
+        },
+        {
+          "field_id": "jscweekdays",
+          "label": "Weekdays mask",
+          "control": "text"
+        },
+        {
+          "field_id": "jscmonthdays",
+          "label": "Monthdays mask",
+          "control": "text"
+        },
+        {
+          "field_id": "jscmonths",
+          "label": "Months mask",
+          "control": "text"
+        },
+        {
+          "field_id": "jscdesc",
+          "label": "Comment",
+          "control": "text"
+        }
+      ]
+    }
+  ]
+}

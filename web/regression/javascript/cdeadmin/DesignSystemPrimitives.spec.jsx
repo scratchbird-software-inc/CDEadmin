@@ -32,7 +32,7 @@ describe('CDEadmin design-system primitives', () => {
     render(<Component intent="primary">Connect</Component>);
 
     expect(screen.getByRole('button', {name: 'Connect'}))
-      .toHaveClass('MuiButton-containedPrimary');
+      .toHaveClass('sr-btn-primary');
   });
 
   it('exposes loading and destructive action semantics', () => {
@@ -43,7 +43,7 @@ describe('CDEadmin design-system primitives', () => {
     render(<Component />);
 
     expect(screen.getByRole('button', {name: 'Delete'}))
-      .toHaveClass('MuiButton-colorError');
+      .toHaveClass('sr-btn-destructive');
     expect(screen.getByRole('button', {name: 'Connecting'}))
       .toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', {name: 'Connecting'})).toBeDisabled();

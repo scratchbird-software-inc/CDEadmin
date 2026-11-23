@@ -35,6 +35,8 @@ function normalizeSxStyle(sx, style) {
   if (sx.width) mapped.width = sx.width;
   if (sx.minWidth !== undefined) mapped.minWidth = sx.minWidth;
   if (sx.minHeight !== undefined) mapped.minHeight = sx.minHeight;
+  if (sx.flexShrink !== undefined) mapped.flexShrink = String(sx.flexShrink);
+  if (sx.whiteSpace) mapped.whiteSpace = sx.whiteSpace;
   if (sx.justifyContent) mapped.justifyContent = sx.justifyContent;
   if (sx.alignSelf) mapped.alignSelf = sx.alignSelf;
   if (sx.ml === 'auto') mapped.marginLeft = 'auto';
@@ -71,7 +73,7 @@ export const Button = forwardRef(function Button({
   const isDisabled = Boolean(loading || disabled);
   const invokeOnce = (event) => {
     if (isDisabled) return;
-    if (event.detail > 0) {
+    if (event.isTrusted && event.detail > 0) {
       const now = Date.now();
       if (now - lastMouseActivation.current <= 500) return;
       lastMouseActivation.current = now;

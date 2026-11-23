@@ -1,0 +1,79 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "large-object"
+  ],
+  "form_reference": "SR-F-030599",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Large object OID",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "initial_value_path": [
+        "native",
+        "oid"
+      ]
+    },
+    {
+      "field_id": "oid",
+      "label": "Requested OID (0 allocates automatically)",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "create"
+      ],
+      "default": "0",
+      "native_keyword": "lo_create"
+    },
+    {
+      "field_id": "action",
+      "label": "Change action",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "owner",
+          "label": "Owner"
+        },
+        {
+          "value": "comment",
+          "label": "Comment"
+        }
+      ],
+      "modes": [
+        "alter"
+      ],
+      "required": true
+    },
+    {
+      "field_id": "value",
+      "label": "Owner or comment value",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "large_object_data_base64",
+      "label": "Initial binary payload (Base64)",
+      "tab": "Definition",
+      "control": "code",
+      "language": "text",
+      "modes": [
+        "create"
+      ]
+    }
+  ]
+}

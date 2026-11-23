@@ -7,13 +7,36 @@
 //
 //////////////////////////////////////////////////////////////
 
-import FirebirdTraceWorkspace from './FirebirdTraceWorkspace';
-import FirebirdLockPrintWorkspace from './FirebirdLockPrintWorkspace';
-import FirebirdHostConfigWorkspace from './FirebirdHostConfigWorkspace';
-import FirebirdPluginDeploymentWorkspace from './FirebirdPluginDeploymentWorkspace';
-import FirebirdRuntimeLifecycleWorkspace from './FirebirdRuntimeLifecycleWorkspace';
-import FirebirdDatabaseEncryptionWorkspace from './FirebirdDatabaseEncryptionWorkspace';
-import FirebirdReplicationWorkspace from './FirebirdReplicationWorkspace';
+import {lazySurface} from '../../foundations/lazySurface';
+
+const FirebirdTraceWorkspace = lazySurface(
+  () => import('./FirebirdTraceWorkspace'),
+  'FirebirdTraceWorkspace',
+);
+const FirebirdLockPrintWorkspace = lazySurface(
+  () => import('./FirebirdLockPrintWorkspace'),
+  'FirebirdLockPrintWorkspace',
+);
+const FirebirdHostConfigWorkspace = lazySurface(
+  () => import('./FirebirdHostConfigWorkspace'),
+  'FirebirdHostConfigWorkspace',
+);
+const FirebirdPluginDeploymentWorkspace = lazySurface(
+  () => import('./FirebirdPluginDeploymentWorkspace'),
+  'FirebirdPluginDeploymentWorkspace',
+);
+const FirebirdRuntimeLifecycleWorkspace = lazySurface(
+  () => import('./FirebirdRuntimeLifecycleWorkspace'),
+  'FirebirdRuntimeLifecycleWorkspace',
+);
+const FirebirdDatabaseEncryptionWorkspace = lazySurface(
+  () => import('./FirebirdDatabaseEncryptionWorkspace'),
+  'FirebirdDatabaseEncryptionWorkspace',
+);
+const FirebirdReplicationWorkspace = lazySurface(
+  () => import('./FirebirdReplicationWorkspace'),
+  'FirebirdReplicationWorkspace',
+);
 
 export const FIREBIRD_ADMIN_TABS = Object.freeze([
   'firebird-trace',

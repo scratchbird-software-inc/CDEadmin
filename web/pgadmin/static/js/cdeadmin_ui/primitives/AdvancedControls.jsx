@@ -498,6 +498,7 @@ export function MultiSelect({
             setOpen(true);
           }}
           onFocus={() => !disabled && setOpen(true)}
+          onMouseDown={() => !disabled && setOpen(true)}
           onClick={() => !disabled && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           className="sr-input"
@@ -740,7 +741,11 @@ export function UnitNumberField({
       }}
     >
       {units.map((item) => (
-        <option key={item.value ?? item} value={item.value ?? item}>
+        <option
+          key={item.value ?? item}
+          value={item.value ?? item}
+          onClick={() => onUnitChange?.(item.value ?? item)}
+        >
           {item.label ?? item}
         </option>
       ))}

@@ -1,0 +1,58 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mysql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "character-set"
+  ],
+  "form_reference": "SR-F-030625",
+  "status": "complete",
+  "engine_tab_title": "MySQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Character set",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Description",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "description"
+      ]
+    },
+    {
+      "field_id": "default_collation",
+      "label": "Default collation",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "default_collide_name"
+      ]
+    },
+    {
+      "field_id": "maxlen",
+      "label": "Maximum bytes per character",
+      "tab": "Engine",
+      "control": "number",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "maxlen"
+      ]
+    }
+  ]
+}

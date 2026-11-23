@@ -1,0 +1,123 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "rule"
+  ],
+  "form_reference": "SR-F-030597",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE RULE"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "view",
+      "label": "Table or view",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "event",
+      "label": "Event",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "SELECT",
+          "label": "SELECT"
+        },
+        {
+          "value": "UPDATE",
+          "label": "UPDATE"
+        },
+        {
+          "value": "INSERT",
+          "label": "INSERT"
+        },
+        {
+          "value": "DELETE",
+          "label": "DELETE"
+        }
+      ],
+      "required": true
+    },
+    {
+      "field_id": "do_instead",
+      "label": "Do instead",
+      "tab": "Definition",
+      "control": "boolean",
+      "native_keyword": "DO INSTEAD"
+    },
+    {
+      "field_id": "condition",
+      "label": "Condition",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "native_keyword": "WHERE"
+    },
+    {
+      "field_id": "statements",
+      "label": "Commands",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql"
+    },
+    {
+      "field_id": "is_enable_rule",
+      "label": "Enabled mode",
+      "tab": "Engine",
+      "control": "select",
+      "options": [
+        {
+          "value": "O",
+          "label": "Enable"
+        },
+        {
+          "value": "D",
+          "label": "Disable"
+        },
+        {
+          "value": "R",
+          "label": "Enable Replica"
+        },
+        {
+          "value": "A",
+          "label": "Enable Always"
+        }
+      ],
+      "modes": [
+        "alter"
+      ]
+    }
+  ]
+}

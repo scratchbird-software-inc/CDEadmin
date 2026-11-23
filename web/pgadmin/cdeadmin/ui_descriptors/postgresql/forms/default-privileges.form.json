@@ -1,0 +1,243 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "default-privileges"
+  ],
+  "form_reference": "SR-F-030608",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Default privilege rule",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "display_name"
+      ]
+    },
+    {
+      "field_id": "object_type",
+      "label": "Future object family",
+      "tab": "General",
+      "control": "select",
+      "options": [
+        {
+          "value": "TABLES",
+          "label": "Tables"
+        },
+        {
+          "value": "SEQUENCES",
+          "label": "Sequences"
+        },
+        {
+          "value": "FUNCTIONS",
+          "label": "Functions"
+        },
+        {
+          "value": "ROUTINES",
+          "label": "Routines"
+        },
+        {
+          "value": "TYPES",
+          "label": "Types"
+        },
+        {
+          "value": "SCHEMAS",
+          "label": "Schemas"
+        },
+        {
+          "value": "LARGE OBJECTS",
+          "label": "Large Objects"
+        }
+      ],
+      "required": true,
+      "default": "TABLES"
+    },
+    {
+      "field_id": "scope",
+      "label": "Target scope",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "GLOBAL",
+          "label": "Entire database"
+        },
+        {
+          "value": "SCHEMAS",
+          "label": "Selected schemas"
+        }
+      ],
+      "default": "GLOBAL"
+    },
+    {
+      "field_id": "schemas",
+      "label": "Target schemas",
+      "tab": "Definition",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "owner_mode",
+      "label": "Creation owner mode",
+      "tab": "Security",
+      "control": "select",
+      "options": [
+        {
+          "value": "CURRENT_ROLE",
+          "label": "Current database role"
+        },
+        {
+          "value": "NAMED_ROLES",
+          "label": "Named roles"
+        }
+      ],
+      "default": "CURRENT_ROLE"
+    },
+    {
+      "field_id": "owner_kind",
+      "label": "Owner keyword",
+      "tab": "Security",
+      "control": "select",
+      "options": [
+        {
+          "value": "ROLE",
+          "label": "FOR ROLE"
+        },
+        {
+          "value": "USER",
+          "label": "FOR USER"
+        }
+      ],
+      "default": "ROLE"
+    },
+    {
+      "field_id": "owners",
+      "label": "Creation owners",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "privileges",
+      "label": "Granted privileges",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "privilege",
+          "label": "Privilege",
+          "control": "select",
+          "options": [
+            {
+              "value": "SELECT",
+              "label": "SELECT"
+            },
+            {
+              "value": "INSERT",
+              "label": "INSERT"
+            },
+            {
+              "value": "UPDATE",
+              "label": "UPDATE"
+            },
+            {
+              "value": "DELETE",
+              "label": "DELETE"
+            },
+            {
+              "value": "TRUNCATE",
+              "label": "TRUNCATE"
+            },
+            {
+              "value": "REFERENCES",
+              "label": "REFERENCES"
+            },
+            {
+              "value": "TRIGGER",
+              "label": "TRIGGER"
+            },
+            {
+              "value": "MAINTAIN",
+              "label": "MAINTAIN"
+            },
+            {
+              "value": "USAGE",
+              "label": "USAGE"
+            },
+            {
+              "value": "CREATE",
+              "label": "CREATE"
+            },
+            {
+              "value": "EXECUTE",
+              "label": "EXECUTE"
+            },
+            {
+              "value": "ALL PRIVILEGES",
+              "label": "ALL PRIVILEGES"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "field_id": "grantees",
+      "label": "Grantee roles",
+      "tab": "Security",
+      "control": "grid",
+      "columns": [
+        {
+          "field_id": "role",
+          "label": "Role",
+          "control": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "field_id": "with_grant",
+      "label": "With grant option",
+      "tab": "Security",
+      "control": "boolean"
+    },
+    {
+      "field_id": "grant_option_only",
+      "label": "Revoke grant option only",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "cascade",
+      "label": "Cascade dependent grants",
+      "tab": "Security",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ]
+    }
+  ]
+}

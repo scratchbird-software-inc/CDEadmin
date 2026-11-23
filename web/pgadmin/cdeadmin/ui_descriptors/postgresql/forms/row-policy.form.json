@@ -1,0 +1,124 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "postgresql",
+  "family": "engine_object",
+  "resource_kinds": [
+    "row-policy"
+  ],
+  "form_reference": "SR-F-030598",
+  "status": "complete",
+  "engine_tab_title": "PostgreSQL",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "native_keyword": "CREATE POLICY"
+    },
+    {
+      "field_id": "schema",
+      "label": "Schema",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "table",
+      "label": "Table",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text"
+    },
+    {
+      "field_id": "type",
+      "label": "Permissiveness",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "PERMISSIVE",
+          "label": "Permissive"
+        },
+        {
+          "value": "RESTRICTIVE",
+          "label": "Restrictive"
+        }
+      ],
+      "modes": [
+        "create"
+      ],
+      "default": "PERMISSIVE"
+    },
+    {
+      "field_id": "event",
+      "label": "Command event",
+      "tab": "Definition",
+      "control": "select",
+      "options": [
+        {
+          "value": "ALL",
+          "label": "ALL"
+        },
+        {
+          "value": "SELECT",
+          "label": "SELECT"
+        },
+        {
+          "value": "INSERT",
+          "label": "INSERT"
+        },
+        {
+          "value": "UPDATE",
+          "label": "UPDATE"
+        },
+        {
+          "value": "DELETE",
+          "label": "DELETE"
+        }
+      ],
+      "modes": [
+        "create"
+      ],
+      "default": "ALL"
+    },
+    {
+      "field_id": "using",
+      "label": "USING expression",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "native_keyword": "USING"
+    },
+    {
+      "field_id": "withcheck",
+      "label": "WITH CHECK expression",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "native_keyword": "WITH CHECK"
+    },
+    {
+      "field_id": "policyowner",
+      "label": "Target roles (TO)",
+      "tab": "Security",
+      "control": "text",
+      "native_keyword": "TO"
+    }
+  ]
+}

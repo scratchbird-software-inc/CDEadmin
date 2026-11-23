@@ -1,0 +1,59 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "mariadb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "metric"
+  ],
+  "form_reference": "SR-F-030650",
+  "status": "complete",
+  "engine_tab_title": "MariaDB",
+  "omitted_tabs": [],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Metric name",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "native_name"
+      ]
+    },
+    {
+      "field_id": "value",
+      "label": "Observed value",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "value"
+      ]
+    },
+    {
+      "field_id": "category",
+      "label": "Category",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "category"
+      ]
+    },
+    {
+      "field_id": "unit",
+      "label": "Unit",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "initial_value_path": [
+        "native",
+        "unit"
+      ]
+    }
+  ]
+}
