@@ -1,10 +1,60 @@
-"""DuckDB retained-session administration and catalog-aware row identity."""
+"""DuckDB retained-session administration, continuity guards, and write codecs."""
+from collections.abc import Mapping
 from contextlib import contextmanager
 from copy import deepcopy
 import os
+import re
+import time
 
 from ..relational_admin import RelationalAdministration
 from ...sdk.relational import RelationalClientError
+
+
+def _split_top_level_clauses(body):
+    clauses, start, depth, quote_ch = [], 0, 0, None
+    idx = 0
+    while idx < len(body):
+        ch = body[idx]
+        if quote_ch is not None:
+            if ch == quote_ch:
+                if idx + 1 < len(body) and body[idx + 1] == quote_ch:
+                    idx += 1
+                else:
+                    quote_ch = None
+        elif ch in {'"', "'"}:
+            quote_ch = ch
+        elif ch in {'(', '['}:
+            depth += 1
+        elif ch in {')', ']'}:
+            depth = max(0, depth - 1)
+        elif ch == ',' and depth == 0:
+            clauses.append(body[start:idx].strip())
+            start = idx + 1
+        idx += 1
+    tail = body[start:].strip()
+    if tail:
+        clauses.append(tail)
+    return clauses
+
+
+def _generated_columns_from_ddl(ddl):
+    if not isinstance(ddl, str) or '(' not in ddl or ')' not in ddl:
+        return set()
+    body = ddl[ddl.index('(') + 1:ddl.rindex(')')]
+    generated = set()
+    for clause in _split_top_level_clauses(body):
+        if not re.search(r'\bGENERATED\s+ALWAYS\s+AS\b', clause, re.IGNORECASE):
+            continue
+        stripped = clause.lstrip()
+        if stripped.startswith('"'):
+            match = re.match(r'^"((?:[^"]|"")*)"', stripped)
+            if match:
+                generated.add(match.group(1).replace('""', '"'))
+        else:
+            match = re.match(r'^([^\s(]+)', stripped)
+            if match and match.group(1).upper() != 'CONSTRAINT':
+                generated.add(match.group(1))
+    return generated
 
 
 class DuckDBAdministration(RelationalAdministration):
@@ -23,6 +73,184 @@ class DuckDBAdministration(RelationalAdministration):
     def _duckdb_secret(self, name, options):
         from .secret_values import compile_secret
         return compile_secret(self, name, options)
+
+    def _inspect_table_write_schema(self, connection, path):
+        schema, table = self._schema_table(path, 'main')
+        catalog = (
+            path[-3] if len(path) >= 3
+            else connection.execute('SELECT current_database()').fetchone()[0]
+        )
+        qualified = self._qualified((catalog, schema, table))
+        relation = connection.sql(f'SELECT * FROM {qualified} LIMIT 0')
+        types_by_col = dict(zip(relation.columns, relation.types))
+        ddl_row = connection.execute(
+            'SELECT sql FROM "system"."main".duckdb_tables() '
+            'WHERE database_name = ? AND schema_name = ? AND table_name = ? '
+            'AND NOT internal',
+            [catalog, schema, table],
+        ).fetchone()
+        generated = _generated_columns_from_ddl(ddl_row[0] if ddl_row else None)
+        return types_by_col, generated
+
+    def _resolve_table_write_schema(self, request):
+        target = request.get('target_resource')
+        if not isinstance(target, Mapping):
+            return None, set()
+        path = self._target_path(target)
+        handle = request.get('_provider_session_handle') or getattr(
+            getattr(self, '_local', None), 'planning_handle', None,
+        )
+        if handle is not None:
+            return self._inspect_table_write_schema(handle, path)
+        native = target.get('native') if isinstance(target.get('native'), Mapping) else {}
+        ddl = native.get('ddl')
+        generated = _generated_columns_from_ddl(ddl)
+        route = request.get('_provider_route') or {}
+        raw_db = route.get('database')
+        if isinstance(raw_db, str) and raw_db.strip() and raw_db.strip() != ':memory:':
+            from ..embedded_route import contained_database
+            db_path = contained_database(route)
+            if os.path.isfile(db_path):
+                import duckdb
+                from .provider import _initialize_connection, _route_arguments
+                conn = duckdb.connect(**_route_arguments(route))
+                try:
+                    _initialize_connection(conn, route)
+                    return self._inspect_table_write_schema(conn, path)
+                except duckdb.CatalogException:
+                    pass
+                finally:
+                    conn.close()
+        if isinstance(native.get('columns'), list) and native['columns']:
+            import duckdb
+            parsed = {}
+            for col in native['columns']:
+                if isinstance(col, Mapping) and col.get('name') and col.get('data_type'):
+                    try:
+                        parsed[str(col['name'])] = duckdb.sqltype(str(col['data_type']))
+                    except Exception:
+                        return None, generated
+            if parsed:
+                return parsed, generated
+        return None, generated
+
+    def _compile_insert(self, request):
+        if request['target_resource'].get(
+            'resource_kind', request['resource_kind'],
+        ) != request['resource_kind']:
+            raise RelationalClientError('insert target kind does not match')
+        if request['resource_kind'] != 'table':
+            return super()._compile_insert(request)
+        values = request['draft'].get('values')
+        if not isinstance(values, Mapping):
+            raise RelationalClientError('insert values must be an object')
+        target = self._qualified(self._target_path(request['target_resource']))
+        if not values:
+            return {'source': f'INSERT INTO {target} DEFAULT VALUES', 'parameters': ()}
+        types_by_col, generated = self._resolve_table_write_schema(request)
+        from .grid_values import compile_write_value
+        from .values import parameter as untyped_parameter
+        columns = list(values)
+        exprs, params = [], []
+        for col in columns:
+            if col in generated:
+                raise RelationalClientError(
+                    f'DuckDB generated column {col!r} cannot be inserted directly'
+                )
+            if types_by_col is not None:
+                if col not in types_by_col:
+                    raise RelationalClientError(f'Unknown DuckDB table column {col!r}')
+                expr, bound = compile_write_value(values[col], types_by_col[col])
+                exprs.append(expr)
+                params.extend(bound)
+            else:
+                exprs.append(self.dialect.parameter)
+                params.append(untyped_parameter(values[col]))
+        source = (
+            f'INSERT INTO {target} '
+            f'({", ".join(self._quote(item) for item in columns)}) '
+            f'VALUES ({", ".join(exprs)})'
+        )
+        return {'source': source, 'parameters': tuple(params)}
+
+    def _compile_identity_dml(self, request):
+        if request['operation_id'] == 'delete':
+            return super()._compile_identity_dml(request)
+        draft = request['draft']
+        selector = draft.get('selector')
+        if not isinstance(selector, Mapping):
+            raise RelationalClientError('row selector must contain a provider identity token')
+        token = selector.get('identity_token')
+        if not isinstance(token, str) or not token:
+            raise RelationalClientError('provider-issued row identity token is required')
+        with self._identity_lock:
+            identity = self._row_identities.pop(token, None)
+        if identity is None:
+            raise RelationalClientError('row identity token is stale or invalid')
+        if identity.purpose != 'row':
+            raise RelationalClientError('row identity has another purpose')
+        if identity.session_id != request.get('session_id'):
+            raise RelationalClientError('row identity belongs to another provider session')
+        if (identity.resource_kind != request['resource_kind'] or
+                identity.resource_kind != request['target_resource'].get('resource_kind', 'table')):
+            raise RelationalClientError('row identity belongs to another kind')
+        if time.monotonic() - identity.issued_at > 600:
+            raise RelationalClientError('row identity token has expired')
+        route = request.get('_provider_route')
+        if self._route_fingerprint(route) != identity.route_fingerprint:
+            raise RelationalClientError('row identity belongs to another route')
+        target_path = self._target_path(request['target_resource'])
+        if target_path != identity.target_path:
+            raise RelationalClientError('row identity belongs to another table')
+        where, predicate_params = self._identity_predicate(identity)
+        target = self._qualified(target_path)
+        changes = draft.get('changes')
+        if not isinstance(changes, Mapping) or not changes:
+            raise RelationalClientError('row update changes must be an object')
+        if identity.writable_columns is not None and any(
+            name not in identity.writable_columns for name in changes
+        ):
+            raise RelationalClientError('row update contains a column not admitted for editing')
+        from .grid_values import NativeCell, compile_write_value
+        from .values import parameter as untyped_parameter
+        types_by_col = {
+            col_name: cell.kind
+            for col_name, cell in identity.original.items()
+            if isinstance(cell, NativeCell)
+        }
+        target_res = request.get('target_resource')
+        target_native = (
+            target_res.get('native')
+            if isinstance(target_res, Mapping) and isinstance(target_res.get('native'), Mapping)
+            else {}
+        )
+        generated = _generated_columns_from_ddl(target_native.get('ddl'))
+        if not types_by_col or getattr(getattr(self, '_local', None), 'planning_handle', None) is not None:
+            live_types, live_gen = self._resolve_table_write_schema(request)
+            if live_types is not None:
+                types_by_col.update(live_types)
+            generated |= live_gen
+        assignments, write_params = [], []
+        for col_name, raw_val in changes.items():
+            if col_name in generated:
+                raise RelationalClientError(
+                    f'DuckDB generated column {col_name!r} cannot be updated directly'
+                )
+            if types_by_col:
+                if col_name not in types_by_col:
+                    raise RelationalClientError(f'Unknown DuckDB table column {col_name!r}')
+                expr, bound = compile_write_value(raw_val, types_by_col[col_name])
+                assignments.append(f'{self._quote(col_name)} = {expr}')
+                write_params.extend(bound)
+            else:
+                assignments.append(f'{self._quote(col_name)} = {self.dialect.parameter}')
+                write_params.append(untyped_parameter(raw_val))
+        source = f'UPDATE {target} SET {", ".join(assignments)} WHERE {where}'
+        return {
+            'source': source,
+            'parameters': tuple(write_params) + tuple(predicate_params),
+            'expected_rowcount': 1,
+        }
 
     def catalog(self, catalog):
         from .object_metadata import KINDS
@@ -156,7 +384,64 @@ class DuckDBAdministration(RelationalAdministration):
                 result['errors'].append({'field_id': None,
                     'code': 'invalid_duckdb_definition_replacement',
                     'message': str(error)})
+        elif (not result['errors'] and request.get('resource_kind') in {'table', 'column'} and
+                request.get('operation_id') in {'create', 'alter'}):
+            try:
+                normalized = dict(request)
+                normalized['draft'] = self._normalize_draft(
+                    request['resource_kind'], request['operation_id'], request.get('draft') or {},
+                )
+                self._compile(normalized)
+            except RelationalClientError as error:
+                result['errors'].append({'field_id': None,
+                    'code': 'invalid_duckdb_column_spec',
+                    'message': str(error)})
         return result
+
+    def _column_definition(self, item):
+        if not isinstance(item, Mapping):
+            raise RelationalClientError('column definition must be an object')
+        name = self._quote(item.get('name'))
+        data_type = self._safe_fragment(item.get('type'), 'column type')
+        parts = [name, data_type]
+        collation = item.get('collation')
+        if collation not in {None, ''}:
+            if not isinstance(collation, str) or not re.fullmatch(
+                r'[A-Za-z_][A-Za-z0-9_.]*', collation.strip(),
+            ):
+                raise RelationalClientError('DuckDB column collation must be a valid collation identifier')
+            parts.extend(('COLLATE', collation.strip()))
+        gen_expr = item.get('generated_expression')
+        if gen_expr not in {None, ''}:
+            if item.get('default') not in {None, ''}:
+                raise RelationalClientError(
+                    'DuckDB generated column cannot specify both a DEFAULT and GENERATED ALWAYS AS expression'
+                )
+            if item.get('primary_key'):
+                raise RelationalClientError(
+                    'DuckDB generated column cannot be a PRIMARY KEY'
+                )
+            if not item.get('nullable', True):
+                raise RelationalClientError(
+                    'DuckDB generated column cannot declare NOT NULL'
+                )
+            expr = self._safe_fragment(gen_expr, 'generated expression')
+            parts.append(f'GENERATED ALWAYS AS ({expr})')
+            if item.get('unique'):
+                parts.append('UNIQUE')
+            return ' '.join(parts)
+        if not item.get('nullable', True):
+            parts.append('NOT NULL')
+        if 'default' in item and item['default'] not in {None, ''}:
+            parts.extend((
+                'DEFAULT', self._safe_fragment(item['default'], 'default'),
+            ))
+        if item.get('unique'):
+            parts.append('UNIQUE')
+        if item.get('primary_key'):
+            parts.append('PRIMARY KEY')
+        parts.extend(self._column_option_clauses(item))
+        return ' '.join(parts)
 
     def _compile(self, request):
         if request.get('resource_kind') == 'secret' and request.get('operation_id') in {'create', 'drop'}:
@@ -171,7 +456,26 @@ class DuckDBAdministration(RelationalAdministration):
         if (request['operation_id'] == 'alter' and
                 request['resource_kind'] in {'view', 'macro'}):
             return self._definition_replacement(request)
-        return super()._compile(request)
+        compiled = super()._compile(request)
+        if request.get('resource_kind') == 'table' and request.get('operation_id') == 'alter':
+            changes = (request.get('draft') or {}).get('changes') or {}
+            add_cols = changes.get('add_columns') or []
+            comment_stmts = []
+            target = self._qualified(self._target_path(request['target_resource']))
+            for item in add_cols:
+                if isinstance(item, Mapping) and item.get('comment') not in {None, ''}:
+                    if not isinstance(item['comment'], str):
+                        raise RelationalClientError('DuckDB column comment must be text')
+                    comment_stmts.append({
+                        'source': f'COMMENT ON COLUMN {target}.{self._quote(item["name"])} IS {self._literal(item["comment"])}',
+                        'parameters': (),
+                    })
+            if comment_stmts:
+                if isinstance(compiled, dict) and 'statements' in compiled:
+                    compiled['statements'] = list(compiled['statements']) + comment_stmts
+                elif isinstance(compiled, list):
+                    compiled = list(compiled) + comment_stmts
+        return compiled
 
     def _compile_create(self, request):
         if request['resource_kind'] == 'index' and any(
@@ -179,12 +483,44 @@ class DuckDBAdministration(RelationalAdministration):
                 for key in ('terms', 'method', 'index_options')):
             from .indexes import compile_create
             return compile_create(self, request)
-        return super()._compile_create(request)
+        statements = super()._compile_create(request)
+        kind = request['resource_kind']
+        draft = request['draft']
+        options = draft.get('options') or {}
+        if kind == 'table':
+            qualified = self._new_object_name(self._identifier(draft['name']), options)
+            extra = []
+            for item in options.get('columns') or []:
+                if isinstance(item, Mapping) and item.get('comment') not in {None, ''}:
+                    if not isinstance(item['comment'], str):
+                        raise RelationalClientError('DuckDB column comment must be text')
+                    extra.append({
+                        'source': f'COMMENT ON COLUMN {qualified}.{self._quote(item["name"])} IS {self._literal(item["comment"])}',
+                        'parameters': (),
+                    })
+            if extra:
+                statements = list(statements) + extra
+        elif kind == 'column':
+            table = self._qualified(self._option_path(options, 'table'))
+            comment = options.get('comment')
+            if comment not in {None, ''}:
+                if not isinstance(comment, str):
+                    raise RelationalClientError('DuckDB column comment must be text')
+                statements = list(statements) + [{
+                    'source': f'COMMENT ON COLUMN {table}.{self._quote(draft["name"])} IS {self._literal(comment)}',
+                    'parameters': (),
+                }]
+        return statements
 
     def _normalize_draft(self, kind, operation, draft):
         if kind == 'secret' and operation in {'create', 'drop'}:
             return deepcopy(draft)
         result = super()._normalize_draft(kind, operation, draft)
+        if kind == 'column' and operation == 'create':
+            options = result.setdefault('options', {})
+            for key in ('collation', 'generated_expression', 'comment'):
+                if key in result:
+                    options[key] = result.pop(key)
         if kind == 'index' and operation == 'create':
             for key in ('terms', 'method', 'index_options'):
                 if key in result:
@@ -196,7 +532,29 @@ class DuckDBAdministration(RelationalAdministration):
         return result
 
     def plan(self, request):
-        result = super().plan(request)
+        import threading
+        if not hasattr(self, '_local'):
+            self._local = threading.local()
+        handle = request.get('_provider_session_handle')
+        clean_request = (
+            {k: v for k, v in request.items() if k != '_provider_session_handle'}
+            if handle is not None else request
+        )
+        self._local.planning_handle = handle
+        try:
+            result = super().plan(clean_request)
+        finally:
+            self._local.planning_handle = None
+        compiled = (result.get('provider_payload') or {}).get('compiled') or {}
+        if not any(
+            key in compiled
+            for key in ('duckdb_secret', 'duckdb_extension_update', 'duckdb_comment')
+        ):
+            from .destructive_identity import observe_for_plan
+            binding = observe_for_plan(request, self)
+            if binding is not None:
+                result['provider_payload']['duckdb_target_binding'] = binding
+                result['command_preview']['native_target_revalidation_required'] = True
         if (request.get('operation_id') == 'alter' and
                 request.get('resource_kind') == 'macro'):
             result['command_preview']['provider_constructed'] = False
@@ -258,12 +616,35 @@ class DuckDBAdministration(RelationalAdministration):
             return super().apply(client, request, connection=connection)
 
     def read_rows(self, client, request, connection=None):
+        from .grid_values import input_envelope_spec
         with self._borrow(client, connection):
             execution = request.get('_row_read_execution')
             if connection is not None and execution is not None:
                 with execution.cancellable_row_read(connection.interrupt):
-                    return super().read_rows(client, request, connection=connection)
-            return super().read_rows(client, request, connection=connection)
+                    page = super().read_rows(client, request, connection=connection)
+            else:
+                page = super().read_rows(client, request, connection=connection)
+            target = request.get('target_resource')
+            if isinstance(target, Mapping) and target.get('resource_kind') == 'table':
+                path = self._target_path(target)
+                owns = connection is None
+                obs_conn = connection or client._connect({'route': request.get('_provider_route')})
+                try:
+                    types_by_col, generated = self._inspect_table_write_schema(obs_conn, path)
+                finally:
+                    if owns:
+                        client._forget_and_close(obs_conn)
+                for col in page.get('columns', []):
+                    col_name = col['name']
+                    kind = types_by_col.get(col_name)
+                    if kind is not None:
+                        spec = input_envelope_spec(kind)
+                        col['input_envelope'] = spec
+                        if not spec['admitted'] or col_name in generated:
+                            col['editable'] = False
+                        if col_name in generated:
+                            col['generated'] = True
+            return page
 
     def _primary_key(self, connection, path):
         schema, table = self._schema_table(path, 'main')

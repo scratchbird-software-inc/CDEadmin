@@ -1,5 +1,6 @@
 """Bounded DuckDB DDN apply with one native transaction and rediscovery."""
 
+from copy import deepcopy
 import os
 
 from ..embedded_route import contained_database
@@ -46,7 +47,8 @@ def _table_columns_match(actual, desired, added_ids, owner_oid=None):
 def _model(connection, record, *, in_transaction):
     from .catalog import capture
     verify_macro_source = (not in_transaction and any(
-        item.get('operation') == 'create' and item.get('kind') == 'macro'
+        (item.get('operation') == 'create' and item.get('kind') == 'macro') or
+        item.get('verify_macro_source') is True
         for item in record.get('plan', {}).get('operations', [])))
     observed = capture(connection, include_system=False, _in_transaction=in_transaction,
         include_macro_source=verify_macro_source)
@@ -54,6 +56,237 @@ def _model(connection, record, *, in_transaction):
     return build_export(observed['resources'], endpoint_id=provenance['endpoint_id'],
         target_id=provenance['database_target_id'], generation=observed['generation'],
         include_system=False, refreshed=True, engine='duckdb', native_model=True)
+
+
+def _copy_self_fk_hierarchy(connection, spec):
+    """Copy staged rows into a table with self-referential FKs level-by-level."""
+    from ...workspace.duckdb_schema_plan import _quote
+    stage = spec['stage_qualified']
+    target = spec['target_qualified']
+    cols = ', '.join(_quote(c) for c in spec['base_columns'])
+    s_cols = ', '.join('s.' + _quote(c) for c in spec['base_columns'])
+    total = connection.execute(f'SELECT count(*) FROM {stage}').fetchone()[0]
+    if total == 0:
+        connection.execute(f'DROP TABLE {stage} RESTRICT')
+        return
+    # Build NOT EXISTS (row already in target) + all self-FKs satisfied in target or NULL
+    first_fk = spec['self_fks'][0]
+    pk_cols = first_fk['referenced_column_names']
+    pk_match = ' AND '.join(
+        f't0.{_quote(pk)} IS NOT DISTINCT FROM s.{_quote(pk)}'
+        for pk in pk_cols
+    )
+    fk_clauses = []
+    for i, fk in enumerate(spec['self_fks'], 1):
+        null_cond = ' OR '.join(f's.{_quote(c)} IS NULL' for c in fk['column_names'])
+        join_cond = ' AND '.join(
+            f'p{i}.{_quote(rc)} = s.{_quote(fc)}'
+            for fc, rc in zip(fk['column_names'], fk['referenced_column_names'])
+        )
+        fk_clauses.append(
+            f'(({null_cond}) OR EXISTS (SELECT 1 FROM {target} p{i} WHERE {join_cond}))'
+        )
+    where_sql = f'NOT EXISTS (SELECT 1 FROM {target} t0 WHERE {pk_match}) AND ' + ' AND '.join(fk_clauses)
+    inserted_total = 0
+    while inserted_total < total:
+        before_cnt = connection.execute(f'SELECT count(*) FROM {target}').fetchone()[0]
+        connection.execute(
+            f'INSERT INTO {target} ({cols}) SELECT {s_cols} FROM {stage} s WHERE {where_sql}'
+        )
+        after_cnt = connection.execute(f'SELECT count(*) FROM {target}').fetchone()[0]
+        delta = after_cnt - before_cnt
+        if delta <= 0:
+            raise ValueError('Self-referential foreign-key rows contain an unresolvable cycle or orphan')
+        inserted_total = after_cnt
+    connection.execute(f'DROP TABLE {stage} RESTRICT')
+
+
+def _execute_general_rebuild(connection, record, operation, result, rebuild_rows, inbound_rows, view_descriptors, macro_descriptors):
+    from ...workspace.duckdb_schema_plan import _quote
+    for vid in operation.get('preserved_view_ids', []):
+        vrow = record['baseline']['rows'][vid]
+        vtgt = '.'.join(_quote(p) for p in vrow['path'])
+        view_descriptors[vid] = (vtgt, connection.execute('DESCRIBE SELECT * FROM ' + vtgt).fetchall())
+    for mid, probes in operation.get('preserved_macro_probes', {}).items():
+        macro_descriptors[mid] = [(q, connection.execute(q).fetchall()) for q in probes]
+
+    old_rows = connection.execute('SELECT count(*) FROM ' + operation['target']).fetchone()[0]
+    for cid in operation.get('inbound_table_ids', []):
+        crow = record['baseline']['rows'][cid]
+        ctgt = '.'.join(_quote(p) for p in crow['path'])
+        inbound_rows[cid] = connection.execute('SELECT count(*) FROM ' + ctgt).fetchone()[0]
+
+    seq_before = dict(
+        connection.execute('SELECT sequence_oid, last_value FROM duckdb_sequences()').fetchall()
+    )
+
+    detach_checks = {s['copy_statement_index']: s['data_check'] for s in operation.get('detach_steps', [])}
+    restore_checks = {s['copy_statement_index']: s['data_check'] for s in operation.get('restore_steps', [])}
+    parent_copy_idx = operation.get('parent_stage_copy_index')
+    self_fk_idx = operation.get('self_fk_trigger_index')
+
+    for idx, stmt in enumerate(operation['statements']):
+        result['statement_dispatched'] = True
+        connection.execute(stmt)
+        if idx in detach_checks:
+            if connection.execute(detach_checks[idx]).fetchone()[0] != 0:
+                raise ValueError('Inbound child detach stage rows differ from original')
+        if idx == parent_copy_idx:
+            if connection.execute(operation['parent_stage_check']).fetchone()[0] != 0:
+                raise ValueError('General rebuild staging rows differ from original')
+        if self_fk_idx is not None and idx == self_fk_idx:
+            _copy_self_fk_hierarchy(connection, operation['self_fk_spec'])
+        if idx in restore_checks:
+            if connection.execute(restore_checks[idx]).fetchone()[0] != 0:
+                raise ValueError('Inbound child restore stage row count differs from detached table')
+
+    seq_after = dict(
+        connection.execute('SELECT sequence_oid, last_value FROM duckdb_sequences()').fetchall()
+    )
+    if seq_after != seq_before:
+        raise ValueError('Sequence generator state changed unexpectedly during table rebuild')
+
+    if operation.get('sequence_references'):
+        tpath = record['desired']['rows'][operation['resource_id']]['path']
+        dep_cnt = connection.execute(
+            "SELECT count(*) FROM duckdb_sequences() s "
+            "JOIN duckdb_dependencies() d ON d.objid = s.sequence_oid "
+            "WHERE d.deptype = 'n' AND d.refobjid = ("
+            "SELECT table_oid FROM duckdb_tables() WHERE database_name=? AND schema_name=? AND table_name=?)",
+            (tpath[0], tpath[1], tpath[2]),
+        ).fetchone()[0]
+        if dep_cnt < len(set(tuple(x) for x in operation['sequence_references'])):
+            raise ValueError('Rebuilt table is missing expected native sequence dependencies')
+
+    for vid in operation.get('preserved_view_ids', []):
+        vtgt, orig_proj = view_descriptors[vid]
+        if connection.execute('DESCRIBE SELECT * FROM ' + vtgt).fetchall() != orig_proj:
+            raise ValueError('Preserved view projection changed during general table rebuild')
+    for vid in operation.get('co_updated_view_ids', []):
+        vrow = record['desired']['rows'][vid]
+        vtgt = '.'.join(_quote(p) for p in vrow['path'])
+        view_descriptors[vid] = (vtgt, connection.execute('DESCRIBE SELECT * FROM ' + vtgt).fetchall())
+
+    for mid in operation.get('preserved_macro_probes', {}):
+        for q, orig_proj in macro_descriptors[mid]:
+            if connection.execute(q).fetchall() != orig_proj:
+                raise ValueError('Preserved macro projection changed during general table rebuild')
+    for mid, probes in operation.get('co_updated_macro_probes', {}).items():
+        macro_descriptors[mid] = [(q, connection.execute(q).fetchall()) for q in probes]
+
+    rebuild_rows[operation['resource_id']] = old_rows
+    if operation.get('acknowledged_lost_tags'):
+        result.setdefault('acknowledged_lost_tags', []).extend(operation['acknowledged_lost_tags'])
+
+
+def _verify_general_rebuild_rediscovery(connection, record, observed, operation, rebuild_rows, inbound_rows, view_descriptors, macro_descriptors):
+    from ...workspace.duckdb_schema_plan import _definition, _fk_parent_definition, _quote
+    from ...workspace.firebird_schema_plan import digest
+
+    current = observed['rows'].get(operation['resource_id'])
+    desired_table = record['desired']['rows'][operation['resource_id']]
+    if current is None or current['kind'] != 'table':
+        return False
+    if connection.execute('SELECT count(*) FROM ' + operation['target']).fetchone()[0] != rebuild_rows[operation['resource_id']]:
+        return False
+    if current['native'].get('catalog_metadata', {}).get('comment') != desired_table['native'].get('catalog_metadata', {}).get('comment'):
+        return False
+
+    # Verify columns (allowing derived type facts on converted or added columns)
+    relaxed_ids = set(operation.get('added_column_ids', [])) | {
+        c['resource_id'] for c in desired_table['native'].get('columns', [])
+        if c.get('name') in set(operation.get('converted_columns', []))
+    }
+    if not _table_columns_match(
+        current['native'].get('columns'),
+        desired_table['native'].get('columns'),
+        relaxed_ids,
+        current['native'].get('catalog_metadata', {}).get('oid'),
+    ):
+        return False
+
+    # Verify constraint types & columns (allowing DuckDB self-FK empty constraint_text quirk)
+    def norm_con(items):
+        out = []
+        for item in items:
+            ctype = item.get('constraint_type')
+            ctext = item.get('constraint_text') or ''
+            if ctype == 'FOREIGN KEY' and item.get('referenced_table') == current['name']:
+                ctext = '__self_fk__'
+            out.append((
+                ctype,
+                tuple(item.get('column_names') or ()),
+                item.get('referenced_table') or '',
+                tuple(item.get('referenced_column_names') or ()),
+                ctext if ctype != 'FOREIGN KEY' or ctext == '__self_fk__' else ctext,
+            ))
+        return sorted(out)
+
+    if norm_con(current['native'].get('constraints', [])) != norm_con(operation['postcondition']['constraints']):
+        return False
+
+    # Verify removed columns absent
+    for rem_col in operation.get('removed_column_ids', []):
+        if observed['rows'].get(rem_col) is not None:
+            return False
+
+    # Verify indexes (added/retained match desired, removed are absent)
+    removed_idx = set(operation.get('removed_index_ids', []))
+    for idx_id in operation.get('affected_index_ids', []):
+        found_idx = observed['rows'].get(idx_id)
+        if idx_id in removed_idx:
+            if found_idx is not None:
+                return False
+        else:
+            if found_idx is None:
+                return False
+            # Compare index ignoring lost tags if acknowledged
+            f_def = deepcopy(_definition(found_idx))
+            d_def = deepcopy(_definition(record['desired']['rows'][idx_id]))
+            f_def['catalog'].pop('tags', None)
+            d_def['catalog'].pop('tags', None)
+            if f_def != d_def:
+                return False
+
+    # Verify outbound FK parents unchanged
+    for pid, psha in operation.get('fk_parent_sha256', {}).items():
+        prow = observed['rows'].get(pid)
+        if prow is None or digest(_fk_parent_definition(prow)) != psha:
+            return False
+
+    # Verify inbound children row counts & restored definitions
+    for cid in operation.get('inbound_table_ids', []):
+        crow = observed['rows'].get(cid)
+        d_crow = record['desired']['rows'][cid]
+        if crow is None:
+            return False
+        ctgt = '.'.join(_quote(p) for p in crow['path'])
+        if connection.execute('SELECT count(*) FROM ' + ctgt).fetchone()[0] != inbound_rows[cid]:
+            return False
+        if len(crow['native'].get('columns', [])) != len(d_crow['native'].get('columns', [])):
+            return False
+        if {x['name'] for x in crow['native'].get('indexes', [])} != {x['name'] for x in d_crow['native'].get('indexes', [])}:
+            return False
+
+    # Verify views (preserved & co-updated)
+    for vid in operation.get('affected_view_ids', []):
+        vrow = observed['rows'].get(vid)
+        if vrow is None or vrow['native'].get('state', {}).get('bound') is not True:
+            return False
+        vtgt, proj = view_descriptors[vid]
+        if connection.execute('DESCRIBE SELECT * FROM ' + vtgt).fetchall() != proj:
+            return False
+
+    # Verify macros (preserved & co-updated)
+    for mid in operation.get('affected_macro_ids', []):
+        mrow = observed['rows'].get(mid)
+        if mrow is None:
+            return False
+        for q, proj in macro_descriptors[mid]:
+            if connection.execute(q).fetchall() != proj:
+                return False
+
+    return True
 
 
 def apply_review(provider, route, record):
@@ -90,7 +323,12 @@ def apply_review(provider, route, record):
         view_descriptors = {}
         macro_descriptors = {}
         for operation in fresh['operations']:
-            if operation['operation'] == 'rebuild':
+            if operation['operation'] == 'rebuild' and operation.get('general_rebuild') is True:
+                _execute_general_rebuild(
+                    connection, record, operation, result,
+                    rebuild_rows, inbound_rows, view_descriptors, macro_descriptors,
+                )
+            elif operation['operation'] == 'rebuild':
                 if (operation.get('affected_view_ids') or
                         operation.get('affected_macro_ids')):
                     from ...workspace.duckdb_schema_plan import _quote
@@ -348,6 +586,11 @@ def apply_review(provider, route, record):
                     verified = (current is not None and
                         current['kind'] == operation['kind'] and current['name'] == operation['name'] and
                         observed['rows'].get(operation['source_resource_id']) is None)
+                elif operation['operation'] == 'rebuild' and operation.get('general_rebuild') is True:
+                    verified = _verify_general_rebuild_rediscovery(
+                        connection, record, observed, operation,
+                        rebuild_rows, inbound_rows, view_descriptors, macro_descriptors,
+                    )
                 elif operation['operation'] == 'rebuild':
                     from ...workspace.duckdb_schema_plan import create_definition_tokens
                     baseline = record['baseline']['rows'][operation['resource_id']]
@@ -491,6 +734,37 @@ def apply_review(provider, route, record):
                                     operation['postcondition']['overloads'])
                             except ValueError:
                                 verified = False
+                        elif 'preserved_overloads' in operation['postcondition']:
+                            from ...workspace.duckdb_general_rebuild import (
+                                parse_macro_source_overloads,
+                            )
+                            from ...workspace.duckdb_schema_plan import _macro_overload_postcondition
+                            try:
+                                actual_src = parse_macro_source_overloads(current['native'].get('source_ddl'))
+                                expected_src = operation['postcondition']['preserved_overloads']
+                                desired_row = record['desired']['rows'][operation['resource_id']]
+                                def param_sig(ovs):
+                                    return sorted(
+                                        (
+                                            ov['kind'],
+                                            tuple(
+                                                (p['name'].casefold(), p.get('data_type'), p.get('default'))
+                                                for p in ov['parameters']
+                                            ),
+                                        )
+                                        for ov in ovs
+                                    )
+                                verified = (
+                                    param_sig(actual_src) == param_sig(expected_src) and
+                                    _macro_overload_postcondition(current) ==
+                                    _macro_overload_postcondition(desired_row)
+                                )
+                            except ValueError:
+                                verified = False
+                            if operation.get('acknowledged_lost_tags'):
+                                result.setdefault('acknowledged_lost_tags', []).extend(
+                                    operation['acknowledged_lost_tags']
+                                )
                         elif 'sequence_options' in operation['postcondition']:
                             metadata = current['native'].get('catalog_metadata', {})
                             verified = all(metadata.get(key) == value for key, value in

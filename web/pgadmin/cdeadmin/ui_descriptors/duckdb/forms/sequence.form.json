@@ -11,15 +11,10 @@
   "omitted_tabs": [
     {
       "tab": "Security",
-      "reason": "no users or privileges"
+      "reason": "DuckDB 1.5.2 has no database users, roles or SQL GRANT privileges."
     }
   ],
-  "gaps": [
-    {
-      "concept": "sequence.alter",
-      "reason": "only create/drop/comment; restart/increment changes need ALTER SEQUENCE"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -42,28 +37,32 @@
       "label": "Start value",
       "tab": "General",
       "control": "number",
-      "required": false
+      "required": false,
+      "record_key": "catalog_metadata.start_value"
     },
     {
       "field_id": "increment",
       "label": "Increment",
       "tab": "General",
       "control": "number",
-      "required": false
+      "required": false,
+      "record_key": "catalog_metadata.increment_by"
     },
     {
       "field_id": "minimum",
       "label": "Minimum",
       "tab": "General",
       "control": "number",
-      "required": false
+      "required": false,
+      "record_key": "catalog_metadata.min_value"
     },
     {
       "field_id": "maximum",
       "label": "Maximum",
       "tab": "General",
       "control": "number",
-      "required": false
+      "required": false,
+      "record_key": "catalog_metadata.max_value"
     },
     {
       "field_id": "cycle",
@@ -71,8 +70,9 @@
       "tab": "General",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "record_key": "catalog_metadata.cycle"
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: parent picker (schema). Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+  "notes": "DuckDB 1.5.2 supports CREATE/DROP SEQUENCE and COMMENT ON SEQUENCE; in-place parameter changes require reviewed DDN CREATE OR REPLACE SEQUENCE (which resets generator state), and ALTER SEQUENCE ... OWNED BY is non-durable across file reopen in DuckDB 1.5.2."
 }

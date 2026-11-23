@@ -8058,6 +8058,70 @@
       "reference": "SR-F-030577",
       "title": "SQLite runtime compile-option inspection form"
     },
+    "duckdb-form-schema": {
+      "reference": "SR-F-030580",
+      "title": "DuckDB schema create, drop and inspection form"
+    },
+    "duckdb-form-column": {
+      "reference": "SR-F-030581",
+      "title": "DuckDB column create, rename, comment and inspection form"
+    },
+    "duckdb-form-constraint": {
+      "reference": "SR-F-030582",
+      "title": "DuckDB table constraint inspection form"
+    },
+    "duckdb-form-function": {
+      "reference": "SR-F-030583",
+      "title": "DuckDB built-in and extension function overload inspection form"
+    },
+    "duckdb-form-secret": {
+      "reference": "SR-F-030584",
+      "title": "DuckDB secret create, drop and public metadata inspection form"
+    },
+    "duckdb-form-extension": {
+      "reference": "SR-F-030585",
+      "title": "DuckDB extension capability, install/load and update inspection form"
+    },
+    "duckdb-form-materialization": {
+      "reference": "SR-F-030586",
+      "title": "DuckDB semantic materialization CTAS creation form"
+    },
+    "duckdb-runtime-settings": {
+      "reference": "SR-F-030587",
+      "title": "DuckDB session and global runtime settings, attachments, foreign database copy and rich COPY workspace"
+    },
+    "duckdb-retained-schema": {
+      "reference": "SR-F-030588",
+      "title": "DuckDB original-session DDN schema observe, preview, review, apply and receipts workspace"
+    },
+    "duckdb-shell": {
+      "reference": "SR-F-030589",
+      "title": "DuckDB supervised directive and SQL batch runner and CLI provenance workspace"
+    },
+    "duckdb-sql-dump": {
+      "reference": "SR-F-030590",
+      "title": "DuckDB single-stream logical SQL dump export and transactional reload workspace"
+    },
+    "duckdb-continuity-storage": {
+      "reference": "SR-F-030591",
+      "title": "DuckDB physical continuity, WAL recovery drills, storage header inspection and storage migration workspace"
+    },
+    "duckdb-sql-session-dialog": {
+      "reference": "SR-F-030592",
+      "title": "DuckDB SQL editor session settings, catalog attachments, statement grammar and prepare diagnostics"
+    },
+    "duckdb-sql-explain-dialog": {
+      "reference": "SR-F-030593",
+      "title": "DuckDB EXPLAIN, EXPLAIN ANALYZE and prepared parameter/result metadata inspector"
+    },
+    "duckdb-data-row-sql": {
+      "reference": "SR-F-030594",
+      "title": "DuckDB data grid row SQL, ON CONFLICT upsert, COPY snippet and nested literal helper"
+    },
+    "duckdb-data-cell-inspector": {
+      "reference": "SR-F-030595",
+      "title": "DuckDB data grid Arrow 19-family, HUGEINT, DECIMAL, BLOB and nested container cell inspector"
+    },
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"

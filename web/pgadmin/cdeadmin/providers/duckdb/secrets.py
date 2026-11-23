@@ -17,10 +17,10 @@ def form(field):
         field('storage', 'Native storage', 'text', False, 'Empty uses DuckDB\'s selected default storage.'),
         field('on_conflict', 'Existing secret', 'select', True, default='ERROR',
               options=('ERROR', 'IF NOT EXISTS', 'OR REPLACE')),
-        field('properties', 'Secret properties', 'json', False,
+        field('properties', 'Secret properties', 'keyvalue', False,
               'JSON constants, including provider, scope lists and header maps. Values stay private.',
               default={}, sensitive=True),
-        field('property_expressions', 'Native property expressions', 'json', False,
+        field('property_expressions', 'Native property expressions', 'keyvalue', False,
               'Explicit property-to-SQL-expression map. Parsed without execution; evaluated by DuckDB only at apply.',
               default={}, sensitive=True),
     ]}

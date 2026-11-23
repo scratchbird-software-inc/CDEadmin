@@ -100,12 +100,12 @@
       "sha256": "c5fe127e818af416b37c7cd36586acced0c0a753ccac57a5739fe72119a9bd45"
     },
     {
-      "artifact": "DUCKDB_PROVIDER_LIVE_GATE.json",
+      "artifact": "duckdb-qualification/metrics-observations-live-1.5.2.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-live-observation-gate",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "da282965b30eded1673b08107ff896f19258252378b02edd14dc0c030e14a8c9"
+      "sha256": "c202db562159ec8ebbb8309be29483780efbf34d0f55a809973b25c34b825ccb"
     }
   ],
   "contract_id": "duckdb.metrics.1.5.2.v1",

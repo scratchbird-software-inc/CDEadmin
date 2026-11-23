@@ -1,0 +1,65 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "schema"
+  ],
+  "form_reference": "SR-F-030580",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "DuckDB 1.5.2 has no schema ownership or SQL GRANT privileges."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Schema name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Catalog",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "attached-database",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "help": "Leave empty for the primary catalog, or choose an attached catalog."
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "catalog_metadata.comment"
+    },
+    {
+      "field_id": "ddl",
+      "label": "Schema DDL",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "ddl"
+    }
+  ],
+  "notes": "DuckDB 1.5.2 schema create, drop and inspection form."
+}

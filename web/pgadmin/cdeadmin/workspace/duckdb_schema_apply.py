@@ -41,17 +41,34 @@ class DuckDBSchemaApplications(SchemaApplications):
             elif operation['baseline_sha256'] != digest(_definition(before)):
                 raise SchemaApplyError('Native baseline differs from the reviewed plan')
             if operation['operation'] == 'rebuild':
+                is_gen = operation.get('general_rebuild') is True
+                for seq_id in operation.get('referenced_sequence_ids', []):
+                    if seq_id in baseline['rows']:
+                        baseline_ids.add(seq_id)
+                    if seq_id in desired['rows']:
+                        desired_ids.add(seq_id)
                 for inbound_id in operation.get('affected_inbound_ids', []):
                     old_inbound = baseline['rows'].get(inbound_id)
                     new_inbound = desired['rows'].get(inbound_id)
-                    if (old_inbound is None or new_inbound is None or
-                            operation['baseline_inbound_sha256'].get(inbound_id) !=
-                                digest(_definition(old_inbound)) or
-                            operation['desired_inbound_sha256'].get(inbound_id) !=
-                                digest(_definition(new_inbound))):
-                        raise SchemaApplyError('Inbound child differs from reviewed plan')
-                    baseline_ids.add(inbound_id)
-                    desired_ids.add(inbound_id)
+                    if is_gen:
+                        if (operation['baseline_inbound_sha256'].get(inbound_id) !=
+                                (digest(_definition(old_inbound)) if old_inbound else None) or
+                                operation['desired_inbound_sha256'].get(inbound_id) !=
+                                (digest(_definition(new_inbound)) if new_inbound else None)):
+                            raise SchemaApplyError('Inbound child differs from reviewed plan')
+                        if old_inbound is not None:
+                            baseline_ids.add(inbound_id)
+                        if new_inbound is not None:
+                            desired_ids.add(inbound_id)
+                    else:
+                        if (old_inbound is None or new_inbound is None or
+                                operation['baseline_inbound_sha256'].get(inbound_id) !=
+                                    digest(_definition(old_inbound)) or
+                                operation['desired_inbound_sha256'].get(inbound_id) !=
+                                    digest(_definition(new_inbound))):
+                            raise SchemaApplyError('Inbound child differs from reviewed plan')
+                        baseline_ids.add(inbound_id)
+                        desired_ids.add(inbound_id)
                 for macro_id in operation.get('affected_macro_ids', []):
                     old_macro = baseline['rows'].get(macro_id)
                     new_macro = desired['rows'].get(macro_id)
@@ -77,14 +94,25 @@ class DuckDBSchemaApplications(SchemaApplications):
                 for column_id in operation.get('affected_view_column_ids', []):
                     old_column = baseline['rows'].get(column_id)
                     new_column = desired['rows'].get(column_id)
-                    if (old_column is None or new_column is None or
-                            operation['baseline_view_column_sha256'].get(column_id) !=
-                                digest(_definition(old_column)) or
-                            operation['desired_view_column_sha256'].get(column_id) !=
-                                digest(_definition(new_column))):
-                        raise SchemaApplyError('Preserved view column differs from reviewed plan')
-                    baseline_ids.add(column_id)
-                    desired_ids.add(column_id)
+                    if is_gen:
+                        if (operation['baseline_view_column_sha256'].get(column_id) !=
+                                (digest(_definition(old_column)) if old_column else None) or
+                                operation['desired_view_column_sha256'].get(column_id) !=
+                                (digest(_definition(new_column)) if new_column else None)):
+                            raise SchemaApplyError('Preserved view column differs from reviewed plan')
+                        if old_column is not None:
+                            baseline_ids.add(column_id)
+                        if new_column is not None:
+                            desired_ids.add(column_id)
+                    else:
+                        if (old_column is None or new_column is None or
+                                operation['baseline_view_column_sha256'].get(column_id) !=
+                                    digest(_definition(old_column)) or
+                                operation['desired_view_column_sha256'].get(column_id) !=
+                                    digest(_definition(new_column))):
+                            raise SchemaApplyError('Preserved view column differs from reviewed plan')
+                        baseline_ids.add(column_id)
+                        desired_ids.add(column_id)
                 for column_id in operation.get('affected_column_ids', []):
                     old_column = baseline['rows'].get(column_id)
                     new_column = desired['rows'].get(column_id)
@@ -117,14 +145,25 @@ class DuckDBSchemaApplications(SchemaApplications):
                 for index_id in operation['affected_index_ids']:
                     old_index = baseline['rows'].get(index_id)
                     new_index = desired['rows'].get(index_id)
-                    if (old_index is None or new_index is None or
-                            operation['baseline_index_sha256'].get(index_id) !=
-                                digest(_definition(old_index)) or
-                            operation['desired_index_sha256'].get(index_id) !=
-                                digest(_definition(new_index))):
-                        raise SchemaApplyError('Constraint rebuild index facts differ from reviewed plan')
-                    baseline_ids.add(index_id)
-                    desired_ids.add(index_id)
+                    if is_gen:
+                        if (operation['baseline_index_sha256'].get(index_id) !=
+                                (digest(_definition(old_index)) if old_index else None) or
+                                operation['desired_index_sha256'].get(index_id) !=
+                                (digest(_definition(new_index)) if new_index else None)):
+                            raise SchemaApplyError('Constraint rebuild index facts differ from reviewed plan')
+                        if old_index is not None:
+                            baseline_ids.add(index_id)
+                        if new_index is not None:
+                            desired_ids.add(index_id)
+                    else:
+                        if (old_index is None or new_index is None or
+                                operation['baseline_index_sha256'].get(index_id) !=
+                                    digest(_definition(old_index)) or
+                                operation['desired_index_sha256'].get(index_id) !=
+                                    digest(_definition(new_index))):
+                            raise SchemaApplyError('Constraint rebuild index facts differ from reviewed plan')
+                        baseline_ids.add(index_id)
+                        desired_ids.add(index_id)
                 for parent_id, parent_sha in operation.get('fk_parent_sha256', {}).items():
                     old_parent = baseline['rows'].get(parent_id)
                     new_parent = desired['rows'].get(parent_id)

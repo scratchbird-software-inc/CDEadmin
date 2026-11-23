@@ -4084,3 +4084,71 @@ SQLite remaining 26-item backend, UI & multi-runtime qualification completion
   SQLite Jest suites. Persistent ScratchBird monitoring history (``SQ-OWN-01``)
   remains ``owner_deferred`` and was not run, while native Windows/macOS and
   human UI acceptance (``SQ-OWN-02``) remain ``external_acceptance_pending``.
+
+DuckDB remaining 34-item backend, DDN, continuity/storage, UI & 1.5.2 qualification completion
+----------------------------------------------------------------------------------------------
+
+* **Race-safe destructive target identity guard, lossless Arrow row/write codecs &
+  contextual nested SQL completion** (``DU-AUD-01``, ``DU-AUD-02``,
+  ``DU-AUD-42``, ``DU-AUD-43``): implemented ``destructive_identity.py`` binding
+  ``(st_dev, st_ino)``, ``(database_name, database_oid)``, ``(schema_name,
+  schema_oid)``, object OIDs, and SHA-256 projection digests at plan time and
+  revalidating before dispatch across ``database``, ``schema``, ``table``,
+  ``view``, ``column``, ``constraint``, ``index``, ``sequence``, ``type``, and
+  ``macro``; expanded ``grid_values.py``, ``values.py``, and
+  ``administration.py`` so editable row pages and DML writes preserve exact
+  ``TIMESTAMP_NS`` nanoseconds, 128-bit ``HUGEINT``/``UHUGEINT``, ``DECIMAL``,
+  ``BLOB``/``BIT``, ``TIME_TZ``, ``INTERVAL``, ``LIST``/``ARRAY``, ``STRUCT``,
+  ``MAP``, ``UNION``, and ``VARIANT`` values alongside ``input_envelope``
+  metadata (failing closed on opaque types); and expanded
+  ``editor_type_rules.py``, ``duckdbNestedTypes.js``, and ``nativeScopes.js``
+  for contextual completion across ``ORDER BY`` aggregates, ``arg_max``/``arg_min``,
+  scalar container/map/struct/union functions, ``coalesce``/``ifnull``/``nullif``,
+  ``CAST``/``TRY_CAST``/``::``, and scalar subqueries.
+* **Session/global runtime settings, rich native COPY, foreign attachments/copies,
+  extension capabilities & full 12-metric / 15-endpoint collector**
+  (``DU-AUD-03``, ``DU-AUD-05``, ``DU-AUD-06``, ``DU-AUD-07``, ``DU-AUD-08``,
+  ``DU-AUD-40``): implemented ``runtime_settings.py`` for ``duckdb_settings()``
+  ``SESSION``/``GLOBAL``/``RESET`` workflows with security guardrails; expanded
+  ``duckdb_copy.py`` for ``CSV``/``PARQUET``/``JSON``, ``reader_ctas``,
+  ``reader_insert``, and Hive-partitioned output; expanded ``attachments.py``
+  and ``database_copy.py`` for ``sqlite``/``postgres``/``mysql``/``httpfs``
+  source discovery, secret-authorized foreign attachment, and explicit
+  ``conversion_preview`` (``cutover_implied=False``); implemented
+  ``extension_capabilities.py``; and expanded ``monitoring.py`` and
+  ``duckdb_monitoring_host.py`` across all ``12`` authoritative metrics and all
+  ``58`` declared observations across ``15`` endpoints on dedicated policy
+  connections.
+* **General DDN table rebuilds, macro default preservation, retained-session DDN,
+  supervised shell runner, single-stream SQL dump, physical continuity & storage
+  lifecycle** (``DU-AUD-09`` .. ``DU-AUD-21``): implemented
+  ``duckdb_general_rebuild.py`` supporting combined column type conversions,
+  renames, drops, additions, reordering, explicit ``NOT NULL`` retention,
+  topological generated-on-generated chains, hierarchical self-referential FKs,
+  multi-hop inbound child FK DAGs, variadic and same-arity typed macro probing,
+  expression/UNIQUE/commented index replay, ``tag_loss_acknowledged`` gates,
+  compound sequence defaults without advancing ``last_value``, and
+  ``replace-macro-preserve-defaults`` via ``source_ddl`` parsing; implemented
+  ``duckdb_retained_schema.py``, ``duckdb_retained_applications.py``, and
+  ``duckdb_retained_service.py`` for original-session TEMP/attached/uncommitted
+  DDN observe/preview/review/apply without issuing ``COMMIT`` or ``ROLLBACK``;
+  and implemented ``shell_tool.py``, ``sql_dump.py``, ``physical_continuity.py``,
+  ``storage_lifecycle.py``, and ``duckdb_operations_hub.py`` covering provenance
+  verification, supervised dot-directives, single-stream dependency-ordered
+  logical SQL dump & atomic reload, ``.duckdb`` + ``.wal`` quiesced snapshots &
+  WAL recovery drills, inode-bound cutovers, binary ``MainHeader``/``DatabaseHeader``
+  inspection, non-rewriting reopen probes, and reviewed storage-version
+  migrations.
+* **Object-form parity, full 16-kind / 15-form UI surfacing & live DuckDB 1.5.2
+  qualification reconciliation** (``DU-AUD-27`` .. ``DU-AUD-37``): resolved all
+  ``ui-gap-decisions.json`` items, added ``7`` complete ``engine_object`` forms
+  (``SR-F-030580``..``SR-F-030586``), surfaced ``5`` dedicated ``duckdb_admin``
+  workspaces (``SR-F-030587``..``SR-F-030591``) and ``4`` SQL/Data surface
+  dialogs (``SR-F-030592``..``SR-F-030595``) with ``json_controls_in_provider_forms``
+  reduced to ``299`` and zero lint ceiling increases, and reconciled all proof
+  records in ``duckdb_dialect_1_5_2.json``, ``duckdb_metrics_1_5_2.json``, and
+  ``provider_manifest.json`` against fresh current-source live receipts on
+  DuckDB ``1.5.2`` (``8a5851971f``). Persistent ScratchBird monitoring history
+  (``DU-AUD-38``) remains ``owner_deferred`` and was not run, while human UI
+  signoff and Windows/macOS native qualification (``DU-AUD-39``) remain
+  ``external_acceptance_pending``.

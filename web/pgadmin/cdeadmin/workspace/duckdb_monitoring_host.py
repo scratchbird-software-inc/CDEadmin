@@ -112,6 +112,20 @@ class DuckDBMonitoringHost(MySQLMonitoringHost):
     def snapshot(self, owner, sid, target):
         result = super().snapshot(owner, sid, target)
         if target is not None:
+            latest = (result.get('samples') or [None])[-1]
+            result['display_bindings'] = {
+                'contract_id': 'duckdb.metrics.1.5.2.v1',
+                'display_only': True,
+                'borrowed_sql_session': False,
+                'fresh_at': latest.get('ended_at') if isinstance(latest, dict) else None,
+                'collector_epoch': latest.get('source_epoch') if isinstance(latest, dict) else None,
+                'metrics': dict(latest.get('metrics') or {}) if isinstance(latest, dict) else {},
+                'group_statuses': {
+                    gname: gval.get('status', 'unavailable')
+                    for gname, gval in (latest.get('groups') or {}).items()
+                    if isinstance(gval, dict)
+                } if isinstance(latest, dict) else {},
+            }
             return result
         registered = result.get('navigation', {}).get('databases', [])
         if len(registered) > 256:

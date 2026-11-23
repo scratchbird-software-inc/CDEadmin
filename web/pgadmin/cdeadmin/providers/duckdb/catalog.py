@@ -74,7 +74,7 @@ def _capture_macro_source(connection, resources, account):
             scratch = os.path.join(root, 'schema.duckdb')
             exported = os.path.join(root, 'export')
             connection.execute('ATTACH ' + literal(scratch) + ' AS ' +
-                quote(alias) + ' (READ_WRITE)')
+                quote(alias) + " (READ_WRITE, STORAGE_VERSION 'latest')")
             connection.execute('COPY FROM DATABASE ' + quote(database) +
                 ' TO ' + quote(alias) + ' (SCHEMA)')
             connection.execute('USE ' + quote(alias))

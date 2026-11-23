@@ -64,6 +64,26 @@ def contained_database(route):
     return database_path
 
 
+def resolve_contained_path(filesystem_root: str, candidate_path: str, *, must_exist: bool = False) -> str:
+    """Resolve a relative or absolute path strictly inside ``filesystem_root``."""
+    if not isinstance(filesystem_root, str) or not filesystem_root.strip() or not os.path.isabs(filesystem_root):
+        raise ValueError('Approved absolute filesystem_root is required')
+    if not isinstance(candidate_path, str) or not candidate_path.strip() or '\x00' in candidate_path:
+        raise ValueError('Path must be non-empty text without NUL')
+    root_real = os.path.realpath(filesystem_root)
+    joined = candidate_path if os.path.isabs(candidate_path) else os.path.join(root_real, candidate_path)
+    resolved = os.path.realpath(joined)
+    try:
+        contained = os.path.commonpath((root_real, resolved)) == root_real
+    except ValueError:
+        contained = False
+    if not contained:
+        raise ValueError('Path escapes the approved filesystem_root')
+    if must_exist and not os.path.exists(resolved):
+        raise ValueError(f'Contained path does not exist: {candidate_path}')
+    return resolved
+
+
 def duckdb_arguments(route):
     """Return only approved DuckDB connector arguments."""
     result = {'database': contained_database(route)}
@@ -75,18 +95,8 @@ def duckdb_arguments(route):
         result['read_only'] = route['read_only']
     config = route.get('config')
     if config is not None:
-        if not isinstance(config, Mapping):
-            raise RelationalClientError('DuckDB config must be an object')
-        if not all(
-            isinstance(key, str) and key.strip() and
-            isinstance(value, (str, int, float, bool)) and
-            value is not None
-            for key, value in config.items()
-        ):
-            raise RelationalClientError(
-                'DuckDB config must contain named scalar options'
-            )
-        result['config'] = dict(config)
+        from .duckdb.runtime_settings import validate_open_time_config
+        result['config'] = validate_open_time_config(route, config)
     return result
 
 

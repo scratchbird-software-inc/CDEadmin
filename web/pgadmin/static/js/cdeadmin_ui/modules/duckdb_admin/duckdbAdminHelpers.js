@@ -1,0 +1,60 @@
+/////////////////////////////////////////////////////////////
+//
+// CDEadmin - Multi-engine Database Administration
+//
+// Copyright (C) 2013 - 2026, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////
+
+import PropTypes from 'prop-types';
+import gettext from 'sources/gettext';
+import {Panel, Stack} from '../../primitives/Layout';
+
+export function createDuckdbWorkspaceCaller(api, endpointUrl, databaseTargetId) {
+  return async ({action, request = {}, sessionId = null, topLevel = {}}) => {
+    const mergedRequest =
+      databaseTargetId && !sessionId
+        ? {database_target_id: databaseTargetId, ...request}
+        : request;
+    const payload = {
+      action,
+      ...(databaseTargetId ? {database_target_id: databaseTargetId} : {}),
+      ...(sessionId ? {session_id: sessionId, language_profile: 'duckdb-sql'} : {}),
+      ...topLevel,
+      request: mergedRequest,
+    };
+    const response = await api.post(endpointUrl, payload);
+    const env = response?.data;
+    if (env && env.success === 0) {
+      throw new Error(env.errormsg || gettext('DuckDB workspace request failed.'));
+    }
+    return env?.data ?? env;
+  };
+}
+
+export function DuckdbSectionCard({title, actions = null, children}) {
+  return (
+    <Panel style={{padding: 12}}>
+      <Stack gap="standard">
+        {(title || actions) && (
+          <Stack
+            direction="row"
+            gap="compact"
+            style={{justifyContent: 'space-between', alignItems: 'center'}}
+          >
+            {title ? <strong>{title}</strong> : <span />}
+            {actions}
+          </Stack>
+        )}
+        {children}
+      </Stack>
+    </Panel>
+  );
+}
+
+DuckdbSectionCard.propTypes = {
+  title: PropTypes.node,
+  actions: PropTypes.node,
+  children: PropTypes.node,
+};

@@ -79,6 +79,10 @@ import {
   SqlSqliteSessionDialog,
 } from './SqlSqliteDiagnostics';
 import {
+  SqlDuckdbExplainDialog,
+  SqlDuckdbSessionDialog,
+} from './SqlDuckdbDiagnostics';
+import {
   defaultLayoutState,
   orderedColumns,
 } from './RecordForm';
@@ -100,6 +104,7 @@ const MYSQL_SURFACE_KEYS = new Set(['mysql', 'mysql-native', 'mysql-sql']);
 const MARIADB_SURFACE_KEYS = new Set(['mariadb', 'mariadb-native', 'mariadb-sql']);
 const POSTGRES_SURFACE_KEYS = new Set(['postgresql', 'postgresql-native', 'postgresql-sql']);
 const SQLITE_SURFACE_KEYS = new Set(['sqlite', 'sqlite-native', 'sqlite-sql']);
+const DUCKDB_SURFACE_KEYS = new Set(['duckdb', 'duckdb-native', 'duckdb-sql']);
 
 export const SQL_SURFACE_VIEWS = Object.freeze({
   SQL: 'sql',
@@ -409,6 +414,8 @@ export default function SqlEditorSurface({
   const [postgresAnalyzeConsentOpen, setPostgresAnalyzeConsentOpen] = useState(false);
   const [sqliteSessionOpen, setSqliteSessionOpen] = useState(false);
   const [sqliteExplainOpen, setSqliteExplainOpen] = useState(false);
+  const [duckdbSessionOpen, setDuckdbSessionOpen] = useState(false);
+  const [duckdbExplainOpen, setDuckdbExplainOpen] = useState(false);
   const [sessionToolsOpen, setSessionToolsOpen] = useState(Boolean(initialSessionToolsTab));
   const [sessionToolsTab, setSessionToolsTab] = useState(initialSessionToolsTab || 'eds_pool');
   useEffect(() => {
@@ -475,6 +482,7 @@ export default function SqlEditorSurface({
   const isMariaDB = MARIADB_SURFACE_KEYS.has(languageProfile) || MARIADB_SURFACE_KEYS.has(engineId);
   const isPostgres = POSTGRES_SURFACE_KEYS.has(languageProfile) || POSTGRES_SURFACE_KEYS.has(engineId);
   const isSQLite = SQLITE_SURFACE_KEYS.has(languageProfile) || SQLITE_SURFACE_KEYS.has(engineId);
+  const isDuckDB = DUCKDB_SURFACE_KEYS.has(languageProfile) || DUCKDB_SURFACE_KEYS.has(engineId);
   const sqlEditorConfig = useMemo(() => sqlLanguageConfig(languageOptions, activeLanguage?.editor, clientSqlDialect, resources),
     [languageOptions, activeLanguage?.editor, clientSqlDialect, resources]);
 
@@ -3994,6 +4002,21 @@ export default function SqlEditorSurface({
               callback: () => setSqliteSessionOpen(true),
             },
           ] : []),
+          ...(isDuckDB ? [
+            {
+              id: `${pfx}.m.du_explain`,
+              label: gettext('Run DuckDB EXPLAIN / EXPLAIN ANALYZE Plan Inspector…'),
+              index: 36,
+              disabled: executing,
+              callback: () => setDuckdbExplainOpen(true),
+            },
+            {
+              id: `${pfx}.m.du_session_diag`,
+              label: gettext('DuckDB Session Settings, Catalog Attachments, PREPARE & Grammar…'),
+              index: 37,
+              callback: () => setDuckdbSessionOpen(true),
+            },
+          ] : []),
           {
             id: `${pfx}.m.hist_sensitive`,
             label: gettext('Suppress Sensitive SQL from Persistent History'),
@@ -5668,6 +5691,35 @@ export default function SqlEditorSurface({
             onClose={() => setSqliteExplainOpen(false)}
             onRunExplain={(explainSql) => {
               setSqliteExplainOpen(false);
+              setSqlText(explainSql);
+              runSql('statement', false);
+            }}
+          />
+        </>
+      )}
+      {isDuckDB && (
+        <>
+          <SqlDuckdbSessionDialog
+            open={duckdbSessionOpen}
+            transaction={hostData?.transaction || null}
+            editorSource={sqlText}
+            sessionId={hostData?.session_id || null}
+            databaseTargetId={databaseTargetId}
+            ensureSession={ensureSurfaceSession}
+            callHost={callHost}
+            post={post}
+            onInsertSql={(snippet) => {
+              setSqlText((prev) => (prev ? `${prev}\n${snippet}` : snippet));
+              setDuckdbSessionOpen(false);
+            }}
+            onClose={() => setDuckdbSessionOpen(false)}
+          />
+          <SqlDuckdbExplainDialog
+            open={duckdbExplainOpen}
+            editorSource={sqlText}
+            onClose={() => setDuckdbExplainOpen(false)}
+            onRunExplain={(explainSql) => {
+              setDuckdbExplainOpen(false);
               setSqlText(explainSql);
               runSql('statement', false);
             }}

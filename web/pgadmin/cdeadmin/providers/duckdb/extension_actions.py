@@ -170,7 +170,7 @@ def action(client,handle,route,request, *, authorize_secret=None):
     if not isinstance(request,dict):raise ValueError('Select a native extension workflow')
     operation=request.get('operation')
     allowed={'operation','draft'} if operation=='review' else {'operation','review_id','review_digest','confirmation','confirmed'} if operation=='apply' else {'operation','review_id'} if operation=='receipt' else {'operation'}
-    if operation not in {'inventory','review','apply','receipt'} or set(request)-allowed:raise ValueError('Unknown native extension request')
+    if operation not in {'inventory','capabilities','review','apply','receipt'} or set(request)-allowed:raise ValueError('Unknown native extension request')
     session=client._attachment_contexts.get(id(handle))
     if not session or session['route']!=route:raise ValueError('The original native extension session or registration changed')
     scope=session['session_scope_id'];reviews=client._extension_reviews;now=time.monotonic()
@@ -199,7 +199,12 @@ def action(client,handle,route,request, *, authorize_secret=None):
                 compiled['installed_file_identity']=file_identity({**route,'filesystem_root':os.path.dirname(path)},path)
         compiled['source_access'] = source_access(handle, compiled, before, observed_environment, authorize_secret)
         return compiled
-    if operation=='inventory':return {'extensions':before,'context':observed_environment,'session_scope_id':scope,'caller_transaction_decision_requested':False}
+    if operation=='capabilities':
+        from .extension_capabilities import discover_capabilities
+        return {**discover_capabilities(handle, before),'context':observed_environment,'session_scope_id':scope,'caller_transaction_decision_requested':False}
+    if operation=='inventory':
+        from .extension_capabilities import discover_capabilities
+        return {'extensions':before,'capabilities':discover_capabilities(handle, before),'context':observed_environment,'session_scope_id':scope,'caller_transaction_decision_requested':False}
     if operation=='review':
         active={value['session_scope_id'] for value in client._attachment_contexts.values()}
         for key in list(reviews):

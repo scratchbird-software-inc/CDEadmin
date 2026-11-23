@@ -1,0 +1,88 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "function"
+  ],
+  "form_reference": "SR-F-030583",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "DuckDB 1.5.2 built-in and extension functions have no SQL GRANT or DEFINER security attributes."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Function name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "readonly": true
+    },
+    {
+      "field_id": "function_type",
+      "label": "Function category",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.function_type",
+      "initial_value_path": [
+        "native",
+        "catalog_metadata",
+        "function_type"
+      ]
+    },
+    {
+      "field_id": "overload_count",
+      "label": "Overload count",
+      "tab": "General",
+      "control": "number",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "overload_count"
+    },
+    {
+      "field_id": "return_type",
+      "label": "Return type",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.return_type"
+    },
+    {
+      "field_id": "description",
+      "label": "Description",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.description"
+    },
+    {
+      "field_id": "stability",
+      "label": "Stability",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.stability"
+    },
+    {
+      "field_id": "has_side_effects",
+      "label": "Has side effects",
+      "tab": "Engine",
+      "control": "boolean",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.has_side_effects"
+    }
+  ],
+  "notes": "DuckDB 1.5.2 built-in and extension function overload inspection form."
+}

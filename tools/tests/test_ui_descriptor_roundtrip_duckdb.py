@@ -113,3 +113,135 @@ def test_database_form_creates_a_database_file(live):
     probe = duckdb.connect(str(child))
     assert probe.execute('select 1').fetchone() == (1,)
     probe.close()
+
+    typed_draft = backend_draft(form, {
+        'name': 'typed_child',
+        'config_threads': 2,
+        'config_default_order': 'DESC',
+        'config_preserve_insertion_order': 'true',
+    })
+    assert typed_draft['config'] == {
+        'threads': 2,
+        'default_order': 'DESC',
+        'preserve_insertion_order': 'true',
+    }
+    typed_req = {
+        'resource_kind': 'database', 'operation_id': 'create',
+        'target_resource': None, '_provider_route': route, 'draft': typed_draft,
+    }
+    assert ADMINISTRATION.validate(typed_req)['errors'] == []
+    assert ADMINISTRATION.apply(client, ADMINISTRATION.plan(typed_req))['accepted']
+    assert (Path(route['filesystem_root']) / 'typed_child.duckdb').exists()
+
+
+def test_column_facets_and_engine_object_forms(live):
+    path, route, client, connection = live
+    schema_form = resolved_form('duckdb', 'engine_object:schema')
+    run(client, route, 'schema', 'create', backend_draft(schema_form, {'name': 'analytics'}))
+    schema_res = resource(connection, 'schema', 'analytics')
+    assert schema_res['display_name'] == 'analytics'
+
+    table_form = resolved_form('duckdb', 'table')
+    rich_draft = backend_draft(table_form, {
+        'name': 'customers',
+        'parent': 'analytics',
+        'columns': [
+            {'name': 'id', 'type': 'INTEGER', 'nullable': False, 'primary_key': True},
+            {'name': 'handle', 'type': 'VARCHAR', 'collation': 'NOCASE', 'nullable': False, 'comment': 'Case-insensitive handle'},
+            {'name': 'handle_upper', 'type': 'VARCHAR', 'generated_expression': 'upper(handle)'},
+        ],
+        'primary_key': [], 'unique_constraints': [], 'foreign_keys': [], 'check_constraints': [],
+    })
+    req = {
+        'resource_kind': 'table', 'operation_id': 'create',
+        'target_resource': None, '_provider_route': route, 'draft': rich_draft,
+    }
+    assert ADMINISTRATION.validate(req)['errors'] == []
+    planned = ADMINISTRATION.plan(req)
+    assert len(planned['command_preview']['statements']) == 2
+    assert 'COLLATE NOCASE' in planned['command_preview']['statements'][0]['source']
+    assert 'GENERATED ALWAYS AS (upper(handle))' in planned['command_preview']['statements'][0]['source']
+    assert 'COMMENT ON COLUMN' in planned['command_preview']['statements'][1]['source']
+    assert ADMINISTRATION.apply(client, planned)['accepted']
+
+    connection.execute("INSERT INTO analytics.customers (id, handle) VALUES (1, 'alice')")
+    assert connection.execute("SELECT handle = 'ALICE', handle_upper FROM analytics.customers").fetchone() == (True, 'ALICE')
+    col_comment = connection.execute(
+        "SELECT comment FROM duckdb_columns() WHERE schema_name='analytics' AND table_name='customers' AND column_name='handle'"
+    ).fetchone()[0]
+    assert col_comment == 'Case-insensitive handle'
+
+    invalid_gen = backend_draft(table_form, {
+        'name': 'bad_gen',
+        'columns': [{'name': 'g', 'type': 'VARCHAR', 'default': "'x'", 'generated_expression': "'x'"}],
+        'primary_key': [], 'unique_constraints': [], 'foreign_keys': [], 'check_constraints': [],
+    })
+    assert ADMINISTRATION.validate({
+        'resource_kind': 'table', 'operation_id': 'create',
+        'target_resource': None, '_provider_route': route, 'draft': invalid_gen,
+    })['errors'] != []
+
+    col_form = resolved_form('duckdb', 'engine_object:column')
+    col_draft = backend_draft(col_form, {
+        'table': 'analytics.customers',
+        'name': 'region',
+        'data_type': 'VARCHAR',
+        'collation': 'NOCASE',
+        'comment': 'Customer region',
+    })
+    col_req = {
+        'resource_kind': 'column', 'operation_id': 'create',
+        'target_resource': None, '_provider_route': route, 'draft': col_draft,
+    }
+    assert ADMINISTRATION.validate(col_req)['errors'] == []
+    assert ADMINISTRATION.apply(client, ADMINISTRATION.plan(col_req))['accepted']
+    assert connection.execute(
+        "SELECT comment FROM duckdb_columns() WHERE schema_name='analytics' AND table_name='customers' AND column_name='region'"
+    ).fetchone()[0] == 'Customer region'
+
+    mat_form = resolved_form('duckdb', 'engine_object:materialization')
+    run(client, route, 'materialization', 'create', backend_draft(mat_form, {
+        'name': 'customer_rollup',
+        'parent': 'analytics',
+        'select': 'SELECT count(*) AS total_customers FROM analytics.customers',
+    }))
+    assert connection.execute('SELECT total_customers FROM analytics.customer_rollup').fetchone() == (1,)
+
+    secret_form = resolved_form('duckdb', 'engine_object:secret')
+    secret_draft = backend_draft(secret_form, {
+        'name': 'ui_http_secret',
+        'secret_type': 'HTTP',
+        'persistence_mode': 'TEMPORARY',
+        'scope': 'https://example.invalid/api/',
+        'properties': {'bearer_token': 'super-secret-token'},
+    })
+    secret_req = {
+        'resource_kind': 'secret', 'operation_id': 'create',
+        'target_resource': None, '_provider_route': route, 'draft': secret_draft,
+    }
+    assert ADMINISTRATION.validate(secret_req)['errors'] == []
+    secret_plan = ADMINISTRATION.plan(secret_req)
+    assert 'super-secret-token' not in secret_plan['command_preview']['statements'][0]['source']
+    sess = client._connect({'route': route})
+    try:
+        secret_applied = ADMINISTRATION.apply(client, secret_plan, connection=sess)
+        assert secret_applied['accepted']
+        all_rows = _resources(sess, {})
+    finally:
+        client._forget_and_close(sess)
+
+    secret_res = next(r for r in all_rows if r['resource_kind'] == 'secret' and r['display_name'] == 'ui_http_secret')
+    assert record_draft(secret_form, {**secret_res['native'], 'name': secret_res['display_name']})['secret_type'].upper() == 'HTTP'
+
+    constraint_form = resolved_form('duckdb', 'engine_object:constraint')
+    constraint_res = next(r for r in all_rows if r['resource_kind'] == 'constraint')
+    assert record_draft(constraint_form, {**constraint_res['native'], 'name': constraint_res['display_name']})['constraint_type']
+
+    fn_form = resolved_form('duckdb', 'engine_object:function')
+    fn_res = next(r for r in all_rows if r['resource_kind'] == 'function')
+    assert record_draft(fn_form, {**fn_res['native'], 'name': fn_res['display_name']})['function_type']
+
+    ext_form = resolved_form('duckdb', 'engine_object:extension')
+    ext_res = next(r for r in all_rows if r['resource_kind'] == 'extension')
+    assert 'installed' in record_draft(ext_form, {**ext_res['native'], 'name': ext_res['display_name']})
+

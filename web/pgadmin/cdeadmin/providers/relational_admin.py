@@ -3290,6 +3290,10 @@ class RelationalAdministration:
                 )
             return response
         if driver_operation == 'embedded-drop-database':
+            if (self.dialect.engine_id == 'duckdb' and
+                    payload.get('duckdb_target_binding')):
+                from .duckdb.destructive_identity import verify_offline_file
+                verify_offline_file(route, payload['duckdb_target_binding'])
             observation = client.drop_database(
                 {'route': route}, compiled['database'], driver_operation
             )
@@ -3408,6 +3412,10 @@ class RelationalAdministration:
                     from .firebird.metadata_guard import _refused
                     raise _refused('Reviewed metadata changes cannot use a caller-owned autocommit transaction')
                 verify(connection, payload['firebird_target_binding'])
+            if (self.dialect.engine_id == 'duckdb' and
+                    payload.get('duckdb_target_binding')):
+                from .duckdb.destructive_identity import verify as verify_duckdb_target
+                verify_duckdb_target(connection, route, payload['duckdb_target_binding'])
             if self.dialect.engine_id == 'firebird':
                 from .firebird.physical_rows import verify_owner
                 for statement in compiled.get('statements', []):

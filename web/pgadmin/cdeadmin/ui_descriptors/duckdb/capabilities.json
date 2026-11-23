@@ -218,6 +218,7 @@
     {
       "resource_kind": "secret",
       "family": "engine_object",
+      "form": "forms/secret.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -274,6 +275,7 @@
     {
       "resource_kind": "schema",
       "family": "engine_object",
+      "form": "forms/schema.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -295,6 +297,7 @@
     {
       "resource_kind": "extension",
       "family": "engine_object",
+      "form": "forms/extension.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -331,6 +334,7 @@
       "resource_kind": "column",
       "family": "engine_object",
       "title": "Column",
+      "form": "forms/column.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -363,6 +367,7 @@
       "resource_kind": "constraint",
       "family": "engine_object",
       "title": "Constraint",
+      "form": "forms/constraint.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -375,6 +380,7 @@
       "resource_kind": "function",
       "family": "engine_object",
       "title": "Function",
+      "form": "forms/function.form.json",
       "operations": [
         {
           "operation_id": "inspect",
@@ -387,6 +393,7 @@
       "resource_kind": "materialization",
       "family": "engine_object",
       "title": "Semantic materialization",
+      "form": "forms/materialization.form.json",
       "operations": [
         {
           "operation_id": "create",

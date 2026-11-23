@@ -197,6 +197,91 @@
       }
     },
     {
+      "command_id": "database.duckdb.runtime_settings",
+      "scope": "database",
+      "label": "DuckDB runtime settings and session tasks...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.settings",
+      "group": "database",
+      "priority": 50,
+      "arguments": {
+        "tab": "duckdb-runtime-settings"
+      }
+    },
+    {
+      "command_id": "database.duckdb.retained_schema",
+      "scope": "database",
+      "label": "DuckDB original-session DDN schema...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.erd",
+      "group": "database",
+      "priority": 51,
+      "arguments": {
+        "tab": "duckdb-retained-schema"
+      }
+    },
+    {
+      "command_id": "database.duckdb.shell",
+      "scope": "database",
+      "label": "DuckDB directive and SQL batch runner...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "tool.query",
+      "group": "database",
+      "priority": 52,
+      "arguments": {
+        "tab": "duckdb-shell"
+      }
+    },
+    {
+      "command_id": "database.duckdb.sql_dump",
+      "scope": "database",
+      "label": "DuckDB single-stream SQL dump and reload...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.export",
+      "group": "database",
+      "priority": 53,
+      "arguments": {
+        "tab": "duckdb-sql-dump"
+      }
+    },
+    {
+      "command_id": "database.duckdb.continuity_storage",
+      "scope": "database",
+      "label": "DuckDB continuity, WAL drill and storage lifecycle...",
+      "handler": "open_workspace",
+      "slot": "post_tasks",
+      "icon": "action.backup",
+      "group": "database",
+      "priority": 54,
+      "arguments": {
+        "tab": "duckdb-continuity-storage"
+      }
+    },
+    {
+      "command_id": "endpoint.duckdb.continuity_storage",
+      "scope": "endpoint",
+      "label": "DuckDB continuity, WAL drill and storage lifecycle...",
+      "handler": "open_workspace",
+      "slot": "after_verify",
+      "icon": "action.backup",
+      "group": "availability",
+      "priority": 55,
+      "arguments": {
+        "tab": "duckdb-continuity-storage"
+      },
+      "enabled_when": [
+        "verified",
+        "owner"
+      ],
+      "disabled_reasons": {
+        "owner": "Only the endpoint owner can run physical continuity or storage migrations."
+      }
+    },
+    {
       "command_id": "resource.duckdb.table.copy",
       "scope": "resource",
       "label": "Native DuckDB COPY...",

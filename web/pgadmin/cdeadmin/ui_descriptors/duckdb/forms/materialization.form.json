@@ -1,0 +1,51 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "materialization"
+  ],
+  "form_reference": "SR-F-030586",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "DuckDB 1.5.2 has no database users, roles or SQL GRANT privileges."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Materialized table name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "schema",
+      "required": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "select",
+      "label": "Materialization SELECT query",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "help": "SELECT or WITH query materialized into a DuckDB table via CREATE TABLE ... AS."
+    }
+  ],
+  "notes": "DuckDB 1.5.2 semantic materialization creation form."
+}

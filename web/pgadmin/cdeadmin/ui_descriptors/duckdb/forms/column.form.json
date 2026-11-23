@@ -1,0 +1,139 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "column"
+  ],
+  "form_reference": "SR-F-030581",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "DuckDB 1.5.2 has no column-level privileges."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "table",
+      "label": "Owning table",
+      "tab": "General",
+      "control": "reference",
+      "reference_kind": "table",
+      "required": true,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "name",
+      "label": "Column name",
+      "tab": "General",
+      "control": "text",
+      "required": true
+    },
+    {
+      "field_id": "new_name",
+      "label": "New column name",
+      "tab": "General",
+      "control": "text",
+      "modes": [
+        "alter"
+      ]
+    },
+    {
+      "field_id": "data_type",
+      "label": "Data type",
+      "tab": "Definition",
+      "control": "text",
+      "required": true,
+      "modes": [
+        "create"
+      ],
+      "record_key": "catalog_metadata.data_type",
+      "initial_value_path": [
+        "native",
+        "catalog_metadata",
+        "data_type"
+      ]
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "placeholder": "e.g. NOCASE, NOACCENT"
+    },
+    {
+      "field_id": "nullable",
+      "label": "Nullable",
+      "tab": "Definition",
+      "control": "boolean",
+      "default": true,
+      "modes": [
+        "create"
+      ],
+      "record_key": "catalog_metadata.nullable"
+    },
+    {
+      "field_id": "default",
+      "label": "Default expression",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "record_key": "catalog_metadata.default"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "Definition",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "record_key": "catalog_metadata.comment"
+    },
+    {
+      "field_id": "generated_expression",
+      "label": "Generated AS expression",
+      "tab": "Engine",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "help": "Optional GENERATED ALWAYS AS (...) expression; leave Default empty and Nullable enabled."
+    },
+    {
+      "field_id": "unique",
+      "label": "Unique",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ]
+    },
+    {
+      "field_id": "primary_key",
+      "label": "Primary key",
+      "tab": "Engine",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ]
+    }
+  ],
+  "notes": "DuckDB 1.5.2 column create, rename, comment and inspection form."
+}

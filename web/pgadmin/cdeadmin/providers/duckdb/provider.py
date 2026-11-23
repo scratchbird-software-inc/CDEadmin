@@ -248,7 +248,7 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._require('execute')
         if request.get('language_profile') != 'duckdb-sql':
             raise RelationalClientError('Native DuckDB query session required')
-        if request.get('operation') not in {'inventory', 'receipt'}:
+        if request.get('operation') not in {'inventory', 'discover_foreign', 'receipt'}:
             self._require('administer', 'resource')
             self._require('filesystem')
         handle = self._editor_session(request)
@@ -261,7 +261,8 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 self.client._busy.add(id(handle))
             try:
                 result=action(self.client, handle, route, {key: value for key, value in request.items()
-                    if key not in {'session_id', 'language_profile'}})
+                    if key not in {'session_id', 'language_profile'}},
+                    authorize_secret=self._require_native_http_secret)
                 if result.get('review_id'):self.client.publish_receipt(handle,'attachments',result)
                 return result
             except (ValueError, RelationalClientError):
@@ -309,7 +310,7 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
         self._require('data_read', 'resource')
         if request.get('language_profile')!='duckdb-sql':
             raise RelationalClientError('Native DuckDB query session required')
-        if request.get('operation') not in {'inventory','receipt'}:
+        if request.get('operation') not in {'inventory','capabilities','receipt'}:
             self._require('administer','resource');self._require('filesystem')
         handle=self._editor_session(request)
         with self.client._lock:
@@ -329,6 +330,26 @@ class DuckDBPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 raise RelationalClientError('Native DuckDB extension workflow failed ('+type(error).__name__+')') from None
             finally:
                 if not reading:self.client._busy.discard(id(handle))
+
+    def runtime_settings_action(self, request, route):
+        from .runtime_settings import action
+        self._require('execute')
+        if request.get('language_profile') != 'duckdb-sql':
+            raise RelationalClientError('Native DuckDB query session required')
+        if request.get('operation') != 'inventory':
+            self._require('administer', 'resource')
+        handle = self._editor_session(request)
+        with self.client._lock:
+            self.client._require_idle(handle)
+            self.client._busy.add(id(handle))
+            try:
+                result = action(
+                    self.client, handle, route,
+                    {k: v for k, v in request.items() if k not in {'session_id', 'language_profile'}},
+                )
+                return result
+            finally:
+                self.client._busy.discard(id(handle))
 
     def _require_native_http_secret(self):
         # Missing optional authority is an ordinary operation refusal. Calling
@@ -890,17 +911,11 @@ def _database_create_arguments(route, database, options):
             'DuckDB database creation options are unsupported'
         )
     config = options.get('config', {})
-    if not isinstance(config, Mapping) or not all(
-        isinstance(key, str) and key.strip() and
-        isinstance(value, (str, int, float, bool)) and value is not None
-        for key, value in config.items()
-    ):
-        raise RelationalClientError(
-            'DuckDB creation configuration must contain named scalar values'
-        )
+    from .runtime_settings import validate_open_time_config
+    validated = validate_open_time_config(route, config)
     arguments = {'database': database}
-    if config:
-        arguments['config'] = dict(config)
+    if validated:
+        arguments['config'] = dict(validated)
     return arguments
 
 

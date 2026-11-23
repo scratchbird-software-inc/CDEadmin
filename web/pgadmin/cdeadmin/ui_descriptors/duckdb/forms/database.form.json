@@ -12,24 +12,10 @@
   "omitted_tabs": [
     {
       "tab": "Security",
-      "reason": "no users or privileges"
+      "reason": "DuckDB 1.5.2 has no database users, roles or SQL GRANT privileges."
     }
   ],
-  "gaps": [
-    {
-      "concept": "database.create.config",
-      "reason": "typed_from_json: provider accepts a JSON value with no editor; give it a typed control or grid",
-      "tracking": "ui-unification"
-    },
-    {
-      "concept": "database.alter",
-      "reason": "only create/drop; settable options are session/config values and belong on the Parameters tab (keyvalue config already present)"
-    },
-    {
-      "concept": "ATTACH / DETACH as Database tier-2 operations",
-      "reason": "attached-database is inspect-only; the DuckDBAttachment panel performs attach/detach and must become operations.json entries"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -37,16 +23,220 @@
       "tab": "General",
       "control": "text",
       "required": true,
+      "modes": [
+        "create"
+      ],
       "help": "Created below the endpoint-approved root; .duckdb is added when omitted."
     },
     {
+      "field_id": "database_type",
+      "label": "Catalog engine type",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "database_type"
+    },
+    {
+      "field_id": "runtime_version",
+      "label": "Runtime version",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "runtime_version"
+    },
+    {
       "field_id": "config",
-      "label": "DuckDB creation configuration",
+      "label": "Additional creation options",
       "tab": "Parameters",
       "control": "keyvalue",
       "required": false,
-      "help": "Named scalar options passed to DuckDB 1.5.2 while opening the new file."
+      "modes": [
+        "create"
+      ],
+      "help": "Additional named scalar options passed to DuckDB 1.5.2 when opening the new file."
+    },
+    {
+      "field_id": "config_threads",
+      "label": "Worker threads",
+      "tab": "Parameters",
+      "control": "number",
+      "min": 1,
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.threads",
+      "help": "Optional worker thread count used when initializing the database file."
+    },
+    {
+      "field_id": "config_memory_limit",
+      "label": "Memory limit",
+      "tab": "Parameters",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "placeholder": "e.g. 1GB or 512MB",
+      "backend_field_id": "config.memory_limit"
+    },
+    {
+      "field_id": "config_max_temp_directory_size",
+      "label": "Max temporary directory size",
+      "tab": "Parameters",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "placeholder": "e.g. 4GB",
+      "backend_field_id": "config.max_temp_directory_size"
+    },
+    {
+      "field_id": "config_default_order",
+      "label": "Default sort order",
+      "tab": "Parameters",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.default_order",
+      "options": [
+        {
+          "value": "ASC",
+          "label": "ASC"
+        },
+        {
+          "value": "DESC",
+          "label": "DESC"
+        }
+      ]
+    },
+    {
+      "field_id": "config_default_null_order",
+      "label": "Default NULL sort order",
+      "tab": "Parameters",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.default_null_order",
+      "options": [
+        {
+          "value": "NULLS_FIRST",
+          "label": "NULLS_FIRST"
+        },
+        {
+          "value": "NULLS_LAST",
+          "label": "NULLS_LAST"
+        }
+      ]
+    },
+    {
+      "field_id": "config_preserve_insertion_order",
+      "label": "Preserve insertion order",
+      "tab": "Parameters",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.preserve_insertion_order",
+      "options": [
+        {
+          "value": "true",
+          "label": "true"
+        },
+        {
+          "value": "false",
+          "label": "false"
+        }
+      ]
+    },
+    {
+      "field_id": "config_storage_compatibility_version",
+      "label": "Storage compatibility version",
+      "tab": "Parameters",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.storage_compatibility_version",
+      "options": [
+        {
+          "value": "v1.0.0",
+          "label": "v1.0.0"
+        },
+        {
+          "value": "v1.2.0",
+          "label": "v1.2.0"
+        },
+        {
+          "value": "v1.3.0",
+          "label": "v1.3.0"
+        },
+        {
+          "value": "v1.4.0",
+          "label": "v1.4.0"
+        },
+        {
+          "value": "v1.5.0",
+          "label": "v1.5.0"
+        },
+        {
+          "value": "v1.5.2",
+          "label": "v1.5.2"
+        },
+        {
+          "value": "latest",
+          "label": "latest"
+        }
+      ]
+    },
+    {
+      "field_id": "config_default_block_size",
+      "label": "Default block size (bytes)",
+      "tab": "Parameters",
+      "control": "select",
+      "required": false,
+      "modes": [
+        "create"
+      ],
+      "backend_field_id": "config.default_block_size",
+      "options": [
+        {
+          "value": "16384",
+          "label": "16384 (16 KiB)"
+        },
+        {
+          "value": "32768",
+          "label": "32768 (32 KiB)"
+        },
+        {
+          "value": "65536",
+          "label": "65536 (64 KiB)"
+        },
+        {
+          "value": "131072",
+          "label": "131072 (128 KiB)"
+        },
+        {
+          "value": "262144",
+          "label": "262144 (256 KiB)"
+        }
+      ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. attached-database: provider exposes no create form (inspect) Round-tripped by tools/tests/test_ui_descriptor_roundtrip_duckdb.py (create a file with configuration)."
+  "notes": "DuckDB 1.5.2 database files expose create/drop/inspect on the database family; runtime session/global settings and catalog ATTACH/DETACH/SET ALIAS are operated through the original-session DuckDB runtime settings and editor_attachment_* operations."
 }

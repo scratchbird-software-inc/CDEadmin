@@ -409,12 +409,32 @@ def metadata(handle, engine, transaction=None, dialect=None):
                     add('column', [*owner, 'rowid'], 'BIGINT; native row identifier, not a durable application key',
                         hidden_from_star=True)
             functions = query('functions', 'SELECT database_name,schema_name,function_name,function_type,parameters,parameter_types,return_type,internal FROM duckdb_functions() ORDER BY database_name,schema_name,function_name LIMIT 25001')
-            from .duckdb.editor_type_rules import aggregate_type_rules
-            context['aggregate_type_rules'] = aggregate_type_rules(version, functions, observations[-1]['truncated'])
+            functions_truncated = observations[-1]['truncated']
+            from .duckdb.editor_type_rules import aggregate_type_rules, computed_type_rules
+            context['aggregate_type_rules'] = aggregate_type_rules(version, functions, functions_truncated)
             for database, schema, name, kind, parameters, types, returns, _internal in functions:
                 add('function', [database, schema, name], f'{kind} {parameters} {types} -> {returns}')
-            for database, schema, name in query('types', 'SELECT database_name,schema_name,type_name FROM duckdb_types() ORDER BY database_name,schema_name,type_name LIMIT 25001'):
-                add('type', [database, schema, name])
+            native_types = query('types', 'SELECT database_name,schema_name,type_name,logical_type,internal FROM duckdb_types() ORDER BY database_name,schema_name,type_name LIMIT 25001')
+            types_truncated = observations[-1]['truncated']
+            for database, schema, name, logical_type, is_internal in native_types:
+                type_shape = None
+                if not is_internal and str(logical_type).upper() in {'STRUCT', 'UNION', 'MAP', 'LIST', 'ARRAY'}:
+                    try:
+                        quoted_tp = '.'.join('"' + str(part).replace('"', '""') + '"' for part in (database, schema, name))
+                        bound_tp = handle.sql('SELECT NULL::' + quoted_tp).types
+                        if len(bound_tp) == 1:
+                            type_shape = duckdb_type_shape(bound_tp[0], type_budget)
+                    except NativeTypeShapeLimit:
+                        observations.append({'section': f'type-shape:{database}:{schema}:{name}',
+                            'available': False, 'truncated': True, 'reason': 'native-type-observation-limit'})
+                    except Exception:
+                        observations.append({'section': f'type-shape:{database}:{schema}:{name}',
+                            'available': False, 'reason': 'native-type-binding'})
+                add('type', [database, schema, name], str(logical_type or ''), native_type=type_shape)
+            context['computed_type_rules'] = computed_type_rules(
+                version, functions, functions_truncated,
+                types_truncated=types_truncated, columns_truncated=columns_truncated,
+            )
         else:
             context.update(version=str(handle.info.version), sql_dialect=dialect or handle.sql_dialect)
             identity=query('authentication','SELECT CURRENT_USER,CURRENT_ROLE FROM RDB$DATABASE')

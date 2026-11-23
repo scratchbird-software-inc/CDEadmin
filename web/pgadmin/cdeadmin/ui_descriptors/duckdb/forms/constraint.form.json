@@ -1,0 +1,72 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "constraint"
+  ],
+  "form_reference": "SR-F-030582",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "DuckDB 1.5.2 constraints carry no security attributes."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Constraint name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "readonly": true
+    },
+    {
+      "field_id": "constraint_type",
+      "label": "Constraint kind",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.constraint_type",
+      "initial_value_path": [
+        "native",
+        "catalog_metadata",
+        "constraint_type"
+      ]
+    },
+    {
+      "field_id": "constraint_text",
+      "label": "Constraint definition",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.constraint_text"
+    },
+    {
+      "field_id": "expression",
+      "label": "Check expression",
+      "tab": "Definition",
+      "control": "code",
+      "language": "sql",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.expression"
+    },
+    {
+      "field_id": "referenced_table",
+      "label": "Referenced table",
+      "tab": "Engine",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.referenced_table"
+    }
+  ],
+  "notes": "DuckDB 1.5.2 constraint inspection form; constraint creation and retargeting run through the table form or reviewed DDN table rebuild."
+}

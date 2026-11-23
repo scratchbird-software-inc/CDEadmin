@@ -2413,7 +2413,37 @@ def plan(baseline, desired, live):
              'rebuild-add-generated-column-and-reorder',
              'rebuild-add-generated-column',
              'rebuild-change-generated-expression'}}
+    general_rebuild_tables = {identity for identity, row in desired['rows'].items()
+        if row['kind'] == 'table' and isinstance(row['native'].get('duckdb_change'), dict)
+        and row['native']['duckdb_change'].get('action') == 'rebuild-table-general'}
+    general_owned_ids = set()
+    general_parent_paths = set()
+    for g_id in general_rebuild_tables:
+        g_row = desired['rows'][g_id]
+        g_change = g_row['native']['duckdb_change']
+        general_parent_paths.add(tuple(g_row['path'][:3]))
+        for inb in g_change.get('inbound_children') or []:
+            if isinstance(inb, dict) and isinstance(inb.get('resource_id'), str):
+                general_owned_ids.add(inb['resource_id'])
+                inb_row = desired['rows'].get(inb['resource_id']) or baseline['rows'].get(inb['resource_id'])
+                if inb_row and isinstance(inb_row.get('path'), list) and len(inb_row['path']) == 3:
+                    general_parent_paths.add(tuple(inb_row['path']))
+        for vid in g_change.get('updated_views') or []:
+            if isinstance(vid, str):
+                general_owned_ids.add(vid)
+                v_row = desired['rows'].get(vid) or baseline['rows'].get(vid)
+                if v_row and isinstance(v_row.get('path'), list) and len(v_row['path']) == 3:
+                    general_parent_paths.add(tuple(v_row['path']))
+        for mspec in g_change.get('updated_macros') or []:
+            if isinstance(mspec, dict) and isinstance(mspec.get('resource_id'), str):
+                general_owned_ids.add(mspec['resource_id'])
+    for r_id, r_row in desired['rows'].items():
+        if r_row['kind'] in {'column', 'constraint', 'index'} and len(r_row.get('path', [])) == 4:
+            if tuple(r_row['path'][:3]) in general_parent_paths:
+                general_owned_ids.add(r_id)
     for identity, after in sorted(desired['rows'].items()):
+        if identity in general_owned_ids:
+            continue
         before, current = baseline['rows'].get(identity), live['rows'].get(identity)
         if before is not None and (after.get('resource_id') != identity or
                 any(not _equal(before.get(field), after.get(field)) for field in
@@ -2555,6 +2585,20 @@ def plan(baseline, desired, live):
                 operation = 'replace'
                 source, _macro_overloads, _macro_comment_replay = _validated_macro_group_replacement(
                     before, after, change)
+            elif (isinstance(change, dict) and
+                  change.get('action') == 'replace-macro-preserve-defaults' and
+                  after['kind'] == 'macro'):
+                from .duckdb_general_rebuild import validate_macro_preserve_defaults
+                operation = 'replace'
+                (source, _preserved_macro_overloads,
+                 _macro_comment_replay, _macro_lost_tags) = validate_macro_preserve_defaults(
+                    before, after, target, change)
+            elif (after['kind'] == 'table' and isinstance(change, dict) and
+                  change.get('action') == 'rebuild-table-general'):
+                from .duckdb_general_rebuild import validate_general_table_rebuild
+                operations.append(validate_general_table_rebuild(
+                    before, after, change, target, baseline, live, desired))
+                continue
             elif (isinstance(change, dict) and change.get('action') == 'replace-sequence' and
                   after['kind'] == 'sequence'):
                 operation = 'replace'
@@ -2637,11 +2681,14 @@ def plan(baseline, desired, live):
                 if replay is not None:
                     operation_record['statements'] = [source, replay]
             if (operation == 'replace' and after['kind'] == 'macro' and
-                    change.get('action') in {'replace-definition', 'replace-macro'}):
+                    change.get('action') in {'replace-definition', 'replace-macro', 'replace-macro-preserve-defaults'}):
                 operation_record['preserved_comment'] = after['native'].get(
                     'catalog_metadata', {}).get('comment')
                 if _macro_comment_replay is not None:
                     operation_record['statements'] = [source, _macro_comment_replay]
+                if change.get('action') == 'replace-macro-preserve-defaults':
+                    operation_record['verify_macro_source'] = True
+                    operation_record['acknowledged_lost_tags'] = _macro_lost_tags
             if operation == 'rename':
                 operation_record['source_resource_id'] = before['resource_id']
             if (after['kind'] == 'column' and isinstance(change, dict) and
@@ -2667,6 +2714,8 @@ def plan(baseline, desired, live):
                 operation_record['postcondition'] = {'definition': _definition_text}
             elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-macro':
                 operation_record['postcondition'] = {'overloads': _macro_overloads}
+            elif after['kind'] == 'macro' and isinstance(change, dict) and change.get('action') == 'replace-macro-preserve-defaults':
+                operation_record['postcondition'] = {'preserved_overloads': _preserved_macro_overloads}
             elif after['kind'] == 'sequence' and isinstance(change, dict) and change.get('action') == 'replace-sequence':
                 operation_record['postcondition'] = {'sequence_options': _sequence_options}
             elif after['kind'] == 'type' and isinstance(change, dict) and change.get('action') == 'replace-type':
@@ -2881,7 +2930,14 @@ def plan(baseline, desired, live):
             blockers.append({'resource_id': identity, 'name': after.get('name'), 'reason': str(error)})
     for identity, row in baseline['rows'].items():
         if identity not in desired['rows'] and not (
-                row['kind'] in {'constraint', 'column'} and
+                (row['kind'] in {'constraint', 'column', 'index'} and
+                 len(row.get('path', [])) == 4 and
+                 tuple(row['path'][:3]) in general_parent_paths and
+                 (row['kind'] != 'column' or
+                  _resource_id('table', row['path'][:2], row['path'][2]) not in general_rebuild_tables or
+                  identity in desired['rows'][_resource_id('table', row['path'][:2], row['path'][2])]['native']['duckdb_change'].get('drop_column_ids', []) or
+                  row['name'] in desired['rows'][_resource_id('table', row['path'][:2], row['path'][2])]['native']['duckdb_change'].get('column_renames', {}))) or
+                (row['kind'] in {'constraint', 'column'} and
                 len(row.get('path', [])) == 4 and
                 _resource_id('table', row['path'][:2], row['path'][2]) in rebuild_tables and
                 (row['kind'] == 'constraint' or
@@ -2891,7 +2947,7 @@ def plan(baseline, desired, live):
                             'rebuild-replace-columns-and-reorder'} and
                     identity in desired['rows'][_resource_id('table',
                         row['path'][:2], row['path'][2])]['native'][
-                            'duckdb_change'].get('drop_column_ids', []))):
+                            'duckdb_change'].get('drop_column_ids', [])))):
             ignored.append({'resource_id': identity, 'name': row['name'],
                 'reason': 'Missing desired selection is not deletion intent'})
     if not blockers and not conflicts:
@@ -2913,4 +2969,8 @@ def plan(baseline, desired, live):
              if any(item['operation'] == 'rebuild' for item in operations) else []) +
             (['Replacing a native enum does not retarget existing typed columns; review their conversions separately.']
              if any(item['kind'] == 'type' and item['operation'] == 'replace' for item in operations)
-             else [])}
+             else []) +
+            (['DuckDB 1.5.2 OWNED BY sequence ownership is non-durable across file reopen; only default nextval() dependencies are persisted.']
+             if any(item.get('sequence_references') for item in operations) else []) +
+            (['Acknowledged C++/extension catalog tags cannot be recreated via DuckDB 1.5.2 SQL DDL and will be cleared on rebuilt/replaced objects.']
+             if any(item.get('acknowledged_lost_tags') for item in operations) else [])}

@@ -29,6 +29,9 @@ def qualify(output):
             connection.execute('CREATE VIEW tuple_values AS SELECT row(42::BIGINT,struct_pack("Field ü":=12::BIGINT),[struct_pack("Field ü":=13::BIGINT)]) AS "positional"')
             connection.execute('CREATE TABLE native_names("select" STRUCT("Field ü" BIGINT),array_extract STRUCT("Field ü" BIGINT)[],"value" STRUCT("Field ü" BIGINT))')
             connection.execute('INSERT INTO native_names VALUES(struct_pack("Field ü":=17),[struct_pack("Field ü":=18)],struct_pack("Field ü":=19))')
+            connection.execute('CREATE TYPE user_pair AS STRUCT("Field ü" BIGINT)')
+            connection.execute('CREATE TABLE union_tbl(u UNION(left_branch STRUCT("Field ü" BIGINT), right_branch VARCHAR))')
+            connection.execute('INSERT INTO union_tbl VALUES (union_value(left_branch := struct_pack("Field ü" := 23)))')
             connection.execute('BEGIN');connection.execute('INSERT INTO one DEFAULT VALUES')
             observed=metadata(connection,'duckdb')
             cases=[]
@@ -82,6 +85,35 @@ def qualify(output):
                 'SELECT max(DISTINCT n.items[1]).| FROM one n',
                 'SELECT (list(ALL n.items[1]) OVER (ORDER BY n.items ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[1].| FROM one n WHERE n.items IS NOT NULL',
                 'WITH q AS (SELECT (max(n.items[1]) FILTER (WHERE true) OVER ()) AS part FROM one n WHERE n.items IS NOT NULL) SELECT q.part.| FROM q',
+                'SELECT max(n.items[1] ORDER BY n.items).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list(n.items[1] ORDER BY n.items DESC NULLS LAST)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT arg_max(n.items[1], 1).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT arg_min(n.items[1], 1, 2)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT max_by(n.items[1], 1).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT min_by(n.items[1], 1).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_extract(n.items, 1).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_element(n.items, 1).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_slice(n.items, 1, 1)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_reverse(n.items)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_distinct(n.items)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT list_sort(n.items)[1].| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT flatten(n.matrix)[1].| FROM one n WHERE n.matrix IS NOT NULL',
+                "SELECT map_extract(n.lookup, 'key')[1].| FROM one n WHERE n.lookup IS NOT NULL",
+                "SELECT map_extract_value(n.lookup, 'key').| FROM one n WHERE n.lookup IS NOT NULL",
+                'SELECT map_values(n.lookup)[1].| FROM one n WHERE n.lookup IS NOT NULL',
+                'SELECT map_entries(n.lookup)[1]."value".| FROM one n WHERE n.lookup IS NOT NULL',
+                'SELECT struct_pack(wrapped := n.items[1]).wrapped.| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT row(42, n.items[1])[2].| FROM one n WHERE n.items IS NOT NULL',
+                "SELECT union_extract(u.u, 'left_branch').| FROM union_tbl u",
+                'SELECT coalesce(n.items[1], n.fixed[1]).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT ifnull(n.items[1], n.fixed[1]).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT nullif(n.items[1], NULL).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT CAST(n.items[1] AS STRUCT("Field ü" BIGINT)).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT TRY_CAST(n.items[1] AS user_pair).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT (n.items[1]::user_pair).| FROM one n WHERE n.items IS NOT NULL',
+                'SELECT (SELECT m.items[1] FROM one m WHERE m.items IS NOT NULL LIMIT 1).|',
+                'SELECT (SELECT n.items[1]).| FROM one n WHERE n.items IS NOT NULL',
+                'WITH q AS (SELECT (SELECT m.items[1] FROM one m WHERE m.items IS NOT NULL LIMIT 1) AS part) SELECT q.part.| FROM q',
             ]:
                 sql=marked.replace('|','"Field ü"');query=connection.execute(sql)
                 assert str(query.description[0][1])=='BIGINT'

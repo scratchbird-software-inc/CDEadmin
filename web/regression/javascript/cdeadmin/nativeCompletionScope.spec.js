@@ -184,6 +184,78 @@ test('DuckDB vanished native aggregate admission cannot be borrowed from prior c
   expect(suggestions('SELECT max(n.items[1]). FROM one n',current,previous,23)).toBeNull();
 });
 
+const computedMetadata=()=> {
+  const data=aggregateMetadata();
+  data.resources.push(
+    {resource_kind:'type',display_path:['owned','main','user_pair'],detail:'STRUCT',native_type:memberShape},
+    {resource_kind:'column',display_path:['owned','main','one','u'],detail:'UNION',
+      native_type:{kind:'union',sql:'UNION("left_branch" STRUCT("Field ü" BIGINT), "right_branch" VARCHAR)',
+        fields:[{name:'left_branch',type:memberShape},{name:'right_branch',type:{kind:'varchar',sql:'VARCHAR'}}]}},
+  );
+  data.context.computed_type_rules={
+    ordered_aggregates:true,
+    keyed_aggregates:{arg_max:{positive_literal_count:true},arg_min:{positive_literal_count:true},max_by:{positive_literal_count:true},min_by:{positive_literal_count:true}},
+    scalar_functions:{
+      list_extract:{shape:'list_element',min_args:2,max_args:2},
+      list_element:{shape:'list_element',min_args:2,max_args:2},
+      array_extract:{shape:'array_or_struct_extract',min_args:2,max_args:2},
+      list_slice:{shape:'list_slice',min_args:3,max_args:4},
+      list_reverse:{shape:'list_preserve',min_args:1,max_args:1},
+      list_distinct:{shape:'list_preserve',min_args:1,max_args:1},
+      list_sort:{shape:'list_preserve',min_args:1,max_args:3},
+      flatten:{shape:'list_flatten',min_args:1,max_args:1},
+      map_extract:{shape:'map_extract_list',min_args:2,max_args:2},
+      map_extract_value:{shape:'map_extract_value',min_args:2,max_args:2},
+      map_values:{shape:'map_values',min_args:1,max_args:1},
+      map_entries:{shape:'map_entries',min_args:1,max_args:1},
+      struct_pack:{shape:'struct_pack',min_args:1,max_args:64},
+      row:{shape:'row_tuple',min_args:1,max_args:64},
+      struct_extract:{shape:'struct_extract',min_args:2,max_args:2},
+      union_extract:{shape:'union_extract',min_args:2,max_args:2},
+      nullif:{shape:'first_arg',min_args:2,max_args:2},
+    },
+    special_forms:{coalesce:true,ifnull:true,casts:true,scalar_subquery:true},
+  };
+  return data;
+};
+test.each([
+  'SELECT max(n.items[1] ORDER BY n.first).| FROM one n',
+  'SELECT list(n.items[1] ORDER BY n.first DESC NULLS LAST)[1].| FROM one n',
+  'SELECT arg_max(n.items[1], n.first).| FROM one n',
+  'SELECT arg_min(n.items[1], n.first, 2)[1].| FROM one n',
+  'SELECT list_extract(n.items, 1).| FROM one n',
+  'SELECT list_reverse(n.items)[1].| FROM one n',
+  'SELECT flatten(n.matrix)[1].| FROM one n',
+  'SELECT map_extract(n.lookup, \'key\')[1].| FROM one n',
+  'SELECT map_extract_value(n.lookup, \'key\').| FROM one n',
+  'SELECT map_entries(n.lookup)[1]."value".| FROM one n',
+  'SELECT struct_pack(wrapped := n.items[1]).wrapped.| FROM one n',
+  'SELECT row(42, n.items[1])[2].| FROM one n',
+  'SELECT union_extract(n.u, \'left_branch\').| FROM one n',
+  'SELECT coalesce(n.items[1], n.fixed[1]).| FROM one n',
+  'SELECT CAST(n.items[1] AS STRUCT("Field ü" BIGINT)).| FROM one n',
+  'SELECT TRY_CAST(n.items[1] AS user_pair).| FROM one n',
+  'SELECT (n.items[1]::user_pair).| FROM one n',
+  'SELECT (SELECT m.items[1] FROM one m LIMIT 1).|',
+  'SELECT (SELECT n.items[1]).| FROM one n',
+])('DuckDB admitted computed expressions, casts, and scalar subqueries retain exact members in %s',marked=> {
+  const data=computedMetadata();
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))?.options).toEqual([
+    expect.objectContaining({label:'Field ü',apply:'"Field ü"',detail:'BIGINT'})]);
+});
+test.each([
+  'SELECT CAST(n.items[1] AS VARCHAR).| FROM one n',
+  'SELECT (n.items[1]::VARCHAR).| FROM one n',
+  'SELECT (SELECT n.items[1], n.fixed[1]).| FROM one n',
+  'SELECT (SELECT n.items[1] UNION SELECT n.fixed[1]).| FROM one n',
+  'SELECT coalesce(n.items[1], n.items).| FROM one n',
+  'SELECT list_extract(n.items, 1, 2).| FROM one n',
+  'SELECT union_extract(n.u, \'missing_branch\').| FROM one n',
+])('DuckDB ambiguous, scalar-cast, or mismatched computed expressions stay unresolved in %s',marked=> {
+  const data=computedMetadata();
+  expect(suggestions(marked.replace('|',''),data,data,marked.indexOf('|'))).toBeNull();
+});
+
 test.each([
   'SELECT n.items[1].| FROM one n', 'SELECT n.fixed[1].| FROM one n',
   'SELECT n.lookup[\'key\'].| FROM one n', 'SELECT n.matrix[1][2].| FROM one n',

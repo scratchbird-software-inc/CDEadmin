@@ -74763,67 +74763,67 @@
       "sha256": "e7e95e2ec0aa58b10b7ce4be599bf50a646d5995df99dfd173f946ac6004027f"
     },
     {
-      "artifact": "duckdb-dialect-qualification-gate-20261013-4.json",
+      "artifact": "duckdb-qualification/dialect-tasks-live-1.5.2.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-task-parser-acceptance",
       "evidence_kind": "parser_acceptance",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "4fa8acce9bdabf59bc26357f1b8e8aff7c884527f3ef6803f070ca82ae21f291"
+      "sha256": "6fdb054badd542f25f1dd2178e2df8872e609417b6192b9febc61d1b79b3c0dc"
     },
     {
-      "artifact": "duckdb-dialect-qualification-gate-20261013-4.json",
+      "artifact": "duckdb-qualification/dialect-tasks-live-1.5.2.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-task-live-execution",
       "evidence_kind": "live_execution",
       "format": "cdeadmin.relational-provider-live-verification.v1",
       "license_id": "PostgreSQL",
-      "sha256": "4fa8acce9bdabf59bc26357f1b8e8aff7c884527f3ef6803f070ca82ae21f291"
+      "sha256": "6fdb054badd542f25f1dd2178e2df8872e609417b6192b9febc61d1b79b3c0dc"
     },
     {
-      "artifact": "_duckdb.cpython-312-x86_64-linux-gnu.so",
+      "artifact": "_duckdb.cpython-314-x86_64-linux-gnu.so",
       "authority": "DuckDB Foundation",
       "evidence_id": "duckdb-python-1.5.2",
       "evidence_kind": "driver",
       "format": "CPython extension module",
       "license_id": "MIT",
-      "sha256": "3df1b67c01f59581c71ee8100aaefb7ce8e98f69000c3949dfac727a16e8e67b"
+      "sha256": "5214dd1b4a7441d0bd1d6cd94315b0e2084c4c409b44e2d6708abc2d21c104d5"
     },
     {
-      "artifact": "duckdb-metadata607/proof.json",
+      "artifact": "duckdb-qualification/metadata-comments-live-1.5.2.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-native-comment-parser",
       "evidence_kind": "parser_acceptance",
       "format": "native DuckDB object-comment qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "d5300f8ed3d60b95fd9cd57b47de0f33d0a736aa5414c708e72a93c378d1811b"
+      "sha256": "239e94c31e373d138b292714efe6b009698683424f753ca4dae376e8fd22b29c"
     },
     {
-      "artifact": "duckdb-metadata607/proof.json",
+      "artifact": "duckdb-qualification/metadata-comments-live-1.5.2.json",
       "authority": "DuckDB 1.5.2 runtime",
       "evidence_id": "duckdb-1.5.2-native-comment-execution",
       "evidence_kind": "live_execution",
       "format": "native DuckDB object-comment qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "d5300f8ed3d60b95fd9cd57b47de0f33d0a736aa5414c708e72a93c378d1811b"
+      "sha256": "239e94c31e373d138b292714efe6b009698683424f753ca4dae376e8fd22b29c"
     },
     {
-      "artifact": "duckdb-extensions618/proof.json",
+      "artifact": "duckdb-qualification/extension-updates-live-1.5.2.json",
       "authority": "Native DuckDB 1.5.2 and signed httpfs repository extension",
       "evidence_id": "duckdb-1.5.2-extension-update-parser",
       "evidence_kind": "parser_acceptance",
       "format": "native DuckDB extension-update qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "0238693013236ee02a9f2e151b681b3b965f32938f33da03d58a4764a3303d34"
+      "sha256": "2e2c32bb03c1f58c756a2224e8264b1522c8a392ee087d63aa85018814b25e7f"
     },
     {
-      "artifact": "duckdb-extensions618/proof.json",
+      "artifact": "duckdb-qualification/extension-updates-live-1.5.2.json",
       "authority": "Native DuckDB 1.5.2 and signed httpfs repository extension",
       "evidence_id": "duckdb-1.5.2-extension-update-execution",
       "evidence_kind": "live_execution",
       "format": "native DuckDB extension-update qualification JSON",
       "license_id": "PostgreSQL",
-      "sha256": "0238693013236ee02a9f2e151b681b3b965f32938f33da03d58a4764a3303d34"
+      "sha256": "2e2c32bb03c1f58c756a2224e8264b1522c8a392ee087d63aa85018814b25e7f"
     }
   ],
   "provider_id": "org.cdeadmin.duckdb",

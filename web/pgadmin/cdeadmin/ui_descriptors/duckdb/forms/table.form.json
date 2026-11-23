@@ -11,27 +11,18 @@
   "omitted_tabs": [
     {
       "tab": "Partitions",
-      "reason": "no partitioning"
+      "reason": "DuckDB 1.5.2 has no native table partitioning DDL; Hive-partitioned file output belongs to COPY TO (PARTITION_BY ...)."
     },
     {
       "tab": "Triggers",
-      "reason": "no triggers"
+      "reason": "DuckDB 1.5.2 has no triggers."
     },
     {
       "tab": "Security",
-      "reason": "no users or privileges"
+      "reason": "DuckDB 1.5.2 has no database users, roles or SQL GRANT privileges."
     }
   ],
-  "gaps": [
-    {
-      "concept": "Column grid depth",
-      "reason": "column records carry only name/type/nullable/default/unique/primary_key; add collation, generated columns, comment"
-    },
-    {
-      "concept": "Partitions tab",
-      "reason": "omit: DuckDB has no table partitioning; list under omitted_tabs when the form is completed"
-    }
-  ],
+  "gaps": [],
   "fields": [
     {
       "field_id": "name",
@@ -63,10 +54,17 @@
         },
         {
           "field_id": "type",
-          "label": "Native data type",
+          "label": "Data type",
           "control": "text",
           "required": true,
           "record_key": "data_type"
+        },
+        {
+          "field_id": "collation",
+          "label": "Collation",
+          "control": "text",
+          "required": false,
+          "placeholder": "e.g. NOCASE, NOACCENT"
         },
         {
           "field_id": "nullable",
@@ -80,6 +78,13 @@
           "label": "Default expression",
           "control": "text",
           "required": false
+        },
+        {
+          "field_id": "generated_expression",
+          "label": "Generated AS expression",
+          "control": "text",
+          "required": false,
+          "help": "DuckDB GENERATED ALWAYS AS (...) expression; leave Default empty and Nullable enabled."
         },
         {
           "field_id": "unique",
@@ -96,10 +101,16 @@
           "default": false,
           "record_key": "primary_key_position",
           "record_truthy": true
+        },
+        {
+          "field_id": "comment",
+          "label": "Comment",
+          "control": "text",
+          "required": false
         }
       ],
       "required": true,
-      "help": "Array of name, type, nullable, default, unique and primary_key properties."
+      "help": "Define columns with DuckDB data types, optional COLLATE, DEFAULT or GENERATED ALWAYS AS expressions, constraints and comments."
     },
     {
       "field_id": "primary_key",
@@ -213,5 +224,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Alter-mode column changes (add_columns, drop_columns, rename_columns) are produced from the Columns grid diff; they are not separate fields. Reviewed by tools/review_ui_descriptors.py: constraints grid split into Primary key / Unique / Foreign keys / Check; parent picker (schema). Reviewed by tools/review_ui_descriptors.py: column grid record keys. Round trip verified in-process (create, re-inspect, alter via the Columns grid diff) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+  "notes": "DuckDB 1.5.2 table form with collation, generated columns and column comments on create/add_columns; complex table rebuilds (type conversions, constraint/PK retargeting, column drops/reordering with dependents) run through the reviewed DuckDB DDN schema workflow."
 }

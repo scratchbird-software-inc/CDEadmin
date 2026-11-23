@@ -1,4 +1,4 @@
-"""Reviewed, cancellable native database copies on the original DuckDB handle."""
+"""Reviewed, cancellable native and foreign-attached database copies (DU-AUD-07)."""
 from copy import deepcopy
 import hashlib
 import json
@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 
-from .attachments import catalogs, file_identity, identifier_key, quote
+from .attachments import catalogs, file_identity, identifier_key, quote, sqlite_file_identity
 from ...sdk import RelationalClientError
 
 FAMILIES = {
@@ -20,6 +20,7 @@ FAMILIES = {
     'types': ('duckdb_types', ('schema_name', 'type_name')),
     'macros': ('duckdb_functions', ('schema_name', 'function_name', 'function_type', 'parameters')),
 }
+ADMITTED_SOURCE_TYPES = frozenset({'duckdb', 'sqlite', 'postgres', 'mysql'})
 ACTIVE = frozenset({'reviewing', 'applying'})
 PRIVATE = frozenset({'baseline', 'draft', 'deadline', 'worker', 'origin'})
 
@@ -44,9 +45,12 @@ def check_cancel(record):
 
 def physical_columns(table, columns):
     """Follow native COPY's physical columns without evaluating virtual values."""
+    raw_sql = table.get('sql')
+    if not isinstance(raw_sql, str) or not raw_sql.strip():
+        return [row['column_name'] for row in sorted(columns, key=lambda row: row['column_index'])]
     import duckdb
-    source = table['sql'].encode('utf8')
-    positions = duckdb.tokenize(table['sql'])
+    source = raw_sql.encode('utf8')
+    positions = duckdb.tokenize(raw_sql)
     tokens = []
     for index, (offset, kind) in enumerate(positions):
         end = positions[index + 1][0] if index + 1 < len(positions) else len(source)
@@ -71,13 +75,16 @@ def physical_columns(table, columns):
     marker = [(word, duckdb.token_type.keyword) for word in ('generated', 'always', 'as')]
     for section in sections:
         lowered = [(word.lower() if kind == duckdb.token_type.keyword else word, kind) for word, kind in section]
-        if any(lowered[index:index+3] == marker for index in range(len(lowered)-2)):
+        if any(lowered[index:index + 3] == marker for index in range(len(lowered) - 2)):
             name = section[0][0]
             if name.startswith('"') and name.endswith('"'):
                 name = name[1:-1].replace('""', '"')
             generated.add(identifier_key(name))
-    return [row['column_name'] for row in sorted(columns, key=lambda row: row['column_index'])
-        if identifier_key(row['column_name']) not in generated]
+    return [
+        row['column_name']
+        for row in sorted(columns, key=lambda row: row['column_index'])
+        if identifier_key(row['column_name']) not in generated
+    ]
 
 
 def observe(handle, alias, record):
@@ -100,14 +107,18 @@ def observe(handle, alias, record):
         check_cancel(record)
         path = [alias, table['schema_name'], table['table_name']]
         record['active_table'] = path
-        columns = [row for row in result['objects']['columns']
-            if row['schema_name'] == path[1] and row['table_name'] == path[2]]
+        columns = [
+            row for row in result['objects']['columns']
+            if row['schema_name'] == path[1] and row['table_name'] == path[2]
+        ]
         physical = physical_columns(table, columns)
         if not physical:
             raise ValueError('Native physical copy-column evidence is unavailable')
         value = 'hash(ROW(' + ','.join('t.' + quote(column) for column in physical) + '))'
-        row = handle.execute('SELECT count(*), coalesce(bit_xor(' + value + '),0), '
-            'coalesce(sum(' + value + '::HUGEINT),0) FROM ' + '.'.join(map(quote, path)) + ' t').fetchone()
+        row = handle.execute(
+            'SELECT count(*), coalesce(bit_xor(' + value + '),0), '
+            'coalesce(sum(' + value + '::HUGEINT),0) FROM ' + '.'.join(map(quote, path)) + ' t'
+        ).fetchone()
         result['tables'][encoded(path[1:])] = [str(value) for value in row]
     record.pop('active_table', None)
     if len(encoded(result).encode()) > 8 * 1024 * 1024:
@@ -115,26 +126,130 @@ def observe(handle, alias, record):
     return result
 
 
+def _catalog_identity(route, row, *, side):
+    ctype = row['type']
+    raw_path = row.get('path')
+    if ctype == 'duckdb':
+        if raw_path is None:
+            if route.get('allow_memory') is not True:
+                raise ValueError('In-memory database copy requires registered memory authorization')
+            return {'memory': True, 'catalog_type': 'duckdb'}
+        if isinstance(raw_path, str) and raw_path.startswith(('http://', 'https://', 's3://')):
+            if side != 'source' or not row.get('read_only'):
+                raise ValueError('Remote httpfs catalogs can only be used as read-only copy sources')
+            return {'remote_uri': raw_path, 'catalog_type': 'duckdb', 'remote': True}
+        identity = file_identity(route, raw_path)
+        return {key: identity[key] for key in ('path', 'device', 'inode')}
+    if ctype == 'sqlite':
+        if not raw_path:
+            return {'memory': True, 'catalog_type': 'sqlite', 'foreign': True}
+        identity = sqlite_file_identity(route, raw_path)
+        return {
+            'path': identity['path'], 'device': identity['device'], 'inode': identity['inode'],
+            'catalog_type': 'sqlite', 'foreign': True,
+        }
+    if ctype in {'postgres', 'mysql'}:
+        return {'catalog_type': ctype, 'foreign': True, 'oid': str(row['oid'])}
+    raise ValueError(f'Unsupported catalog type for database copy: {ctype}')
+
+
+def catalog_capabilities(rows):
+    items = []
+    for row in rows:
+        raw_path = str(row.get('path') or '')
+        remote = raw_path.startswith(('http://', 'https://', 's3://'))
+        foreign = row['type'] != 'duckdb'
+        items.append({
+            'name': row['name'],
+            'type': row['type'],
+            'read_only': bool(row['read_only']),
+            'foreign': foreign,
+            'remote': remote,
+            'admitted_as_source': row['type'] in ADMITTED_SOURCE_TYPES,
+            'admitted_as_destination': not bool(row['read_only']) and not remote and row['type'] in ADMITTED_SOURCE_TYPES,
+            'requires_explicit_foreign_destination_opt_in': foreign and not bool(row['read_only']),
+            'cutover_implied': False,
+        })
+    return items
+
+
+def conversion_preview(source_obs, dest_obs, source_cat, dest_cat, mode):
+    foreign_src = source_cat['type'] != 'duckdb'
+    foreign_dst = dest_cat['type'] != 'duckdb'
+    loss_notes = []
+    if foreign_src:
+        loss_notes.append(
+            f"Foreign {source_cat['type']} source catalog exposes tables through scanner types; "
+            'foreign triggers, server grants, and engine-specific indexes are not copied.'
+        )
+    if foreign_dst:
+        loss_notes.append(
+            f"Foreign {dest_cat['type']} destination stores DuckDB columns using target engine type coercion; "
+            'DuckDB macros, sequences, ENUM types, and nested UNION/MAP types may be rejected by the foreign store.'
+        )
+    loss_notes.append('Database copy never performs or implies physical source cutover.')
+    dest_cols = {
+        (c['schema_name'], c['table_name'], c['column_name']): c['data_type']
+        for c in dest_obs['objects']['columns']
+    }
+    table_previews = []
+    for tbl in source_obs['objects']['tables']:
+        tkey = (tbl['schema_name'], tbl['table_name'])
+        scols = [
+            c for c in source_obs['objects']['columns']
+            if (c['schema_name'], c['table_name']) == tkey
+        ]
+        mismatches = []
+        for col in scols:
+            existing_tp = dest_cols.get((*tkey, col['column_name']))
+            if existing_tp is not None and existing_tp != col['data_type']:
+                mismatches.append({
+                    'column': col['column_name'],
+                    'source_type': col['data_type'],
+                    'destination_type': existing_tp,
+                })
+        table_previews.append({
+            'schema': tbl['schema_name'],
+            'table': tbl['table_name'],
+            'column_count': len(scols),
+            'type_conversions': mismatches,
+        })
+    return {
+        'source_type': source_cat['type'],
+        'destination_type': dest_cat['type'],
+        'foreign_involved': foreign_src or foreign_dst,
+        'mode': mode,
+        'cutover_implied': False,
+        'tables': table_previews,
+        'notes': loss_notes,
+    }
+
+
 def compile_operation(route, draft, before):
-    if not isinstance(draft, dict) or set(draft) != {'source_catalog', 'destination_catalog', 'mode'}:
+    allowed = {'source_catalog', 'destination_catalog', 'mode', 'allow_foreign_destination'}
+    if not isinstance(draft, dict) or not {'source_catalog', 'destination_catalog', 'mode'} <= set(draft) or (
+        set(draft) - allowed
+    ):
         raise ValueError('Select source, destination and native database-copy mode')
     if not isinstance(draft['mode'], str) or draft['mode'] not in {'ALL', 'SCHEMA', 'DATA'}:
         raise ValueError('Select native schema, data or schema and data copy')
+    allow_foreign_dest = draft.get('allow_foreign_destination', False)
+    if type(allow_foreign_dest) is not bool:
+        raise ValueError('allow_foreign_destination must be boolean')
+
     selected = []
-    for field in ('source_catalog', 'destination_catalog'):
+    for field, side in (('source_catalog', 'source'), ('destination_catalog', 'destination')):
         name = draft[field]
         if not isinstance(name, str) or not name or '\x00' in name or len(name.encode()) > 65536:
             raise ValueError('Select an exact attached native catalog name')
         row = next((row for row in before if identifier_key(row['name']) == identifier_key(name)), None)
-        if row is None or row['type'] != 'duckdb':
-            raise ValueError('Select an attached native DuckDB catalog')
-        if row['path'] is None:
-            if route.get('allow_memory') is not True:
-                raise ValueError('In-memory database copy requires registered memory authorization')
-            identity = {'memory': True}
-        else:
-            identity = file_identity(route, row['path'])
-            identity = {key: identity[key] for key in ('path', 'device', 'inode')}
+        if row is None or row['type'] not in ADMITTED_SOURCE_TYPES:
+            raise ValueError('Select an attached DuckDB or admitted foreign scanner catalog')
+        if side == 'destination' and row['type'] != 'duckdb' and not allow_foreign_dest:
+            raise ValueError(
+                'Select an attached native DuckDB destination catalog or explicitly opt into allow_foreign_destination'
+            )
+        identity = _catalog_identity(route, row, side=side)
         selected.append({'catalog': row, 'file_identity': identity})
     source, destination = selected
     if source['catalog']['oid'] == destination['catalog']['oid']:
@@ -156,12 +271,14 @@ def baseline(handle, route, draft, record):
     before = catalogs(handle)
     origin = record['origin']
     if not any((row['name'], row['oid'], row['path']) ==
-            (origin[0], str(origin[1]), origin[2]) for row in before):
+               (origin[0], str(origin[1]), origin[2]) for row in before):
         raise ValueError('The original registered native catalog identity changed')
     compiled = compile_operation(route, draft, before)
     context = record['session_scope_id']
-    result = {'catalogs': before, 'compiled': compiled, 'session_scope_id': context,
-        'transaction_id': str(handle.execute('SELECT current_transaction_id()').fetchone()[0])}
+    result = {
+        'catalogs': before, 'compiled': compiled, 'session_scope_id': context,
+        'transaction_id': str(handle.execute('SELECT current_transaction_id()').fetchone()[0]),
+    }
     for side in ('source', 'destination'):
         check_cancel(record)
         record['phase'] = 'reading_' + side
@@ -180,10 +297,13 @@ def dispatch(handle, source):
 
 
 def storage_facts(compiled):
-    """Native observed encryption belongs to each attached store, never its SQL."""
-    return {side: {key: compiled[side]['catalog'][key]
-        for key in ('name', 'oid', 'path', 'read_only', 'encrypted', 'cipher')}
-        for side in ('source', 'destination')}
+    return {
+        side: {
+            key: compiled[side]['catalog'][key]
+            for key in ('name', 'oid', 'path', 'type', 'read_only', 'encrypted', 'cipher')
+        }
+        for side in ('source', 'destination')
+    }
 
 
 def observe_storage(handle, compiled):
@@ -192,36 +312,64 @@ def observe_storage(handle, compiled):
     for side in ('source', 'destination'):
         expected = compiled[side]['catalog']
         row = next((row for row in rows if row['name'] == expected['name']), None)
-        observed[side] = {key: row[key] for key in ('name', 'oid', 'path', 'read_only', 'encrypted', 'cipher')} if row else None
-    return {'catalogs': observed, 'verified': observed == storage_facts(compiled),
-        'method': 'Native catalog identity, path, access, encryption and cipher; file reopening and commit remain separate observations'}
+        observed[side] = (
+            {key: row[key] for key in ('name', 'oid', 'path', 'type', 'read_only', 'encrypted', 'cipher')}
+            if row else None
+        )
+    return {
+        'catalogs': observed,
+        'verified': observed == storage_facts(compiled),
+        'method': 'Native catalog identity, path, type, access, encryption and cipher; file reopening and commit remain separate observations',
+    }
 
 
 def verify(before, after, mode):
     source, destination = before['source'], before['destination']
+    foreign_involved = (
+        before['compiled']['source']['catalog']['type'] != 'duckdb'
+        or before['compiled']['destination']['catalog']['type'] != 'duckdb'
+    )
+    checked_families = ('schemas', 'tables', 'columns') if foreign_involved else tuple(FAMILIES)
     object_checks = {}
-    for family in FAMILIES:
+    for family in checked_families:
         expected = object_keys(destination, family)
         if mode != 'DATA':
             expected |= object_keys(source, family)
         object_checks[family] = expected == object_keys(after, family)
     data_checks = {}
+
     def column_types(observation, name):
-        return sorted((row['column_index'], row['column_name'], row['data_type'])
+        return sorted(
+            (row['column_index'], row['column_name'], row['data_type'])
             for row in observation['objects']['columns']
-            if encoded([row['schema_name'], row['table_name']]) == name)
+            if encoded([row['schema_name'], row['table_name']]) == name
+        )
+
     for name, values in after['tables'].items():
         old = list(map(int, destination['tables'].get(name, ['0', '0', '0'])))
         copied = list(map(int, source['tables'].get(name, ['0', '0', '0']))) if mode != 'SCHEMA' else [0, 0, 0]
         expected = [old[0] + copied[0], old[1] ^ copied[1], old[2] + copied[2]]
-        conversion = mode == 'DATA' and name in source['tables'] and column_types(source, name) != column_types(destination, name)
+        conversion = (
+            foreign_involved
+            or (mode == 'DATA' and name in source['tables'] and column_types(source, name) != column_types(destination, name))
+        )
         data_checks[name] = {
             'method': 'native_row_count_after_conversion' if conversion else 'native_row_bag_aggregates',
-            'expected_rows': str(expected[0]), 'observed_rows': values[0],
-            'verified': int(values[0]) == expected[0] if conversion else list(map(int, values)) == expected}
-    return {'native_object_identities': object_checks, 'native_table_postconditions': data_checks,
-        'verification_method': 'native object identities and per-table native row aggregates; native DATA conversions use row counts, not cross-type hashes; neither is a collision-free data proof',
-        'verified': all(object_checks.values()) and all(row['verified'] for row in data_checks.values())}
+            'expected_rows': str(expected[0]),
+            'observed_rows': values[0],
+            'verified': int(values[0]) == expected[0] if conversion else list(map(int, values)) == expected,
+        }
+    return {
+        'native_object_identities': object_checks,
+        'native_table_postconditions': data_checks,
+        'foreign_involved': foreign_involved,
+        'cutover_implied': False,
+        'verification_method': (
+            'native object identities and per-table native row aggregates; '
+            'foreign/converted copies use row counts rather than cross-engine hashes; neither is a collision-free data proof'
+        ),
+        'verified': all(object_checks.values()) and all(row['verified'] for row in data_checks.values()),
+    }
 
 
 def worker(client, handle, route, record, reviewing):
@@ -232,17 +380,34 @@ def worker(client, handle, route, record, reviewing):
         check_cancel(record)
         if reviewing:
             compiled = current['compiled']
-            record.update(baseline=current, source_catalog=compiled['source']['catalog']['name'],
+            preview = conversion_preview(
+                current['source'], current['destination'],
+                compiled['source']['catalog'], compiled['destination']['catalog'],
+                compiled['mode'],
+            )
+            record.update(
+                baseline=current,
+                source_catalog=compiled['source']['catalog']['name'],
                 destination_catalog=compiled['destination']['catalog']['name'],
+                source_catalog_type=compiled['source']['catalog']['type'],
+                destination_catalog_type=compiled['destination']['catalog']['type'],
+                conversion_preview=preview,
+                cutover_implied=False,
                 source=';\n'.join(compiled['statements']) + ';',
-                mode=compiled['mode'], deadline=time.monotonic() + 300,
+                mode=compiled['mode'],
+                deadline=time.monotonic() + 300,
                 storage=storage_facts(compiled),
                 source_table_rows={key: values[0] for key, values in current['source']['tables'].items()},
-                destination_table_rows={key: values[0] for key, values in current['destination']['tables'].items()})
+                destination_table_rows={key: values[0] for key, values in current['destination']['tables'].items()},
+            )
             if record['storage']['source']['encrypted'] and not record['storage']['destination']['encrypted']:
-                record['warnings'].append('The source is encrypted and the destination is not encrypted. Copied data will be stored without database encryption in the destination.')
+                record['warnings'].append(
+                    'The source is encrypted and the destination is not encrypted. Copied data will be stored without database encryption in the destination.'
+                )
             if record['storage']['destination']['encrypted']:
-                record['warnings'].append('The destination keeps its attached native encryption key and cipher. Copy SQL and receipts contain no encryption keys. Commit, detach and independently reopen the new file with its intended key before retiring the source.')
+                record['warnings'].append(
+                    'The destination keeps its attached native encryption key and cipher. Copy SQL and receipts contain no encryption keys. Commit, detach and independently reopen the new file with its intended key before retiring the source.'
+                )
             record['review_digest'] = hashlib.sha256(encoded(public(record)).encode()).hexdigest()
             record['state'] = 'reviewed'
         else:
@@ -252,26 +417,32 @@ def worker(client, handle, route, record, reviewing):
             record['steps'] = []
             for source in current['compiled']['statements']:
                 check_cancel(record)
-                record.update(phase='copying_schema' if source.endswith('(SCHEMA)') else 'copying_data',
-                    native_dispatched=True, native_catalog_or_data_effects_possible=True)
+                record.update(
+                    phase='copying_schema' if source.endswith('(SCHEMA)') else 'copying_data',
+                    native_dispatched=True, native_catalog_or_data_effects_possible=True,
+                )
                 step = {'source': source, 'native_dispatched': True, 'native_acknowledged': False}
                 record['steps'].append(step)
-                try:client.publish_receipt(handle,'database_copy',public(record))
+                try:
+                    client.publish_receipt(handle, 'database_copy', public(record))
                 except Exception:
                     step.update(native_dispatched=False)
-                    record['native_dispatched']=any(value['native_dispatched'] for value in record['steps'])
-                    record['native_catalog_or_data_effects_possible']=record['native_dispatched']
+                    record['native_dispatched'] = any(value['native_dispatched'] for value in record['steps'])
+                    record['native_catalog_or_data_effects_possible'] = record['native_dispatched']
                     raise
                 dispatch(handle, source)
                 step['native_acknowledged'] = True
-                client.publish_receipt(handle,'database_copy',public(record))
+                client.publish_receipt(handle, 'database_copy', public(record))
             record.update(native_acknowledged=True, phase='observing_destination')
             after = observe(handle, current['compiled']['destination']['catalog']['name'], record)
             observation = verify(current, after, current['compiled']['mode'])
             storage_observation = observe_storage(handle, current['compiled'])
             verified = observation['verified'] and storage_observation['verified']
-            record.update(state='acknowledged', observation=observation,
-                storage_observation=storage_observation, rediscovery_verified=verified)
+            record.update(
+                state='acknowledged', observation=observation,
+                storage_observation=storage_observation, rediscovery_verified=verified,
+                cutover_implied=False,
+            )
             blocked = not verified
     except Exception as error:
         import duckdb
@@ -300,19 +471,24 @@ def worker(client, handle, route, record, reviewing):
                 record.pop('baseline', None)
                 record.pop('draft', None)
             record['phase'] = 'finished'
-            try:client.publish_receipt(handle,'database_copy',public(record))
-            except Exception as error:record['receipt_recording_error_type']=type(error).__name__
-            finally:client._busy.discard(id(handle))
+            try:
+                client.publish_receipt(handle, 'database_copy', public(record))
+            except Exception as error:
+                record['receipt_recording_error_type'] = type(error).__name__
+            finally:
+                client._busy.discard(id(handle))
 
 
 def action(client, handle, route, request):
     if not isinstance(request, dict):
         raise ValueError('Select a native database-copy request')
     operation = request.get('operation')
-    allowed = {'inventory': {'operation'}, 'review': {'operation', 'draft'},
+    allowed = {
+        'inventory': {'operation'}, 'review': {'operation', 'draft'},
         'apply': {'operation', 'review_id', 'review_digest', 'confirmation', 'confirmed'},
         'receipt': {'operation', 'review_id'}, 'cancel': {'operation', 'review_id'},
-        'discard': {'operation', 'review_id', 'review_digest'}}
+        'discard': {'operation', 'review_id', 'review_digest'},
+    }
     if operation not in allowed or set(request) != allowed[operation]:
         raise ValueError('Unknown native database-copy request')
     with client._lock:
@@ -338,14 +514,20 @@ def action(client, handle, route, request):
             if operation == 'discard':
                 record.update(state='discarded')
                 record.pop('baseline', None)
-                client.publish_receipt(handle,'database_copy',public(record))
+                client.publish_receipt(handle, 'database_copy', public(record))
                 return public(record)
             if (record['deadline'] < time.monotonic() or request['confirmed'] is not True or
                     request['confirmation'] != record['destination_catalog']):
                 raise ValueError('Confirm the current reviewed destination catalog')
         client._require_idle(handle)
         if operation == 'inventory':
-            return {'catalogs': catalogs(handle), 'session_scope_id': context['session_scope_id']}
+            live = catalogs(handle)
+            return {
+                'catalogs': live,
+                'catalog_capabilities': catalog_capabilities(live),
+                'cutover_implied': False,
+                'session_scope_id': context['session_scope_id'],
+            }
         if operation == 'review':
             for key in list(records):
                 old = records[key]
@@ -354,27 +536,33 @@ def action(client, handle, route, request):
                     del records[key]
             if len(records) >= 16:
                 raise ValueError('Close old native database-copy reviews before creating another')
-            # Reject forged SQL/options and unauthorized files before starting a worker.
             compile_operation(route, request['draft'], catalogs(handle))
-            record = {'review_id': str(uuid.uuid4()), 'state': 'reviewing', 'phase': 'starting',
+            record = {
+                'review_id': str(uuid.uuid4()), 'state': 'reviewing', 'phase': 'starting',
                 'session_scope_id': context['session_scope_id'], 'draft': deepcopy(request['draft']),
                 'origin': context['origin'],
                 'deadline': time.monotonic() + 300, 'cancel_requested': False,
                 'native_dispatched': False, 'native_acknowledged': False, 'rediscovery_verified': False,
                 'automatic_retry': False, 'caller_transaction_decision_requested': False,
-                'warnings': ['The original native transaction owns all copy effects. Commit and rollback remain your decision.',
+                'cutover_implied': False,
+                'warnings': [
+                    'The original native transaction owns all copy effects. Commit and rollback remain your decision.',
                     'Review and revalidation read all selected tables to compare native row aggregates.',
                     'Data mode appends native rows. Schema mode creates native objects. Schema and data runs those two native steps in order.',
                     'Native conflicts and the one-writable-database-per-transaction restriction are returned without a fallback or implicit transaction decision.',
                     'Encryption follows the source and destination stores. This copies into another attached catalog; it does not change a source key, replace a file or infer that two attached keys differ.',
-                    'Live review/application belongs to this original session. Durable receipts remain read-only after release. Acknowledgement does not mean the caller committed.']}
+                    'Live review/application belongs to this original session. Durable receipts remain read-only after release. Acknowledgement does not mean the caller committed.',
+                ],
+            }
             records[record['review_id']] = record
         else:
             record.update(state='applying', phase='starting', cancel_requested=False)
-        client.publish_receipt(handle,'database_copy',public(record))
+        client.publish_receipt(handle, 'database_copy', public(record))
         client._busy.add(id(handle))
-        thread = threading.Thread(target=worker, args=(client, handle, deepcopy(route), record, operation == 'review'),
-            daemon=True, name='cdeadmin-duckdb-database-copy')
+        thread = threading.Thread(
+            target=worker, args=(client, handle, deepcopy(route), record, operation == 'review'),
+            daemon=True, name='cdeadmin-duckdb-database-copy',
+        )
         record['worker'] = thread
         try:
             thread.start()

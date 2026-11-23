@@ -51,6 +51,7 @@ import {DataFirebirdBlobDialog, DataFirebirdRowSqlDialog} from './DataFirebirdTo
 import {DataMySQLRowSqlDialog, DataMySQLSpatialDialog, isMySQLSpatialType} from './DataMySQLTools';
 import {DataPostgresCellInspectorModal, DataPostgresRowSqlDialog} from './DataPostgresTools';
 import {DataSqliteCellInspectorModal, DataSqliteRowSqlDialog} from './DataSqliteTools';
+import {DataDuckdbCellInspectorModal, DataDuckdbRowSqlDialog} from './DataDuckdbTools';
 import {defaultLayoutState, orderedColumns} from './RecordForm';
 import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
@@ -184,6 +185,8 @@ export default function DataEditSurface({
   const [pgRowSqlOpen, setPgRowSqlOpen] = useState(false);
   const [sqCellInspectorState, setSqCellInspectorState] = useState(null); // {column, rowIndex}
   const [sqRowSqlOpen, setSqRowSqlOpen] = useState(false);
+  const [duCellInspectorState, setDuCellInspectorState] = useState(null); // {column, rowIndex}
+  const [duRowSqlOpen, setDuRowSqlOpen] = useState(false);
 
   useEffect(() => {
     const el = areaRef.current;
@@ -394,6 +397,10 @@ export default function DataEditSurface({
   }, [engineId, languageProfile]);
   const isSQLite = useMemo(() => {
     const keys = new Set(['sqlite', 'sqlite-native', 'sqlite-sql']);
+    return keys.has(languageProfile) || keys.has(engineId);
+  }, [engineId, languageProfile]);
+  const isDuckDB = useMemo(() => {
+    const keys = new Set(['duckdb', 'duckdb-native', 'duckdb-sql']);
     return keys.has(languageProfile) || keys.has(engineId);
   }, [engineId, languageProfile]);
   const conversionPairs = languageOptions.field_conversion_pairs;
@@ -2835,6 +2842,26 @@ export default function DataEditSurface({
               },
             ]
             : []),
+          ...(isDuckDB
+            ? [
+              {
+                id: `${pfx}.mnu.du_row_sql`,
+                label: gettext('Generate DuckDB Row SQL & COPY Snippet…'),
+                iconKey: 'action.sql_preview',
+                disabled: rows.length === 0,
+                index: 225,
+                callback: () => setDuRowSqlOpen(true),
+              },
+              {
+                id: `${pfx}.mnu.du_cell_inspector`,
+                label: gettext('Inspect DuckDB Arrow Value, Nested Container & Input Envelope…'),
+                iconKey: 'action.view',
+                disabled: !activeColObj || rows.length === 0,
+                index: 228,
+                callback: () => setDuCellInspectorState({column: activeColObj, rowIndex: activeRowIndex}),
+              },
+            ]
+            : []),
         ],
       },
       {
@@ -4406,6 +4433,28 @@ export default function DataEditSurface({
             columns={columns}
             row={rows[activeRowIndex]?.values || null}
             onClose={() => setSqRowSqlOpen(false)}
+          />
+        </>
+      )}
+
+      {isDuckDB && (
+        <>
+          <DataDuckdbCellInspectorModal
+            open={Boolean(duCellInspectorState)}
+            column={duCellInspectorState?.column || null}
+            value={
+              duCellInspectorState
+                ? rows[duCellInspectorState.rowIndex]?.values?.[duCellInspectorState.column.name]
+                : null
+            }
+            onClose={() => setDuCellInspectorState(null)}
+          />
+          <DataDuckdbRowSqlDialog
+            open={duRowSqlOpen}
+            tableLabel={targetResource?.display_name || targetResource?.name || 'main.table'}
+            columns={columns}
+            row={rows[activeRowIndex]?.values || null}
+            onClose={() => setDuRowSqlOpen(false)}
           />
         </>
       )}

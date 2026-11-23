@@ -96,21 +96,85 @@ export function scopedSQLConfig(config, state, position) {
     }
     return bindings;
   };
+  const resolveScalarSubquery = (subText, outerBindings, depth=0) => {
+    if (depth > 12 || config.nativeEngine !== 'duckdb') return undefined;
+    const subStruct = nativeSourceStructure(subText, config.nativeLanguageContext, subText.length);
+    const stmt = subStruct.containers.at(-1);
+    const parens = stmt?.children?.find(child => child.name === 'Parens');
+    if (!parens) return undefined;
+    const subConfig = scopedSQLConfig(
+      {...config, schema: Object.assign(Object.create(null), schema)},
+      {sliceDoc: (f, t) => subText.slice(f, t), doc: {toString: () => subText}},
+      parens.to - 1,
+    );
+    const subNodes = (parens.children || []).filter(n => !['(', ')'].includes(n.name));
+    const subWord = n => n ? upper(subText.slice(n.from, n.to)) : '';
+    if (subNodes.some(n => ['UNION', 'INTERSECT', 'EXCEPT'].includes(subWord(n)))) return undefined;
+    const mergedBindings = new Map(outerBindings);
+    for (const [alias, entry] of subConfig.nativeScopeBindings) mergedBindings.set(alias, entry);
+    const selIdx = subNodes.findIndex(n => subWord(n) === 'SELECT');
+    if (selIdx < 0) return undefined;
+    const endKeywords = new Set(['FROM', 'WHERE', 'GROUP', 'HAVING', 'ORDER', 'LIMIT', 'OFFSET', 'FETCH', 'FOR', 'WINDOW', 'QUALIFY']);
+    const endIdx = subNodes.findIndex((n, idx) => idx > selIdx && endKeywords.has(subWord(n)));
+    const exprGroups = [[]];
+    for (const n of subNodes.slice(selIdx + 1, endIdx < 0 ? undefined : endIdx)) {
+      if (subWord(n) === ',') exprGroups.push([]); else exprGroups.at(-1).push(n);
+    }
+    if (exprGroups.length !== 1) return undefined;
+    let group = exprGroups[0].filter(n => !['DISTINCT', 'ALL'].includes(subWord(n)));
+    if (!group.length) return undefined;
+    const last = group.at(-1), previous = group.at(-2);
+    const implicitAlias = previous && previous.to < last.from && previous.name !== 'Operator' &&
+      (previous.name !== 'Keyword' || subWord(previous) === 'END' || previous.nativeIdentifierRoles?.includes('nm'));
+    if (identifier(last, 'nm', true) && previous && (subWord(previous) === 'AS' || implicitAlias)) {
+      group = group.slice(0, subWord(previous) === 'AS' ? -2 : -1);
+    }
+    if (!group.length || subWord(group.at(-1)) === '*') return undefined;
+    const subResolve = parts => {
+      let entry = mergedBindings.get(bindingKey(parts[0]));
+      if (!entry) {
+        const direct = subConfig.nativeResolve(parts);
+        if (direct && direct.self.type !== 'function') return direct;
+        const cands = [...mergedBindings.values()].map(owner => lookup(owner.children, parts[0], exactCase)).filter(Boolean);
+        if (cands.length !== 1) return cands.length ? undefined : direct;
+        entry = cands[0];
+      } else {
+        for (const part of parts.slice(1)) {
+          entry = lookup(entry.children, part, exactCase);
+          if (!entry) return undefined;
+        }
+      }
+      return entry;
+    };
+    return duckdbAccessEntry(
+      subText.slice(group[0].from, group.at(-1).to),
+      config.nativeLanguageContext,
+      subResolve,
+      quote,
+      (nestedText, nestedDepth) => resolveScalarSubquery(nestedText, mergedBindings, nestedDepth),
+    );
+  };
   const project = (body, depth=0, positional=false) => {
     if (depth > 12) return [];
     const nodes = children(body).filter(node => !['(', ')'].includes(node.name));
     const select = nodes.findIndex(node => word(node) === 'SELECT');
     if (select < 0) return [];
-    const from = nodes.findIndex((node, index) => index > select && word(node) === 'FROM');
+    const stopWords = new Set(['FROM', 'WHERE', 'GROUP', 'HAVING', 'ORDER', 'UNION', 'INTERSECT', 'EXCEPT', 'LIMIT', 'OFFSET', 'FETCH', 'FOR', 'RETURNING', 'WINDOW', 'QUALIFY']);
+    const selectEnd = nodes.findIndex((node, index) => index > select && stopWords.has(word(node)));
     const bindings = sourceBindings(body, depth);
     const groups = [[]];
-    for (const node of nodes.slice(select + 1, from < 0 ? undefined : from)) {
+    for (const node of nodes.slice(select + 1, selectEnd < 0 ? undefined : selectEnd)) {
       if (word(node) === ',') groups.push([]); else groups.at(-1).push(node);
     }
     const result = [];
     const nativeColumn = parts => {
       if (!parts.length)return undefined;
       if (parts.length===1) {
+        const direct=resolve(parts);
+        if (config.nativeEngine==='duckdb' && direct?.nativeType && direct.self.type==='type') {
+          const colMatches=[...bindings.values()].map(entry => lookup(entry.children,parts[0],exactCase)).filter(Boolean);
+          if (!colMatches.length) return direct;
+        }
         const candidates=[...bindings.values()].map(entry => lookup(entry.children,parts[0],exactCase)).filter(Boolean);
         return candidates.length===1 ? candidates[0] : undefined;
       }
@@ -123,7 +187,13 @@ export function scopedSQLConfig(config, state, position) {
       return entry;
     };
     const expressionColumn = expression => config.nativeEngine==='duckdb' && expression.length ?
-      duckdbAccessEntry(state.sliceDoc(expression[0].from,expression.at(-1).to),config.nativeLanguageContext,nativeColumn,quote) :
+      duckdbAccessEntry(
+        state.sliceDoc(expression[0].from,expression.at(-1).to),
+        config.nativeLanguageContext,
+        nativeColumn,
+        quote,
+        (subText, subDepth) => resolveScalarSubquery(subText, bindings, subDepth),
+      ) :
       expression.length===1 ? nativeColumn(path(expression[0],false,true)) : undefined;
     for (let group of groups) {
       group = group.filter(node => !['DISTINCT', 'ALL'].includes(word(node)));
@@ -196,6 +266,7 @@ export function scopedSQLConfig(config, state, position) {
       }
       return entry;
     },
+    nativeSubqueryResolve: (subText, subDepth) => resolveScalarSubquery(subText, bindings, subDepth),
     nativeName: name, nativeStructure: structure, nativeQuote: quote};
 }
 

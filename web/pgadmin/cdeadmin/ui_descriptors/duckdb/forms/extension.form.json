@@ -1,0 +1,87 @@
+{
+  "schema": "cdeadmin.ui-form.v1",
+  "engine": "duckdb",
+  "family": "engine_object",
+  "resource_kinds": [
+    "extension"
+  ],
+  "form_reference": "SR-F-030585",
+  "status": "complete",
+  "engine_tab_title": "DuckDB",
+  "omitted_tabs": [
+    {
+      "tab": "Security",
+      "reason": "Extension signature, repository and external-access controls are enforced by DuckDB runtime settings."
+    }
+  ],
+  "gaps": [],
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "Extension name",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "readonly": true
+    },
+    {
+      "field_id": "version",
+      "label": "Extension version",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "version",
+      "initial_value_path": [
+        "native",
+        "version"
+      ]
+    },
+    {
+      "field_id": "description",
+      "label": "Description",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.description"
+    },
+    {
+      "field_id": "install_mode",
+      "label": "Install mode",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.install_mode"
+    },
+    {
+      "field_id": "installed_from",
+      "label": "Installed from",
+      "tab": "Definition",
+      "control": "text",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "catalog_metadata.installed_from"
+    },
+    {
+      "field_id": "installed",
+      "label": "Installed",
+      "tab": "Engine",
+      "control": "boolean",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "installed"
+    },
+    {
+      "field_id": "loaded",
+      "label": "Loaded in session",
+      "tab": "Engine",
+      "control": "boolean",
+      "readonly": true,
+      "ui_only": true,
+      "record_key": "loaded"
+    }
+  ],
+  "notes": "DuckDB 1.5.2 extension inspection form; INSTALL, LOAD and UPDATE EXTENSIONS run through the extension operations and workspace."
+}

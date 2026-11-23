@@ -2236,6 +2236,13 @@ class ProviderWorkspaceService:
         except (ValueError, TypeError, KeyError, OSError) as error:
             raise ProviderWorkspaceError(str(error)) from None
 
+    def duckdb_operations(self, server, operation, request, *, host_authorized=True):
+        from .duckdb_operations_hub import handle_operation
+        try:
+            return handle_operation(self, server, operation, request, host_authorized=host_authorized)
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            raise ProviderWorkspaceError(str(error)) from None
+
     def sqlite_data_capture(self, server, request):
         from .sqlite_catalog_service import data
         try:
@@ -4997,6 +5004,12 @@ class ProviderWorkspaceService:
             from .sqlite_retained_service import serve
             try:return serve(self,server,action,data)
             except (ValueError,KeyError,TypeError) as error:raise ProviderWorkspaceError(str(error)) from None
+        if action in {'duckdb_retained_schema','duckdb_retained_schema_receipts'}:
+            from .duckdb_retained_service import serve
+            try:
+                return serve(self, server, action, data)
+            except (ValueError, KeyError, TypeError) as error:
+                raise ProviderWorkspaceError(str(error)) from None
         if action in {'firebird_eds_pool','firebird_eds_pool_receipts'}:
             from .firebird_eds_pool_receipts import for_workspace
             if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native Firebird EDS request')
@@ -5060,6 +5073,12 @@ class ProviderWorkspaceService:
                     data['request'], endpoint['route'])
                 from .duckdb_alias_bindings import record_binding_notice
                 return record_binding_notice(self, context, data['database_target_id'], result)
+            if action == 'duckdb_runtime_settings':
+                if not isinstance(data.get('request'), dict):
+                    raise ProviderWorkspaceError('Select a typed DuckDB runtime-settings request')
+                return self.studio_service.duckdb_runtime_settings_action(
+                    context, data.get('session_id'), data['request'], endpoint['route'],
+                )
             if action=='sqlite_native_preupdate':
                 if not isinstance(data.get('request'),dict):raise ProviderWorkspaceError('Select a native SQLite preupdate request')
                 return self.studio_service.sqlite_native_preupdate_action(context,data.get('session_id'),data['request'])

@@ -85,9 +85,27 @@ def test_data(service, server, request):
 
 def copy_plan(service, server, request):
     from .firebird_catalog_export import build_export
-    from .duckdb_copy import plan
-    if not isinstance(request, dict) or set(request) != {
-            'database_target_id', 'resource_id', 'direction', 'format', 'path'}:
+    from .duckdb_copy import capabilities, plan
+    if not isinstance(request, dict):
+        raise ValueError('Invalid DuckDB COPY request')
+    if set(request) == {'database_target_id', 'operation'} and request.get('operation') == 'capabilities':
+        target = request['database_target_id']
+        if not isinstance(target, str) or not target:
+            raise ValueError('Select a registered DuckDB database file')
+        context, endpoint, _root = service.endpoint_service.workspace(server, database_target_id=target)
+        provider = service.endpoint_service.provider_registry.resolve(context).instance
+        if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
+            raise ValueError('Select a native DuckDB endpoint')
+        conn = provider.client._connect({'route': endpoint['route']})
+        try:
+            return capabilities(conn)
+        finally:
+            provider.client._discard_failed_session(conn)
+    allowed = {
+        'database_target_id', 'resource_id', 'direction', 'format', 'path',
+        'options', 'target_schema', 'target_table', 'partitioned_source',
+    }
+    if not {'database_target_id', 'direction', 'format', 'path'} <= set(request) or set(request) - allowed:
         raise ValueError('Invalid DuckDB COPY request')
     target = request['database_target_id']
     if not isinstance(target, str) or not target:
@@ -96,7 +114,7 @@ def copy_plan(service, server, request):
     provider = service.endpoint_service.provider_registry.resolve(context).instance
     if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
         raise ValueError('Select a native DuckDB endpoint')
-    if request['direction'] == 'from':
+    if request['direction'] in {'from', 'reader_ctas', 'reader_insert'}:
         if endpoint['route'].get('read_only') is True:
             raise ValueError('Read-only DuckDB file cannot import COPY data')
         provider._require('data_write', 'resource')

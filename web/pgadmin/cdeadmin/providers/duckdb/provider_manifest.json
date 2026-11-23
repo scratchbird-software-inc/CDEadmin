@@ -1,25 +1,269 @@
 {
-  "identity": {"contract_version": "1.1.0", "provider_id": "org.cdeadmin.duckdb", "provider_version": "0.1.0", "profile_id": "duckdb-native", "profile_version": "1.5.2", "evidence_reference": "cde-prep-150:actual-engine-pilots-20260831"},
-  "package_type": "engine", "sdk_compatibility": {"minimum": "1.1.0", "maximum_exclusive": "2.0.0"},
-  "support_state": "experimental", "enabled": true, "fixture": false, "production_registration": true,
-  "contracts": ["EndpointProvider", "ResourceProvider", "LanguageProvider", "SessionProvider", "ExecutionProvider", "ResultProvider", "ResultRenderer", "DiagnosticProvider", "OperationProvider", "ToolProvider", "SecurityProvider", "SemanticLayerProvider", "AnalyticalQueryProvider"],
-  "permissions": [{"permission_id": "secret_read", "granted": true, "scope": ["endpoint"]}, {"permission_id": "embedded_runtime", "granted": true, "scope": ["endpoint"]}, {"permission_id": "filesystem", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "data_read", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "data_write", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "administer", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "execute", "granted": true, "scope": ["endpoint"]}, {"permission_id": "backup_admin", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "restore_admin", "granted": true, "scope": ["endpoint", "resource"]}, {"permission_id": "maintenance_admin", "granted": true, "scope": ["endpoint", "resource"]}],
-  "required_permissions": ["embedded_runtime", "filesystem"], "composition": {"experience_families": ["duckdb"], "target_adapter_ids": ["embedded-duckdb-helper"]}, "extension_schema": null,
-  "registration": {"display_name": "DuckDB 1.5.2", "workflow": "provider_endpoint", "browse_data": {"resource_kinds": ["table", "view"]}, "route_kind": "embedded_file", "requires_secret": false, "default_port": null, "default": false, "database_targeting": {"mode": "required", "multiple": true, "server_verification": false, "create_and_activate": true}, "target_adapter_version": "1.5.2", "connection_field_sets": ["duckdb-embedded-v1"], "connection_capabilities": {"contract_version": "1.0", "categories": {
-    "authentication": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB embedded database connections have no connection-authentication exchange."},
-    "tls": {"state": "not_applicable", "features": [], "evidence": [], "reason": "An embedded DuckDB connection has no network transport to protect with TLS."},
-    "client_certificates": {"state": "not_applicable", "features": [], "evidence": [], "reason": "An embedded DuckDB connection has no client-certificate exchange."},
-    "connection_profiles": {"state": "complete", "features": ["persistent-provider-profile", "editable-connection-options", "secret-free-export"], "evidence": ["unit:test_cdeadmin_endpoint_persistence", "unit:test_cdeadmin_endpoint_registration"]},
-    "multiple_endpoints": {"state": "not_applicable", "features": [], "evidence": [], "reason": "A DuckDB endpoint is one embedded database file or in-memory database; additional files are database attachments, not connection routes."},
-    "topology_discovery": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB does not expose a distributed connection topology."},
-    "routing_failover": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB embedded connections have no remote routing or failover protocol."},
-    "session_defaults": {"state": "complete", "features": ["read-only-mode", "typed-driver-configuration"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:duckdb-1.5.2:20260901"]},
-    "timeouts": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB's Python connect API exposes no connection timeout; operation cancellation is managed by the execution contract."},
-    "compression": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB embedded connections do not negotiate wire compression."},
-    "consistency_isolation": {"state": "not_applicable", "features": [], "evidence": [], "reason": "DuckDB's Python connect API exposes no client-selectable isolation or consistency mode."},
-    "pooling": {"state": "not_applicable", "features": [], "evidence": [], "reason": "The DuckDB Python embedded connector exposes connection handles, not a connection-pool protocol."},
-    "reconnection": {"state": "not_applicable", "features": [], "evidence": [], "reason": "A closed embedded handle is reopened explicitly; there is no network reconnection policy."},
-    "state_visibility": {"state": "complete", "features": ["autocommit-observation", "transaction-observation", "provider-owned-finality"], "evidence": ["unit:test_cdeadmin_relational_providers", "live:cde-rel-live:duckdb-1.5.2:20260901"]}
-  }}},
-  "provenance": {"purpose": "CDE-REL-020 DuckDB exact-profile provider", "protocol": "embedded_duckdb", "client_state": "duckdb_1.5.2_installed", "runtime_state": "exact_provider_live_verified", "activation_gate": "passed_exact_dialect_and_primary_relational_object_evidence_pending_screenshot_and_manual_ui_review", "live_evidence_reference": "cde-rel-live:duckdb-1.5.2:20260910", "object_experience_gate": "passed", "provider_live_evidence_sha256": "6f4bc30c15830f0278b3c83c980a0862f71bbaafd4da9e3b7a4173b94dc771f7", "object_evidence_sha256": "75c99813b5459d5498b918283cc510355857b5ad4ff122854f83eb4622a83cdb", "strict_object_evidence_sha256": "0fd5ca7b88dfa2b7945cfaee88edb07dd7a57453ea4dbb259b24f32dcd68d90a"}
+  "identity": {
+    "contract_version": "1.1.0",
+    "provider_id": "org.cdeadmin.duckdb",
+    "provider_version": "0.1.0",
+    "profile_id": "duckdb-native",
+    "profile_version": "1.5.2",
+    "evidence_reference": "cde-prep-150:actual-engine-pilots-20260831"
+  },
+  "package_type": "engine",
+  "sdk_compatibility": {
+    "minimum": "1.1.0",
+    "maximum_exclusive": "2.0.0"
+  },
+  "support_state": "experimental",
+  "enabled": true,
+  "fixture": false,
+  "production_registration": true,
+  "contracts": [
+    "EndpointProvider",
+    "ResourceProvider",
+    "LanguageProvider",
+    "SessionProvider",
+    "ExecutionProvider",
+    "ResultProvider",
+    "ResultRenderer",
+    "DiagnosticProvider",
+    "OperationProvider",
+    "ToolProvider",
+    "SecurityProvider",
+    "SemanticLayerProvider",
+    "AnalyticalQueryProvider"
+  ],
+  "permissions": [
+    {
+      "permission_id": "secret_read",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "embedded_runtime",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "filesystem",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_read",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "data_write",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "administer",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "execute",
+      "granted": true,
+      "scope": [
+        "endpoint"
+      ]
+    },
+    {
+      "permission_id": "backup_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "restore_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    },
+    {
+      "permission_id": "maintenance_admin",
+      "granted": true,
+      "scope": [
+        "endpoint",
+        "resource"
+      ]
+    }
+  ],
+  "required_permissions": [
+    "embedded_runtime",
+    "filesystem"
+  ],
+  "composition": {
+    "experience_families": [
+      "duckdb"
+    ],
+    "target_adapter_ids": [
+      "embedded-duckdb-helper"
+    ]
+  },
+  "extension_schema": null,
+  "registration": {
+    "display_name": "DuckDB 1.5.2",
+    "workflow": "provider_endpoint",
+    "browse_data": {
+      "resource_kinds": [
+        "table",
+        "view"
+      ]
+    },
+    "route_kind": "embedded_file",
+    "requires_secret": false,
+    "default_port": null,
+    "default": false,
+    "database_targeting": {
+      "mode": "required",
+      "multiple": true,
+      "server_verification": false,
+      "create_and_activate": true
+    },
+    "target_adapter_version": "1.5.2",
+    "connection_field_sets": [
+      "duckdb-embedded-v1"
+    ],
+    "connection_capabilities": {
+      "contract_version": "1.0",
+      "categories": {
+        "authentication": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB embedded database connections have no connection-authentication exchange."
+        },
+        "tls": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "An embedded DuckDB connection has no network transport to protect with TLS."
+        },
+        "client_certificates": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "An embedded DuckDB connection has no client-certificate exchange."
+        },
+        "connection_profiles": {
+          "state": "complete",
+          "features": [
+            "persistent-provider-profile",
+            "editable-connection-options",
+            "secret-free-export"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_endpoint_persistence",
+            "unit:test_cdeadmin_endpoint_registration"
+          ]
+        },
+        "multiple_endpoints": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "A DuckDB endpoint is one embedded database file or in-memory database; additional files are database attachments, not connection routes."
+        },
+        "topology_discovery": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB does not expose a distributed connection topology."
+        },
+        "routing_failover": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB embedded connections have no remote routing or failover protocol."
+        },
+        "session_defaults": {
+          "state": "complete",
+          "features": [
+            "read-only-mode",
+            "typed-driver-configuration"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:duckdb-1.5.2:20260901"
+          ]
+        },
+        "timeouts": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB's Python connect API exposes no connection timeout; operation cancellation is managed by the execution contract."
+        },
+        "compression": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB embedded connections do not negotiate wire compression."
+        },
+        "consistency_isolation": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "DuckDB's Python connect API exposes no client-selectable isolation or consistency mode."
+        },
+        "pooling": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "The DuckDB Python embedded connector exposes connection handles, not a connection-pool protocol."
+        },
+        "reconnection": {
+          "state": "not_applicable",
+          "features": [],
+          "evidence": [],
+          "reason": "A closed embedded handle is reopened explicitly; there is no network reconnection policy."
+        },
+        "state_visibility": {
+          "state": "complete",
+          "features": [
+            "autocommit-observation",
+            "transaction-observation",
+            "provider-owned-finality"
+          ],
+          "evidence": [
+            "unit:test_cdeadmin_relational_providers",
+            "live:cde-rel-live:duckdb-1.5.2:20260901"
+          ]
+        }
+      }
+    }
+  },
+  "provenance": {
+    "purpose": "CDE-REL-020 DuckDB exact-profile provider",
+    "protocol": "embedded_duckdb",
+    "client_state": "duckdb_1.5.2_installed",
+    "runtime_state": "exact_provider_live_verified",
+    "activation_gate": "passed_exact_dialect_and_primary_relational_object_evidence_pending_screenshot_and_manual_ui_review",
+    "live_evidence_reference": "duckdb-qualification/summary.json",
+    "object_experience_gate": "passed",
+    "provider_live_evidence_sha256": "6fdb054badd542f25f1dd2178e2df8872e609417b6192b9febc61d1b79b3c0dc",
+    "object_evidence_sha256": "893272c80d1b615f4840e86da14be6eab9ce190432924f017b681eb475afc253",
+    "strict_object_evidence_sha256": "fcd54d89c58943bb72fa9743bc775b7dc5fda7807b0601a9bc4995b324e258c8",
+    "metrics_live_evidence_sha256": "c202db562159ec8ebbb8309be29483780efbf34d0f55a809973b25c34b825ccb"
+  }
 }

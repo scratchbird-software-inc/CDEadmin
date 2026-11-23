@@ -691,6 +691,101 @@ class DataStudioService:
         except (ValueError,RelationalClientError) as error:raise DataStudioAccessError(str(error)) from None
 
     @serialized_execution
+    def duckdb_runtime_settings_action(self, context, session_id, request, route):
+        from ..sdk import RelationalClientError
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'duckdb-sql' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Native DuckDB query session required')
+        try:
+            return binding.instance.runtime_settings_action({
+                **request,
+                'session_id': session.provider_session['session_id'],
+                'language_profile': session.language_profile,
+            }, route)
+        except (ValueError, RelationalClientError) as error:
+            raise DataStudioAccessError(str(error)) from None
+
+    @serialized_execution
+    def duckdb_retained_schema_action(self, context, session_id, request, archive, owner, scope_binding, target):
+        import duckdb
+        from ..sdk import RelationalClientError
+        from ..workspace import duckdb_retained_schema as native
+        from ..workspace.firebird_catalog_export import build_export
+        from ..workspace.firebird_catalog_import import read_catalog
+        from ..providers.embedded_session_catalog import duckdb_catalog
+        session, binding = self._operational_session(context, session_id)
+        if session.language_profile != 'duckdb-sql' or context.provider_id != 'org.cdeadmin.duckdb':
+            raise DataStudioAccessError('Select the original native DuckDB query connection')
+        provider = binding.instance
+        provider._require('execute')
+        provider._require('administer')
+        handle = provider._editor_session({'session_id': session.provider_session['session_id']})
+        operation = request.get('operation')
+
+        def parse_doc(value):
+            if isinstance(value, str):
+                return read_catalog(value, engine='duckdb')
+            if isinstance(value, dict) and isinstance(value.get('provenance'), dict) and isinstance(value.get('rows'), dict):
+                return value
+            raise ValueError('Supply a valid DuckDB DDN catalog document or retained model')
+
+        try:
+            with provider.client._lock:
+                provider.client._require_idle(handle)
+                if operation == 'observe':
+                    captured = duckdb_catalog(provider.client, handle, session.session_id, include_system=False)
+                    mod = native.model(captured['resources'], context.endpoint_id, session.session_id)
+                    doc = build_export(
+                        captured['resources'],
+                        endpoint_id=context.endpoint_id,
+                        target_id='retained-session:' + session.session_id,
+                        generation=captured['generation'],
+                        include_system=False,
+                        refreshed=True,
+                        engine='duckdb',
+                    )
+                    return {
+                        'session_id': session.session_id,
+                        'catalog_target_id': 'retained-session:' + session.session_id,
+                        'model': mod,
+                        'document': doc,
+                        'native_context': native.context(provider.client, handle, session.native_work_revision),
+                    }
+                if operation in {'preview', 'review'}:
+                    baseline = parse_doc(request['baseline'])
+                    desired = parse_doc(request['desired'])
+                    live = native.observe(provider.client, handle, context.endpoint_id, session.session_id)
+                    preview = native.plan(
+                        provider.client, handle, baseline, desired, live,
+                        context.endpoint_id, session.session_id,
+                        deletions=request.get('deletions', ()),
+                        alterations=request.get('alterations', ()),
+                        rebuilds=request.get('rebuilds', ()),
+                    )
+                    if operation == 'preview':
+                        return preview
+                    if request.get('execution_sha256') != preview['execution_sha256']:
+                        raise ValueError('Original retained DuckDB preview changed; inspect it before preparing another review')
+                    return archive.review(
+                        preview, baseline, desired,
+                        native.context(provider.client, handle, session.native_work_revision),
+                        owner, scope_binding, target, session.session_id,
+                    )
+                if operation == 'apply':
+                    revision = session.native_work_revision
+                    result = archive.apply(
+                        {key: request[key] for key in ('review_id', 'review_digest', 'confirmed')},
+                        owner, scope_binding, session.session_id,
+                        provider.client, handle, context.endpoint_id, revision,
+                    )
+                    if not result.get('replay_refused'):
+                        session.native_work_revision += 1
+                    return result
+                raise ValueError('Unknown original-session DuckDB DDL action')
+        except (ValueError, RelationalClientError, duckdb.Error) as error:
+            raise DataStudioAccessError(str(error)[:400]) from None
+
+    @serialized_execution
     def sqlite_retained_schema_action(self,context,session_id,request,archive,owner,scope_binding,target):
         import sqlite3
         from ..sdk import RelationalClientError
