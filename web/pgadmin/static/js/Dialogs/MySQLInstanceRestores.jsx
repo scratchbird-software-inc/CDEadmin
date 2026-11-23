@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import {Alert,Box,Button,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import MySQLInstanceAcceptance from './MySQLInstanceAcceptance';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({load_users:false,checksum:true,threads:4,update_gtid_set:'off',timeout_seconds:3600},null,2);
@@ -46,7 +47,19 @@ export default function MySQLInstanceRestores({post}) {
     <Button disabled={busy} onClick={()=>loadSources(0)}>Load instance backup sources</Button>
     {sources && <>
       {sources.sources.map(row=><Button disabled={busy} key={row.server_id} onClick={()=>{setSource(row);setBackups(null);setBackup(null);setReview(null);}}>Use backup source {row.name}</Button>)}
-      <TablePagination component="div" count={sources.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={sources.offset/25} onPageChange={(_event,next)=>loadSources(next*25)} />
+      {sources.total > 25 && (
+        <GridNavigation
+          busy={busy}
+          page={Math.floor(sources.offset / 25)}
+          pages={Math.max(1, Math.ceil(sources.total / 25))}
+          endKnown
+          canNext={sources.offset + 25 < sources.total}
+          onFirst={()=>loadSources(0)}
+          onPrevious={()=>loadSources(Math.max(0,sources.offset-25))}
+          onNext={()=>loadSources(sources.offset+25)}
+          onLast={()=>loadSources(Math.max(0,(Math.ceil(sources.total/25)-1)*25))}
+        />
+      )}
     </>}
     {source && <Box><Box>Backup source: {source.name}</Box><Button disabled={busy} onClick={()=>loadBackups(0)}>Load source instance backups</Button></Box>}
     {backups && <>

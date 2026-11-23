@@ -17,7 +17,7 @@ function exportColumns(columns=[]) {
     column.exportable === false ? [] : [column]);
 }
 
-function safeSpreadsheetValue(value) {
+export function safeSpreadsheetValue(value) {
   if(typeof value === 'string' && DANGEROUS_SPREADSHEET_PREFIX.test(value)) {
     return `'${value}`;
   }

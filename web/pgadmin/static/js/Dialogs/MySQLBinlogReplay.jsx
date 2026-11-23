@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert,Box,Button,MenuItem,Table,TableBody,TableCell,TableHead,TableRow,TablePagination,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
+import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLBinlogReplay({post,engine='mysql'}) {
@@ -60,14 +61,38 @@ export default function MySQLBinlogReplay({post,engine='mysql'}) {
       <TextField disabled={busy} select size="small" label="Owned archive source" value={source} sx={{minWidth:280}} onChange={event => {setSource(event.target.value);setArchives(null);setArchive('');setBoundaries(null);setStart(null);setStop(null);setReview(null);}}>
         {sources.sources.map(item => <MenuItem key={item.server_id} value={item.server_id}>{item.name} ({item.server_id})</MenuItem>)}
       </TextField>
-      <TablePagination component="div" count={sources.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={sources.offset/25} onPageChange={(_event,next) => run('sources',{offset:next*25,limit:25},value => {setSources(value);setSource('');setArchives(null);setArchive('');setReview(null);})} />
+      {sources.total > 25 && (
+        <GridNavigation
+          busy={busy}
+          page={Math.floor(sources.offset / 25)}
+          pages={Math.max(1, Math.ceil(sources.total / 25))}
+          endKnown
+          canNext={sources.offset + 25 < sources.total}
+          onFirst={() => run('sources',{offset:0,limit:25},value => {setSources(value);setSource('');setArchives(null);setArchive('');setReview(null);})}
+          onPrevious={() => run('sources',{offset:Math.max(0,sources.offset-25),limit:25},value => {setSources(value);setSource('');setArchives(null);setArchive('');setReview(null);})}
+          onNext={() => run('sources',{offset:sources.offset+25,limit:25},value => {setSources(value);setSource('');setArchives(null);setArchive('');setReview(null);})}
+          onLast={() => run('sources',{offset:Math.max(0,(Math.ceil(sources.total/25)-1)*25),limit:25},value => {setSources(value);setSource('');setArchives(null);setArchive('');setReview(null);})}
+        />
+      )}
       <Button disabled={busy || source===''} onClick={() => run('archives',archiveRequest({source_server_id:source,offset:0,limit:25}),setArchives)}>Load sealed archives</Button>
     </>}
     {archives && <>
       <TextField disabled={busy} select size="small" label="Sealed native archive" value={archive} sx={{minWidth:380}} onChange={event => {setArchive(event.target.value);setBoundaries(null);setStart(null);setStop(null);setReview(null);}}>
         {archives.jobs.filter(item => ['completed','artifact_verified'].includes(item.state) && !item.artifact_removed && item.native_process_termination_confirmed===true).map(item => <MenuItem key={item.job_id} value={item.job_id}>{item.job_id} ({item.result?.artifact?.total_bytes} bytes)</MenuItem>)}
       </TextField>
-      <TablePagination component="div" count={archives.total} rowsPerPage={25} rowsPerPageOptions={[25]} page={archives.offset/25} onPageChange={(_event,next) => run('archives',archiveRequest({source_server_id:source,offset:next*25,limit:25}),value => {setArchives(value);setArchive('');setReview(null);})} />
+      {archives.total > 25 && (
+        <GridNavigation
+          busy={busy}
+          page={Math.floor(archives.offset / 25)}
+          pages={Math.max(1, Math.ceil(archives.total / 25))}
+          endKnown
+          canNext={archives.offset + 25 < archives.total}
+          onFirst={() => run('archives',archiveRequest({source_server_id:source,offset:0,limit:25}),value => {setArchives(value);setArchive('');setReview(null);})}
+          onPrevious={() => run('archives',archiveRequest({source_server_id:source,offset:Math.max(0,archives.offset-25),limit:25}),value => {setArchives(value);setArchive('');setReview(null);})}
+          onNext={() => run('archives',archiveRequest({source_server_id:source,offset:archives.offset+25,limit:25}),value => {setArchives(value);setArchive('');setReview(null);})}
+          onLast={() => run('archives',archiveRequest({source_server_id:source,offset:Math.max(0,(Math.ceil(archives.total/25)-1)*25),limit:25}),value => {setArchives(value);setArchive('');setReview(null);})}
+        />
+      )}
       {archives.unavailable_job_ids?.length>0 && <Alert severity="warning">Some archive receipts are unavailable: {archives.unavailable_job_ids.join(', ')}</Alert>}
     </>}
     {raw && <Box sx={{my:1}}>

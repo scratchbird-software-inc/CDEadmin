@@ -38,6 +38,8 @@ export {
   ScratchFilterTable,
   ScratchDiffTable,
 } from './data/beautiful';
+export {default as UnifiedDataGrid} from './data/UnifiedDataGrid';
+export {DiffDataGrid, normalizeDiffKind} from './data/DiffDataGrid';
 export {
   DEFAULT_QUERY_LIMITS,
   QueryExecutionToolbarCluster,

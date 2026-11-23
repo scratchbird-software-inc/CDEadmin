@@ -13,6 +13,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import {ScratchDiffTable} from '../../data/beautiful';
 
 export const AI_SURFACES = Object.freeze([
   {id: 'assistant_dock', title: 'Assistant Dock'},
@@ -210,10 +211,20 @@ function DiffReview({session, service}) {
   const rows = session.runtime.outputs.filter((item) => item.diff && Object.keys(item.diff).length).map((item) => ({
     id: item.id, type: item.type, summary: item.text, diff: JSON.stringify(item.diff, null, 2)}));
   return <Box sx={{height: '100%'}}>{!rows.length ? <EmptyState message="No proposed diffs are available." /> :
-    <DataGrid gridId="ai/diffs" aria-label="AI proposed diffs" rows={rows} readOnly enableRowSelect
-      rowKeyGetter={(row) => row.id} onItemEnter={(row) => row && service.select(session.id,
-        {selectedId: row.id})} columns={[{key: 'type', name: 'Type'}, {key: 'summary', name: 'Summary'},
-        {key: 'diff', name: 'Draft diff'}]} />}</Box>;
+    <ScratchDiffTable
+      caption="AI proposed diffs"
+      showIncludeToggle={false}
+      searchable
+      exportable
+      items={rows.map((row) => ({
+        id: row.id,
+        name: row.summary || row.id,
+        kind: row.type || 'proposal',
+        delta: 'modify',
+        summary: row.diff,
+      }))}
+      onInspectItem={(item) => item && service.select(session.id, {selectedId: item.id})}
+    />}</Box>;
 }
 DiffReview.propTypes = {session: PropTypes.object, service: PropTypes.object};
 

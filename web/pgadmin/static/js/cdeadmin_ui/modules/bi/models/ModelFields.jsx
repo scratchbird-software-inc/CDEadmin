@@ -9,12 +9,11 @@
 
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import {Box, Grid, Stack} from '../../../primitives/Layout';
+import {Box, Stack} from '../../../primitives/Layout';
 import {EmptyState} from '../../../feedback/EmptyState';
+import AdaptiveFieldPlacementGrid from '../../../objects/AdaptiveFieldPlacementGrid';
 import FieldControl from '../../../objects/FieldControl';
 import {activeFields} from '../../../objects/descriptors';
-
-const WIDE = new Set(['grid', 'code', 'privileges', 'keyvalue']);
 
 function groups(fields) {
   const found = [];
@@ -42,12 +41,23 @@ export default function ModelFields({tab, draft, onChange, context, disabled = f
     {groups(fields).map((group) => <Box key={group.name || '_'} component="section" aria-label={group.name || tab.title}>
       {group.name && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
         textTransform: 'uppercase', color: 'text.secondary'}}>{group.name}</Box>}
-      <Grid columns={group.fields.some((field) => WIDE.has(field.control)) ? 1 :
-        'repeat(auto-fit, minmax(260px, 1fr))'} gap="standard">
-        {group.fields.map((field) => <FieldControl key={field.field_id} field={field}
-          value={draft[field.field_id]} draft={draft} context={context} error={errors[field.field_id]}
-          disabled={disabled} onChange={(value) => onChange(field.field_id, value)} />)}
-      </Grid>
+      <AdaptiveFieldPlacementGrid
+        fields={group.fields}
+        draft={draft}
+        context={context}
+        qaKey={`bi.models.grid.${tab.tab}.${group.name || 'default'}`}
+        renderField={(field) => (
+          <FieldControl
+            field={field}
+            value={draft[field.field_id]}
+            draft={draft}
+            context={context}
+            error={errors[field.field_id]}
+            disabled={disabled}
+            onChange={(value) => onChange(field.field_id, value)}
+          />
+        )}
+      />
     </Box>)}
     {children}
   </Stack>;

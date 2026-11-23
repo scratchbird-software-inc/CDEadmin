@@ -231,8 +231,8 @@ describe('Task-specific ERD and data modelling designer', () => {
       within(alterDialog).getByText('Breaks Running Clients: 2')
     ).toBeInTheDocument();
 
-    const dropBox = within(alterDialog).getByRole('checkbox', {
-      name: /drop_column: accounts\.legacy_code/,
+    const dropBox = within(alterDialog).getByRole('switch', {
+      name: /Carry drop_column: accounts\.legacy_code/,
     });
     expect(dropBox).toBeChecked();
     fireEvent.click(dropBox);

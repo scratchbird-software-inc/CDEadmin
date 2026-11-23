@@ -43,7 +43,8 @@ import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import getApiInstance from '../api_instance';
 import { ModalContent, ModalFooter } from '../components/ModalContent';
-import DataGrid from 'sources/cdeadmin_ui/data/DataGrid';
+import PagedDataGrid from 'sources/cdeadmin_ui/data/PagedDataGrid';
+import AdaptiveFieldPlacementGrid from '../cdeadmin_ui/objects/AdaptiveFieldPlacementGrid';
 import ProviderTransactionObservation from './ProviderTransactionObservation';
 import {FIREBIRD_ADMIN_TABS, renderFirebirdAdminWorkspace} from '../cdeadmin_ui/modules/firebird_admin';
 import {MYSQL_ADMIN_TABS, renderMySQLAdminWorkspace} from '../cdeadmin_ui/modules/mysql_admin';
@@ -537,15 +538,17 @@ export function RecordListAdminField({field, value, onChange, singleRecord = fal
       {schema.item_kind === 'string' ? <TextField disabled={disabled || schema.fixed_items} fullWidth
         label={`${field.label} ${index + 1}`} value={item}
         onChange={(event) => setItem(index, event.target.value)} /> :
-        <Box sx={{display: 'grid', gridTemplateColumns: {
-          xs: '1fr', md: 'repeat(2, minmax(0, 1fr))'}, gap: 2}}>
-          {children.filter((child) => fieldVisible(child, item)).map((child) =>
+        <AdaptiveFieldPlacementGrid
+          fields={children.filter((child) => fieldVisible(child, item))}
+          draft={item || {}}
+          qaKey={`record-list-admin.${field.field_id || 'list'}.${index}`}
+          renderField={(child) => (
             <VisualAdminField disabled={disabled} key={child.field_id}
               field={visibleFieldOptions(child, item)}
               value={item?.[child.field_id] ?? initialFieldValue(child)}
               onChange={(next) => setItem(index,
-                changedFieldDraft(children, item, child.field_id, next))} />)}
-        </Box>}
+                changedFieldDraft(children, item, child.field_id, next))} />
+          )} />}
     </Box>)}
     {!singleRecord && !schema.fixed_items && <Button disabled={disabled} onClick={() => onChange([...items, schema.item_kind === 'string' ? '' :
       Object.fromEntries(children.map((child) =>
@@ -2680,12 +2683,7 @@ const ServerPagedResultContext = createContext(false);
 function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   readOnly=true, gridId, paginate: requestedPagination=contract.native_page !== true, ...props}) {
   const serverPaged = useContext(ServerPagedResultContext);
-  const paginate = requestedPagination && !serverPaged;
-  const [localPage, setLocalPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(100);
-  useEffect(() => {setLocalPage(0);}, [gridId]);
-  const pageCount = Math.ceil(rows.length / rowsPerPage);
-  const selectedPage = Math.min(localPage, Math.max(0, pageCount - 1));
+  const paginate = requestedPagination && !serverPaged && rows.length > 0;
   const gridRows = rows.map((row) => {
     if (Array.isArray(row) && columns.length) {
       return Object.fromEntries(row.map((value, index) => [
@@ -2715,38 +2713,24 @@ function ProviderDataGrid({columns=[], rows=[], contract={}, ariaLabel,
   const finalColumns = providerGridColumns(
     suppliedColumns.length ? suppliedColumns : contractColumns
   );
-  return <Box sx={{minWidth: 0, mt: 1}}>
-    {paginate && rows.length > 0 && <GridNavigation page={selectedPage} pages={pageCount} endKnown
-      canNext={selectedPage < pageCount - 1} onFirst={() => setLocalPage(0)}
-      onPrevious={() => setLocalPage(selectedPage - 1)} onNext={() => setLocalPage(selectedPage + 1)}
-      onLast={() => setLocalPage(pageCount - 1)}>
-      <TextField select size="small" label={gettext('Rows per page')} value={rowsPerPage}
-        onChange={(event) => {setRowsPerPage(Number(event.target.value)); setLocalPage(0);}}>
-        {[25, 50, 100, 200, 500].map((count) => <MenuItem key={count} value={count}>{count}</MenuItem>)}
-      </TextField>
-      <span>{gettext('%s rows in this result', rows.length)}</span>
-    </GridNavigation>}
-    <Box sx={{height: 'min(52vh, 34rem)', minHeight: 180, minWidth: 0, overflow: 'auto'}}
-      onMouseDownCapture={(event) => {
-        const button = event.target.closest?.('button');
-        if (event.button !== 0 || !button || button.disabled ||
-          !event.currentTarget.contains(button)) return;
-        // Browser focus can scroll an action out from under the pointer between
-        // mousedown and mouseup. Preserve focus without moving the click target.
-        event.preventDefault();
-        button.focus({preventScroll: true});
-      }}>
-      <DataGrid columns={finalColumns} rows={paginate ? gridRows.slice(selectedPage * rowsPerPage, (selectedPage + 1) * rowsPerPage) : gridRows}
-        gridId={gridId || contract.grid_id || 'provider/result'}
-        persistColumnState selectionMode={contract.selection_mode || 'row'}
-        enableCellSelect={contract.selection_mode === 'cell' ||
-        contract.selection_mode === 'range'}
-        readOnly={readOnly || contract.read_only !== false}
-        aria-label={ariaLabel || contract.accessible_name ||
-        gettext('Provider data grid')}
-        noRowsText={gettext('Query completed without rows.')}
-        {...props} />
-    </Box>
+  return <Box sx={{minWidth: 0, mt: 1, height: paginate ? 'min(58vh, 38rem)' : 'min(52vh, 34rem)', minHeight: 180}}
+    onMouseDownCapture={(event) => {
+      const button = event.target.closest?.('button');
+      if (event.button !== 0 || !button || button.disabled ||
+        !event.currentTarget.contains(button)) return;
+      event.preventDefault();
+      button.focus({preventScroll: true});
+    }}>
+    <PagedDataGrid columns={finalColumns} rows={gridRows} pagination={paginate}
+      gridId={gridId || contract.grid_id || 'provider/result'}
+      persistColumnState selectionMode={contract.selection_mode || 'row'}
+      enableCellSelect={contract.selection_mode === 'cell' ||
+      contract.selection_mode === 'range'}
+      readOnly={readOnly || contract.read_only !== false}
+      aria-label={ariaLabel || contract.accessible_name ||
+      gettext('Provider data grid')}
+      noRowsText={gettext('Query completed without rows.')}
+      {...props} />
   </Box>;
 }
 

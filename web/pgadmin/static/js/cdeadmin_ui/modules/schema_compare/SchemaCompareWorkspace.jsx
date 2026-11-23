@@ -18,6 +18,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Banner, Badge, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import {ScratchDiffTable} from '../../data/beautiful';
 import FormReference from '../../navigation/FormReference';
 
 export const SCHEMA_COMPARE_SURFACES = Object.freeze([
@@ -254,9 +255,14 @@ function MappingReview({session, invoke}) {
           {key: 'leftId', name: 'Left object'}, {key: 'rightId', name: 'Right object'},
           {key: 'kind', name: 'Kind'}, {key: 'evidenceText', name: 'Evidence'},
         ]} rows={rows} readOnly enableRowSelect rowKeyGetter={(row) => row.id}
-        onItemSelect={(row) => row?.id && invoke('schema_compare.rename.accept', {
-          candidateId: row.id, category: 'representational_difference',
-        })} />
+        onItemSelect={(rowOrIdx) => {
+          const row = typeof rowOrIdx === 'number' ? rows[rowOrIdx] : rowOrIdx;
+          if (row?.id) {
+            invoke('schema_compare.rename.accept', {
+              candidateId: row.id, category: 'representational_difference',
+            });
+          }
+        }} />
     </Box>
   </Box>;
 }
@@ -286,14 +292,27 @@ function ChangePlan({session, invoke}) {
     </Toolbar>
     {!session.plan ? <EmptyState
       message="Select an explicit live target and generate a provider-native plan." /> :
-      <Box sx={{flex: 1, minHeight: 0}}><DataGrid gridId="schema-compare/change-plan"
-        aria-label="Dependency ordered change plan" readOnly
-        columns={[
-          {key: 'action', name: 'Action'}, {key: 'kind', name: 'Object kind'},
-          {key: 'qualifiedName', name: 'Qualified name'}, {key: 'risk', name: 'Risk'},
-          {key: 'reversible', name: 'Reversible'},
-          {key: 'nativeStatement', name: 'Provider-native operation'},
-        ]} rows={session.plan.operations} rowKeyGetter={(row) => row.id} /></Box>}
+      <Box sx={{flex: 1, minHeight: 0}}>
+        <ScratchDiffTable
+          caption="Dependency ordered change plan"
+          showIncludeToggle={false}
+          searchable
+          filterable
+          exportable
+          items={session.plan.operations.map((op) => ({
+            id: op.id,
+            name: op.qualifiedName,
+            kind: op.kind,
+            delta: op.action,
+            risk: op.risk,
+            destructive:
+              op.risk === 'high' ||
+              op.risk === 'destructive' ||
+              (op.reversible === false && String(op.action).toLowerCase() === 'drop'),
+            summary: op.nativeStatement,
+          }))}
+        />
+      </Box>}
   </Box>;
 }
 

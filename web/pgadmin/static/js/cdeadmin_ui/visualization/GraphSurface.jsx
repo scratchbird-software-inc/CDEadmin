@@ -45,7 +45,8 @@ export default function GraphSurface({nodes=[], edges=[], mode='graph', selected
       columns={[{key: 'name', name: 'Name'}, {key: 'kind', name: 'Kind'},
         {key: 'namespace', name: 'Namespace'}, {key: 'referenceText', name: 'Reference'},
         {key: 'selected', name: 'Selection'}]} rows={rows} readOnly enableRowSelect
-      rowKeyGetter={(row) => `${row.recordType}:${row.id}`} onItemSelect={(row) => {
+      rowKeyGetter={(row) => `${row.recordType}:${row.id}`} onItemSelect={(rowOrIdx) => {
+        const row = typeof rowOrIdx === 'number' ? rows[rowOrIdx] : rowOrIdx;
         if(!row) return;
         row.recordType === 'edge' ? onSelectEdge?.(row.id) : onSelect?.(row.id);
       }} />;

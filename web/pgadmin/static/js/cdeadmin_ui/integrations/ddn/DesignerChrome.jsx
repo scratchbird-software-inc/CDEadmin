@@ -19,8 +19,8 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../../primitives/Layout';
 import {Button, IconButton} from '../../primitives/Button';
-import {NumberField, TextField} from '../../primitives/Field';
-import {Checkbox, Select} from '../../primitives/Choice';
+import {TextField} from '../../primitives/Field';
+import {Select} from '../../primitives/Choice';
 import {Dialog} from '../../overlays/Dialog';
 import {StatusBadge} from '../../status/StatusBadge';
 import {Banner} from '../../feedback/Indicators';
@@ -34,8 +34,8 @@ import {
   T_ACTION_TARGET_KIND,
   t_actions,
 } from '../../actions/t_actions';
-import {ensureScratchBaseStyles} from '../../base/ScratchBaseStyles';
-import {ScratchScrollArea} from '../../base/ScratchScrollArea';
+import RecordGrid from '../../objects/RecordGrid';
+import {ScratchDiffTable} from '../../data/beautiful';
 import {
   useProjectInstanceScope,
   useProjectShell,
@@ -1509,194 +1509,48 @@ export function TypedRowsEditor({
   disabled = false,
   reorderable = false,
 }) {
-  const makeDefaultRow = () => {
-    const next = {};
-    for (const col of columns) {
-      if (col.default !== undefined) next[col.key] = col.default;
-      else if (col.type === 'boolean') next[col.key] = false;
-      else if (col.type === 'number') next[col.key] = 0;
-      else if (col.type === 'select') next[col.key] = col.options?.[0]?.value ?? '';
-      else next[col.key] = '';
-    }
-    return next;
-  };
+  const descriptorField = useMemo(
+    () => ({
+      field_id: String(label || 'rows')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'rows',
+      label,
+      control: 'grid',
+      reorderable,
+      columns: columns.map((col) => ({
+        field_id: col.key,
+        label: col.label,
+        control: col.type || 'text',
+        options: col.options,
+        placeholder: col.placeholder,
+        minWidth: col.minWidth,
+        default:
+          col.default !== undefined
+            ? col.default
+            : col.type === 'boolean'
+              ? false
+              : col.type === 'number'
+                ? 0
+                : col.type === 'select'
+                  ? (col.options?.[0]?.value ?? '')
+                  : '',
+      })),
+    }),
+    [label, columns, reorderable]
+  );
 
-  const updateCell = (idx, key, val) => {
-    onChange?.(rows.map((r, i) => (i === idx ? {...r, [key]: val} : r)));
-  };
-  const removeRow = (idx) => {
-    onChange?.(rows.filter((_, i) => i !== idx));
-  };
-  const moveRow = (idx, delta) => {
-    const target = idx + delta;
-    if (target < 0 || target >= rows.length) return;
-    const copy = rows.slice();
-    [copy[idx], copy[target]] = [copy[target], copy[idx]];
-    onChange?.(copy);
-  };
-
-  ensureScratchBaseStyles();
   return (
-    <Box
-      role="group"
-      aria-label={label}
-      className="sr-bui-table-card"
-    >
-      <Box
-        className="sr-bui-toolbar"
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-        }}
-      >
-        <Box component="span" className="sr-bui-toolbar-title">
-          {label}
-        </Box>
-        <Button
-          size="small"
-          intent="neutral"
-          disabled={disabled}
-          onClick={() => onChange?.([...rows, makeDefaultRow()])}
-        >
-          + {addLabel}
-        </Button>
-      </Box>
-      {rows.length === 0 ? (
-        <Box sx={{fontSize: '0.75rem', color: 'text.secondary', px: 1.5, py: 1}}>
-          {emptyText}
-        </Box>
-      ) : (
-        <ScratchScrollArea orientation="both" style={{width: '100%'}}>
-          <Box
-            component="table"
-            className="sr-bui-table"
-            aria-label={label}
-            sx={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}
-          >
-            <Box component="thead">
-              <Box component="tr">
-                {columns.map((col) => (
-                  <Box
-                    key={col.key}
-                    component="th"
-                    className="sr-bui-th"
-                    scope="col"
-                    sx={{
-                      textAlign: 'left',
-                      minWidth: col.minWidth || 110,
-                    }}
-                  >
-                    {col.label}
-                  </Box>
-                ))}
-                <Box
-                  component="th"
-                  className="sr-bui-th"
-                  scope="col"
-                  sx={{
-                    width: reorderable ? 88 : 40,
-                  }}
-                />
-              </Box>
-            </Box>
-            <Box component="tbody">
-              {rows.map((row, idx) => (
-                <Box key={idx} component="tr" className="sr-bui-tr">
-                  {columns.map((col) => (
-                    <Box
-                      key={col.key}
-                      component="td"
-                      className="sr-bui-td"
-                      sx={{verticalAlign: 'middle'}}
-                    >
-                      {col.type === 'select' ? (
-                        <Select
-                          aria-label={`${col.label} row ${idx + 1}`}
-                          size="small"
-                          fullWidth
-                          disabled={disabled}
-                          value={row[col.key] ?? ''}
-                          options={col.options || []}
-                          onChange={(val) => updateCell(idx, col.key, val)}
-                        />
-                      ) : col.type === 'boolean' ? (
-                        <Checkbox
-                          label={col.checkboxLabel || ''}
-                          checked={Boolean(row[col.key])}
-                          disabled={disabled}
-                          onChange={(checked) => updateCell(idx, col.key, checked)}
-                        />
-                      ) : col.type === 'number' ? (
-                        <NumberField
-                          aria-label={`${col.label} row ${idx + 1}`}
-                          size="small"
-                          fullWidth
-                          disabled={disabled}
-                          value={row[col.key] ?? ''}
-                          onChange={(e) =>
-                            updateCell(
-                              idx,
-                              col.key,
-                              e.target.value === '' ? '' : Number(e.target.value)
-                            )
-                          }
-                        />
-                      ) : (
-                        <TextField
-                          aria-label={`${col.label} row ${idx + 1}`}
-                          size="small"
-                          fullWidth
-                          disabled={disabled}
-                          placeholder={col.placeholder || ''}
-                          value={row[col.key] ?? ''}
-                          onChange={(e) => updateCell(idx, col.key, e.target.value)}
-                        />
-                      )}
-                    </Box>
-                  ))}
-                  <Box
-                    component="td"
-                    className="sr-bui-td"
-                    sx={{
-                      whiteSpace: 'nowrap',
-                      verticalAlign: 'middle',
-                    }}
-                  >
-                    {reorderable && (
-                      <>
-                        <IconButton
-                          label={gettext('Move row %s up', idx + 1)}
-                          disabled={disabled || idx === 0}
-                          onClick={() => moveRow(idx, -1)}
-                        >
-                          ↑
-                        </IconButton>
-                        <IconButton
-                          label={gettext('Move row %s down', idx + 1)}
-                          disabled={disabled || idx === rows.length - 1}
-                          onClick={() => moveRow(idx, 1)}
-                        >
-                          ↓
-                        </IconButton>
-                      </>
-                    )}
-                    <IconButton
-                      label={gettext('Remove row %s', idx + 1)}
-                      disabled={disabled}
-                      onClick={() => removeRow(idx)}
-                    >
-                      ×
-                    </IconButton>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </ScratchScrollArea>
-      )}
-    </Box>
+    <RecordGrid
+      field={descriptorField}
+      rows={rows}
+      onChange={(next) => onChange?.(next)}
+      disabled={disabled}
+      addLabel={`+ ${addLabel}`}
+      emptyText={emptyText}
+      maxInlineColumns={Math.max(6, columns.length)}
+      cellLabelFormat={(colLabel, rowNum) => `${colLabel} row ${rowNum}`}
+    />
   );
 }
 
@@ -2078,6 +1932,42 @@ export function DesignCheckpointHistoryDrawer({
                         label={`-${(diffResult.removed_elements || []).length} ${gettext('removed')}`}
                       />
                     </Box>
+                    {((diffResult.added_elements || []).length > 0 ||
+                      (diffResult.modified_elements || []).length > 0 ||
+                      (diffResult.removed_elements || []).length > 0) && (
+                      <ScratchDiffTable
+                        caption={gettext('Checkpoint element differences')}
+                        showIncludeToggle={false}
+                        searchable
+                        filterable
+                        items={[
+                          ...(diffResult.added_elements || []).map((el, i) => ({
+                            id: `add:${el.id || el.name || i}`,
+                            name: el.name || el.id || String(el),
+                            kind: el.kind || 'element',
+                            delta: 'add',
+                            summary: el.summary || '',
+                          })),
+                          ...(diffResult.modified_elements || []).map((el, i) => ({
+                            id: `mod:${el.id || el.name || i}`,
+                            name: el.name || el.id || String(el),
+                            kind: el.kind || 'element',
+                            delta: 'modify',
+                            before: el.before,
+                            after: el.after,
+                            summary: el.summary || '',
+                          })),
+                          ...(diffResult.removed_elements || []).map((el, i) => ({
+                            id: `rem:${el.id || el.name || i}`,
+                            name: el.name || el.id || String(el),
+                            kind: el.kind || 'element',
+                            delta: 'drop',
+                            summary: el.summary || '',
+                          })),
+                        ]}
+                        style={{maxHeight: 200}}
+                      />
+                    )}
                     <Box sx={{minHeight: 220}}>
                       <CodeEditor
                         label={gettext('Checkpoint DDN Diff')}

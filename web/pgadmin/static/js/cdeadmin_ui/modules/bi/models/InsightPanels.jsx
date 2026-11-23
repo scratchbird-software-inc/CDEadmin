@@ -16,6 +16,7 @@ import {Select} from '../../../primitives/Choice';
 import {Badge, Banner} from '../../../feedback/Indicators';
 import {EmptyState} from '../../../feedback/EmptyState';
 import CodeEditor from '../../../editors/CodeEditor';
+import {ScratchDiffTable} from '../../../data/beautiful';
 
 const message = (error) => error?.message || String(error);
 const STATUS_BADGE = {draft: 'neutral', published: 'success', archived: 'warning'};
@@ -97,21 +98,26 @@ export function RevisionsPanel({client, record}) {
       <Select size="small" label={gettext('with')} value={right} options={choices} onChange={setRight} />
       <Button onClick={compare}>{gettext('Compare revisions')}</Button>
     </Stack>}
-    {comparison && (comparison.changes.length ? <Box component="table" aria-label={gettext('Revision changes')}
-      sx={{borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%'}}>
-      <Box component="thead"><Box component="tr">
-        {[gettext('Field'), `r${comparison.left_revision}`, `r${comparison.right_revision}`].map((title) =>
-          <Box key={title} component="th" scope="col" sx={{textAlign: 'left', p: 0.5, borderBottom: '1px solid',
-            borderColor: 'divider'}}>{title}</Box>)}
-      </Box></Box>
-      <Box component="tbody">
-        {comparison.changes.map((change) => <Box component="tr" key={change.field}>
-          <Box component="td" sx={{p: 0.5, verticalAlign: 'top'}}>{change.field}</Box>
-          <Box component="td" sx={{p: 0.5, verticalAlign: 'top'}}><pre style={{margin: 0}}>{show(change.before)}</pre></Box>
-          <Box component="td" sx={{p: 0.5, verticalAlign: 'top'}}><pre style={{margin: 0}}>{show(change.after)}</pre></Box>
-        </Box>)}
-      </Box>
-    </Box> : <Banner status="info">{gettext('These revisions are identical.')}</Banner>)}
+    {comparison && (comparison.changes.length ? (
+      <ScratchDiffTable
+        caption={gettext('Revision changes')}
+        showIncludeToggle={false}
+        searchable
+        items={comparison.changes.map((change) => ({
+          id: change.field,
+          name: change.field,
+          kind: `r${comparison.left_revision} → r${comparison.right_revision}`,
+          delta:
+            change.before === undefined
+              ? 'add'
+              : change.after === undefined
+                ? 'drop'
+                : 'modify',
+          before: show(change.before),
+          after: show(change.after),
+        }))}
+      />
+    ) : <Banner status="info">{gettext('These revisions are identical.')}</Banner>)}
   </Stack>;
 }
 

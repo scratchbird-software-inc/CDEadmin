@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import {computeCellGridLayout} from '../objects/formCellLayout';
+import {safeSpreadsheetValue} from '../data/gridIO';
 
 export const SURFACE_VIEWS = Object.freeze({
   DATA: 'data',
@@ -419,15 +420,16 @@ export function formatRowsForExport(rows, columns, format, tableName = 'TARGET_T
 
   if (format === 'tsv' || format === 'csv') {
     const sep = format === 'tsv' ? '\t' : ',';
-    const esc = (v) => {
+    const esc = (v, isHeader = false) => {
       if (v === null || v === undefined) return '';
-      const raw = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      const rawStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      const raw = isHeader ? rawStr : String(safeSpreadsheetValue(rawStr));
       if (format === 'csv' && (raw.includes(',') || raw.includes('"') || raw.includes('\n'))) {
         return `"${raw.replaceAll('"', '""')}"`;
       }
       return raw.replaceAll('\t', ' ').replaceAll('\n', ' ');
     };
-    const header = colNames.map(esc).join(sep);
+    const header = colNames.map((c) => esc(c, true)).join(sep);
     const lines = rows.map((r) => colNames.map((c) => esc(r.values?.[c])).join(sep));
     return [header, ...lines].join('\n');
   }

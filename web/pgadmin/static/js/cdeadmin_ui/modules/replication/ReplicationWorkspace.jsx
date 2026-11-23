@@ -149,7 +149,10 @@ function ParticipantInspector({session, service}) {
     {!rows.length ? <EmptyState message="Discover a topology to inspect participants." /> :
       <DataGrid gridId="replication/participants" aria-label="Replication participants"
         rows={rows} readOnly enableRowSelect rowKeyGetter={(row) => row.id}
-        onItemSelect={(row) => row && service.select(session.id, {participantId: row.id})}
+        onItemSelect={(rowOrIdx) => {
+          const row = typeof rowOrIdx === 'number' ? rows[rowOrIdx] : rowOrIdx;
+          if (row) service.select(session.id, {participantId: row.id});
+        }}
         columns={[{key: 'name', name: 'Participant'}, {key: 'normalizedRole', name: 'Category'},
           {key: 'nativeRole', name: 'Native role'}, {key: 'nativeState', name: 'Native state'},
           {key: 'resource', name: 'Resource'}, {key: 'positionType', name: 'Position type'},
@@ -181,7 +184,10 @@ function LinkInspector({session, service, invoke, currentUser}) {
     {!rows.length ? <EmptyState message="Discover a topology to inspect replication links." /> :
       <DataGrid gridId="replication/links" aria-label="Replication links" rows={rows} readOnly
         enableRowSelect rowKeyGetter={(row) => row.id}
-        onItemSelect={(row) => row && service.select(session.id, {linkId: row.id})}
+        onItemSelect={(rowOrIdx) => {
+          const row = typeof rowOrIdx === 'number' ? rows[rowOrIdx] : rowOrIdx;
+          if (row) service.select(session.id, {linkId: row.id});
+        }}
         columns={[{key: 'name', name: 'Link'}, {key: 'source', name: 'Source'},
           {key: 'target', name: 'Target'}, {key: 'mechanism', name: 'Native mechanism'},
           {key: 'nativeState', name: 'Native state'}, {key: 'lag', name: 'Lag'},

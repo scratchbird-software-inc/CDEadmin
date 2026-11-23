@@ -18,13 +18,14 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {useLocaleRevision} from '../actions/t_actions';
 import {Dialog} from '../overlays/Dialog';
-import {Box, Grid, Stack} from '../primitives/Layout';
+import {Box, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {TextField} from '../primitives/Field';
 import {Select} from '../primitives/Choice';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import CodeEditor from '../editors/CodeEditor';
 import {ScratchDiffTable} from '../data/beautiful';
+import AdaptiveFieldPlacementGrid from './AdaptiveFieldPlacementGrid';
 import FieldControl from './FieldControl';
 import {activeFields, fieldVisible, toOperationDraft} from './descriptors';
 import {planSqlText} from './ObjectEditor';
@@ -158,13 +159,26 @@ export default function OperationDialog({open, operation, targetName, context={}
         return <Box key={group || '_'} component="section" aria-label={group ? gettext(group) : opTitle}>
           {group && <Box component="h4" sx={{m: 0, mb: 1, fontSize: '0.75rem', fontWeight: 600,
             textTransform: 'uppercase', color: 'text.secondary'}}>{gettext(group)}</Box>}
-          <Grid columns={groupFields.some((field) => ['grid', 'code', 'keyvalue'].includes(field.control)) ?
-            1 : 'repeat(auto-fit, minmax(240px, 1fr))'}>
-            {groupFields.map((field) => <FieldControl key={field.field_id} field={field} value={values[field.field_id]}
-              draft={values} context={context} resourceKind={operation.resource_kind}
-              error={submitAttempted || touched.has(field.field_id) ? errors[field.field_id] : undefined}
-              disabled={busy} dense onChange={(value) => setValue(field.field_id, value)} />)}
-          </Grid>
+          <AdaptiveFieldPlacementGrid
+            fields={groupFields}
+            draft={values}
+            context={context}
+            resourceKind={operation.resource_kind}
+            qaKey={`operation-dialog.grid.${group || 'default'}`}
+            renderField={(field) => (
+              <FieldControl
+                field={field}
+                value={values[field.field_id]}
+                draft={values}
+                context={context}
+                resourceKind={operation.resource_kind}
+                error={submitAttempted || touched.has(field.field_id) ? errors[field.field_id] : undefined}
+                disabled={busy}
+                dense
+                onChange={(value) => setValue(field.field_id, value)}
+              />
+            )}
+          />
         </Box>;
       })}
       {visible.length === 0 && <Box sx={{fontSize: '0.8125rem', color: 'text.secondary'}}>

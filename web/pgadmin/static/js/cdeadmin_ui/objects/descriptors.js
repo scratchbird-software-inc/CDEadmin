@@ -188,9 +188,11 @@ export function editorAvailable(bundle, resourceKind) {
 /** Evaluate a descriptor visible_when against the current draft. */
 export function fieldVisible(field, draft={}) {
   const rule = field?.visible_when;
-  if(!rule || !rule.field) return true;
-  const value = draft[rule.field];
+  const target = rule?.field || rule?.field_id;
+  if(!rule || !target) return true;
+  const value = draft[target];
   if(Object.hasOwn(rule, 'equals')) return value === rule.equals;
+  if(Object.hasOwn(rule, 'not_equals')) return value !== rule.not_equals;
   if(Array.isArray(rule.in)) return rule.in.includes(value);
   if(Object.hasOwn(rule, 'truthy')) return Boolean(value) === Boolean(rule.truthy);
   return true;
@@ -235,9 +237,10 @@ export function versionSupportNotice(support) {
  * value declaring `requires_resource` is offered only when the endpoint
  * reports a resource of that kind with that native name.
  */
-export function optionOffered(option, context={}) {
+export function optionOffered(option, context={}, draft=null) {
   if(typeof option !== 'object' || option === null) return true;
   if(option.available === false) return false;
+  if(draft && option.visible_when && !fieldVisible(option, draft)) return false;
   const required = option.requires_resource;
   if(!required) return true;
   const rows = context.resources?.[required.resource_kind] || [];
@@ -260,7 +263,7 @@ export function fieldOptions(field, {context={}, draft={}, resourceKind}={}) {
     // An existing object's current value stays visible even when it is not
     // offered for new choices (for example a module not loaded this session).
     const current = draft?.[field.field_id];
-    return field.options.filter((option) => optionOffered(option, context) ||
+    return field.options.filter((option) => optionOffered(option, context, draft) ||
       (current !== undefined && option?.value === current));
   }
   const path = field.option_values_path;
@@ -448,11 +451,14 @@ export function validateDraft(form, draft, {mode='create', baseline=null}={}) {
         errors[field.field_id] = `${field.label} must be a number.`;
       }
       if(field.control === 'grid' && Array.isArray(value)) {
+        const cols = (field.columns && field.columns.length) ? field.columns :
+          (field.item_kind === 'string' ? [{field_id: 'value', label: field.label, control: 'text', required: Boolean(field.required)}] : []);
         value.forEach((row, index) => {
-          for(const column of field.columns || []) {
-            // A hidden column is never shown, so it cannot be the user's omission.
-            if(column.hidden) continue;
-            if(column.required && (row?.[column.field_id] === undefined || row?.[column.field_id] === '')) {
+          const rowObj = (typeof row === 'object' && row !== null) ? row : {value: row};
+          for(const column of activeFields(cols, {mode, draft: {...draft, ...rowObj}})) {
+            // A hidden or readonly column cannot be the user's omission.
+            if(column.hidden || column.readonly) continue;
+            if(column.required && (rowObj?.[column.field_id] === undefined || rowObj?.[column.field_id] === '')) {
               errors[`${field.field_id}[${index}].${column.field_id}`] = `${column.label} is required in row ${index + 1}.`;
             }
           }

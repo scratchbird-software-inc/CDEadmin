@@ -2707,7 +2707,15 @@
           "label": "Selected partitions (one table only)",
           "control": "grid",
           "item_kind": "string",
-          "default": []
+          "default": [],
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Partition name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "all_partitions",
@@ -2787,7 +2795,15 @@
           "label": "Selected partitions (one table only)",
           "control": "grid",
           "item_kind": "string",
-          "default": []
+          "default": [],
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Partition name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "all_partitions",

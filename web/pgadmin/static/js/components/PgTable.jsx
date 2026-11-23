@@ -162,7 +162,7 @@ export function Table({
   let totalDBRowCount = 0;
 
   // Infinite scrolling
-  const { _data, fetchNextPage, isFetching } = useInfiniteQuery({
+  const { data: infiniteData, fetchNextPage, isFetching } = useInfiniteQuery({
     queryKey: ['logs'],
     queryFn: async () => {
       const fetchedData = loadNextPage ? await loadNextPage() : [];
@@ -174,7 +174,9 @@ export function Table({
     placeholderData: keepPreviousData,
   });
 
-  flatData = _data || [];
+  flatData = Array.isArray(infiniteData?.pages)
+    ? infiniteData.pages.flat()
+    : infiniteData || [];
   totalFetched = flatData.length;
 
   // Called on scroll and possibly on mount to fetch more data as the user

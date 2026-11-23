@@ -407,7 +407,7 @@ export function AdaptiveRecordFormCard({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {col.name}
+                    {col.label || col.name}
                     {col.key ? ' 🔑' : ''}
                   </span>
                   <span

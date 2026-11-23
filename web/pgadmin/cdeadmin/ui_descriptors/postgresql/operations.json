@@ -3324,7 +3324,15 @@
           "label": "Operator-granted summary identities",
           "control": "grid",
           "item_kind": "string",
-          "required": true
+          "required": true,
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Summary identity",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "individual",
@@ -4397,7 +4405,15 @@
           "label": "Target databases",
           "control": "grid",
           "item_kind": "string",
-          "required": true
+          "required": true,
+          "columns": [
+            {
+              "field_id": "value",
+              "label": "Database name",
+              "control": "text",
+              "required": true
+            }
+          ]
         },
         {
           "field_id": "dry_run",

@@ -22,6 +22,7 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import {ScratchDiffTable} from '../../data/beautiful';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
   DesignCheckpointHistoryDrawer,
@@ -3920,61 +3921,21 @@ export function ScreenMeshDesignerSurface({
                 />
               </Stack>
               {(compareResult.affected_regions || []).length > 0 && (
-                <Box
-                  component="table"
-                  aria-label="Affected screenshot regions"
-                  sx={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <Box component="thead">
-                    <Box component="tr">
-                      {['Region', 'Overlap', 'Out of Bounds', 'Recommendation'].map(
-                        (h) => (
-                          <Box
-                            key={h}
-                            component="th"
-                            sx={{
-                              textAlign: 'left',
-                              p: 0.5,
-                              borderBottom: '1px solid',
-                              borderColor: 'divider',
-                            }}
-                          >
-                            {h}
-                          </Box>
-                        )
-                      )}
-                    </Box>
-                  </Box>
-                  <Box component="tbody">
-                    {compareResult.affected_regions.map((ar) => (
-                      <Box key={ar.region_id} component="tr">
-                        <Box component="td" sx={{p: 0.5}}>
-                          {ar.name}
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          {(Number(ar.overlap_ratio || 0) * 100).toFixed(1)}%
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          {ar.out_of_bounds ? 'Yes' : 'No'}
-                        </Box>
-                        <Box component="td" sx={{p: 0.5}}>
-                          <StatusBadge
-                            status={
-                              ar.recommendation === 'review_bounds'
-                                ? 'warning'
-                                : 'success'
-                            }
-                            label={ar.recommendation}
-                          />
-                        </Box>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
+                <ScratchDiffTable
+                  caption="Affected screenshot regions"
+                  showIncludeToggle={false}
+                  searchable
+                  items={compareResult.affected_regions.map((ar) => ({
+                    id: ar.region_id,
+                    name: ar.name,
+                    kind: ar.recommendation || (ar.out_of_bounds ? 'out_of_bounds' : 'region'),
+                    delta:
+                      ar.recommendation === 'review_bounds' || ar.out_of_bounds
+                        ? 'modify'
+                        : 'identical',
+                    summary: `Overlap: ${(Number(ar.overlap_ratio || 0) * 100).toFixed(1)}% · Out of Bounds: ${ar.out_of_bounds ? 'Yes' : 'No'}`,
+                  }))}
+                />
               )}
             </Stack>
           )}

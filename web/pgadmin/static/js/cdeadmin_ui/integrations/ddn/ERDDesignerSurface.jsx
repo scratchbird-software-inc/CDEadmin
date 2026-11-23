@@ -21,6 +21,7 @@ import {ProgressOverlay} from '../../feedback/ProgressOverlay';
 import {StatusBadge} from '../../status/StatusBadge';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import {ScratchDiffTable} from '../../data/beautiful';
 import {t_actions} from '../../actions/t_actions';
 import {DDNViewerSurface} from './DDNViewerSurface';
 import {
@@ -3603,40 +3604,34 @@ export function ERDDesignerSurface({
                         />
                       </Box>
 
-                      <ScrollArea
-                        label={gettext('Detected schema differences')}
-                        sx={{maxHeight: 220}}
-                      >
-                        <Box role="group" aria-label={gettext('Detected differences')}>
-                          {(alterPlan.differences || []).length === 0 ? (
-                            <Box sx={{fontSize: '0.8125rem', py: 0.5}}>
-                              {gettext('No physical schema differences detected.')}
-                            </Box>
-                          ) : (
-                            <Stack gap="compact">
-                              {alterPlan.differences.map((diff) => (
-                                <Checkbox
-                                  key={diff.difference_id}
-                                  label={`${diff.change_kind}: ${diff.object_name}${
-                                    diff.destructive
-                                      ? ` (${gettext('destructive')})`
-                                      : ''
-                                  }`}
-                                  checked={selectedDiffs.includes(
-                                    diff.difference_id
-                                  )}
-                                  onChange={(checked) =>
-                                    toggleDifference(
-                                      diff.difference_id,
-                                      checked
-                                    )
-                                  }
-                                />
-                              ))}
-                            </Stack>
+                      <Box role="group" aria-label={gettext('Detected differences')}>
+                        <ScratchDiffTable
+                          caption={gettext('Detected schema differences')}
+                          searchable
+                          filterable
+                          exportable
+                          items={(alterPlan.differences || []).map((diff) => ({
+                            id: diff.difference_id,
+                            name: `${diff.change_kind}: ${diff.object_name}`,
+                            kind: diff.change_kind,
+                            delta: diff.change_kind,
+                            destructive: Boolean(diff.destructive),
+                            summary:
+                              diff.summary ||
+                              diff.sql ||
+                              diff.details ||
+                              diff.object_name,
+                          }))}
+                          includedIds={selectedDiffs}
+                          onToggleInclude={(id, checked) =>
+                            toggleDifference(id, checked)
+                          }
+                          emptyMessage={gettext(
+                            'No physical schema differences detected.'
                           )}
-                        </Box>
-                      </ScrollArea>
+                          style={{maxHeight: 240}}
+                        />
+                      </Box>
                     </>
                   )}
                 </Stack>

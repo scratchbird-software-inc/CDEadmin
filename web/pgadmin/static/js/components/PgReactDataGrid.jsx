@@ -249,7 +249,7 @@ export function CustomRow({inTest=false, ...props}) {
   const isRowSelected = props.selectedCellIdx >= 0;
   useEffect(()=>{
     if(isRowSelected) {
-      gridUtils.onItemSelect?.(props.rowIdx);
+      gridUtils.onItemSelect?.(props.rowIdx, props.row);
     }
   }, [props.selectedCellIdx]);
   if(inTest) {

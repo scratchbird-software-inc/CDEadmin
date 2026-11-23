@@ -15,6 +15,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import {ScratchDiffTable} from '../../data/beautiful';
 import {CONTRACT_STATUSES} from './contracts';
 
 export const CONTRACT_SURFACES = Object.freeze([
@@ -519,10 +520,21 @@ function VersionDiff({session, invoke, service, currentUser}) {
         session.id, left, right)}>Compare versions</Button>
     </Toolbar>
     {!session.versionDiff ? <EmptyState message="Select two immutable contract versions." /> :
-      <DataGrid gridId="contract/version-diff" aria-label="Data Contract version differences"
-        rows={rows} readOnly rowKeyGetter={(row) => row.path} columns={[
-          {key: 'path', name: 'Canonical path'}, {key: 'state', name: 'State'},
-          {key: 'left', name: 'Left'}, {key: 'right', name: 'Right'}]} />}
+      <ScratchDiffTable
+        caption="Data Contract version differences"
+        showIncludeToggle={false}
+        searchable
+        filterable
+        exportable
+        items={rows.map((row) => ({
+          id: row.path,
+          name: row.path,
+          kind: 'contract_field',
+          delta: row.state,
+          before: row.left,
+          after: row.right,
+        }))}
+      />}
   </Box>;
 }
 VersionDiff.propTypes = {session: PropTypes.object, invoke: PropTypes.func,

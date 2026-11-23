@@ -30,10 +30,9 @@ import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
 import {resolveSectionIconKey} from '../icons/registry';
 import {useProjectInstanceScope} from '../shell/ProjectShell';
+import AdaptiveFieldPlacementGrid from './AdaptiveFieldPlacementGrid';
 import FieldControl from './FieldControl';
-import {activeFields, fieldOptions, initialDraft, toBackendDraft, validateDraft} from './descriptors';
-import {computeCellGridLayout} from './formCellLayout';
-import {resolveSmartOptions} from './smartFieldDefaults';
+import {activeFields, initialDraft, toBackendDraft, validateDraft} from './descriptors';
 
 /** Extract SQL text from a provider plan's command preview, whatever its shape. */
 export function planSqlText(plan) {
@@ -69,9 +68,6 @@ function cellErrorsFor(fieldId, errors) {
   return Object.fromEntries(Object.entries(errors).filter(([key]) => key.startsWith(prefix)));
 }
 
-const COL_GAP_PX = 16;
-const ROW_GAP_PX = 12;
-
 function AdaptiveFieldGroupGrid({
   fields,
   draft,
@@ -84,138 +80,35 @@ function AdaptiveFieldGroupGrid({
   fixedFields,
   onFieldChange,
 }) {
-  const containerRef = useRef(null);
-  const prevColsRef = useRef(null);
-  const [availableWidth, setAvailableWidth] = useState(760);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return undefined;
-    let rafId = null;
-    const isJsdom =
-      typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
-
-    const applyWidth = (rawW) => {
-      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
-      if (w > 80) {
-        setAvailableWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
-      }
-    };
-
-    const scheduleMeasure = (entries) => {
-      const entryW = entries?.[0]?.contentRect?.width;
-      if (isJsdom || typeof requestAnimationFrame !== 'function') {
-        applyWidth(entryW);
-        return;
-      }
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        applyWidth(el.clientWidth || entryW);
-      });
-    };
-
-    applyWidth(el.clientWidth);
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(scheduleMeasure);
-      ro.observe(el);
-      return () => {
-        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(rafId);
-        }
-        ro.disconnect();
-      };
-    }
-    if (typeof window !== 'undefined') {
-      const onWinResize = () => scheduleMeasure();
-      window.addEventListener('resize', onWinResize);
-      return () => {
-        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(rafId);
-        }
-        window.removeEventListener('resize', onWinResize);
-      };
-    }
-    return undefined;
-  }, []);
-
-  const optionsByField = useMemo(() => {
-    const map = {};
-    for (const field of fields) {
-      const raw = fieldOptions(field, {context, draft, resourceKind});
-      map[field.field_id] = resolveSmartOptions(field, raw);
-    }
-    return map;
-  }, [fields, context, draft, resourceKind]);
-
-  const layout = useMemo(() => {
-    const computed = computeCellGridLayout(fields, availableWidth, optionsByField, {
-      colGap: COL_GAP_PX,
-      prevNumCols: prevColsRef.current,
-    });
-    prevColsRef.current = computed.numCols;
-    return computed;
-  }, [fields, availableWidth, optionsByField]);
-
-  const placementByField = useMemo(() => {
-    const map = new Map();
-    for (const p of layout.placements) {
-      map.set(p.fieldId, p);
-    }
-    return map;
-  }, [layout.placements]);
-
   return (
-    <div
-      ref={containerRef}
-      style={{width: '100%', minWidth: 0, overflowX: 'hidden', boxSizing: 'border-box'}}
-    >
-      <div
-        data-cdeadmin-qa-key="object-editor.cell-grid"
-        data-cell-columns={layout.numCols}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${layout.numCols}, minmax(0, 1fr))`,
-          columnGap: `${COL_GAP_PX}px`,
-          rowGap: `${ROW_GAP_PX}px`,
-          alignItems: 'start',
-          width: '100%',
-        }}
-      >
-        {fields.map((field) => {
-          const show = shownError(field.field_id);
-          const placement = placementByField.get(field.field_id) || {row: 1, colStart: 1, span: 1};
-          return (
-            <div
-              key={field.field_id}
-              data-cell-span={placement.span}
-              style={{
-                gridRow: placement.row,
-                gridColumn: `${placement.colStart} / span ${placement.span}`,
-                minWidth: 0,
-              }}
-            >
-              <FieldControl
-                field={field}
-                value={draft[field.field_id]}
-                draft={draft}
-                context={context}
-                resourceKind={resourceKind}
-                error={show ? errors[field.field_id] : undefined}
-                cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined}
-                mode={mode}
-                disabled={
-                  disabled ||
-                fixedFields.includes(field.field_id) ||
-                (mode === 'alter' && field.editable_after_create === false)
-                }
-                onChange={(value) => onFieldChange(field.field_id, value)}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <AdaptiveFieldPlacementGrid
+      fields={fields}
+      draft={draft}
+      context={context}
+      resourceKind={resourceKind}
+      qaKey="object-editor.cell-grid"
+      renderField={(field) => {
+        const show = shownError(field.field_id);
+        return (
+          <FieldControl
+            field={field}
+            value={draft[field.field_id]}
+            draft={draft}
+            context={context}
+            resourceKind={resourceKind}
+            error={show ? errors[field.field_id] : undefined}
+            cellErrors={show ? cellErrorsFor(field.field_id, errors) : undefined}
+            mode={mode}
+            disabled={
+              disabled ||
+              fixedFields.includes(field.field_id) ||
+              (mode === 'alter' && field.editable_after_create === false)
+            }
+            onChange={(value) => onFieldChange(field.field_id, value)}
+          />
+        );
+      }}
+    />
   );
 }
 

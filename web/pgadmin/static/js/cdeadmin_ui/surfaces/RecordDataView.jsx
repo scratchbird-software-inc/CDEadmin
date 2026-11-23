@@ -531,8 +531,8 @@ export default function RecordDataView({model}) {
       >
         <div
           role="grid"
-          aria-label={gettext('Data Surface Grid')}
-          data-cdeadmin-qa-key="data-surface-standard-grid"
+          aria-label={model.ariaLabel || gettext('Data Surface Grid')}
+          data-cdeadmin-qa-key={model.qaKey || 'data-surface-standard-grid'}
           style={{minWidth: 'max-content', width: '100%'}}
         >
           {/* Sticky Column Header Bar with Top-Left Hamburger (☰) */}
@@ -669,7 +669,7 @@ export default function RecordDataView({model}) {
                       }}
                     >
                       {isPinned ? '📌 ' : ''}
-                      {col.name}
+                      {col.label || col.name}
                       {col.key ? ' 🔑' : ''}
                       {hasFilter ? ' •' : ''}
                     </span>

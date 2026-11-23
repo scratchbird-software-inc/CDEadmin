@@ -40,6 +40,7 @@ import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {promptAbandonUncommittedWork} from '../overlays/UncommittedWorkDialog';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
+import UnifiedDataGrid from '../data/UnifiedDataGrid';
 import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
@@ -3667,75 +3668,44 @@ export default function DataEditSurface({
   };
 
   const renderFieldsView = () => {
-    const fieldsList = hostData?.fields_grid || [];
+    const fieldsList = (hostData?.fields_grid || []).map((fld) => ({
+      ...fld,
+      key_display: fld.key_role || '—',
+      nullable_display: fld.nullable ? 'YES' : 'NO',
+      charset_collation: `${fld.charset || ''} / ${fld.collation || ''}`,
+      alignment_display: layout.gridColPrefs[fld.name]?.hAlign || fld.default_alignment || 'left',
+      editable_display: fld.editable ? 'YES' : 'NO',
+    }));
     return (
-      <ScratchScrollArea orientation="both" fillViewport style={{flex: 1, minHeight: 0}}>
-        <table
-          data-cdeadmin-qa-key="data-surface-fields-view"
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '0.8rem',
-          }}
-        >
-          <thead>
-            <tr
-              style={{
-                position: 'sticky',
-                top: 0,
-                background: 'var(--sr-surface-subtle)',
-                borderBottom: '1px solid var(--sr-border-default)',
-                textAlign: 'left',
-              }}
-            >
-              <th style={{padding: '7px 10px'}}>#</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Field Name')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Key')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Server Native Type')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Domain / UDT')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Nullable')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Charset / Collation')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Client Type')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Alignment')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Editable')}</th>
-              <th style={{padding: '7px 10px'}}>{gettext('Comment')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fieldsList.map((fld) => (
-              <tr
-                key={fld.name}
-                onClick={() =>
-                  openRightDrawerWith({
-                    mode: 'field_detail',
-                    selectedField: fld,
-                  })
-                }
-                style={{
-                  cursor: 'pointer',
-                  borderBottom: '1px solid var(--sr-border-subtle)',
-                }}
-              >
-                <td style={{padding: '6px 10px', opacity: 0.7}}>{fld.ordinal}</td>
-                <td style={{padding: '6px 10px', fontWeight: 600}}>{fld.name}</td>
-                <td style={{padding: '6px 10px'}}>{fld.key_role || '—'}</td>
-                <td style={{padding: '6px 10px', fontFamily: 'var(--sr-font-mono, monospace)'}}>
-                  {fld.native_type}
-                </td>
-                <td style={{padding: '6px 10px'}}>{fld.domain_type}</td>
-                <td style={{padding: '6px 10px'}}>{fld.nullable ? 'YES' : 'NO'}</td>
-                <td style={{padding: '6px 10px'}}>{fld.charset} / {fld.collation}</td>
-                <td style={{padding: '6px 10px'}}>{fld.client_type}</td>
-                <td style={{padding: '6px 10px'}}>
-                  {layout.gridColPrefs[fld.name]?.hAlign || fld.default_alignment}
-                </td>
-                <td style={{padding: '6px 10px'}}>{fld.editable ? 'YES' : 'NO'}</td>
-                <td style={{padding: '6px 10px', opacity: 0.8}}>{fld.comment || ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScratchScrollArea>
+      <UnifiedDataGrid
+        ariaLabel={gettext('Field Metadata')}
+        qaKey="data-surface-fields-view"
+        columns={[
+          {name: 'ordinal', label: '#', width: 64, numeric: true},
+          {name: 'name', label: gettext('Field Name'), width: 170},
+          {name: 'key_display', label: gettext('Key'), width: 90},
+          {name: 'native_type', label: gettext('Server Native Type'), width: 150, mono: true},
+          {name: 'domain_type', label: gettext('Domain / UDT'), width: 150},
+          {name: 'nullable_display', label: gettext('Nullable'), width: 90},
+          {name: 'charset_collation', label: gettext('Charset / Collation'), width: 150},
+          {name: 'client_type', label: gettext('Client Type'), width: 110},
+          {name: 'alignment_display', label: gettext('Alignment'), width: 100},
+          {name: 'editable_display', label: gettext('Editable'), width: 90},
+          {name: 'comment', label: gettext('Comment'), width: 220},
+        ]}
+        rows={fieldsList}
+        rowKeyGetter={(r) => r.name}
+        readOnly
+        searchable
+        exportable
+        onInspectRow={(fld) =>
+          openRightDrawerWith({
+            mode: 'field_detail',
+            selectedField: fld,
+          })
+        }
+        style={{flex: 1, minHeight: 0, border: 'none', borderRadius: 0}}
+      />
     );
   };
 

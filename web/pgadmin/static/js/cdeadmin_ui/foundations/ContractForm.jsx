@@ -19,6 +19,7 @@ import {Banner, EnvironmentIndicator, Skeleton,
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
 import DataGrid from '../data/PagedDataGrid';
+import RecordGrid from '../objects/RecordGrid';
 import {enterSubmits} from '../overlays/Dialog';
 import {evaluateContractCondition, fieldsForContractForm, initialContractFormValues,
   isContractFormActionEnabled, redactedContractFormValues,
@@ -100,8 +101,63 @@ PickerControl.propTypes = {
   state: PropTypes.string,
 };
 
-function GridControl({field, value, columns, namespace}) {
+const CONTRACT_EDITABLE_GRID_SCHEMAS = Object.freeze({
+  entries: [
+    {field_id: 'canonical_term', label: 'Canonical term', control: 'text', required: true},
+    {field_id: 'synonyms', label: 'Synonyms', control: 'text', required: true},
+  ],
+  criteria: [
+    {field_id: 'check', label: 'Check', control: 'text', required: true},
+    {
+      field_id: 'severity',
+      label: 'Severity',
+      control: 'select',
+      default: 'blocker',
+      options: [
+        {value: 'blocker', label: 'Blocker'},
+        {value: 'warning', label: 'Warning'},
+      ],
+    },
+  ],
+});
+
+function GridControl({field, value, onChange, disabled, columns, namespace}) {
   const rows = rowsFor(value);
+  const editable = !disabled && field.enabled !== 'readonly';
+  if (editable) {
+    const inferredCols =
+      columns && columns.length
+        ? columns.map((col) => ({
+          field_id: col.key || col.id,
+          label: col.name || col.label || col.key || col.id,
+          control: col.type === 'number' ? 'number' : col.type === 'boolean' ? 'boolean' : col.options ? 'select' : 'text',
+          options: col.options,
+        }))
+        : CONTRACT_EDITABLE_GRID_SCHEMAS[field.id] ||
+          columnsFor(rows, columns).map((col) => ({
+            field_id: col.key,
+            label: col.name,
+            control: 'text',
+          }));
+    const cleanRows = Array.isArray(value)
+      ? value.map((row) => (typeof row === 'object' && row !== null ? row : {value: row}))
+      : [];
+    return (
+      <RecordGrid
+        field={{
+          field_id: field.id,
+          label: field.label,
+          required: Boolean(field.required),
+          control: 'grid',
+          columns: inferredCols,
+        }}
+        rows={cleanRows}
+        disabled={disabled}
+        help={field.help || undefined}
+        onChange={(nextRows) => onChange?.(nextRows)}
+      />
+    );
+  }
   if(!rows.length) return <Box sx={{height: 112}}><EmptyState
     message={`No ${field.label.toLowerCase()} are available.`} /></Box>;
   return <Box sx={{height: 240, minHeight: 160}}><DataGrid
@@ -113,6 +169,8 @@ function GridControl({field, value, columns, namespace}) {
 GridControl.propTypes = {
   field: PropTypes.object.isRequired,
   value: PropTypes.any,
+  onChange: PropTypes.func,
+  disabled: PropTypes.bool,
   columns: PropTypes.array,
   namespace: PropTypes.string,
 };
@@ -178,7 +236,7 @@ function FieldControl({field, value, onChange, options, gridColumns,
       language={context.editorLanguages?.[field.id] || 'json'}
       error={error} /></Box>;
   case 'DataGrid': return <GridControl field={field} value={value}
-    columns={gridColumns} namespace={namespace} />;
+    onChange={onChange} disabled={disabled} columns={gridColumns} namespace={namespace} />;
   case 'ConnectionSelector': return <ConnectionSelector label={field.label}
     connections={connections} value={value ?? ''} onChange={onChange}
     disabled={disabled}

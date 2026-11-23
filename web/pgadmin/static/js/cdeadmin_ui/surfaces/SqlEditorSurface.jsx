@@ -47,6 +47,7 @@ import {sqlLanguageConfig, sqlLanguageProfile} from '../editors/sqlLanguageProfi
 import {RobinTiledCanvas} from '../integrations/ddn/RobinTiledCanvas';
 import SurfaceExportDialog from './SurfaceExportDialog';
 import RecordDataView from './RecordDataView';
+import UnifiedDataGrid from '../data/UnifiedDataGrid';
 import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
@@ -4710,89 +4711,71 @@ export default function SqlEditorSurface({
         )}
 
         {(hostData?.statement_summaries || []).length > 0 && (
-          <div>
-            <strong>{gettext('Script Statement Execution Summary')}</strong>
-            <table style={{width: '100%', marginTop: 6, borderCollapse: 'collapse', fontSize: '0.8rem'}}>
-              <thead>
-                <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
-                  <th style={{padding: 6}}>#</th>
-                  <th style={{padding: 6}}>{gettext('Line')}</th>
-                  <th style={{padding: 6}}>{gettext('Status')}</th>
-                  <th style={{padding: 6}}>{gettext('Rows')}</th>
-                  <th style={{padding: 6}}>{gettext('Elapsed')}</th>
-                  <th style={{padding: 6}}>SQL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hostData.statement_summaries.map((st, idx) => (
-                  <tr key={idx} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
-                    <td style={{padding: 6}}>{st.ordinal}</td>
-                    <td style={{padding: 6}}>{st.start_line}</td>
-                    <td style={{padding: 6}}>{st.status}</td>
-                    <td style={{padding: 6}}>{st.rows_returned ?? st.rows_affected ?? 0}</td>
-                    <td style={{padding: 6}}>{st.elapsed_ms} ms</td>
-                    <td style={{padding: 6, maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                      {st.sql_preview}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <UnifiedDataGrid
+            caption={gettext('Script Statement Execution Summary')}
+            qaKey="sql-surface-statement-summary-grid"
+            columns={[
+              {name: 'ordinal', label: '#', width: 64, numeric: true},
+              {name: 'start_line', label: gettext('Line'), width: 76, numeric: true},
+              {name: 'status', label: gettext('Status'), width: 100},
+              {name: 'rows_count', label: gettext('Rows'), width: 90, numeric: true},
+              {name: 'elapsed_display', label: gettext('Elapsed'), width: 100},
+              {name: 'sql_preview', label: 'SQL', width: 380},
+            ]}
+            rows={hostData.statement_summaries.map((st, idx) => ({
+              ...st,
+              id: st.ordinal ?? idx + 1,
+              rows_count: st.rows_returned ?? st.rows_affected ?? 0,
+              elapsed_display: `${st.elapsed_ms ?? 0} ms`,
+            }))}
+            readOnly
+            minHeight={180}
+          />
         )}
       </Box>
     </ScratchScrollArea>
   );
   const renderFields = () => (
-    <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>
-      <Box data-cdeadmin-qa-key="sql-surface-fields" sx={{p: 2}}>
-        {columns.length === 0 ? (
+    <Box data-cdeadmin-qa-key="sql-surface-fields" sx={{display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0}}>
+      {columns.length === 0 ? (
+        <Box sx={{p: 2}}>
           <EmptyState
             title={gettext('No Result Columns')}
             description={gettext('Execute a query returning columns to inspect result field metadata.')}
           />
-        ) : (
-          <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem'}}>
-            <thead>
-              <tr style={{textAlign: 'left', borderBottom: '1px solid var(--sr-border-default)'}}>
-                <th style={{padding: 8}}>#</th>
-                <th style={{padding: 8}}>{gettext('Column')}</th>
-                <th style={{padding: 8}}>{gettext('Native Type')}</th>
-                <th style={{padding: 8}}>{gettext('Domain')}</th>
-                <th style={{padding: 8}}>{gettext('Nullable')}</th>
-                <th style={{padding: 8}}>{gettext('Key')}</th>
-                <th style={{padding: 8}}>{gettext('Profile')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {columns.map((c, idx) => (
-                <tr key={c.name} style={{borderBottom: '1px solid var(--sr-border-subtle)'}}>
-                  <td style={{padding: 8}}>{idx + 1}</td>
-                  <td style={{padding: 8}}>
-                    <strong>{c.name}</strong>
-                  </td>
-                  <td style={{padding: 8}}>{c.native_type || c.logical_type || 'TEXT'}</td>
-                  <td style={{padding: 8}}>{c.domain_type || '—'}</td>
-                  <td style={{padding: 8}}>{c.nullable === false ? 'NOT NULL' : 'NULL'}</td>
-                  <td style={{padding: 8}}>{c.key ? 'PK' : '—'}</td>
-                  <td style={{padding: 8}}>
-                    <Button
-                      size="small"
-                      onClick={async () => {
-                        const prof = await callHost('column_profile', {column: c.name});
-                        openRightDrawerWith({panel: 'column_profile', profileData: prof});
-                      }}
-                    >
-                      {gettext('Profile')}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Box>
-    </ScratchScrollArea>
+        </Box>
+      ) : (
+        <UnifiedDataGrid
+          ariaLabel={gettext('Result Field Metadata')}
+          qaKey="sql-surface-fields-grid"
+          columns={[
+            {name: 'ordinal', label: '#', width: 64, numeric: true},
+            {name: 'name', label: gettext('Column'), width: 170},
+            {name: 'native_type_display', label: gettext('Native Type'), width: 150, mono: true},
+            {name: 'domain_display', label: gettext('Domain'), width: 150},
+            {name: 'nullable_display', label: gettext('Nullable'), width: 100},
+            {name: 'key_display', label: gettext('Key'), width: 90},
+          ]}
+          rows={columns.map((c, idx) => ({
+            ...c,
+            ordinal: idx + 1,
+            native_type_display: c.native_type || c.logical_type || 'TEXT',
+            domain_display: c.domain_type || '—',
+            nullable_display: c.nullable === false ? 'NOT NULL' : 'NULL',
+            key_display: c.key ? 'PK' : '—',
+          }))}
+          rowKeyGetter={(r) => r.name}
+          readOnly
+          searchable
+          exportable
+          onInspectRow={async (col) => {
+            const prof = await callHost('column_profile', {column: col.name});
+            openRightDrawerWith({panel: 'column_profile', profileData: prof});
+          }}
+          style={{flex: 1, minHeight: 0, border: 'none', borderRadius: 0}}
+        />
+      )}
+    </Box>
   );
   const renderMessages = () => (
     <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0}}>

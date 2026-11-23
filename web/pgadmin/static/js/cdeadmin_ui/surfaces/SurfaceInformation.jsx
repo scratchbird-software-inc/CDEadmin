@@ -4,6 +4,7 @@ import gettext from 'sources/gettext';
 import {useLocaleRevision} from '../actions/t_actions';
 import {Button} from '../primitives/Button';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
+import UnifiedDataGrid from '../data/UnifiedDataGrid';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
 import {formatRowsForExport} from './dataEditSurfaceHelpers';
 
@@ -51,17 +52,22 @@ export default function SurfaceInformation({fields, sql, effectiveQuery, filters
       <div style={{padding: 12}}>
         {fields.length > 0 ? (
           <>
-            <Button onClick={() => setPickerOpen(true)}>{gettext('Columns…')}</Button>
-            <Button onClick={() => copy('csv')}>{gettext('Copy CSV')}</Button>
-            <Button onClick={() => copy('tsv')}>{gettext('Copy TSV')}</Button>
-            <Button onClick={() => copy('text')}>{gettext('Copy Plain Text')}</Button>
+            <div style={{display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8}}>
+              <Button onClick={() => setPickerOpen(true)}>{gettext('Columns…')}</Button>
+              <Button onClick={() => copy('csv')}>{gettext('Copy CSV')}</Button>
+              <Button onClick={() => copy('tsv')}>{gettext('Copy TSV')}</Button>
+              <Button onClick={() => copy('text')}>{gettext('Copy Plain Text')}</Button>
+            </div>
             {copyError && <p role="alert">{gettext('Could not copy to clipboard.')}</p>}
-            <table>
-              <thead><tr>{columns.map((name) => <th key={name}>{labels[name]}</th>)}</tr></thead>
-              <tbody>{values.map((row, index) => (
-                <tr key={index}>{columns.map((name) => <td key={name}>{String(row[labels[name]])}</td>)}</tr>
-              ))}</tbody>
-            </table>
+            <UnifiedDataGrid
+              ariaLabel={gettext('Object field information')}
+              qaKey="surface-information-grid"
+              columns={columns.map((name) => ({name, label: labels[name]}))}
+              rows={fields}
+              readOnly
+              searchable
+              minHeight={220}
+            />
             <ColumnOrderDialog
               open={pickerOpen}
               scope="grid"

@@ -37,5 +37,8 @@ export {
 export {
   gridExportRecords,
   parseGridData,
+  safeSpreadsheetValue,
   serializeGridData,
 } from './gridIO';
+export {default as UnifiedDataGrid} from './UnifiedDataGrid';
+export {default as DiffDataGrid, normalizeDiffKind} from './DiffDataGrid';
