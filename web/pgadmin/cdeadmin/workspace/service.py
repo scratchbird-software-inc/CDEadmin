@@ -2454,19 +2454,39 @@ class ProviderWorkspaceService:
             raise ProviderWorkspaceError(
                 'Design storage changed concurrently; reload before saving') from None
 
+    @staticmethod
+    def _apply_duckdb_preservation_overrides(desired, overrides):
+        if overrides is None:
+            return desired
+        if not isinstance(overrides, dict) or len(overrides) > 32:
+            raise ValueError('preservation_overrides must map at most 32 resource IDs to change specs')
+        for rid, spec in overrides.items():
+            if not isinstance(rid, str) or not rid or not isinstance(spec, dict):
+                raise ValueError('Each preservation_overrides entry requires a resource_id and dict spec')
+            row = desired['rows'].get(rid)
+            if row is None:
+                raise ValueError(f'Preservation override target {rid!r} is absent from desired DDN')
+            row['native'] = {**row.get('native', {}), 'duckdb_change': copy.deepcopy(spec)}
+        return desired
+
     def duckdb_schema_plan(self, server, request):
         from .firebird_catalog_import import read_catalog
         from .firebird_catalog_export import build_export
         from .duckdb_schema_plan import plan
         from ..providers.duckdb.provider import DuckDBPilotProvider
-        if not isinstance(request, dict) or set(request) != {'database_target_id', 'baseline', 'desired'}:
+        if (not isinstance(request, dict) or
+                not {'database_target_id', 'baseline', 'desired'} <= set(request) or
+                set(request) - {'database_target_id', 'baseline', 'desired', 'preservation_overrides'}):
             raise ProviderWorkspaceError('DuckDB schema preview requires exact baseline and desired DDN')
         target = request['database_target_id']
         if not isinstance(target, str) or not target:
             raise ProviderWorkspaceError('Select a registered DuckDB database file')
         try:
             baseline = read_catalog(request['baseline'], engine='duckdb')
-            desired = read_catalog(request['desired'], engine='duckdb')
+            desired = self._apply_duckdb_preservation_overrides(
+                read_catalog(request['desired'], engine='duckdb'),
+                request.get('preservation_overrides'),
+            )
             context, endpoint, _root = self.endpoint_service.workspace(server, database_target_id=target)
             provider = self.endpoint_service.provider_registry.resolve(context).instance
             if not isinstance(provider, DuckDBPilotProvider) or context.profile_id != 'duckdb-native':
@@ -2516,14 +2536,19 @@ class ProviderWorkspaceService:
             binding = digest({'context': asdict(context), 'route': endpoint['route'],
                 'target': target, 'file_identity': [info.st_dev, info.st_ino]})
             if action == 'duckdb_schema_review':
-                if set(request) != {'database_target_id', 'baseline', 'desired', 'execution_sha256'}:
+                if (not {'database_target_id', 'baseline', 'desired', 'execution_sha256'} <= set(request) or
+                        set(request) - {'database_target_id', 'baseline', 'desired', 'execution_sha256', 'preservation_overrides'}):
                     raise ValueError('Invalid native schema review request')
                 preview = self.duckdb_schema_plan(server, {key: value for key, value in request.items()
                     if key != 'execution_sha256'})
                 if preview['execution_sha256'] != request['execution_sha256']:
                     raise ValueError('Displayed plan changed; preview native changes again')
+                desired_model = self._apply_duckdb_preservation_overrides(
+                    read_catalog(request['desired'], engine='duckdb'),
+                    request.get('preservation_overrides'),
+                )
                 return applications.review(preview, read_catalog(request['baseline'], engine='duckdb'),
-                    read_catalog(request['desired'], engine='duckdb'), owner, binding, target,
+                    desired_model, owner, binding, target,
                     file_identity=[info.st_dev, info.st_ino])
             if action == 'duckdb_schema_receipt':
                 if set(request) != {'database_target_id', 'review_id'} or not isinstance(request['review_id'], str):

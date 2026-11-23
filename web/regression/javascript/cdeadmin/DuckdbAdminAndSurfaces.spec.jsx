@@ -101,13 +101,15 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
         }
         if (payload.action === 'duckdb_retained_schema') {
           if (payload.request?.operation === 'observe') {
-            return {data: {success: 1, data: {model: {contract: 'scratchrobin.duckdb.retained-session-ddn@1', rows: {}}}}};
+            return {data: {success: 1, data: {provenance: {mapping: 'scratchrobin.duckdb.catalog@1'}, rows: {
+              'table:temp.main.t1': {resource_id: 'table:temp.main.t1', kind: 'table'},
+            }}}};
           }
           if (payload.request?.operation === 'preview') {
-            return {data: {success: 1, data: {statement_count: 1, statements: ['CREATE TEMP TABLE t1 (id INT)']}}};
+            return {data: {success: 1, data: {execution_sha256: 'ret-sha-1', operations: [{source: 'CREATE TEMP TABLE t1 (id INT)'}]}}};
           }
           if (payload.request?.operation === 'review') {
-            return {data: {success: 1, data: {application_id: 'ret-app-1', plan_digest: 'ret-dig-1'}}};
+            return {data: {success: 1, data: {review_id: 'ret-app-1', review_digest: 'ret-dig-1'}}};
           }
           if (payload.request?.operation === 'apply') {
             return {data: {success: 1, data: {applied: true, commit_requested: false, rollback_requested: false}}};
@@ -134,20 +136,37 @@ describe('DuckDB Native Administration Workspaces & SQL/Data Surface Parity (SR-
 
     fireEvent.click(screen.getByText('Observe Retained Session'));
     await waitFor(() =>
-      expect(screen.getAllByText(/scratchrobin\.duckdb\.retained-session-ddn@1/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/scratchrobin\.duckdb\.catalog@1/).length).toBeGreaterThan(0)
     );
 
+    fireEvent.change(screen.getByLabelText('Retained Rebuild Table Resource ID'), {
+      target: {value: 'table:temp.main.t1'},
+    });
     fireEvent.click(screen.getByText('Preview Diff'));
     await waitFor(() => expect(screen.getByText(/CREATE TEMP TABLE t1/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Seal Review Plan'));
     await waitFor(() => expect(screen.getByText('Application: ret-app-1')).toBeInTheDocument());
 
+    const reviewCall = api.post.mock.calls.find(([, p]) => p.action === 'duckdb_retained_schema' && p.request?.operation === 'review');
+    expect(reviewCall[1].request).toMatchObject({
+      operation: 'review',
+      execution_sha256: 'ret-sha-1',
+      rebuilds: [{resource_id: 'table:temp.main.t1', preserve_rows_confirmed: true, complete_definition_confirmed: true}],
+    });
+
     fireEvent.click(
       screen.getByLabelText('Confirm applying reviewed DDN changes on the retained session (caller retains COMMIT/ROLLBACK)')
     );
     fireEvent.click(screen.getByText('Apply Reviewed Retained Schema Plan'));
     await waitFor(() => expect(screen.getByText(/"commit_requested": false/)).toBeInTheDocument());
+    const applyCall = api.post.mock.calls.find(([, p]) => p.action === 'duckdb_retained_schema' && p.request?.operation === 'apply');
+    expect(applyCall[1].request).toEqual({
+      operation: 'apply',
+      review_id: 'ret-app-1',
+      review_digest: 'ret-dig-1',
+      confirmed: true,
+    });
 
     fireEvent.click(screen.getByText('Refresh Retained Schema Receipts'));
     await waitFor(() => expect(screen.getByText('Archived retained receipts: 1')).toBeInTheDocument());

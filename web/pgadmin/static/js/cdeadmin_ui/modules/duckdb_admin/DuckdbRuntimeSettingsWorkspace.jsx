@@ -61,12 +61,15 @@ export default function DuckdbRuntimeSettingsWorkspace({
   const [confirmDangerous, setConfirmDangerous] = useState(false);
 
   // 2. Rich COPY & Reader Planner (DU-AUD-05)
-  const [copyDirection, setCopyDirection] = useState('export');
+  const [copyDirection, setCopyDirection] = useState('to');
   const [copyFormat, setCopyFormat] = useState('JSON');
   const [copySchema, setCopySchema] = useState('main');
   const [copyTable, setCopyTable] = useState('events');
-  const [copyPath, setCopyPath] = useState('exports/events.ndjson');
+  const [copyResourceId, setCopyResourceId] = useState('table:main.events');
+  const [copyPath, setCopyPath] = useState('/tmp/events.ndjson');
   const [copyPartitionCols, setCopyPartitionCols] = useState('');
+  const [copyCompression, setCopyCompression] = useState('');
+  const [copyPartitionedSource, setCopyPartitionedSource] = useState(false);
   const [copyPlanResult, setCopyPlanResult] = useState(null);
 
   // 3. Foreign Source Adapters & Discovery (DU-AUD-06 / DU-AUD-07)
@@ -168,15 +171,21 @@ export default function DuckdbRuntimeSettingsWorkspace({
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+      const options = {
+        ...(copyDirection === 'to' && partitionBy.length ? {partition_by: partitionBy} : {}),
+        ...(copyCompression ? {compression: copyCompression} : {}),
+      };
       const res = await callDuckdb({
         action: 'duckdb_copy_plan',
         request: {
           direction: copyDirection,
           format: copyFormat,
-          schema_name: copySchema,
-          table_name: copyTable,
-          file_path: copyPath,
-          ...(partitionBy.length ? {partition_by: partitionBy} : {}),
+          path: copyPath,
+          ...(copyDirection === 'reader_ctas'
+            ? {target_schema: copySchema, target_table: copyTable}
+            : {resource_id: copyResourceId || `table:${copySchema}.${copyTable}`}),
+          ...(copyDirection !== 'to' && copyPartitionedSource ? {partitioned_source: true} : {}),
+          ...(Object.keys(options).length ? {options} : {}),
         },
       });
       setCopyPlanResult(res);
@@ -195,7 +204,7 @@ export default function DuckdbRuntimeSettingsWorkspace({
       const res = await callDuckdb({
         action: 'duckdb_attachments',
         sessionId: sid,
-        request: {operation: 'source_adapters'},
+        request: {operation: 'inventory'},
       });
       setForeignAdapters(res);
     } catch (err) {
@@ -327,8 +336,8 @@ export default function DuckdbRuntimeSettingsWorkspace({
               label={gettext('Direction / Mode')}
               value={copyDirection}
               options={[
-                {value: 'export', label: 'COPY ... TO (Export)'},
-                {value: 'import', label: 'COPY ... FROM (Import)'},
+                {value: 'to', label: 'COPY ... TO (Export)'},
+                {value: 'from', label: 'COPY ... FROM (Import)'},
                 {value: 'reader_ctas', label: 'CREATE TABLE AS read_* (Direct Reader CTAS)'},
                 {value: 'reader_insert', label: 'INSERT INTO ... SELECT * FROM read_*'},
               ]}
@@ -345,28 +354,55 @@ export default function DuckdbRuntimeSettingsWorkspace({
               onChange={setCopyFormat}
             />
             <TextField
-              label={gettext('Relative or Contained File Path')}
+              label={gettext('Absolute Contained File Path')}
               value={copyPath}
               onChange={(e) => setCopyPath(textVal(e))}
             />
-            <TextField
-              label={gettext('Schema Name')}
-              value={copySchema}
-              onChange={(e) => setCopySchema(textVal(e))}
-            />
-            <TextField
-              label={gettext('Table Name')}
-              value={copyTable}
-              onChange={(e) => setCopyTable(textVal(e))}
-            />
+            {copyDirection === 'reader_ctas' ? (
+              <>
+                <TextField
+                  label={gettext('Target Schema Name')}
+                  value={copySchema}
+                  onChange={(e) => setCopySchema(textVal(e))}
+                />
+                <TextField
+                  label={gettext('New Target Table Name')}
+                  value={copyTable}
+                  onChange={(e) => setCopyTable(textVal(e))}
+                />
+              </>
+            ) : (
+              <TextField
+                label={gettext('Native Table Resource ID')}
+                value={copyResourceId}
+                onChange={(e) => setCopyResourceId(textVal(e))}
+              />
+            )}
             <TextField
               label={gettext('Hive Partition Columns (comma-separated, export)')}
               value={copyPartitionCols}
               onChange={(e) => setCopyPartitionCols(textVal(e))}
             />
+            <TextField
+              label={gettext('Compression (optional, e.g. GZIP / ZSTD / SNAPPY)')}
+              value={copyCompression}
+              onChange={(e) => setCopyCompression(textVal(e))}
+            />
           </Grid>
-          {copyPlanResult?.sql && (
-            <CodeEditor value={copyPlanResult.sql} language="sql" readOnly minHeight={90} />
+          {copyDirection !== 'to' && (
+            <Checkbox
+              label={gettext('Partitioned source directory')}
+              checked={copyPartitionedSource}
+              onChange={setCopyPartitionedSource}
+            />
+          )}
+          {(copyPlanResult?.source || copyPlanResult?.sql) && (
+            <CodeEditor
+              value={copyPlanResult.source || copyPlanResult.sql}
+              language="sql"
+              readOnly
+              minHeight={90}
+            />
           )}
         </DuckdbSectionCard>
 

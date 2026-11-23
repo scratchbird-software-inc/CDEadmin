@@ -131,4 +131,49 @@ describe('native DuckDB database copy', () => {
     rendered.unmount();
     expect(properties.onBusyChange).toHaveBeenLastCalledWith(false);
   });
+
+  it('surfaces catalog capabilities, foreign destination opt-in, and foreign conversion preview', async () => {
+    const foreignReviewed = {
+      ...reviewed,
+      conversion_preview: {
+        source_type: 'sqlite',
+        destination_type: 'duckdb',
+        foreign_involved: true,
+        cutover_implied: false,
+        tables: [{schema: 'main', table: 'items', column_count: 2, type_conversions: []}],
+        notes: ['Database copy never performs or implies physical source cutover.'],
+      },
+    };
+    const post = jest.fn()
+      .mockResolvedValueOnce({
+        catalogs: [{name: 'sq_src', type: 'sqlite', read_only: true}],
+        catalog_capabilities: [{name: 'sq_src', type: 'sqlite', foreign: true, cutover_implied: false}],
+      })
+      .mockResolvedValueOnce(foreignReviewed);
+
+    render(<Component {...props(post)} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect copy catalogs'}));
+    const caps = await screen.findByLabelText('DuckDB copy catalog capabilities');
+    expect(JSON.parse(caps.textContent)[0]).toMatchObject({name: 'sq_src', foreign: true, cutover_implied: false});
+
+    enter();
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Allow foreign destination catalog'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Review native database copy'}));
+    const previewNode = await screen.findByLabelText('Reviewed DuckDB copy conversion preview');
+    expect(JSON.parse(previewNode.textContent)).toMatchObject({foreign_involved: true, cutover_implied: false});
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_database_copy',
+      database_target_id: 'registered-1',
+      session_id: 'session-1',
+      request: {
+        operation: 'review',
+        draft: {
+          source_catalog: reviewed.source_catalog,
+          destination_catalog: reviewed.destination_catalog,
+          mode: 'ALL',
+          allow_foreign_destination: true,
+        },
+      },
+    });
+  });
 });

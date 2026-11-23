@@ -4142,11 +4142,23 @@ DuckDB remaining 34-item backend, DDN, continuity/storage, UI & 1.5.2 qualificat
 * **Object-form parity, full 16-kind / 15-form UI surfacing & live DuckDB 1.5.2
   qualification reconciliation** (``DU-AUD-27`` .. ``DU-AUD-37``): resolved all
   ``ui-gap-decisions.json`` items, added ``7`` complete ``engine_object`` forms
-  (``SR-F-030580``..``SR-F-030586``), surfaced ``5`` dedicated ``duckdb_admin``
-  workspaces (``SR-F-030587``..``SR-F-030591``) and ``4`` SQL/Data surface
-  dialogs (``SR-F-030592``..``SR-F-030595``) with ``json_controls_in_provider_forms``
-  reduced to ``299`` and zero lint ceiling increases, and reconciled all proof
-  records in ``duckdb_dialect_1_5_2.json``, ``duckdb_metrics_1_5_2.json``, and
+  ``SR-F-030586``), surfaced ``5`` dedicated ``duckdb_admin`` workspaces
+  (``SR-F-030587``..``SR-F-030591``), ``4`` SQL/Data surface dialogs
+  (``SR-F-030592``..``SR-F-030595``), and full GUI parity across
+  ``DuckDBCopy.jsx`` (``capabilities``, ``JSON``/``NDJSON``, ``reader_ctas``,
+  ``reader_insert``, ``partitioned_source``, and CSV/Parquet/JSON options),
+  ``DuckDBAttachment.jsx`` (``source_adapters``, ``discover_foreign``, foreign
+  ``sqlite``/``postgres``/``mysql``/``httpfs`` attachments, and ``SET ALIAS``
+  renames), ``DuckDBDatabaseCopy.jsx`` (``catalog_capabilities``,
+  ``allow_foreign_destination``, and ``conversion_preview``),
+  ``DuckDBExtensions.jsx`` (``capabilities`` runtime state matrix),
+  ``DuckDBCatalog.jsx`` & ``DuckdbRetainedSchemaWorkspace.jsx``
+  (``preservation_overrides`` for ``rebuild-table-general`` and
+  ``replace-macro-preserve-defaults``, plus retained ``deletions``/``alterations``/
+  ``rebuilds``), and ``ProviderWorkspaceContent.jsx`` multi-database action
+  scoping with ``json_controls_in_provider_forms`` reduced to ``299`` and zero
+  lint ceiling increases, and reconciled all proof records in
+  ``duckdb_dialect_1_5_2.json``, ``duckdb_metrics_1_5_2.json``, and
   ``provider_manifest.json`` against fresh current-source live receipts on
   DuckDB ``1.5.2`` (``8a5851971f``). Persistent ScratchBird monitoring history
   (``DU-AUD-38``) remains ``owner_deferred`` and was not run, while human UI

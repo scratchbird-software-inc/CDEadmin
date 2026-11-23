@@ -122,4 +122,101 @@ describe('DuckDB original-session attachment workflow', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
     expect(post.mock.calls.filter(([request]) => request.request.operation === 'apply')).toHaveLength(1);
   });
+
+  it('discovers foreign attached catalogs, attaches foreign postgres/sqlite sources, and reviews SET ALIAS renames', async () => {
+    const renameReview = {
+      ...review,
+      action: 'rename',
+      alias: 'analytics',
+      new_alias: 'warehouse',
+      source: 'ALTER DATABASE "analytics" SET ALIAS TO "warehouse"',
+      alias_review: {descendants: [{resource_id: 'table:analytics.main.sales'}]},
+    };
+    const post = jest.fn()
+      .mockResolvedValueOnce({
+        session_scope_id: 'native-session-1',
+        catalogs: [{name: 'analytics', type: 'sqlite'}],
+        source_adapters: {sqlite: {available: true, loaded: true}},
+      })
+      .mockResolvedValueOnce({
+        catalog: 'analytics',
+        catalog_type: 'sqlite',
+        is_foreign: true,
+        tables: [{schema: 'main', name: 'items', column_count: 2}],
+      })
+      .mockResolvedValueOnce({
+        ...review,
+        source_type: 'postgres',
+        source: 'ATTACH \'dbname=app host=127.0.0.1 port=5432 user=reader\' AS "pg_remote" (TYPE postgres, SECRET "pg_sec", READ_ONLY)',
+      })
+      .mockResolvedValueOnce(renameReview);
+
+    render(<Component {...properties(post)} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect current native catalogs'}));
+    const adapters = await screen.findByLabelText('DuckDB attachment source adapters');
+    expect(JSON.parse(adapters.textContent)).toMatchObject({sqlite: {available: true}});
+
+    fireEvent.change(screen.getByRole('textbox', {name: 'Native catalog alias'}), {target: {value: 'analytics'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Discover attached catalog objects'}));
+    const discovered = await screen.findByLabelText('Discovered DuckDB attached catalog');
+    expect(JSON.parse(discovered.textContent)).toMatchObject({catalog_type: 'sqlite', is_foreign: true});
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_attachments',
+      database_target_id: 'file-1',
+      session_id: 'query-1',
+      request: {operation: 'discover_foreign', alias: 'analytics'},
+    });
+
+    fireEvent.change(screen.getByRole('textbox', {name: 'Native catalog alias'}), {target: {value: 'pg_remote'}});
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Attachment source type'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Foreign PostgreSQL catalog (postgres_scanner)'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Foreign host'}), {target: {value: '127.0.0.1'}});
+    fireEvent.change(screen.getByRole('textbox', {name: 'Foreign port'}), {target: {value: '5432'}});
+    fireEvent.change(screen.getByRole('textbox', {name: 'Foreign database'}), {target: {value: 'app'}});
+    fireEvent.change(screen.getByRole('textbox', {name: 'Foreign user'}), {target: {value: 'reader'}});
+    fireEvent.change(screen.getByRole('textbox', {name: 'DuckDB secret name (optional)'}), {target: {value: 'pg_sec'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Review native attachment'}));
+    await screen.findByRole('textbox', {name: 'Exact reviewed catalog alias'});
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_attachments',
+      database_target_id: 'file-1',
+      session_id: 'query-1',
+      request: {
+        operation: 'review',
+        draft: {
+          action: 'attach',
+          source_type: 'postgres',
+          alias: 'pg_remote',
+          read_only: true,
+          conflict: 'ERROR',
+          create_if_missing: false,
+          foreign_options: {host: '127.0.0.1', port: 5432, dbname: 'app', user: 'reader'},
+          secret_name: 'pg_sec',
+        },
+      },
+    });
+
+    fireEvent.mouseDown(screen.getByRole('combobox', {name: 'Action'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Rename attached alias (SET ALIAS)'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Native catalog alias'}), {target: {value: 'analytics'}});
+    fireEvent.change(screen.getByRole('textbox', {name: 'New catalog alias'}), {target: {value: 'warehouse'}});
+    fireEvent.click(screen.getByRole('checkbox', {name: 'I understand stored SQL can retain the old alias and rollback will not restore it'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Review native attachment'}));
+    const impact = await screen.findByLabelText('DuckDB alias rename impact');
+    expect(JSON.parse(impact.textContent)).toEqual({descendants: [{resource_id: 'table:analytics.main.sales'}]});
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_attachments',
+      database_target_id: 'file-1',
+      session_id: 'query-1',
+      request: {
+        operation: 'review',
+        draft: {
+          action: 'rename',
+          alias: 'analytics',
+          new_alias: 'warehouse',
+          dependent_sql_confirmed: true,
+        },
+      },
+    });
+  });
 });

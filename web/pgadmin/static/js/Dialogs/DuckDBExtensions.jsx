@@ -42,7 +42,7 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
         ...(remoteSource && expectedSecret ? {expected_http_secret: expectedSecret} : {}),
         ...(action === 'install' && sourceKind === 'NAME' ? {repository_kind: repositoryKind,
           ...(repositoryKind !== 'DEFAULT' ? {repository} : {}), ...(version ? {version} : {})} : {})}} :
-        operation === 'inventory' ? {operation} : {operation, review_id: result.review_id,
+        (operation === 'inventory' || operation === 'capabilities') ? {operation} : {operation, review_id: result.review_id,
           ...(operation === 'apply' ? {review_digest: result.review_digest, confirmation, confirmed} : {})};
       if(operation === 'apply') setAwaitingReceipt(true);
       const value = await post({action: 'duckdb_extensions', database_target_id: databaseTargetId,
@@ -62,6 +62,7 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
     {awaitingReceipt && <Alert severity="warning">Read the extension receipt before changing the form or preparing another operation.</Alert>}
     <Box sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, my: 1}}>
       <Button disabled={busy || blocked || awaitingReceipt} onClick={() => run('inventory')}>Inspect native extensions</Button>
+      <Button disabled={busy || blocked || awaitingReceipt} onClick={() => run('capabilities')}>Inspect extension capabilities</Button>
       <TextField select size="small" label="Extension action" value={action} disabled={busy || blocked || awaitingReceipt}
         onChange={event => {setAction(event.target.value); if(event.target.value === 'load' && sourceKind === 'URL') {
           setSourceKind('NAME'); setSource('');} clear();}}><MenuItem value="install">Install file</MenuItem><MenuItem value="load">Load native code</MenuItem></TextField>
@@ -90,6 +91,11 @@ export default function DuckDBExtensions({post, databaseTargetId, ensureSession,
       <Button disabled={busy || blocked || awaitingReceipt || !extensionName || (sourceKind !== 'NAME' && !source)} onClick={() => run('review')}>Review native extension</Button>
     </Box>
     {result?.extensions && <Box component="pre" aria-label="Native DuckDB extensions" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(result.extensions, null, 2)}</Box>}
+    {(result?.capabilities || result?.profiles) && (
+      <Box component="pre" aria-label="DuckDB extension capabilities" sx={{whiteSpace: 'pre-wrap'}}>
+        {JSON.stringify(result.capabilities || {schema: result.schema, summary: result.summary, profiles: result.profiles, context: result.context}, null, 2)}
+      </Box>
+    )}
     {result?.source && <><Alert severity="info">Native extension review: {result.state}. Session scope: {result.session_scope_id}. Repeated submissions read the same receipt.</Alert>
       <Box component="textarea" aria-label="Generated DuckDB extension SQL" value={result.source} readOnly
         sx={{width: '100%', boxSizing: 'border-box', minHeight: 90, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem'}} />

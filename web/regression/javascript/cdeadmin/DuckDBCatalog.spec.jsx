@@ -124,4 +124,76 @@ describe('DuckDB native catalog form', () => {
     expect(post).toHaveBeenLastCalledWith({action: 'duckdb_schema_apply', request: {
       database_target_id: 'owned-duckdb-file', review_id: 'review-1', review_digest: 'digest-1', confirmed: true}});
   });
+
+  it('stages general table rebuild and macro default preservation overrides into schema plan and review', async () => {
+    const catalogWithTable = {
+      ...capture,
+      objects: [{resource_id: 'table:owned.main.facts', kind: 'table', path: ['owned', 'main', 'facts']}],
+    };
+    const preview = {
+      operations: [{resource_id: 'table:owned.main.facts', name: 'facts', operation: 'rebuild', source: 'CREATE TABLE ...'}],
+      blockers: [],
+      conflicts: [],
+      ignored: [],
+      application_supported: true,
+      execution_sha256: 'rebuild-sha',
+    };
+    const receipt = {review_id: 'rev-gen-1', review_digest: 'dig-gen-1', state: 'reviewed'};
+    const post = jest.fn()
+      .mockResolvedValueOnce(catalogWithTable)
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce(receipt);
+
+    render(<Component post={post} databaseTargetId="owned-duckdb-file" />);
+    fireEvent.click(screen.getByRole('button', {name: 'Capture metadata'}));
+    await screen.findByText('Native DDN viewer');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Edit catalog design in DDN'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Prepare DDN draft'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Use design for native review'}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Acknowledge conversion loss'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Acknowledge catalog tag loss'}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Column conversions JSON'}), {
+      target: {value: '{"amount": "CAST(\\"amount\\" AS BIGINT)"}'},
+    });
+    fireEvent.click(screen.getByRole('button', {name: 'Stage preservation override'}));
+    await screen.findByLabelText('Staged DuckDB preservation overrides');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Preview native changes'}));
+    await screen.findByRole('button', {name: 'Prepare native change review'});
+    const expectedOverrides = {
+      'table:owned.main.facts': {
+        action: 'rebuild-table-general',
+        complete_definition_confirmed: true,
+        preserve_rows_confirmed: true,
+        loss_acknowledged: true,
+        tag_loss_acknowledged: true,
+        column_conversions: {amount: 'CAST("amount" AS BIGINT)'},
+      },
+    };
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_schema_plan',
+      request: {
+        database_target_id: 'owned-duckdb-file',
+        baseline: JSON.stringify(snapshot),
+        desired: JSON.stringify({...snapshot, files: {'catalog.ddn': 'authored native facts'}}),
+        preservation_overrides: expectedOverrides,
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', {name: 'Prepare native change review'}));
+    await screen.findByText(/Native receipt rev-gen-1: reviewed/);
+    expect(post).toHaveBeenLastCalledWith({
+      action: 'duckdb_schema_review',
+      request: {
+        database_target_id: 'owned-duckdb-file',
+        baseline: JSON.stringify(snapshot),
+        desired: JSON.stringify({...snapshot, files: {'catalog.ddn': 'authored native facts'}}),
+        execution_sha256: 'rebuild-sha',
+        preservation_overrides: expectedOverrides,
+      },
+    });
+  });
 });

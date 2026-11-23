@@ -18,9 +18,25 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   const [display, setDisplay] = useState('inventory'), [view, setView] = useState('inventory_1');
   const [data, setData] = useState(null), [relation, setRelation] = useState('');
   const [dataMode, setDataMode] = useState('sample'), [rowLimit, setRowLimit] = useState('100');
+  const [preservationOverrides, setPreservationOverrides] = useState({});
+  const [preserveTargetId, setPreserveTargetId] = useState('');
+  const [preserveAction, setPreserveAction] = useState('rebuild-table-general');
+  const [completeDefConfirmed, setCompleteDefConfirmed] = useState(true);
+  const [preserveRowsConfirmed, setPreserveRowsConfirmed] = useState(true);
+  const [lossAcknowledged, setLossAcknowledged] = useState(false);
+  const [discardColsConfirmed, setDiscardColsConfirmed] = useState(false);
+  const [tagLossAcknowledged, setTagLossAcknowledged] = useState(false);
+  const [metadataResetAck, setMetadataResetAck] = useState(false);
+  const [completeSigConfirmed, setCompleteSigConfirmed] = useState(false);
+  const [dropColumnIdsText, setDropColumnIdsText] = useState('');
+  const [columnRenamesJson, setColumnRenamesJson] = useState('');
+  const [columnConversionsJson, setColumnConversionsJson] = useState('');
+  const [addedColumnFillsJson, setAddedColumnFillsJson] = useState('');
+  const [macroOverloadUpdatesJson, setMacroOverloadUpdatesJson] = useState('');
   const serial = useRef(0);
   useEffect(() => {
     serial.current++; setResult(null); setComparison(null); setSource(''); setBaselineSource(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setData(null); setRelation(''); setError('');
+    setPreservationOverrides({}); setPreserveTargetId('');
     setBusy(false); setDisplay('inventory'); setView('inventory_1');
     return () => {serial.current++;};
   }, [post, databaseTargetId]);
@@ -33,8 +49,9 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
           ...(compare ? {source} : {})}});
       if(token !== serial.current) return;
       if(compare) setComparison(value);
-      else {setResult(value); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setData(null);
+      else {setResult(value); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false); setData(null); setPreservationOverrides({});
         setRelation(value.objects?.find(item => ['table', 'view'].includes(item.kind))?.resource_id || '');
+        setPreserveTargetId(value.objects?.find(item => ['table', 'macro'].includes(item.kind))?.resource_id || '');
         setDisplay('inventory'); setView(value.snapshot.view);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB catalog capture failed');}
     finally {if(token === serial.current) setBusy(false);}
@@ -50,12 +67,48 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB data capture failed');}
     finally {if(token === serial.current) setBusy(false);}
   };
+  const stagePreservationSpec = () => {
+    setError('');
+    try {
+      if(!preserveTargetId.trim()) throw new Error('Select a target table or macro resource ID');
+      let spec;
+      if(preserveAction === 'rebuild-table-general') {
+        const dropIds = dropColumnIdsText.split(',').map(s => s.trim()).filter(Boolean).sort();
+        spec = {
+          action: 'rebuild-table-general',
+          complete_definition_confirmed: completeDefConfirmed,
+          preserve_rows_confirmed: preserveRowsConfirmed,
+          ...(lossAcknowledged ? {loss_acknowledged: true} : {}),
+          ...(discardColsConfirmed ? {discard_columns_confirmed: true} : {}),
+          ...(dropIds.length ? {drop_column_ids: dropIds} : {}),
+          ...(tagLossAcknowledged ? {tag_loss_acknowledged: true} : {}),
+          ...(columnRenamesJson.trim() ? {column_renames: JSON.parse(columnRenamesJson)} : {}),
+          ...(columnConversionsJson.trim() ? {column_conversions: JSON.parse(columnConversionsJson)} : {}),
+          ...(addedColumnFillsJson.trim() ? {added_column_fills: JSON.parse(addedColumnFillsJson)} : {}),
+        };
+      } else {
+        spec = {
+          action: 'replace-macro-preserve-defaults',
+          metadata_reset_acknowledged: metadataResetAck,
+          overload_updates: JSON.parse(macroOverloadUpdatesJson || '[]'),
+          ...(completeSigConfirmed ? {complete_signature_set_confirmed: true} : {}),
+          ...(tagLossAcknowledged ? {tag_loss_acknowledged: true} : {}),
+        };
+      }
+      setPreservationOverrides(prev => ({...prev, [preserveTargetId.trim()]: spec}));
+      setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);
+    } catch(failure) {
+      setError(failure.message || 'Invalid preservation specification');
+    }
+  };
   const previewSchema = async () => {
     const token = ++serial.current;
     setBusy(true); setError(''); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);
     try {
+      const hasOverrides = Object.keys(preservationOverrides).length > 0;
       const value = await post({action: 'duckdb_schema_plan', request: {
-        database_target_id: databaseTargetId, baseline: baselineSource, desired: source}});
+        database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
+        ...(hasOverrides ? {preservation_overrides: preservationOverrides} : {})}});
       if(token === serial.current) setSchemaPlan(value);
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB schema preview failed');}
     finally {if(token === serial.current) setBusy(false);}
@@ -63,9 +116,11 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
   const reviewSchema = async () => {
     const token = ++serial.current; setBusy(true); setError('');
     try {
+      const hasOverrides = Object.keys(preservationOverrides).length > 0;
       const value = await post({action: 'duckdb_schema_review', request: {
         database_target_id: databaseTargetId, baseline: baselineSource, desired: source,
-        execution_sha256: schemaPlan.execution_sha256}});
+        execution_sha256: schemaPlan.execution_sha256,
+        ...(hasOverrides ? {preservation_overrides: preservationOverrides} : {})}});
       if(token === serial.current) {setSchemaReceipt(value); setConfirmApply(false);}
     } catch(failure) {if(token === serial.current) setError(failure.response?.data?.errormsg || failure.message || 'DuckDB review failed');}
     finally {if(token === serial.current) setBusy(false);}
@@ -148,6 +203,54 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
     {result?.snapshot && <FirebirdCatalogDesigner engine="duckdb" baseline={JSON.stringify(result.snapshot)}
       post={post} databaseTargetId={databaseTargetId} disabled={busy}
       onReview={(desired, baseline) => {setSource(desired); setBaselineSource(baseline); setComparison(null); setSchemaPlan(null); setSchemaReceipt(null); setConfirmApply(false);}} />}
+    {result && <Box component="details" sx={{my: 1}}>
+      <summary>General table rebuild &amp; macro default preservation options</summary>
+      <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', my: 1}}>
+        <TextField size="small" label="Preservation target resource ID" value={preserveTargetId} disabled={busy} sx={{minWidth: 240}}
+          onChange={event => setPreserveTargetId(event.target.value)} />
+        <TextField select size="small" label="Preservation adapter" value={preserveAction} disabled={busy} sx={{minWidth: 250}}
+          onChange={event => setPreserveAction(event.target.value)}>
+          <MenuItem value="rebuild-table-general">General table rebuild (rebuild-table-general)</MenuItem>
+          <MenuItem value="replace-macro-preserve-defaults">Macro default preservation (replace-macro-preserve-defaults)</MenuItem>
+        </TextField>
+        <FormControlLabel label="Acknowledge catalog tag loss" control={<Checkbox checked={tagLossAcknowledged} disabled={busy}
+          onChange={event => setTagLossAcknowledged(event.target.checked)} />} />
+        {preserveAction === 'rebuild-table-general' ? <>
+          <FormControlLabel label="Confirm complete table definition" control={<Checkbox checked={completeDefConfirmed} disabled={busy}
+            onChange={event => setCompleteDefConfirmed(event.target.checked)} />} />
+          <FormControlLabel label="Confirm row preservation" control={<Checkbox checked={preserveRowsConfirmed} disabled={busy}
+            onChange={event => setPreserveRowsConfirmed(event.target.checked)} />} />
+          <FormControlLabel label="Acknowledge conversion loss" control={<Checkbox checked={lossAcknowledged} disabled={busy}
+            onChange={event => setLossAcknowledged(event.target.checked)} />} />
+          <FormControlLabel label="Confirm column discard" control={<Checkbox checked={discardColsConfirmed} disabled={busy}
+            onChange={event => setDiscardColsConfirmed(event.target.checked)} />} />
+          <TextField size="small" label="Dropped column resource IDs (comma-separated)" value={dropColumnIdsText} disabled={busy} sx={{minWidth: 260}}
+            onChange={event => setDropColumnIdsText(event.target.value)} />
+          <TextField size="small" label="Column renames JSON" value={columnRenamesJson} disabled={busy} sx={{minWidth: 220}}
+            onChange={event => setColumnRenamesJson(event.target.value)} />
+          <TextField size="small" label="Column conversions JSON" value={columnConversionsJson} disabled={busy} sx={{minWidth: 240}}
+            onChange={event => setColumnConversionsJson(event.target.value)} />
+          <TextField size="small" label="Added column fills JSON" value={addedColumnFillsJson} disabled={busy} sx={{minWidth: 220}}
+            onChange={event => setAddedColumnFillsJson(event.target.value)} />
+        </> : <>
+          <FormControlLabel label="Acknowledge macro metadata reset" control={<Checkbox checked={metadataResetAck} disabled={busy}
+            onChange={event => setMetadataResetAck(event.target.checked)} />} />
+          <FormControlLabel label="Confirm complete overload signature set" control={<Checkbox checked={completeSigConfirmed} disabled={busy}
+            onChange={event => setCompleteSigConfirmed(event.target.checked)} />} />
+          <TextField size="small" label="Macro overload updates JSON" value={macroOverloadUpdatesJson} disabled={busy} sx={{minWidth: 320}}
+            onChange={event => setMacroOverloadUpdatesJson(event.target.value)} />
+        </>}
+        <Button disabled={busy || !preserveTargetId.trim()} onClick={stagePreservationSpec}>Stage preservation override</Button>
+        {!!Object.keys(preservationOverrides).length && (
+          <Button disabled={busy} onClick={() => {setPreservationOverrides({}); setSchemaPlan(null); setSchemaReceipt(null);}}>Clear preservation overrides</Button>
+        )}
+      </Box>
+      {!!Object.keys(preservationOverrides).length && (
+        <Box component="pre" aria-label="Staged DuckDB preservation overrides" sx={{whiteSpace: 'pre-wrap', m: 0}}>
+          {JSON.stringify(preservationOverrides, null, 2)}
+        </Box>
+      )}
+    </Box>}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
     {comparison && <Box sx={{height: 280, overflow: 'auto'}}>
       <PagedDataGrid readOnly gridId="duckdb/catalog-comparison" aria-label="DuckDB catalog differences"

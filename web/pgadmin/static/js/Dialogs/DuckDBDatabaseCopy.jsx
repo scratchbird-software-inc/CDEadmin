@@ -8,13 +8,16 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
   disabled=false, onBusyChange, onBlocked}) {
   const [source, setSource] = useState(''), [destination, setDestination] = useState('');
   const [mode, setMode] = useState('ALL'), [record, setRecord] = useState(null);
+  const [allowForeignDest, setAllowForeignDest] = useState(false);
+  const [catalogCapabilities, setCatalogCapabilities] = useState([]);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState(''), [confirmed, setConfirmed] = useState(false);
   const [awaitingReceipt, setAwaitingReceipt] = useState(false), [catalogs, setCatalogs] = useState([]);
   const serial = useRef(0), previousSession = useRef(sessionId);
   const ownsBusy = useRef(false);
   useEffect(() => {
-    serial.current++; setRecord(null); setSource(''); setDestination(''); setCatalogs([]);
+    serial.current++; setRecord(null); setSource(''); setDestination(''); setCatalogs([]); setCatalogCapabilities([]);
+    setAllowForeignDest(false);
     setConfirmation(''); setConfirmed(false); setError(''); setBusy(false); setAwaitingReceipt(false);
     return () => {serial.current++; if(ownsBusy.current) onBusyChange(false); ownsBusy.current = false;};
   }, [post, databaseTargetId, onBusyChange]);
@@ -22,7 +25,7 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
     if(previousSession.current && previousSession.current !== sessionId) {
       if(ownsBusy.current) onBusyChange(false);
       ownsBusy.current = false;
-      serial.current++; setRecord(null); setCatalogs([]); setBusy(false); setAwaitingReceipt(false);
+      serial.current++; setRecord(null); setCatalogs([]); setCatalogCapabilities([]); setBusy(false); setAwaitingReceipt(false);
       setConfirmation(''); setConfirmed(false);
       setError('The original copy session closed or changed. Its receipts cannot be applied on another session.');
     }
@@ -42,7 +45,8 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
       const active = sessionId || await ensureSession();
       if(token !== serial.current) return;
       const request = operation === 'review' ? {operation, draft: {
-        source_catalog: source, destination_catalog: destination, mode}} : operation === 'inventory' ? {operation} :
+        source_catalog: source, destination_catalog: destination, mode,
+        ...(allowForeignDest ? {allow_foreign_destination: true} : {})}} : operation === 'inventory' ? {operation} :
         {operation, review_id: record.review_id,
           ...(operation === 'apply' ? {review_digest: record.review_digest, confirmation, confirmed} :
             operation === 'discard' ? {review_digest: record.review_digest} : {})};
@@ -50,8 +54,10 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
       const value = await post({action: 'duckdb_database_copy', database_target_id: databaseTargetId,
         session_id: active, request});
       if(token === serial.current) {
-        if(operation === 'inventory') setCatalogs(value.catalogs);
-        else receive(value);
+        if(operation === 'inventory') {
+          setCatalogs(value.catalogs || []);
+          setCatalogCapabilities(value.catalog_capabilities || []);
+        } else receive(value);
         keepBusy = operation !== 'inventory' && running(value);
         setConfirmation(''); setConfirmed(false);
       }
@@ -91,10 +97,14 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
       <TextField select size="small" label="Native database copy mode" value={mode} disabled={locked} onChange={changed(setMode)}>
         <MenuItem value="ALL">Schema and data</MenuItem><MenuItem value="SCHEMA">Schema only</MenuItem><MenuItem value="DATA">Data only (append)</MenuItem>
       </TextField>
+      <FormControlLabel label="Allow foreign destination catalog" control={<Checkbox checked={allowForeignDest} disabled={locked}
+        onChange={event => {setAllowForeignDest(event.target.checked); setRecord(null); setConfirmation(''); setConfirmed(false);}} />} />
       <Button disabled={locked || !source || !destination} onClick={() => send('review')}>Review native database copy</Button>
     </Box>
     {!!catalogs.length && <Box component="pre" aria-label="DuckDB copy catalogs" sx={{whiteSpace: 'pre-wrap'}}>
       {JSON.stringify(catalogs, null, 2)}</Box>}
+    {!!catalogCapabilities.length && <Box component="pre" aria-label="DuckDB copy catalog capabilities" sx={{whiteSpace: 'pre-wrap'}}>
+      {JSON.stringify(catalogCapabilities, null, 2)}</Box>}
     {record && <>
       <Alert severity={record.state === 'refused' || record.state === 'partial' || record.state === 'unknown_outcome' ? 'warning' : 'info'}>
         Native database copy: {record.state}. Phase: {record.phase}. Acknowledgement does not mean committed.</Alert>
@@ -102,6 +112,8 @@ export default function DuckDBDatabaseCopy({post, databaseTargetId, sessionId, e
         sx={{width: '100%', minHeight: 80, fontFamily: 'monospace'}} />}
       {record.storage && <Box component="pre" aria-label="Reviewed DuckDB copy storage" sx={{whiteSpace: 'pre-wrap'}}>
         {JSON.stringify(record.storage, null, 2)}</Box>}
+      {record.conversion_preview && <Box component="pre" aria-label="Reviewed DuckDB copy conversion preview" sx={{whiteSpace: 'pre-wrap'}}>
+        {JSON.stringify(record.conversion_preview, null, 2)}</Box>}
       {(record.warnings || []).map(warning => <Alert key={warning} severity="warning">{warning}</Alert>)}
       {record.state === 'reviewed' && record.phase === 'finished' && <>
         <TextField size="small" label="Exact copy destination confirmation" value={confirmation}

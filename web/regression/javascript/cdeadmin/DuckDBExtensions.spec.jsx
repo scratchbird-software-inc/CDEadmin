@@ -105,4 +105,27 @@ describe('DuckDB original-session extension workflow', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
     expect(post.mock.calls.filter(([request]) => request.request.operation === 'apply')).toHaveLength(1);
   });
+
+  it('probes live per-extension runtime capabilities without executing mutations', async () => {
+    const capPayload = {
+      schema: 'scratchrobin.duckdb.extension-capabilities@1',
+      summary: {total_known: 2, statically_linked_loaded: 2},
+      profiles: [{extension_name: 'parquet', runtime_state: 'statically_linked_loaded'}],
+      context: {allow_community_extensions: false},
+    };
+    const post = jest.fn().mockResolvedValueOnce(capPayload);
+    render(<Component {...properties(post)} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Inspect extension capabilities'}));
+    const capPre = await screen.findByLabelText('DuckDB extension capabilities');
+    expect(JSON.parse(capPre.textContent)).toMatchObject({
+      schema: 'scratchrobin.duckdb.extension-capabilities@1',
+      summary: {total_known: 2, statically_linked_loaded: 2},
+    });
+    expect(post).toHaveBeenCalledWith({
+      action: 'duckdb_extensions',
+      database_target_id: 'file-1',
+      session_id: 'query-1',
+      request: {operation: 'capabilities'},
+    });
+  });
 });

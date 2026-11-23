@@ -11,13 +11,16 @@ import {useCallback, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import getApiInstance from 'sources/api_instance';
-import {Box, Stack} from '../../primitives/Layout';
+import {Box, Grid, Stack} from '../../primitives/Layout';
 import {Button} from '../../primitives/Button';
+import {TextField} from '../../primitives/Field';
 import {Checkbox} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
 import {DuckdbSectionCard, createDuckdbWorkspaceCaller} from './duckdbAdminHelpers';
+
+const textVal = (e) => (e?.target ? e.target.value : String(e ?? ''));
 
 /**
  * DU-AUD-17 (SR-F-030588): DuckDB Original-Session Retained DDN Schema Workflow & Receipts.
@@ -41,6 +44,15 @@ export default function DuckdbRetainedSchemaWorkspace({
   const [desiredSeed, setDesiredSeed] = useState('');
   const desiredJsonRef = useRef('');
   const [editorEpoch, setEditorEpoch] = useState(0);
+  const [deletionsText, setDeletionsText] = useState('');
+  const [alterationsJson, setAlterationsJson] = useState('');
+  const [rebuildResourceId, setRebuildResourceId] = useState('');
+  const [rebuildPreserveRows, setRebuildPreserveRows] = useState(true);
+  const [rebuildCompleteDef, setRebuildCompleteDef] = useState(true);
+  const [rebuildLossAck, setRebuildLossAck] = useState(false);
+  const [rebuildDiscardCols, setRebuildDiscardCols] = useState(false);
+  const [rebuildConversionsJson, setRebuildConversionsJson] = useState('');
+  const [rebuildRenamesJson, setRebuildRenamesJson] = useState('');
   const [previewResult, setPreviewResult] = useState(null);
   const [reviewedPlan, setReviewedPlan] = useState(null);
   const [confirmApply, setConfirmApply] = useState(false);
@@ -65,6 +77,30 @@ export default function DuckdbRetainedSchemaWorkspace({
     return sid;
   }, [activeSessionId, api, databaseTargetId, endpointUrl]);
 
+  const observedModel = observed?.model || (observed?.rows ? observed : null);
+
+  const buildRetainedModifiers = () => {
+    const deletions = deletionsText.split(',').map((s) => s.trim()).filter(Boolean);
+    const alterations = alterationsJson.trim() ? JSON.parse(alterationsJson) : [];
+    const rebuilds = [];
+    if (rebuildResourceId.trim()) {
+      rebuilds.push({
+        resource_id: rebuildResourceId.trim(),
+        preserve_rows_confirmed: rebuildPreserveRows,
+        complete_definition_confirmed: rebuildCompleteDef,
+        ...(rebuildLossAck ? {loss_acknowledged: true} : {}),
+        ...(rebuildDiscardCols ? {discard_columns_confirmed: true} : {}),
+        ...(rebuildConversionsJson.trim() ? {column_conversions: JSON.parse(rebuildConversionsJson)} : {}),
+        ...(rebuildRenamesJson.trim() ? {column_renames: JSON.parse(rebuildRenamesJson)} : {}),
+      });
+    }
+    return {
+      ...(deletions.length ? {deletions} : {}),
+      ...(alterations.length ? {alterations} : {}),
+      ...(rebuilds.length ? {rebuilds} : {}),
+    };
+  };
+
   const handleObserve = async () => {
     setBusy(true);
     setError('');
@@ -76,8 +112,9 @@ export default function DuckdbRetainedSchemaWorkspace({
         request: {operation: 'observe'},
       });
       setObserved(res);
-      if (res?.model) {
-        const formatted = JSON.stringify(res.model, null, 2);
+      const doc = res?.model || (res?.rows ? res : null);
+      if (doc) {
+        const formatted = JSON.stringify(doc, null, 2);
         desiredJsonRef.current = formatted;
         setDesiredSeed(formatted);
         setEditorEpoch((n) => n + 1);
@@ -90,19 +127,21 @@ export default function DuckdbRetainedSchemaWorkspace({
   };
 
   const handlePreview = async () => {
-    if (!observed?.model) return;
+    if (!observedModel) return;
     setBusy(true);
     setError('');
     try {
       const sid = await ensureSession();
       const desired = JSON.parse(desiredJsonRef.current || '{}');
+      const modifiers = buildRetainedModifiers();
       const res = await callDuckdb({
         action: 'duckdb_retained_schema',
         sessionId: sid,
         request: {
           operation: 'preview',
-          baseline_model: observed.model,
-          desired_model: desired,
+          baseline: observedModel,
+          desired,
+          ...modifiers,
         },
       });
       setPreviewResult(res);
@@ -114,19 +153,22 @@ export default function DuckdbRetainedSchemaWorkspace({
   };
 
   const handleReview = async () => {
-    if (!observed?.model) return;
+    if (!observedModel) return;
     setBusy(true);
     setError('');
     try {
       const sid = await ensureSession();
       const desired = JSON.parse(desiredJsonRef.current || '{}');
+      const modifiers = buildRetainedModifiers();
       const res = await callDuckdb({
         action: 'duckdb_retained_schema',
         sessionId: sid,
         request: {
           operation: 'review',
-          baseline_model: observed.model,
-          desired_model: desired,
+          baseline: observedModel,
+          desired,
+          ...(previewResult?.execution_sha256 ? {execution_sha256: previewResult.execution_sha256} : {}),
+          ...modifiers,
         },
       });
       setReviewedPlan(res);
@@ -138,8 +180,11 @@ export default function DuckdbRetainedSchemaWorkspace({
     }
   };
 
+  const reviewedId = reviewedPlan?.review_id || reviewedPlan?.application_id || '';
+  const reviewedDigest = reviewedPlan?.review_digest || reviewedPlan?.plan_digest || '';
+
   const handleApply = async () => {
-    if (!reviewedPlan?.application_id || !confirmApply) return;
+    if (!reviewedId || !confirmApply) return;
     setBusy(true);
     setError('');
     try {
@@ -149,8 +194,8 @@ export default function DuckdbRetainedSchemaWorkspace({
         sessionId: sid,
         request: {
           operation: 'apply',
-          application_id: reviewedPlan.application_id,
-          plan_digest: reviewedPlan.plan_digest,
+          review_id: reviewedId,
+          review_digest: reviewedDigest,
           confirmed: true,
         },
       });
@@ -216,7 +261,7 @@ export default function DuckdbRetainedSchemaWorkspace({
           {observed && (
             <Badge
               status="info"
-              label={`Model contract: ${observed.model?.contract || 'scratchrobin.duckdb.retained-session-ddn@1'}`}
+              label={`Model contract: ${observed.model?.contract || observed.provenance?.mapping || 'scratchrobin.duckdb.retained-session-ddn@1'}`}
             />
           )}
           <CodeEditor
@@ -228,6 +273,57 @@ export default function DuckdbRetainedSchemaWorkspace({
             }}
             minHeight={180}
           />
+          <Grid columns={3} gap="sm">
+            <TextField
+              label={gettext('Explicit Deletions (comma-separated resource IDs)')}
+              value={deletionsText}
+              onChange={(e) => setDeletionsText(textVal(e))}
+            />
+            <TextField
+              label={gettext('Explicit Alterations JSON Array')}
+              value={alterationsJson}
+              onChange={(e) => setAlterationsJson(textVal(e))}
+            />
+            <TextField
+              label={gettext('Retained Rebuild Table Resource ID')}
+              value={rebuildResourceId}
+              onChange={(e) => setRebuildResourceId(textVal(e))}
+            />
+            <TextField
+              label={gettext('Rebuild Column Conversions JSON')}
+              value={rebuildConversionsJson}
+              onChange={(e) => setRebuildConversionsJson(textVal(e))}
+            />
+            <TextField
+              label={gettext('Rebuild Column Renames JSON')}
+              value={rebuildRenamesJson}
+              onChange={(e) => setRebuildRenamesJson(textVal(e))}
+            />
+          </Grid>
+          {rebuildResourceId.trim() && (
+            <Stack direction="row" gap="sm" style={{flexWrap: 'wrap'}}>
+              <Checkbox
+                label={gettext('Confirm preserving retained table rows')}
+                checked={rebuildPreserveRows}
+                onChange={setRebuildPreserveRows}
+              />
+              <Checkbox
+                label={gettext('Confirm complete retained table definition')}
+                checked={rebuildCompleteDef}
+                onChange={setRebuildCompleteDef}
+              />
+              <Checkbox
+                label={gettext('Acknowledge retained conversion loss')}
+                checked={rebuildLossAck}
+                onChange={setRebuildLossAck}
+              />
+              <Checkbox
+                label={gettext('Confirm retained column discard')}
+                checked={rebuildDiscardCols}
+                onChange={setRebuildDiscardCols}
+              />
+            </Stack>
+          )}
           {previewResult && (
             <pre style={{margin: 0, maxHeight: 140, overflow: 'auto', whiteSpace: 'pre-wrap'}}>
               {JSON.stringify(previewResult, null, 2)}
@@ -245,7 +341,7 @@ export default function DuckdbRetainedSchemaWorkspace({
         >
           {reviewedPlan && (
             <Stack gap="sm">
-              <Badge status="info" label={`Application: ${reviewedPlan.application_id}`} />
+              <Badge status="info" label={`Application: ${reviewedId}`} />
               <Checkbox
                 label={gettext('Confirm applying reviewed DDN changes on the retained session (caller retains COMMIT/ROLLBACK)')}
                 checked={confirmApply}
