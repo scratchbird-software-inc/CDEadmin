@@ -129,6 +129,7 @@ blueprint = AuthenticateModule(MODULE_NAME, __name__, static_url_path='')
 
 
 @blueprint.route('/vault_status', endpoint='vault_status', methods=['GET'])
+@pgCSRFProtect.exempt
 def vault_status():
     """Report whether the Firebird Embedded UserConfigurationDatabase is initialized."""
     from pgadmin.cdeadmin.user_config_db import get_user_config_db
@@ -200,6 +201,7 @@ def desktop_unlock():
 
 
 @blueprint.route('/desktop_handoff', endpoint='desktop_handoff', methods=['GET'])
+@pgCSRFProtect.exempt
 def desktop_handoff():
     """Consume single-use Electron splash ticket to establish authenticated BrowserWindow session."""
     from flask_security.utils import login_user

@@ -344,7 +344,7 @@ def test_flask_web_and_electron_splash_three_field_login_routes(
     try:
         app = create_app('ScratchRobin-Test')
         app.config['USER_CONFIG_LOGIN_REQUIRED'] = True
-        app.config['WTF_CSRF_ENABLED'] = False
+        app.config['WTF_CSRF_ENABLED'] = True
         app.PGADMIN_INT_KEY = 'desktop-int-key-123'
 
         client = app.test_client()
