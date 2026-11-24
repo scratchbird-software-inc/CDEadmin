@@ -14,6 +14,7 @@ from flask_babel import gettext
 from flask_security import current_user
 from pgadmin.user_login_check import pga_login_required
 from pgadmin.utils import PgAdminModule
+from pgadmin.utils.csrf import pgCSRFProtect
 from pgadmin.utils.menu import MenuItem
 from pgadmin.utils.constants import MIMETYPE_APP_JS
 from pgadmin.utils.ajax import make_json_response
@@ -137,7 +138,8 @@ blueprint = AboutModule(MODULE_NAME, __name__, static_url_path='')
 ##########################################################################
 # A test page
 ##########################################################################
-@blueprint.route("/", endpoint='index')
+@blueprint.route("/", endpoint='index', methods=['GET'])
+@pgCSRFProtect.exempt
 @pga_login_required
 def index():
     """Render the about box."""
