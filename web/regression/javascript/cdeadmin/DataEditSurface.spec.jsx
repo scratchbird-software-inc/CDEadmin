@@ -388,12 +388,28 @@ describe('Surface 1: DataEditSurface (Browse & Edit Data)', () => {
     await act(async () => {});
     expect(document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]')).toBeTruthy();
 
-    const nameField = document.querySelector('[data-form-nav-cell="0:ACCOUNT_NAME"]');
+    const nameFieldReadOnly = document.querySelector('[data-form-nav-cell="0:ACCOUNT_NAME"]');
     expect(screen.queryByText('Ledger account display name')).not.toBeInTheDocument();
-    fireEvent.focus(nameField);
+    fireEvent.focus(nameFieldReadOnly);
+    expect(
+      document.querySelector('[data-form-field-wrap="ACCOUNT_NAME"]')
+    ).toHaveAttribute('data-field-selected', 'true');
+    // Column comment hint is shown ONLY when in edit mode on the focused field
+    expect(screen.queryByText('Ledger account display name')).not.toBeInTheDocument();
+    fireEvent.blur(nameFieldReadOnly);
+
+    // Enter Edit Mode -> focusing ACCOUNT_NAME shows the per-field comment hint underneath it
+    fireEvent.click(within(underTabs).getByRole('tab', {name: 'Data'}));
+    fireEvent.click(screen.getByRole('button', {name: /Edit Row/i}));
+    await act(async () => {});
+    const nameFieldEdit = document.querySelector('[data-form-nav-cell="0:ACCOUNT_NAME"]');
+    fireEvent.focus(nameFieldEdit);
     expect(screen.getByText('Ledger account display name')).toHaveAttribute('role', 'note');
-    fireEvent.blur(nameField);
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+    fireEvent.blur(nameFieldEdit);
     expect(screen.queryByText('Ledger account display name')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Accept'}));
+    await act(async () => {});
 
     fireEvent.click(screen.getByRole('radio', {name: 'Hybrid (Grid + Current Mini-Form)'}));
     await act(async () => {});

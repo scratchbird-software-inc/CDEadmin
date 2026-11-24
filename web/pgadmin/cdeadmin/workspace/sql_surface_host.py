@@ -3591,6 +3591,7 @@ class SqlSurfaceHostService:
             col['client_type'] = client_type
             col['default_alignment'] = default_align
             col['is_complex'] = is_complex
+            col['comment'] = str(col.get('comment') or col.get('description') or '')[:128]
             out.append({
                 'ordinal': idx,
                 'name': cname,
@@ -3608,7 +3609,7 @@ class SqlSurfaceHostService:
                 'editable': bool(editable and col.get('editable', not col.get('key'))),
                 'insertable': bool(editable and col.get('insertable', True)),
                 'is_complex': is_complex,
-                'comment': str(col.get('comment') or ''),
+                'comment': col['comment'],
             })
         return out
 

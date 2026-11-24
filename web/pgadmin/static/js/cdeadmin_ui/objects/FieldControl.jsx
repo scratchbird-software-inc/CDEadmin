@@ -62,10 +62,16 @@ export function fieldHelpText(field) {
       ? gettext(field.unavailable_reason)
       : gettext('Not available on this version');
   }
-  return [
-    field.help ? gettext(field.help) : null,
+  const commentHint =
+    !field.help && field.comment
+      ? Array.from(String(field.comment).trim()).slice(0, 128).join('')
+      : null;
+  const joined = [
+    field.help ? gettext(field.help) : commentHint,
     field.native_keyword ? `Native: ${field.native_keyword}` : null,
   ].filter(Boolean).join(' ');
+  const chars = Array.from(joined);
+  return chars.length > 128 ? chars.slice(0, 128).join('') : joined;
 }
 
 export default function FieldControl({field, value, onChange, draft={}, context={}, resourceKind,

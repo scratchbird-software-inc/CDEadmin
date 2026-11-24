@@ -46,7 +46,8 @@ class RowPage:
                     catalog.execute(source, parameters)
 
             catalog_query(
-                """SELECT n.nspname, c.relname, c.relkind, c.relhassubclass
+                """SELECT n.nspname, c.relname, c.relkind, c.relhassubclass,
+                          COALESCE(LEFT(pg_catalog.obj_description(c.oid, 'pg_class'), 128), '')
                      FROM pg_catalog.pg_class c
                      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                     WHERE c.oid = %s AND c.relkind IN ('r', 'p', 'v', 'm', 'f')""",
@@ -55,8 +56,10 @@ class RowPage:
             relation = catalog.fetchone()
             if not relation:
                 raise ValueError('PostgreSQL relation is unavailable')
+            self.table_comment = str(relation[4] or '')[:128] if len(relation) > 4 else ''
             catalog_query(
-                """SELECT attname, pg_catalog.format_type(atttypid, atttypmod), attnotnull
+                """SELECT attname, pg_catalog.format_type(atttypid, atttypmod), attnotnull,
+                          COALESCE(LEFT(pg_catalog.col_description(attrelid, attnum), 128), '')
                      FROM pg_catalog.pg_attribute
                     WHERE attrelid = %s AND attnum > 0 AND NOT attisdropped
                     ORDER BY attnum""",
@@ -64,9 +67,16 @@ class RowPage:
             )
             self.relation = sql.Identifier(*relation[:2])
             self.columns = [
-                {'name': name, 'native_type': kind, 'nullable': not required,
-                 'editable': False, 'read_only': True, 'insertable': False}
-                for name, kind, required in catalog.fetchall()
+                {
+                    'name': row[0],
+                    'native_type': row[1],
+                    'nullable': not row[2],
+                    'editable': False,
+                    'read_only': True,
+                    'insertable': False,
+                    'comment': str(row[3] or '')[:128] if len(row) > 3 else '',
+                }
+                for row in catalog.fetchall()
             ]
             if allow_edit and relation[2] == 'r' and not relation[3]:
                 catalog_query(
@@ -130,6 +140,7 @@ class RowPage:
             rows.append(result)
         return {
             'columns': self.columns, 'rows': rows,
+            'table_comment': self.table_comment,
             'editable': bool(self.operations),
             'identity_policy': 'primary-key-and-version' if self.operations else 'read-only-relation',
             'row_operations': self.operations,

@@ -174,3 +174,36 @@ def table_operations(connection, name, columns):
         result['delete'] = admitted(f'DELETE FROM {table} WHERE 1 = 0')
         result['defaults'] = admitted(f'INSERT INTO {table} DEFAULT VALUES')
     return result
+
+
+def relation_comments(connection, relation_name):
+    """Fetch bounded (first 128 chars) relation & column comments directly via SQL LEFT()
+    so unlimited RDB$DESCRIPTION text blobs never stream across the wire."""
+    table_comment = ''
+    col_comments = {}
+    if not relation_name or not hasattr(connection, 'cursor'):
+        return table_comment, col_comments
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                'SELECT CAST(LEFT(RDB$DESCRIPTION, 128) AS VARCHAR(512)) '
+                'FROM RDB$RELATIONS WHERE TRIM(TRAILING FROM RDB$RELATION_NAME) = ?',
+                (str(relation_name),),
+            )
+            rel_row = cur.fetchone()
+            if rel_row and rel_row[0]:
+                table_comment = str(rel_row[0])[:128]
+            cur.execute(
+                'SELECT TRIM(TRAILING FROM RF.RDB$FIELD_NAME), '
+                'CAST(LEFT(COALESCE(RF.RDB$DESCRIPTION, F.RDB$DESCRIPTION), 128) AS VARCHAR(512)) '
+                'FROM RDB$RELATION_FIELDS RF '
+                'LEFT JOIN RDB$FIELDS F ON F.RDB$FIELD_NAME = RF.RDB$FIELD_SOURCE '
+                'WHERE TRIM(TRAILING FROM RF.RDB$RELATION_NAME) = ?',
+                (str(relation_name),),
+            )
+            for cname, cdesc in cur.fetchall() or ():
+                if cname and cdesc:
+                    col_comments[str(cname)] = str(cdesc)[:128]
+    except Exception:
+        pass
+    return table_comment, col_comments

@@ -7,12 +7,21 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
-import {FIELD_FONTS, BOOLEAN_FORMATS, DISPLAY_MODES, buildFormLayoutPlacements, formatCellValue,
-  inferColumnMeta, serializeValueForEdit} from './dataEditSurfaceHelpers';
-const GUTTER_WIDTH = 58;
+import {
+  FIELD_FONTS,
+  BOOLEAN_FORMATS,
+  DISPLAY_MODES,
+  buildFormLayoutPlacements,
+  formatCellValue,
+  formatColumnCommentHint,
+  inferColumnMeta,
+  serializeValueForEdit,
+} from './dataEditSurfaceHelpers';
+
+const GUTTER_WIDTH = 62;
 
 export function defaultLayoutState() {
   return {
@@ -54,12 +63,14 @@ export function orderedColumns(allColumns, orderList, visibleList) {
  *   - (c) Hybrid (pinned to Area 3e visible viewport width)
  *   - (d) Single Form (100% of Area 3e)
  *   - (e) Hybrid-When-Editing
- * Includes left-side hover scrollbars on vertical overflow and strict
- * focus-visibility guarantee (focused field is always scrolled into view).
+ * Includes left-side hover scrollbars on vertical overflow, prominent active-field
+ * highlighting, and single-focused-field 128-character column comment hints
+ * displayed directly underneath the focused editing field.
  */
 export function AdaptiveRecordFormCard({
   row,
   rowIndex,
+  activeColName = '',
   isCurrent,
   isEditing,
   isBookmarked = false,
@@ -83,12 +94,57 @@ export function AdaptiveRecordFormCard({
   onFormContextMenu,
   onFieldContextMenu,
 }) {
-  const [focusedColName, setFocusedColName] = useState(null);
+  // Strictly track the single DOM-focused field inside this card ({colName, el})
+  const [focusedField, setFocusedField] = useState(null);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const focusedElRef = useRef(null);
+
+  useEffect(() => {
+    if (!focusedField?.colName || !focusedElRef.current) {
+      setAnchorRect(null);
+      return undefined;
+    }
+    const updateRect = () => {
+      const el = focusedElRef.current;
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      const r = el.getBoundingClientRect();
+      setAnchorRect(r);
+    };
+    updateRect();
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [focusedField?.colName, isEditing]);
+
+  const handleFieldFocus = (colName, el) => {
+    focusedElRef.current = el || null;
+    const rect =
+      el && typeof el.getBoundingClientRect === 'function'
+        ? el.getBoundingClientRect()
+        : null;
+    setFocusedField({colName});
+    setAnchorRect(rect);
+    onSelectRow?.(rowIndex);
+    onFocusField?.(colName);
+  };
+
+  const handleFieldBlur = (colName) => {
+    setFocusedField((prev) => (prev?.colName === colName ? null : prev));
+  };
 
   const resolvedLayout = useMemo(
     () =>
       formLayout ||
-      buildFormLayoutPlacements(columns, formFieldPrefs, 720, null, row ? [row] : null),
+      buildFormLayoutPlacements(
+        columns,
+        formFieldPrefs,
+        720,
+        null,
+        row ? [row] : null
+      ),
     [formLayout, columns, formFieldPrefs, row]
   );
 
@@ -109,7 +165,12 @@ export function AdaptiveRecordFormCard({
           ? '−'
           : '';
 
-  const handleFieldKeyNav = (ev, colIdx, col, {isMultiline = false, isTextInput = false} = {}) => {
+  const handleFieldKeyNav = (
+    ev,
+    colIdx,
+    col,
+    {isMultiline = false, isTextInput = false} = {}
+  ) => {
     if (!onNavigateFormField) return;
     const lastColIdx = columns.length - 1;
     const maxRowIdx = Math.max(0, (totalRowsInPage || rowIndex + 1) - 1);
@@ -164,7 +225,11 @@ export function AdaptiveRecordFormCard({
     }
     if (ev.key === 'End' && (ev.ctrlKey || ev.metaKey)) {
       ev.preventDefault();
-      onNavigateFormField(maxRowIdx, columns[lastColIdx]?.name || col.name, 'last_record');
+      onNavigateFormField(
+        maxRowIdx,
+        columns[lastColIdx]?.name || col.name,
+        'last_record'
+      );
       return;
     }
 
@@ -176,7 +241,8 @@ export function AdaptiveRecordFormCard({
     const atRightEdge =
       !isTextInput ||
       (typeof ev.currentTarget?.selectionEnd === 'number' &&
-        ev.currentTarget.selectionEnd === String(ev.currentTarget.value ?? '').length);
+        ev.currentTarget.selectionEnd ===
+          String(ev.currentTarget.value ?? '').length);
 
     if (ev.key === 'ArrowRight' && atRightEdge && !isMultiline) {
       ev.preventDefault();
@@ -234,7 +300,10 @@ export function AdaptiveRecordFormCard({
         }}
         title={
           onToggleBookmark
-            ? gettext('Row %s — Double-click gutter or click ! to toggle bookmark', row.row_number)
+            ? gettext(
+              'Row %s — Double-click gutter or click ! to toggle bookmark',
+              row.row_number
+            )
             : undefined
         }
         style={{
@@ -326,8 +395,12 @@ export function AdaptiveRecordFormCard({
             const fPrefs = {
               ...fieldTypeDefaults?.[nativeMeta.clientType],
               ...formFieldPrefs[col.name],
-              font: formFieldPrefs[col.name]?.font || fieldTypeDefaults?.[nativeMeta.clientType]?.font,
-              hAlign: formFieldPrefs[col.name]?.hAlign || fieldTypeDefaults?.[nativeMeta.clientType]?.hAlign,
+              font:
+                formFieldPrefs[col.name]?.font ||
+                fieldTypeDefaults?.[nativeMeta.clientType]?.font,
+              hAlign:
+                formFieldPrefs[col.name]?.hAlign ||
+                fieldTypeDefaults?.[nativeMeta.clientType]?.hAlign,
             };
             const placement = placementMap.get(col.name) || {
               row: 'auto',
@@ -335,7 +408,10 @@ export function AdaptiveRecordFormCard({
               span: 1,
             };
             const markdownEditor = fPrefs.editor === 'markdown';
-            const useInlineEditor = fPrefs.inlineBox || markdownEditor || (isEditing && nativeMeta.clientType === 'json');
+            const useInlineEditor =
+              fPrefs.inlineBox ||
+              markdownEditor ||
+              (isEditing && nativeMeta.clientType === 'json');
             const isFullRow = Boolean(useInlineEditor || placement.fullRow);
             const natWidth =
               fPrefs.widthPx ||
@@ -348,9 +424,13 @@ export function AdaptiveRecordFormCard({
               Object.prototype.hasOwnProperty.call(draftValues, col.name)
                 ? draftValues[col.name]
                 : row.values?.[col.name];
-            const rawVal = conversions?.displayValue(col.name, nativeValue) ?? nativeValue;
-            const colMeta = conversions?.pairFor(col.name) && (typeof rawVal === 'string' || rawVal == null)
-              ? {...nativeMeta, clientType: 'text', isComplex: false} : nativeMeta;
+            const rawVal =
+              conversions?.displayValue(col.name, nativeValue) ?? nativeValue;
+            const colMeta =
+              conversions?.pairFor(col.name) &&
+              (typeof rawVal === 'string' || rawVal == null)
+                ? {...nativeMeta, clientType: 'text', isComplex: false}
+                : nativeMeta;
             const formatted = formatCellValue(rawVal, colMeta, {
               booleanFormat,
               localeDateFormat,
@@ -362,14 +442,50 @@ export function AdaptiveRecordFormCard({
               (row.stage_state === 'inserted'
                 ? col.insertable !== false
                 : col.editable !== false);
-            const showHint =
-              focusedColName === col.name && Boolean(col.comment);
+
+            const isFocusedThisCol = focusedField?.colName === col.name;
+            const isSelectedField = Boolean(
+              isCurrent &&
+                (isFocusedThisCol ||
+                  (!focusedField?.colName && activeColName === col.name))
+            );
+            const shouldAutoFocus = Boolean(
+              isCurrent &&
+                canEditField &&
+                (activeColName ? activeColName === col.name : colIdx === 0)
+            );
+
+            // Strictly show ONLY ONE hint at a time, ONLY on the specific focused field while in edit mode,
+            // capped to the first 128 characters of the column comment.
+            const hintText = formatColumnCommentHint(col.comment);
+            const showHint = Boolean(
+              canEditField && isFocusedThisCol && hintText
+            );
+            const hasLiveRect = Boolean(
+              anchorRect && (anchorRect.width > 0 || anchorRect.height > 0)
+            );
+
+            const selectedBoxBorder = isSelectedField
+              ? '2px solid var(--sr-accent, #0284c7)'
+              : '1px solid var(--sr-border-default, rgba(128,128,128,0.3))';
+            const selectedBoxShadow = isSelectedField
+              ? '0 0 0 3px rgba(2, 132, 199, 0.28)'
+              : 'none';
+            const readOnlyFieldBg = isSelectedField
+              ? 'rgba(2, 132, 199, 0.12)'
+              : 'var(--sr-surface-card, rgba(255,255,255,0.75))';
 
             return (
               <div
                 key={col.name}
                 data-form-field-wrap={col.name}
+                data-field-selected={isSelectedField ? 'true' : undefined}
                 data-field-width-px={natWidth}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onSelectRow?.(rowIndex);
+                  onFocusField?.(col.name);
+                }}
                 onContextMenu={(ev) => {
                   ev.preventDefault();
                   ev.stopPropagation();
@@ -383,6 +499,7 @@ export function AdaptiveRecordFormCard({
                   minWidth: isFullRow ? '100%' : `${Math.min(natWidth, 84)}px`,
                   maxWidth: '100%',
                   position: 'relative',
+                  zIndex: showHint ? 45 : isSelectedField ? 5 : 1,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 2,
@@ -391,8 +508,10 @@ export function AdaptiveRecordFormCard({
                 <label
                   style={{
                     fontSize: '0.71rem',
-                    fontWeight: 600,
-                    color: 'var(--sr-text-secondary, #475569)',
+                    fontWeight: isSelectedField ? 700 : 600,
+                    color: isSelectedField
+                      ? 'var(--sr-accent, #0284c7)'
+                      : 'var(--sr-text-secondary, #475569)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -413,7 +532,7 @@ export function AdaptiveRecordFormCard({
                   <span
                     style={{
                       fontSize: '0.64rem',
-                      opacity: 0.62,
+                      opacity: isSelectedField ? 0.85 : 0.62,
                       fontWeight: 400,
                       whiteSpace: 'nowrap',
                     }}
@@ -431,9 +550,11 @@ export function AdaptiveRecordFormCard({
                       minHeight: 26,
                       padding: '2px 7px',
                       borderRadius: 5,
-                      border:
-                        '1px solid var(--sr-border-default, rgba(128,128,128,0.3))',
-                      background: 'var(--sr-surface-subtle, rgba(128,128,128,0.05))',
+                      border: selectedBoxBorder,
+                      boxShadow: selectedBoxShadow,
+                      background: isSelectedField
+                        ? 'rgba(2, 132, 199, 0.12)'
+                        : 'var(--sr-surface-subtle, rgba(128,128,128,0.05))',
                     }}
                   >
                     <span style={{fontSize: '0.74rem', opacity: 0.8}}>
@@ -445,12 +566,8 @@ export function AdaptiveRecordFormCard({
                       data-form-nav-cell={`${rowIndex}:${col.name}`}
                       style={{minHeight: 20, padding: '1px 7px', fontSize: '0.73rem'}}
                       tabIndex={0}
-                      onFocus={() => {
-                        setFocusedColName(col.name);
-                        onSelectRow?.(rowIndex);
-                        onFocusField?.(col.name);
-                      }}
-                      onBlur={() => setFocusedColName(null)}
+                      onFocus={(ev) => handleFieldFocus(col.name, ev.currentTarget)}
+                      onBlur={() => handleFieldBlur(col.name)}
                       onKeyDown={(ev) => handleFieldKeyNav(ev, colIdx, col)}
                       onClick={(ev) => {
                         ev.stopPropagation();
@@ -462,6 +579,7 @@ export function AdaptiveRecordFormCard({
                   </div>
                 ) : useInlineEditor ? (
                   <textarea
+                    autoFocus={shouldAutoFocus}
                     aria-label={`${col.name}`}
                     data-form-nav-cell={`${rowIndex}:${col.name}`}
                     readOnly={!canEditField}
@@ -474,13 +592,15 @@ export function AdaptiveRecordFormCard({
                           : '<null>'
                         : serializeValueForEdit(rawVal)
                     }
-                    placeholder={rawVal === null ? '<null>' : markdownEditor ? gettext('Markdown') : ''}
-                    onFocus={() => {
-                      setFocusedColName(col.name);
-                      onSelectRow?.(rowIndex);
-                      onFocusField?.(col.name);
-                    }}
-                    onBlur={() => setFocusedColName(null)}
+                    placeholder={
+                      rawVal === null
+                        ? '<null>'
+                        : markdownEditor
+                          ? gettext('Markdown')
+                          : ''
+                    }
+                    onFocus={(ev) => handleFieldFocus(col.name, ev.currentTarget)}
+                    onBlur={() => handleFieldBlur(col.name)}
                     onKeyDown={(ev) =>
                       handleFieldKeyNav(ev, colIdx, col, {
                         isMultiline: true,
@@ -496,10 +616,12 @@ export function AdaptiveRecordFormCard({
                       minHeight: 58,
                       padding: '4px 7px',
                       borderRadius: 5,
-                      border: canEditField
-                        ? '1px solid var(--sr-accent, #0284c7)'
-                        : '1px solid var(--sr-border-default, rgba(128,128,128,0.28))',
-                      background: 'var(--sr-surface-card, transparent)',
+                      border: selectedBoxBorder,
+                      boxShadow: selectedBoxShadow,
+                      outline: 'none',
+                      background: canEditField
+                        ? 'var(--sr-surface-card, #ffffff)'
+                        : readOnlyFieldBg,
                       color:
                         rawVal === null && !canEditField
                           ? 'var(--sr-text-muted, #64748b)'
@@ -507,8 +629,9 @@ export function AdaptiveRecordFormCard({
                       fontStyle:
                         rawVal === null && !canEditField ? 'italic' : 'normal',
                       textAlign: hAlign,
-                      fontFamily: FIELD_FONTS[fPrefs.font] || (
-                        colMeta.clientType === 'json' || markdownEditor
+                      fontFamily:
+                        FIELD_FONTS[fPrefs.font] ||
+                        (colMeta.clientType === 'json' || markdownEditor
                           ? 'var(--sr-font-mono, monospace)'
                           : 'inherit'),
                       fontSize: '0.8rem',
@@ -517,6 +640,7 @@ export function AdaptiveRecordFormCard({
                 ) : canEditField ? (
                   <input
                     type="text"
+                    autoFocus={shouldAutoFocus}
                     aria-label={`${col.name}`}
                     data-form-nav-cell={`${rowIndex}:${col.name}`}
                     value={
@@ -525,12 +649,8 @@ export function AdaptiveRecordFormCard({
                         : serializeValueForEdit(rawVal)
                     }
                     placeholder={rawVal === null ? '<null>' : ''}
-                    onFocus={() => {
-                      setFocusedColName(col.name);
-                      onSelectRow?.(rowIndex);
-                      onFocusField?.(col.name);
-                    }}
-                    onBlur={() => setFocusedColName(null)}
+                    onFocus={(ev) => handleFieldFocus(col.name, ev.currentTarget)}
+                    onBlur={() => handleFieldBlur(col.name)}
                     onKeyDown={(ev) =>
                       handleFieldKeyNav(ev, colIdx, col, {
                         isMultiline: false,
@@ -545,8 +665,10 @@ export function AdaptiveRecordFormCard({
                       minHeight: 26,
                       padding: '3px 7px',
                       borderRadius: 5,
-                      border: '1px solid var(--sr-accent, #0284c7)',
-                      background: 'var(--sr-surface-card, transparent)',
+                      border: selectedBoxBorder,
+                      boxShadow: selectedBoxShadow,
+                      outline: 'none',
+                      background: 'var(--sr-surface-card, #ffffff)',
                       color: 'inherit',
                       textAlign: hAlign,
                       fontFamily: FIELD_FONTS[fPrefs.font],
@@ -560,23 +682,16 @@ export function AdaptiveRecordFormCard({
                     aria-readonly="true"
                     aria-label={`${col.name}`}
                     data-form-nav-cell={`${rowIndex}:${col.name}`}
-                    onFocus={() => {
-                      setFocusedColName(col.name);
-                      onSelectRow?.(rowIndex);
-                      onFocusField?.(col.name);
-                    }}
-                    onBlur={() => setFocusedColName(null)}
+                    onFocus={(ev) => handleFieldFocus(col.name, ev.currentTarget)}
+                    onBlur={() => handleFieldBlur(col.name)}
                     onKeyDown={(ev) => handleFieldKeyNav(ev, colIdx, col)}
                     style={{
                       minHeight: 26,
                       padding: '3px 7px',
                       borderRadius: 5,
-                      border:
-                        focusedColName === col.name
-                          ? '1.5px solid var(--sr-accent, #0284c7)'
-                          : '1px solid var(--sr-border-subtle, rgba(128,128,128,0.28))',
-                      background:
-                        'var(--sr-surface-card, rgba(255,255,255,0.6))',
+                      border: selectedBoxBorder,
+                      boxShadow: selectedBoxShadow,
+                      background: readOnlyFieldBg,
                       color: formatted.isNull
                         ? 'var(--sr-text-muted, #64748b)'
                         : 'inherit',
@@ -599,19 +714,33 @@ export function AdaptiveRecordFormCard({
                     role="note"
                     data-cdeadmin-qa-key={`field-comment-hint-${col.name}`}
                     style={{
-                      marginTop: 2,
-                      padding: '5px 8px',
-                      borderRadius: 6,
-                      fontSize: '0.74rem',
-                      background: 'var(--sr-surface-elevated, #1e293b)',
-                      color: 'var(--sr-text-primary, #f8fafc)',
+                      position: hasLiveRect ? 'fixed' : 'absolute',
+                      top: hasLiveRect
+                        ? `${Math.round(anchorRect.bottom + 5)}px`
+                        : 'calc(100% + 5px)',
+                      left: hasLiveRect
+                        ? `${Math.round(anchorRect.left)}px`
+                        : 0,
+                      width: hasLiveRect
+                        ? `${Math.max(Math.round(anchorRect.width), 220)}px`
+                        : 'max(100%, min(280px, 82vw))',
+                      maxWidth: 'min(420px, 88vw)',
+                      padding: '7px 10px',
+                      borderRadius: 'var(--sr-control-radius, 7px)',
+                      fontSize: '0.75rem',
+                      lineHeight: 1.42,
+                      background:
+                        'var(--sr-surface-popover, var(--sr-surface-card, #ffffff))',
+                      color: 'var(--sr-text-primary, #0f172a)',
                       border:
                         '1px solid var(--sr-border-default, rgba(128,128,128,0.35))',
-                      boxShadow: 'var(--sr-popup-shadow)',
-                      zIndex: 8,
+                      boxShadow:
+                        'var(--sr-shadow-popover, 0 8px 24px rgba(15, 23, 42, 0.18))',
+                      pointerEvents: 'none',
+                      zIndex: 2600,
                     }}
                   >
-                    {col.comment}
+                    {hintText}
                   </div>
                 )}
               </div>
@@ -626,6 +755,7 @@ export function AdaptiveRecordFormCard({
 AdaptiveRecordFormCard.propTypes = {
   row: PropTypes.object.isRequired,
   rowIndex: PropTypes.number.isRequired,
+  activeColName: PropTypes.string,
   isCurrent: PropTypes.bool,
   isEditing: PropTypes.bool,
   isBookmarked: PropTypes.bool,

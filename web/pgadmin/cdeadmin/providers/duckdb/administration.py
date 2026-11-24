@@ -625,17 +625,49 @@ class DuckDBAdministration(RelationalAdministration):
             else:
                 page = super().read_rows(client, request, connection=connection)
             target = request.get('target_resource')
-            if isinstance(target, Mapping) and target.get('resource_kind') == 'table':
+            if isinstance(target, Mapping) and target.get('resource_kind') in ('table', 'view'):
                 path = self._target_path(target)
                 owns = connection is None
                 obs_conn = connection or client._connect({'route': request.get('_provider_route')})
+                col_comments = {}
+                table_comment = ''
+                types_by_col, generated = {}, set()
                 try:
-                    types_by_col, generated = self._inspect_table_write_schema(obs_conn, path)
+                    if target.get('resource_kind') == 'table':
+                        types_by_col, generated = self._inspect_table_write_schema(obs_conn, path)
+                    if not request.get('continuation') and hasattr(obs_conn, 'execute'):
+                        try:
+                            schema_n, table_n = self._schema_table(path, 'main')
+                            catalog_n = path[-3] if len(path) >= 3 else obs_conn.execute(
+                                'SELECT current_database()'
+                            ).fetchone()[0]
+                            for cname, cdesc in obs_conn.execute(
+                                "SELECT column_name, LEFT(COALESCE(comment, ''), 128) "
+                                'FROM duckdb_columns() WHERE database_name=? AND schema_name=? AND table_name=?',
+                                (catalog_n, schema_n, table_n),
+                            ).fetchall():
+                                if cname and cdesc:
+                                    col_comments[str(cname)] = str(cdesc)[:128]
+                            rel_fn = 'duckdb_views()' if target.get('resource_kind') == 'view' else 'duckdb_tables()'
+                            rel_col = 'view_name' if target.get('resource_kind') == 'view' else 'table_name'
+                            t_row = obs_conn.execute(
+                                f"SELECT LEFT(COALESCE(comment, ''), 128) FROM {rel_fn} "
+                                f'WHERE database_name=? AND schema_name=? AND {rel_col}=?',
+                                (catalog_n, schema_n, table_n),
+                            ).fetchone()
+                            if t_row and t_row[0]:
+                                table_comment = str(t_row[0])[:128]
+                        except Exception:
+                            pass
                 finally:
                     if owns:
                         client._forget_and_close(obs_conn)
+                if table_comment:
+                    page['table_comment'] = table_comment
                 for col in page.get('columns', []):
                     col_name = col['name']
+                    if col_name in col_comments and not col.get('comment'):
+                        col['comment'] = col_comments[col_name]
                     kind = types_by_col.get(col_name)
                     if kind is not None:
                         spec = input_envelope_spec(kind)

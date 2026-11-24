@@ -31,7 +31,7 @@ export const SCRATCH_BASE_UI_CSS = `
   --sr-warning: var(--sr-scheme-warning, var(--cde-color-warning, #d97706));
   --sr-success: var(--sr-scheme-success, var(--cde-color-success, #16a34a));
   --sr-info: var(--sr-scheme-accent, var(--cde-color-info, #0284c7));
-  --sr-focus-ring: 0 0 0 2px rgba(2, 132, 199, 0.32);
+  --sr-focus-ring: 0 0 0 3px rgba(2, 132, 199, 0.28);
   --sr-popup-shadow: 0 12px 32px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.08);
   --sr-tree-guide: rgba(71, 85, 105, 0.78);
   --sr-tree-line: var(--sr-tree-guide);
@@ -81,6 +81,7 @@ kbd,
   --sr-accent: var(--sr-scheme-accent, var(--sr-accent-fg, #38bdf8));
   --sr-accent-hover: #0ea5e9;
   --sr-accent-fg-contrast: #082f49;
+  --sr-focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.30);
   --sr-popup-shadow: 0 16px 38px rgba(2, 6, 23, 0.52), 0 2px 8px rgba(2, 6, 23, 0.36);
   --sr-tree-guide: rgba(148, 163, 184, 0.72);
   --sr-tree-line: var(--sr-tree-guide);
@@ -318,9 +319,8 @@ kbd,
   min-width: 0;
 }
 
-.sr-field:hover,
 .sr-field:focus-within {
-  z-index: 35;
+  z-index: 45;
 }
 
 .sr-field-label {
@@ -328,6 +328,12 @@ kbd,
   font-weight: 600;
   color: var(--sr-text-secondary);
   line-height: 1.25;
+  transition: color 120ms ease;
+}
+
+.sr-field:focus-within:not(:has(.sr-field:focus-within)) > .sr-field-label {
+  color: var(--sr-accent);
+  font-weight: 700;
 }
 
 .sr-input-wrap {
@@ -340,12 +346,12 @@ kbd,
   border: 1px solid var(--sr-border-default);
   background: var(--sr-surface-card);
   color: var(--sr-text-primary);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .sr-input-wrap:focus-within {
   border-color: var(--sr-accent);
-  box-shadow: var(--sr-focus-ring);
+  box-shadow: inset 0 0 0 1px var(--sr-accent), var(--sr-focus-ring);
 }
 
 .sr-input-wrap[data-invalid="true"] {
@@ -408,8 +414,8 @@ kbd,
   z-index: 50;
 }
 
-.sr-field:hover > .sr-field-help:not([data-error="true"]),
-.sr-field:focus-within > .sr-field-help:not([data-error="true"]) {
+/* Strictly show ONLY ONE hint at a time: only on the single innermost focused field */
+.sr-field:focus-within:not(:has(.sr-field:focus-within)) > .sr-field-help:not([data-error="true"]) {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);

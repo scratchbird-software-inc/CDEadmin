@@ -566,21 +566,57 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
             self.client.close_session(connection)
         return {'values': values}
 
+    def _enrich_firebird_page_comments(self, request, page):
+        if not isinstance(page, dict) or not page.get('columns') or (isinstance(request, dict) and request.get('continuation')):
+            return page
+        target = request.get('target_resource') if isinstance(request, dict) else None
+        rel_name = (target or {}).get('display_name') or (target or {}).get('name')
+        if not rel_name:
+            return page
+        from .grid_values import relation_comments
+        ctx = self._visual_admin_session_context(_mapping(request))
+        conn = ctx.get('session_handle') if ctx else None
+        owns = False
+        if conn is None and isinstance(request, dict) and request.get('_provider_route'):
+            try:
+                conn = self.client._connect({'route': request['_provider_route']})
+                owns = True
+            except Exception:
+                conn = None
+        if conn is None:
+            return page
+        try:
+            tbl_comment, col_comments = relation_comments(conn, rel_name)
+            if tbl_comment:
+                page['table_comment'] = tbl_comment
+            for col in page.get('columns', []):
+                cname = col.get('name')
+                if cname in col_comments and not col.get('comment'):
+                    col['comment'] = col_comments[cname]
+        finally:
+            if owns:
+                try:
+                    self.client.close_session(conn)
+                except Exception:
+                    pass
+        return page
+
     def read_visual_admin_rows(self, request):
         execution = request.get('_row_read_execution') if isinstance(request, dict) else None
         if execution is not None:
             request = {key: value for key, value in request.items() if key != '_row_read_execution'}
         with self._grid_session_guard(request):
             if execution is None or not isinstance(self.client, FirebirdQueryClient):
-                return super().read_visual_admin_rows(request)
+                return self._enrich_firebird_page_comments(request, super().read_visual_admin_rows(request))
             context = self._visual_admin_session_context(request)
             if not context or not context['session_id']:
-                return super().read_visual_admin_rows(request)
+                return self._enrich_firebird_page_comments(request, super().read_visual_admin_rows(request))
             handle = context['session_handle']
             context['_row_read_checkpoint'] = execution.check_stop
             try:
                 with self.client.cancellable_grid_read(handle, execution):
                     page = self._visual_admin.read_rows(request, context)
+                    self._enrich_firebird_page_comments(request, page)
                 execution.check_stop()
                 return page
             except Exception:

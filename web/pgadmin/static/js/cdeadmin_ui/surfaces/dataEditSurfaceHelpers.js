@@ -527,3 +527,20 @@ export function formatBytes(bytes) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
+
+export const MAX_COLUMN_HINT_CHARS = 128;
+
+/**
+ * Format a database column comment as a bounded per-field editing hint.
+ * Slices strictly to the first 128 Unicode characters so unlimited text/blob
+ * column comments remain concise and safe to render below the focused field.
+ */
+export function formatColumnCommentHint(comment) {
+  if (comment === null || comment === undefined) return '';
+  const text = String(comment).trim();
+  if (!text) return '';
+  const chars = Array.from(text);
+  return chars.length > MAX_COLUMN_HINT_CHARS
+    ? chars.slice(0, MAX_COLUMN_HINT_CHARS).join('')
+    : text;
+}

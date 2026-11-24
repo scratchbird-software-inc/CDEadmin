@@ -27,6 +27,7 @@ import {
   FIELD_FONTS,
   DISPLAY_MODES,
   formatCellValue,
+  formatColumnCommentHint,
   inferColumnMeta,
   isComplexOrOversizedCell,
   serializeValueForEdit,
@@ -93,6 +94,36 @@ export default function RecordDataView({model}) {
   const dragStateRef = useRef(null);
   const suppressNextClickRef = useRef(false);
   const [gridMenu, setGridMenu] = useState(null); // {x, y, rowIndex, colName}
+  const [focusedGridEdit, setFocusedGridEdit] = useState(null); // {rowIndex, colName}
+  const [focusedGridEditRect, setFocusedGridEditRect] = useState(null);
+  const focusedGridInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!isEditingRow) {
+      setFocusedGridEdit(null);
+      setFocusedGridEditRect(null);
+      focusedGridInputRef.current = null;
+    }
+  }, [isEditingRow]);
+
+  useEffect(() => {
+    if (!focusedGridEdit || !focusedGridInputRef.current) {
+      setFocusedGridEditRect(null);
+      return undefined;
+    }
+    const updateRect = () => {
+      const el = focusedGridInputRef.current;
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      setFocusedGridEditRect(el.getBoundingClientRect());
+    };
+    updateRect();
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [focusedGridEdit]);
 
   useEffect(() => {
     const handleGlobalMouseUp = () => {
@@ -345,9 +376,27 @@ export default function RecordDataView({model}) {
               .toLowerCase()
               .includes(quickFindText.trim().toLowerCase());
 
+          const isFocusedInlineEdit =
+            canEditCell &&
+            focusedGridEdit?.rowIndex === rIdx &&
+            focusedGridEdit?.colName === col.name;
+          const editHintText = canEditCell
+            ? formatColumnCommentHint(col.comment)
+            : '';
+          const showInlineHint = Boolean(isFocusedInlineEdit && editHintText);
+          const hasLiveGridRect = Boolean(
+            focusedGridEditRect &&
+              (focusedGridEditRect.width > 0 || focusedGridEditRect.height > 0)
+          );
+
           let cellBg;
           if (quickMatch) {
             cellBg = 'rgba(250, 204, 21, 0.24)';
+          } else if (isActiveCell && !canEditCell && isPinned) {
+            cellBg =
+              'linear-gradient(rgba(2, 132, 199, 0.20), rgba(2, 132, 199, 0.20)), var(--sr-surface-card, #ffffff)';
+          } else if (isActiveCell && !canEditCell) {
+            cellBg = 'rgba(2, 132, 199, 0.17)';
           } else if (showSelectionFill && isPinned) {
             cellBg =
               'linear-gradient(rgba(2, 132, 199, 0.20), rgba(2, 132, 199, 0.20)), var(--sr-surface-card, #ffffff)';
@@ -362,6 +411,7 @@ export default function RecordDataView({model}) {
               key={col.name}
               role={model.gridRole === 'table' ? 'cell' : 'gridcell'}
               data-grid-nav-cell={`${rIdx}:${col.name}`}
+              data-active-cell={isActiveCell ? 'true' : undefined}
               data-cell-selected={isSelectedCell ? 'true' : undefined}
               aria-selected={isSelectedCell || isActiveCell || undefined}
               tabIndex={isActiveCell ? 0 : -1}
@@ -747,16 +797,28 @@ export default function RecordDataView({model}) {
                 fontFamily: FIELD_FONTS[cPrefs.font],
                 borderRight:
                   '1px solid var(--sr-border-subtle, rgba(128,128,128,0.16))',
-                outline: isActiveCell
-                  ? '2px solid var(--sr-accent, #0284c7)'
-                  : 'none',
+                outline:
+                  isActiveCell || isFocusedInlineEdit
+                    ? '2px solid var(--sr-accent, #0284c7)'
+                    : 'none',
                 outlineOffset: -2,
+                boxShadow: isFocusedInlineEdit
+                  ? '0 0 0 3px rgba(2, 132, 199, 0.28)'
+                  : isActiveCell
+                    ? 'inset 0 0 0 2px rgba(2, 132, 199, 0.24)'
+                    : undefined,
                 position: isPinned ? 'sticky' : 'relative',
                 left: stickyLeft,
-                zIndex: isPinned ? 2 : 1,
+                zIndex: showInlineHint
+                  ? 45
+                  : isPinned
+                    ? 2
+                    : isActiveCell || isFocusedInlineEdit
+                      ? 2
+                      : 1,
                 background: cellBg,
                 userSelect: canEditCell ? 'text' : 'none',
-                overflow: 'hidden',
+                overflow: showInlineHint ? 'visible' : 'hidden',
               }}
             >
               {typeof col.render === 'function' ? (
@@ -792,34 +854,89 @@ export default function RecordDataView({model}) {
                   [...]
                 </button>
               ) : canEditCell ? (
-                <input
-                  type="text"
-                  autoFocus={isActiveCell}
-                  aria-label={`${col.name} cell editor`}
-                  value={
-                    rawVal === null || rawVal === undefined
-                      ? ''
-                      : serializeValueForEdit(rawVal)
-                  }
-                  placeholder={rawVal === null ? '<null>' : ''}
-                  onChange={(ev) =>
-                    setRowDraft((prev) => ({
-                      ...(prev || {}),
-                      [col.name]: ev.target.value,
-                    }))
-                  }
-                  style={{
-                    width: '100%',
-                    height: 24,
-                    padding: '0 5px',
-                    border: 'none',
-                    outline: 'none',
-                    background: 'var(--sr-surface-card)',
-                    color: 'inherit',
-                    textAlign: hAlign,
-                    fontSize: '0.8125rem',
-                  }}
-                />
+                <>
+                  <input
+                    type="text"
+                    autoFocus={isActiveCell}
+                    aria-label={`${col.name} cell editor`}
+                    value={
+                      rawVal === null || rawVal === undefined
+                        ? ''
+                        : serializeValueForEdit(rawVal)
+                    }
+                    placeholder={rawVal === null ? '<null>' : ''}
+                    onFocus={(ev) => {
+                      focusedGridInputRef.current = ev.currentTarget;
+                      setFocusedGridEdit({rowIndex: rIdx, colName: col.name});
+                      setFocusedGridEditRect(
+                        typeof ev.currentTarget.getBoundingClientRect ===
+                          'function'
+                          ? ev.currentTarget.getBoundingClientRect()
+                          : null
+                      );
+                      setActiveColName(col.name);
+                    }}
+                    onBlur={() => {
+                      setFocusedGridEdit((prev) =>
+                        prev?.rowIndex === rIdx && prev?.colName === col.name
+                          ? null
+                          : prev
+                      );
+                    }}
+                    onChange={(ev) =>
+                      setRowDraft((prev) => ({
+                        ...(prev || {}),
+                        [col.name]: ev.target.value,
+                      }))
+                    }
+                    style={{
+                      width: '100%',
+                      height: 24,
+                      padding: '0 5px',
+                      border: 'none',
+                      outline: 'none',
+                      background: 'var(--sr-surface-card)',
+                      color: 'inherit',
+                      textAlign: hAlign,
+                      fontSize: '0.8125rem',
+                    }}
+                  />
+                  {showInlineHint && (
+                    <div
+                      role="note"
+                      data-cdeadmin-qa-key={`field-comment-hint-${col.name}`}
+                      style={{
+                        position: hasLiveGridRect ? 'fixed' : 'absolute',
+                        top: hasLiveGridRect
+                          ? `${Math.round(focusedGridEditRect.bottom + 5)}px`
+                          : 'calc(100% + 5px)',
+                        left: hasLiveGridRect
+                          ? `${Math.round(focusedGridEditRect.left)}px`
+                          : 0,
+                        width: hasLiveGridRect
+                          ? `${Math.max(Math.round(focusedGridEditRect.width), 220)}px`
+                          : 'max(100%, min(280px, 82vw))',
+                        maxWidth: 'min(420px, 88vw)',
+                        padding: '7px 10px',
+                        borderRadius: 'var(--sr-control-radius, 7px)',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.42,
+                        textAlign: 'left',
+                        background:
+                          'var(--sr-surface-popover, var(--sr-surface-card, #ffffff))',
+                        color: 'var(--sr-text-primary, #0f172a)',
+                        border:
+                          '1px solid var(--sr-border-default, rgba(128,128,128,0.35))',
+                        boxShadow:
+                          'var(--sr-shadow-popover, 0 8px 24px rgba(15, 23, 42, 0.18))',
+                        pointerEvents: 'none',
+                        zIndex: 2600,
+                      }}
+                    >
+                      {editHintText}
+                    </div>
+                  )}
+                </>
               ) : (
                 <span
                   style={{
@@ -860,6 +977,7 @@ export default function RecordDataView({model}) {
         <AdaptiveRecordFormCard
           row={currentRow}
           rowIndex={activeRowIndex}
+          activeColName={activeColName}
           isCurrent
           isEditing={isRowEdit}
           isBookmarked={bookmarkedGlobals.has(
@@ -919,6 +1037,7 @@ export default function RecordDataView({model}) {
                   <AdaptiveRecordFormCard
                     row={row}
                     rowIndex={rIdx}
+                    activeColName={activeColName}
                     isCurrent={rIdx === activeRowIndex}
                     isEditing={isRowEdit}
                     isBookmarked={bookmarkedGlobals.has(
@@ -1241,12 +1360,20 @@ export default function RecordDataView({model}) {
                         border: 'none',
                         background:
                           isColSelected || activeColName === col.name
-                            ? 'var(--sr-surface-selected, rgba(2,132,199,0.1))'
+                            ? 'var(--sr-surface-selected, rgba(2,132,199,0.14))'
                             : 'transparent',
-                        color: isColSelected
-                          ? 'var(--sr-accent, #0284c7)'
-                          : 'inherit',
-                        fontWeight: isColSelected ? 700 : 600,
+                        boxShadow:
+                          activeColName === col.name
+                            ? 'inset 0 -2px 0 var(--sr-accent, #0284c7)'
+                            : 'none',
+                        color:
+                          isColSelected || activeColName === col.name
+                            ? 'var(--sr-accent, #0284c7)'
+                            : 'inherit',
+                        fontWeight:
+                          isColSelected || activeColName === col.name
+                            ? 700
+                            : 600,
                         fontSize: '0.76rem',
                         display: 'flex',
                         alignItems: 'center',
@@ -1343,6 +1470,7 @@ export default function RecordDataView({model}) {
                     <AdaptiveRecordFormCard
                       row={row}
                       rowIndex={rIdx}
+                      activeColName={activeColName}
                       isCurrent
                       isEditing={isRowEdit}
                       isBookmarked={bookmarkedGlobals.has(

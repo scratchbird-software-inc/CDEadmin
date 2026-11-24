@@ -433,4 +433,91 @@ describe('Unified Grid 2D Selection (Cell, Cell Group, Row, Row Group, Column, C
       );
     });
   });
+
+  it('shows at most one 128-char-capped column comment hint under the focused editing field (Grid & Hybrid) and highlights the selected field prominently', () => {
+    const longBlobComment =
+      'Primary ledger account display name used on financial statements and regulatory schedules. ' +
+      'EXTRA_TRAILING_BLOB_TEXT_BEYOND_128_CHARACTERS_MUST_BE_TRUNCATED_CLEANLY!';
+    expect(longBlobComment.length).toBeGreaterThan(150);
+    const expected128 = Array.from(longBlobComment).slice(0, 128).join('');
+    expect(expected128).toHaveLength(128);
+
+    const commentedColumns = [
+      {name: 'id', label: 'ID', native_type: 'integer', key: true, editable: false},
+      {
+        name: 'name',
+        label: 'Account Name',
+        native_type: 'varchar',
+        editable: true,
+        comment: longBlobComment,
+      },
+      {
+        name: 'amount',
+        label: 'Amount',
+        native_type: 'numeric',
+        editable: true,
+        comment: 'Current ledger balance in base currency.',
+      },
+    ];
+
+    render(
+      <ThemedUnifiedGrid
+        caption="Commented Ledger"
+        columns={commentedColumns}
+        rows={SAMPLE_ROWS}
+        editable
+      />
+    );
+
+    // 1. Standard Grid: clicking cell marks it prominently as active (`data-active-cell="true"`), no hint in view mode
+    const cell0Name = document.querySelector('[data-grid-nav-cell="0:name"]');
+    fireEvent.click(cell0Name);
+    expect(cell0Name).toHaveAttribute('data-active-cell', 'true');
+    expect(screen.queryByRole('note')).toBeNull();
+
+    // 2. Double-click cell to enter inline Grid Edit mode -> focusing 'name' editor shows 128-char capped hint;
+    // moving focus to 'amount' editor switches to ONLY 'amount' hint (never 2 hints at once!)
+    fireEvent.doubleClick(cell0Name);
+    const nameGridInput = screen.getByLabelText('name cell editor');
+    fireEvent.focus(nameGridInput);
+    const notesAfterName = screen.getAllByRole('note');
+    expect(notesAfterName).toHaveLength(1);
+    expect(notesAfterName[0]).toHaveTextContent(expected128);
+    expect(notesAfterName[0].textContent).toHaveLength(128);
+
+    const amountGridInput = screen.getByLabelText('amount cell editor');
+    fireEvent.blur(nameGridInput);
+    fireEvent.focus(amountGridInput);
+    const notesAfterAmount = screen.getAllByRole('note');
+    expect(notesAfterAmount).toHaveLength(1);
+    expect(notesAfterAmount[0]).toHaveTextContent('Current ledger balance in base currency.');
+
+    // Cancel edit with Escape -> zero hints shown
+    fireEvent.keyDown(amountGridInput, {key: 'Escape'});
+    expect(screen.queryByRole('note')).toBeNull();
+
+    // 3. Switch to Hybrid Grid mode -> verify prominent active-field highlight (`data-field-selected="true"`)
+    // and single-focused-field 128-char hint in edit mode
+    fireEvent.click(screen.getByRole('button', {name: 'Hybrid Grid'}));
+    const hybridNameWrap = document.querySelector('[data-form-field-wrap="name"]');
+    const hybridAmountWrap = document.querySelector('[data-form-field-wrap="amount"]');
+    fireEvent.click(hybridNameWrap);
+    expect(hybridNameWrap).toHaveAttribute('data-field-selected', 'true');
+    expect(hybridAmountWrap).not.toHaveAttribute('data-field-selected');
+    expect(screen.queryByRole('note')).toBeNull();
+
+    // Double-click row 1 in Hybrid Grid to edit, then switch back to row 0 or press F2 on row 1
+    const row1NameCell = document.querySelector('[data-grid-nav-cell="1:name"]');
+    fireEvent.doubleClick(row1NameCell);
+    const hybridEditNameInput = document.querySelector('[data-form-nav-cell="1:name"]');
+    const hybridEditAmountInput = document.querySelector('[data-form-nav-cell="1:amount"]');
+    fireEvent.focus(hybridEditNameInput);
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+    expect(screen.getByRole('note').textContent).toBe(expected128);
+
+    fireEvent.blur(hybridEditNameInput);
+    fireEvent.focus(hybridEditAmountInput);
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+    expect(screen.getByRole('note')).toHaveTextContent('Current ledger balance in base currency.');
+  });
 });

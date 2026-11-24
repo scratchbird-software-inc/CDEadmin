@@ -1162,11 +1162,31 @@ describe('Surface 2 — SqlEditorSurface & SurfaceExportDialog', () => {
     const miniFormsWrap = document.querySelector('[data-cdeadmin-qa-key="data-surface-mini-forms-list"]');
     expect(miniFormsWrap).not.toBeNull();
     expect(miniFormsWrap).toContainElement(document.querySelector('[data-form-nav-cell="1:NAME"]'));
-    const firstNameField = document.querySelector('[data-form-nav-cell="0:NAME"]');
-    fireEvent.focus(firstNameField);
-    expect(screen.getByText('Customer display name')).toHaveAttribute('role', 'note');
-    fireEvent.blur(firstNameField);
+    const firstNameFieldReadOnly = document.querySelector('[data-form-nav-cell="0:NAME"]');
+    fireEvent.focus(firstNameFieldReadOnly);
+    expect(document.querySelector('[data-form-field-wrap="NAME"]')).toHaveAttribute('data-field-selected', 'true');
+    // Hint only appears when editing the focused field, not when browsing read-only rows
     expect(screen.queryByText('Customer display name')).not.toBeInTheDocument();
+    fireEvent.blur(firstNameFieldReadOnly);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', {name: 'Query'}));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', {name: 'Edit Row'}));
+    });
+    const firstNameFieldEdit = document.querySelector('[data-form-nav-cell="0:NAME"]');
+    fireEvent.focus(firstNameFieldEdit);
+    expect(screen.getByText('Customer display name')).toHaveAttribute('role', 'note');
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+    fireEvent.blur(firstNameFieldEdit);
+    expect(screen.queryByText('Customer display name')).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', {name: 'Accept Row'}));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', {name: 'Format & Layout'}));
+    });
     // Bookmark badges carry over into Mini-Form gutters!
     expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-0"]')).not.toBeNull();
     expect(document.querySelector('[data-cdeadmin-qa-key="row-bookmark-badge-2"]')).not.toBeNull();

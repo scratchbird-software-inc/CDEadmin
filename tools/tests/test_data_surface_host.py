@@ -613,3 +613,50 @@ def test_export_formatted_selection_scope_slices_rows_and_columns(tmp_path):
     assert lines[0] == 'ACCOUNT_NAME'
     assert len(lines) == 4
 
+
+def test_column_comment_enrichment_from_child_resources_and_128_char_cap(tmp_path):
+    store = SurfaceLayoutStore(tmp_path / 'layouts.db')
+    host = DataSurfaceHostService(layout_store=store)
+    srv = _make_server()
+    huge_blob_comment = 'B' * 400
+
+    class ChildCommentWorkspace(FakeFirebirdWorkspaceService):
+        def inspect_resource(self, _server, _req):
+            return {'resource_id': 'table:ACCOUNT', 'extensions': {'firebird': {'native': {}}}}
+
+        def list_resources(self, _server, _req):
+            return {
+                'items': [
+                    {
+                        'resource_id': 'column:ACCOUNT:BALANCE',
+                        'resource_kind': 'column',
+                        'display_name': 'BALANCE',
+                        'extensions': {
+                            'firebird': {
+                                'native': {
+                                    'description': huge_blob_comment,
+                                }
+                            }
+                        },
+                    }
+                ]
+            }
+
+    ws = ChildCommentWorkspace()
+    opened = host.dispatch(
+        ws,
+        srv,
+        {
+            'surface_id': 'ds-blob-comment',
+            'surface_action': 'open',
+            'target_resource': _target(),
+            'database_target_id': 'frappe_suite.fdb',
+            'language_profile': 'firebird-sql',
+            'engine_id': 'firebird',
+        },
+    )
+    cols_by_name = {c['name']: c for c in opened['columns']}
+    assert cols_by_name['BALANCE']['comment'] == 'B' * 128
+    assert len(cols_by_name['BALANCE']['comment']) == 128
+
+

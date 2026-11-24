@@ -946,6 +946,32 @@ class DataSurfaceHostService:
     ) -> list[dict[str, Any]]:
         """Build 1-row-per-column Server-to-Client Field Mapping metadata."""
         inspected_cols: dict[str, dict[str, Any]] = {}
+
+        def _collect_ext_cols(res_obj: dict[str, Any] | None) -> None:
+            if not isinstance(res_obj, dict):
+                return
+            exts = res_obj.get('extensions') or {}
+            candidates = [res_obj.get('properties'), res_obj]
+            if isinstance(exts, dict):
+                for ext_val in exts.values():
+                    if isinstance(ext_val, dict):
+                        candidates.append(ext_val)
+                        candidates.append(ext_val.get('native'))
+                        candidates.append(ext_val.get('catalog_metadata'))
+                        if isinstance(ext_val.get('native'), dict):
+                            candidates.append(
+                                ext_val['native'].get('catalog_metadata')
+                            )
+            for cand in candidates:
+                if not isinstance(cand, dict):
+                    continue
+                for col_item in cand.get('columns') or ():
+                    if isinstance(col_item, dict) and col_item.get('name'):
+                        inspected_cols.setdefault(
+                            str(col_item['name']), col_item
+                        )
+
+        _collect_ext_cols(surface.target_resource)
         try:
             res_id = surface.target_resource.get('resource_id')
             if res_id and hasattr(workspace_service, 'inspect_resource'):
@@ -956,14 +982,42 @@ class DataSurfaceHostService:
                         'database_target_id': surface.database_target_id,
                     },
                 )
-                props = (
-                    (inspected or {}).get('properties')
-                    or (inspected or {}).get('extensions', {}).get('provider', {}).get('native', {})
-                    or {}
+                _collect_ext_cols(inspected)
+            if (
+                res_id
+                and hasattr(workspace_service, 'list_resources')
+                and any(
+                    not (
+                        c.get('comment')
+                        or (inspected_cols.get(str(c.get('name') or '')) or {}).get('comment')
+                        or (inspected_cols.get(str(c.get('name') or '')) or {}).get('description')
+                    )
+                    for c in surface.columns
                 )
-                for col_item in (props.get('columns') or (inspected or {}).get('columns') or []):
-                    if isinstance(col_item, dict) and col_item.get('name'):
-                        inspected_cols[str(col_item['name'])] = col_item
+            ):
+                child_page = workspace_service.list_resources(
+                    server,
+                    {
+                        'parent_resource_id': res_id,
+                        'database_target_id': surface.database_target_id,
+                    },
+                )
+                for item in (child_page or {}).get('items') or ():
+                    if not isinstance(item, dict) or item.get('resource_kind') != 'column':
+                        continue
+                    cname = str(item.get('display_name') or item.get('name') or '')
+                    if not cname:
+                        continue
+                    merged: dict[str, Any] = {}
+                    for ext_val in (item.get('extensions') or {}).values():
+                        if isinstance(ext_val, dict):
+                            nat = ext_val.get('native')
+                            if isinstance(nat, dict):
+                                merged.update(nat)
+                                if isinstance(nat.get('catalog_metadata'), dict):
+                                    merged.update(nat['catalog_metadata'])
+                    if merged:
+                        inspected_cols.setdefault(cname, {}).update(merged)
         except Exception:
             pass
 
@@ -978,9 +1032,10 @@ class DataSurfaceHostService:
             col['comment'] = str(
                 col.get('comment')
                 or extra.get('comment')
+                or extra.get('column_comment')
                 or extra.get('description')
                 or ''
-            )
+            )[:128]
             domain_name = str(
                 col.get('domain_name')
                 or extra.get('domain')
