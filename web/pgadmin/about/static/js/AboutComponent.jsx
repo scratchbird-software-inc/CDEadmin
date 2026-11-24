@@ -7,164 +7,267 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {useEffect, useRef, useState} from 'react';
+import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import url_for from 'sources/url_for';
-import { useEffect, useState, useRef } from 'react';
-import { Box, Grid, InputLabel } from '@mui/material';
-import { InputSQL } from '../../../static/js/components/FormComponents';
+import {Box, Stack} from 'sources/cdeadmin_ui/primitives/Layout';
+import {Icon} from 'sources/cdeadmin_ui/icons';
+import {InputSQL} from '../../../static/js/components/FormComponents';
 import getApiInstance from '../../../static/js/api_instance';
-import { usePgAdmin } from '../../../static/js/PgAdminProvider';
+import {usePgAdmin} from '../../../static/js/PgAdminProvider';
+
+const FAMILY_BRANDS = [
+  {iconKey: 'brand.scratchbird', name: 'ScratchBird'},
+  {iconKey: 'brand.scratchrobin', name: 'ScratchRobin'},
+  {iconKey: 'brand.scratchweaver', name: 'ScratchWeaver'},
+  {iconKey: 'brand.ddn', name: 'DDN'},
+  {iconKey: 'brand.opensource', name: 'Open Source'},
+];
+
+function AboutFieldRow({label, value, mono = false, qaKey}) {
+  if (!value) return null;
+  return (
+    <div
+      data-cdeadmin-qa-key={qaKey}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(170px, 220px) minmax(0, 1fr)',
+        gap: 12,
+        alignItems: 'baseline',
+        padding: '4px 0',
+        borderBottom: '1px solid var(--sr-border-subtle, rgba(128,128,128,0.16))',
+        fontSize: '0.82rem',
+      }}
+    >
+      <span style={{fontWeight: 700, color: 'var(--sr-text-secondary, inherit)'}}>
+        {label}
+      </span>
+      <span
+        className={mono ? 'sr-bui-mono' : undefined}
+        style={{wordBreak: 'break-word'}}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+AboutFieldRow.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.node,
+  mono: PropTypes.bool,
+  qaKey: PropTypes.string,
+};
 
 export default function AboutComponent() {
-  const containerRef = useRef();
-  const [aboutData, setAboutData] = useState([]);
+  const containerRef = useRef(null);
+  const [aboutData, setAboutData] = useState({});
   const pgAdmin = usePgAdmin();
 
   useEffect(() => {
-    const about_url = url_for('about.index');
+    const aboutUrl = url_for('about.index');
     const api = getApiInstance();
 
-    api.get(about_url).then((res)=>{
-      setAboutData(res.data.data);
-    }).catch((err)=>{
-      pgAdmin.Browser.notifier.errorText(err);
-    });
-  }, []);
+    api
+      .get(aboutUrl)
+      .then((res) => {
+        setAboutData(res?.data?.data || {});
+      })
+      .catch((err) => {
+        pgAdmin?.Browser?.notifier?.errorText?.(err);
+      });
+  }, [pgAdmin]);
+
+  const releaseText = aboutData.release || aboutData.version || '';
+  const buildDateText =
+    aboutData.build_datetime || aboutData.build_timestamp_utc || '';
 
   return (
-    <Box sx={{ padding: '16px', height: '100%', display: 'flex',flexDirection: 'column'}} ref={containerRef}>
-      <Box sx={{marginBottom: '16px'}}>
-        <InputLabel sx={{fontWeight: 'bold', fontSize: '1.15rem'}}>
-          {aboutData.product_name}
-        </InputLabel>
-        <InputLabel>{aboutData.fork_summary}</InputLabel>
-      </Box>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Project Status')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.fork_status}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Upstream Base')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.upstream_name} {aboutData.upstream_version}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Version')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.version}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Application Mode')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.app_mode}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Commit')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.commit_hash}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Python Version')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.python_version}</InputLabel>
-        </Grid>
-      </Grid>
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Current User')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.current_user}</InputLabel>
-        </Grid>
-      </Grid>
-      { aboutData.electron &&
-        <Grid container spacing={0} style={{marginBottom: '8px'}}>
-          <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('Electron Version')}</InputLabel>
-          </Grid>
-          <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-            <InputLabel>{aboutData.electron}</InputLabel>
-          </Grid>
-        </Grid>
-      }
-      <Grid container spacing={0} style={{marginBottom: '8px'}}>
-        <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-          <InputLabel style={{fontWeight: 'bold'}}>{gettext('Browser')}</InputLabel>
-        </Grid>
-        <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-          <InputLabel>{aboutData.browser_details}</InputLabel>
-        </Grid>
-      </Grid>
-      { aboutData.os_details &&
-        <Grid container spacing={0} style={{marginBottom: '8px'}}>
-          <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('Operating System')}</InputLabel>
-          </Grid>
-          <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-            <InputLabel>{aboutData.os_details}</InputLabel>
-          </Grid>
-        </Grid>
-      }
-      { aboutData.config_db &&
-        <Grid container spacing={0} style={{marginBottom: '8px'}}>
-          <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('ScratchRobin Configuration Database')}</InputLabel>
-          </Grid>
-          <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-            <InputLabel>{aboutData.config_db}</InputLabel>
-          </Grid>
-        </Grid>
-      }
-      { aboutData.log_file &&
-        <Grid container spacing={0} style={{marginBottom: '8px'}}>
-          <Grid size={{ lg: 3, md: 3, sm: 3, xs: 12 }}>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('Log File')}</InputLabel>
-          </Grid>
-          <Grid size={{ lg: 9, md: 9, sm: 9, xs: 12 }}>
-            <InputLabel>{aboutData.log_file}</InputLabel>
-          </Grid>
-        </Grid>
-      }
-      { aboutData.settings &&
-        <Box flexGrow="1" display="flex" flexDirection="column" minHeight="0">
-          <Box>
-            <InputLabel style={{fontWeight: 'bold'}}>{gettext('ScratchRobin Server Configuration')}</InputLabel>
-          </Box>
-          <Box flexGrow="1" paddingTop="1px" minHeight="0">
-            <InputSQL value={aboutData.settings}
+    <Box
+      ref={containerRef}
+      data-cdeadmin-qa-key="about-scratchrobin-view"
+      sx={{
+        p: 2,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        overflow: 'auto',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          paddingBottom: 10,
+          borderBottom: '1px solid var(--sr-border-default, rgba(128,128,128,0.28))',
+        }}
+      >
+        <Icon iconKey="brand.scratchrobin" label="ScratchRobin" size="48px" />
+        <div style={{minWidth: 0, flex: 1}}>
+          <div style={{fontWeight: 700, fontSize: '1.15rem'}}>
+            {aboutData.product_name || 'ScratchRobin'}
+          </div>
+          {releaseText && (
+            <div
+              data-cdeadmin-qa-key="about-release-badge"
+              style={{
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: 'var(--sr-accent, #0284c7)',
+              }}
+            >
+              {gettext('Release %s', releaseText)}
+              {buildDateText ? ` · ${gettext('Built %s', buildDateText)}` : ''}
+            </div>
+          )}
+          {aboutData.fork_summary && (
+            <div
+              style={{
+                fontSize: '0.8rem',
+                marginTop: 4,
+                color: 'var(--sr-text-secondary, inherit)',
+              }}
+            >
+              {aboutData.fork_summary}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <AboutFieldRow
+          label={gettext('Release')}
+          value={releaseText}
+          qaKey="about-row-release"
+        />
+        <AboutFieldRow
+          label={gettext('Build Date / Time')}
+          value={buildDateText}
+          mono
+          qaKey="about-row-build-datetime"
+        />
+        <AboutFieldRow
+          label={gettext('Commit')}
+          value={aboutData.commit_hash}
+          mono
+          qaKey="about-row-commit"
+        />
+        <AboutFieldRow
+          label={gettext('Application Mode')}
+          value={aboutData.app_mode}
+        />
+        <AboutFieldRow
+          label={gettext('Project Status')}
+          value={aboutData.fork_status}
+        />
+        <AboutFieldRow
+          label={gettext('Upstream Base')}
+          value={
+            aboutData.upstream_name
+              ? `${aboutData.upstream_name} ${aboutData.upstream_version || ''}`.trim()
+              : ''
+          }
+        />
+        <AboutFieldRow
+          label={gettext('Electron Version')}
+          value={aboutData.electron}
+        />
+        <AboutFieldRow
+          label={gettext('Browser')}
+          value={aboutData.browser_details}
+        />
+        <AboutFieldRow
+          label={gettext('Python Version')}
+          value={aboutData.python_version}
+        />
+        <AboutFieldRow
+          label={gettext('Operating System')}
+          value={aboutData.os_details}
+        />
+        <AboutFieldRow
+          label={gettext('Current User')}
+          value={aboutData.current_user}
+        />
+        <AboutFieldRow
+          label={gettext('User Configuration Vault')}
+          value={aboutData.user_config_db}
+          mono
+        />
+        <AboutFieldRow
+          label={gettext('ScratchRobin Configuration Database')}
+          value={aboutData.config_db}
+          mono
+        />
+        <AboutFieldRow
+          label={gettext('Log File')}
+          value={aboutData.log_file}
+          mono
+        />
+      </div>
+
+      {aboutData.settings && (
+        <Box sx={{flex: 1, display: 'flex', flexDirection: 'column', minHeight: 140}}>
+          <div style={{fontWeight: 700, fontSize: '0.82rem', marginBottom: 4}}>
+            {gettext('ScratchRobin Server Configuration')}
+          </div>
+          <Box sx={{flex: 1, minHeight: 0}}>
+            <InputSQL
+              value={aboutData.settings}
               controlProps={{
                 readonly: true,
                 showCopyBtn: true,
               }}
               options={{
                 lineNumbers: false,
-                foldGutter: false
-              }} />
+                foldGutter: false,
+              }}
+            />
           </Box>
         </Box>
-      }
-      <Box sx={{marginTop: '12px'}}>
-        <InputLabel style={{fontWeight: 'bold'}}>{gettext('Attribution and Licence')}</InputLabel>
-        <InputLabel>{aboutData.attribution}</InputLabel>
-      </Box>
+      )}
+
+      <Stack
+        direction="row"
+        gap="standard"
+        data-cdeadmin-qa-key="about-family-logos"
+        style={{
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          paddingTop: 8,
+          borderTop: '1px solid var(--sr-border-subtle, rgba(128,128,128,0.2))',
+        }}
+      >
+        {FAMILY_BRANDS.map((brand) => (
+          <div
+            key={brand.iconKey}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 8px',
+              borderRadius: 6,
+              background: 'var(--sr-surface-subtle, rgba(128,128,128,0.08))',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+            }}
+          >
+            <Icon iconKey={brand.iconKey} label={brand.name} size="20px" />
+            <span>{brand.name}</span>
+          </div>
+        ))}
+      </Stack>
+
+      {aboutData.attribution && (
+        <div style={{fontSize: '0.76rem', color: 'var(--sr-text-secondary, inherit)'}}>
+          <div style={{fontWeight: 700, marginBottom: 2}}>
+            {gettext('Attribution and Licence')}
+          </div>
+          <div>{aboutData.attribution}</div>
+        </div>
+      )}
     </Box>
   );
 }

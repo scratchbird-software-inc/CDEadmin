@@ -45,8 +45,8 @@
       "forbidden": ["APP_NAME = 'pgAdmin 4'", "APP_NAME = 'CDEadmin'", "APP_SHORT_NAME = 'pgadmin4'"]
     },
     {
-      "path": "web/pgadmin/dashboard/static/js/WelcomeDashboard.jsx",
-      "required": ["CDEadminLogo", "ActivityLaunchers"],
+      "path": "web/pgadmin/static/js/cdeadmin_ui/shell/ProjectShellDialogs.jsx",
+      "required": ["brand.scratchrobin", "ScratchRobin"],
       "forbidden": ["PgAdminLogo", "Maximises PostgreSQL", "pgAdmin Website", "Planet PostgreSQL"]
     },
     {

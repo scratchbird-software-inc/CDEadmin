@@ -8,7 +8,9 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- CDEadmin shortcut icon -->
+    <!-- ScratchRobin light/dark shortcut icons -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/cdeadmin/branding/scratchrobin.svg') }}" media="(prefers-color-scheme: light)"/>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/cdeadmin/branding/scratchrobin-dark.svg') }}" media="(prefers-color-scheme: dark)"/>
     <link rel="shortcut icon" href="{{ url_for('redirects.favicon') }}"/>
     <style>
         .pg-sp-container {

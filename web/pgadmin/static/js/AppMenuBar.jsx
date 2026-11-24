@@ -48,8 +48,6 @@ const StyledBox = styled(Box)(({theme}) => ({
       width: '1.4em',
       height: '1.4em',
       flex: '0 0 1.4em',
-      filter: 'drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) '
-        + 'drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff)',
     },
   },
   '& .AppMenuBar-menus': {
@@ -209,7 +207,7 @@ function LegacyAppMenuBar() {
       <div className='AppMenuBar-logo'
         data-cdeadmin-qa-key='application.brand.scratchrobin'
         aria-label='ScratchRobin CDE Administrator'>
-        <Icon iconKey='tool.scratchrobin' decorative />
+        <Icon iconKey='tool.scratchrobin' tone='dark' decorative />
         <span>ScratchRobin</span>
       </div>
       <div className='AppMenuBar-menus'>

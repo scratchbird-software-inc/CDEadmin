@@ -7,13 +7,13 @@
 //
 //////////////////////////////////////////////////////////////
 
-import ScratchRobinIcon from '../../../static/assets/cdeadmin/branding/scratchrobincde.svg?svgr';
+import {Icon} from 'sources/cdeadmin_ui/icons';
 import gettext from 'sources/gettext';
 
 export default function CDEadminLogo() {
   return (
     <div className="welcome-logo" aria-label="ScratchRobin CDE Administrator">
-      <ScratchRobinIcon role="img" aria-label="ScratchRobin" />
+      <Icon iconKey="brand.scratchrobin" label="ScratchRobin" size="3rem" />
       <div className="welcome-wordmark">
         <h1>ScratchRobin CDE Administrator</h1>
         <p className="WelcomeDashboard-description">

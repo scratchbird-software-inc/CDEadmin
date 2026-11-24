@@ -227,17 +227,35 @@ const FALLBACK_REFERENCES = Object.freeze({
  */
 export function ProjectHelpReferenceDialog({open, topic = '', onClose, fetchImpl}) {
   const [payload, setPayload] = useState(null);
+  const [aboutInfo, setAboutInfo] = useState(null);
 
   useEffect(() => {
-    if (!open || !topic) return;
-    if (topic === 'about' || topic === 'docs') {
+    if (!open || !topic) return undefined;
+    if (topic === 'docs') {
       setPayload(null);
-      return;
+      return undefined;
+    }
+    const runFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+    if (topic === 'about') {
+      setPayload(null);
+      if (!runFetch) return undefined;
+      let active = true;
+      Promise.resolve(runFetch('/about/', {credentials: 'same-origin'}))
+        .then((res) => (res?.ok ? res.json() : null))
+        .then((json) => {
+          const info = json?.data || json;
+          if (active && info && typeof info === 'object') {
+            setAboutInfo(info);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
     }
     const fallback = FALLBACK_REFERENCES[topic] || FALLBACK_REFERENCES.sql;
     setPayload(fallback);
-    const runFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
-    if (!runFetch) return;
+    if (!runFetch) return undefined;
     let active = true;
     Promise.resolve(runFetch(`/cdeadmin/api/shell/reference/${topic}`, {credentials: 'same-origin'}))
       .then((res) => (res?.ok ? res.json() : null))
@@ -284,16 +302,112 @@ export function ProjectHelpReferenceDialog({open, topic = '', onClose, fetchImpl
       actions={<Button onClick={onClose}>{gettext('Close')}</Button>}
     >
       {topic === 'about' ? (
-        <Stack spacing={1}>
-          <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-            <Icon iconKey="tool.scratchrobin" decorative size="28px" />
-            <Box sx={{fontWeight: 700, fontSize: '1rem'}}>ScratchRobin CDE Administrator</Box>
+        <Stack gap="standard" data-cdeadmin-qa-key="project-about-dialog-body">
+          <Box sx={{display: 'flex', alignItems: 'center', gap: 1.5}}>
+            <Icon iconKey="brand.scratchrobin" label="ScratchRobin" size="42px" />
+            <Box sx={{minWidth: 0, flex: 1}}>
+              <Box sx={{fontWeight: 700, fontSize: '1.05rem'}}>
+                {aboutInfo?.product_name || 'ScratchRobin'} CDE Administrator
+              </Box>
+              <Box
+                data-cdeadmin-qa-key="project-about-release-summary"
+                sx={{fontSize: '0.8rem', fontWeight: 600, color: 'var(--sr-accent, #0284c7)'}}
+              >
+                {gettext('Release')}: {aboutInfo?.release || aboutInfo?.version || '0.325-alpha'}
+                {(aboutInfo?.build_datetime || aboutInfo?.build_timestamp_utc)
+                  ? ` · ${gettext('Built')}: ${aboutInfo.build_datetime || aboutInfo.build_timestamp_utc}`
+                  : ''}
+              </Box>
+            </Box>
           </Box>
-          <Box sx={{fontSize: '0.875rem', color: 'text.secondary'}}>
-            {gettext(
-              'Multi-engine database administration, DDN data modelling, dimensional cubes, BI questions/dashboards, and screen mesh design under the PostgreSQL Licence.'
-            )}
+
+          <Box sx={{fontSize: '0.84rem', color: 'text.secondary'}}>
+            {aboutInfo?.fork_summary ||
+              gettext(
+                'Multi-engine database administration, DDN data modelling, dimensional cubes, BI questions/dashboards, and screen mesh design under the PostgreSQL Licence.'
+              )}
           </Box>
+
+          <div
+            data-cdeadmin-qa-key="project-about-metadata-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(160px, 210px) minmax(0, 1fr)',
+              rowGap: 6,
+              columnGap: 12,
+              padding: '8px 10px',
+              borderRadius: 8,
+              border: '1px solid var(--sr-border-subtle, rgba(128,128,128,0.22))',
+              background: 'var(--sr-surface-subtle, rgba(128,128,128,0.06))',
+              fontSize: '0.8rem',
+            }}
+          >
+            {[
+              [gettext('Release'), aboutInfo?.release || aboutInfo?.version || '0.325-alpha'],
+              [
+                gettext('Build Date / Time'),
+                aboutInfo?.build_datetime || aboutInfo?.build_timestamp_utc || gettext('Development checkout'),
+              ],
+              [gettext('Commit'), aboutInfo?.commit_hash || ''],
+              [gettext('Application Mode'), aboutInfo?.app_mode || ''],
+              [gettext('Electron Version'), aboutInfo?.electron || ''],
+              [gettext('Browser'), aboutInfo?.browser_details || ''],
+              [gettext('Python Version'), aboutInfo?.python_version || ''],
+              [gettext('Operating System'), aboutInfo?.os_details || ''],
+              [gettext('Current User'), aboutInfo?.current_user || ''],
+              [gettext('User Configuration Vault'), aboutInfo?.user_config_db || ''],
+            ]
+              .filter(([, val]) => Boolean(val))
+              .map(([lbl, val]) => (
+                <div key={lbl} style={{display: 'contents'}}>
+                  <span style={{fontWeight: 700}}>{lbl}</span>
+                  <span className="sr-bui-mono" style={{wordBreak: 'break-word'}}>
+                    {val}
+                  </span>
+                </div>
+              ))}
+          </div>
+
+          <div
+            data-cdeadmin-qa-key="project-about-family-logos"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            {[
+              {iconKey: 'brand.scratchbird', name: 'ScratchBird'},
+              {iconKey: 'brand.scratchrobin', name: 'ScratchRobin'},
+              {iconKey: 'brand.scratchweaver', name: 'ScratchWeaver'},
+              {iconKey: 'brand.ddn', name: 'DDN'},
+              {iconKey: 'brand.opensource', name: 'Open Source'},
+            ].map((item) => (
+              <span
+                key={item.iconKey}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--sr-border-subtle, rgba(128,128,128,0.2))',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                }}
+              >
+                <Icon iconKey={item.iconKey} label={item.name} size="18px" />
+                <span>{item.name}</span>
+              </span>
+            ))}
+          </div>
+
+          {aboutInfo?.attribution && (
+            <Box sx={{fontSize: '0.75rem', color: 'text.secondary'}}>
+              {aboutInfo.attribution}
+            </Box>
+          )}
         </Stack>
       ) : topic === 'docs' ? (
         <Stack spacing={1}>

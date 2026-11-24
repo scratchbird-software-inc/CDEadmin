@@ -24,3 +24,14 @@
   height: 1.3em;
 }
 {% endfor %}
+
+html[data-cde-theme="dark"] .icon-engine-type-scratchbird,
+html[data-theme="dark"] .icon-engine-type-scratchbird,
+[data-tone="dark"] .icon-engine-type-scratchbird {
+  background-image: url('{{ url_for("static", filename="assets/cdeadmin/branding/scratchbird-dark.svg") }}') !important;
+}
+html[data-cde-theme="dark"] .icon-engine-type-scratchbird-unavailable,
+html[data-theme="dark"] .icon-engine-type-scratchbird-unavailable,
+[data-tone="dark"] .icon-engine-type-scratchbird-unavailable {
+  background-image: url('{{ url_for("static", filename="assets/cdeadmin/branding/scratchbird-dark.svg") }}') !important;
+}

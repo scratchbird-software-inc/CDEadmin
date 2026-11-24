@@ -30,5 +30,5 @@ def index():
 def favicon():
     """Redirect to the favicon"""
     return redirect(url_for(
-        'static', filename='assets/cdeadmin/branding/cdeadmin.svg'
+        'static', filename='assets/cdeadmin/branding/scratchrobin.svg'
     ))

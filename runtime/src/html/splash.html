@@ -41,9 +41,9 @@
         background-image: url("../../assets/cdeadmin-welcome.svg");
         background-position: center;
         background-repeat: no-repeat;
-        background-size: contain;
+        background-size: 136px 136px;
         flex: 1 1 auto;
-        min-height: 180px;
+        min-height: 156px;
         margin: 12px 0;
       }
       .brand-eyebrow {
@@ -219,7 +219,10 @@
         <div class="top-actions">
           <button id="splash-quit-btn" type="button" class="quit-btn">Quit</button>
         </div>
-        <h1 class="login-heading">Sign in to ScratchRobin</h1>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+          <img src="../../assets/scratchrobin.svg" alt="" style="width: 28px; height: 28px; flex-shrink: 0;" />
+          <h1 class="login-heading" style="margin: 0;">Sign in to ScratchRobin</h1>
+        </div>
         <p id="splash-subtitle" class="login-caption">
           Starting local backend service. Sign-in controls will activate momentarily…
         </p>

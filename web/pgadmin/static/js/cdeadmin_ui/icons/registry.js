@@ -42,7 +42,16 @@ import SortIcon from '../../../assets/cdeadmin/commands/sort-by-down01.svg?svgr'
 import TransactionIcon from '../../../assets/cdeadmin/commands/transaction.svg?svgr';
 import UnlinkIcon from '../../../assets/cdeadmin/commands/unlink01.svg?svgr';
 import UploadIcon from '../../../assets/cdeadmin/commands/upload01.svg?svgr';
-import ScratchRobinIcon from '../../../assets/cdeadmin/branding/scratchrobincde.svg?svgr';
+import ScratchRobinIcon from '../../../assets/cdeadmin/branding/scratchrobin.svg?svgr';
+import ScratchRobinDarkIcon from '../../../assets/cdeadmin/branding/scratchrobin-dark.svg?svgr';
+import ScratchBirdBrandIcon from '../../../assets/cdeadmin/branding/scratchbird.svg?svgr';
+import ScratchBirdBrandDarkIcon from '../../../assets/cdeadmin/branding/scratchbird-dark.svg?svgr';
+import ScratchWeaverBrandIcon from '../../../assets/cdeadmin/branding/scratchweaver.svg?svgr';
+import ScratchWeaverBrandDarkIcon from '../../../assets/cdeadmin/branding/scratchweaver-dark.svg?svgr';
+import DdnBrandIcon from '../../../assets/cdeadmin/branding/ddn.svg?svgr';
+import DdnBrandDarkIcon from '../../../assets/cdeadmin/branding/ddn-dark.svg?svgr';
+import OpenSourceBrandIcon from '../../../assets/cdeadmin/branding/opensource.svg?svgr';
+import OpenSourceBrandDarkIcon from '../../../assets/cdeadmin/branding/opensource-dark.svg?svgr';
 
 function UndoIcon(props) {
   return (
@@ -1333,6 +1342,7 @@ function SetNullIcon(props) {
 
 export const ICON_CATEGORIES = Object.freeze({
   ACTION: 'action',
+  BRAND: 'brand',
   ENGINE: 'engine',
   OBJECT: 'object',
   STATUS: 'status',
@@ -1742,16 +1752,21 @@ function definition(key, category, className, label=title(key.split('.').pop()))
 }
 
 function componentDefinition(
-  key, category, component, label=title(key.split('.').pop())
+  key,
+  category,
+  component,
+  label=title(key.split('.').pop()),
+  options={}
 ) {
   return Object.freeze({
     key,
     category,
     kind: 'component',
     component,
+    darkComponent: options.darkComponent || null,
     label,
-    license: 'MIT',
-    attribution: 'Hugeicons Free Icons 4.3.0',
+    license: options.license || 'MIT',
+    attribution: options.attribution || 'Hugeicons Free Icons 4.3.0',
   });
 }
 
@@ -1953,8 +1968,70 @@ const BUILTIN_DEFINITIONS = [
     'tool.query', ICON_CATEGORIES.TOOL, CodeIcon, 'Query Tool'
   ),
   componentDefinition(
-    'tool.scratchrobin', ICON_CATEGORIES.TOOL, ScratchRobinIcon,
-    'ScratchRobin Home'
+    'tool.scratchrobin',
+    ICON_CATEGORIES.TOOL,
+    ScratchRobinIcon,
+    'ScratchRobin Home',
+    {
+      darkComponent: ScratchRobinDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
+  ),
+  componentDefinition(
+    'brand.scratchrobin',
+    ICON_CATEGORIES.BRAND,
+    ScratchRobinIcon,
+    'ScratchRobin',
+    {
+      darkComponent: ScratchRobinDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
+  ),
+  componentDefinition(
+    'brand.scratchbird',
+    ICON_CATEGORIES.BRAND,
+    ScratchBirdBrandIcon,
+    'ScratchBird',
+    {
+      darkComponent: ScratchBirdBrandDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
+  ),
+  componentDefinition(
+    'brand.scratchweaver',
+    ICON_CATEGORIES.BRAND,
+    ScratchWeaverBrandIcon,
+    'ScratchWeaver',
+    {
+      darkComponent: ScratchWeaverBrandDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
+  ),
+  componentDefinition(
+    'brand.ddn',
+    ICON_CATEGORIES.BRAND,
+    DdnBrandIcon,
+    'Diagram Design Notation',
+    {
+      darkComponent: DdnBrandDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
+  ),
+  componentDefinition(
+    'brand.opensource',
+    ICON_CATEGORIES.BRAND,
+    OpenSourceBrandIcon,
+    'Open Source',
+    {
+      darkComponent: OpenSourceBrandDarkIcon,
+      license: 'PostgreSQL',
+      attribution: 'ScratchBird Software Inc.',
+    }
   ),
 ];
 
