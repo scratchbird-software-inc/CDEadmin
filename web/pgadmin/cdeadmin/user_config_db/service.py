@@ -30,13 +30,15 @@ import datetime
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
 import sqlite3
 import threading
+import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -359,6 +361,60 @@ class UserConfigurationDatabase:
             )
             """,
         ),
+        (
+            'UCFG_METRIC_SERIES',
+            """
+            CREATE TABLE UCFG_METRIC_SERIES (
+                SERIES_ID VARCHAR(96) NOT NULL PRIMARY KEY,
+                USER_ID INTEGER NOT NULL,
+                ENGINE_ID VARCHAR(64) DEFAULT '' NOT NULL,
+                SERVER_ID INTEGER DEFAULT 0 NOT NULL,
+                DATABASE_TARGET_ID VARCHAR(192) DEFAULT '' NOT NULL,
+                OBJECT_KIND VARCHAR(32) DEFAULT 'server' NOT NULL,
+                OBJECT_KEY VARCHAR(320) NOT NULL,
+                METRIC_KEY VARCHAR(96) NOT NULL,
+                METRIC_KIND VARCHAR(24) DEFAULT 'gauge' NOT NULL,
+                UNIT VARCHAR(32) DEFAULT 'count' NOT NULL,
+                META_ENC BLOB SUB_TYPE TEXT NOT NULL,
+                LAST_EPOCH_ID VARCHAR(96) DEFAULT '' NOT NULL,
+                UPDATED_AT VARCHAR(40) NOT NULL
+            )
+            """,
+        ),
+        (
+            'UCFG_METRIC_SAMPLES_RAW',
+            """
+            CREATE TABLE UCFG_METRIC_SAMPLES_RAW (
+                SERIES_ID VARCHAR(96) NOT NULL,
+                OBSERVED_AT_MS BIGINT NOT NULL,
+                EPOCH_ID VARCHAR(96) DEFAULT '' NOT NULL,
+                SAMPLE_ENC BLOB SUB_TYPE TEXT NOT NULL,
+                PRIMARY KEY (SERIES_ID, OBSERVED_AT_MS)
+            )
+            """,
+        ),
+        (
+            'UCFG_METRIC_ROLLUP_5M',
+            """
+            CREATE TABLE UCFG_METRIC_ROLLUP_5M (
+                SERIES_ID VARCHAR(96) NOT NULL,
+                BUCKET_START_MS BIGINT NOT NULL,
+                ROLLUP_ENC BLOB SUB_TYPE TEXT NOT NULL,
+                PRIMARY KEY (SERIES_ID, BUCKET_START_MS)
+            )
+            """,
+        ),
+        (
+            'UCFG_METRIC_ROLLUP_1H',
+            """
+            CREATE TABLE UCFG_METRIC_ROLLUP_1H (
+                SERIES_ID VARCHAR(96) NOT NULL,
+                BUCKET_START_MS BIGINT NOT NULL,
+                ROLLUP_ENC BLOB SUB_TYPE TEXT NOT NULL,
+                PRIMARY KEY (SERIES_ID, BUCKET_START_MS)
+            )
+            """,
+        ),
     )
 
     def __init__(
@@ -532,6 +588,11 @@ class UserConfigurationDatabase:
                     'IDX_UCFG_TPL_SURFACE',
                     'CREATE INDEX IDX_UCFG_TPL_SURFACE '
                     'ON UCFG_DISPLAY_TEMPLATES (SURFACE_KIND)',
+                ),
+                (
+                    'IDX_UCFG_SERIES_OBJ',
+                    'CREATE INDEX IDX_UCFG_SERIES_OBJ '
+                    'ON UCFG_METRIC_SERIES (USER_ID, OBJECT_KIND, OBJECT_KEY)',
                 ),
             ):
                 cur.execute(
@@ -1299,6 +1360,641 @@ class UserConfigurationDatabase:
                     )
                 con.commit()
         return {'deleted': rid}
+
+    # ------------------------------------------------------------------
+    # Historic Time-Series Metrics, Deep-Scan Cache & View Customization
+    # ------------------------------------------------------------------
+
+    DEFAULT_METRICS_RETENTION: dict[str, int] = {
+        'raw_hours': 24,
+        'rollup_5m_days': 30,
+        'rollup_1h_days': 365,
+    }
+
+    def get_metrics_retention_policy(self, user_id: int) -> dict[str, int]:
+        raw = self.get_user_preference(
+            int(user_id), 'dashboard', 'metrics_retention', default={}
+        )
+        src = raw if isinstance(raw, Mapping) else {}
+        return {
+            'raw_hours': max(
+                1, min(720, int(src.get('raw_hours') or self.DEFAULT_METRICS_RETENTION['raw_hours']))
+            ),
+            'rollup_5m_days': max(
+                1, min(365, int(src.get('rollup_5m_days') or self.DEFAULT_METRICS_RETENTION['rollup_5m_days']))
+            ),
+            'rollup_1h_days': max(
+                1, min(3650, int(src.get('rollup_1h_days') or self.DEFAULT_METRICS_RETENTION['rollup_1h_days']))
+            ),
+        }
+
+    def set_metrics_retention_policy(
+        self, user_id: int, policy: Mapping[str, Any]
+    ) -> dict[str, int]:
+        uid = int(user_id)
+        current = self.get_metrics_retention_policy(uid)
+        merged = {
+            'raw_hours': max(
+                1, min(720, int(policy.get('raw_hours') or current['raw_hours']))
+            ),
+            'rollup_5m_days': max(
+                1, min(365, int(policy.get('rollup_5m_days') or current['rollup_5m_days']))
+            ),
+            'rollup_1h_days': max(
+                1, min(3650, int(policy.get('rollup_1h_days') or current['rollup_1h_days']))
+            ),
+        }
+        self.save_user_preference(uid, 'dashboard', 'metrics_retention', merged)
+        return merged
+
+    @staticmethod
+    def _metric_series_id(
+        user_id: int,
+        engine_id: str,
+        server_id: int,
+        database_target_id: str,
+        object_kind: str,
+        object_key: str,
+        metric_key: str,
+    ) -> str:
+        raw = (
+            f'{int(user_id)}|{str(engine_id or "")}|{int(server_id or 0)}|'
+            f'{str(database_target_id or "")}|{str(object_kind or "server")}|'
+            f'{str(object_key or "")}|{str(metric_key or "")}'
+        )
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:64]
+
+    def record_object_metric_observations(
+        self,
+        *,
+        user_id: int,
+        engine_id: str,
+        server_id: int = 0,
+        database_target_id: str = '',
+        object_kind: str = 'server',
+        object_key: str,
+        observations: Sequence[Mapping[str, Any]],
+        observed_at_ms: int | None = None,
+        epoch_id: str = '',
+    ) -> dict[str, Any]:
+        """Record encrypted raw metric samples and maintain 5m and 1h rollups."""
+        if not observations:
+            return {'recorded_count': 0, 'series_ids': []}
+
+        uid = int(user_id)
+        eng = str(engine_id or '')[:64]
+        srv_id = int(server_id or 0)
+        db_target = str(database_target_id or '')[:192]
+        obj_kind = str(object_kind or 'server')[:32]
+        obj_key = str(object_key or '')[:320]
+        ts_ms = int(observed_at_ms if observed_at_ms is not None else round(time.time() * 1000))
+        ep_id = str(epoch_id or '')[:96]
+        now_iso = _now_iso()
+
+        retention = self.get_metrics_retention_policy(uid)
+        raw_cutoff_ms = ts_ms - retention['raw_hours'] * 3_600_000
+        r5m_cutoff_ms = ts_ms - retention['rollup_5m_days'] * 86_400_000
+        r1h_cutoff_ms = ts_ms - retention['rollup_1h_days'] * 86_400_000
+
+        bucket_5m = (ts_ms // 300_000) * 300_000
+        bucket_1h = (ts_ms // 3_600_000) * 3_600_000
+
+        recorded_ids: list[str] = []
+        computed_rates: dict[str, float] = {}
+
+        with self._lock:
+            self._require_dek()
+            with self._open_or_create_connection(create_if_missing=True) as con:
+                cur = con.cursor()
+                for obs in observations:
+                    if not isinstance(obs, Mapping):
+                        continue
+                    mkey = str(obs.get('metric_key') or '').strip()[:96]
+                    if not mkey:
+                        continue
+                    mkind = str(obs.get('kind') or 'gauge').strip()[:24]
+                    if mkind not in ('gauge', 'counter_rate'):
+                        mkind = 'gauge'
+                    unit = str(obs.get('unit') or 'count').strip()[:32]
+                    label = str(obs.get('label') or mkey)[:160]
+                    group = str(obs.get('group') or 'general')[:64]
+
+                    sid = self._metric_series_id(
+                        uid, eng, srv_id, db_target, obj_kind, obj_key, mkey
+                    )
+                    series_aad = f'UCFG_METRIC_SERIES:{sid}'
+
+                    cur.execute(
+                        'SELECT META_ENC, LAST_EPOCH_ID FROM UCFG_METRIC_SERIES WHERE SERIES_ID = ?',
+                        (sid,),
+                    )
+                    existing_row = cur.fetchone()
+                    prev_meta: dict[str, Any] = {}
+                    prev_epoch = ''
+                    if existing_row is not None:
+                        prev_epoch = str(existing_row[1] or '')
+                        try:
+                            dec = self._decrypt_json(str(existing_row[0]), series_aad)
+                            if isinstance(dec, dict):
+                                prev_meta = dec
+                        except Exception:
+                            prev_meta = {}
+
+                    raw_val = obs.get('value')
+                    raw_counter = obs.get('raw_counter')
+                    effective_val: float | None = None
+
+                    if mkind == 'counter_rate' and raw_counter is not None:
+                        try:
+                            c_num = float(raw_counter)
+                        except (TypeError, ValueError):
+                            continue
+                        if not math.isfinite(c_num):
+                            continue
+                        prev_c = prev_meta.get('last_counter')
+                        prev_c_ts = prev_meta.get('last_counter_ts_ms')
+                        same_epoch = (prev_epoch == ep_id) or (not prev_epoch and not ep_id)
+                        if (
+                            same_epoch
+                            and isinstance(prev_c, (int, float))
+                            and isinstance(prev_c_ts, (int, float))
+                            and ts_ms > int(prev_c_ts)
+                            and c_num >= float(prev_c)
+                        ):
+                            dt_sec = (ts_ms - int(prev_c_ts)) / 1000.0
+                            if dt_sec > 0:
+                                effective_val = (c_num - float(prev_c)) / dt_sec
+                                computed_rates[mkey] = effective_val
+                        elif raw_val is not None:
+                            try:
+                                fallback_f = float(raw_val)
+                                if math.isfinite(fallback_f):
+                                    effective_val = fallback_f
+                                    computed_rates[mkey] = effective_val
+                            except (TypeError, ValueError):
+                                pass
+
+                        next_meta = {
+                            **prev_meta,
+                            'label': label,
+                            'group': group,
+                            'object_label': str(obs.get('object_label') or obj_key)[:192],
+                            'last_counter': c_num,
+                            'last_counter_ts_ms': ts_ms,
+                        }
+                    else:
+                        if raw_val is None or isinstance(raw_val, bool):
+                            continue
+                        try:
+                            f_val = float(raw_val)
+                        except (TypeError, ValueError):
+                            continue
+                        if not math.isfinite(f_val):
+                            continue
+                        effective_val = f_val
+                        next_meta = {
+                            **prev_meta,
+                            'label': label,
+                            'group': group,
+                            'object_label': str(obs.get('object_label') or obj_key)[:192],
+                        }
+
+                    if effective_val is not None:
+                        next_meta['latest_value'] = effective_val
+                        next_meta['latest_ts_ms'] = ts_ms
+
+                    meta_enc = self._encrypt_json(next_meta, series_aad)
+                    cur.execute(
+                        """
+                        UPDATE OR INSERT INTO UCFG_METRIC_SERIES
+                            (SERIES_ID, USER_ID, ENGINE_ID, SERVER_ID, DATABASE_TARGET_ID,
+                             OBJECT_KIND, OBJECT_KEY, METRIC_KEY, METRIC_KIND, UNIT,
+                             META_ENC, LAST_EPOCH_ID, UPDATED_AT)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        MATCHING (SERIES_ID)
+                        """,
+                        (
+                            sid, uid, eng, srv_id, db_target,
+                            obj_kind, obj_key, mkey, mkind, unit,
+                            meta_enc, ep_id, now_iso,
+                        ),
+                    )
+
+                    if effective_val is None:
+                        continue
+
+                    sample_aad = f'UCFG_METRIC_SAMPLES_RAW:{sid}:{ts_ms}'
+                    sample_payload: dict[str, Any] = {'v': effective_val}
+                    if raw_counter is not None:
+                        try:
+                            sample_payload['c'] = float(raw_counter)
+                        except (TypeError, ValueError):
+                            pass
+                    sample_enc = self._encrypt_json(sample_payload, sample_aad)
+                    cur.execute(
+                        """
+                        UPDATE OR INSERT INTO UCFG_METRIC_SAMPLES_RAW
+                            (SERIES_ID, OBSERVED_AT_MS, EPOCH_ID, SAMPLE_ENC)
+                        VALUES (?, ?, ?, ?)
+                        MATCHING (SERIES_ID, OBSERVED_AT_MS)
+                        """,
+                        (sid, ts_ms, ep_id, sample_enc),
+                    )
+
+                    self._upsert_metric_rollup_bucket(
+                        cur, 'UCFG_METRIC_ROLLUP_5M', sid, bucket_5m, effective_val, ts_ms
+                    )
+                    self._upsert_metric_rollup_bucket(
+                        cur, 'UCFG_METRIC_ROLLUP_1H', sid, bucket_1h, effective_val, ts_ms
+                    )
+
+                    cur.execute(
+                        'DELETE FROM UCFG_METRIC_SAMPLES_RAW '
+                        'WHERE SERIES_ID = ? AND OBSERVED_AT_MS < ?',
+                        (sid, raw_cutoff_ms),
+                    )
+                    cur.execute(
+                        'DELETE FROM UCFG_METRIC_ROLLUP_5M '
+                        'WHERE SERIES_ID = ? AND BUCKET_START_MS < ?',
+                        (sid, r5m_cutoff_ms),
+                    )
+                    cur.execute(
+                        'DELETE FROM UCFG_METRIC_ROLLUP_1H '
+                        'WHERE SERIES_ID = ? AND BUCKET_START_MS < ?',
+                        (sid, r1h_cutoff_ms),
+                    )
+                    recorded_ids.append(sid)
+
+                con.commit()
+
+        return {
+            'recorded_count': len(recorded_ids),
+            'series_ids': recorded_ids,
+            'observed_at_ms': ts_ms,
+            'computed_rates': computed_rates,
+        }
+
+    def _upsert_metric_rollup_bucket(
+        self,
+        cur,
+        table_name: str,
+        series_id: str,
+        bucket_start_ms: int,
+        val: float,
+        ts_ms: int,
+    ) -> None:
+        aad = f'{table_name}:{series_id}:{bucket_start_ms}'
+        cur.execute(
+            f'SELECT ROLLUP_ENC FROM {table_name} '
+            'WHERE SERIES_ID = ? AND BUCKET_START_MS = ?',
+            (series_id, bucket_start_ms),
+        )
+        row = cur.fetchone()
+        agg: dict[str, Any] | None = None
+        if row is not None:
+            try:
+                dec = self._decrypt_json(str(row[0]), aad)
+                if isinstance(dec, dict):
+                    agg = dec
+            except Exception:
+                agg = None
+
+        if agg is None:
+            next_agg = {
+                'min': val,
+                'max': val,
+                'sum': val,
+                'count': 1,
+                'last': val,
+                'last_ts': ts_ms,
+            }
+        else:
+            prev_count = max(0, int(agg.get('count') or 0))
+            prev_last_ts = int(agg.get('last_ts') or 0)
+            next_agg = {
+                'min': min(float(agg.get('min', val)), val),
+                'max': max(float(agg.get('max', val)), val),
+                'sum': float(agg.get('sum', 0.0)) + val,
+                'count': prev_count + 1,
+                'last': val if ts_ms >= prev_last_ts else float(agg.get('last', val)),
+                'last_ts': max(prev_last_ts, ts_ms),
+            }
+
+        enc = self._encrypt_json(next_agg, aad)
+        cur.execute(
+            f"""
+            UPDATE OR INSERT INTO {table_name}
+                (SERIES_ID, BUCKET_START_MS, ROLLUP_ENC)
+            VALUES (?, ?, ?)
+            MATCHING (SERIES_ID, BUCKET_START_MS)
+            """,
+            (series_id, bucket_start_ms, enc),
+        )
+
+    def query_object_metric_history(
+        self,
+        *,
+        user_id: int,
+        object_kind: str,
+        object_key: str,
+        window: str = '1h',
+        server_id: int | None = None,
+        database_target_id: str | None = None,
+        now_ms: int | None = None,
+    ) -> dict[str, Any]:
+        """Query encrypted time-series points from RAW, 5M, or 1H tables."""
+        uid = int(user_id)
+        obj_kind = str(object_kind or 'server')[:32]
+        obj_key = str(object_key or '')[:320]
+        win = str(window or '1h').strip().lower()
+        end_ms = int(now_ms if now_ms is not None else round(time.time() * 1000))
+
+        window_specs = {
+            'live': ('raw', 900_000),
+            '15m': ('raw', 900_000),
+            '1h': ('raw', 3_600_000),
+            '24h': ('raw', 86_400_000),
+            '7d': ('5m', 7 * 86_400_000),
+            '30d': ('5m', 30 * 86_400_000),
+            '90d': ('1h', 90 * 86_400_000),
+            '365d': ('1h', 365 * 86_400_000),
+        }
+        resolution, span_ms = window_specs.get(win, ('raw', 3_600_000))
+        start_ms = end_ms - span_ms
+        retention = self.get_metrics_retention_policy(uid)
+
+        clauses = ['USER_ID = ?', 'OBJECT_KIND = ?', 'OBJECT_KEY = ?']
+        params: list[Any] = [uid, obj_kind, obj_key]
+        if server_id is not None and int(server_id) > 0:
+            clauses.append('SERVER_ID = ?')
+            params.append(int(server_id))
+        if database_target_id is not None and str(database_target_id):
+            clauses.append('DATABASE_TARGET_ID = ?')
+            params.append(str(database_target_id)[:192])
+
+        where_sql = ' AND '.join(clauses)
+        out_series: list[dict[str, Any]] = []
+
+        with self._lock:
+            self._require_dek()
+            with self._open_or_create_connection(create_if_missing=True) as con:
+                cur = con.cursor()
+                cur.execute(
+                    'SELECT SERIES_ID, ENGINE_ID, METRIC_KEY, METRIC_KIND, UNIT, META_ENC, UPDATED_AT '
+                    f'FROM UCFG_METRIC_SERIES WHERE {where_sql} '
+                    'ORDER BY METRIC_KEY ASC',
+                    tuple(params),
+                )
+                series_rows = cur.fetchall()
+
+                for srow in series_rows:
+                    sid = str(srow[0])
+                    eng = str(srow[1] or '')
+                    mkey = str(srow[2] or '')
+                    mkind = str(srow[3] or 'gauge')
+                    unit = str(srow[4] or 'count')
+                    updated_at = str(srow[6] or '')
+                    meta: dict[str, Any] = {}
+                    try:
+                        dec_meta = self._decrypt_json(
+                            str(srow[5]), f'UCFG_METRIC_SERIES:{sid}'
+                        )
+                        if isinstance(dec_meta, dict):
+                            meta = dec_meta
+                    except Exception:
+                        meta = {}
+
+                    points = self._fetch_series_points(
+                        cur, sid, resolution, start_ms, end_ms
+                    )
+                    if not points and resolution == 'raw' and win == '24h':
+                        points = self._fetch_series_points(
+                            cur, sid, '5m', start_ms, end_ms
+                        )
+
+                    vals = [float(p['value']) for p in points]
+                    latest_val = (
+                        vals[-1]
+                        if vals
+                        else (
+                            float(meta['latest_value'])
+                            if isinstance(meta.get('latest_value'), (int, float))
+                            else None
+                        )
+                    )
+                    out_series.append({
+                        'series_id': sid,
+                        'engine_id': eng,
+                        'metric_key': mkey,
+                        'label': str(meta.get('label') or mkey),
+                        'group': str(meta.get('group') or 'general'),
+                        'kind': mkind,
+                        'unit': unit,
+                        'resolution': resolution,
+                        'latest_value': latest_val,
+                        'min_value': min(vals) if vals else latest_val,
+                        'max_value': max(vals) if vals else latest_val,
+                        'avg_value': (sum(vals) / len(vals)) if vals else latest_val,
+                        'sample_count': len(points),
+                        'updated_at': updated_at,
+                        'points': points,
+                    })
+
+        return {
+            'window': win if win in window_specs else '1h',
+            'resolution': resolution,
+            'from_ms': start_ms,
+            'to_ms': end_ms,
+            'retention_policy': retention,
+            'series': out_series,
+        }
+
+    def _fetch_series_points(
+        self,
+        cur,
+        series_id: str,
+        resolution: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        if resolution == 'raw':
+            cur.execute(
+                'SELECT FIRST 2500 OBSERVED_AT_MS, SAMPLE_ENC '
+                'FROM UCFG_METRIC_SAMPLES_RAW '
+                'WHERE SERIES_ID = ? AND OBSERVED_AT_MS >= ? AND OBSERVED_AT_MS <= ? '
+                'ORDER BY OBSERVED_AT_MS ASC',
+                (series_id, start_ms, end_ms),
+            )
+            for ts_ms, enc in cur.fetchall():
+                ts_int = int(ts_ms)
+                try:
+                    dec = self._decrypt_json(
+                        str(enc), f'UCFG_METRIC_SAMPLES_RAW:{series_id}:{ts_int}'
+                    )
+                except Exception:
+                    continue
+                if not isinstance(dec, dict) or not isinstance(dec.get('v'), (int, float)):
+                    continue
+                v = float(dec['v'])
+                points.append({
+                    'ts': ts_int,
+                    'value': v,
+                    'min': v,
+                    'max': v,
+                    'count': 1,
+                })
+            return points
+
+        table_name = 'UCFG_METRIC_ROLLUP_5M' if resolution == '5m' else 'UCFG_METRIC_ROLLUP_1H'
+        cur.execute(
+            f'SELECT FIRST 9000 BUCKET_START_MS, ROLLUP_ENC FROM {table_name} '
+            'WHERE SERIES_ID = ? AND BUCKET_START_MS >= ? AND BUCKET_START_MS <= ? '
+            'ORDER BY BUCKET_START_MS ASC',
+            (series_id, start_ms, end_ms),
+        )
+        for bucket_ms, enc in cur.fetchall():
+            b_int = int(bucket_ms)
+            try:
+                dec = self._decrypt_json(
+                    str(enc), f'{table_name}:{series_id}:{b_int}'
+                )
+            except Exception:
+                continue
+            if not isinstance(dec, dict):
+                continue
+            cnt = max(1, int(dec.get('count') or 1))
+            avg_v = float(dec.get('sum', 0.0)) / cnt
+            points.append({
+                'ts': b_int,
+                'value': avg_v,
+                'min': float(dec.get('min', avg_v)),
+                'max': float(dec.get('max', avg_v)),
+                'last': float(dec.get('last', avg_v)),
+                'count': cnt,
+            })
+        return points
+
+    def list_tracked_metric_objects(
+        self, user_id: int, *, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return summary of tracked objects with stored historic metrics for fleet views."""
+        uid = int(user_id)
+        max_rows = max(1, min(1000, int(limit)))
+        with self._lock:
+            self._require_dek()
+            with self._open_or_create_connection(create_if_missing=True) as con:
+                cur = con.cursor()
+                cur.execute(
+                    f'SELECT FIRST {max_rows} ENGINE_ID, SERVER_ID, DATABASE_TARGET_ID, '
+                    'OBJECT_KIND, OBJECT_KEY, COUNT(*), MAX(UPDATED_AT) '
+                    'FROM UCFG_METRIC_SERIES WHERE USER_ID = ? '
+                    'GROUP BY ENGINE_ID, SERVER_ID, DATABASE_TARGET_ID, OBJECT_KIND, OBJECT_KEY '
+                    'ORDER BY 7 DESC',
+                    (uid,),
+                )
+                return [
+                    {
+                        'engine_id': str(r[0] or ''),
+                        'server_id': int(r[1] or 0),
+                        'database_target_id': str(r[2] or ''),
+                        'object_kind': str(r[3] or ''),
+                        'object_key': str(r[4] or ''),
+                        'series_count': int(r[5] or 0),
+                        'updated_at': str(r[6] or ''),
+                    }
+                    for r in cur.fetchall()
+                ]
+
+    @staticmethod
+    def _deep_stats_record_id(
+        user_id: int,
+        server_id: int,
+        database_target_id: str,
+        object_kind: str,
+        object_key: str,
+    ) -> str:
+        raw = (
+            f'{int(user_id)}|{int(server_id or 0)}|'
+            f'{str(database_target_id or "")}|{str(object_kind or "")}|{str(object_key or "")}'
+        )
+        return 'deep:' + hashlib.sha256(raw.encode('utf-8')).hexdigest()[:64]
+
+    def save_on_demand_object_stats(
+        self,
+        *,
+        user_id: int,
+        engine_id: str,
+        server_id: int = 0,
+        database_target_id: str = '',
+        object_kind: str,
+        object_key: str,
+        stats: Mapping[str, Any],
+        computed_at: str | None = None,
+    ) -> dict[str, Any]:
+        ts = str(computed_at or _now_iso())
+        rid = self._deep_stats_record_id(
+            user_id, server_id, database_target_id, object_kind, object_key
+        )
+        payload = {
+            'object_kind': str(object_kind),
+            'object_key': str(object_key),
+            'computed_at': ts,
+            'stats': dict(stats),
+        }
+        self.save_metrics_history_record(
+            record_id=rid,
+            user_id=int(user_id),
+            record_kind='on_demand_object_stats',
+            payload=payload,
+            server_id=int(server_id or 0),
+            database_target_id=str(database_target_id or ''),
+            engine_id=str(engine_id or ''),
+            scope='personal',
+            updated_at=ts,
+        )
+        return payload
+
+    def get_on_demand_object_stats(
+        self,
+        *,
+        user_id: int,
+        object_kind: str,
+        object_key: str,
+        server_id: int = 0,
+        database_target_id: str = '',
+    ) -> dict[str, Any] | None:
+        rid = self._deep_stats_record_id(
+            user_id, server_id, database_target_id, object_kind, object_key
+        )
+        rec = self.get_metrics_history_record(rid)
+        if rec is None or not isinstance(rec.get('payload'), dict):
+            return None
+        return rec['payload']
+
+    def get_object_view_customization(
+        self, user_id: int, surface_kind: str, scope_key: str = 'default'
+    ) -> dict[str, Any]:
+        stored = self.get_specific_layout(
+            int(user_id), str(surface_kind or 'object_dashboard'), str(scope_key or 'default')
+        )
+        return dict(stored) if isinstance(stored, dict) else {}
+
+    def save_object_view_customization(
+        self,
+        user_id: int,
+        surface_kind: str,
+        customization: Mapping[str, Any],
+        scope_key: str = 'default',
+    ) -> dict[str, Any]:
+        clean = dict(customization)
+        self.save_specific_layout(
+            int(user_id),
+            str(surface_kind or 'object_dashboard'),
+            str(scope_key or 'default'),
+            clean,
+        )
+        return clean
 
     # ------------------------------------------------------------------
     # Legacy SQLite Import & Runtime SQLAlchemy Sync

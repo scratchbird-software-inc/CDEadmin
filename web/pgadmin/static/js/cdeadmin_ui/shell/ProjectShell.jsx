@@ -1060,6 +1060,8 @@ export function ProjectShellProvider({
         menus: custom?.menus || [],
         buildMenus: custom?.buildMenus || null,
         ribbonTabs: defaultRibbonTabs,
+        useUnderTabs: Boolean(custom?.useUnderTabs ?? options?.useUnderTabs),
+        selectedUnderTabId: custom?.selectedUnderTabId ?? options?.selectedUnderTabId ?? null,
         quickAccess: custom?.quickAccess || options.quickAccess || DEFAULT_QUICK_ACCESS_IDS,
         quickActions: custom?.quickActions || options.quickActions || null,
         statusText: custom?.statusText || `${title} — Ready`,
@@ -3436,13 +3438,19 @@ export function ProjectApplicationNotebookBar() {
   };
 
   const hasUnderTabs = Boolean(
-    activeInstance?.useUnderTabs && Array.isArray(ribbonTabs) && ribbonTabs.length > 1
+    Array.isArray(ribbonTabs) &&
+      ribbonTabs.length > 1 &&
+      (activeInstance?.useUnderTabs || ribbonTabs.some((rt) => Boolean(rt?.isUnderTab)))
   );
   const selectedUnderTabId =
     hasUnderTabs && activeInstance
-      ? (ribbonTabs.some((rt) => rt.id === underTabByInstance[activeInstance.instanceId])
-        ? underTabByInstance[activeInstance.instanceId]
-        : ribbonTabs[0].id)
+      ? (ribbonTabs.find((rt) => Boolean(rt?.selected))?.id ||
+        (activeInstance.selectedUnderTabId &&
+        ribbonTabs.some((rt) => rt.id === activeInstance.selectedUnderTabId)
+          ? activeInstance.selectedUnderTabId
+          : ribbonTabs.some((rt) => rt.id === underTabByInstance[activeInstance.instanceId])
+            ? underTabByInstance[activeInstance.instanceId]
+            : ribbonTabs[0].id))
       : null;
   const visibleRibbonTabs = hasUnderTabs
     ? ribbonTabs.filter((rt) => rt.id === selectedUnderTabId)
@@ -3645,12 +3653,13 @@ export function ProjectApplicationNotebookBar() {
                     role="tab"
                     aria-selected={isSubSelected}
                     className={`sr-3b-undertab${isSubSelected ? ' active' : ''}`}
-                    onClick={() =>
+                    onClick={() => {
                       setUnderTabByInstance((prev) => ({
                         ...prev,
                         [activeInstance.instanceId]: rt.id,
-                      }))
-                    }
+                      }));
+                      rt.onSelect?.(rt.id, activeInstance.instanceId);
+                    }}
                   >
                     {rt.label}
                   </button>

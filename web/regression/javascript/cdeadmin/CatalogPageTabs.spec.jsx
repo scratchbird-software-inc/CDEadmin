@@ -375,11 +375,22 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
       })
     ).toHaveAttribute('aria-selected', 'true');
 
-    // Database page icons on Tabbed-Icon-Bar: Properties, Statistics, Connect, Open SQL Editor,
-    // Edit Connection / Settings, Drop Database, Refresh — and NO Remove Database!
+    // Area 3b shows Dashboard | Properties sub-tabs under "database: firebird-demo", with Dashboard active by default!
+    const getUnderTabs = () =>
+      Array.from(
+        document.querySelectorAll('[data-cdeadmin-qa-key="notebookbar-undertabs"] [role="tab"]')
+      );
+    expect(getUnderTabs().map((t) => t.textContent)).toEqual(['Dashboard', 'Properties']);
+    expect(getUnderTabs()[0]).toHaveAttribute('aria-selected', 'true');
+
+    // Database Dashboard icons on Tabbed-Icon-Bar: refresh, deep stats, auto-refresh, historic metrics,
+    // customize, plus database actions — and NO Remove Database!
     expect(getNotebookIcons()).toEqual([
-      'Properties',
-      'Statistics',
+      'Refresh Dashboard',
+      'Compute Deep Stats',
+      'Auto-Refresh',
+      'Historic Metrics',
+      'Customize Dashboard',
       'Connect',
       'Open SQL Editor',
       'Edit Connection / Settings',
@@ -406,10 +417,12 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     expect(hoverHint).toHaveTextContent('Open SQL Editor');
     fireEvent.mouseLeave(document.querySelector('[data-cdeadmin-qa-key="project-application-notebookbar"]'));
 
-    // Work Area (Area 3e) shows Database Properties with ZERO tabs and ZERO inline action buttons!
+    // Work Area (Area 3e) defaults to Database Dashboard with ZERO tabs and ZERO inline action buttons!
     const island3e = document.querySelector('[data-area-part="3e"]');
-    expect(within(island3e).getByText(/Database Properties — firebird-demo/)).toBeInTheDocument();
-    expect(within(island3e).getByText('/var/lib/firebird/data/firebird-demo.fdb')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
+    ).toHaveAttribute('data-active-view', 'dashboard');
+    expect(within(island3e).getByText(/Database Dashboard — firebird-demo/)).toBeInTheDocument();
     expect(within(island3e).queryByRole('tablist')).not.toBeInTheDocument();
     expect(within(island3e).queryByRole('button', {name: /Connect/i})).not.toBeInTheDocument();
     expect(within(island3e).queryByRole('button', {name: /Open SQL Editor/i})).not.toBeInTheDocument();
@@ -423,19 +436,29 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     expect(screen.queryByRole('menuitem', {name: /Remove Database/i})).not.toBeInTheDocument();
     fireEvent.keyDown(document, {key: 'Escape'});
 
-    // Clicking the Statistics icon on the Tabbed-Icon-Bar switches view without any work-area tabs
-    const statsBtn = document.querySelector(
-      '.sr-island-3b .snb-panel [aria-label="Statistics"]'
-    );
-    fireEvent.click(statsBtn);
+    // Clicking the Properties sub-tab in Area 3b switches view to Properties and swaps ribbon controls!
+    fireEvent.click(getUnderTabs()[1]);
     expect(
       document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
-    ).toHaveAttribute('data-active-view', 'statistics');
+    ).toHaveAttribute('data-active-view', 'properties');
+    expect(within(island3e).getByText(/Database Properties — firebird-demo/)).toBeInTheDocument();
+    expect(within(island3e).getByText('/var/lib/firebird/data/firebird-demo.fdb')).toBeInTheDocument();
     expect(within(island3e).queryByRole('tablist')).not.toBeInTheDocument();
+    expect(getNotebookIcons()).toEqual([
+      'Refresh Properties',
+      'Properties Sections',
+      'Copy DDL',
+      'Customize Properties',
+      'Connect',
+      'Open SQL Editor',
+      'Edit Connection / Settings',
+      'Drop Database',
+      'Refresh',
+    ]);
 
     // 3a. Single-clicking a second catalog node ("server: localhost") in the Data Navigator tree
     //     replaces the single Browse tab in place ("database: firebird-demo" -> "server: localhost")
-    //     and swaps Tabbed-Icon-Bar icons to ONLY the server page's icons!
+    //     on its default Dashboard sub-tab and swaps Tabbed-Icon-Bar icons to ONLY the server page's icons!
     act(() => {
       pgAdmin.__selectInTree(serverItem);
     });
@@ -449,8 +472,11 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
       })
     ).toHaveAttribute('aria-selected', 'true');
     expect(getNotebookIcons()).toEqual([
-      'Properties',
-      'Statistics',
+      'Refresh Dashboard',
+      'Compute Deep Stats',
+      'Auto-Refresh',
+      'Historic Metrics',
+      'Customize Dashboard',
       'Verify / Connect',
       'Create Database',
       'Register Database',
@@ -459,19 +485,17 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     ]);
 
     // Single-clicking back on "database: firebird-demo" restores it on the replaceable Browse tab,
-    // and re-selecting the Statistics view keeps it active while opening a 2nd explicit tab!
+    // and selecting the Properties sub-tab keeps it active while opening a 2nd explicit tab!
     act(() => {
       pgAdmin.__selectInTree(firebirdDbItem);
     });
     expect(getPageTabs().map((t) => t.getAttribute('aria-label'))).toEqual([
       'database: firebird-demo',
     ]);
-    fireEvent.click(
-      document.querySelector('.sr-island-3b .snb-panel [aria-label="Statistics"]')
-    );
+    fireEvent.click(getUnderTabs()[1]);
     expect(
       document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
-    ).toHaveAttribute('data-active-view', 'statistics');
+    ).toHaveAttribute('data-active-view', 'properties');
 
     // 3b. Explicitly opening "server: localhost" in a separate tab ("Open in Separate Tab…")
     //     adds a second independent tab without closing "database: firebird-demo"!
@@ -500,8 +524,11 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
 
     // Tabbed-Icon-Bar icons are ALWAYS the ones for the currently active page ("server: localhost")
     expect(getNotebookIcons()).toEqual([
-      'Properties',
-      'Statistics',
+      'Refresh Dashboard',
+      'Compute Deep Stats',
+      'Auto-Refresh',
+      'Historic Metrics',
+      'Customize Dashboard',
       'Verify / Connect',
       'Create Database',
       'Register Database',
@@ -512,15 +539,17 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     expect(getNotebookIcons()).not.toContain('Open SQL Editor');
 
     // 4. Switch back to "database: firebird-demo" via tab press ->
-    //    restores database workarea (still on 'statistics' view!), database Object menu, and database icons!
+    //    restores database workarea (still on 'properties' sub-tab!), database Object menu, and database icons!
     fireEvent.click(
       within(screen.getByRole('tablist', {name: 'Open Pages'})).getByRole('tab', {
         name: 'database: firebird-demo',
       })
     );
     expect(getNotebookIcons()).toEqual([
-      'Properties',
-      'Statistics',
+      'Refresh Properties',
+      'Properties Sections',
+      'Copy DDL',
+      'Customize Properties',
       'Connect',
       'Open SQL Editor',
       'Edit Connection / Settings',
@@ -529,13 +558,12 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
     ]);
     expect(
       document.querySelector('[data-cdeadmin-qa-key="data-navigator-work-area"]')
-    ).toHaveAttribute('data-active-view', 'statistics');
-
-    // Switch back to Properties view via Properties icon on Tabbed-Icon-Bar
-    fireEvent.click(
-      document.querySelector('.sr-island-3b .snb-panel [aria-label="Properties"]')
-    );
+    ).toHaveAttribute('data-active-view', 'properties');
     expect(within(island3e).getByText(/Database Properties — firebird-demo/)).toBeInTheDocument();
+
+    // Switch back to Dashboard view via Dashboard sub-tab on Area 3b
+    fireEvent.click(getUnderTabs()[0]);
+    expect(within(island3e).getByText(/Database Dashboard — firebird-demo/)).toBeInTheDocument();
 
     // 5. Close "database: firebird-demo" tab -> cleans up its actions/menus/icons and activates "server: localhost"
     fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="active-tab-close"]'));
@@ -543,8 +571,11 @@ describe('Catalog page tabs, active-page Tabbed-Icon-Bar icons, and work-area cl
       'server: localhost',
     ]);
     expect(getNotebookIcons()).toEqual([
-      'Properties',
-      'Statistics',
+      'Refresh Dashboard',
+      'Compute Deep Stats',
+      'Auto-Refresh',
+      'Historic Metrics',
+      'Customize Dashboard',
       'Verify / Connect',
       'Create Database',
       'Register Database',

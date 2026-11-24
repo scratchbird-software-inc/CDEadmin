@@ -5626,6 +5626,8 @@ def init_app(
     init_mysql_check_schedule(app, service)
     from .mysql_physical_backup_schedule import init_app as init_mysql_backup_schedule
     init_mysql_backup_schedule(app,service)
+    from .object_dashboard_host import init_app as init_object_dashboard
+    service.object_dashboard_host = init_object_dashboard(app, service)
     return service
 
 

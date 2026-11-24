@@ -82,6 +82,8 @@ import {
 } from '../../browser/static/js/ProviderContextMenu';
 import {openFamilyCreate} from '../../browser/static/js/ProviderObjectEditor';
 import {SchemaCompareWorkspace} from './cdeadmin_ui/modules/schema_compare/SchemaCompareWorkspace';
+import ObjectDashboardSurface from './cdeadmin_ui/surfaces/ObjectDashboardSurface';
+import ObjectPropertiesInspector from './cdeadmin_ui/surfaces/ObjectPropertiesInspector';
 import {
   DesignStoreClient,
   ERDDesignerSurface,
@@ -170,6 +172,10 @@ export function catalogNodeIdentityKey(nodeData) {
 }
 
 const VIEW_ACTION_META = Object.freeze({
+  dashboard: {
+    icon: 'action.statistics',
+    label: () => gettext('Dashboard'),
+  },
   properties: {
     icon: 'action.properties',
     label: () => gettext('Properties'),
@@ -191,6 +197,20 @@ const VIEW_ACTION_META = Object.freeze({
     label: () => gettext('Dependents'),
   },
 });
+
+export function isDashboardCapableNodeType(nodeType) {
+  if (!nodeType) return false;
+  if (
+    nodeType === 'server_group' ||
+    nodeType === 'engine_type' ||
+    nodeType === 'localhost_placeholder' ||
+    nodeType === 'cde_resource_group' ||
+    String(nodeType).startsWith('coll-')
+  ) {
+    return false;
+  }
+  return true;
+}
 
 export function buildNavigatorSelectionConfig(
   pgAdmin,
@@ -241,7 +261,8 @@ export function buildNavigatorSelectionConfig(
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '') || 'inst';
 
-  // 1. View Switch Icons (Properties, Statistics, SQL, Dependencies, Dependents) — NO tabs in work area
+  // 1. View Switch Actions (Dashboard, Properties, or non-dashboard Views) — NO tabs in work area
+  const hasDashboardSubTabs = isDashboardCapableNodeType(nodeType);
   const objectViews = allowedViews.filter((v) => v !== 'connectors' && VIEW_ACTION_META[v]);
   objectViews.forEach((viewId) => {
     const meta = VIEW_ACTION_META[viewId];
@@ -261,7 +282,9 @@ export function buildNavigatorSelectionConfig(
         invoke: () => dispatchViewSelect(viewId, viewId === 'properties'),
       },
     });
-    viewControlIds.push(actId);
+    if (!hasDashboardSubTabs) {
+      viewControlIds.push(actId);
+    }
     menuItems.push({
       id: actId,
       actionId: actId,
@@ -273,7 +296,7 @@ export function buildNavigatorSelectionConfig(
     menuIndex += 5;
   });
 
-  if (viewControlIds.length > 0) {
+  if (objectViews.length > 0) {
     menuItems.push({id: `sep_views_${instanceId}`, type: 'separator', index: menuIndex});
     menuIndex += 5;
   }
@@ -767,6 +790,309 @@ export function buildNavigatorSelectionConfig(
     index: menuIndex + 10,
   });
 
+  if (hasDashboardSubTabs) {
+    const historyWindow = options.dashboardWindow || '1h';
+    const autoRefreshSec = Number(options.dashboardAutoRefreshSec || 0);
+    const propsSectionFilter = options.propertiesSectionFilter || 'all';
+
+    const dispatchDashboardState = (patch) => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:navigator-dashboard-state', {
+            detail: {instanceId, ...patch},
+          })
+        );
+      }
+    };
+
+    const regSubControl = (suffix, icon, text, hint, invoke, extra = {}) => {
+      const actId = `data-navigator.${suffix}.${safeInstId}`;
+      actions.push({
+        id: actId,
+        icon,
+        application: 'data-navigator',
+        defaultText: text,
+        defaultHint: hint || text,
+        status: T_ACTION_STATUS.ENABLED,
+        focusScoped: true,
+        ...extra,
+        target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke},
+      });
+      return actId;
+    };
+
+    const dashRefreshId = regSubControl(
+      'dash_refresh',
+      'action.refresh',
+      gettext('Refresh Dashboard'),
+      gettext('Refresh fast snapshot metrics and record historic observation'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-dashboard-refresh', {detail: {instanceId}})
+        )
+    );
+    const dashDeepId = regSubControl(
+      'dash_deep_stats',
+      'action.statistics',
+      gettext('Compute Deep Stats'),
+      gettext('Run explicit on-demand deep statistics scan without background query churn'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-dashboard-deep-refresh', {detail: {instanceId}})
+        )
+    );
+    const dashAutoRefreshId = regSubControl(
+      'dash_auto_refresh',
+      'action.history',
+      gettext('Auto-Refresh'),
+      gettext('Configure live dashboard auto-refresh interval'),
+      (detail) => {
+        if (detail?.item !== undefined) {
+          dispatchDashboardState({dashboardAutoRefreshSec: Number(detail.item) || 0});
+        }
+      },
+      {
+        checked: autoRefreshSec > 0,
+        paletteItems: [
+          {id: '0', label: gettext('Off (Manual Snapshot)'), checked: autoRefreshSec === 0},
+          {id: '5', label: gettext('Every 5 seconds'), checked: autoRefreshSec === 5},
+          {id: '15', label: gettext('Every 15 seconds'), checked: autoRefreshSec === 15},
+          {id: '60', label: gettext('Every 60 seconds'), checked: autoRefreshSec === 60},
+        ],
+      }
+    );
+    const dashHistoryPillId = regSubControl(
+      'dash_history_window',
+      'action.history',
+      gettext('Historic Metrics'),
+      gettext('Load stored historic metric series from the embedded UserConfigurationDatabase'),
+      (detail) => {
+        if (detail?.item) {
+          dispatchDashboardState({dashboardWindow: String(detail.item)});
+        }
+      },
+      {value: historyWindow}
+    );
+    const dashCustomizeId = regSubControl(
+      'dash_customize',
+      'action.settings',
+      gettext('Customize Dashboard'),
+      gettext('Customize visible dashboard panels and embedded metric retention'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-dashboard-customize', {detail: {instanceId}})
+        )
+    );
+
+    const propsRefreshId = regSubControl(
+      'props_refresh',
+      'action.refresh',
+      gettext('Refresh Properties'),
+      gettext('Reload comprehensive object metadata, structure, and DDL'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-properties-refresh', {detail: {instanceId}})
+        )
+    );
+    const propsSectionPillId = regSubControl(
+      'props_section_filter',
+      'action.properties',
+      gettext('Properties Sections'),
+      gettext('Filter displayed object property sections'),
+      (detail) => {
+        if (detail?.item) {
+          dispatchDashboardState({propertiesSectionFilter: String(detail.item)});
+        }
+      },
+      {value: propsSectionFilter}
+    );
+    const propsCopyDdlId = regSubControl(
+      'props_copy_ddl',
+      'action.copy',
+      gettext('Copy DDL'),
+      gettext('Copy object CREATE / DDL definition to clipboard'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-properties-copy-ddl', {detail: {instanceId}})
+        )
+    );
+    const propsCustomizeId = regSubControl(
+      'props_customize',
+      'action.settings',
+      gettext('Customize Properties'),
+      gettext('Configure empty attributes, system catalog fields, and layout'),
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:object-properties-customize', {detail: {instanceId}})
+        )
+    );
+
+    const sharedTailGroups = [];
+    if (pageControlIds.length > 0) {
+      sharedTailGroups.push({
+        id: 'page-actions',
+        label: gettext('Actions'),
+        controls: pageControlIds,
+      });
+    }
+    if (catalogControlIds.length > 0) {
+      sharedTailGroups.push({
+        id: 'page-catalog',
+        label: gettext('Catalog'),
+        controls: catalogControlIds,
+      });
+    }
+
+    const dashSubTabId = `undertab-dashboard-${safeInstId}`;
+    const propsSubTabId = `undertab-properties-${safeInstId}`;
+
+    return {
+      title: pageTitle,
+      activeView: resolvedView,
+      useUnderTabs: true,
+      selectedUnderTabId: resolvedView === 'properties' ? propsSubTabId : dashSubTabId,
+      actions,
+      menus: [
+        {
+          name: 'object',
+          label: gettext('Object'),
+          i18nKey: 'menu.object.title',
+          index: 20,
+          items: menuItems,
+        },
+      ],
+      ribbonTabs: [
+        {
+          id: dashSubTabId,
+          label: gettext('Dashboard'),
+          isUnderTab: true,
+          selected: resolvedView !== 'properties',
+          onSelect: () => dispatchViewSelect('dashboard', false),
+          allowEmpty: true,
+          groups: [
+            {
+              id: 'dashboard-controls',
+              label: gettext('Dashboard & Historic Metrics'),
+              controls: [
+                dashRefreshId,
+                dashDeepId,
+                dashAutoRefreshId,
+                {
+                  id: dashHistoryPillId,
+                  actionId: dashHistoryPillId,
+                  type: 'segmented',
+                  value: historyWindow,
+                  items: [
+                    {
+                      id: 'live',
+                      label: gettext('Live'),
+                      tooltip: gettext('Live 15-minute raw metrics window'),
+                      showLabel: true,
+                      checked: historyWindow === 'live',
+                    },
+                    {
+                      id: '1h',
+                      label: gettext('1h'),
+                      tooltip: gettext('Last 1 hour raw metrics from embedded database'),
+                      showLabel: true,
+                      checked: historyWindow === '1h',
+                    },
+                    {
+                      id: '24h',
+                      label: gettext('24h'),
+                      tooltip: gettext('Last 24 hours raw metrics from embedded database'),
+                      showLabel: true,
+                      checked: historyWindow === '24h',
+                    },
+                    {
+                      id: '30d',
+                      label: gettext('30d'),
+                      tooltip: gettext('Last 30 days 5-minute rollups from embedded database'),
+                      showLabel: true,
+                      checked: historyWindow === '30d',
+                    },
+                    {
+                      id: '365d',
+                      label: gettext('365d'),
+                      tooltip: gettext('Last 365 days 1-hour rollups from embedded database'),
+                      showLabel: true,
+                      checked: historyWindow === '365d',
+                    },
+                  ],
+                },
+                dashCustomizeId,
+              ],
+            },
+            ...sharedTailGroups,
+          ],
+        },
+        {
+          id: propsSubTabId,
+          label: gettext('Properties'),
+          isUnderTab: true,
+          selected: resolvedView === 'properties',
+          onSelect: () => dispatchViewSelect('properties', true),
+          allowEmpty: true,
+          groups: [
+            {
+              id: 'properties-controls',
+              label: gettext('Properties & Customize'),
+              controls: [
+                propsRefreshId,
+                {
+                  id: propsSectionPillId,
+                  actionId: propsSectionPillId,
+                  type: 'segmented',
+                  value: propsSectionFilter,
+                  items: [
+                    {
+                      id: 'all',
+                      label: gettext('All'),
+                      tooltip: gettext('Show all available information about the object'),
+                      showLabel: true,
+                      checked: propsSectionFilter === 'all',
+                    },
+                    {
+                      id: 'structure',
+                      label: gettext('Structure'),
+                      tooltip: gettext('Show columns, indexes, constraints, triggers, and partitions'),
+                      showLabel: true,
+                      checked: propsSectionFilter === 'structure',
+                    },
+                    {
+                      id: 'ddl',
+                      label: gettext('DDL / SQL'),
+                      tooltip: gettext('Show CREATE / DDL SQL definition'),
+                      showLabel: true,
+                      checked: propsSectionFilter === 'ddl',
+                    },
+                    {
+                      id: 'dependencies',
+                      label: gettext('Dependencies'),
+                      tooltip: gettext('Show object dependencies and dependents'),
+                      showLabel: true,
+                      checked: propsSectionFilter === 'dependencies',
+                    },
+                    {
+                      id: 'settings',
+                      label: gettext('Overview'),
+                      tooltip: gettext('Show connection settings and summary attributes'),
+                      showLabel: true,
+                      checked: propsSectionFilter === 'settings',
+                    },
+                  ],
+                },
+                propsCopyDdlId,
+                propsCustomizeId,
+              ],
+            },
+            ...sharedTailGroups,
+          ],
+        },
+      ],
+    };
+  }
+
   const groups = [];
   if (viewControlIds.length > 0) {
     groups.push({
@@ -800,6 +1126,8 @@ export function buildNavigatorSelectionConfig(
   return {
     title: pageTitle,
     activeView: resolvedView,
+    useUnderTabs: false,
+    selectedUnderTabId: null,
     actions,
     menus: [
       {
@@ -821,16 +1149,11 @@ export function buildNavigatorSelectionConfig(
   };
 }
 
-export function navigatorTabIdsForNodeType(nodeType, pgAdmin = null) {
+export function navigatorTabIdsForNodeType(nodeType, _pgAdmin = null) {
   if (!nodeType || nodeType === 'server_group') {
     return ['connectors'];
   }
-  if (
-    nodeType === 'engine_type' ||
-    nodeType === 'localhost_placeholder' ||
-    nodeType === 'server' ||
-    nodeType === 'cde_database_target'
-  ) {
+  if (nodeType === 'engine_type' || nodeType === 'localhost_placeholder') {
     return ['properties', 'statistics'];
   }
   if (nodeType === 'cde_resource_group') {
@@ -839,22 +1162,7 @@ export function navigatorTabIdsForNodeType(nodeType, pgAdmin = null) {
   if (String(nodeType).startsWith('coll-')) {
     return ['properties', 'statistics'];
   }
-  if (nodeType === 'database') {
-    return ['properties', 'sql', 'statistics'];
-  }
-  if (nodeType === 'cde_resource') {
-    return ['properties', 'sql', 'statistics', 'dependencies', 'dependents'];
-  }
-  const nodeDef = pgAdmin?.Browser?.Nodes?.[nodeType];
-  if (nodeDef) {
-    const ids = ['properties'];
-    if (nodeDef.hasSQL !== false) ids.push('sql');
-    if (nodeDef.hasStatistics !== false) ids.push('statistics');
-    if (nodeDef.hasDependencies) ids.push('dependencies');
-    if (nodeDef.hasDependents) ids.push('dependents');
-    return ids;
-  }
-  return ['properties', 'sql', 'statistics', 'dependencies', 'dependents'];
+  return ['dashboard', 'properties'];
 }
 
 export function CatalogPageCoordinator() {
@@ -883,6 +1191,9 @@ export function CatalogPageCoordinator() {
         {
           connectorProfileId: inst.meta?.connectorProfileId,
           connectorIntent: inst.meta?.connectorIntent,
+          dashboardWindow: inst.meta?.dashboardWindow,
+          dashboardAutoRefreshSec: inst.meta?.dashboardAutoRefreshSec,
+          propertiesSectionFilter: inst.meta?.propertiesSectionFilter,
         }
       );
       let nextTitle = cfg.title;
@@ -898,6 +1209,8 @@ export function CatalogPageCoordinator() {
       currentShell.updateInstance(inst.instanceId, {
         title: nextTitle,
         statusText: `${nextTitle} — ${gettext('Ready')}`,
+        useUnderTabs: cfg.useUnderTabs,
+        selectedUnderTabId: cfg.selectedUnderTabId,
         actions: cfg.actions,
         menus: cfg.menus,
         ribbonTabs: cfg.ribbonTabs,
@@ -948,11 +1261,16 @@ export function CatalogPageCoordinator() {
           {
             connectorProfileId: existing.meta?.connectorProfileId,
             connectorIntent: existing.meta?.connectorIntent,
+            dashboardWindow: existing.meta?.dashboardWindow,
+            dashboardAutoRefreshSec: existing.meta?.dashboardAutoRefreshSec,
+            propertiesSectionFilter: existing.meta?.propertiesSectionFilter,
           }
         );
         currentShell.updateInstance(existing.instanceId, {
           title: cfg.title,
           statusText: `${cfg.title} — ${gettext('Ready')}`,
+          useUnderTabs: cfg.useUnderTabs,
+          selectedUnderTabId: cfg.selectedUnderTabId,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
@@ -988,19 +1306,24 @@ export function CatalogPageCoordinator() {
         const initialView =
           preservedView && allowed.includes(preservedView)
             ? preservedView
-            : allowed.includes('properties')
-              ? 'properties'
-              : allowed[0];
+            : allowed[0];
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           replaceable.instanceId,
           item,
           data,
-          initialView
+          initialView,
+          {
+            dashboardWindow: replaceable.meta?.dashboardWindow,
+            dashboardAutoRefreshSec: replaceable.meta?.dashboardAutoRefreshSec,
+            propertiesSectionFilter: replaceable.meta?.propertiesSectionFilter,
+          }
         );
         currentShell.updateInstance(replaceable.instanceId, {
           title: cfg.title,
           statusText: `${cfg.title} — ${gettext('Ready')}`,
+          useUnderTabs: cfg.useUnderTabs,
+          selectedUnderTabId: cfg.selectedUnderTabId,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
@@ -1024,7 +1347,7 @@ export function CatalogPageCoordinator() {
       }
 
       const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
-      const initialView = allowed.includes('properties') ? 'properties' : allowed[0];
+      const initialView = allowed[0];
       currentShell.openApplication('data-navigator', {
         title: formatCatalogPageTitle(data),
         isUnboundNavigator: false,
@@ -1054,9 +1377,7 @@ export function CatalogPageCoordinator() {
       const initialView =
         requestedView && allowed.includes(requestedView)
           ? requestedView
-          : allowed.includes('properties')
-            ? 'properties'
-            : allowed[0];
+          : allowed[0];
       currentShell.openApplication('data-navigator', {
         title: formatCatalogPageTitle(data),
         isUnboundNavigator: false,
@@ -1112,13 +1433,28 @@ export function CatalogPageCoordinator() {
       if (target && target.appId === 'data-navigator' && requestedView) {
         const selItem = pgAdmin?.Browser?.tree?.selected?.() || null;
         const selData = (selItem && pgAdmin?.Browser?.tree?.itemData?.(selItem)) || null;
-        const isUnbound = selData ? false : Boolean(target.meta?.isUnboundNavigator);
-        const item = selItem || (isUnbound ? null : target.meta?.boundNodeItem || null);
-        const data =
-          selData ||
-          (isUnbound
-            ? null
-            : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null);
+        const hasBoundTarget =
+          Boolean(ev?.detail?.instanceId) &&
+          !target.meta?.isUnboundNavigator &&
+          Boolean(target.meta?.boundNodeData);
+        const isUnbound = hasBoundTarget
+          ? false
+          : selData
+            ? false
+            : Boolean(target.meta?.isUnboundNavigator);
+        const item = hasBoundTarget
+          ? target.meta?.boundNodeItem || selItem
+          : selItem || (isUnbound ? null : target.meta?.boundNodeItem || null);
+        const data = hasBoundTarget
+          ? (item && pgAdmin?.Browser?.tree?.itemData?.(item)) ||
+            target.meta?.boundNodeData ||
+            selData
+          : selData ||
+            (isUnbound
+              ? null
+              : (item && pgAdmin?.Browser?.tree?.itemData?.(item)) ||
+                target.meta?.boundNodeData ||
+                null);
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           target.instanceId,
@@ -1128,10 +1464,15 @@ export function CatalogPageCoordinator() {
           {
             connectorProfileId: target.meta?.connectorProfileId,
             connectorIntent: target.meta?.connectorIntent,
+            dashboardWindow: target.meta?.dashboardWindow,
+            dashboardAutoRefreshSec: target.meta?.dashboardAutoRefreshSec,
+            propertiesSectionFilter: target.meta?.propertiesSectionFilter,
           }
         );
         currentShell.updateInstance(target.instanceId, {
           title: isUnbound ? target.title : cfg.title,
+          useUnderTabs: cfg.useUnderTabs,
+          selectedUnderTabId: cfg.selectedUnderTabId,
           actions: cfg.actions,
           menus: cfg.menus,
           ribbonTabs: cfg.ribbonTabs,
@@ -1189,6 +1530,8 @@ export function CatalogPageCoordinator() {
         }
       );
       currentShell.updateInstance(target.instanceId, {
+        useUnderTabs: cfg.useUnderTabs,
+        selectedUnderTabId: cfg.selectedUnderTabId,
         actions: cfg.actions,
         menus: cfg.menus,
         ribbonTabs: cfg.ribbonTabs,
@@ -1201,6 +1544,56 @@ export function CatalogPageCoordinator() {
       });
     };
 
+    const onDashboardStateEvent = (ev) => {
+      const currentShell = shellRef.current;
+      if (!currentShell) return;
+      const targetId = ev?.detail?.instanceId || currentShell.focusedId;
+      const target = (currentShell.instances || []).find((i) => i.instanceId === targetId);
+      if (!target || target.appId !== 'data-navigator') return;
+      const nextWindow =
+        ev?.detail?.dashboardWindow !== undefined
+          ? ev.detail.dashboardWindow
+          : target.meta?.dashboardWindow || '1h';
+      const nextAutoSec =
+        ev?.detail?.dashboardAutoRefreshSec !== undefined
+          ? Number(ev.detail.dashboardAutoRefreshSec) || 0
+          : Number(target.meta?.dashboardAutoRefreshSec || 0);
+      const nextPropsSection =
+        ev?.detail?.propertiesSectionFilter !== undefined
+          ? ev.detail.propertiesSectionFilter
+          : target.meta?.propertiesSectionFilter || 'all';
+      const item = target.meta?.boundNodeItem || null;
+      const data =
+        (item && pgAdmin?.Browser?.tree?.itemData?.(item)) || target.meta?.boundNodeData || null;
+      const cfg = buildNavigatorSelectionConfig(
+        pgAdmin,
+        target.instanceId,
+        item,
+        data,
+        target.meta?.activeView || null,
+        {
+          connectorProfileId: target.meta?.connectorProfileId,
+          connectorIntent: target.meta?.connectorIntent,
+          dashboardWindow: nextWindow,
+          dashboardAutoRefreshSec: nextAutoSec,
+          propertiesSectionFilter: nextPropsSection,
+        }
+      );
+      currentShell.updateInstance(target.instanceId, {
+        useUnderTabs: cfg.useUnderTabs,
+        selectedUnderTabId: cfg.selectedUnderTabId,
+        actions: cfg.actions,
+        menus: cfg.menus,
+        ribbonTabs: cfg.ribbonTabs,
+        meta: {
+          ...target.meta,
+          dashboardWindow: nextWindow,
+          dashboardAutoRefreshSec: nextAutoSec,
+          propertiesSectionFilter: nextPropsSection,
+        },
+      });
+    };
+
     events.on('pgadmin-browser:tree:selected', onTreeSelected);
     events.on('pgadmin:browser:node:updated', onCatalogNodeChanged);
     events.on('pgadmin-browser:tree:updated', onCatalogNodeChanged);
@@ -1209,6 +1602,7 @@ export function CatalogPageCoordinator() {
     if (typeof window !== 'undefined') {
       window.addEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
       window.addEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+      window.addEventListener('scratchrobin:navigator-dashboard-state', onDashboardStateEvent);
       window.addEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
       window.addEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
     }
@@ -1222,6 +1616,7 @@ export function CatalogPageCoordinator() {
       if (typeof window !== 'undefined') {
         window.removeEventListener('scratchrobin:navigator-select-tab', onSelectViewEvent);
         window.removeEventListener('scratchrobin:connector-select-mode', onConnectorModeEvent);
+        window.removeEventListener('scratchrobin:navigator-dashboard-state', onDashboardStateEvent);
         window.removeEventListener('scratchrobin:open-catalog-tab', onOpenCatalogTabEvent);
         window.removeEventListener('scratchrobin:language-changed', onCatalogNodeChanged);
       }
@@ -1265,7 +1660,13 @@ export function DataNavigatorWorkArea({instanceId}) {
       instance?.meta?.boundNodeData ||
       null;
   const selectedNodeType = boundNodeData?._type || null;
-  const activeView = instance?.meta?.activeView || (selectedNodeType ? 'properties' : 'connectors');
+  const dashboardCapable = isDashboardCapableNodeType(selectedNodeType);
+  const activeView =
+    instance?.meta?.activeView ||
+    (selectedNodeType ? (dashboardCapable ? 'dashboard' : 'properties') : 'connectors');
+  const dashboardWindow = instance?.meta?.dashboardWindow || '1h';
+  const dashboardAutoRefreshSec = Number(instance?.meta?.dashboardAutoRefreshSec || 0);
+  const propertiesSectionFilter = instance?.meta?.propertiesSectionFilter || 'all';
 
   const loadEnabledEngines = useCallback(() => {
     if (typeof fetch !== 'function') {
@@ -1481,10 +1882,52 @@ export function DataNavigatorWorkArea({instanceId}) {
   const allPages = [
     {id: 'connectors', render: renderConnectorsOverview},
     {
-      id: 'properties',
+      id: 'dashboard',
       render: () => (
-        <Properties boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+        <ObjectDashboardSurface
+          boundNodeData={boundNodeData}
+          instanceId={instance?.instanceId || instanceId}
+          historyWindow={dashboardWindow}
+          autoRefreshSec={dashboardAutoRefreshSec}
+          onHistoryWindowChange={(win) => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('scratchrobin:navigator-dashboard-state', {
+                  detail: {instanceId: instance?.instanceId || instanceId, dashboardWindow: win},
+                })
+              );
+            }
+          }}
+        />
       ),
+    },
+    {
+      id: 'properties',
+      render: () =>
+        dashboardCapable ? (
+          <ObjectPropertiesInspector
+            boundNodeData={boundNodeData}
+            instanceId={instance?.instanceId || instanceId}
+            sectionFilter={propertiesSectionFilter}
+            onSectionFilterChange={(sec) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('scratchrobin:navigator-dashboard-state', {
+                    detail: {
+                      instanceId: instance?.instanceId || instanceId,
+                      propertiesSectionFilter: sec,
+                    },
+                  })
+                );
+              }
+            }}
+            renderNativeProperties={() => (
+              <Properties boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+            )}
+          />
+        ) : (
+          <Properties boundNodeItem={boundNodeItem} boundNodeData={boundNodeData} />
+        ),
     },
     {
       id: 'sql',
@@ -3186,6 +3629,8 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         supportsLeftDrawer: true,
         supportsRightDrawer: true,
         supportsTabbedIconBar: true,
+        useUnderTabs: navConfig.useUnderTabs,
+        selectedUnderTabId: navConfig.selectedUnderTabId,
         actions: navConfig.actions,
         menus: navConfig.menus,
         ribbonTabs: navConfig.ribbonTabs,

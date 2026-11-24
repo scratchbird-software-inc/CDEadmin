@@ -400,13 +400,14 @@ describe('datatype-sized dynamic cell packing and selection-scoped tabs (2026-11
     expect(screen.getByRole('textbox', {name: /Comments/i}).tagName).toBe('TEXTAREA');
   });
 
-  it('hides Connectors, SQL, Dependencies and Dependents on servers and resolves provider statistics URLs', () => {
+  it('defaults catalog objects to Dashboard with Properties second while keeping connector registration tabs and statistics URLs', () => {
     expect(navigatorTabIdsForNodeType('server_group')).toEqual(['connectors']);
     expect(navigatorTabIdsForNodeType('engine_type')).toEqual(['properties', 'statistics']);
     expect(navigatorTabIdsForNodeType('localhost_placeholder')).toEqual(['properties', 'statistics']);
-    expect(navigatorTabIdsForNodeType('server')).toEqual(['properties', 'statistics']);
-    expect(navigatorTabIdsForNodeType('cde_database_target')).toEqual(['properties', 'statistics']);
-    expect(navigatorTabIdsForNodeType('database')).toEqual(['properties', 'sql', 'statistics']);
+    expect(navigatorTabIdsForNodeType('server')).toEqual(['dashboard', 'properties']);
+    expect(navigatorTabIdsForNodeType('cde_database_target')).toEqual(['dashboard', 'properties']);
+    expect(navigatorTabIdsForNodeType('database')).toEqual(['dashboard', 'properties']);
+    expect(navigatorTabIdsForNodeType('cde_resource')).toEqual(['dashboard', 'properties']);
 
     expect(resolveStatisticsUrl(
       {_type: 'engine_type', engine_id: 'firebird'},
