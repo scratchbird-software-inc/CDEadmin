@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {forwardRef} from 'react';
 import PropTypes from 'prop-types';
 import {Separator as BaseSeparator} from '@base-ui/react/separator';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
@@ -18,7 +19,7 @@ function spacingPx(value) {
   return value;
 }
 
-export function Box({
+export const Box = forwardRef(function Box({
   component: Component = 'div',
   sx,
   style,
@@ -59,7 +60,7 @@ export function Box({
    
   mr,
   ...props
-}) {
+}, ref) {
   const directStyle = {
     ...(display !== undefined ? {display} : {}),
     ...(flex !== undefined ? {flex} : {}),
@@ -107,8 +108,10 @@ export function Box({
     ...(sx.position !== undefined ? {position: sx.position} : {}),
   } : undefined;
 
-  return <Component style={{...directStyle, ...sxStyle, ...style}} {...props} />;
-}
+  return <Component ref={ref} style={{...directStyle, ...sxStyle, ...style}} {...props} />;
+});
+
+Box.displayName = 'Box';
 
 Box.propTypes = {
   component: PropTypes.elementType,

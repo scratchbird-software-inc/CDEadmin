@@ -43,51 +43,47 @@ export default function AdaptiveFieldPlacementGrid({
     const el = containerRef.current;
     if (!el) return undefined;
     let rafId = null;
+    const win =
+      el.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
     const isJsdom =
       typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
 
     const applyWidth = (rawW) => {
       const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
       if (w > 80) {
-        setAvailableWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
+        setAvailableWidth((prev) => (Math.abs(prev - w) >= 1 ? w : prev));
       }
     };
 
     const scheduleMeasure = (entries) => {
       const entryW = entries?.[0]?.contentRect?.width;
-      if (isJsdom || typeof requestAnimationFrame !== 'function') {
+      if (isJsdom || typeof win?.requestAnimationFrame !== 'function') {
         applyWidth(entryW);
         return;
       }
       if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
+      rafId = win.requestAnimationFrame(() => {
         rafId = null;
         applyWidth(el.clientWidth || entryW);
       });
     };
 
     applyWidth(el.clientWidth);
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(scheduleMeasure);
-      ro.observe(el);
-      return () => {
-        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(rafId);
-        }
-        ro.disconnect();
-      };
-    }
-    if (typeof window !== 'undefined') {
-      const onWinResize = () => scheduleMeasure();
-      window.addEventListener('resize', onWinResize);
-      return () => {
-        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(rafId);
-        }
-        window.removeEventListener('resize', onWinResize);
-      };
-    }
-    return undefined;
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const ro = ResizeObserverCtor ? new ResizeObserverCtor(scheduleMeasure) : null;
+    if (ro) ro.observe(el);
+    const onWinResize = () => scheduleMeasure();
+    win?.addEventListener?.('resize', onWinResize);
+    return () => {
+      if (rafId !== null && typeof win?.cancelAnimationFrame === 'function') {
+        win.cancelAnimationFrame(rafId);
+      }
+      win?.removeEventListener?.('resize', onWinResize);
+      ro?.disconnect();
+    };
   }, []);
 
   const optionsByField = useMemo(() => {
@@ -102,7 +98,7 @@ export default function AdaptiveFieldPlacementGrid({
   const layout = useMemo(() => {
     const computed = computeCellGridLayout(fields, availableWidth, optionsByField, {
       colGap,
-      prevNumCols: prevColsRef.current,
+      prevNumCols: null,
     });
     prevColsRef.current = computed.numCols;
     return computed;

@@ -452,29 +452,45 @@ export default function SqlEditorSurface({
   // Coalesced ResizeObserver on Area 3e for responsive form wrapping
   useEffect(() => {
     const el = workAreaRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    if (!el) return undefined;
     let rafId = null;
-    const obs = new ResizeObserver((entries) => {
-      const w = entries?.[0]?.contentRect?.width;
-      if (!w || w <= 80) return;
-      const rounded = Math.round(w);
-      const applyWidth = () => {
+    const win =
+      el.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
+    const isJsdom =
+      typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
+    const applyWidth = (rawW) => {
+      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
+      if (w > 80) {
+        setViewportWidth((prev) => (Math.abs(prev - w) >= 1 ? w : prev));
+      }
+    };
+    const scheduleMeasure = (entries) => {
+      const entryW = entries?.[0]?.contentRect?.width;
+      if (isJsdom || typeof win?.requestAnimationFrame !== 'function') {
+        applyWidth(entryW);
+        return;
+      }
+      if (rafId !== null) return;
+      rafId = win.requestAnimationFrame(() => {
         rafId = null;
-        setViewportWidth((prev) => (Math.abs(prev - rounded) >= 2 ? rounded : prev));
-      };
-      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-        if (rafId !== null) window.cancelAnimationFrame(rafId);
-        rafId = window.requestAnimationFrame(applyWidth);
-      } else {
-        applyWidth();
-      }
-    });
-    obs.observe(el);
+        applyWidth(el.clientWidth || entryW);
+      });
+    };
+    applyWidth(el.clientWidth);
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const obs = ResizeObserverCtor ? new ResizeObserverCtor(scheduleMeasure) : null;
+    if (obs) obs.observe(el);
+    const onWinResize = () => scheduleMeasure();
+    win?.addEventListener?.('resize', onWinResize);
     return () => {
-      if (rafId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-        window.cancelAnimationFrame(rafId);
+      if (rafId !== null && typeof win?.cancelAnimationFrame === 'function') {
+        win.cancelAnimationFrame(rafId);
       }
-      obs.disconnect();
+      win?.removeEventListener?.('resize', onWinResize);
+      obs?.disconnect();
     };
   }, []);
 
@@ -736,13 +752,14 @@ export default function SqlEditorSurface({
     const computed = buildFormLayoutPlacements(
       formColumns,
       layout.formFieldPrefs,
-      viewportWidth - GUTTER_WIDTH - 36,
-      prevFormColsRef.current,
-      rows
+      viewportWidth - GUTTER_WIDTH - 28,
+      null,
+      rows,
+      layout.gridColPrefs
     );
     prevFormColsRef.current = computed.numCols;
     return computed;
-  }, [formColumns, layout.formFieldPrefs, viewportWidth, rows]);
+  }, [formColumns, layout.formFieldPrefs, layout.gridColPrefs, viewportWidth, rows]);
 
   const currentRow = rows[activeRowIndex] || null;
   const isEditableResult = Boolean(activeResult?.editable && !hostData?.transaction_prepare_state);

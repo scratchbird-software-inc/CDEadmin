@@ -25,6 +25,8 @@ export const ModalContent = forwardRef(function ModalContent(
       className={['sr-modal-content', className].filter(Boolean).join(' ')}
       style={{
         height: '100%',
+        width: '100%',
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: 'var(--sr-surface, var(--sr-bg, inherit))',

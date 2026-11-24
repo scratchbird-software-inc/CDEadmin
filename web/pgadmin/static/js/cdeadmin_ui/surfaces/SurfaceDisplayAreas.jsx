@@ -12,11 +12,11 @@ export default function SurfaceDisplayAreas({first, second, ratio, onActivate, q
       flexDirection: 'column',
     }}>
       <div data-surface-area="upper" onFocusCapture={onActivate} onPointerDownCapture={onActivate} style={{
-        flex: `0 0 ${ratio}%`, minHeight: 100, minWidth: 160, display: 'flex',
+        flex: `0 0 ${ratio}%`, minHeight: 100, minWidth: 0, width: '100%', overflow: 'hidden', display: 'flex',
         borderBottom: '2px solid var(--sr-border-default, #cbd5e1)',
       }}>{first}</div>
       <div data-surface-area="lower" onFocusCapture={onActivate} onPointerDownCapture={onActivate}
-        style={{flex: 1, minHeight: 100, minWidth: 160, display: 'flex'}}>{second}</div>
+        style={{flex: 1, minHeight: 100, minWidth: 0, width: '100%', overflow: 'hidden', display: 'flex'}}>{second}</div>
     </div>
   );
 }

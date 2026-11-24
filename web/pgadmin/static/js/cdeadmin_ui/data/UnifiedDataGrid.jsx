@@ -146,13 +146,30 @@ export default function UnifiedDataGrid({
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || typeof ResizeObserver !== 'function') return undefined;
-    const ro = new ResizeObserver((entries) => {
-      const w = Math.floor(entries?.[0]?.contentRect?.width || el.clientWidth || 0);
-      if (w > 120) setViewportWidth(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+    if (!el) return undefined;
+    const win =
+      el.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
+    const applyWidth = (rawW) => {
+      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
+      if (w > 120) setViewportWidth((prev) => (prev !== w ? w : prev));
+    };
+    applyWidth(el.clientWidth);
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const ro = ResizeObserverCtor
+      ? new ResizeObserverCtor((entries) => {
+        applyWidth(entries?.[0]?.contentRect?.width || el.clientWidth || 0);
+      })
+      : null;
+    if (ro) ro.observe(el);
+    const onWinResize = () => applyWidth(el.clientWidth);
+    win?.addEventListener?.('resize', onWinResize);
+    return () => {
+      win?.removeEventListener?.('resize', onWinResize);
+      ro?.disconnect();
+    };
   }, []);
 
   const normalizedColumns = useMemo(() => {
@@ -280,8 +297,16 @@ export default function UnifiedDataGrid({
   );
 
   const sharedFormLayout = useMemo(
-    () => buildFormLayoutPlacements(formCols, layout.formFieldPrefs, viewportWidth, null, visibleRows),
-    [formCols, layout.formFieldPrefs, viewportWidth, visibleRows]
+    () =>
+      buildFormLayoutPlacements(
+        formCols,
+        layout.formFieldPrefs,
+        Math.max(180, viewportWidth - 62 - 28),
+        null,
+        visibleRows,
+        layout.gridColPrefs
+      ),
+    [formCols, layout.formFieldPrefs, layout.gridColPrefs, viewportWidth, visibleRows]
   );
 
   const effectiveDisplayMode = resolveRecordPresentation(

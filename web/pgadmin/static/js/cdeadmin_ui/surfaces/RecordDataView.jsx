@@ -7,7 +7,7 @@
 //
 //////////////////////////////////////////////////////////////
 
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
@@ -27,6 +27,7 @@ import {
   FIELD_FONTS,
   FIELD_FONT_SIZES,
   DISPLAY_MODES,
+  buildFormLayoutPlacements,
   clampColumnWidth,
   formatCellValue,
   formatColumnCommentHint,
@@ -95,12 +96,111 @@ export default function RecordDataView({model}) {
   const {selection, selectionSlice} = activeGridSelection;
 
   const gridRootRef = useRef(null);
+  const outerViewRef = useRef(null);
+  const [measuredViewportWidth, setMeasuredViewportWidth] = useState(0);
   const dragStateRef = useRef(null);
   const suppressNextClickRef = useRef(false);
   const [gridMenu, setGridMenu] = useState(null); // {x, y, rowIndex, colName}
   const [focusedGridEdit, setFocusedGridEdit] = useState(null); // {rowIndex, colName}
   const [focusedGridEditRect, setFocusedGridEditRect] = useState(null);
   const focusedGridInputRef = useRef(null);
+
+  useEffect(() => {
+    const outerEl = outerViewRef.current;
+    const vpEl = gridViewportRef?.current || null;
+    const targetEl = vpEl || outerEl;
+    if (!targetEl) return undefined;
+    let rafId = null;
+    const win =
+      targetEl.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
+    const isJsdom =
+      typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
+
+    const applyWidth = (entryW) => {
+      const liveVp = gridViewportRef?.current;
+      const liveOuter = outerViewRef.current;
+      const raw =
+        (typeof entryW === 'number' && entryW > 0 ? entryW : 0) ||
+        liveVp?.clientWidth ||
+        liveOuter?.clientWidth ||
+        liveOuter?.getBoundingClientRect?.().width ||
+        0;
+      const w = Math.floor(raw);
+      if (w > 80) {
+        setMeasuredViewportWidth((prev) => (prev !== w ? w : prev));
+      }
+    };
+
+    const scheduleMeasure = (entries) => {
+      let bestEntryW = 0;
+      if (Array.isArray(entries)) {
+        for (const entry of entries) {
+          const ew = entry?.contentRect?.width || 0;
+          if (ew > 0 && (bestEntryW === 0 || entry.target === gridViewportRef?.current)) {
+            bestEntryW = ew;
+          }
+        }
+      }
+      if (isJsdom || typeof win?.requestAnimationFrame !== 'function') {
+        applyWidth(bestEntryW);
+        return;
+      }
+      if (rafId !== null) return;
+      rafId = win.requestAnimationFrame(() => {
+        rafId = null;
+        const liveW =
+          gridViewportRef?.current?.clientWidth ||
+          outerViewRef.current?.clientWidth ||
+          bestEntryW;
+        applyWidth(liveW);
+      });
+    };
+
+    applyWidth(0);
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const ro = ResizeObserverCtor ? new ResizeObserverCtor(scheduleMeasure) : null;
+    if (ro) {
+      if (outerEl) ro.observe(outerEl);
+      if (vpEl && vpEl !== outerEl) ro.observe(vpEl);
+    }
+    const onWinResize = () => scheduleMeasure();
+    win?.addEventListener?.('resize', onWinResize);
+    return () => {
+      if (rafId !== null && typeof win?.cancelAnimationFrame === 'function') {
+        win.cancelAnimationFrame(rafId);
+      }
+      win?.removeEventListener?.('resize', onWinResize);
+      ro?.disconnect();
+    };
+  }, [effectiveDisplayMode, gridViewportRef]);
+
+  const effectiveViewportWidth =
+    measuredViewportWidth > 80 ? measuredViewportWidth : viewportWidth || 780;
+
+  const effectiveFormLayout = useMemo(() => {
+    if (measuredViewportWidth <= 80 && sharedFormLayout) {
+      return sharedFormLayout;
+    }
+    return buildFormLayoutPlacements(
+      formColumns,
+      layout?.formFieldPrefs,
+      Math.max(180, effectiveViewportWidth - GUTTER_WIDTH - 28),
+      null,
+      rows,
+      layout?.gridColPrefs
+    );
+  }, [
+    measuredViewportWidth,
+    sharedFormLayout,
+    effectiveViewportWidth,
+    formColumns,
+    layout?.formFieldPrefs,
+    layout?.gridColPrefs,
+    rows,
+  ]);
 
   useEffect(() => {
     if (!isEditingRow) {
@@ -1014,7 +1114,7 @@ export default function RecordDataView({model}) {
           )}
           draftValues={isRowEdit ? rowDraft : null}
           columns={formColumns}
-          formLayout={sharedFormLayout}
+          formLayout={effectiveFormLayout}
           formFieldPrefs={layout.formFieldPrefs}
           gridColPrefs={layout.gridColPrefs}
           fieldTypeDefaults={hostData?.field_type_defaults}
@@ -1075,7 +1175,7 @@ export default function RecordDataView({model}) {
                     )}
                     draftValues={isRowEdit ? rowDraft : null}
                     columns={formColumns}
-                    formLayout={sharedFormLayout}
+                    formLayout={effectiveFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
                     gridColPrefs={layout.gridColPrefs}
                     fieldTypeDefaults={hostData?.field_type_defaults}
@@ -1502,8 +1602,10 @@ export default function RecordDataView({model}) {
                     style={{
                       position: 'sticky',
                       left: 0,
-                      width: `${viewportWidth}px`,
-                      maxWidth: `${viewportWidth}px`,
+                      width: `${effectiveViewportWidth}px`,
+                      maxWidth: `${effectiveViewportWidth}px`,
+                      boxSizing: 'border-box',
+                      overflow: 'hidden',
                       zIndex: 4,
                     }}
                   >
@@ -1518,7 +1620,7 @@ export default function RecordDataView({model}) {
                       )}
                       draftValues={isRowEdit ? rowDraft : null}
                       columns={formColumns}
-                      formLayout={sharedFormLayout}
+                      formLayout={effectiveFormLayout}
                       formFieldPrefs={layout.formFieldPrefs}
                       gridColPrefs={layout.gridColPrefs}
                       fieldTypeDefaults={hostData?.field_type_defaults}
@@ -1722,21 +1824,22 @@ export default function RecordDataView({model}) {
     );
   };
 
-  return conversions?.error ? (
+  return (
     <div
+      ref={outerViewRef}
+      data-cdeadmin-qa-key="record-data-view-container"
       style={{
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
         minHeight: 0,
         minWidth: 0,
+        width: '100%',
       }}
     >
-      <div role="alert">{conversions.error}</div>
+      {conversions?.error ? <div role="alert">{conversions.error}</div> : null}
       {renderDataView()}
     </div>
-  ) : (
-    renderDataView()
   );
 }
 

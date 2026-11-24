@@ -485,6 +485,7 @@ function FloatingSubFormPortal({
         height: '100%',
         width: '100%',
         minHeight: 0,
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'background.default',
@@ -493,7 +494,16 @@ function FloatingSubFormPortal({
     >
       <Box
         data-cdeadmin-qa-key={`floating-workarea-${instance.instanceId}`}
-        sx={{flex: 1, minHeight: 0, overflow: 'auto', position: 'relative'}}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'auto',
+          position: 'relative',
+        }}
       >
         <ShellSurfaceErrorBoundary
           resetKey={`${instance.instanceId}:floating`}
@@ -4218,11 +4228,18 @@ export function ProjectWorkbenchFrame({fallbackArea3 = null}) {
                       sx={{
                         flex: 1,
                         minHeight: 0,
+                        minWidth: 0,
+                        width: '100%',
+                        overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
                       }}
                     >
-                      <ScratchScrollArea fillViewport style={{flex: 1, minHeight: 0, position: 'relative'}}>
+                      <ScratchScrollArea
+                        fillViewport
+                        style={{flex: 1, minHeight: 0, minWidth: 0, width: '100%', position: 'relative'}}
+                        contentStyle={{width: '100%', minWidth: 0, maxWidth: '100%'}}
+                      >
                         <ShellSurfaceErrorBoundary
                           resetKey={`${activeDockedItem.instanceId}:work`}
                           surfaceName={activeDockedItem.title}

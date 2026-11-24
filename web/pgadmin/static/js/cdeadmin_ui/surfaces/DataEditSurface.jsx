@@ -199,41 +199,47 @@ export default function DataEditSurface({
     const el = areaRef.current;
     if (!el) return undefined;
     let rafId = null;
+    const win =
+      el.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
     const isJsdom =
       typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '');
 
     const applyWidth = (rawW) => {
       const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
       if (w > 120) {
-        setViewportWidth((prev) => (Math.abs(prev - w) >= 8 ? w : prev));
+        setViewportWidth((prev) => (Math.abs(prev - w) >= 1 ? w : prev));
       }
     };
 
     const scheduleMeasure = (entries) => {
       const entryW = entries?.[0]?.contentRect?.width;
-      if (isJsdom || typeof requestAnimationFrame !== 'function') {
+      if (isJsdom || typeof win?.requestAnimationFrame !== 'function') {
         applyWidth(entryW);
         return;
       }
       if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
+      rafId = win.requestAnimationFrame(() => {
         rafId = null;
         applyWidth(el.clientWidth || entryW);
       });
     };
 
     applyWidth(el.clientWidth);
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(scheduleMeasure);
-      ro.observe(el);
-      return () => {
-        if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(rafId);
-        }
-        ro.disconnect();
-      };
-    }
-    return undefined;
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const ro = ResizeObserverCtor ? new ResizeObserverCtor(scheduleMeasure) : null;
+    if (ro) ro.observe(el);
+    const onWinResize = () => scheduleMeasure();
+    win?.addEventListener?.('resize', onWinResize);
+    return () => {
+      if (rafId !== null && typeof win?.cancelAnimationFrame === 'function') {
+        win.cancelAnimationFrame(rafId);
+      }
+      win?.removeEventListener?.('resize', onWinResize);
+      ro?.disconnect();
+    };
   }, []);
 
   const targetResourceRef = useRef(targetResource);
@@ -366,13 +372,14 @@ export default function DataEditSurface({
     const computed = buildFormLayoutPlacements(
       formColumns,
       layout.formFieldPrefs,
-      viewportWidth - GUTTER_WIDTH - 36,
-      prevFormColsRef.current,
-      rows
+      viewportWidth - GUTTER_WIDTH - 28,
+      null,
+      rows,
+      layout.gridColPrefs
     );
     prevFormColsRef.current = computed.numCols;
     return computed;
-  }, [formColumns, layout.formFieldPrefs, rows, viewportWidth]);
+  }, [formColumns, layout.formFieldPrefs, layout.gridColPrefs, rows, viewportWidth]);
 
   const currentRow = rows[activeRowIndex] || null;
   const activeColObj = useMemo(

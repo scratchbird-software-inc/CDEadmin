@@ -500,8 +500,11 @@ export function AdaptiveRecordFormCard({
                 style={{
                   flex: isFullRow ? '1 1 100%' : `0 1 ${natWidth}px`,
                   width: isFullRow ? '100%' : `${natWidth}px`,
-                  minWidth: isFullRow ? '100%' : `${Math.min(natWidth, 84)}px`,
+                  minWidth: isFullRow
+                    ? '100%'
+                    : `min(100%, ${Math.min(natWidth, Math.max(84, fPrefs.minWidth || 84))}px)`,
                   maxWidth: '100%',
+                  boxSizing: 'border-box',
                   position: 'relative',
                   zIndex: showHint ? 45 : isSelectedField ? 5 : 1,
                   display: 'flex',

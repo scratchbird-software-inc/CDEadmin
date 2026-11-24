@@ -19,7 +19,7 @@
  *   - Keeps Area 3b/3c Right-Drawer inspection live and reactive on edit.
  */
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {useLocaleRevision} from '../actions/t_actions';
@@ -155,6 +155,38 @@ export default function RecordGrid({
   const [drawerRowIndex, setDrawerRowIndex] = useState(null);
   const [expanded, setExpanded] = useState(() => new Set());
   const [presentation, setPresentation] = useState(defaultPresentation);
+  const scrollViewportRef = useRef(null);
+  const [scrollViewportWidth, setScrollViewportWidth] = useState(0);
+
+  useEffect(() => {
+    const el = scrollViewportRef.current;
+    if (!el) return undefined;
+    const win =
+      el.ownerDocument?.defaultView ||
+      (typeof window !== 'undefined' ? window : null);
+    const applyWidth = (rawW) => {
+      const w = Math.floor(rawW || el.clientWidth || el.getBoundingClientRect?.().width || 0);
+      if (w > 80) {
+        setScrollViewportWidth((prev) => (prev !== w ? w : prev));
+      }
+    };
+    applyWidth(el.clientWidth);
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver === 'function' ? ResizeObserver : null);
+    const ro = ResizeObserverCtor
+      ? new ResizeObserverCtor((entries) => {
+        applyWidth(entries?.[0]?.contentRect?.width || el.clientWidth || 0);
+      })
+      : null;
+    if (ro) ro.observe(el);
+    const onWinResize = () => applyWidth(el.clientWidth);
+    win?.addEventListener?.('resize', onWinResize);
+    return () => {
+      win?.removeEventListener?.('resize', onWinResize);
+      ro?.disconnect();
+    };
+  }, [presentation, rows.length]);
 
   const columns = useMemo(() => resolveEffectiveColumns(field), [field]);
   const isPrimitiveStringList =
@@ -484,7 +516,7 @@ export default function RecordGrid({
       {/* (a) GRID & (b) HYBRID MODES */}
       {objectRows.length > 0 &&
         (presentation === RECORD_GRID_MODES.GRID || presentation === RECORD_GRID_MODES.HYBRID) && (
-        <ScratchScrollArea orientation="both" style={{width: '100%'}}>
+        <ScratchScrollArea orientation="both" viewportRef={scrollViewportRef} style={{width: '100%'}}>
           <Box
             component="table"
             className="sr-bui-table"
@@ -572,7 +604,21 @@ export default function RecordGrid({
                         sx={{...cellSx, bgcolor: 'var(--sr-surface-subtle)', p: 1.25}}
                         aria-label={gettext('Row %s details', index + 1)}
                       >
-                        {renderAdaptiveRowForm(row, index, expandedFields, 'record-grid-detail')}
+                        <div
+                          data-cdeadmin-qa-key={`record-grid-hybrid-wrap.${field.field_id}.${index}`}
+                          style={{
+                            position: 'sticky',
+                            left: 0,
+                            width:
+                              scrollViewportWidth > 80
+                                ? `${Math.max(160, scrollViewportWidth - 20)}px`
+                                : '100%',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box',
+                          }}
+                        >
+                          {renderAdaptiveRowForm(row, index, expandedFields, 'record-grid-detail')}
+                        </div>
                       </Box>
                     </Box>
                   ),
