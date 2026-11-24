@@ -44,6 +44,7 @@ let cdeadminServerProcess = null;
 let startPageUrl = null;
 let serverCheckUrl = null;
 let cdeadminMainScreen = null;
+let desktopServerReady = false;
 
 let configureWindow = null,
   viewLogWindow = null;
@@ -347,9 +348,9 @@ function startDesktopMode() {
     }
 
     pingInProgress = true;
-    pingServer().then(() => {
+    pingServer().then(async () => {
       pingInProgress = false;
-      splashWindow.webContents.executeJavaScript('document.getElementById(\'loader-text-status\').innerHTML = \'ScratchRobin started\';', true);
+      desktopServerReady = true;
       // Expose the CDEadmin server process to the runtime helpers.
       misc.setProcessObject(cdeadminServerProcess);
 
@@ -360,7 +361,22 @@ function startDesktopMode() {
       misc.writeServerLog('------------------------------------------');
       misc.writeServerLog('Total launch time of ScratchRobin: ' + (appEndTime - appStartTime) / 1000 + ' Sec');
       misc.writeServerLog('------------------------------------------');
-      launchCDEadminWindow();
+
+      let vaultInfo = {vault_initialized: true, engine: 'firebird-embedded'};
+      try {
+        const statusResp = await axios.get(`${baseUrl}/authenticate/vault_status?key=${UUID}`);
+        if (statusResp?.data?.data) {
+          vaultInfo = statusResp.data.data;
+        }
+      } catch (statusErr) {
+        misc.writeServerLog(`[Vault Status]: ${statusErr?.message || statusErr}`);
+      }
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.webContents.send('desktop-vault:server-ready', {
+          ready: true,
+          ...vaultInfo,
+        });
+      }
     }).catch(() => {
       pingInProgress = false;
       let curTime = (new Date).getTime();
@@ -568,6 +584,54 @@ ipcMain.handle('checkPortAvailable', async (_e, fixedPort)=>{
   }
 });
 ipcMain.handle('openConfigure', openConfigure);
+ipcMain.handle('desktop-vault:status', async () => {
+  if (!desktopServerReady) {
+    return {ready: false};
+  }
+  try {
+    const resp = await axios.get(`${baseUrl}/authenticate/vault_status?key=${UUID}`);
+    return {ready: true, ...(resp?.data?.data || {})};
+  } catch {
+    return {ready: true, vault_initialized: true};
+  }
+});
+ipcMain.handle('desktop-vault:unlock', async (_e, credentials) => {
+  if (!desktopServerReady) {
+    return {ok: false, error: 'ScratchRobin backend is still starting.'};
+  }
+  try {
+    const resp = await axios.post(
+      `${baseUrl}/authenticate/desktop_unlock?key=${UUID}`,
+      {
+        username: credentials?.username || '',
+        password: credentials?.password || '',
+        database_key: credentials?.databaseKey || credentials?.database_key || '',
+      },
+      {validateStatus: () => true}
+    );
+    if (resp.status === 200 && resp.data?.success && resp.data?.data?.ticket) {
+      const ticket = encodeURIComponent(resp.data.data.ticket);
+      startPageUrl = `${baseUrl}/authenticate/desktop_handoff?key=${UUID}&ticket=${ticket}`;
+      if (!cdeadminMainScreen || cdeadminMainScreen.isDestroyed()) {
+        launchCDEadminWindow();
+      }
+      return {ok: true, data: resp.data.data};
+    }
+    return {
+      ok: false,
+      error: resp.data?.errormsg || 'Invalid credentials or database key.',
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err?.message || 'Failed to communicate with local ScratchRobin engine.',
+    };
+  }
+});
+ipcMain.on('desktop-vault:quit', () => {
+  cleanupAutoUpdateFlag();
+  misc.cleanupAndQuitApp();
+});
 
 function workspaceWindowForSender(event) {
   const window = BrowserWindow.fromWebContents(event.sender);
@@ -676,14 +740,24 @@ ipcMain.on('workspace-window:placement', (event, details) => {
 app.whenReady().then(() => {
   splashWindow = new BrowserWindow({
     transparent: true,
-    width: 750,
-    height: 600,
+    width: 820,
+    height: 560,
     frame: false,
     movable: true,
     focusable: true,
     resizable: false,
     show: false,
     icon: '../../assets/cdeadmin.png',
+    webPreferences: {
+      preload: path.join(__dirname, 'other_preload.js'),
+    },
+  });
+
+  splashWindow.on('closed', () => {
+    if (!cdeadminMainScreen || cdeadminMainScreen.isDestroyed()) {
+      cleanupAutoUpdateFlag();
+      misc.cleanupAndQuitApp();
+    }
   });
 
   splashWindow.loadFile('./src/html/splash.html');

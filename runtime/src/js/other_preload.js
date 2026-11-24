@@ -18,4 +18,11 @@ contextBridge.exposeInMainWorld('electronUI', {
   readServerLog: ()=>ipcRenderer.invoke('readServerLog'),
   checkPortAvailable: (port)=>ipcRenderer.invoke('checkPortAvailable', port),
   openConfigure: ()=>ipcRenderer.invoke('openConfigure'),
+  getVaultStatus: () => ipcRenderer.invoke('desktop-vault:status'),
+  unlockVault: (credentials) => ipcRenderer.invoke('desktop-vault:unlock', credentials),
+  quitApp: () => ipcRenderer.send('desktop-vault:quit'),
+  onServerReadyForLogin: (callback) => {
+    ipcRenderer.removeAllListeners('desktop-vault:server-ready');
+    ipcRenderer.on('desktop-vault:server-ready', (_event, details) => callback(details));
+  },
 });

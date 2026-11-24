@@ -496,10 +496,21 @@ The audit found these functional gaps before placement review:
   tooltips, and the SQL Editor transaction, parameter-binding, Save and
   Quick Queries, fetch limits and connection details dialogs in all supported
   locales. Some secondary controls still fall back to English.
-* Shareable layout templates are managed in Data Viewer and can be applied in
-  SQL Editor through Format & Layout or the View menu. Applying a template
-  changes the current result presentation. Use the existing save commands to
-  keep the applied layout for an object or named query.
+* Shareable layout templates are managed in Data Viewer and SQL Editor and can
+  be saved or applied in both surfaces. Applying a template changes the current
+  result presentation. Use the existing save commands or the Column Display
+  Settings dialog to keep the applied layout for an object or named query.
+* DN-15 and DN-16: ``ColumnDisplaySettingsDialog.jsx``, ``RecordDataView.jsx``,
+  ``RecordForm.jsx``, and ``UnifiedDataGrid.jsx`` expose per-column font
+  (family and size), text and cell background colour, horizontal and vertical
+  alignment, text wrap mode, maximum displayed lines in wrap, minimum width and
+  maximum width (enforced across rendering, auto-fit and column drag-resize).
+  Object display layouts, shareable templates, field-type defaults, user
+  preferences, connection parameters and query/server metrics and history are
+  persisted in the AES-256-GCM encrypted ``UserConfigurationDatabase`` backed
+  by FirebirdSQL 5.0.4 Embedded (``user_configuration.fdb``), unlocked on both
+  the Electron splash screen and web sign-in form with ``User name``,
+  ``User password`` and ``Database key``.
 
 Resume and acceptance checklist
 -------------------------------

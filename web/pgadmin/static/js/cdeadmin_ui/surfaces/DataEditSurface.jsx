@@ -50,6 +50,7 @@ import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
 import FieldTypeDefaultsDialog from './FieldTypeDefaultsDialog';
+import ColumnDisplaySettingsDialog from './ColumnDisplaySettingsDialog';
 import SurfaceMetadata from './SurfaceMetadata';
 import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
@@ -63,6 +64,7 @@ import {sqlLanguageProfile} from '../editors/sqlLanguageProfiles';
 import {
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
+  clampColumnWidth,
   resolveRecordPresentation,
   SURFACE_VIEWS,
   buildFormLayoutPlacements,
@@ -266,12 +268,19 @@ export default function DataEditSurface({
       pageSize: resp.page_size || 200,
       maxRows: resp.max_rows || 1000,
     });
-    if (!layoutInitializedRef.current && resp.saved_specific_layout) {
-      layoutInitializedRef.current = true;
-      setLayout((prev) => ({...prev, ...resp.saved_specific_layout}));
-    } else if (!layoutInitializedRef.current && resp.columns?.length) {
-      layoutInitializedRef.current = true;
-      setActiveColName((cur) => cur || resp.columns[0].name);
+    const nextObjectKey = resp.object_key || '__initial__';
+    if (layoutInitializedRef.current !== nextObjectKey) {
+      layoutInitializedRef.current = nextObjectKey;
+      if (resp.saved_specific_layout) {
+        setLayout({...defaultLayoutState(), ...resp.saved_specific_layout});
+      } else {
+        setLayout(defaultLayoutState());
+      }
+      if (resp.columns?.length) {
+        setActiveColName((cur) =>
+          resp.columns.some((c) => c.name === cur) ? cur : resp.columns[0].name
+        );
+      }
     }
   }, []);
 
@@ -2079,9 +2088,13 @@ export default function DataEditSurface({
             const txt = String(r.values?.[col.name] ?? '');
             maxChars = Math.max(maxChars, Math.min(48, txt.length));
           }
+          const curColPrefs = nextPrefs[col.name] || {};
           nextPrefs[col.name] = {
-            ...(nextPrefs[col.name] || {}),
-            width: Math.max(88, Math.min(380, maxChars * 8 + 26)),
+            ...curColPrefs,
+            width: clampColumnWidth(
+              Math.max(88, Math.min(380, maxChars * 8 + 26)),
+              curColPrefs
+            ),
           };
         }
         handlersRef.current.setLayout((prev) => ({
@@ -3282,7 +3295,10 @@ export default function DataEditSurface({
               );
             }
             setColumnPref(col.name, {
-              width: Math.max(88, Math.min(400, maxChars * 8 + 26)),
+              width: clampColumnWidth(
+                Math.max(88, Math.min(400, maxChars * 8 + 26)),
+                layout.gridColPrefs[col.name] || {}
+              ),
             });
           },
         },
@@ -3299,15 +3315,24 @@ export default function DataEditSurface({
                   Math.min(50, String(r.values?.[c.name] ?? '').length)
                 );
               }
+              const curColPrefs = nextPrefs[c.name] || {};
               nextPrefs[c.name] = {
-                ...(nextPrefs[c.name] || {}),
-                width: Math.max(88, Math.min(400, maxChars * 8 + 26)),
+                ...curColPrefs,
+                width: clampColumnWidth(
+                  Math.max(88, Math.min(400, maxChars * 8 + 26)),
+                  curColPrefs
+                ),
               };
             }
             setLayout((prev) => ({...prev, gridColPrefs: nextPrefs}));
           },
         },
         {type: 'separator'},
+        {
+          label: gettext('Column Display Settings…'),
+          icon: 'action.settings',
+          callback: () => setFormatFieldName(col.name),
+        },
         {
           label: gettext('Display Format…'),
           icon: 'action.settings',
@@ -3475,6 +3500,11 @@ export default function DataEditSurface({
             }),
         },
         {
+          label: gettext('Column Display Settings…'),
+          icon: 'action.settings',
+          callback: () => setFormatFieldName(col.name),
+        },
+        {
           label: gettext('Display Format…'),
           icon: 'action.settings',
           callback: () => openRightDrawerWith({mode: 'column_format', column: col}),
@@ -3509,6 +3539,7 @@ export default function DataEditSurface({
     isEditingRow,
     layout,
     onCopySelection: copySelection,
+    onOpenColumnDisplaySettings: (colName) => setFormatFieldName(colName),
     onOpenExportSelection: () => {
       setExportFormat('csv');
       setExportDialogOpen(true);
@@ -3979,14 +4010,34 @@ export default function DataEditSurface({
       ) : renderView(surfaceView)}
 
       {formatFieldName && (
-        <FieldTypeDefaultsDialog
-          fieldName={formatFieldName}
-          types={[formatFieldName]}
-          defaults={{[formatFieldName]: layout.formFieldPrefs[formatFieldName] || {}}}
+        <ColumnDisplaySettingsDialog
+          open={Boolean(formatFieldName)}
+          columns={columns}
+          initialColumnName={formatFieldName}
+          layout={layout}
+          objectLabel={targetResource?.display_name || ''}
+          canPersistObjectLayout={Boolean(targetResource)}
+          templates={availableTemplates}
           onClose={() => setFormatFieldName(null)}
-          onSave={(values) => {
-            const {font, hAlign} = values[formatFieldName];
-            setColumnPref(formatFieldName, {font: font || undefined, hAlign: hAlign || undefined});
+          onApplyLayout={(nextLayout) => setLayout(nextLayout)}
+          onSaveObjectLayout={async (nextLayout) => {
+            await callHost('save_layout', {
+              scope: 'specific',
+              layout: nextLayout,
+            });
+          }}
+          onSaveTemplate={async (tplName, nextLayout) => {
+            await callHost('save_layout', {
+              scope: 'template',
+              template_name: tplName,
+              layout: nextLayout,
+            });
+          }}
+          onRequestTemplates={async () => {
+            const tplResp = await callHost('list_templates').catch(() => ({
+              templates: [],
+            }));
+            setAvailableTemplates(tplResp?.templates || []);
           }}
         />
       )}

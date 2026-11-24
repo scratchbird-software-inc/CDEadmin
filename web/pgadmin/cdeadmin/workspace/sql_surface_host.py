@@ -34,7 +34,6 @@ import json
 import math
 import os
 import re
-import sqlite3
 import threading
 import time
 import uuid
@@ -567,85 +566,75 @@ BUILTIN_SNIPPETS: tuple[dict[str, Any], ...] = (
 
 
 class SqlSnippetsStore:
-    """SQLite store for built-in, personal, and project-shared multi-tag SQL snippets."""
+    """Encrypted FirebirdSQL Embedded store via UserConfigurationDatabase for
+    built-in, personal, and project-shared multi-tag SQL snippets.
+    """
 
-    def __init__(self, db_path: str | Path | None = None):
-        if db_path is None:
-            try:
-                import config as pg_config
-                data_dir = getattr(pg_config, 'DATA_DIR', None)
-            except Exception:
-                data_dir = None
-            base = Path(data_dir or os.path.expanduser('~/.cdeadmin'))
-            base.mkdir(parents=True, exist_ok=True)
-            db_path = base / 'sql_snippets.db'
-        self.db_path = str(db_path)
+    def __init__(self, db_path: str | Path | Any | None = None):
+        from pgadmin.cdeadmin.user_config_db import (
+            UserConfigurationDatabase,
+            get_user_config_db,
+        )
+
         self._lock = threading.RLock()
-        self._init_schema()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute('PRAGMA foreign_keys = ON')
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS sql_snippet (
-                    snippet_id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    shortcut TEXT NOT NULL DEFAULT '',
-                    engine_id TEXT NOT NULL DEFAULT 'ansi',
-                    scope TEXT NOT NULL DEFAULT 'personal',
-                    project_id TEXT NOT NULL DEFAULT '',
-                    owner_user_id INTEGER NOT NULL DEFAULT 0,
-                    favorite INTEGER NOT NULL DEFAULT 0,
-                    sql_text TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS sql_snippet_tag (
-                    snippet_id TEXT NOT NULL REFERENCES sql_snippet(snippet_id) ON DELETE CASCADE,
-                    tag TEXT NOT NULL,
-                    PRIMARY KEY (snippet_id, tag)
-                );
-                CREATE INDEX IF NOT EXISTS idx_snippet_tag_lookup
-                    ON sql_snippet_tag(tag, snippet_id);
-                """
+        self._seeded_for_id: int | None = None
+        if isinstance(db_path, UserConfigurationDatabase):
+            self._explicit_db: UserConfigurationDatabase | None = db_path
+            self.db_path = str(db_path.db_path or db_path.dsn)
+        elif db_path is not None:
+            self._explicit_db = UserConfigurationDatabase(
+                db_path=db_path,
+                kdf_iterations=10_000,
+                auto_test_unlock_key='cdeadmin-isolated-snippets-store-key',
             )
+            self.db_path = str(self._explicit_db.db_path or self._explicit_db.dsn)
+        else:
+            self._explicit_db = None
+            default_db = get_user_config_db()
+            self.db_path = str(default_db.db_path or default_db.dsn)
+        self._get_default_db = get_user_config_db
+
+    @property
+    def _db(self):
+        return self._explicit_db if self._explicit_db is not None else self._get_default_db()
+
+    def _ensure_builtins(self) -> None:
+        db = self._db
+        if self._seeded_for_id == id(db):
+            return
+        with self._lock:
+            if self._seeded_for_id == id(db):
+                return
             now = _now_iso()
             for item in BUILTIN_SNIPPETS:
-                exists = conn.execute(
-                    'SELECT 1 FROM sql_snippet WHERE snippet_id = ?',
-                    (item['snippet_id'],),
-                ).fetchone()
-                if not exists:
-                    conn.execute(
-                        """
-                        INSERT INTO sql_snippet
-                            (snippet_id, title, description, shortcut, engine_id, scope,
-                             project_id, owner_user_id, favorite, sql_text, updated_at)
-                        VALUES (?, ?, ?, ?, ?, 'builtin', '', 0, 0, ?, ?)
-                        """,
-                        (
-                            item['snippet_id'],
-                            item['title'],
-                            item['description'],
-                            item['shortcut'],
-                            item['engine_id'],
-                            item['sql_text'],
-                            now,
-                        ),
+                sid = str(item['snippet_id'])
+                rid = f'snippet:{sid}'
+                if db.get_metrics_history_record(rid) is None:
+                    tags = [str(t).strip().lower() for t in item['tags'] if str(t).strip()]
+                    payload = {
+                        'snippet_id': sid,
+                        'title': item['title'],
+                        'description': item['description'],
+                        'shortcut': item['shortcut'],
+                        'engine_id': item['engine_id'],
+                        'scope': 'builtin',
+                        'project_id': '',
+                        'owner_user_id': 0,
+                        'favorite': False,
+                        'sql_text': item['sql_text'],
+                        'tags': sorted(set(tags)),
+                        'updated_at': now,
+                    }
+                    db.save_metrics_history_record(
+                        record_id=rid,
+                        user_id=0,
+                        record_kind='sql_snippet',
+                        engine_id=str(item['engine_id']),
+                        scope='builtin',
+                        payload=payload,
+                        updated_at=now,
                     )
-                    for tag in item['tags']:
-                        clean_tag = str(tag).strip().lower()
-                        if clean_tag:
-                            conn.execute(
-                                'INSERT OR IGNORE INTO sql_snippet_tag (snippet_id, tag) VALUES (?, ?)',
-                                (item['snippet_id'], clean_tag),
-                            )
+            self._seeded_for_id = id(db)
 
     @staticmethod
     def _normalize_tags(tags: list[str] | str | None) -> list[str]:
@@ -667,6 +656,7 @@ class SqlSnippetsStore:
         user_id: int,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+        self._ensure_builtins()
         sid = str(payload.get('snippet_id') or f'snip-{uuid.uuid4()}')
         title = str(payload.get('title') or 'Untitled Snippet').strip()[:160]
         desc = str(payload.get('description') or '').strip()[:500]
@@ -676,103 +666,82 @@ class SqlSnippetsStore:
         if scope not in ('personal', 'project', 'builtin'):
             scope = 'personal'
         project_id = str(payload.get('project_id') or '').strip()
-        favorite = 1 if payload.get('favorite') else 0
+        favorite = bool(payload.get('favorite'))
         sql_text = str(payload.get('sql_text') or '')
         tags = self._normalize_tags(payload.get('tags'))
         if engine_id and engine_id not in tags:
             tags.insert(0, engine_id)
         now = _now_iso()
 
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO sql_snippet
-                    (snippet_id, title, description, shortcut, engine_id, scope,
-                     project_id, owner_user_id, favorite, sql_text, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(snippet_id) DO UPDATE SET
-                    title = excluded.title,
-                    description = excluded.description,
-                    shortcut = excluded.shortcut,
-                    engine_id = excluded.engine_id,
-                    scope = excluded.scope,
-                    project_id = excluded.project_id,
-                    favorite = excluded.favorite,
-                    sql_text = excluded.sql_text,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    sid,
-                    title,
-                    desc,
-                    shortcut,
-                    engine_id,
-                    scope,
-                    project_id,
-                    int(user_id),
-                    favorite,
-                    sql_text,
-                    now,
-                ),
-            )
-            conn.execute('DELETE FROM sql_snippet_tag WHERE snippet_id = ?', (sid,))
-            for tag in tags:
-                conn.execute(
-                    'INSERT OR IGNORE INTO sql_snippet_tag (snippet_id, tag) VALUES (?, ?)',
-                    (sid, tag),
-                )
-        return self.get_snippet(sid) or {'snippet_id': sid}
+        record_payload = {
+            'snippet_id': sid,
+            'title': title,
+            'description': desc,
+            'shortcut': shortcut,
+            'engine_id': engine_id,
+            'scope': scope,
+            'project_id': project_id,
+            'owner_user_id': int(user_id),
+            'favorite': favorite,
+            'sql_text': sql_text,
+            'tags': sorted(set(tags)),
+            'updated_at': now,
+        }
+        self._db.save_metrics_history_record(
+            record_id=f'snippet:{sid}',
+            user_id=int(user_id),
+            record_kind='sql_snippet',
+            engine_id=engine_id,
+            scope=scope,
+            payload=record_payload,
+            updated_at=now,
+        )
+        return self.get_snippet(sid) or record_payload
 
     def get_snippet(self, snippet_id: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                'SELECT * FROM sql_snippet WHERE snippet_id = ?', (snippet_id,)
-            ).fetchone()
-            if not row:
-                return None
-            tags = [
-                r['tag']
-                for r in conn.execute(
-                    'SELECT tag FROM sql_snippet_tag WHERE snippet_id = ? ORDER BY tag ASC',
-                    (snippet_id,),
-                ).fetchall()
-            ]
+        self._ensure_builtins()
+        rec = self._db.get_metrics_history_record(f'snippet:{snippet_id}')
+        if not rec or not isinstance(rec.get('payload'), dict):
+            return None
+        p = rec['payload']
         return {
-            'snippet_id': row['snippet_id'],
-            'title': row['title'],
-            'description': row['description'],
-            'shortcut': row['shortcut'],
-            'engine_id': row['engine_id'],
-            'scope': row['scope'],
-            'project_id': row['project_id'],
-            'owner_user_id': row['owner_user_id'],
-            'favorite': bool(row['favorite']),
-            'sql_text': row['sql_text'],
-            'tags': tags,
-            'updated_at': row['updated_at'],
+            'snippet_id': str(p.get('snippet_id') or snippet_id),
+            'title': str(p.get('title') or ''),
+            'description': str(p.get('description') or ''),
+            'shortcut': str(p.get('shortcut') or ''),
+            'engine_id': str(p.get('engine_id') or 'ansi'),
+            'scope': str(p.get('scope') or 'personal'),
+            'project_id': str(p.get('project_id') or ''),
+            'owner_user_id': int(p.get('owner_user_id') or 0),
+            'favorite': bool(p.get('favorite')),
+            'sql_text': str(p.get('sql_text') or ''),
+            'tags': sorted(str(t) for t in (p.get('tags') or [])),
+            'updated_at': str(p.get('updated_at') or rec['updated_at']),
         }
 
     def delete_snippet(self, user_id: int, snippet_id: str) -> dict[str, Any]:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                "DELETE FROM sql_snippet WHERE snippet_id = ? AND scope != 'builtin'",
-                (snippet_id,),
-            )
+        self._ensure_builtins()
+        self._db.delete_metrics_history_record(
+            f'snippet:{snippet_id}', forbid_builtin=True
+        )
         return {'deleted': snippet_id}
 
     def toggle_favorite(self, user_id: int, snippet_id: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                'SELECT favorite FROM sql_snippet WHERE snippet_id = ?',
-                (snippet_id,),
-            ).fetchone()
-            if not row:
-                return None
-            next_fav = 0 if row['favorite'] else 1
-            conn.execute(
-                'UPDATE sql_snippet SET favorite = ?, updated_at = ? WHERE snippet_id = ?',
-                (next_fav, _now_iso(), snippet_id),
-            )
+        self._ensure_builtins()
+        existing = self.get_snippet(snippet_id)
+        if not existing:
+            return None
+        existing['favorite'] = not bool(existing.get('favorite'))
+        existing['updated_at'] = _now_iso()
+        self._db.save_metrics_history_record(
+            record_id=f'snippet:{snippet_id}',
+            user_id=int(existing.get('owner_user_id') or 0),
+            record_kind='sql_snippet',
+            engine_id=str(existing.get('engine_id') or 'ansi'),
+            scope=str(existing.get('scope') or 'personal'),
+            payload=existing,
+            updated_at=existing['updated_at'],
+        )
         return self.get_snippet(snippet_id)
 
     def search_snippets(
@@ -786,22 +755,20 @@ class SqlSnippetsStore:
         favorites_only: bool = False,
         include_all_engines: bool = False,
     ) -> dict[str, Any]:
-        with self._lock, self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM sql_snippet
-                WHERE scope IN ('builtin', 'project') OR owner_user_id = ?
-                ORDER BY favorite DESC, title COLLATE NOCASE ASC
-                """,
-                (int(user_id),),
-            ).fetchall()
-            tag_rows = conn.execute(
-                'SELECT snippet_id, tag FROM sql_snippet_tag ORDER BY tag ASC'
-            ).fetchall()
-
-        tags_by_id: dict[str, list[str]] = collections.defaultdict(list)
-        for tr in tag_rows:
-            tags_by_id[tr['snippet_id']].append(tr['tag'])
+        self._ensure_builtins()
+        records = self._db.list_metrics_history_records(
+            'sql_snippet',
+            user_id=int(user_id),
+            include_shared_scopes=('builtin', 'project'),
+            limit=2000,
+        )
+        rows = sorted(
+            (r['payload'] for r in records if isinstance(r.get('payload'), dict)),
+            key=lambda p: (
+                0 if bool(p.get('favorite')) else 1,
+                str(p.get('title') or '').lower(),
+            ),
+        )
 
         # Parse inline `#tag` tokens inside `search_text`
         inline_tags: list[str] = []
@@ -817,28 +784,29 @@ class SqlSnippetsStore:
 
         engine_scoped_items: list[dict[str, Any]] = []
         for r in rows:
-            item_tags = tags_by_id.get(r['snippet_id'], [])
+            item_tags = sorted(str(t) for t in (r.get('tags') or []))
+            r_eng = str(r.get('engine_id') or '')
             if (
                 not include_all_engines
                 and eng_norm
-                and r['engine_id'] not in ('ansi', '', eng_norm)
+                and r_eng not in ('ansi', '', eng_norm)
                 and eng_norm not in item_tags
             ):
                 continue
-            if favorites_only and not r['favorite']:
+            if favorites_only and not bool(r.get('favorite')):
                 continue
             engine_scoped_items.append({
-                'snippet_id': r['snippet_id'],
-                'title': r['title'],
-                'description': r['description'],
-                'shortcut': r['shortcut'],
-                'engine_id': r['engine_id'],
-                'scope': r['scope'],
-                'project_id': r['project_id'],
-                'favorite': bool(r['favorite']),
-                'sql_text': r['sql_text'],
+                'snippet_id': str(r.get('snippet_id') or ''),
+                'title': str(r.get('title') or ''),
+                'description': str(r.get('description') or ''),
+                'shortcut': str(r.get('shortcut') or ''),
+                'engine_id': r_eng,
+                'scope': str(r.get('scope') or 'personal'),
+                'project_id': str(r.get('project_id') or ''),
+                'favorite': bool(r.get('favorite')),
+                'sql_text': str(r.get('sql_text') or ''),
                 'tags': item_tags,
-                'updated_at': r['updated_at'],
+                'updated_at': str(r.get('updated_at') or ''),
             })
 
         # Compute live tag counts across the engine-eligible set
@@ -881,55 +849,41 @@ class SqlSnippetsStore:
 
 
 # ============================================================================
-# 3. Quick Queries Store (`DATA_DIR/quick_queries.db`)
+# 3. Quick Queries Store (Encrypted FirebirdSQL UserConfigurationDatabase)
 # ============================================================================
 
 
 class QuickQueryStore:
-    """Persists Quick Queries (SQL + Terminator + Parameter Defaults + Surface 1 Display Layout)."""
+    """Persists Quick Queries (SQL + Terminator + Parameter Defaults + Surface 1 Display Layout)
+    in the encrypted FirebirdSQL Embedded UserConfigurationDatabase.
+    """
 
-    def __init__(self, db_path: str | Path | None = None):
-        if db_path is None:
-            try:
-                import config as pg_config
-                data_dir = getattr(pg_config, 'DATA_DIR', None)
-            except Exception:
-                data_dir = None
-            base = Path(data_dir or os.path.expanduser('~/.cdeadmin'))
-            base.mkdir(parents=True, exist_ok=True)
-            db_path = base / 'quick_queries.db'
-        self.db_path = str(db_path)
+    def __init__(self, db_path: str | Path | Any | None = None):
+        from pgadmin.cdeadmin.user_config_db import (
+            UserConfigurationDatabase,
+            get_user_config_db,
+        )
+
         self._lock = threading.RLock()
-        self._init_schema()
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS quick_query (
-                    query_id TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    server_id INTEGER NOT NULL DEFAULT 0,
-                    database_target_id TEXT NOT NULL DEFAULT '',
-                    engine_id TEXT NOT NULL DEFAULT '',
-                    project_id TEXT NOT NULL DEFAULT '',
-                    name TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    sql_text TEXT NOT NULL,
-                    terminator TEXT NOT NULL DEFAULT ';',
-                    parameters_json TEXT NOT NULL DEFAULT '[]',
-                    display_layout_json TEXT NOT NULL DEFAULT '{}',
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_quick_query_db
-                    ON quick_query(user_id, server_id, database_target_id);
-                """
+        if isinstance(db_path, UserConfigurationDatabase):
+            self._explicit_db: UserConfigurationDatabase | None = db_path
+            self.db_path = str(db_path.db_path or db_path.dsn)
+        elif db_path is not None:
+            self._explicit_db = UserConfigurationDatabase(
+                db_path=db_path,
+                kdf_iterations=10_000,
+                auto_test_unlock_key='cdeadmin-isolated-quick-query-store-key',
             )
+            self.db_path = str(self._explicit_db.db_path or self._explicit_db.dsn)
+        else:
+            self._explicit_db = None
+            default_db = get_user_config_db()
+            self.db_path = str(default_db.db_path or default_db.dsn)
+        self._get_default_db = get_user_config_db
+
+    @property
+    def _db(self):
+        return self._explicit_db if self._explicit_db is not None else self._get_default_db()
 
     def save_quick_query(self, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         qid = str(payload.get('query_id') or f'qq-{uuid.uuid4()}')
@@ -941,77 +895,74 @@ class QuickQueryStore:
         project_id = str(payload.get('project_id') or '')
         sql_text = str(payload.get('sql_text') or '')
         terminator = str(payload.get('terminator') or ';').strip() or ';'
-        params_json = json.dumps(payload.get('parameters') or [], ensure_ascii=False)
-        layout_json = json.dumps(
-            payload.get('display_layout') or {}, ensure_ascii=False, sort_keys=True
-        )
+        params_list = list(payload.get('parameters') or [])
+        display_layout = dict(payload.get('display_layout') or {})
         now = _now_iso()
 
-        with self._lock, self._connect() as conn:
-            result = conn.execute(
-                """
-                INSERT INTO quick_query
-                    (query_id, user_id, server_id, database_target_id, engine_id, project_id,
-                     name, description, sql_text, terminator, parameters_json, display_layout_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(query_id) DO UPDATE SET
-                    name = excluded.name,
-                    description = excluded.description,
-                    sql_text = excluded.sql_text,
-                    terminator = excluded.terminator,
-                    parameters_json = excluded.parameters_json,
-                    display_layout_json = excluded.display_layout_json,
-                    updated_at = excluded.updated_at
-                WHERE quick_query.user_id = excluded.user_id
-                  AND quick_query.server_id = excluded.server_id
-                  AND quick_query.database_target_id = excluded.database_target_id
-                """,
-                (
-                    qid,
-                    int(user_id),
-                    server_id,
-                    db_target,
-                    engine_id,
-                    project_id,
-                    name,
-                    desc,
-                    sql_text,
-                    terminator,
-                    params_json,
-                    layout_json,
-                    now,
-                ),
+        rid = f'quick_query:{qid}'
+        with self._lock:
+            existing = self._db.get_metrics_history_record(rid)
+            if existing is not None:
+                ex_payload = existing.get('payload') or {}
+                if (
+                    int(ex_payload.get('user_id', existing.get('user_id', -1))) != int(user_id)
+                    or int(ex_payload.get('server_id', existing.get('server_id', 0))) != server_id
+                    or str(ex_payload.get('database_target_id', existing.get('database_target_id', '')))
+                    != db_target
+                ):
+                    raise ValueError('The saved query is unavailable in this database.')
+
+            record_payload = {
+                'query_id': qid,
+                'user_id': int(user_id),
+                'server_id': server_id,
+                'database_target_id': db_target,
+                'engine_id': engine_id,
+                'project_id': project_id,
+                'name': name,
+                'description': desc,
+                'sql_text': sql_text,
+                'terminator': terminator,
+                'parameters': params_list,
+                'display_layout': display_layout,
+                'updated_at': now,
+            }
+            self._db.save_metrics_history_record(
+                record_id=rid,
+                user_id=int(user_id),
+                record_kind='quick_query',
+                server_id=server_id,
+                database_target_id=db_target,
+                engine_id=engine_id,
+                payload=record_payload,
+                updated_at=now,
             )
-            if not result.rowcount:
-                raise ValueError('The saved query is unavailable in this database.')
-        return self.get_quick_query(qid, user_id=int(user_id)) or {'query_id': qid}
+        return self.get_quick_query(qid, user_id=int(user_id)) or record_payload
 
-    def get_quick_query(self, query_id: str, *, user_id: int | None = None) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            r = conn.execute(
-                'SELECT * FROM quick_query WHERE query_id = ? '
-                'AND (? IS NULL OR user_id = ?)', (query_id, user_id, user_id)
-            ).fetchone()
-        if not r:
+    def get_quick_query(
+        self, query_id: str, *, user_id: int | None = None
+    ) -> dict[str, Any] | None:
+        rec = self._db.get_metrics_history_record(f'quick_query:{query_id}')
+        if not rec or not isinstance(rec.get('payload'), dict):
             return None
-        return self._row_to_dict(r)
-
-    @staticmethod
-    def _row_to_dict(r: sqlite3.Row) -> dict[str, Any]:
+        p = rec['payload']
+        owner = int(p.get('user_id', rec.get('user_id', 0)))
+        if user_id is not None and owner != int(user_id):
+            return None
         return {
-            'query_id': r['query_id'],
-            'user_id': r['user_id'],
-            'server_id': r['server_id'],
-            'database_target_id': r['database_target_id'],
-            'engine_id': r['engine_id'],
-            'project_id': r['project_id'],
-            'name': r['name'],
-            'description': r['description'],
-            'sql_text': r['sql_text'],
-            'terminator': r['terminator'],
-            'parameters': json.loads(r['parameters_json'] or '[]'),
-            'display_layout': json.loads(r['display_layout_json'] or '{}'),
-            'updated_at': r['updated_at'],
+            'query_id': str(p.get('query_id') or query_id),
+            'user_id': owner,
+            'server_id': int(p.get('server_id') or 0),
+            'database_target_id': str(p.get('database_target_id') or ''),
+            'engine_id': str(p.get('engine_id') or ''),
+            'project_id': str(p.get('project_id') or ''),
+            'name': str(p.get('name') or ''),
+            'description': str(p.get('description') or ''),
+            'sql_text': str(p.get('sql_text') or ''),
+            'terminator': str(p.get('terminator') or ';'),
+            'parameters': list(p.get('parameters') or []),
+            'display_layout': dict(p.get('display_layout') or {}),
+            'updated_at': str(p.get('updated_at') or rec['updated_at']),
         }
 
     def list_quick_queries(
@@ -1020,28 +971,40 @@ class QuickQueryStore:
         server_id: int | None = None,
         database_target_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        clauses = ['user_id = ?']
-        args: list[Any] = [int(user_id)]
-        if server_id is not None:
-            clauses.append('(server_id = ? OR server_id = 0)')
-            args.append(int(server_id))
-        if database_target_id:
-            clauses.append("(database_target_id = ? OR database_target_id = '')")
-            args.append(str(database_target_id))
-        where_sql = ' AND '.join(clauses)
-        with self._lock, self._connect() as conn:
-            rows = conn.execute(
-                f'SELECT * FROM quick_query WHERE {where_sql} ORDER BY name COLLATE NOCASE ASC',
-                tuple(args),
-            ).fetchall()
-        return [self._row_to_dict(r) for r in rows]
+        records = self._db.list_metrics_history_records(
+            'quick_query',
+            user_id=int(user_id),
+            server_id=server_id,
+            database_target_id=database_target_id,
+            limit=1000,
+        )
+        items: list[dict[str, Any]] = []
+        for rec in records:
+            p = rec.get('payload')
+            if not isinstance(p, dict):
+                continue
+            items.append({
+                'query_id': str(p.get('query_id') or ''),
+                'user_id': int(p.get('user_id', rec.get('user_id', 0))),
+                'server_id': int(p.get('server_id') or 0),
+                'database_target_id': str(p.get('database_target_id') or ''),
+                'engine_id': str(p.get('engine_id') or ''),
+                'project_id': str(p.get('project_id') or ''),
+                'name': str(p.get('name') or ''),
+                'description': str(p.get('description') or ''),
+                'sql_text': str(p.get('sql_text') or ''),
+                'terminator': str(p.get('terminator') or ';'),
+                'parameters': list(p.get('parameters') or []),
+                'display_layout': dict(p.get('display_layout') or {}),
+                'updated_at': str(p.get('updated_at') or rec['updated_at']),
+            })
+        items.sort(key=lambda item: item['name'].lower())
+        return items
 
     def delete_quick_query(self, user_id: int, query_id: str) -> dict[str, Any]:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                'DELETE FROM quick_query WHERE query_id = ? AND user_id = ?',
-                (query_id, int(user_id)),
-            )
+        existing = self.get_quick_query(query_id, user_id=int(user_id))
+        if existing is not None:
+            self._db.delete_metrics_history_record(f'quick_query:{query_id}')
         return {'deleted': query_id}
 
 
@@ -3502,6 +3465,22 @@ class SqlSurfaceHostService:
                 engine_id=eng,
                 parameter_shape=str(request.get('parameter_shape') or 'array'),
             )
+            try:
+                stored_hist = self.layout_store._db.list_metrics_history_records(
+                    'query_history',
+                    user_id=user_id,
+                    server_id=server_id,
+                    database_target_id=state.database_target_id,
+                    limit=50,
+                )
+                if stored_hist:
+                    state.query_history = [
+                        dict(item['payload'])
+                        for item in reversed(stored_hist)
+                        if isinstance(item.get('payload'), dict)
+                    ]
+            except Exception:
+                pass
             self._surfaces[surface_id] = state
             while len(self._surfaces) > 48:
                 self._surfaces.popitem(last=False)
@@ -4986,6 +4965,17 @@ class SqlSurfaceHostService:
 
         if sub_action == 'list_templates':
             return {'templates': self.layout_store.list_templates('data-edit-surface')}
+        if sub_action == 'save_template':
+            layout = request.get('layout')
+            if not isinstance(layout, dict):
+                raise ValueError('A layout template must be a mapping.')
+            return self.layout_store.save_template(
+                user_id,
+                'data-edit-surface',
+                str(request.get('template_name') or 'Custom Data Layout'),
+                layout,
+                description=str(request.get('description') or ''),
+            )
 
         if sub_action == 'get_field_type_defaults':
             return {'field_type_defaults': self.layout_store.get_field_type_defaults(user_id)}
@@ -5655,14 +5645,29 @@ class SqlSurfaceHostService:
                 if new_results or not (had_error or cancelled):
                     surface.result_sets = new_results
                     surface.active_result_index = 0
-                surface.query_history.append({
+                hist_entry = {
                     'id': f'qh-{len(surface.query_history) + 1}',
                     'timestamp': _now_iso(),
                     'mode': exec_mode,
                     'sql': selected_sql or surface.sql_source,
                     'elapsed_ms': round(total_ms, 2),
                     'result_sets': len(new_results),
-                })
+                }
+                surface.query_history.append(hist_entry)
+                if not req_hist_sensitive:
+                    try:
+                        self.layout_store._db.save_metrics_history_record(
+                            record_id=f'qhist:{uuid.uuid4()}',
+                            user_id=user_id,
+                            record_kind='query_history',
+                            server_id=surface.server_id,
+                            database_target_id=str(surface.database_target_id or ''),
+                            engine_id=str(surface.engine_id or ''),
+                            payload=hist_entry,
+                            updated_at=hist_entry['timestamp'],
+                        )
+                    except Exception:
+                        pass
 
                 if surface.session_id and hasattr(workspace_service, 'transaction'):
                     try:

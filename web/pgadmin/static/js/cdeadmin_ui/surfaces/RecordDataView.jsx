@@ -25,11 +25,15 @@ import {
 import {AdaptiveRecordFormCard} from './RecordForm';
 import {
   FIELD_FONTS,
+  FIELD_FONT_SIZES,
   DISPLAY_MODES,
+  clampColumnWidth,
   formatCellValue,
   formatColumnCommentHint,
   inferColumnMeta,
   isComplexOrOversizedCell,
+  resolveColumnWidthBounds,
+  resolveEffectiveColumnPrefs,
   serializeValueForEdit,
 } from './dataEditSurfaceHelpers';
 
@@ -319,20 +323,26 @@ export default function RecordDataView({model}) {
 
         {gridColumns.map((col) => {
           const nativeMeta = inferColumnMeta(col);
-          const cPrefs = {
-            ...hostData?.field_type_defaults?.[nativeMeta.clientType],
-            ...layout.gridColPrefs[col.name],
-            font:
-              layout.gridColPrefs[col.name]?.font ||
-              hostData?.field_type_defaults?.[nativeMeta.clientType]?.font,
-            hAlign:
-              layout.gridColPrefs[col.name]?.hAlign ||
-              hostData?.field_type_defaults?.[nativeMeta.clientType]?.hAlign,
-          };
-          const w = cPrefs.width || DEFAULT_COL_WIDTH;
+          const cPrefs = resolveEffectiveColumnPrefs(
+            col,
+            layout.gridColPrefs,
+            hostData?.field_type_defaults,
+            layout.formFieldPrefs
+          );
+          const w = clampColumnWidth(cPrefs.width, cPrefs, DEFAULT_COL_WIDTH);
           const hAlign = cPrefs.hAlign || nativeMeta.defaultAlignment || 'left';
           const vAlign = cPrefs.vAlign || 'middle';
           const wrapMode = cPrefs.wrapMode || 'none';
+          const rawMaxLines = Number(cPrefs.maxWrapLines);
+          const hasMaxWrapLines =
+            Number.isFinite(rawMaxLines) && rawMaxLines >= 1;
+          const effectiveClampLines =
+            wrapMode === 'clamp'
+              ? Math.max(1, Math.min(50, hasMaxWrapLines ? Math.round(rawMaxLines) : 3))
+              : wrapMode === 'wrap' && hasMaxWrapLines
+                ? Math.max(1, Math.min(50, Math.round(rawMaxLines)))
+                : null;
+          const fontSizeCss = FIELD_FONT_SIZES[cPrefs.fontSize] || '0.8125rem';
           const isPinned = Boolean(cPrefs.pinned);
           const stickyLeft = isPinned ? pinnedLeftAcc : undefined;
           if (isPinned) pinnedLeftAcc += w;
@@ -402,6 +412,8 @@ export default function RecordDataView({model}) {
               'linear-gradient(rgba(2, 132, 199, 0.20), rgba(2, 132, 199, 0.20)), var(--sr-surface-card, #ffffff)';
           } else if (showSelectionFill) {
             cellBg = 'var(--sr-grid-cell-selected, rgba(2, 132, 199, 0.18))';
+          } else if (cPrefs.bgColor) {
+            cellBg = cPrefs.bgColor;
           } else if (isPinned) {
             cellBg = 'var(--sr-surface-card)';
           }
@@ -895,10 +907,11 @@ export default function RecordDataView({model}) {
                       padding: '0 5px',
                       border: 'none',
                       outline: 'none',
-                      background: 'var(--sr-surface-card)',
-                      color: 'inherit',
+                      background: cPrefs.bgColor || 'var(--sr-surface-card)',
+                      color: cPrefs.color || 'inherit',
                       textAlign: hAlign,
-                      fontSize: '0.8125rem',
+                      fontFamily: FIELD_FONTS[cPrefs.font],
+                      fontSize: fontSizeCss,
                     }}
                   />
                   {showInlineHint && (
@@ -939,20 +952,36 @@ export default function RecordDataView({model}) {
                 </>
               ) : (
                 <span
+                  data-col-wrap-mode={wrapMode}
+                  data-col-max-lines={
+                    effectiveClampLines !== null ? String(effectiveClampLines) : undefined
+                  }
                   style={{
                     width: '100%',
-                    fontSize: '0.8125rem',
+                    fontSize: fontSizeCss,
+                    lineHeight: wrapMode !== 'none' ? 1.35 : undefined,
                     color: formatted.isNull
                       ? 'var(--sr-text-muted, #64748b)'
-                      : 'inherit',
+                      : cPrefs.color || 'inherit',
                     fontStyle: formatted.isNull ? 'italic' : 'normal',
-                    whiteSpace: wrapMode === 'none' ? 'nowrap' : 'normal',
-                    overflow: 'hidden',
+                    whiteSpace: wrapMode === 'none' ? 'nowrap' : 'pre-wrap',
+                    overflow:
+                      wrapMode === 'wrap' && effectiveClampLines === null
+                        ? 'visible'
+                        : 'hidden',
                     textOverflow: wrapMode === 'none' ? 'ellipsis' : 'clip',
-                    display: wrapMode === 'clamp' ? '-webkit-box' : 'block',
-                    WebkitLineClamp: wrapMode === 'clamp' ? 3 : undefined,
+                    display:
+                      effectiveClampLines !== null ? '-webkit-box' : 'block',
+                    WebkitLineClamp:
+                      effectiveClampLines !== null
+                        ? effectiveClampLines
+                        : undefined,
                     WebkitBoxOrient:
-                      wrapMode === 'clamp' ? 'vertical' : undefined,
+                      effectiveClampLines !== null ? 'vertical' : undefined,
+                    maxHeight:
+                      effectiveClampLines !== null
+                        ? `${(effectiveClampLines * 1.35).toFixed(2)}em`
+                        : undefined,
                     wordBreak: wrapMode !== 'none' ? 'break-word' : undefined,
                   }}
                 >
@@ -987,6 +1016,7 @@ export default function RecordDataView({model}) {
           columns={formColumns}
           formLayout={sharedFormLayout}
           formFieldPrefs={layout.formFieldPrefs}
+          gridColPrefs={layout.gridColPrefs}
           fieldTypeDefaults={hostData?.field_type_defaults}
           conversions={conversions}
           booleanFormat={layout.booleanFormat}
@@ -1047,6 +1077,7 @@ export default function RecordDataView({model}) {
                     columns={formColumns}
                     formLayout={sharedFormLayout}
                     formFieldPrefs={layout.formFieldPrefs}
+                    gridColPrefs={layout.gridColPrefs}
                     fieldTypeDefaults={hostData?.field_type_defaults}
                     conversions={conversions}
                     booleanFormat={layout.booleanFormat}
@@ -1199,8 +1230,15 @@ export default function RecordDataView({model}) {
             </div>
 
             {gridColumns.map((col) => {
-              const cPrefs = layout.gridColPrefs[col.name] || {};
-              const w = cPrefs.width || DEFAULT_COL_WIDTH;
+              const cPrefs = resolveEffectiveColumnPrefs(
+                col,
+                layout.gridColPrefs,
+                hostData?.field_type_defaults,
+                layout.formFieldPrefs
+              );
+              const {minWidth: colMinW, maxWidth: colMaxW} =
+                resolveColumnWidthBounds(cPrefs);
+              const w = clampColumnWidth(cPrefs.width, cPrefs, DEFAULT_COL_WIDTH);
               const isPinned = Boolean(cPrefs.pinned);
               const stickyLeft = isPinned ? headerPinnedAcc : undefined;
               if (isPinned) headerPinnedAcc += w;
@@ -1223,6 +1261,8 @@ export default function RecordDataView({model}) {
                   key={col.name}
                   role="columnheader"
                   data-grid-col-header={col.name}
+                  data-col-min-width={colMinW}
+                  data-col-max-width={colMaxW}
                   data-col-selected={isColSelected ? 'true' : undefined}
                   aria-selected={isColSelected || undefined}
                   aria-sort={
@@ -1417,8 +1457,8 @@ export default function RecordDataView({model}) {
                         const startW = w;
                         const onMove = (me) => {
                           const nextW = Math.max(
-                            64,
-                            Math.min(680, startW + (me.clientX - startX))
+                            colMinW,
+                            Math.min(colMaxW, startW + (me.clientX - startX))
                           );
                           setColumnPref(col.name, {width: nextW});
                         };
@@ -1480,6 +1520,7 @@ export default function RecordDataView({model}) {
                       columns={formColumns}
                       formLayout={sharedFormLayout}
                       formFieldPrefs={layout.formFieldPrefs}
+                      gridColPrefs={layout.gridColPrefs}
                       fieldTypeDefaults={hostData?.field_type_defaults}
                       conversions={conversions}
                       booleanFormat={layout.booleanFormat}
@@ -1602,6 +1643,16 @@ export default function RecordDataView({model}) {
                         {}
                       ),
                   },
+                  ...(typeof model.onOpenColumnDisplaySettings === 'function'
+                    ? [
+                      {
+                        id: 'col_display_settings',
+                        label: gettext('Column Display Settings…'),
+                        action: () =>
+                          model.onOpenColumnDisplaySettings(gridMenu.colName),
+                      },
+                    ]
+                    : []),
                 ]
                 : []),
               {

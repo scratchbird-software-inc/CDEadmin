@@ -59,10 +59,73 @@ export function normalizeUuidText(raw) {
 }
 
 export const FIELD_FONTS = {
+  system:
+    'var(--sr-font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif)',
   mono: 'var(--sr-font-mono, monospace)',
-  sans: 'sans-serif',
-  serif: 'serif',
+  sans: 'Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  serif: 'Georgia, Cambria, "Times New Roman", Times, serif',
 };
+
+export const FIELD_FONT_SIZES = {
+  xs: '0.75rem',
+  sm: '0.8125rem',
+  md: '0.875rem',
+  lg: '0.95rem',
+};
+
+export const DEFAULT_MIN_COL_WIDTH = 64;
+export const DEFAULT_MAX_COL_WIDTH = 680;
+
+export function resolveColumnWidthBounds(cPrefs = {}) {
+  const rawMin = Number(cPrefs?.minWidth);
+  const rawMax = Number(cPrefs?.maxWidth);
+  const minWidth =
+    Number.isFinite(rawMin) && rawMin >= 32
+      ? Math.min(1600, Math.round(rawMin))
+      : DEFAULT_MIN_COL_WIDTH;
+  let maxWidth =
+    Number.isFinite(rawMax) && rawMax >= 48
+      ? Math.min(3200, Math.round(rawMax))
+      : DEFAULT_MAX_COL_WIDTH;
+  if (maxWidth < minWidth) maxWidth = minWidth;
+  return {minWidth, maxWidth};
+}
+
+export function clampColumnWidth(rawWidth, cPrefs = {}, fallbackWidth = 148) {
+  const {minWidth, maxWidth} = resolveColumnWidthBounds(cPrefs);
+  const base =
+    Number.isFinite(Number(rawWidth)) && Number(rawWidth) > 0
+      ? Number(rawWidth)
+      : fallbackWidth;
+  return Math.max(minWidth, Math.min(maxWidth, Math.round(base)));
+}
+
+/**
+ * DN-16 property-by-property precedence resolver across all per-column display settings:
+ * 1. Explicit column/field setting in layout
+ * 2. Field-type default
+ * 3. Application / column metadata default
+ */
+export function resolveEffectiveColumnPrefs(
+  col,
+  colPrefsMap,
+  fieldTypeDefaults,
+  secondaryPrefsMap = null
+) {
+  const meta = inferColumnMeta(col);
+  const typeDef = fieldTypeDefaults?.[meta.clientType] || {};
+  const secondary = secondaryPrefsMap?.[col?.name] || {};
+  const primary = colPrefsMap?.[col?.name] || {};
+  const merged = {...typeDef};
+  for (const src of [secondary, primary]) {
+    for (const [k, v] of Object.entries(src)) {
+      if (v !== undefined && v !== null && v !== '') {
+        merged[k] = v;
+      }
+    }
+  }
+  return merged;
+}
 
 export function inferColumnMeta(col = {}) {
   if (col.client_type) {
@@ -120,6 +183,9 @@ export function isComplexOrOversizedCell(value, colMeta, colPrefs = {}) {
   if (colMeta.isComplex) return true;
   if (typeof value === 'object') return true;
   const str = String(value);
+  if (colPrefs.wrapMode === 'wrap' || colPrefs.wrapMode === 'clamp') {
+    return str.length > 8192;
+  }
   return str.length > 512 || str.includes('\n');
 }
 
@@ -278,9 +344,25 @@ export function coerceEditedValue(rawInput, col, colMeta = inferColumnMeta(col))
  * Estimate a tight, content- and datatype-adaptive pixel width for a form field
  * so Mini-Forms, Hybrid, and Single Form pack fields efficiently without wasted width.
  */
-export function estimateAdaptiveColumnWidthPx(col, meta, sampleRows = null, explicitWidthPx = null) {
+export function estimateAdaptiveColumnWidthPx(
+  col,
+  meta,
+  sampleRows = null,
+  explicitWidthPx = null,
+  minWidthPx = null,
+  maxWidthPx = null
+) {
+  const lo =
+    typeof minWidthPx === 'number' && Number.isFinite(minWidthPx) && minWidthPx >= 32
+      ? Math.min(1600, Math.round(minWidthPx))
+      : 84;
+  const hiRaw =
+    typeof maxWidthPx === 'number' && Number.isFinite(maxWidthPx) && maxWidthPx >= 48
+      ? Math.min(3200, Math.round(maxWidthPx))
+      : 420;
+  const hi = Math.max(lo, hiRaw);
   if (typeof explicitWidthPx === 'number' && Number.isFinite(explicitWidthPx) && explicitWidthPx > 0) {
-    return Math.round(explicitWidthPx);
+    return Math.max(lo, Math.min(hi, Math.round(explicitWidthPx)));
   }
   const colName = String(col?.name || '');
   const native = String(col?.native_type || '').toUpperCase();
@@ -341,7 +423,7 @@ export function estimateAdaptiveColumnWidthPx(col, meta, sampleRows = null, expl
     dataNeedPx = targetChars * 7.5 + 24;
   }
 
-  return Math.round(Math.max(84, Math.min(420, Math.max(headerNeedPx, dataNeedPx))));
+  return Math.round(Math.max(lo, Math.min(hi, Math.max(headerNeedPx, dataNeedPx))));
 }
 
 /**
@@ -354,13 +436,15 @@ export function buildFormLayoutPlacements(
   formFieldPrefs,
   availableWidth,
   prevNumCols = null,
-  sampleRows = null
+  sampleRows = null,
+  gridColPrefs = null
 ) {
   const adaptiveWidths = {};
   const safeFormPrefs = formFieldPrefs || {};
+  const safeGridPrefs = gridColPrefs || {};
   const descriptors = (columns || []).map((col) => {
     const meta = inferColumnMeta(col);
-    const prefs = safeFormPrefs[col.name] || {};
+    const prefs = {...(safeGridPrefs[col.name] || {}), ...(safeFormPrefs[col.name] || {})};
     let control = 'text';
     if (prefs.inlineBox) {
       control = 'multiline';
@@ -375,7 +459,9 @@ export function buildFormLayoutPlacements(
       col,
       meta,
       sampleRows,
-      prefs.widthPx
+      prefs.widthPx || prefs.width,
+      prefs.minWidth,
+      prefs.maxWidth
     );
     adaptiveWidths[col.name] = adaptiveW;
     return {

@@ -57,6 +57,7 @@ import SurfaceDisplayAreas from './SurfaceDisplayAreas';
 import {displayAreaControl, presentationChoices} from './displayAreaControls';
 import SurfaceInformation from './SurfaceInformation';
 import FieldTypeDefaultsDialog from './FieldTypeDefaultsDialog';
+import ColumnDisplaySettingsDialog from './ColumnDisplaySettingsDialog';
 import SurfaceMetadata from './SurfaceMetadata';
 import {convertRecordField, recordConversionPair, useRecordConversions} from './recordConversions';
 import ColumnOrderDialog from './RecordColumnOrderDialog';
@@ -4455,6 +4456,7 @@ export default function SqlEditorSurface({
         navigator.clipboard?.writeText?.(text).catch(()=>{});
       }},
       {id:'sep_col',separator:true},
+      {id:'col_display',label:gettext('Column Display Settings…'),onSelect:()=>setFormatFieldName(col.name)},
       {id:'columns',label:gettext('Visible Columns & Field Order…'),onSelect:()=>{setColumnPickerScope('grid');setColPickerOpen(true);}},
       {id:'freeze',label:gettext('Freeze / Unfreeze Column'),onSelect:()=>setRecordColumnPref(col.name,{pinned:!layout.gridColPrefs[col.name]?.pinned})},
       {id:'filter',label:gettext('Filter Options…'),onSelect:()=>openRightDrawerWith({panel:'filter_builder',filterColumn:col.name})},
@@ -4488,7 +4490,7 @@ export default function SqlEditorSurface({
     }
     items.push({
       id: 'field_format',
-      label: gettext('Font & Alignment…'),
+      label: gettext('Column Display Settings…'),
       onSelect: () => setFormatFieldName(column.name),
     });
     if (inferColumnMeta(column).clientType === 'text') {
@@ -4522,6 +4524,7 @@ export default function SqlEditorSurface({
     isEditingRow,
     layout,
     onCopySelection: copySqlSelection,
+    onOpenColumnDisplaySettings: (colName) => setFormatFieldName(colName),
     onOpenExportSelection: () => {
       setExportInitialFormat('csv');
       setExportDialogOpen(true);
@@ -5078,14 +5081,38 @@ export default function SqlEditorSurface({
 
       {/* Right-Click Context Menu */}
       {formatFieldName && (
-        <FieldTypeDefaultsDialog
-          fieldName={formatFieldName}
-          types={[formatFieldName]}
-          defaults={{[formatFieldName]: layout.formFieldPrefs[formatFieldName] || {}}}
+        <ColumnDisplaySettingsDialog
+          open={Boolean(formatFieldName)}
+          columns={columns}
+          initialColumnName={formatFieldName}
+          layout={layout}
+          objectLabel={
+            hostData?.active_result?.target_resource?.display_name || sqlTableName || ''
+          }
+          canPersistObjectLayout={Boolean(hostData?.object_layout_key)}
+          templates={availableTemplates || []}
           onClose={() => setFormatFieldName(null)}
-          onSave={(values) => {
-            const {font, hAlign} = values[formatFieldName];
-            setRecordColumnPref(formatFieldName, {font: font || undefined, hAlign: hAlign || undefined});
+          onApplyLayout={(nextLayout) => {
+            setLayout(nextLayout);
+          }}
+          onSaveObjectLayout={async (nextLayout) => {
+            if (hostData?.object_layout_key) {
+              await callHost('save_object_layout', {
+                object_layout_key: hostData.object_layout_key,
+                layout: nextLayout,
+              });
+            }
+          }}
+          onSaveTemplate={async (tplName, nextLayout) => {
+            await callHost('save_template', {
+              template_name: tplName,
+              layout: nextLayout,
+            });
+          }}
+          onRequestTemplates={() => {
+            callHost('list_templates')
+              .then((resp) => setAvailableTemplates(resp?.templates || []))
+              .catch(() => {});
           }}
         />
       )}

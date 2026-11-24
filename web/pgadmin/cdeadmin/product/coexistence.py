@@ -126,6 +126,9 @@ def isolated_profile(profile, environment=None, home=None, identity=None):
         'LOG_FILE': _join(logs, 'cdeadmin.log', windows=windows),
         'RUNTIME_DIR': directories['runtime'],
         'SQLITE_PATH': _join(data, common['database'], windows=windows),
+        'USER_CONFIGURATION_DATABASE_PATH': _join(
+            data, 'user_configuration.fdb', windows=windows
+        ),
         'CDEADMIN_OPERATION_STORE_PATH': _join(
             data, 'cdeadmin-operations.json', windows=windows
         ),

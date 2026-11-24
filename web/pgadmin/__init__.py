@@ -634,6 +634,11 @@ def create_app(app_name=None):
     )
     from pgadmin.cdeadmin.workspace import init_app as init_cde_workspace
     from pgadmin.cdeadmin.ui_descriptors import init_app as init_cde_ui_descriptors
+    from pgadmin.cdeadmin.user_config_db import (
+        get_user_config_db,
+        init_user_config_db_app,
+    )
+    init_user_config_db_app(app)
     cde_security = init_cde_security(app)
     cde_registry = init_cdeadmin(app, cde_security.secrets)
     driver.init_app(app)
@@ -862,6 +867,8 @@ def create_app(app_name=None):
 
         # remove key
         current_app.keyManager.reset()
+        if not config.SERVER_MODE:
+            get_user_config_db().lock()
 
     ##########################################################################
     # Load plugin modules
@@ -927,11 +934,35 @@ def create_app(app_name=None):
         ):
             abort(401)
 
-        if not config.SERVER_MODE and not current_user.is_authenticated:
+        require_ucfg_login = app.config.get(
+            'USER_CONFIG_LOGIN_REQUIRED',
+            os.environ.get('PGADMIN_TESTING_MODE') != '1',
+        )
+
+        if require_ucfg_login:
+            ucfg = get_user_config_db()
+            if (
+                current_user.is_authenticated
+                and not ucfg.is_unlocked()
+                and request.endpoint not in (
+                    'security.login',
+                    'security.logout',
+                    'authenticate.login',
+                    'authenticate.vault_status',
+                    'authenticate.desktop_unlock',
+                    'authenticate.desktop_handoff',
+                    'misc.ping',
+                )
+            ):
+                logout_user()
+            elif (
+                current_user.is_authenticated
+                and ucfg.is_unlocked()
+                and current_app.keyManager.get() is None
+            ):
+                current_app.keyManager.set(ucfg.derived_session_crypt_key())
+        elif not config.SERVER_MODE and not current_user.is_authenticated:
             user = user_datastore.find_user(email=config.DESKTOP_USER)
-            # Throw an error if we failed to find the desktop user, to give
-            # the sysadmin a hint. We'll continue to try to login anyway as
-            # that'll through a nice 500 error for us.
             if user is None:
                 app.logger.error(
                     'The desktop user %s was not found in the configuration '
@@ -944,10 +975,7 @@ def create_app(app_name=None):
                 request.endpoint in ('redirects.index', 'security.login') and \
                 app.PGADMIN_EXTERNAL_AUTH_SOURCE in [KERBEROS, WEBSERVER]:
             return authenticate.login()
-        # if the server is restarted the in memory key will be lost
-        # but the user session may still be active. Logout the user
-        # to get the key again when login
-        if config.SERVER_MODE and current_user.is_authenticated and \
+        elif config.SERVER_MODE and current_user.is_authenticated and \
             'auth_source_manager' in session and \
             session['auth_source_manager']['current_source'] not in \
             [KERBEROS, OAUTH2, WEBSERVER] and \
@@ -1047,11 +1075,14 @@ def create_app(app_name=None):
         except OSError:
             react_bundle_mtime = 0
 
+        ucfg = get_user_config_db()
         return {
             'current_app': current_app,
             'current_blueprint': current_blueprint,
             'theme_css_mtime': theme_css_mtime,
             'react_bundle_mtime': react_bundle_mtime,
+            'user_config_vault_initialized': ucfg.is_vault_initialized(),
+            'user_config_vault_engine': ucfg.engine_name,
         }
 
     @app.errorhandler(Exception)

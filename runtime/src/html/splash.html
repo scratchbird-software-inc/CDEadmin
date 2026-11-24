@@ -1,57 +1,391 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <meta charset="utf-8" />
     <title>ScratchRobin</title>
     <style>
-        body, html {
-          height: 100%;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-          font-size: 14px;
-          margin: 0 10px;
-          background-color: #e9f8ff;
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 13.5px;
+        color: #0f172a;
+        background: transparent;
+        overflow: hidden;
+      }
+      .splash-shell {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 18px 44px rgba(15, 23, 42, 0.36);
+        border: 1px solid rgba(148, 163, 184, 0.32);
+        background: #f8fafc;
+      }
+      .brand-pane {
+        flex: 0 0 44%;
+        background-color: #1b2640;
+        color: #ffffff;
+        padding: 28px 26px 22px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        -webkit-app-region: drag;
+        position: relative;
+      }
+      .brand-art {
+        background-image: url("../../assets/cdeadmin-welcome.svg");
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+        flex: 1 1 auto;
+        min-height: 180px;
+        margin: 12px 0;
+      }
+      .brand-eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #7fa8e6;
+      }
+      .brand-title {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 6px 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .brand-subtitle {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: #cbd5e1;
+        margin: 0;
+      }
+      .loader-text {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.09);
+        color: #e2e8f0;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .login-pane {
+        flex: 1 1 auto;
+        padding: 26px 30px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: #f8fafc;
+        -webkit-app-region: no-drag;
+      }
+      .top-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 6px;
+      }
+      .quit-btn {
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .quit-btn:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+      .login-heading {
+        font-size: 19px;
+        font-weight: 700;
+        margin: 0 0 4px;
+        color: #0f172a;
+      }
+      .login-caption {
+        font-size: 12.5px;
+        color: #475569;
+        margin: 0 0 12px;
+        line-height: 1.45;
+      }
+      .vault-badge {
+        font-size: 11.5px;
+        line-height: 1.4;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: rgba(51, 102, 214, 0.08);
+        border: 1px solid rgba(51, 102, 214, 0.24);
+        color: #1e3a8a;
+        margin-bottom: 12px;
+      }
+      .field-group {
+        margin-bottom: 11px;
+      }
+      .field-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 4px;
+      }
+      .field-group input {
+        width: 100%;
+        height: 34px;
+        padding: 0 10px;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 13px;
+        outline: none;
+      }
+      .field-group input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+      }
+      .field-group input:disabled {
+        background: #f1f5f9;
+        color: #94a3b8;
+      }
+      .show-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: #334155;
+        margin: 2px 0 12px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .error-banner {
+        display: none;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        color: #991b1b;
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      .submit-btn {
+        width: 100%;
+        height: 38px;
+        border: none;
+        border-radius: 6px;
+        background: #3366d6;
+        color: #ffffff;
+        font-size: 13.5px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .submit-btn:hover:not(:disabled) {
+        background: #2554bd;
+      }
+      .submit-btn:disabled {
+        opacity: 0.58;
+        cursor: wait;
+      }
+      @media screen and (forced-colors: active) {
+        body {
+          forced-color-adjust: none !important;
         }
-
-        .bg {
-          background-image: url("../../assets/cdeadmin-welcome.svg");
-          height: 100%;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: contain;
-          overflow: hidden;
-          display: flex;
-          -webkit-app-region: drag;
-        }
-
-        .loader-text {
-          margin-top: auto;
-          margin-left: auto;
-          margin-right: auto;
-          margin-bottom: 10px;
-        }
-        @media screen and (forced-colors: active) {
-          body {
-            forced-color-adjust: none !important;
-          }
-        }
+      }
     </style>
-
-    <!-- Disable/block all password saving in nw.js -->
-    <script type="text/javascript">
-      chrome.passwordsPrivate.getSavedPasswordList(function(passwords) {
-        passwords.forEach((p, i) => {
-          chrome.passwordsPrivate.removeSavedPassword(i);
-        });
-      });
-      chrome.privacy.services.passwordSavingEnabled.set({ value: false });
-    </script>
-
-    <script type="text/javascript">
-      let platform = require("os").platform;
-    </script>
   </head>
   <body>
-    <div class="bg">
-      <span id="loader-text-status" class="loader-text">Waiting for ScratchRobin to start...</span>
+    <div class="splash-shell">
+      <div class="brand-pane">
+        <div>
+          <div class="brand-eyebrow">ScratchBird CDE Family</div>
+          <div class="brand-title">ScratchRobin</div>
+          <p class="brand-subtitle">
+            Multi-engine database administration, DDN design &amp; BI workbench.
+          </p>
+        </div>
+        <div class="brand-art" role="img" aria-label="ScratchRobin"></div>
+        <div>
+          <span id="loader-text-status" class="loader-text">
+            Waiting for ScratchRobin to start...
+          </span>
+        </div>
+      </div>
+
+      <div class="login-pane">
+        <div class="top-actions">
+          <button id="splash-quit-btn" type="button" class="quit-btn">Quit</button>
+        </div>
+        <h1 class="login-heading">Sign in to ScratchRobin</h1>
+        <p id="splash-subtitle" class="login-caption">
+          Starting local backend service. Sign-in controls will activate momentarily…
+        </p>
+
+        <div id="splash-vault-badge" class="vault-badge">
+          Encrypted UserConfigurationDatabase (FirebirdSQL Embedded)
+        </div>
+
+        <div id="splash-error" role="alert" class="error-banner"></div>
+
+        <form id="splash-login-form" data-cdeadmin-qa-key="desktop.splash.login-form">
+          <div class="field-group">
+            <label for="splash-username">User name</label>
+            <input
+              id="splash-username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              placeholder="Enter user name"
+              required
+              disabled
+            />
+          </div>
+
+          <div class="field-group">
+            <label for="splash-password">User password</label>
+            <input
+              id="splash-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Enter user password"
+              required
+              disabled
+            />
+          </div>
+
+          <div class="field-group">
+            <label for="splash-database-key">Database key</label>
+            <input
+              id="splash-database-key"
+              name="database_key"
+              type="password"
+              autocomplete="off"
+              placeholder="Decryption key for UserConfigurationDatabase"
+              required
+              disabled
+            />
+          </div>
+
+          <label class="show-row">
+            <input id="splash-show-secrets" type="checkbox" disabled />
+            <span>Show password &amp; database key</span>
+          </label>
+
+          <button id="splash-submit-btn" type="submit" class="submit-btn" disabled>
+            Starting Engine…
+          </button>
+        </form>
+      </div>
     </div>
+
+    <script type="text/javascript">
+      (function () {
+        const usernameEl = document.getElementById('splash-username');
+        const passwordEl = document.getElementById('splash-password');
+        const dbKeyEl = document.getElementById('splash-database-key');
+        const showSecretsEl = document.getElementById('splash-show-secrets');
+        const submitBtn = document.getElementById('splash-submit-btn');
+        const quitBtn = document.getElementById('splash-quit-btn');
+        const errorEl = document.getElementById('splash-error');
+        const badgeEl = document.getElementById('splash-vault-badge');
+        const subtitleEl = document.getElementById('splash-subtitle');
+        const statusEl = document.getElementById('loader-text-status');
+        const formEl = document.getElementById('splash-login-form');
+
+        let serverReady = false;
+
+        function setError(msg) {
+          if (msg) {
+            errorEl.textContent = msg;
+            errorEl.style.display = 'block';
+          } else {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+          }
+        }
+
+        function activateLoginPrompt(status) {
+          if (serverReady) return;
+          serverReady = true;
+          const initialized = status && status.vault_initialized !== false;
+          usernameEl.disabled = false;
+          passwordEl.disabled = false;
+          dbKeyEl.disabled = false;
+          showSecretsEl.disabled = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = initialized
+            ? 'Unlock & Sign In'
+            : 'Initialize Database & Sign In';
+          subtitleEl.textContent = initialized
+            ? 'Enter your credentials and Database key to unlock your UserConfigurationDatabase.'
+            : 'First-run setup: create your User account and encrypt your UserConfigurationDatabase.';
+          badgeEl.textContent = initialized
+            ? 'Encrypted UserConfigurationDatabase ready (FirebirdSQL Embedded)'
+            : 'New Encrypted UserConfigurationDatabase (FirebirdSQL Embedded) — First-Run Setup';
+          statusEl.textContent = 'ScratchRobin engine ready — awaiting sign-in';
+          usernameEl.focus();
+        }
+
+        showSecretsEl.addEventListener('change', function () {
+          const nextType = showSecretsEl.checked ? 'text' : 'password';
+          passwordEl.type = nextType;
+          dbKeyEl.type = nextType;
+        });
+
+        quitBtn.addEventListener('click', function () {
+          if (window.electronUI && window.electronUI.quitApp) {
+            window.electronUI.quitApp();
+          } else {
+            window.close();
+          }
+        });
+
+        formEl.addEventListener('submit', async function (ev) {
+          ev.preventDefault();
+          if (!serverReady || !window.electronUI || !window.electronUI.unlockVault) {
+            return;
+          }
+          setError('');
+          submitBtn.disabled = true;
+          const prevLabel = submitBtn.textContent;
+          submitBtn.textContent = 'Unlocking UserConfigurationDatabase…';
+          try {
+            const res = await window.electronUI.unlockVault({
+              username: usernameEl.value,
+              password: passwordEl.value,
+              databaseKey: dbKeyEl.value,
+            });
+            if (!res || !res.ok) {
+              setError((res && res.error) || 'Unable to unlock UserConfigurationDatabase.');
+              submitBtn.disabled = false;
+              submitBtn.textContent = prevLabel;
+            } else {
+              statusEl.textContent = 'Authenticated — opening workbench…';
+            }
+          } catch (err) {
+            setError((err && err.message) || String(err));
+            submitBtn.disabled = false;
+            submitBtn.textContent = prevLabel;
+          }
+        });
+
+        if (window.electronUI) {
+          if (window.electronUI.onServerReadyForLogin) {
+            window.electronUI.onServerReadyForLogin(activateLoginPrompt);
+          }
+          if (window.electronUI.getVaultStatus) {
+            window.electronUI.getVaultStatus().then(function (st) {
+              if (st && st.ready) {
+                activateLoginPrompt(st);
+              }
+            }).catch(function () {});
+          }
+        }
+      })();
+    </script>
   </body>
 </html>

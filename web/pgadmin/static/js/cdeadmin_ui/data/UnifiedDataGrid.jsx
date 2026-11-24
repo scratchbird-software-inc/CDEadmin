@@ -19,6 +19,7 @@ import {SearchField} from '../primitives/AdvancedControls';
 import RecordDataView from '../surfaces/RecordDataView';
 import {defaultLayoutState, orderedColumns} from '../surfaces/RecordForm';
 import ColumnOrderDialog from '../surfaces/RecordColumnOrderDialog';
+import ColumnDisplaySettingsDialog from '../surfaces/ColumnDisplaySettingsDialog';
 import {
   DISPLAY_MODES,
   buildFormLayoutPlacements,
@@ -200,6 +201,7 @@ export default function UnifiedDataGrid({
   const [, setScrollRowRange] = useState({start: 0, end: 50});
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
   const [columnPickerScope, setColumnPickerScope] = useState('grid');
+  const [formatFieldName, setFormatFieldName] = useState(null);
 
   // Optional local row editing state when `editable` is true
   const [isEditingRow, setIsEditingRow] = useState(false);
@@ -591,8 +593,9 @@ export default function UnifiedDataGrid({
     isEditingRow,
     layout,
     onCopySelection: (fmt) => copyExport(fmt),
+    onOpenColumnDisplaySettings: (colName) => setFormatFieldName(colName),
     onOpenExportSelection: exportable ? () => downloadExport('csv') : null,
-    openFormFieldContextMenu: () => {},
+    openFormFieldContextMenu: (_ev, col) => setFormatFieldName(col?.name || null),
     openHeaderContextMenu: null,
     openMiniFormContextMenu: () => {},
     openRightDrawerWith: ({rowIndex, column}) => {
@@ -922,6 +925,16 @@ export default function UnifiedDataGrid({
           setColumnPickerOpen(false);
         }}
       />
+      {formatFieldName && (
+        <ColumnDisplaySettingsDialog
+          open={Boolean(formatFieldName)}
+          columns={normalizedColumns}
+          initialColumnName={formatFieldName}
+          layout={layout}
+          onClose={() => setFormatFieldName(null)}
+          onApplyLayout={(nextLayout) => setLayout(nextLayout)}
+        />
+      )}
     </Box>
   );
 }

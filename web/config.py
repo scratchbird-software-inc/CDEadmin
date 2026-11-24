@@ -343,6 +343,12 @@ CONFIG_DATABASE_URI = ''
 SQLITE_PATH = env('SQLITE_PATH') or \
     os.path.join(DATA_DIR, APP_SHORT_NAME + '.db')
 
+# Encrypted UserConfigurationDatabase backed by FirebirdSQL Embedded
+# (or optional central multi-user Firebird DSN).
+USER_CONFIGURATION_DATABASE_PATH = env('USER_CONFIGURATION_DATABASE_PATH') or \
+    os.path.join(DATA_DIR, 'user_configuration.fdb')
+USER_CONFIGURATION_DATABASE_DSN = env('USER_CONFIGURATION_DATABASE_DSN') or None
+
 # Restart-safe, redacted CDEadmin operation and control-plane audit state.
 CDEADMIN_OPERATION_STORE_PATH = env('CDEADMIN_OPERATION_STORE_PATH') or \
     os.path.join(DATA_DIR, 'cdeadmin-operations.json')

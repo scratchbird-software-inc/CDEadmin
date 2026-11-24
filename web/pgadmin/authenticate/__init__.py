@@ -24,6 +24,7 @@ from flask_login import current_user
 from flask_socketio import disconnect, ConnectionRefusedError
 
 from pgadmin.model import db, User
+from pgadmin.utils.csrf import pgCSRFProtect
 from pgadmin.utils.constants import KERBEROS, INTERNAL, OAUTH2, LDAP,\
     MessageType
 import pgadmin.utils as pga_utils
@@ -118,10 +119,114 @@ def socket_permissions_required(*fsperms):
 
 class AuthenticateModule(pga_utils.PgAdminModule):
     def get_exposed_url_endpoints(self):
-        return ['authenticate.login']
+        return [
+            'authenticate.login',
+            'authenticate.vault_status',
+        ]
 
 
 blueprint = AuthenticateModule(MODULE_NAME, __name__, static_url_path='')
+
+
+@blueprint.route('/vault_status', endpoint='vault_status', methods=['GET'])
+def vault_status():
+    """Report whether the Firebird Embedded UserConfigurationDatabase is initialized."""
+    from pgadmin.cdeadmin.user_config_db import get_user_config_db
+    from pgadmin.utils.ajax import make_json_response
+
+    ucfg = get_user_config_db()
+    return make_json_response(
+        data={
+            'vault_initialized': ucfg.is_vault_initialized(),
+            'vault_unlocked': ucfg.is_unlocked(),
+            'engine': ucfg.engine_name,
+            'multi_user_ready': True,
+        }
+    )
+
+
+@blueprint.route('/desktop_unlock', endpoint='desktop_unlock', methods=['POST'])
+@pgCSRFProtect.exempt
+def desktop_unlock():
+    """Unlock UserConfigurationDatabase from the Electron splash screen login prompt."""
+    from flask_security.utils import login_user
+    from pgadmin.cdeadmin.user_config_db import (
+        UserConfigAuthError,
+        UserConfigKeyError,
+        ensure_flask_security_user_for_vault_user,
+        get_user_config_db,
+         sync_runtime_orm_to_user_config_db,
+    )
+    from pgadmin.cdeadmin.user_config_db.service import mint_desktop_handoff_ticket
+    from pgadmin.utils.ajax import make_json_response
+
+    if config.SERVER_MODE:
+        return make_json_response(
+            status=403,
+            success=0,
+            errormsg=gettext('Desktop vault unlock is only available in desktop runtime.'),
+        )
+
+    payload = request.get_json(silent=True) or request.form or {}
+    username = str(payload.get('username') or payload.get('email') or '').strip()
+    password = str(payload.get('password') or '')
+    database_key = str(payload.get('database_key') or payload.get('databaseKey') or '')
+
+    with AuthLocker():
+        ucfg = get_user_config_db()
+        try:
+            vault_user = ucfg.unlock_and_authenticate(
+                username,
+                password,
+                database_key,
+                legacy_data_dir=getattr(config, 'DATA_DIR', None),
+            )
+        except (UserConfigKeyError, UserConfigAuthError) as exc:
+            return make_json_response(status=401, success=0, errormsg=str(exc))
+
+        user = ensure_flask_security_user_for_vault_user(vault_user)
+        current_app.keyManager.set(ucfg.derived_session_crypt_key())
+        login_user(user)
+        sync_runtime_orm_to_user_config_db(int(user.id))
+        ticket = mint_desktop_handoff_ticket(int(user.id), str(user.username))
+        return make_json_response(
+            data={
+                'ticket': ticket,
+                'username': str(user.username),
+                'vault_created': bool(vault_user.get('vault_created')),
+                'engine': ucfg.engine_name,
+            }
+        )
+
+
+@blueprint.route('/desktop_handoff', endpoint='desktop_handoff', methods=['GET'])
+def desktop_handoff():
+    """Consume single-use Electron splash ticket to establish authenticated BrowserWindow session."""
+    from flask_security.utils import login_user
+    from pgadmin.cdeadmin.user_config_db import get_user_config_db
+    from pgadmin.cdeadmin.user_config_db.service import consume_desktop_handoff_ticket
+
+    if config.SERVER_MODE:
+        return redirect(url_for('security.login'))
+
+    ticket = str(request.args.get('ticket') or '').strip()
+    entry = consume_desktop_handoff_ticket(ticket)
+    ucfg = get_user_config_db()
+    if not entry or not ucfg.is_unlocked():
+        return redirect(url_for('security.login'))
+
+    user = db.session.get(User, int(entry['user_id']))
+    if user is None or not user.is_active:
+        return redirect(url_for('security.login'))
+
+    current_app.keyManager.set(ucfg.derived_session_crypt_key())
+    login_user(user)
+    session['auth_source_manager'] = {
+        'source_friendly_name': INTERNAL,
+        'auth_sources': [INTERNAL],
+        'current_source': INTERNAL,
+    }
+    return redirect(url_for('browser.index'))
 
 
 @blueprint.route('/login', endpoint='login', methods=['GET', 'POST'])
@@ -134,10 +239,73 @@ def login():
         return _login()
 
 
+def _render_login_with_error(err_msg: str):
+    flash(err_msg, MessageType.ERROR)
+    form_class = _security.forms.get('login_form').cls
+    form = form_class()
+    return _security.render_template(
+        config_value('LOGIN_USER_TEMPLATE'),
+        login_user_form=form,
+        **_ctx('login'),
+    )
+
+
 def _login():
     """
     Internal authentication process locked by a mutex.
     """
+    import os as _os
+
+    require_ucfg = current_app.config.get(
+        'USER_CONFIG_LOGIN_REQUIRED',
+        _os.environ.get('PGADMIN_TESTING_MODE') != '1',
+    )
+    if (
+        request.method == 'POST'
+        and 'oauth2_button' not in request.form
+        and (require_ucfg or 'database_key' in request.form)
+    ):
+        from flask_security.utils import login_user
+        from pgadmin.cdeadmin.user_config_db import (
+            UserConfigAuthError,
+            UserConfigKeyError,
+            ensure_flask_security_user_for_vault_user,
+            get_user_config_db,
+            sync_runtime_orm_to_user_config_db,
+        )
+
+        username = str(
+            request.form.get('email') or request.form.get('username') or ''
+        ).strip()
+        password = str(request.form.get('password') or '')
+        database_key = str(request.form.get('database_key') or '')
+
+        ucfg = get_user_config_db()
+        try:
+            vault_user = ucfg.unlock_and_authenticate(
+                username,
+                password,
+                database_key,
+                legacy_data_dir=getattr(config, 'DATA_DIR', None),
+            )
+        except (UserConfigKeyError, UserConfigAuthError) as exc:
+            return _render_login_with_error(str(exc))
+
+        user = ensure_flask_security_user_for_vault_user(vault_user)
+        if not login_user(user):
+            return _render_login_with_error(gettext('Login failed'))
+
+        current_app.keyManager.set(ucfg.derived_session_crypt_key())
+        sync_runtime_orm_to_user_config_db(int(user.id))
+        session['auth_source_manager'] = {
+            'source_friendly_name': INTERNAL,
+            'auth_sources': copy.deepcopy(config.AUTHENTICATION_SOURCES),
+            'current_source': INTERNAL,
+        }
+        user.login_attempts = 0
+        db.session.commit()
+        session.pop('oauth2_current_client', None)
+        return redirect(pga_utils.get_safe_post_login_redirect())
     form = _security.forms.get('login_form').cls(request.form)
     if OAUTH2 in config.AUTHENTICATION_SOURCES \
             and 'oauth2_button' in request.form:

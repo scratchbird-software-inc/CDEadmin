@@ -7,8 +7,6 @@
 //
 //////////////////////////////////////////////////////////////
 
-
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import Theme from '../../../pgadmin/static/js/Theme';
 import LoginPage from '../../../pgadmin/static/js/SecurityPages/LoginPage';
@@ -19,14 +17,13 @@ describe('LoginPage', ()=>{
   beforeEach(() => window.localStorage.clear());
   afterEach(() => window.localStorage.clear());
 
-
   let ctrlMount = (props)=>{
     return render(<Theme>
       <LoginPage {...props}/>
     </Theme>);
   };
 
-  it('internal', ()=>{
+  it('renders user name, user password, and database key prompt', ()=>{
     const ctrl = ctrlMount({
       userLanguage: 'en',
       langOptions: [{
@@ -44,13 +41,16 @@ describe('LoginPage', ()=>{
       oauth2Config: [],
       loginBanner: 'login banner',
       productVersion: '0.325-alpha',
+      vaultInitialized: false,
+      vaultEngine: 'firebird-embedded',
     });
     expect(ctrl.container.querySelector('form').getAttribute('action')).toBe('/login/url');
-    // Owner direction 2026-11-06: labelled fields, and a brand panel stating
-    // the open-source alpha release and how much is ready for review.
-    expect(screen.getByLabelText('Email address or username'))
-      .toHaveAttribute('name', 'email');
-    expect(screen.getByLabelText('Password')).toHaveAttribute('name', 'password');
+    expect(screen.getByLabelText('User name')).toHaveAttribute('name', 'email');
+    expect(screen.getByLabelText('User password')).toHaveAttribute('name', 'password');
+    expect(screen.getByLabelText('Database key')).toHaveAttribute('name', 'database_key');
+    expect(screen.getByText(/Encrypted UserConfigurationDatabase \(FirebirdSQL Embedded\)/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/First-run setup:/i)).toBeInTheDocument();
     expect(screen.getByText('Welcome to ScratchRobin')).toBeInTheDocument();
     const brand = screen.getByRole('complementary', {name: 'About ScratchRobin'});
     expect(brand).toHaveAttribute('data-cdeadmin-qa-key',
@@ -84,26 +84,34 @@ describe('LoginPage', ()=>{
     expect(screen.getByLabelText('Enable QA visual element IDs')).toBeChecked();
   });
 
-  it('reveals and hides browser-autofilled credentials without losing their values', async ()=>{
+  it('reveals and hides browser-autofilled credentials and database key without losing their values', async ()=>{
     const ctrl = ctrlMount({userLanguage: 'en', langOptions: [],
       authSources: ['internal'], authSourcesEnum: {OAUTH2: 'oauth2'}, oauth2Config: []});
     const email = ctrl.container.querySelector('input[name="email"]');
     const password = ctrl.container.querySelector('input[name="password"]');
+    const dbKey = ctrl.container.querySelector('input[name="database_key"]');
     expect(email).toHaveAttribute('autocomplete', 'username');
     expect(password).toHaveAttribute('autocomplete', 'current-password');
     expect(password).toHaveAttribute('type', 'password');
+    expect(dbKey).toHaveAttribute('type', 'password');
     expect(password).toBeRequired();
+    expect(dbKey).toBeRequired();
     // Model autofill that does not dispatch React's change event.
-    email.value = 'owner@example.test';
+    email.value = 'dcalford';
     password.value = 'autofilled-test-value';
+    dbKey.value = 'autofilled-db-key';
     expect(screen.getByRole('button', {name: 'Sign in'})).toBeEnabled();
     fireEvent.click(screen.getByLabelText('Show password'));
     await waitFor(() => expect(password).toHaveAttribute('type', 'text'));
+    expect(dbKey).toHaveAttribute('type', 'text');
     expect(password).toHaveValue('autofilled-test-value');
-    expect(email).toHaveValue('owner@example.test');
+    expect(dbKey).toHaveValue('autofilled-db-key');
+    expect(email).toHaveValue('dcalford');
     fireEvent.click(screen.getByLabelText('Show password'));
     expect(password).toHaveAttribute('type', 'password');
+    expect(dbKey).toHaveAttribute('type', 'password');
     expect(password).toHaveValue('autofilled-test-value');
+    expect(dbKey).toHaveValue('autofilled-db-key');
     ctrl.unmount();
     ctrlMount({authSources: ['internal'], authSourcesEnum: {OAUTH2: 'oauth2'}, oauth2Config: []});
     expect(screen.getByLabelText('Show password')).not.toBeChecked();
@@ -148,6 +156,7 @@ describe('LoginPage', ()=>{
     expect(ctrl.container.querySelector('form').getAttribute('action')).toBe('/login/url');
     expect(ctrl.container.querySelector('input[name="email"]')).not.toBeNull();
     expect(ctrl.container.querySelector('input[name="password"]')).not.toBeNull();
+    expect(ctrl.container.querySelector('input[name="database_key"]')).not.toBeNull();
     expect(ctrl.container.querySelector('button[name="oauth2_button"]')).toHaveValue('github');
   });
 

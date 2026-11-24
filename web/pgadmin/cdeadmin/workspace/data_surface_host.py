@@ -23,7 +23,6 @@ import copy
 import datetime
 import json
 import os
-import sqlite3
 import sys
 import threading
 import time
@@ -641,103 +640,53 @@ class DataSurfaceState:
 
 
 class SurfaceLayoutStore:
-    """SQLite persistence in DATA_DIR for Specific Layouts & Shareable Templates."""
+    """Encrypted FirebirdSQL Embedded persistence via UserConfigurationDatabase
+    for per-object display layouts, field-type defaults, and shareable templates.
+    """
 
-    def __init__(self, db_path: str | Path | None = None):
-        if db_path is None:
-            try:
-                import config as pg_config
-                data_dir = getattr(pg_config, 'DATA_DIR', None)
-            except Exception:
-                data_dir = None
-            base = Path(data_dir or os.path.expanduser('~/.cdeadmin'))
-            base.mkdir(parents=True, exist_ok=True)
-            db_path = base / 'surface_layouts.db'
-        self.db_path = str(db_path)
-        self._lock = threading.RLock()
-        self._init_schema()
+    def __init__(self, db_path: str | Path | Any | None = None):
+        from pgadmin.cdeadmin.user_config_db import (
+            UserConfigurationDatabase,
+            get_user_config_db,
+        )
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS surface_specific_layout (
-                    user_id INTEGER NOT NULL,
-                    surface_kind TEXT NOT NULL,
-                    object_key TEXT NOT NULL,
-                    layout_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (user_id, surface_kind, object_key)
-                );
-                CREATE TABLE IF NOT EXISTS surface_layout_template (
-                    template_id TEXT PRIMARY KEY,
-                    surface_kind TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    author_user_id INTEGER NOT NULL,
-                    layout_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                """
+        if isinstance(db_path, UserConfigurationDatabase):
+            self._explicit_db: UserConfigurationDatabase | None = db_path
+            self.db_path = str(db_path.db_path or db_path.dsn)
+        elif db_path is not None:
+            self._explicit_db = UserConfigurationDatabase(
+                db_path=db_path,
+                kdf_iterations=10_000,
+                auto_test_unlock_key='cdeadmin-isolated-layout-store-key',
             )
+            self.db_path = str(self._explicit_db.db_path or self._explicit_db.dsn)
+        else:
+            self._explicit_db = None
+            default_db = get_user_config_db()
+            self.db_path = str(default_db.db_path or default_db.dsn)
+        self._get_default_db = get_user_config_db
+
+    @property
+    def _db(self):
+        return self._explicit_db if self._explicit_db is not None else self._get_default_db()
 
     def get_specific_layout(
         self, user_id: int, surface_kind: str, object_key: str
     ) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                'SELECT layout_json FROM surface_specific_layout '
-                'WHERE user_id = ? AND surface_kind = ? AND object_key = ?',
-                (int(user_id), str(surface_kind), str(object_key)),
-            ).fetchone()
-            if row is None:
-                return None
-            try:
-                return json.loads(row['layout_json'])
-            except Exception:
-                return None
+        return self._db.get_specific_layout(user_id, surface_kind, object_key)
 
     def save_specific_layout(
         self, user_id: int, surface_kind: str, object_key: str, layout: dict[str, Any]
     ) -> dict[str, Any]:
-        encoded = json.dumps(layout, ensure_ascii=False, sort_keys=True)
-        now = _now_iso()
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO surface_specific_layout
-                    (user_id, surface_kind, object_key, layout_json, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, surface_kind, object_key)
-                DO UPDATE SET layout_json = excluded.layout_json,
-                              updated_at = excluded.updated_at
-                """,
-                (int(user_id), str(surface_kind), str(object_key), encoded, now),
-            )
-        return {'saved': 'specific', 'object_key': object_key, 'updated_at': now}
+        return self._db.save_specific_layout(user_id, surface_kind, object_key, layout)
 
-    def get_field_type_defaults(self, user_id):
-        return self.get_specific_layout(user_id, 'shared-field-format', 'defaults') or {}
+    def get_field_type_defaults(self, user_id: int) -> dict[str, Any]:
+        return self._db.get_field_type_defaults(user_id)
 
-    def save_field_type_defaults(self, user_id, defaults):
-        if not isinstance(defaults, dict) or len(defaults) > 64:
-            raise ValueError('Field type defaults must be a mapping.')
-        for field_type, preferences in defaults.items():
-            if not isinstance(field_type, str) or len(field_type) > 64:
-                raise ValueError('Invalid field type.')
-            if not isinstance(preferences, dict) or set(preferences) - {'font', 'hAlign'}:
-                raise ValueError('Invalid field formatting preferences.')
-            if preferences.get('font', '') not in ('', 'mono', 'sans', 'serif'):
-                raise ValueError('Invalid font preference.')
-            if preferences.get('hAlign', '') not in ('', 'left', 'center', 'right'):
-                raise ValueError('Invalid alignment preference.')
-        self.save_specific_layout(user_id, 'shared-field-format', 'defaults', defaults)
-        return {'field_type_defaults': defaults}
+    def save_field_type_defaults(
+        self, user_id: int, defaults: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._db.save_field_type_defaults(user_id, defaults)
 
     def save_template(
         self,
@@ -748,64 +697,22 @@ class SurfaceLayoutStore:
         description: str = '',
         template_id: str | None = None,
     ) -> dict[str, Any]:
-        tid = str(template_id or uuid.uuid4())
-        clean_name = str(name or 'Untitled Template').strip()[:128]
-        encoded = json.dumps(layout, ensure_ascii=False, sort_keys=True)
-        now = _now_iso()
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO surface_layout_template
-                    (template_id, surface_kind, name, description,
-                     author_user_id, layout_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(template_id)
-                DO UPDATE SET name = excluded.name,
-                              description = excluded.description,
-                              layout_json = excluded.layout_json,
-                              updated_at = excluded.updated_at
-                """,
-                (
-                    tid,
-                    str(surface_kind),
-                    clean_name,
-                    str(description or '')[:512],
-                    int(user_id),
-                    encoded,
-                    now,
-                ),
-            )
-        return {
-            'saved': 'template',
-            'template_id': tid,
-            'name': clean_name,
-            'updated_at': now,
-        }
+        return self._db.save_template(
+            user_id,
+            surface_kind,
+            name,
+            layout,
+            description=description,
+            template_id=template_id,
+        )
 
-    def list_templates(self, surface_kind: str) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as conn:
-            rows = conn.execute(
-                'SELECT template_id, name, description, author_user_id, '
-                'layout_json, updated_at '
-                'FROM surface_layout_template WHERE surface_kind = ? '
-                'ORDER BY name COLLATE NOCASE ASC',
-                (str(surface_kind),),
-            ).fetchall()
-        out = []
-        for r in rows:
-            try:
-                parsed = json.loads(r['layout_json'])
-            except Exception:
-                parsed = {}
-            out.append({
-                'template_id': r['template_id'],
-                'name': r['name'],
-                'description': r['description'],
-                'author_user_id': r['author_user_id'],
-                'layout': parsed,
-                'updated_at': r['updated_at'],
-            })
-        return out
+    def list_templates(
+        self, surface_kind: str, *, user_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        return self._db.list_templates(surface_kind, user_id=user_id)
+
+    def delete_template(self, user_id: int, template_id: str) -> dict[str, Any]:
+        return self._db.delete_template(user_id, template_id)
 
 
 class DataSurfaceHostService:

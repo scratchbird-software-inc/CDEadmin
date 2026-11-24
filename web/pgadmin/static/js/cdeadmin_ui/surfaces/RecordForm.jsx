@@ -12,12 +12,15 @@ import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {
   FIELD_FONTS,
+  FIELD_FONT_SIZES,
   BOOLEAN_FORMATS,
   DISPLAY_MODES,
   buildFormLayoutPlacements,
+  clampColumnWidth,
   formatCellValue,
   formatColumnCommentHint,
   inferColumnMeta,
+  resolveEffectiveColumnPrefs,
   serializeValueForEdit,
 } from './dataEditSurfaceHelpers';
 
@@ -78,6 +81,7 @@ export function AdaptiveRecordFormCard({
   columns,
   formLayout,
   formFieldPrefs,
+  gridColPrefs = {},
   fieldTypeDefaults,
   conversions,
   booleanFormat,
@@ -143,9 +147,10 @@ export function AdaptiveRecordFormCard({
         formFieldPrefs,
         720,
         null,
-        row ? [row] : null
+        row ? [row] : null,
+        gridColPrefs
       ),
-    [formLayout, columns, formFieldPrefs, row]
+    [formLayout, columns, formFieldPrefs, gridColPrefs, row]
   );
 
   const placementMap = useMemo(() => {
@@ -392,16 +397,12 @@ export function AdaptiveRecordFormCard({
         >
           {columns.map((col, colIdx) => {
             const nativeMeta = inferColumnMeta(col);
-            const fPrefs = {
-              ...fieldTypeDefaults?.[nativeMeta.clientType],
-              ...formFieldPrefs[col.name],
-              font:
-                formFieldPrefs[col.name]?.font ||
-                fieldTypeDefaults?.[nativeMeta.clientType]?.font,
-              hAlign:
-                formFieldPrefs[col.name]?.hAlign ||
-                fieldTypeDefaults?.[nativeMeta.clientType]?.hAlign,
-            };
+            const fPrefs = resolveEffectiveColumnPrefs(
+              col,
+              formFieldPrefs,
+              fieldTypeDefaults,
+              gridColPrefs
+            );
             const placement = placementMap.get(col.name) || {
               row: 'auto',
               colStart: 1,
@@ -413,11 +414,14 @@ export function AdaptiveRecordFormCard({
               markdownEditor ||
               (isEditing && nativeMeta.clientType === 'json');
             const isFullRow = Boolean(useInlineEditor || placement.fullRow);
-            const natWidth =
+            const rawNatWidth =
               fPrefs.widthPx ||
+              fPrefs.width ||
               resolvedLayout.adaptiveWidths?.[col.name] ||
               placement.naturalWidth ||
               156;
+            const natWidth = clampColumnWidth(rawNatWidth, fPrefs, 156);
+            const fontSizeCss = FIELD_FONT_SIZES[fPrefs.fontSize] || '0.8rem';
             const nativeValue =
               isEditing &&
               draftValues &&
@@ -473,7 +477,7 @@ export function AdaptiveRecordFormCard({
               : 'none';
             const readOnlyFieldBg = isSelectedField
               ? 'rgba(2, 132, 199, 0.12)'
-              : 'var(--sr-surface-card, rgba(255,255,255,0.75))';
+              : fPrefs.bgColor || 'var(--sr-surface-card, rgba(255,255,255,0.75))';
 
             return (
               <div
@@ -620,12 +624,12 @@ export function AdaptiveRecordFormCard({
                       boxShadow: selectedBoxShadow,
                       outline: 'none',
                       background: canEditField
-                        ? 'var(--sr-surface-card, #ffffff)'
+                        ? fPrefs.bgColor || 'var(--sr-surface-card, #ffffff)'
                         : readOnlyFieldBg,
                       color:
                         rawVal === null && !canEditField
                           ? 'var(--sr-text-muted, #64748b)'
-                          : 'inherit',
+                          : fPrefs.color || 'inherit',
                       fontStyle:
                         rawVal === null && !canEditField ? 'italic' : 'normal',
                       textAlign: hAlign,
@@ -634,7 +638,7 @@ export function AdaptiveRecordFormCard({
                         (colMeta.clientType === 'json' || markdownEditor
                           ? 'var(--sr-font-mono, monospace)'
                           : 'inherit'),
-                      fontSize: '0.8rem',
+                      fontSize: fontSizeCss,
                     }}
                   />
                 ) : canEditField ? (
@@ -668,11 +672,11 @@ export function AdaptiveRecordFormCard({
                       border: selectedBoxBorder,
                       boxShadow: selectedBoxShadow,
                       outline: 'none',
-                      background: 'var(--sr-surface-card, #ffffff)',
-                      color: 'inherit',
+                      background: fPrefs.bgColor || 'var(--sr-surface-card, #ffffff)',
+                      color: fPrefs.color || 'inherit',
                       textAlign: hAlign,
                       fontFamily: FIELD_FONTS[fPrefs.font],
-                      fontSize: '0.8rem',
+                      fontSize: fontSizeCss,
                     }}
                   />
                 ) : (
@@ -694,14 +698,43 @@ export function AdaptiveRecordFormCard({
                       background: readOnlyFieldBg,
                       color: formatted.isNull
                         ? 'var(--sr-text-muted, #64748b)'
-                        : 'inherit',
+                        : fPrefs.color || 'inherit',
                       fontStyle: formatted.isNull ? 'italic' : 'normal',
                       textAlign: hAlign,
                       fontFamily: FIELD_FONTS[fPrefs.font],
-                      fontSize: '0.8rem',
+                      fontSize: fontSizeCss,
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      textOverflow:
+                        fPrefs.wrapMode && fPrefs.wrapMode !== 'none'
+                          ? 'clip'
+                          : 'ellipsis',
+                      whiteSpace:
+                        fPrefs.wrapMode && fPrefs.wrapMode !== 'none'
+                          ? 'pre-wrap'
+                          : 'nowrap',
+                      display:
+                        (fPrefs.wrapMode === 'clamp' ||
+                          (fPrefs.wrapMode === 'wrap' &&
+                            Number(fPrefs.maxWrapLines) >= 1))
+                          ? '-webkit-box'
+                          : 'block',
+                      WebkitLineClamp:
+                        fPrefs.wrapMode === 'clamp'
+                          ? Math.max(1, Math.min(50, Number(fPrefs.maxWrapLines) || 3))
+                          : fPrefs.wrapMode === 'wrap' &&
+                              Number(fPrefs.maxWrapLines) >= 1
+                            ? Math.max(1, Math.min(50, Number(fPrefs.maxWrapLines)))
+                            : undefined,
+                      WebkitBoxOrient:
+                        (fPrefs.wrapMode === 'clamp' ||
+                          (fPrefs.wrapMode === 'wrap' &&
+                            Number(fPrefs.maxWrapLines) >= 1))
+                          ? 'vertical'
+                          : undefined,
+                      wordBreak:
+                        fPrefs.wrapMode && fPrefs.wrapMode !== 'none'
+                          ? 'break-word'
+                          : undefined,
                       outline: 'none',
                     }}
                   >
@@ -763,6 +796,7 @@ AdaptiveRecordFormCard.propTypes = {
   columns: PropTypes.array.isRequired,
   formLayout: PropTypes.object,
   formFieldPrefs: PropTypes.object.isRequired,
+  gridColPrefs: PropTypes.object,
   fieldTypeDefaults: PropTypes.object,
   conversions: PropTypes.object,
   booleanFormat: PropTypes.string,

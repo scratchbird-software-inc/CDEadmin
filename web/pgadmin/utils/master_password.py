@@ -29,6 +29,21 @@ def get_crypt_key():
     """
     enc_key = current_app.keyManager.get()
     if enc_key is None:
+        try:
+            from pgadmin.cdeadmin.user_config_db import get_user_config_db
+
+            ucfg = get_user_config_db()
+            if (
+                current_user
+                and getattr(current_user, 'is_authenticated', False)
+                and ucfg.is_unlocked()
+            ):
+                derived = ucfg.derived_session_crypt_key()
+                current_app.keyManager.set(derived)
+                return True, derived
+        except Exception:
+            pass
+
         if config.SERVER_MODE:
             if config.MASTER_PASSWORD_REQUIRED:
                 return False, None
