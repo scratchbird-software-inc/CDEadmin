@@ -1372,3 +1372,26 @@ Corrections from setting it up:
    cause them. None of these is in the known-failures list: adding entries is
    the owner's decision.
 -  ESLint runs; see the corrections above.
+
+Decision 21: principal and grant management (2026-11-25)
+--------------------------------------------------------
+
+Owner direction 2026-11-25 adopted the Decision 21 defaults in
+``ui_unified_design.rst``. The lint gained two counters that the earlier pattern
+could not see, because they match the ``engine`` / ``engineId`` props and
+``isMysql*``-style helpers instead of ``engine_id`` / ``profile_id``:
+
+- ``engine_prop_branches_in_ui_code``: **153** baseline (maximum recorded in
+  ``tools/ui_lint_maximums.json``). Lower it as engines migrate.
+- ``security_ui_engine_branches``: **40** baseline, the share inside
+  ``cdeadmin_ui/security/`` (``PrincipalSecurityManager.jsx`` 34,
+  ``ObjectPermissionsMatrix.jsx`` 6). The target is 0.
+
+The existing counters are unchanged by this step: JSON controls 299, MUI imports
+177, ``engine_literal_branches_in_ui_code`` 111, panels 113, menu branches 13.
+The DDN refresh before this validation run verified snapshot ``a0a26c621cc1``
+with no vendored changes.
+
+Migration order: Firebird, MySQL, PostgreSQL, then the other engines. The
+manager moves to ``security.json`` per engine; an engine without a
+``security.json`` stays on the legacy path until its change lands.

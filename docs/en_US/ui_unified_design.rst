@@ -1688,7 +1688,8 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     and TLS list fields. The forms are ``complete``.
 
 21. Principal and grant management across engines (owner direction,
-    2026-11-25; **proposed, awaiting owner ruling**). Engines name and run the
+    2026-11-25; **decided 2026-11-25: the defaults (a) to (d) and (i) to (v)
+    are adopted as written**). Engines name and run the
     same thing differently: PostgreSQL has one object (a role, with or without
     ``LOGIN``); MySQL and MariaDB have ``user@host`` accounts plus roles;
     Firebird has server-wide users in a security database plus per-database

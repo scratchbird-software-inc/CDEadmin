@@ -357,6 +357,17 @@ def lint_counts() -> dict:
     mui_imports, mui_files = count_matches(ui_files, re.compile(r"from\s+['\"]@mui/"))
     engine_branches, branch_files = count_matches(
         ui_files, re.compile(r"(?:engine_id|profile_id|languageProfile|cde_engine_id|cde_profile_id)\s*===?\s*['\"]"))
+    # Decision 21 (2026-11-25): the ``engine`` / ``engineId`` props and
+    # ``isMysql*``-style helpers are engine branches too; the pattern above
+    # only sees ``engine_id`` / ``profile_id`` style identifiers.
+    prop_branches, prop_files = count_matches(
+        ui_files,
+        re.compile(
+            r"(?<![A-Za-z_.])(?:engine|engineId)\s*[!=]==?\s*['\"]"
+            r"|\[(?:\s*['\"][a-z0-9_]+['\"]\s*,?)+\]\.includes\(\s*(?:engine|engineId)\s*\)"
+            r"|\bconst\s+is(?:Mysql|MysqlFamily|UnifiedRoleEngine|Firebird|Postgres\w*)\b"))
+    security_prop_branches = sum(
+        n for name, n in prop_files.items() if "/cdeadmin_ui/security/" in name)
     context_menu = web / "cdeadmin" / "context_menu.py"
     menu_branches, _menu_files = count_matches(
         [context_menu], re.compile(r"\bengine_id\s*(?:==|in)\s*[\('\"]")) if context_menu.exists() else (0, Counter())
@@ -376,6 +387,9 @@ def lint_counts() -> dict:
         "mui_imports_top_files": mui_files.most_common(8),
         "engine_literal_branches_in_ui_code": engine_branches,
         "engine_branch_top_files": branch_files.most_common(8),
+        "engine_prop_branches_in_ui_code": prop_branches,
+        "engine_prop_branch_top_files": prop_files.most_common(8),
+        "security_ui_engine_branches": security_prop_branches,
         "engine_panels_in_dialogs": len(panels),
         "engine_branches_in_context_menu": menu_branches,
         "shared_monolith_lines": shared,
@@ -409,7 +423,9 @@ def main() -> int:
         if counts:
             print("\nlint counts (recorded in docs/en_US/ui_unification_status.rst):")
             for key in ("json_controls_in_provider_forms", "mui_imports_in_ui_code",
-                        "engine_literal_branches_in_ui_code", "engine_panels_in_dialogs",
+                        "engine_literal_branches_in_ui_code",
+                        "engine_prop_branches_in_ui_code",
+                        "security_ui_engine_branches", "engine_panels_in_dialogs",
                         "engine_branches_in_context_menu"):
                 print(f"  {key:40s} {counts[key]}")
             for key, lines in counts["shared_monolith_lines"].items():
