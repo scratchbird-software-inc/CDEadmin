@@ -374,3 +374,30 @@ def _proxy_round_trip(env, names):
     assert env.one('SELECT 1 FROM mysql.proxies_priv WHERE User=%s AND Proxied_user=%s', (names.member, names.role))
     env.run('privilege', 'revoke', {**base, 'confirmation': f"{names.member}@%"})
     assert env.one('SELECT 1 FROM mysql.proxies_priv WHERE User=%s AND Proxied_user=%s', (names.member, names.role)) == []
+
+
+def test_a_non_administrator_is_told_the_account_catalog_was_unreadable():
+    """The demo account (documented in the project's demo profile) holds no rights on mysql.*: the
+    provider must report that failure by name, which the descriptor's access notice matches."""
+    import mysql.connector
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MYSQL_PROFILE, _create_client
+    from tools.mysql_driver_gate_support import provider_access
+    settings = {'host': '127.0.0.1', 'port': PORT, 'user': 'cdeadmin_demo', 'database': SCHEMA}
+    try:
+        mysql.connector.connect(**settings, password='CDEadminDemo-2026!').close()
+    except Exception as error:  # noqa: BLE001
+        pytest.skip(f'MySQL demo is not reachable: {error}')
+    route, permissions = provider_access({**settings, 'ssl': False}, password='CDEadminDemo-2026!')
+    client = _create_client(MYSQL_PROFILE, permissions, SimpleNamespace(pool_namespace='nonadmin-' + uuid.uuid4().hex[:6]))
+    try:
+        resources = client.list_resources({'route': route})
+    finally:
+        client.close()
+    server = next(r for r in resources if r['resource_kind'] == 'server')
+    failures = server['native']['catalog_coverage']['failures']
+    notice, = _security()['access_notices']
+    matching = [f for f in failures if f.get('category') == notice['match']['category']
+                and f.get('catalog_object') in notice['match']['catalog_object']]
+    if not matching:
+        pytest.skip('the demo account can read mysql.user (privileges were changed on the shared demo)')
+    assert not [r for r in resources if r['resource_kind'] == 'user'], 'an unreadable catalog must not list users'

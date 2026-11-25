@@ -204,6 +204,13 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
             errors.append(f"{rel}: {principal.get('kind')} roster is merged into {target!r}, which is itself merged")
         elif target is not None and next(p for p in principals if p.get("kind") == target).get("scope") != principal.get("scope"):
             errors.append(f"{rel}: {principal.get('kind')} roster is merged into {target!r} of another scope")
+    notice_ids = set()
+    for notice in doc.get("access_notices", []):
+        if notice["id"] in notice_ids:
+            errors.append(f"{rel}: access notice {notice['id']!r} is listed twice")
+        notice_ids.add(notice["id"])
+        if notice["source"]["kind"] not in kinds:
+            errors.append(f"{rel}: access notice {notice['id']!r} reads kind {notice['source']['kind']!r}, which is not in capabilities.json")
     membership = doc.get("membership")
     if membership and membership["kind"] not in seen:
         errors.append(f"{rel}: membership kind {membership['kind']!r} is not a declared principal")

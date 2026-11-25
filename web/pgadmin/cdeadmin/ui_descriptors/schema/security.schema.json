@@ -45,6 +45,13 @@
         "complete"
       ],
       "description": "complete: the descriptor-driven Security Manager serves this engine and its provider operations are round-tripped live; draft: declared but the engine stays on the previous manager until its operations are verified. Required when principals are declared."
+    },
+    "access_notices": {
+      "type": "array",
+      "description": "warnings the manager shows when the connected account could not read part of what it lists, so an empty or short roster is never mistaken for 'no principals'. Each reads a list of failures the provider reports on a resource of the given kind",
+      "items": {
+        "$ref": "#/$defs/access_notice"
+      }
     }
   },
   "$defs": {
@@ -535,6 +542,59 @@
             "owner",
             "available"
           ]
+        }
+      }
+    },
+    "access_notice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "match",
+        "message"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "native_field"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "resource kind carrying the failure list (server)"
+            },
+            "native_field": {
+              "type": "string",
+              "description": "dotted path in that resource's native block to an array of failure rows"
+            }
+          }
+        },
+        "match": {
+          "type": "object",
+          "description": "native field of a failure row to the value, or list of values, that makes the notice apply; every entry must match",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        "message": {
+          "type": "string"
         }
       }
     }

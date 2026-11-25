@@ -198,5 +198,22 @@
   "requires": {
     "inspect": "verified",
     "mutate": "verified"
-  }
+  },
+  "access_notices": [
+    {
+      "id": "accounts-unreadable",
+      "source": {
+        "kind": "server",
+        "native_field": "catalog_coverage.failures"
+      },
+      "match": {
+        "catalog_object": [
+          "mysql.user",
+          "mysql.role_edges"
+        ],
+        "category": "permission_denied"
+      },
+      "message": "The connected account is not allowed to read the MySQL account catalog, so the accounts, roles and memberships listed here are incomplete. Connect as an account with SELECT on mysql.user to see them all."
+    }
+  ]
 }

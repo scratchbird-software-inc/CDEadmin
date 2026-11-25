@@ -223,3 +223,33 @@ describe('DescriptorSecurityManager membership and held grants (MySQL)', () => {
     expect(cells(screen.getByRole('region', {name: 'Privileges held'}))).toEqual([['global', '', 'PROCESS', '', 'No']]);
   });
 });
+
+describe('DescriptorSecurityManager access notices (MySQL)', () => {
+  beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); });
+  const server = (failures) => ({resource_kind: 'server', resource_id: 'server:MySQL', display_name: 'MySQL',
+    native: {catalog_coverage: {state: 'partial', failures}}});
+  const denied = {catalog_object: 'mysql.user', category: 'permission_denied', error_code: '1142'};
+
+  it('says so when the connected account could not read the account catalog, instead of showing an unexplained empty roster', async () => {
+    const {api} = makeApi('mysql', [server([denied])]);
+    mount({api, engine: 'mysql', scope: 'server'});
+    expect(await screen.findByText(/not allowed to read the MySQL account catalog/)).toBeInTheDocument();
+    expect(screen.getByText(/No accounts found/)).toBeInTheDocument();
+  });
+
+  it('shows nothing when the failures are about something else, or there are none', async () => {
+    const other = {catalog_object: 'mysql.servers', category: 'permission_denied'};
+    const {api} = makeApi('mysql', [server([other, {catalog_object: 'mysql.user', category: 'query_failed'}]),
+      {resource_kind: 'user', resource_id: 'user:a@%', display_name: 'a@%', native: {user: 'a', host: '%'}}]);
+    mount({api, engine: 'mysql', scope: 'server'});
+    await screen.findByRole('button', {name: /^a@%/});
+    expect(screen.queryByText(/not allowed to read/)).not.toBeInTheDocument();
+  });
+
+  it('applies only to engines that declare a notice', async () => {
+    const {api} = makeApi('firebird', [server([denied]), {resource_kind: 'user', resource_id: 'user:A', display_name: 'A', native: {}}]);
+    mount({api, engine: 'firebird', scope: 'server'});
+    await screen.findByRole('button', {name: 'A'});
+    expect(screen.queryByText(/not allowed to read/)).not.toBeInTheDocument();
+  });
+});

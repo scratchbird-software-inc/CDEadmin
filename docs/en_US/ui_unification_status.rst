@@ -1701,3 +1701,23 @@ longer, and a refresh after creating a role can lag by seconds.
 The MySQL Shell grammar library (``CDEADMIN_MYSQL_PARSER_LIBRARY``) is required for
 create/alter review and for privilege operations; without it the editor reports
 ``native_review_refused``.
+
+Decision 21: access notices, the non-administrator gap closed (2026-11-25)
+-------------------------------------------------------------------------
+
+The MySQL provider's catalog failures now name the catalog table they read
+(``catalog_object``, for example ``mysql.user``; never the query text), beside the
+existing ``category`` (``permission_denied``). ``security.json`` gained
+``access_notices``: each reads a list of failure rows from a native field of a
+resource kind (MySQL: the server's ``catalog_coverage.failures``), a ``match`` of
+field values, and a message. The Security Manager shows the message as a warning
+when the provider reported a matching failure, so an empty or short roster is never
+read as "no accounts". MySQL declares one notice for ``mysql.user`` and
+``mysql.role_edges``; Firebird declares none (its server already withholds facts
+by naming them, see above).
+
+Verified live: the demo ``cdeadmin_demo`` account (no rights on ``mysql.*``) gets a
+``permission_denied`` failure naming ``mysql.user`` and no user rows
+(``test_a_non_administrator_is_told_the_account_catalog_was_unreadable``); the
+banner logic is covered by Jest. Not clicked through in a browser. Lint counts
+unchanged (engine_prop 135, security_ui 22).

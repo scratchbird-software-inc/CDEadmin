@@ -297,3 +297,24 @@ def test_firebird_users_carry_markers_for_facts_the_provider_reports():
     doc = json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))
     assert {m['label']: (m['field'], m['equals']) for m in doc['principals'][0]['roster']['markers']} == {
         'Administrator': ('administrator', True), 'Inactive': ('active', False)}
+
+
+def test_mysql_declares_an_access_notice_for_an_unreadable_account_catalog():
+    doc = json.loads((DESCRIPTORS / 'mysql' / 'security.json').read_text(encoding='utf-8'))
+    notice, = doc['access_notices']
+    assert notice['source'] == {'kind': 'server', 'native_field': 'catalog_coverage.failures'}
+    assert notice['match']['category'] == 'permission_denied'
+    assert 'mysql.user' in notice['match']['catalog_object']
+    assert 'access_notices' not in json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))
+
+
+def test_an_access_notice_must_read_a_known_kind(engine_copy):
+    def mutate(doc):
+        doc['access_notices'][0]['source']['kind'] = 'warlock'
+    assert any("reads kind 'warlock'" in e for e in check(engine_copy('mysql', mutate)))
+
+
+def test_an_access_notice_needs_a_message_and_a_match(engine_copy):
+    def mutate(doc):
+        doc['access_notices'][0].pop('message')
+    assert check(engine_copy('mysql', mutate))

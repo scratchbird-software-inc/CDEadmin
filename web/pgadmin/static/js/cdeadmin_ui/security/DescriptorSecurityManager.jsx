@@ -43,6 +43,17 @@ export function principalLabel(principal, resource) {
   return resource?.display_name || parts[0] || '';
 }
 
+/** The notices that apply: the descriptor's declared failure patterns found in what the provider reported. */
+export function activeAccessNotices(security, resources) {
+  return (security?.access_notices || []).filter((notice) => resources
+    .filter((resource) => resource.resource_kind === notice.source.kind)
+    .some((resource) => {
+      const rows = notice.source.native_field.split('.').reduce((node, key) => node?.[key], resourceNative(resource));
+      return Array.isArray(rows) && rows.some((row) => Object.entries(notice.match).every(([field, wanted]) =>
+        (Array.isArray(wanted) ? wanted : [wanted]).includes(row?.[field])));
+    }));
+}
+
 function cell(column, row) {
   const value = row?.[column.field];
   if(Object.hasOwn(column, 'equals')) return value === column.equals ? gettext('Yes') : gettext('No');
@@ -134,6 +145,8 @@ export default function DescriptorSecurityManager({
     ? [principal, ...principals.filter((item) => item.roster?.merged_into === principal.kind)] : []),
   [principal, principals]);
 
+  const notices = useMemo(() => activeAccessNotices(security, state.resources), [security, state.resources]);
+
   const roster = useMemo(() => {
     if(!principal) return [];
     const needle = filter.trim().toLowerCase();
@@ -216,6 +229,7 @@ export default function DescriptorSecurityManager({
         </Box>}
     </Box>
     <Box sx={{flex: 1, minWidth: 0, overflow: 'auto'}}>
+      {notices.map((notice) => <Box key={notice.id} sx={{p: 1}}><Banner status="warning">{gettext(notice.message)}</Banner></Box>)}
       {!selection && <EmptyState message={gettext('Select a %s or create one.', gettext(principal.label).toLowerCase())} />}
       {creating && <ProviderObjectEditorHost key={`create:${creating.kind}`}
         api={api} endpointUrl={endpointUrl} engine={engine} version={version} resourceKind={creating.kind}

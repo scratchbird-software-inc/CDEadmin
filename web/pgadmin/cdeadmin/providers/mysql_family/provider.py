@@ -2449,8 +2449,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     'state': 'disabled', 'native_error_code': 1381,
                     'sqlstate': getattr(error, 'sqlstate', None)})
                 return
+            # Name the catalog table the query read, so a consumer can tell which part of the
+            # inventory is missing (never the query text, which may carry identifiers).
+            named = re.search(r'(?i)\bFROM\s+((?:mysql|information_schema|performance_schema|sys)\.\w+)', source)
             catalog_failures.append({
                 'query_sha256': hashlib.sha256(source.encode()).hexdigest(),
+                **({'catalog_object': named.group(1).lower()} if named else {}),
                 'error_code': None if code is None else str(code),
                 'sqlstate': getattr(error, 'sqlstate', None),
                 'category': ('permission_denied' if code in {1142, 1227}
