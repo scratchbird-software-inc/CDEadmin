@@ -288,3 +288,9 @@ def test_a_roster_cannot_merge_into_a_principal_that_is_itself_merged(engine_cop
     def mutate(doc):
         doc['principals'][0]['roster'] = {'merged_into': 'role'}
     assert any('itself merged' in e for e in check(engine_copy('mysql', mutate)))
+
+
+def test_firebird_users_carry_markers_for_facts_the_provider_reports():
+    doc = json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))
+    assert {m['label']: (m['field'], m['equals']) for m in doc['principals'][0]['roster']['markers']} == {
+        'Administrator': ('administrator', True), 'Inactive': ('active', False)}

@@ -228,9 +228,25 @@ describe('MySQL-shaped grants: scope-keyed rows, account strings and the declare
     const security = loadEngineBundle('mysql').security;
     const grantee = granteeSpelling(security, security.principals[0], {display_name: 'app@%', native: {name: 'app', host: '%'}});
     expect(grantee).toBe('\'app\'@\'%\'');
-    const held = heldRows(security.grants, RESOURCES, grantee);
+    const held = heldRows(security.grants, RESOURCES, grantee, 'user');
     expect(held.map((r) => `${r.scope}:${r.object}:${r.privilege}`)).toEqual([
       'column:d.t:UPDATE', 'database:d:SELECT', 'global::PROCESS', 'routine:d.p:ALTER ROUTINE', 'routine:d.p:EXECUTE',
       'table:d.t:SELECT', 'table:other.t:DROP']);
+  });
+});
+
+describe('heldRows for a Firebird principal', () => {
+  const grants = () => loadEngineBundle('firebird').security.grants;
+  const row = (native) => ({resource_kind: 'privilege', native: {grantee: 'APP', user_type: 8, grant_option: 0, ...native}});
+  it('lists object grants by their object name, skips membership rows, and keeps a user apart from a same-named role', () => {
+    const resources = [
+      row({privilege: 'S', object_name: 'T1'}),
+      row({privilege: 'U', object_name: 'T1', field: 'N', grant_option: 1}),
+      row({privilege: 'M', object_name: 'R_ONE'}),
+      row({privilege: 'X', object_name: 'P1', user_type: 13}),
+    ];
+    const asUser = heldRows(grants(), resources, 'APP', 'user');
+    expect(asUser.map((r) => `${r.object}:${r.privilege}:${r.column}:${r.grantOption}`)).toEqual(['T1:SELECT::false', 'T1:UPDATE:N:true']);
+    expect(heldRows(grants(), resources, 'APP', 'role').map((r) => r.object)).toEqual(['P1']);
   });
 });

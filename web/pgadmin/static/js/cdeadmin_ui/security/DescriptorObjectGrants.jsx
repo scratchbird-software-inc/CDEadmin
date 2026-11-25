@@ -100,17 +100,27 @@ export function granteeSpelling(security, principal, resource) {
   return template.replace(/\{(\w+)\}/g, (_, field) => String(native[field] ?? ''));
 }
 
-/** Every grant a principal holds, across all scopes (the only place global grants show). */
-export function heldRows(grants, resources, grantee) {
+/** The object a grant row is on, named through the descriptor's own fields (empty for a server-wide grant). */
+function objectOf(listing, native) {
+  if(listing.object_field) return native[listing.object_field] || '';
+  const spec = Object.values(listing.kinds || {}).find((kind) => kind.scopes.includes(native[listing.scope_field]));
+  const fields = spec ? spec.fields : (listing.object_fields || []);
+  return fields.map((field) => native[field]).filter(Boolean).join('.');
+}
+
+/** Every grant a principal holds, across all scopes (the only place global grants show).
+ *  principalKind separates a user from a role of the same name where the engine stores a grantee type. */
+export function heldRows(grants, resources, grantee, principalKind) {
   const listing = grants.listing;
   const codes = listing.privilege_codes;
   const privilegeName = (stored) => (codes ? codes[stored] : stored);
   return resources
     .filter((resource) => resource.resource_kind === grants.grant_kind)
     .map((resource) => resourceNative(resource))
-    .filter((native) => native[listing.grantee_field] === grantee)
-    .map((native) => ({...toRow(listing, native, privilegeName),
-      object: [native.database, native.table_name || native.routine_name].filter(Boolean).join('.')}))
+    .filter((native) => native[listing.grantee_field] === grantee
+      && (!codes || Object.hasOwn(codes, native[listing.privilege_field])))
+    .map((native) => ({...toRow(listing, native, privilegeName), object: objectOf(listing, native)}))
+    .filter((row) => !(principalKind && row.granteeKind) || row.granteeKind === principalKind.toUpperCase())
     .sort((a, b) => `${a.scope}:${a.object}:${a.privilege}:${a.column}`.localeCompare(`${b.scope}:${b.object}:${b.privilege}:${b.column}`));
 }
 

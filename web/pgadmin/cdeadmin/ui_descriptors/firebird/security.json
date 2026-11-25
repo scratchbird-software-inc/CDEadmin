@@ -15,6 +15,20 @@
       "variant": {
         "field_id": "variant",
         "value": "user"
+      },
+      "roster": {
+        "markers": [
+          {
+            "label": "Administrator",
+            "field": "administrator",
+            "equals": true
+          },
+          {
+            "label": "Inactive",
+            "field": "active",
+            "equals": false
+          }
+        ]
       }
     },
     {
@@ -98,7 +112,8 @@
       "column_field": "field",
       "grant_option_field": "grant_option",
       "grant_option_equals": 1,
-      "grantor_field": "grantor"
+      "grantor_field": "grantor",
+      "held": true
     },
     "dialog": {
       "object_type": "object_type",

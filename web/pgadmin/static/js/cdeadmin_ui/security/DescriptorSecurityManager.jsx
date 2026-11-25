@@ -66,8 +66,8 @@ function Memberships({listing, resource}) {
   </Box>;
 }
 
-function Held({grants, resources, grantee}) {
-  const rows = heldRows(grants, resources, grantee);
+function Held({grants, resources, grantee, principalKind}) {
+  const rows = heldRows(grants, resources, grantee, principalKind);
   if(rows.length === 0) return null;
   const listing = grants.listing;
   return <Box component="section" aria-label={gettext('Privileges held')} sx={{p: 1}}>
@@ -89,7 +89,7 @@ function Held({grants, resources, grantee}) {
   </Box>;
 }
 
-Held.propTypes = {grants: PropTypes.object.isRequired, resources: PropTypes.array.isRequired, grantee: PropTypes.string.isRequired};
+Held.propTypes = {grants: PropTypes.object.isRequired, resources: PropTypes.array.isRequired, grantee: PropTypes.string.isRequired, principalKind: PropTypes.string};
 
 Memberships.propTypes = {listing: PropTypes.object.isRequired, resource: PropTypes.object};
 
@@ -231,7 +231,7 @@ export default function DescriptorSecurityManager({
         {security.membership?.listing && membershipTarget && <Memberships listing={security.membership.listing} resource={membershipTarget} />}
         {security.membership?.member_of_listing && <Memberships listing={security.membership.member_of_listing} resource={selected} />}
         {security.grants?.listing?.held && <Held grants={security.grants} resources={state.resources}
-          grantee={granteeSpelling(security, principal, selected)} />}
+          grantee={granteeSpelling(security, principal, selected)} principalKind={principal.kind} />}
         <ProviderObjectEditorHost key={`alter:${selected.resource_id}`}
           api={api} endpointUrl={endpointUrl} engine={engine} version={version}
           resourceId={selected.resource_id} resourceKind={kind} displayName={selected.display_name}

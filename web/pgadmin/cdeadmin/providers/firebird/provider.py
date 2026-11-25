@@ -585,7 +585,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 svc_conn = None
                 try:
                     svc_route = {k: v for k, v in dict(route).items() if k != 'database'}
-                    svc_conn = self.client._connect({'route': svc_route})
+                    svc_conn = self.client._connect_server({'route': svc_route})
                     rows.extend(_read_server_service_user_resources(svc_conn, generation))
                 except Exception:
                     pass
@@ -848,7 +848,7 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 payload = planned['provider_payload']
                 if 'firebird_service_user' in payload:
                     route = {k: v for k, v in payload['route'].items() if k != 'database'}
-                    conn = self.client._connect({'route': route})
+                    conn = self.client._connect_server({'route': route})
                     try:
                         users.apply_service_call(conn, payload['firebird_service_user'])
                     finally:
@@ -1437,6 +1437,21 @@ def _read_server_security_sql_resources(connection, generation):
 def _server_resources(server, request):
     generation = str(request.get('capability_generation') or 'current')
     info = server.info
+    native = {'version': str(info.version), 'scope': 'server'}
+    # These facts are SYSDBA-only in the Services API. A plain user still gets the server
+    # node, with what the server refuses named rather than the whole listing failing.
+    refused = []
+    for key, read in (('architecture', lambda: str(info.architecture)),
+                      ('home_directory', lambda: str(info.home_directory)),
+                      ('connection_count', lambda: int(info.connection_count))):
+        try:
+            native[key] = read()
+        except Exception as exc:  # noqa: BLE001
+            if 'SYSDBA' not in str(exc):
+                raise
+            refused.append(key)
+    if refused:
+        native['administrator_only_unavailable'] = refused
     resources = [{
         'resource_id': 'server:Firebird',
         'resource_kind': 'server',
@@ -1444,13 +1459,7 @@ def _server_resources(server, request):
         'display_path': ['Firebird'],
         'authority_path': ['server', 'Firebird'],
         'generation': generation,
-        'native': {
-            'version': str(info.version),
-            'architecture': str(info.architecture),
-            'home_directory': str(info.home_directory),
-            'connection_count': int(info.connection_count),
-            'scope': 'server',
-        },
+        'native': native,
     }]
     resources.extend({
         'resource_id': f'service-operation:{name}',

@@ -50,7 +50,7 @@ def rig(monkeypatch):
             raise RuntimeError('Firebird connection failed; status codes: 335544352')
         return service
 
-    client._connect = connect
+    client._connect_server = connect
     client._forget_and_close = Mock()
     provider = FirebirdProvider(context(PROFILE), Permissions(), client)
     return SimpleNamespace(provider=provider, service=service, routes=routes, client=client)

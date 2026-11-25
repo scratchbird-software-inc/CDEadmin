@@ -1619,3 +1619,47 @@ revoke operations were round-tripped for table and column scope only (not databa
 routine, proxy or global); the role form's create and alter were not round-tripped
 live; MariaDB, which shares the provider, was not run. MySQL stays ``draft`` as
 instructed. Lint counts unchanged (engine_prop 135, security_ui 22).
+
+Decision 21: MySQL and Firebird gaps closed against live servers (2026-11-25)
+-----------------------------------------------------------------------------
+
+Supersedes the "not verified" notes above for these items. Live servers used: the
+demo MySQL 9.7.0 and Firebird 5.0.4 containers (``cdeadmin-demo-mysql``,
+``cdeadmin-demo-firebird``); every account the tests create is dropped.
+
+MySQL (``test_ui_descriptor_security_mysql_live.py``, 13 passed with the MySQL
+Shell grammar library at ``CDEADMIN_MYSQL_PARSER_LIBRARY``, otherwise the privilege
+tests skip):
+
+* Grant and revoke round-trip at global, database, routine (procedure), table and
+  column scope, and PROXY (the container's remote root holds no PROXY privilege, so
+  the test grants it temporarily through the local root and reverts it).
+* The role editor creates and alters a user (comment, lock) and creates a role,
+  through the same draft path the editor uses, sending only changed fields on alter.
+* The listings (scope-keyed grants, membership, USAGE) match what the provider
+  returns for each scope.
+
+Firebird (``test_firebird_service_users_live.py``, 4 passed):
+
+* **Defect found and fixed:** the Services API user path and the existing
+  server-user listing called ``client._connect`` (a database attachment) instead of
+  ``client._connect_server``. Against a real server the connection failed with a
+  TypeError; the listing swallowed it, so server-scope user rosters were silently
+  empty, and the earlier fake-manager test patched the wrong method and hid it.
+* Services-API create, alter (name parts, administrator) and drop are now verified
+  on the server; passwords never appear in the plan.
+* Non-administrator view: the server itself limits a plain user. At database scope
+  the user list is the account alone (roles and grants stay visible); at server scope
+  the Services API refuses ``isc_info_svc_get_env``. The provider used to fail the
+  whole server listing; it now returns the server node without the refused facts and
+  names them in ``administrator_only_unavailable``. No separate "limited" state exists.
+* Roster markers (Administrator, Inactive) read the ``administrator`` and ``active``
+  facts the provider reports, and Firebird now has the "Privileges held" view
+  (object grants by object name, membership rows excluded, a user kept apart from a
+  same-named role).
+
+Still open: no click-through of either manager in a running UI; MariaDB (same
+provider as MySQL, no descriptor yet) was not run; many reviews in one apply
+(``apply_visual_admin_bulk``) is not wired, although one Firebird or MySQL review
+already takes several privileges and several grantees. MySQL stays ``draft``.
+Lint counts unchanged (engine_prop 135, security_ui 22).
