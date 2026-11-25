@@ -1678,6 +1678,8 @@ export default function DataEditSurface({
     regActions.push({
       id: `file.save.${instId}`,
       icon: 'action.save',
+      application: 'data-navigator',
+      focusScoped: true,
       defaultText: gettext('Save Surface Layout / Template'),
       defaultHint: gettext('Save the current display settings or create a shareable template'),
       status: T_ACTION_STATUS.ENABLED,
@@ -1695,6 +1697,8 @@ export default function DataEditSurface({
     regActions.push({
       id: `edit.undo.${instId}`,
       icon: 'action.undo',
+      application: 'data-navigator',
+      focusScoped: true,
       defaultText: gettext('Undo Row Edit'),
       defaultHint: gettext('Revert changes to the current row'),
       status:
@@ -1709,6 +1713,8 @@ export default function DataEditSurface({
     regActions.push({
       id: `edit.redo.${instId}`,
       icon: 'action.redo',
+      application: 'data-navigator',
+      focusScoped: true,
       defaultText: gettext('Redo'),
       defaultHint: gettext('Reapply an undone row edit'),
       status:
@@ -2218,8 +2224,9 @@ export default function DataEditSurface({
         label: gettext('Data'),
         groups: [
           {
-            id: 'content_view',
-            label: gettext('Surface & View'),
+            id: 'workspace_panels',
+            sectionId: 'SEC-WORKSPACE',
+            label: gettext('Workspace & Panels'),
             controls: [
               {
                 id: contentPillId,
@@ -2279,6 +2286,13 @@ export default function DataEditSurface({
                   },
                 ],
               },
+            ],
+          },
+          {
+            id: 'data_presentation',
+            sectionId: 'SEC-PRES',
+            label: gettext('Data Presentation'),
+            controls: [
               {
                 id: displayPillId,
                 actionId: displayPillId,
@@ -2352,6 +2366,7 @@ export default function DataEditSurface({
           },
           {
             id: 'navigate',
+            sectionId: 'SEC-NAV',
             label: gettext('Navigate'),
             controls: [
               navFirstId,
@@ -2369,13 +2384,14 @@ export default function DataEditSurface({
           },
           {
             id: 'record',
+            sectionId: 'SEC-REC',
             label: gettext('Record'),
             controls: [
               {
                 id: editAcceptId,
                 actionId: editAcceptId,
                 size: 'large',
-                showLabel: true,
+                showLabel: false,
               },
               {
                 type: 'stack',
@@ -2386,9 +2402,10 @@ export default function DataEditSurface({
           },
           {
             id: 'transaction',
+            sectionId: 'SEC-TX',
             label: gettext('Transaction'),
             controls: [
-              {id: commitId, actionId: commitId, size: 'large', showLabel: true},
+              {id: commitId, actionId: commitId, size: 'large', showLabel: false},
               {
                 type: 'stack',
                 id: `${pfx}.tx_stack`,
@@ -2398,9 +2415,10 @@ export default function DataEditSurface({
           },
           {
             id: 'clipboard',
+            sectionId: 'SEC-CLIP',
             label: gettext('Clipboard'),
             controls: [
-              {id: copyId, actionId: copyId, size: 'large', showLabel: true},
+              {id: copyId, actionId: copyId, size: 'large', showLabel: false},
               {
                 type: 'stack',
                 id: `${pfx}.clip_stack`,
@@ -2425,9 +2443,10 @@ export default function DataEditSurface({
           },
           {
             id: 'fetch_sort',
+            sectionId: 'SEC-FIND',
             label: gettext('Fetch & Sort'),
             controls: [
-              {id: refreshId, actionId: refreshId, size: 'large', showLabel: true},
+              {id: refreshId, actionId: refreshId, size: 'large', showLabel: false},
               {
                 type: 'stack',
                 id: `${pfx}.fetch_stack`,
@@ -2449,11 +2468,13 @@ export default function DataEditSurface({
         groups: [
           {
             id: 'display_areas',
+            sectionId: 'SEC-WORKSPACE',
             label: gettext('Display Areas'),
             controls: displayAreas.map(({control}) => control),
           },
           {
             id: 'alignment',
+            sectionId: 'SEC-COLTEXT',
             label: gettext('Alignment'),
             controls: [
               {
@@ -2490,9 +2511,10 @@ export default function DataEditSurface({
           },
           {
             id: 'sizing_wrap',
+            sectionId: 'SEC-COLTEXT',
             label: gettext('Sizing & Columns'),
             controls: [
-              {id: autoFitId, actionId: autoFitId, size: 'large', showLabel: true},
+              {id: autoFitId, actionId: autoFitId, size: 'large', showLabel: false},
               {
                 id: wrapPillId,
                 actionId: wrapPillId,
@@ -3179,8 +3201,12 @@ export default function DataEditSurface({
         items: [
           {
             id: `${pfx}.mnu.toggle_3b`,
+            replacesId: 'window.toolbar.right_drawer',
             label: gettext('Toggle Right Inspector Drawer'),
             iconKey: 'action.inspector_drawer',
+            checked: Boolean(
+              shellRef.current?.instances?.find((i) => i.instanceId === instId)?.rightOpen
+            ),
             index: 15,
             callback: () => shellRef.current?.toggleInstanceRightDrawer?.(instId),
           },

@@ -55,7 +55,24 @@ export class ManageTreeNodes {
     if (path === null || path === undefined || path.length === 0 || path == '/browser') {
       return this.tempTree;
     }
-    return findInTree(this.tempTree, path);
+    const direct = findInTree(this.tempTree, path);
+    if (direct) {
+      return direct;
+    }
+    const dirName = unix.dirname(path);
+    const baseName = unix.basename(path);
+    const parentNode = dirName === '/browser' || dirName === '/'
+      ? this.tempTree
+      : findInTree(this.tempTree, dirName);
+    if (parentNode && Array.isArray(parentNode.children)) {
+      const byNameOrId = parentNode.children.find(
+        (child) => child?.id === baseName || child?.name === baseName || child?.data?._label === baseName
+      );
+      if (byNameOrId) {
+        return byNameOrId;
+      }
+    }
+    return null;
   }
 
   public addNode = (_parent: string, _path: string, _data: []) => new Promise((res) => {

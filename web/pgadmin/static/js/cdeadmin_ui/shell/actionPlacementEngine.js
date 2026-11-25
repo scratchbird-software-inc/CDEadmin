@@ -7,6 +7,12 @@
 //
 //////////////////////////////////////////////////////////////
 
+import {
+  STANDARD_TIB_ACTIONS,
+  STANDARD_TIB_SECTIONS_BY_ID,
+  normalizeTiBConfig,
+} from './tibStandardConfig';
+
 export const FALLBACK_QUICK_ACCESS_IDS = Object.freeze([
   'shell.quick.new',
   'shell.quick.save',
@@ -248,6 +254,20 @@ export const CANONICAL_ACTION_CATALOG = Object.freeze([
   {id: 'project.export_ddn', label: 'Export DDN Snapshot', icon: 'action.export', scope: 'Project Explorer'},
 ]);
 
+export const EXTENDED_ACTION_CATALOG = Object.freeze([
+  ...CANONICAL_ACTION_CATALOG,
+  ...STANDARD_TIB_ACTIONS.map((act) => ({
+    id: act.id,
+    label: act.label,
+    hint: act.hint,
+    icon: act.icon,
+    scope: act.scope,
+    sectionId: act.sectionId,
+    slotKind: act.slotKind,
+    handlerId: act.handlerId,
+  })),
+]);
+
 export function readLocalPlacements() {
   if (typeof window === 'undefined') return {};
   try {
@@ -310,7 +330,7 @@ export function applyGlobalMenuPlacements(
 
     for (const actionId of extraActions) {
       if (items.some((it) => (it.actionId || it.id) === actionId)) continue;
-      const catEntry = CANONICAL_ACTION_CATALOG.find((c) => c.id === actionId);
+      const catEntry = EXTENDED_ACTION_CATALOG.find((c) => c.id === actionId);
       const regAction = actionsRegistry?.has?.(actionId) ? actionsRegistry.resolve(actionId) : null;
       items.push({
         id: `placed_${actionId}`,
@@ -346,7 +366,7 @@ export function applyGlobalMenuPlacements(
     if (!cm?.name || cm.visible === false) continue;
     if (result.some((m) => m.name === cm.name)) continue;
     const items = (cm.actions || []).map((actionId, idx) => {
-      const catEntry = CANONICAL_ACTION_CATALOG.find((c) => c.id === actionId);
+      const catEntry = EXTENDED_ACTION_CATALOG.find((c) => c.id === actionId);
       const regAction = actionsRegistry?.has?.(actionId) ? actionsRegistry.resolve(actionId) : null;
       return {
         id: `custom_${cm.name}_${actionId}`,
@@ -373,16 +393,51 @@ export function applyGlobalMenuPlacements(
  * Resolves live `3b1` Quick-Access action IDs and `3b` `ribbonTabs` for the focused
  * application instance, merging instance defaults with persisted user placements.
  */
+export function resolveGlobalTiBState(settings = {}) {
+  const local = readLocalPlacements();
+  const globalCfg = settings?.global || {};
+  const tibConfig = normalizeTiBConfig({
+    ...(globalCfg.tib_config || {}),
+    ...(local.tib_config || {}),
+  });
+  const tibSections = {
+    ...(globalCfg.tib_sections || {}),
+    ...(local.tib_sections || {}),
+  };
+  const actionDefinitions = {
+    ...(globalCfg.action_definitions || {}),
+    ...(local.action_definitions || {}),
+  };
+  const iconAssignments = {
+    ...(globalCfg.icon_assignments || {}),
+    ...(local.icon_assignments || {}),
+  };
+  return {tibConfig, tibSections, actionDefinitions, iconAssignments};
+}
+
+/**
+ * Resolves live `3b1` Quick-Access action IDs and `3b` `ribbonTabs` for the focused
+ * application instance, merging instance defaults with persisted user placements
+ * and global TiB settings.
+ */
 export function resolveInstanceNotebookBarSpec(instance, settings = {}) {
+  const {tibConfig, tibSections, actionDefinitions, iconAssignments} =
+    resolveGlobalTiBState(settings);
   if (!instance) {
-    return {ribbonTabs: [], quickAccess: [...FALLBACK_QUICK_ACCESS_IDS], iconAssignments: {}};
+    return {
+      ribbonTabs: [],
+      quickAccess: tibConfig.show_quick_access ? [...FALLBACK_QUICK_ACCESS_IDS] : [],
+      iconAssignments,
+      tibConfig,
+      tibSections,
+      actionDefinitions,
+    };
   }
   const local = readLocalPlacements();
   const globalCfg = settings?.global || {};
   const appCfg = settings?.applications?.[instance.appId] || local.applications?.[instance.appId] || {};
-  const iconAssignments = globalCfg.icon_assignments || local.icon_assignments || {};
 
-  const quickAccess =
+  const rawQuickAccess =
     Array.isArray(appCfg.quick_access) && appCfg.quick_access.length > 0
       ? appCfg.quick_access
       : Array.isArray(globalCfg.quick_access) && globalCfg.quick_access.length > 0
@@ -390,52 +445,85 @@ export function resolveInstanceNotebookBarSpec(instance, settings = {}) {
         : Array.isArray(local.quick_access) && local.quick_access.length > 0
           ? local.quick_access
           : instance.quickAccess || FALLBACK_QUICK_ACCESS_IDS;
+  const quickAccess = tibConfig.show_quick_access ? rawQuickAccess : [];
 
   const baseTabs = Array.isArray(instance.ribbonTabs) ? instance.ribbonTabs : [];
   const nbPlacements = appCfg.notebookbar_placements;
   if (!nbPlacements || !Array.isArray(nbPlacements.tabs) || nbPlacements.tabs.length === 0) {
-    return {ribbonTabs: baseTabs, quickAccess, iconAssignments};
+    return {
+      ribbonTabs: baseTabs,
+      quickAccess,
+      iconAssignments,
+      tibConfig,
+      tibSections,
+      actionDefinitions,
+    };
   }
 
   // Map canonical base action IDs to instance-scoped dynamic action IDs when applicable
-  // (e.g. `data-navigator.refresh` -> `data-navigator.refresh.<instanceId>`)
   const instanceActionIds = [];
+  const collectIds = (items = []) => {
+    items.forEach((a) => {
+      if (!a) return;
+      if (a.type === 'stack' && Array.isArray(a.controls)) {
+        collectIds(a.controls);
+        return;
+      }
+      const id = typeof a === 'string' ? a : a?.actionId || a?.command || a?.id;
+      if (id) instanceActionIds.push(id);
+    });
+  };
   baseTabs.forEach((t) =>
-    (t.groups || []).forEach((g) =>
-      (g.actions || g.controls || []).forEach((a) => {
-        const id = typeof a === 'string' ? a : a?.actionId || a?.command;
-        if (id) instanceActionIds.push(id);
-      })
-    )
+    (t.groups || []).forEach((g) => collectIds(g.actions || g.controls || []))
   );
 
-  const mapToLiveActionId = (canonicalOrRawId) => {
-    if (instanceActionIds.includes(canonicalOrRawId)) return canonicalOrRawId;
-    const prefixed = instanceActionIds.find((liveId) => liveId.startsWith(`${canonicalOrRawId}.`));
-    return prefixed || canonicalOrRawId;
+  const mapToLiveControl = (item) => {
+    if (typeof item !== 'string') return item;
+    if (instanceActionIds.includes(item)) return item;
+    const prefixed = instanceActionIds.find((liveId) => liveId.startsWith(`${item}.`));
+    return prefixed || item;
   };
 
   const mergedTabs = nbPlacements.tabs
     .filter((t) => t && t.hidden !== true)
-    .map((tab) => ({
-      id: tab.id || 'custom-tab',
-      label: tab.label || 'Commands',
-      groups: (tab.groups || [])
-        .filter((g) => g && g.hidden !== true)
-        .map((grp) => {
-          const mapped = (grp.actions || grp.controls || []).map(mapToLiveActionId);
-          return {
-            id: grp.id || 'group',
-            label: grp.label || 'Actions',
-            actions: mapped,
-            controls: mapped,
-          };
-        }),
-    }));
+    .map((tab, tIdx) => {
+      const baseMatch = baseTabs.find((bt) => bt.id === tab.id) || baseTabs[tIdx] || null;
+      return {
+        ...(baseMatch || {}),
+        id: tab.id || baseMatch?.id || `custom-tab-${tIdx}`,
+        label: tab.label || baseMatch?.label || 'Commands',
+        isUnderTab: nbPlacements.tabs.length > 1 || Boolean(baseMatch?.isUnderTab),
+        groups: (tab.groups || [])
+          .filter((g) => g && g.hidden !== true)
+          .map((grp, gIdx) => {
+            const stdSec = grp.sectionId ? STANDARD_TIB_SECTIONS_BY_ID[grp.sectionId] : null;
+            const baseGrp =
+              baseMatch?.groups?.find(
+                (bg) => bg.id === grp.id || (grp.sectionId && bg.sectionId === grp.sectionId)
+              ) || null;
+            const rawList = grp.actions || grp.controls || baseGrp?.controls || [];
+            const mapped = rawList.map(mapToLiveControl);
+            return {
+              ...(baseGrp || {}),
+              id: grp.id || stdSec?.id || `group-${gIdx}`,
+              sectionId: grp.sectionId || baseGrp?.sectionId || stdSec?.id || '',
+              sectionIcon: grp.sectionIcon || baseGrp?.sectionIcon || stdSec?.sectionIcon || '',
+              label: grp.label || stdSec?.title || baseGrp?.label || 'Actions',
+              actions: mapped,
+              controls: mapped,
+            };
+          }),
+      };
+    });
 
   return {
     ribbonTabs: mergedTabs.length > 0 ? mergedTabs : baseTabs,
-    quickAccess: quickAccess.map(mapToLiveActionId),
+    quickAccess: quickAccess.map((id) =>
+      typeof id === 'string' ? mapToLiveControl(id) : id
+    ),
     iconAssignments,
+    tibConfig,
+    tibSections,
+    actionDefinitions,
   };
 }

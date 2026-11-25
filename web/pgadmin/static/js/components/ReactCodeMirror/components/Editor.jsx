@@ -186,6 +186,12 @@ export default function Editor({
   const shortcuts = useRef(new Compartment());
   const configurables = useRef(new Compartment());
   const editableConfig = useRef(new Compartment());
+  const onChangeRef = useRef(onChange);
+  const onCursorActivityRef = useRef(onCursorActivity);
+  const onBreakPointChangeRef = useRef(onBreakPointChange);
+  onChangeRef.current = onChange;
+  onCursorActivityRef.current = onCursorActivity;
+  onBreakPointChangeRef.current = onBreakPointChange;
 
   useEffect(() => {
     if (!checkIsMounted()) return;
@@ -197,6 +203,7 @@ export default function Editor({
       finalExtns.push(lineNumbers());
     }
     if (editorContainerRef.current) {
+      let isMounting = true;
       const state = EditorState.create({
         extensions: [
           ...finalExtns,
@@ -209,10 +216,10 @@ export default function Editor({
           ].concat(keepHistory ? [history()] : [])),
           [EditorView.updateListener.of(function(update) {
             if(update.selectionSet) {
-              onCursorActivity?.(update.view.getCursor(), update.view);
+              onCursorActivityRef.current?.(update.view.getCursor(), update.view);
             }
-            if(update.docChanged) {
-              onChange?.(update.view.getValue(), update.view);
+            if(update.docChanged && !isMounting) {
+              onChangeRef.current?.(update.view.getValue(), update.view);
             }
             if(breakpoint) {
               for(const transaction of update.transactions) {
@@ -223,7 +230,7 @@ export default function Editor({
                       return;
                     }
                     const lineNo = editor.current.state.doc.lineAt(effect.value.pos).number;
-                    onBreakPointChange?.(lineNo, effect.value.on);
+                    onBreakPointChangeRef.current?.(lineNo, effect.value.on);
                   }
                 }
               }
@@ -249,6 +256,7 @@ export default function Editor({
       } else {
         editor.current.setValue('');
       }
+      isMounting = false;
 
       currEditor?.(editor.current);
     }

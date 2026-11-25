@@ -4,6 +4,17 @@ import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mu
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
+import {Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../cdeadmin_ui/modules/StructuredPayloadCard';
+
+function parseJsonArray(text) {
+  try {
+    const parsed=JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 function example(operation,member) {
@@ -86,6 +97,15 @@ export default function MySQLTopologies({post:basePost}) {
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
   const loadMembers=offset=>run('members',{offset,limit:25},setMembers);
   const invalidate=()=>{inputVersion.current++;setReview(null);};
+  const parsedArgs=parseJsonArray(argumentsText);
+  const updatePositionalArg=(idx,nextVal)=> {
+    const base=parsedArgs ? [...parsedArgs] : [];
+    while(base.length<=idx)base.push(null);
+    base[idx]=nextVal;
+    setArgumentsText(JSON.stringify(base,null,2));
+    invalidate();
+    if(operation?.account || operation?.bootstrap){setAccountPassword('');setAccountSecretReady(false);}
+  };
   return <Box sx={{p:2}}>
     <FormReference formKey="mysql-topologies" />
     <Alert severity="info">Manage native MySQL instance configuration, InnoDB Cluster, ReplicaSet, ClusterSet, Router metadata and routing guidelines. Native utility replies and current topology observations are separate from workload readiness. Closing this view does not cancel a job.</Alert>
@@ -94,7 +114,7 @@ export default function MySQLTopologies({post:basePost}) {
       <Button disabled={busy} onClick={()=>setExecution(null)}>Use original topology registration</Button></Alert>}
     <Button disabled={busy} onClick={()=>run('catalog',{},setCatalog)}>Load native topology methods</Button>
     <Button disabled={busy} onClick={()=>run('inspect',{},value=>{setSeed(value);setReview(null);})}>Inspect topology seed</Button>
-    {seed && <Box component="pre" aria-label="Native topology seed" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(seed,null,2)}</Box>}
+    {seed && <Box sx={{my:1}}><StructuredPayloadCard title="Inspected topology seed" value={seed} rawAriaLabel="Native topology seed" /></Box>}
     {catalog && <TextField select fullWidth label="Native topology method" value={operationId} disabled={busy} onChange={event=> {
       const value=catalog.operations.find(item=>item.id===event.target.value);setOperationId(value.id);setArgumentsText(example(value,member));setContextOptions('{}');invalidate();
       setAccountPasswordEnabled(false);setAccountPassword('');setAccountSecretReady(false);
@@ -147,9 +167,53 @@ export default function MySQLTopologies({post:basePost}) {
     </>}
     {member && <Button disabled={busy || !operation} onClick={()=>{setArgumentsText(example(operation,member));setReview(null);}}>Reset arguments for {member.name}</Button>}
     <Alert severity="info">For native SQL fanout or clone recovery, select every known member for recovery observations before review. Missing native ownership or unavailable observations keep uncertain targets protected.</Alert>
-    <TextField fullWidth multiline minRows={5} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
-      helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
-      onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account || operation?.bootstrap){setAccountPassword('');setAccountSecretReady(false);}}} />
+    <Box sx={{my:1.5,p:1.5,border:'1px solid var(--sr-border, rgba(128,128,128,0.22))',borderRadius:1.5}}>
+      <Stack gap={1.25}>
+        {(operation?.arguments || ['options']).map((argSpec,idx)=> {
+          const kind=argSpec.replace(/\?$/,'');
+          const currentVal=parsedArgs?.[idx];
+          if(['options','document'].includes(kind) || (currentVal && typeof currentVal==='object' && !Array.isArray(currentVal))) {
+            return <KeyValueJsonEditor
+              key={`${idx}-${argSpec}`}
+              title={`Argument ${idx + 1}: ${argSpec}`}
+              disabled={busy || !parsedArgs}
+              valueJson={currentVal && typeof currentVal==='object' && !Array.isArray(currentVal) ? JSON.stringify(currentVal,null,2) : '{}'}
+              onChangeJson={nextJson=>{try{updatePositionalArg(idx,JSON.parse(nextJson));}catch{/* ignore */}}}
+            />;
+          }
+          return <TextField
+            key={`${idx}-${argSpec}`}
+            size="small"
+            fullWidth
+            disabled={busy || !parsedArgs}
+            label={`Argument ${idx + 1}: ${argSpec}`}
+            value={currentVal===undefined || currentVal===null ? '' : typeof currentVal==='string' ? currentVal : JSON.stringify(currentVal)}
+            onChange={e=> {
+              const raw=e.target.value;
+              if(raw==='true')updatePositionalArg(idx,true);
+              else if(raw==='false')updatePositionalArg(idx,false);
+              else if(/^-?\d+$/.test(raw.trim()))updatePositionalArg(idx,Number(raw.trim()));
+              else updatePositionalArg(idx,raw);
+            }}
+          />;
+        })}
+        {operation?.context==='cluster' && <KeyValueJsonEditor
+          title="Cluster context options"
+          disabled={busy}
+          valueJson={contextOptions}
+          onChangeJson={nextJson=>{setContextOptions(nextJson);invalidate();}}
+        />}
+        <Box component="details">
+          <summary style={{cursor:'pointer',fontSize:12,opacity:0.8}}>Advanced JSON overrides</summary>
+          <Stack gap={1} style={{marginTop:8}}>
+            <TextField fullWidth multiline minRows={4} label="Native topology arguments (JSON array)" value={argumentsText} disabled={busy}
+              helperText={'Native arguments: '+(operation?.arguments.join(', ') || 'none')+'. Optional arguments end in ?. Edit names for the selected native objects; integer digits are preserved.'}
+              onChange={event=>{setArgumentsText(event.target.value);invalidate();if(operation?.account || operation?.bootstrap){setAccountPassword('');setAccountSecretReady(false);}}} />
+            <TextField fullWidth label="Native Cluster context options (JSON object)" value={contextOptions} disabled={busy || operation?.context!=='cluster'} onChange={event=>{setContextOptions(event.target.value);invalidate();}} />
+          </Stack>
+        </Box>
+      </Stack>
+    </Box>
     {(operation?.account || operation?.bootstrap) && <>
       {operation?.bootstrap ? <Alert severity="info">For a standalone instance, supply clusterAdmin in the native configuration options to create or validate a bootstrap administrator. Native MySQL rejects this option on an existing Cluster or ReplicaSet member. Native clusterAdminPassword is supplied separately at dispatch when creating an account. An existing account retains its password and must already have the required native privileges. Certificate and expiration options retain native behavior.</Alert> : <Alert severity="info">Select the current writable native primary registration. From a secondary seed, load registered topology instances and select the primary as the execution registration, then inspect its seed before review. Native account setup creates an account or adds the required native grants to an existing account. Supply native update, dryRun, certificate and expiration options in the argument array. Password values are supplied separately when starting the reviewed job.</Alert>}
       <FormControlLabel control={<Checkbox disabled={busy} checked={accountPasswordEnabled} onChange={event=> {
@@ -161,7 +225,6 @@ export default function MySQLTopologies({post:basePost}) {
     </>}
     {operation?.fanout && <Alert severity="info">Native SQL fanout uses independent member sessions. Select a native keyword (all, primary, secondaries, read-replicas) or an array of registered instance references. Native context rules determine supported keywords. Options retain native exclude, dryRun and timeout behavior. Inspect every member result for SQL errors or unreachable instances.</Alert>}
     <TextField fullWidth label="Native cluster context name (optional)" value={contextName} disabled={busy} onChange={event=>{setContextName(event.target.value);invalidate();}} />
-    <TextField fullWidth label="Native Cluster context options (JSON object)" value={contextOptions} disabled={busy || operation?.context!=='cluster'} onChange={event=>{setContextOptions(event.target.value);invalidate();}} />
     {operation?.guideline && <TextField fullWidth label="Native routing guideline name (empty selects active guideline)" value={guidelineName} disabled={busy} onChange={event=>{setGuidelineName(event.target.value);invalidate();}} />}
     {operationId.endsWith('.import_routing_guideline') && <Button component="label" disabled={busy}>Read routing guideline JSON file<input hidden type="file" accept="application/json,.json" aria-label="Routing guideline JSON file" onChange={async event=> {
       const file=event.target.files?.[0],token=generation.current,version=++inputVersion.current;event.target.value='';
@@ -181,10 +244,19 @@ export default function MySQLTopologies({post:basePost}) {
       <TextField fullWidth label="Confirm topology seed UUID" value={confirmation} disabled={busy} onChange={event=>{setConfirmation(event.target.value);invalidate();}} />
       <Button disabled={busy || !seed || confirmation!==seed.identity.server_uuid || !operation} onClick={()=>run('review',{options:selected()},value=>{setReview(value);setReceipt(null);setObservation(null);})}>Review native topology change</Button>
     </>}
-    {review && <Box>
+    {review && <Box sx={{my:1}}>
       {review.warnings.map(warning=><Alert severity="warning" key={warning}>{warning}</Alert>)}
-      <Box component="pre" aria-label="Native topology review" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify({target:review.target,selected_instances:review.selected_instances,options:review.options,execution_host:review.execution_host,
-        ...(review.reviewed_seed?.account_state ? {account:{identity:review.reviewed_seed.account_state.account,exists:review.reviewed_seed.account_state.exists,native_grants:review.reviewed_seed.account_state.native_grants,scope:review.reviewed_seed.account_state.scope}} : {})},null,2)}</Box>
+      <StructuredPayloadCard
+        title="Reviewed topology plan"
+        value={{
+          target:review.target,
+          selected_instances:review.selected_instances,
+          options:review.options,
+          execution_host:review.execution_host,
+          ...(review.reviewed_seed?.account_state ? {account:{identity:review.reviewed_seed.account_state.account,exists:review.reviewed_seed.account_state.exists,native_grants:review.reviewed_seed.account_state.native_grants,scope:review.reviewed_seed.account_state.scope}} : {}),
+        }}
+        rawAriaLabel="Native topology review"
+      />
       <Button disabled={busy || review.state!=='reviewed' || review.options?.account_password_mode==='set' && !accountSecretReady} onClick={()=>run('start',{
         job_id:review.job_id,review_digest:review.review_digest,confirmed:true,
         ...(review.options?.account_password_mode==='set' ? {account_secret:{password:accountPassword}} : {}),
@@ -233,16 +305,16 @@ export default function MySQLTopologies({post:basePost}) {
       {receipt.target_state_acknowledged_at && <Alert severity="info">Observed target state acknowledged. The original operation outcome remains {receipt.native_operation_outcome}.</Alert>}
       {receipt.native_error && <Alert severity="error">Native topology error {receipt.native_error.code ?? ''}: {receipt.native_error.message}</Alert>}
       {fanoutSummary && <Alert severity={fanoutSummary.errors ? 'warning' : 'info'}>Native fanout returned {fanoutSummary.instances} instance results: {fanoutSummary.errors} instance errors; {fanoutSummary.dryRuns} dry runs. Inspect the native results for warnings and SQL output.</Alert>}
-      {receipt.result?.control?.result_json && <Box component="pre" aria-label="Native topology result JSON" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{receipt.result.control.result_json}</Box>}
+      {receipt.result?.control?.result_json && <Box sx={{my:1}}><StructuredPayloadCard title="Topology execution result" value={receipt.result.control.result_json} rawText={receipt.result.control.result_json} rawAriaLabel="Native topology result JSON" /></Box>}
       {exportRedacted && <Alert severity="warning">Sensitive string values were removed from this guideline export. The downloaded JSON is a redacted copy.</Alert>}
       {typeof exported==='string' && <Button onClick={()=> {
         const url=URL.createObjectURL(new Blob([exported],{type:'application/json;charset=utf-8'}));
         const link=document.createElement('a');link.href=url;link.download='mysql-routing-guideline.json';link.click();URL.revokeObjectURL(url);
       }}>Download native routing guideline JSON</Button>}
       {receipt.result?.native_json_observation?.native_shell_json_signed_limit && <Alert severity="warning">Stored tags contain unsigned64 integers. MySQL Shell 9.7 options decoding can clamp these to its signed integer limit. The separate SQL tag observation preserves the stored values; the original Shell reply above is unchanged.</Alert>}
-      {receipt.result?.native_json_observation && <Box component="pre" aria-label="Native topology stored tag JSON" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify(receipt.result.native_json_observation.tags,null,2)}</Box>}
+      {receipt.result?.native_json_observation && <Box sx={{my:1}}><StructuredPayloadCard title="Observed SQL routing tags" value={receipt.result.native_json_observation.tags} rawAriaLabel="Native topology stored tag JSON" /></Box>}
       {receipt.result?.control?.observation_error && <Alert severity="warning">The native operation returned, but its later result observation failed: {receipt.result.control.observation_error.message}</Alert>}
-      {receipt.result?.account_observation && <Box component="pre" aria-label="Native account state observation" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify({account:receipt.result.account_observation.account,exists:receipt.result.account_observation.exists,native_grants:receipt.result.account_observation.native_grants,available:receipt.result.account_observation.available,scope:receipt.result.account_observation.scope},null,2)}</Box>}
+      {receipt.result?.account_observation && <Box sx={{my:1}}><StructuredPayloadCard title="Observed account state" value={{account:receipt.result.account_observation.account,exists:receipt.result.account_observation.exists,native_grants:receipt.result.account_observation.native_grants,available:receipt.result.account_observation.available,scope:receipt.result.account_observation.scope}} rawAriaLabel="Native account state observation" /></Box>}
       {receipt.result?.output_text && <Box component="details"><summary>Native utility messages</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{receipt.result.output_text}</Box></Box>}
       <Button disabled={busy} onClick={()=>run('status',{job_id:receipt.job_id},setReceipt)}>Refresh topology receipt</Button>
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel native topology operation</Button>
@@ -272,7 +344,18 @@ export default function MySQLTopologies({post:basePost}) {
         <TextField fullWidth label="Confirm uncertain topology target UUID" value={confirmation} onChange={event=>setConfirmation(event.target.value)} />
         <Button disabled={busy || confirmation!==receipt.target.server_uuid || receipt.server_recovery_clearance_required && !(recovery?.qualified && recovery?.idle)} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:confirmation,observation_digest:observation},setReceipt)}>Acknowledge observed topology target</Button>
       </>}
-      <Box component="details"><summary>Native topology observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
+      <StructuredPayloadCard
+        title="Topology job receipt summary"
+        value={{
+          job_id:receipt.job_id,
+          state:receipt.state,
+          native_operation_outcome:receipt.native_operation_outcome,
+          operation:receipt.options?.operation,
+          target:receipt.target,
+        }}
+        rawText={JSON.stringify(receipt,null,2)}
+        rawDisclosureLabel="Native topology observations"
+      />
     </Box>}
   </Box>;
 }

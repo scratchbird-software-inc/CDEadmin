@@ -9,6 +9,17 @@ import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import FirebirdERD from './FirebirdERD';
 import SQLiteColumnDesign from './SQLiteColumnDesign';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
+import {NumberField, Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../cdeadmin_ui/modules/StructuredPayloadCard';
+
+function parseFtsObject(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
@@ -188,6 +199,15 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
     link.download = `sqlite-${display}.ddn-workspace.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const parsedFts = parseFtsObject(ftsSettings);
+  const updateFtsField = (patch) => {
+    const base = parsedFts ? {...parsedFts} : {};
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v === undefined || v === '') delete base[k];
+      else base[k] = v;
+    });
+    setFtsSettings(JSON.stringify(base, null, 2));
+  };
   return <Box sx={{...compactFormSx, p: 1, overflow: 'auto', flex: 1}}>
     <FormReference formKey="sqlite-catalog-ddn" />
     <NativeDataImport post={post} databaseTargetId={databaseTargetId} engine="sqlite" objects={result?.objects} />
@@ -266,9 +286,21 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
         {(result.objects || []).filter(item => item.kind === 'fts-table').map(item => <MenuItem
           key={item.resource_id} value={item.resource_id} disabled={!item.fts_configuration?.restorable}>{item.name}</MenuItem>)}
       </TextField>
-      <TextField multiline minRows={3} fullWidth label="Native FTS settings (JSON)" value={ftsSettings}
-        disabled={busy || includeSystem} onChange={event => setFtsSettings(event.target.value)}
-        helperText="FTS5: automerge, usermerge, crisismerge, deletemerge, pgsz, hashsize, rank, secure-delete, insttoken. FTS3/4: automerge. Values are checked and normalized by SQLite." />
+      <Box sx={{my: 1}}>
+        <Stack gap={1}>
+          <Stack direction="row" gap={1.5} style={{flexWrap: 'wrap'}}>
+            <NumberField label="Automerge" disabled={busy || includeSystem || !parsedFts} value={parsedFts?.automerge ?? ''} onChange={e => updateFtsField({automerge: e.target.value === '' ? undefined : Number(e.target.value)})} style={{maxWidth: 140}} />
+            <NumberField label="Usermerge" disabled={busy || includeSystem || !parsedFts} value={parsedFts?.usermerge ?? ''} onChange={e => updateFtsField({usermerge: e.target.value === '' ? undefined : Number(e.target.value)})} style={{maxWidth: 140}} />
+            <NumberField label="Crisismerge" disabled={busy || includeSystem || !parsedFts} value={parsedFts?.crisismerge ?? ''} onChange={e => updateFtsField({crisismerge: e.target.value === '' ? undefined : Number(e.target.value)})} style={{maxWidth: 140}} />
+            <NumberField label="Page size (pgsz)" disabled={busy || includeSystem || !parsedFts} value={parsedFts?.pgsz ?? ''} onChange={e => updateFtsField({pgsz: e.target.value === '' ? undefined : Number(e.target.value)})} style={{maxWidth: 160}} />
+            <TextField size="small" label="Rank function" disabled={busy || includeSystem || !parsedFts} value={parsedFts?.rank ?? ''} onChange={e => updateFtsField({rank: e.target.value || undefined})} sx={{minWidth: 180}} />
+          </Stack>
+          <KeyValueJsonEditor title="FTS parameters" disabled={busy || includeSystem} valueJson={ftsSettings} onChangeJson={setFtsSettings} />
+          <TextField multiline minRows={2} fullWidth label="Native FTS settings (JSON)" value={ftsSettings}
+            disabled={busy || includeSystem} onChange={event => setFtsSettings(event.target.value)}
+            helperText="FTS5: automerge, usermerge, crisismerge, deletemerge, pgsz, hashsize, rank, secure-delete, insttoken. FTS3/4: automerge. Values are checked and normalized by SQLite." />
+        </Stack>
+      </Box>
       <Button disabled={busy || includeSystem || !ftsConfigId || !baselineSource} onClick={generateFTSSettings}>Generate FTS settings design</Button>
     </Box>}
     {dataScript && <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.5, my: 1}}>
@@ -378,7 +410,7 @@ export default function SQLiteCatalog({post, databaseTargetId, resourceId}) {
       {schemaPlan.application_supported && !schemaReceipt &&
         <Button disabled={busy} onClick={reviewSchema}>Prepare native change review</Button>}
       {schemaPlan.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}
-      {schemaPlan.operations.some(item => item.operation==='rename-batch') && <Box component="details"><summary>Exact native rename statements and settings</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>{JSON.stringify(schemaPlan.operations,null,2)}</Box></Box>}
+      {schemaPlan.operations.some(item => item.operation==='rename-batch') && <Box component="details"><summary>Exact native rename statements and settings</summary><StructuredPayloadCard title="Native rename operations" value={schemaPlan.operations} /></Box>}
       {schemaPlan.operations.some(item => item.operation!=='rename-batch' && item.stages?.length) &&
         <Box component="details"><summary>Exact native migration statements</summary>
           <Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>

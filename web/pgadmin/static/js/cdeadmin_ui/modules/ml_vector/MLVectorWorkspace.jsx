@@ -13,6 +13,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../StructuredPayloadCard';
 
 export const ML_VECTOR_SURFACES = Object.freeze([
   {id: 'vector_explorer', title: 'Vector Explorer'}, {id: 'index_designer', title: 'Index Designer'},
@@ -136,14 +137,15 @@ function VectorSearchConsole({session, execute, currentUser}) {
       value={query} onChange={(event) => setQuery(event.target.value)} rows={3} />
     <Toolbar label="Vector search projection"><TextField label="Output fields (comma separated)" value={fields}
       onChange={(event) => setFields(event.target.value)} /><TextField label="Filters JSON" value={filters}
-      onChange={(event) => setFilters(event.target.value)} /></Toolbar>{error && <Banner status="error">{error}</Banner>}
+      onChange={(event) => setFilters(event.target.value)} /></Toolbar>
+    <Box sx={{px: 1, pb: 1}}><KeyValueJsonEditor title="Metadata filter predicates" valueJson={filters} onChangeJson={setFilters} /></Box>
+    {error && <Banner status="error">{error}</Banner>}
     {latest ? <DataGrid gridId="ml-vector/search-results" aria-label="Vector search results" rows={latest.rows}
       readOnly rowKeyGetter={(row, index) => row.id ?? index} columns={Object.keys(latest.rows[0] ?? {result: ''})
         .map((key) => ({key, name: key}))} /> : <EmptyState message="Run a bounded search to view results." />}
     {latest?.truncated && <Banner status="warning">Result preview is truncated. Continue with cursor {
       latest.cursorRef ?? 'when provided by the engine'}.</Banner>}
-    {explain && <Box component="pre" aria-label="Provider-native vector query plan" sx={{overflow: 'auto'}}>{
-      JSON.stringify(explain.plan, null, 2)}</Box>}</Box>;
+    {explain && <StructuredPayloadCard title="Provider-native vector query plan" value={explain.plan} rawAriaLabel="Provider-native vector query plan" />}</Box>;
 }
 VectorSearchConsole.propTypes = {session: PropTypes.object, execute: PropTypes.func,
   currentUser: PropTypes.object};
@@ -221,7 +223,7 @@ function ExperimentsEvaluation({session, execute, currentUser}) {
     columns={[{key: 'name', name: 'Evaluation'}, {key: 'vectorDesignId', name: 'Design'},
       {key: 'indexId', name: 'Index'}, {key: 'k', name: 'Top k'}, {key: 'metricsText', name: 'Metrics'},
       {key: 'groundTruth', name: 'Ground truth'}, {key: 'datasetRevision', name: 'Dataset revision'},
-      {key: 'result', name: 'Latest result', renderCell: ({row}) => JSON.stringify(row.result ?? {})}]} />}</Box>;
+      {key: 'result', name: 'Latest result', renderCell: ({row}) => row.result ? Object.entries(row.result).map(([k, v]) => `${k}: ${v}`).join(', ') : '—'}]} />}</Box>;
 }
 ExperimentsEvaluation.propTypes = {session: PropTypes.object, execute: PropTypes.func,
   currentUser: PropTypes.object};
@@ -275,10 +277,10 @@ function MLVectorInspector({session}) { const values = [...session.content.vecto
   ...session.content.embeddingPipelines, ...session.content.modelEntries, ...session.content.experiments,
   ...session.content.evaluationCases, ...session.content.deploymentBindings];
 const selected = values.find((item) => item.id === session.selectedId || session.selectedId?.endsWith(`:${item.id}`));
-return <Box><Box component="h3">Selected definition</Box><Box component="pre">{
-  JSON.stringify(selected ?? {}, null, 2)}</Box><Box component="h3">Provider evidence</Box><Box component="pre">{
-  JSON.stringify(session.providerStatuses, null, 2)}</Box><Box component="h3">Validation</Box>
-<Badge label={session.validation.valid ? 'valid' : 'invalid'} /></Box>; }
+return <Box><Box component="h3">Selected definition</Box><StructuredPayloadCard compact value={selected ?? {}} />
+  <Box component="h3">Provider evidence</Box><StructuredPayloadCard compact value={session.providerStatuses} />
+  <Box component="h3">Validation</Box>
+  <Badge label={session.validation.valid ? 'valid' : 'invalid'} /></Box>; }
 MLVectorInspector.propTypes = {session: PropTypes.object};
 export function mlVectorInspector(session) { return {selectedId: session.selectedId,
   validation: session.validation, providerStatuses: session.providerStatuses,

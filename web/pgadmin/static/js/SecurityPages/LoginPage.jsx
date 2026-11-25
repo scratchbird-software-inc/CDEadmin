@@ -12,7 +12,6 @@ import { InputSelectNonSearch, InputText, MESSAGE_TYPE, NotifierMessage } from '
 import BasePage, { SecurityButton } from './BasePage';
 import gettext from 'sources/gettext';
 import PropTypes from 'prop-types';
-import { QAVisualIdentityToggle } from 'sources/cdeadmin_ui/qa';
 
 export default function LoginPage({
   userLanguage,
@@ -230,7 +229,6 @@ export default function LoginPage({
               />
             </>
           )}
-          <QAVisualIdentityToggle />
           {showLoginForm && (
             <SecurityButton name="internal_button" value="Login">
               {gettext('Sign in')}

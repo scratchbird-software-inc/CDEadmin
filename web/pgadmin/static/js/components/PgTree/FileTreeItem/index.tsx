@@ -110,7 +110,7 @@ export class FileTreeItem extends React.Component<IItemRendererXProps & IItemRen
               ? 'file'
               : 'directory';
 
-    if (this.props.item.parent?.parent && this.props.item.parent?.path) {
+    if (this.props.item.parent?.path && this.props.item._metadata?.data?.id) {
       this.props.item.resolvedPathCache = this.props.item.parent.path + '/' + this.props.item._metadata.data.id;
     }
 

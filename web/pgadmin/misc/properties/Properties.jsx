@@ -807,10 +807,15 @@ function Properties(props) {
   const pgAdmin = usePgAdmin();
   let noPropertyMsg = '';
 
-  if (props.nodeData?._type === 'cde_resource') {
+  if (
+    props.nodeData?._type === 'cde_resource' ||
+    (props.nodeData?.cde_resource_id && props.nodeData?.cde_section)
+  ) {
     return <StyledBox><ErrorBoundary>
-      <ProviderObjectProperties key={props.nodeData.cde_resource_id}
-        nodeData={props.nodeData} />
+      <ProviderObjectProperties
+        key={`${props.nodeData.cde_resource_id}:${props.nodeData.cde_section || ''}`}
+        nodeData={props.nodeData}
+      />
     </ErrorBoundary></StyledBox>;
   }
 

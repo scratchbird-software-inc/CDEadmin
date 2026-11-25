@@ -8,6 +8,8 @@ import PagedDataGrid from '../cdeadmin_ui/data/PagedDataGrid';
 import FirebirdCatalogDesigner from './FirebirdCatalogDesigner';
 import FirebirdERD from './FirebirdERD';
 import {compactFormSx} from '../cdeadmin_ui/foundations/compactFormLayout';
+import {Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../cdeadmin_ui/modules/StructuredPayloadCard';
 
 export default function DuckDBCatalog({post, databaseTargetId}) {
   const [result, setResult] = useState(null), [comparison, setComparison] = useState(null);
@@ -226,6 +228,19 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
             onChange={event => setDiscardColsConfirmed(event.target.checked)} />} />
           <TextField size="small" label="Dropped column resource IDs (comma-separated)" value={dropColumnIdsText} disabled={busy} sx={{minWidth: 260}}
             onChange={event => setDropColumnIdsText(event.target.value)} />
+          <Box sx={{width: '100%', my: 0.5}}>
+            <Stack gap={1}>
+              <KeyValueJsonEditor title="Column renames (old column -> new column)" disabled={busy} parseValues={false}
+                keyLabel="Existing column" valueLabel="New column" addLabel="Add rename"
+                valueJson={columnRenamesJson} onChangeJson={setColumnRenamesJson} />
+              <KeyValueJsonEditor title="Column SQL expression conversions (column -> expression)" disabled={busy} parseValues={false}
+                keyLabel="Target column" valueLabel="SQL expression" addLabel="Add conversion"
+                valueJson={columnConversionsJson} onChangeJson={setColumnConversionsJson} />
+              <KeyValueJsonEditor title="Added column fill expressions (column -> expression)" disabled={busy} parseValues={false}
+                keyLabel="Added column" valueLabel="Fill SQL expression" addLabel="Add fill"
+                valueJson={addedColumnFillsJson} onChangeJson={setAddedColumnFillsJson} />
+            </Stack>
+          </Box>
           <TextField size="small" label="Column renames JSON" value={columnRenamesJson} disabled={busy} sx={{minWidth: 220}}
             onChange={event => setColumnRenamesJson(event.target.value)} />
           <TextField size="small" label="Column conversions JSON" value={columnConversionsJson} disabled={busy} sx={{minWidth: 240}}
@@ -246,9 +261,11 @@ export default function DuckDBCatalog({post, databaseTargetId}) {
         )}
       </Box>
       {!!Object.keys(preservationOverrides).length && (
-        <Box component="pre" aria-label="Staged DuckDB preservation overrides" sx={{whiteSpace: 'pre-wrap', m: 0}}>
-          {JSON.stringify(preservationOverrides, null, 2)}
-        </Box>
+        <StructuredPayloadCard
+          title="Staged DuckDB preservation overrides"
+          value={preservationOverrides}
+          rawAriaLabel="Staged DuckDB preservation overrides"
+        />
       )}
     </Box>}
     {result?.provenance?.warnings?.map(message => <Alert key={message} severity="warning">{message}</Alert>)}

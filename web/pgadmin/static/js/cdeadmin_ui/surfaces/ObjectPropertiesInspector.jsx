@@ -16,7 +16,65 @@ import {Checkbox, Select} from '../primitives/Choice';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {Dialog} from '../overlays/Dialog';
 import UnifiedDataGrid from '../data/UnifiedDataGrid';
+import ObjectPermissionsMatrix from '../security/ObjectPermissionsMatrix';
 import {extractNodeQueryParams} from './ObjectDashboardSurface';
+
+const NON_GRANT_ENGINES = new Set(['sqlite', 'duckdb']);
+const GRANTABLE_NODE_TYPES = new Set([
+  'cde_database_target',
+  'database',
+  'schema',
+  'table',
+  'partition',
+  'foreign_table',
+  'view',
+  'mview',
+  'sequence',
+  'function',
+  'procedure',
+  'edbfunc',
+  'edbproc',
+  'package',
+  'type',
+  'domain',
+  'cde_resource',
+]);
+const NON_GRANTABLE_RESOURCE_KINDS = new Set([
+  'index',
+  'partitioned-index',
+  'trigger',
+  'constraint',
+  'rule',
+  'row-policy',
+  'user',
+  'role',
+  'storage-file',
+  'configuration',
+  'service-operation',
+  'shadow',
+  'exception',
+  'blob-filter',
+  'collation',
+  'character-set',
+  'authentication-mapping',
+  'global-authentication-mapping',
+]);
+
+export function isObjectPermissionsSupported(nodeData) {
+  if (!nodeData || !nodeData._type) return false;
+  if (!GRANTABLE_NODE_TYPES.has(String(nodeData._type))) return false;
+  const rawEngine = String(
+    nodeData.cde_engine_id || nodeData.engine_id || nodeData.server_type || 'postgresql'
+  ).toLowerCase();
+  const engine = rawEngine === 'pg' ? 'postgresql' : rawEngine;
+  if (NON_GRANT_ENGINES.has(engine)) return false;
+  if (nodeData._type === 'cde_resource' && nodeData.cde_resource_kind) {
+    if (NON_GRANTABLE_RESOURCE_KINDS.has(String(nodeData.cde_resource_kind).toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function buildJsonHeaders() {
   const win = typeof window !== 'undefined' ? window : {};
@@ -145,6 +203,9 @@ export default function ObjectPropertiesInspector({
 
   const showOverview = sectionFilter === 'all' || sectionFilter === 'settings';
   const showStructure = sectionFilter === 'all' || sectionFilter === 'structure';
+  const showPermissions =
+    isObjectPermissionsSupported(boundNodeData) &&
+    (sectionFilter === 'all' || sectionFilter === 'permissions');
   const showDdl = sectionFilter === 'all' || sectionFilter === 'ddl';
   const showDeps = sectionFilter === 'all' || sectionFilter === 'dependencies';
 
@@ -165,6 +226,19 @@ export default function ObjectPropertiesInspector({
           typeof renderNativeProperties === 'function' && (
           <Box data-cdeadmin-qa-key="object-properties-native-section" sx={{minWidth: 0}}>
             {renderNativeProperties()}
+          </Box>
+        )}
+
+        {/* Per-Object Grants / Permissions Matrix */}
+        {showPermissions && (
+          <Box
+            data-cdeadmin-qa-key="object-properties-permissions-section"
+            sx={{px: 2, pt: sectionFilter === 'permissions' ? 2 : 0, minWidth: 0}}
+          >
+            <ObjectPermissionsMatrix
+              boundNodeData={boundNodeData}
+              compact={sectionFilter === 'all'}
+            />
           </Box>
         )}
 
@@ -433,6 +507,7 @@ export default function ObjectPropertiesInspector({
             value={customDraft.default_section_filter || 'all'}
             options={[
               {value: 'all', label: gettext('All Sections')},
+              {value: 'permissions', label: gettext('Permissions & Grants')},
               {value: 'structure', label: gettext('Structure (Columns / Indexes / Constraints)')},
               {value: 'ddl', label: gettext('DDL / SQL Definition')},
               {value: 'dependencies', label: gettext('Dependencies & Dependents')},

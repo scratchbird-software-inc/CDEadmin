@@ -853,145 +853,129 @@ export function DesignerTabbedMenu({
     const safeInst = sanitizeActionSegment(instanceId, 'inst');
     const nextHandlers = new Map();
     const actions = [];
-    const groups = [];
     const customNodes = [];
 
-    if (tabs.length > 1) {
-      const catControls = [];
-      tabs.forEach((tab, tIdx) => {
-        const catActionId = `designer.cat.${safeInst}.${sanitizeActionSegment(
+    const buildTabGroups = (tab, isActiveTab) => {
+      const tabGroups = [];
+      const tabSlug = sanitizeActionSegment(tab?.id || 'main', 'tab');
+      (tab?.groups || []).forEach((group, gIdx) => {
+        const grpControls = [];
+        (group.items || []).forEach((item, iIdx) => {
+          if (typeof item.render === 'function') {
+            if (isActiveTab) {
+              customNodes.push({
+                key: item.id || `custom_${tabSlug}_${gIdx}_${iIdx}`,
+                render: item.render,
+              });
+            }
+            return;
+          }
+          const rbacId =
+            item.actionId ||
+            (resolveFromRegistry(item.id, commands) ||
+            resolveFromRegistry(item.id, shellActions)
+              ? item.id
+              : null);
+          const resolvedCmd = rbacId
+            ? resolveFromRegistry(rbacId, commands)
+            : null;
+          const resolvedShell =
+            rbacId && shellActions && shellActions !== commands
+              ? resolveFromRegistry(rbacId, shellActions)
+              : null;
+          if (
+            (resolvedCmd && !resolvedCmd.visible) ||
+            (resolvedShell && !resolvedShell.visible)
+          ) {
+            return;
+          }
+          const baseLabel = item.label || resolvedCmd?.text || item.id;
+          const displayLabel =
+            item.badge !== undefined && item.badge !== null && item.badge !== ''
+              ? `${baseLabel} (${item.badge})`
+              : baseLabel;
+          const hint = resolvedCmd?.hint || item.hint || displayLabel;
+          const iconKey =
+            resolvedCmd?.icon ||
+            item.icon ||
+            item.iconKey ||
+            inferActionIconKey({name: rbacId || item.id, label: baseLabel}) ||
+            'command.default';
+          const isDisabled =
+            Boolean(item.disabled) ||
+            (resolvedCmd ? !resolvedCmd.enabled : false) ||
+            (resolvedShell ? !resolvedShell.enabled : false);
+          const itemActionId = `designer.cmd.${safeInst}.${tabSlug}.${sanitizeActionSegment(
+            item.id || item.label,
+            `item_${gIdx}_${iIdx}`
+          )}`;
+
+          grpControls.push(itemActionId);
+          nextHandlers.set(itemActionId, () => {
+            if (item.onClick) {
+              return item.onClick();
+            }
+            if (resolvedCmd && typeof commands?.execute === 'function') {
+              return commands.execute(resolvedCmd.id);
+            }
+            return undefined;
+          });
+          actions.push({
+            id: itemActionId,
+            focusScoped: true,
+            icon: iconKey,
+            defaultText: displayLabel,
+            defaultHint: hint,
+            permission: item.permission || resolvedCmd?.permission || [],
+            status: isDisabled
+              ? T_ACTION_STATUS.DISABLED
+              : T_ACTION_STATUS.ENABLED,
+            ...(typeof item.active === 'boolean'
+              ? {checked: Boolean(item.active)}
+              : {}),
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: () => handlersRef.current.get(itemActionId)?.(),
+            },
+          });
+        });
+
+        if (grpControls.length > 0) {
+          tabGroups.push({
+            id: sanitizeActionSegment(group.id || group.label, `grp_${gIdx}`),
+            sectionId: group.sectionId || undefined,
+            label: group.label || tab?.label || label,
+            actions: grpControls,
+            controls: grpControls,
+          });
+        }
+      });
+      return tabGroups;
+    };
+
+    const promotedTabs = (tabs.length > 0 ? tabs : [{id: 'main', label, groups: []}]).map(
+      (tab, tIdx) => {
+        const subId = `designer-subtab-${safeInst}-${sanitizeActionSegment(
           tab.id,
           `t${tIdx}`
         )}`;
         const isSelected = tab.id === active?.id;
-        catControls.push(catActionId);
-        nextHandlers.set(catActionId, () => selectTab(tab.id));
-        actions.push({
-          id: catActionId,
-          focusScoped: true,
-          icon:
-            tab.icon ||
-            tab.iconKey ||
-            inferActionIconKey({name: tab.id, label: tab.label}) ||
-            'view.toolbar',
-          defaultText: tab.label,
-          defaultHint: `${label}: ${tab.label}`,
-          status: tab.disabled
-            ? T_ACTION_STATUS.DISABLED
-            : T_ACTION_STATUS.ENABLED,
-          checked: Boolean(isSelected),
-          target: {
-            kind: T_ACTION_TARGET_KIND.CLIENT,
-            invoke: () => handlersRef.current.get(catActionId)?.(),
-          },
-        });
-      });
-      groups.push({
-        id: 'designer-categories',
-        label: gettext('Categories'),
-        actions: catControls,
-        controls: catControls,
-      });
-    }
-
-    (active?.groups || []).forEach((group, gIdx) => {
-      const grpControls = [];
-      (group.items || []).forEach((item, iIdx) => {
-        if (typeof item.render === 'function') {
-          customNodes.push({
-            key: item.id || `custom_${gIdx}_${iIdx}`,
-            render: item.render,
-          });
-          return;
-        }
-        const rbacId =
-          item.actionId ||
-          (resolveFromRegistry(item.id, commands) ||
-          resolveFromRegistry(item.id, shellActions)
-            ? item.id
-            : null);
-        const resolvedCmd = rbacId
-          ? resolveFromRegistry(rbacId, commands)
-          : null;
-        const resolvedShell =
-          rbacId && shellActions && shellActions !== commands
-            ? resolveFromRegistry(rbacId, shellActions)
-            : null;
-        if (
-          (resolvedCmd && !resolvedCmd.visible) ||
-          (resolvedShell && !resolvedShell.visible)
-        ) {
-          return;
-        }
-        const baseLabel = item.label || resolvedCmd?.text || item.id;
-        const displayLabel =
-          item.badge !== undefined && item.badge !== null && item.badge !== ''
-            ? `${baseLabel} (${item.badge})`
-            : baseLabel;
-        const hint = resolvedCmd?.hint || item.hint || displayLabel;
-        const iconKey =
-          resolvedCmd?.icon ||
-          item.icon ||
-          item.iconKey ||
-          inferActionIconKey({name: rbacId || item.id, label: baseLabel}) ||
-          'command.default';
-        const isDisabled =
-          Boolean(item.disabled) ||
-          (resolvedCmd ? !resolvedCmd.enabled : false) ||
-          (resolvedShell ? !resolvedShell.enabled : false);
-        const itemActionId = `designer.cmd.${safeInst}.${sanitizeActionSegment(
-          active?.id || 'main',
-          'tab'
-        )}.${sanitizeActionSegment(
-          item.id || item.label,
-          `item_${gIdx}_${iIdx}`
-        )}`;
-
-        grpControls.push(itemActionId);
-        nextHandlers.set(itemActionId, () => {
-          if (item.onClick) {
-            return item.onClick();
-          }
-          if (resolvedCmd && typeof commands?.execute === 'function') {
-            return commands.execute(resolvedCmd.id);
-          }
-          return undefined;
-        });
-        actions.push({
-          id: itemActionId,
-          focusScoped: true,
-          icon: iconKey,
-          defaultText: displayLabel,
-          defaultHint: hint,
-          permission: item.permission || resolvedCmd?.permission || [],
-          status: isDisabled
-            ? T_ACTION_STATUS.DISABLED
-            : T_ACTION_STATUS.ENABLED,
-          ...(typeof item.active === 'boolean'
-            ? {checked: Boolean(item.active)}
-            : {}),
-          target: {
-            kind: T_ACTION_TARGET_KIND.CLIENT,
-            invoke: () => handlersRef.current.get(itemActionId)?.(),
-          },
-        });
-      });
-
-      if (grpControls.length > 0) {
-        groups.push({
-          id: sanitizeActionSegment(
-            group.id || group.label,
-            `grp_${gIdx}`
-          ),
-          label: group.label || active?.label || label,
-          actions: grpControls,
-          controls: grpControls,
-        });
+        return {
+          id: subId,
+          rawTabId: tab.id,
+          label: tab.label || label,
+          isUnderTab: tabs.length > 1,
+          selected: isSelected,
+          onSelect: () => selectTab(tab.id),
+          allowEmpty: true,
+          groups: buildTabGroups(tab, isSelected),
+        };
       }
-    });
+    );
 
     const signature = [
       label,
+      active?.id || '',
       actions
         .map(
           (a) =>
@@ -1000,12 +984,19 @@ export function DesignerTabbedMenu({
             }`
         )
         .join('|'),
-      groups.map((g) => `${g.id}:${g.label}:${g.controls.join(',')}`).join(';'),
+      promotedTabs
+        .map(
+          (pt) =>
+            `${pt.id}:${pt.selected}:${pt.groups
+              .map((g) => `${g.id}:${g.label}:${g.controls.join(',')}`)
+              .join(';')}`
+        )
+        .join('||'),
     ].join('##');
 
     return {
       actions,
-      groups,
+      promotedTabs,
       customNodes,
       nextHandlers,
       signature,
@@ -1059,6 +1050,9 @@ export function DesignerTabbedMenu({
   const latestPromotionRef = useRef(shellPromotion);
   latestPromotionRef.current = shellPromotion;
   const promotionSig = shellPromotion?.signature || '';
+  const hasCustomExtras =
+    (shellPromotion?.customNodes?.length || 0) > 0 ||
+    Boolean(effectiveShellTrailing);
 
   useEffect(() => {
     if (!inShell || !updateInstance || !instanceId) return undefined;
@@ -1089,42 +1083,48 @@ export function DesignerTabbedMenu({
       const hostActions = (hostBaselineRef.current.actions || []).filter(
         (a) => a?.id && !nextRegistered.has(a.id)
       );
-      const hostGroups = hostBaselineRef.current.ribbonGroups || [];
+      const hostGroups = (hostBaselineRef.current.ribbonGroups || []).filter(
+        (g) => g.id !== 'inline-fallback-inspect'
+      );
       const hostExtras = hostBaselineRef.current.renderToolbarExtras;
+      const selectedSub =
+        promo.promotedTabs.find((t) => t.selected) || promo.promotedTabs[0];
 
       return {
         supportsTabbedIconBar: true,
+        useUnderTabs: promo.promotedTabs.length > 1,
+        selectedUnderTabId: selectedSub?.id || null,
         actions: [...promo.actions, ...hostActions],
-        ribbonTabs: [
-          {
-            id: 'designer-commands',
-            label: prev.title || label,
-            groups: [...promo.groups, ...hostGroups],
-          },
-        ],
-        renderToolbarExtras: (inst, sh) => {
-          const baseNode =
-            typeof hostExtras === 'function' ? hostExtras(inst, sh) : null;
-          return (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 1,
-                width: '100%',
-              }}
-            >
-              {baseNode}
-              <ShellSlotOutlet channel={extrasChannel} slot="extras" />
-            </Box>
-          );
-        },
+        ribbonTabs: promo.promotedTabs.map((pt) => ({
+          ...pt,
+          groups: [...pt.groups, ...hostGroups],
+        })),
+        renderToolbarExtras:
+          hasCustomExtras || typeof hostExtras === 'function'
+            ? (inst, sh) => {
+              const baseNode =
+                typeof hostExtras === 'function' ? hostExtras(inst, sh) : null;
+              return (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 1,
+                    width: '100%',
+                  }}
+                >
+                  {baseNode}
+                  <ShellSlotOutlet channel={extrasChannel} slot="extras" />
+                </Box>
+              );
+            }
+            : null,
       };
     });
 
     return undefined;
-  }, [inShell, instanceId, updateInstance, shellActions, promotionSig, label]);
+  }, [inShell, instanceId, updateInstance, shellActions, promotionSig, label, hasCustomExtras]);
 
   useEffect(() => {
     if (!inShell || !updateInstance || !instanceId) return undefined;

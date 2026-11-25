@@ -18,6 +18,7 @@ import {Badge, Banner, ValidationMessage} from '../feedback/Indicators';
 import {Dialog} from '../overlays/Dialog';
 import FormReference from '../navigation/FormReference';
 import CodeEditor from '../editors/CodeEditor';
+import UnifiedDataGrid from '../data/UnifiedDataGrid';
 
 const textVal = (e) => (e?.target ? e.target.value : String(e ?? ''));
 
@@ -260,16 +261,39 @@ export function SqlDuckdbSessionDialog({
                 </Box>
               </Grid>
               {settingsResult && (
-                <Badge status="info" label={`Matched settings: ${settingsResult.settings?.length ?? 0}`} />
+                <Stack gap="xs">
+                  <div>
+                    <Badge status="info" label={`Matched settings: ${settingsResult.settings?.length ?? 0}`} />
+                  </div>
+                  {(settingsResult.settings?.length ?? 0) > 0 && (
+                    <UnifiedDataGrid
+                      caption={gettext('Session Runtime Settings')}
+                      ariaLabel={gettext('DuckDB session runtime settings')}
+                      searchable
+                      exportable
+                      minHeight={130}
+                      maxHeight={220}
+                      rows={settingsResult.settings}
+                      rowKeyGetter={(row, idx) => row.name || idx}
+                      columns={[
+                        {name: 'name', label: gettext('Setting'), width: 160, mono: true},
+                        {name: 'value', label: gettext('Value'), width: 120, mono: true},
+                        {name: 'input_type', label: gettext('Input Type'), width: 110},
+                        {name: 'scope', label: gettext('Scope'), width: 90},
+                        {name: 'description', label: gettext('Description'), width: 260},
+                      ]}
+                    />
+                  )}
+                </Stack>
               )}
               <Grid columns={2} gap="sm">
                 <Select
                   label={gettext('Original-Session Subsystem')}
                   value={subsystemAction}
                   options={[
-                    {value: 'duckdb_attachments', label: 'Attached Catalogs (duckdb_attachments)'},
-                    {value: 'duckdb_extensions', label: 'Extension Capabilities (duckdb_extensions)'},
-                    {value: 'duckdb_database_copy', label: 'Database Copy Catalogs (duckdb_database_copy)'},
+                    {value: 'duckdb_attachments', label: gettext('Attached Catalogs')},
+                    {value: 'duckdb_extensions', label: gettext('Extension Capabilities')},
+                    {value: 'duckdb_database_copy', label: gettext('Database Copy Catalogs')},
                   ]}
                   onChange={setSubsystemAction}
                 />

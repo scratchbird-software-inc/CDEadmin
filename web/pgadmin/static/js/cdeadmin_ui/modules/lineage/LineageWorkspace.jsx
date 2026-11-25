@@ -16,6 +16,7 @@ import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
+import StructuredPayloadCard from '../StructuredPayloadCard';
 import {LINEAGE_EDGE_TYPES} from './contracts';
 
 export const LINEAGE_SURFACES = Object.freeze([
@@ -205,12 +206,19 @@ function SnapshotCompare({session, invoke}) {
 
 SnapshotCompare.propTypes = {session: PropTypes.object.isRequired, invoke: PropTypes.func};
 
+function formatInlineDetails(obj) {
+  if (!obj || typeof obj !== 'object') return String(obj ?? '');
+  const entries = Object.entries(obj);
+  if (!entries.length) return '—';
+  return entries.map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ');
+}
+
 function EvidenceInspector({session, invoke}) {
   const edge = session.graph.edges.find((item) => item.id === session.selectedEdgeId);
   const [note, setNote] = useState(''); const [type, setType] = useState('');
   if(!edge) return <EmptyState message="Select an edge to inspect all supporting evidence." />;
   const rows = edge.evidence.map((item) => ({...item,
-    detailsText: JSON.stringify(item.details), referenceText: item.reference?.id ?? ''}));
+    detailsText: formatInlineDetails(item.details), referenceText: item.reference?.id ?? ''}));
   const inferenceOnly = edge.evidence.every((item) =>
     ['inferred', 'parsed_query'].includes(item.origin));
   return <Box sx={{height: '100%', display: 'flex', flexDirection: 'column', p: 1}}>
@@ -242,7 +250,7 @@ EvidenceInspector.propTypes = {session: PropTypes.object.isRequired, invoke: Pro
 function IngestionStatus({session, invoke, onExport, service}) {
   const [source, setSource] = useState('');
   const rows = session.ingestion.map((item) => ({...item,
-    warningText: item.warnings.join('; '), evidenceText: JSON.stringify(item.evidence),
+    warningText: item.warnings.join('; '), evidenceText: formatInlineDetails(item.evidence),
     capabilitiesText: [...(item.readCapabilities ?? []),
       ...(item.writeCapabilities ?? []), ...(item.discoveryCapabilities ?? [])].join(', '),
     limitationsText: (item.limitations ?? []).join('; ')}));
@@ -267,7 +275,8 @@ function IngestionStatus({session, invoke, onExport, service}) {
           {key: 'evidenceText', name: 'Evidence'}]} />}</Box>
     <Box component="section" aria-label="OpenLineage interoperability"
       sx={{p: 1, borderTop: '1px solid', borderColor: 'divider'}}>
-      <TextArea fullWidth rows={5} label="OpenLineage RunEvent JSON" value={source}
+      {source.trim() && <Box sx={{mb: 1}}><StructuredPayloadCard compact title="Staged OpenLineage payload" value={source} showRawDisclosure={false} /></Box>}
+      <TextArea fullWidth rows={4} label="OpenLineage RunEvent JSON" value={source}
         onChange={(event) => setSource(event.target.value)} />
       <Box sx={{display: 'flex', gap: 1, mt: 1}}>
         <Button disabled={!source.trim()} onClick={importEvents}>Import OpenLineage</Button>

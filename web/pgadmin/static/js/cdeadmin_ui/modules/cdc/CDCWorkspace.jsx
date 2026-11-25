@@ -16,6 +16,7 @@ import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {
   CDC_CAPTURE_MECHANISMS, CDC_DELIVERY_GUARANTEES, CDC_EVOLUTION_ACTIONS,
   CDC_SCHEMA_CHANGE_CLASSES, CDC_SNAPSHOT_MODES, CDC_START_KINDS,
@@ -208,6 +209,14 @@ function SourceCapture({session, invoke, currentUser, resources, credentialRefer
         onClick={() => invoke('cdc.validate')}>Validate capabilities and privileges</Button>
     </Toolbar>
     {error && <Banner status="error">{error}</Banner>}
+    <Box sx={{mb: 1, display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'}}>
+      <KeyValueJsonEditor title="Start-position parameters" valueJson={draft.startNative}
+        onChangeJson={(startNative) => setDraft({...draft, startNative})} />
+      <KeyValueJsonEditor title="Snapshot policy parameters" valueJson={draft.snapshotNative}
+        onChangeJson={(snapshotNative) => setDraft({...draft, snapshotNative})} />
+      <KeyValueJsonEditor title="Source provider parameters" valueJson={draft.nativeDetails}
+        onChangeJson={(nativeDetails) => setDraft({...draft, nativeDetails})} />
+    </Box>
     <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(3,minmax(180px,1fr))'}}>
       <TextArea label="Source ResourceRef JSON" value={draft.resourceRef}
         onChange={(event) => setDraft({...draft, resourceRef: event.target.value})} />
@@ -493,14 +502,16 @@ function EventInspector({session, service, currentUser}) {
       <Badge label={allowed ? 'Payload permission granted' : 'Payloads redacted'} />
     </Toolbar>
     {error && <Banner status="error">{error}</Banner>}
-    {!rows.length ? <EmptyState message="Load a bounded event sample. Payload access is separately authorized." /> :
+    {!rows.length ? <EmptyState message="Load a bounded event sample. Payload access is separately authorized." /> : <>
       <DataGrid gridId="cdc/event-inspector" aria-label="CDC bounded redacted event samples"
         rows={rows} readOnly rowKeyGetter={(row) => row.id}
         columns={[{key: 'id', name: 'Event'}, {key: 'operation', name: 'Operation'},
           {key: 'captureTime', name: 'Captured'}, {key: 'transactionId', name: 'Transaction'},
           {key: 'sourcePosition', name: 'Source position'}, {key: 'key', name: 'Key'},
           {key: 'before', name: 'Before'}, {key: 'after', name: 'After'},
-          {key: 'metadata', name: 'Metadata'}, {key: 'redacted', name: 'Redacted'}]} />}
+          {key: 'metadata', name: 'Metadata'}, {key: 'redacted', name: 'Redacted'}]} />
+      <Box sx={{p: 1}}><StructuredPayloadCard compact title="Latest sampled event detail" value={session.events[0]} /></Box>
+    </>}
   </Box>;
 }
 EventInspector.propTypes = {session: PropTypes.object, service: PropTypes.object,

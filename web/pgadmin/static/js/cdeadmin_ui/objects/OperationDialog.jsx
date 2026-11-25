@@ -23,6 +23,7 @@ import {Button} from '../primitives/Button';
 import {TextField} from '../primitives/Field';
 import {Select} from '../primitives/Choice';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
+import {readShowFormReferences} from '../navigation/FormReference';
 import CodeEditor from '../editors/CodeEditor';
 import {ScratchDiffTable} from '../data/beautiful';
 import AdaptiveFieldPlacementGrid from './AdaptiveFieldPlacementGrid';
@@ -146,7 +147,7 @@ export default function OperationDialog({open, operation, targetName, context={}
       </Button>
     </>}>
     <Stack gap="comfortable" data-cdeadmin-qa-key={`operation-dialog.${operation.operation_id}`}>
-      {operation.status === 'draft' && <Banner status="info">
+      {operation.status === 'draft' && readShowFormReferences() && <Banner status="info">
         {gettext('This operation is a draft: verification against a live server is pending.')}
       </Banner>}
       {operation.description && <Banner status="info">{gettext(operation.description)}</Banner>}

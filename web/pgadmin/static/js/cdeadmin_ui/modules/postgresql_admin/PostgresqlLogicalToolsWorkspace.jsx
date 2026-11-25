@@ -18,6 +18,7 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {PostgresqlSectionCard, createPostgresqlServerCaller} from './postgresqlAdminHelpers';
 
 /**
@@ -263,7 +264,7 @@ export default function PostgresqlLogicalToolsWorkspace({
         <Stack gap="sm">
           <Banner status="info">
             {gettext(
-              'Provides native cdeadmin_ui logical pg_dump / pg_restore archives, streaming COPY CSV import/export, fast catalog search, and reviewed bulk privilege grants.'
+              'Provides native logical pg_dump / pg_restore archives, streaming COPY CSV import/export, fast catalog search, and reviewed bulk privilege grants.'
             )}
           </Banner>
           {error && <ValidationMessage status="error">{error}</ValidationMessage>}
@@ -384,9 +385,28 @@ export default function PostgresqlLogicalToolsWorkspace({
             </Box>
           </Grid>
           {searchResults.length > 0 && (
-            <Box>
-              <Badge status="info" label={`${searchResults.length} ${gettext('Matches')}`} />
-            </Box>
+            <Stack gap="xs">
+              <Box>
+                <Badge status="info" label={`${searchResults.length} ${gettext('Matches')}`} />
+              </Box>
+              <UnifiedDataGrid
+                caption={gettext('Catalog Object Search Results')}
+                ariaLabel={gettext('Catalog object search results')}
+                searchable
+                exportable
+                minHeight={160}
+                maxHeight={280}
+                rows={searchResults}
+                rowKeyGetter={(row, idx) => `${row.schema || ''}.${row.name || ''}:${row.kind || idx}`}
+                columns={[
+                  {name: 'schema', label: gettext('Schema'), width: 140},
+                  {name: 'name', label: gettext('Name'), width: 220, mono: true},
+                  {name: 'kind', label: gettext('Kind'), width: 140},
+                  {name: 'owner', label: gettext('Owner'), width: 140},
+                  {name: 'comment', label: gettext('Comment'), width: 260},
+                ]}
+              />
+            </Stack>
           )}
           <Grid columns={4} gap="sm">
             <Select

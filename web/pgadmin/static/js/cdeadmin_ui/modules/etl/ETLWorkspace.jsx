@@ -16,6 +16,7 @@ import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
+import {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {
   ETL_ERROR_ACTIONS, ETL_EXECUTION_LOCATIONS, ETL_NODE_FAMILIES,
   ETL_PIPELINE_MODES,
@@ -548,6 +549,10 @@ function Deployment({session, invoke, currentUser}) {
   } catch(exception) { setError(exception.message); }};
   return <Box sx={{height: '100%', overflow: 'auto', p: 1}}>
     {error && <Banner status="error">{error}</Banner>}
+    <Box sx={{mb: 1, display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'}}>
+      <KeyValueJsonEditor title="Parameter bindings" valueJson={parameters} onChangeJson={setParameters} />
+      <KeyValueJsonEditor title="Resource limits" valueJson={resourceLimits} onChangeJson={setResourceLimits} />
+    </Box>
     <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(3,minmax(180px,1fr))'}}>
       <Select label="Existing deployment" value={id} options={session.content.deployments.map(
         (item) => ({value: item.id, label: `${item.name} · ${item.environment}`}))}
@@ -608,6 +613,7 @@ function RunMonitor({session, invoke, currentUser}) {
     <Button disabled={!permitted(currentUser, 'etl.execute') || !run?.checkpoint ||
       !['failed', 'cancelled'].includes(run?.state)}
     onClick={() => invoke('etl.run.resume', {runId: run.id})}>Resume from checkpoint</Button></Toolbar>
+    <Box sx={{px: 1, pb: 0.5}}><KeyValueJsonEditor title="Runtime parameter overrides" valueJson={parameters} onChangeJson={setParameters} /></Box>
     {!runRows.length ? <EmptyState message="Validate a deployment, then run it through provider-native stages." /> : <>
       <Box sx={{height: '42%'}}><DataGrid gridId="etl/runs" aria-label="ETL pipeline runs"
         rows={runRows} readOnly rowKeyGetter={(row) => row.id} columns={[

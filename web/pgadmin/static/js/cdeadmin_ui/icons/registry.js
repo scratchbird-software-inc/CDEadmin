@@ -52,6 +52,7 @@ import DdnBrandIcon from '../../../assets/cdeadmin/branding/ddn.svg?svgr';
 import DdnBrandDarkIcon from '../../../assets/cdeadmin/branding/ddn-dark.svg?svgr';
 import OpenSourceBrandIcon from '../../../assets/cdeadmin/branding/opensource.svg?svgr';
 import OpenSourceBrandDarkIcon from '../../../assets/cdeadmin/branding/opensource-dark.svg?svgr';
+import {TIB_THREE_TONE_COMPONENTS} from './tibThreeToneCatalog';
 
 function UndoIcon(props) {
   return (
@@ -2033,6 +2034,18 @@ const BUILTIN_DEFINITIONS = [
       attribution: 'ScratchBird Software Inc.',
     }
   ),
+  ...Object.values(TIB_THREE_TONE_COMPONENTS).map((entry) =>
+    componentDefinition(
+      entry.key,
+      ICON_CATEGORIES.ACTION,
+      entry.component,
+      entry.label,
+      {
+        license: 'PostgreSQL',
+        attribution: 'ScratchBird Software Inc.',
+      }
+    )
+  ),
 ];
 
 const builtins = new Map(BUILTIN_DEFINITIONS.map((item)=>[item.key, item]));
@@ -2143,6 +2156,12 @@ export function resolveIconDefinition(iconKey, options={}) {
   let key = assignedIconKey(iconKey, options.assignments);
   if(providerDefinitions.has(key)) return providerDefinitions.get(key);
   if(builtins.has(key)) return builtins.get(key);
+
+  if(key.startsWith('tib.')) {
+    const tibSemanticKey = `tib.${key.slice(4).replace(/\.svg$/, '').replace(/-/g, '_')}`;
+    if(providerDefinitions.has(tibSemanticKey)) return providerDefinitions.get(tibSemanticKey);
+    if(builtins.has(tibSemanticKey)) return builtins.get(tibSemanticKey);
+  }
 
   // Provider object kinds use hyphens; the semantic icon registry uses
   // underscores. Preserve exact registered overrides before normalizing.

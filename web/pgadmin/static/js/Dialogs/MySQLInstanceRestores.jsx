@@ -5,9 +5,27 @@ import MySQLInstanceAcceptance from './MySQLInstanceAcceptance';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
+import {Checkbox as SrCheckbox, NumberField, Select as SrSelect, Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard from '../cdeadmin_ui/modules/StructuredPayloadCard';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({load_users:false,checksum:true,threads:4,update_gtid_set:'off',timeout_seconds:3600},null,2);
+const GTID_SET_OPTIONS=[
+  {value:'off',label:'Off (preserve target GTIDs)'},
+  {value:'append',label:'Append backup GTIDs'},
+  {value:'replace',label:'Replace target GTID set'},
+];
+function parseJsonObject(text) {
+  try {
+    const parsed=JSON.parse(text);
+    return parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function splitCsvList(text) {
+  return String(text || '').split(',').map(s=>s.trim()).filter(Boolean);
+}
 export default function MySQLInstanceRestores({post}) {
   const [sources,setSources]=useState(null),[source,setSource]=useState(null),[backups,setBackups]=useState(null),[backup,setBackup]=useState(null);
   const [target,setTarget]=useState(null),[confirmation,setConfirmation]=useState(''),[options,setOptions]=useState(DEFAULT_OPTIONS);
@@ -38,13 +56,23 @@ export default function MySQLInstanceRestores({post}) {
   const loadSources=offset=>run('sources',{offset,limit:25},setSources);
   const loadBackups=offset=>run('backups',{source_server_id:source.server_id,offset,limit:25},setBackups);
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
+  const parsedOptions=parseJsonObject(options);
+  const updateOptionField=(patch)=> {
+    const base=parsedOptions ? {...parsedOptions} : {};
+    Object.entries(patch).forEach(([k,v])=> {
+      if(v===undefined)delete base[k];
+      else base[k]=v;
+    });
+    setOptions(JSON.stringify(base,null,2));
+    setReview(null);
+  };
   return <Box sx={{p:2}}>
     <FormReference formKey="mysql-instance-restores" />
     <Alert severity="warning">Restore a managed full-instance backup onto a separate confirmed MySQL instance during an exclusive maintenance window. Native DDL, data, accounts and GTIDs can change independently; cancellation does not undo earlier effects. Configure trusted local_infile on the target before loading. Closing this view does not cancel a job.</Alert>
     <Alert severity="info">Native utility return, current target observations, recovered data/definitions and production cutover have separate acceptance. Account loading is optional. An uncertain restore is never automatically repeated.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
     <Button disabled={busy} onClick={()=>run('inspect',{},value=>{setTarget(value);setReview(null);})}>Inspect instance restore target</Button>
-    {target && <Box component="pre" aria-label="Native instance restore target" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(target,null,2)}</Box>}
+    {target && <Box sx={{my:1}}><StructuredPayloadCard title="Inspected restore target" value={target} rawAriaLabel="Native instance restore target" /></Box>}
     <Button disabled={busy} onClick={()=>loadSources(0)}>Load instance backup sources</Button>
     {sources && <>
       {sources.sources.map(row=><Button disabled={busy} key={row.server_id} onClick={()=>{setSource(row);setBackups(null);setBackup(null);setReview(null);}}>Use backup source {row.name}</Button>)}
@@ -100,16 +128,45 @@ export default function MySQLInstanceRestores({post}) {
     </>}
     {backup && <Alert severity="info">Selected instance backup: {backup.job_id}</Alert>}
     <TextField fullWidth label="Confirm native restore target UUID" value={confirmation} disabled={busy} onChange={event=>{setConfirmation(event.target.value);setReview(null);}} />
-    <TextField fullWidth multiline minRows={6} label="Native instance restore options" value={options} disabled={busy}
-      helperText="Native load options include load_users, include_users/exclude_users, schema/object filters, load_data/load_ddl, drop_existing_objects and update_gtid_set. Input and progress paths are assigned privately."
-      onChange={event=>{setOptions(event.target.value);setReview(null);}} />
+    <Box sx={{my:1.5,p:1.5,border:'1px solid var(--sr-border, rgba(128,128,128,0.22))',borderRadius:1.5}}>
+      <Stack gap={1.5}>
+        <Stack direction="row" gap={2} style={{flexWrap:'wrap'}}>
+          <SrCheckbox label="Load accounts and grants (load_users)" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.load_users)} onChange={checked=>updateOptionField({load_users:checked})} />
+          <SrCheckbox label="Verify checksums" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.checksum)} onChange={checked=>updateOptionField({checksum:checked})} />
+          <SrCheckbox label="Load DDL" disabled={busy || !parsedOptions} checked={parsedOptions?.load_ddl !== false} onChange={checked=>updateOptionField({load_ddl:checked})} />
+          <SrCheckbox label="Load data" disabled={busy || !parsedOptions} checked={parsedOptions?.load_data !== false} onChange={checked=>updateOptionField({load_data:checked})} />
+          <SrCheckbox label="Drop existing objects" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.drop_existing_objects)} onChange={checked=>updateOptionField({drop_existing_objects:checked || undefined})} />
+        </Stack>
+        <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+          <NumberField label="Worker threads" disabled={busy || !parsedOptions} value={parsedOptions?.threads ?? 4} onChange={e=>updateOptionField({threads:Math.max(1,Number(e.target.value)||1)})} style={{maxWidth:160}} />
+          <SrSelect label="GTID set mode" disabled={busy || !parsedOptions} options={GTID_SET_OPTIONS} value={parsedOptions?.update_gtid_set || 'off'} onChange={val=>updateOptionField({update_gtid_set:val})} style={{minWidth:210}} />
+          <NumberField label="Timeout (seconds)" disabled={busy || !parsedOptions} value={parsedOptions?.timeout_seconds ?? 3600} onChange={e=>updateOptionField({timeout_seconds:Math.max(1,Number(e.target.value)||3600)})} style={{maxWidth:180}} />
+        </Stack>
+        <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+          <TextField size="small" label="Include schemas (comma-separated)" disabled={busy || !parsedOptions} value={Array.isArray(parsedOptions?.include_schemas) ? parsedOptions.include_schemas.join(', ') : ''} onChange={e=>{const list=splitCsvList(e.target.value);updateOptionField({include_schemas:list.length ? list : undefined});}} sx={{minWidth:220,flex:1}} />
+          <TextField size="small" label="Exclude tables (comma-separated)" disabled={busy || !parsedOptions} value={Array.isArray(parsedOptions?.exclude_tables) ? parsedOptions.exclude_tables.join(', ') : ''} onChange={e=>{const list=splitCsvList(e.target.value);updateOptionField({exclude_tables:list.length ? list : undefined});}} sx={{minWidth:220,flex:1}} />
+        </Stack>
+        <Box component="details">
+          <summary style={{cursor:'pointer',fontSize:12,opacity:0.8}}>Advanced JSON overrides</summary>
+          <Box sx={{mt:1}}>
+            <TextField fullWidth multiline minRows={5} label="Native instance restore options" value={options} disabled={busy}
+              helperText="Native load options include load_users, include_users/exclude_users, schema/object filters, load_data/load_ddl, drop_existing_objects and update_gtid_set. Input and progress paths are assigned privately."
+              onChange={event=>{setOptions(event.target.value);setReview(null);}} />
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
     <Button disabled={busy || !backup || !target || confirmation!==target.identity.server_uuid} onClick={()=> {
       try {run('review',{source_server_id:source.server_id,backup_job_id:backup.job_id,options:{...JSON.parse(options),target_confirmation:confirmation}},value=>{setReview(value);setReceipt(null);setObservation(null);});}
       catch(failure) {setError(failure.message);}
     }}>Review full-instance restore</Button>
-    {review && <Box>
+    {review && <Box sx={{my:1}}>
       {review.warnings.map(warning=><Alert severity="warning" key={warning}>{warning}</Alert>)}
-      <Box component="pre" aria-label="Instance restore review" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify({target:review.target,source_backup:review.source_backup,options:review.options,execution_host:review.execution_host},null,2)}</Box>
+      <StructuredPayloadCard
+        title="Reviewed instance restore plan"
+        value={{target:review.target,source_backup:review.source_backup,options:review.options,execution_host:review.execution_host}}
+        rawAriaLabel="Instance restore review"
+      />
       <Button disabled={busy || review.state!=='reviewed'} onClick={()=>run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value=>{setReceipt(value);setReview(current=>({...current,state:value.state}));})}>Confirm and start instance restore</Button>
     </Box>}
     <Button disabled={busy} onClick={()=>loadJobs(0)}>Load instance restore jobs</Button>
@@ -160,7 +217,18 @@ export default function MySQLInstanceRestores({post}) {
       <Button disabled={busy || !ACTIVE.has(receipt.state) && receipt.state!=='reviewed' && !(receipt.state==='unknown' && receipt.durable_tool && receipt.native_process_termination_confirmed!==true)} onClick={()=>run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel instance restore</Button>
       <Button disabled={busy || ACTIVE.has(receipt.state)} onClick={()=>run('reconcile',{job_id:receipt.job_id},value=>{setReceipt(value);setObservation(value.observation_digest);})}>Observe instance restore target</Button>
       {receipt.state==='unknown' && observation && <Button disabled={busy || confirmation!==receipt.target.server_uuid} onClick={()=>run('acknowledge',{job_id:receipt.job_id,target_confirmation:confirmation,observation_digest:observation},setReceipt)}>Acknowledge observed target for another recovery</Button>}
-      <Box component="details"><summary>Native instance restore observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
+      <StructuredPayloadCard
+        title="Instance restore receipt summary"
+        value={{
+          job_id:receipt.job_id,
+          state:receipt.state,
+          native_load_outcome:receipt.native_load_outcome,
+          target:receipt.target,
+          execution_host:receipt.execution_host,
+        }}
+        rawText={JSON.stringify(receipt,null,2)}
+        rawDisclosureLabel="Native instance restore observations"
+      />
     </Box>}
     <MySQLInstanceAcceptance post={post} sourceServerId={source?.server_id} backupJobId={backup?.job_id} targetUuid={target?.identity?.server_uuid} targetConfirmation={confirmation} />
   </Box>;

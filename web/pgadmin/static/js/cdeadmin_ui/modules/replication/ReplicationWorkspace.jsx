@@ -16,6 +16,7 @@ import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {createReplicationContent, validateFailoverPlan} from './contracts';
 import {topologyGraph} from './ReplicationEngine';
 
@@ -266,6 +267,13 @@ function FailoverPlanner({session, invoke, currentUser}) {
     <Banner status="warning">Low lag alone never proves promotion safety. Provider quorum,
       candidate, position and data-loss checks must all pass.</Banner>
     {error && <Banner status="error">{error}</Banner>}
+    {savedPlan && <Box sx={{mb: 1}}><StructuredPayloadCard compact title="Active failover plan summary" value={savedPlan} /></Box>}
+    <Box sx={{mb: 1, display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))'}}>
+      <KeyValueJsonEditor title="Expected topology parameters" valueJson={draft.expectedTopology}
+        onChangeJson={(expectedTopology) => setDraft({...draft, expectedTopology})} />
+      <KeyValueJsonEditor title="Provider-native failover parameters" valueJson={draft.nativeDetails}
+        onChangeJson={(nativeDetails) => setDraft({...draft, nativeDetails})} />
+    </Box>
     <Box sx={{display: 'grid', gap: 1, gridTemplateColumns: 'repeat(3,minmax(190px,1fr))'}}>
       <TextField label="Plan ID" value={draft.id}
         onChange={(event) => setDraft({...draft, id: event.target.value})} />

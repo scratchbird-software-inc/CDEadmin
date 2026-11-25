@@ -24,6 +24,7 @@ import {
 } from '../query';
 import {ProjectAssetClient} from './ProjectAssetClient';
 import FormReference from '../navigation/FormReference';
+import StructuredPayloadCard from '../modules/StructuredPayloadCard';
 import {useModalCloseGuard} from '../../helpers/ModalCloseGuard';
 import {
   NOTEBOOK_TYPE,
@@ -306,10 +307,11 @@ export default function SQLNotebook({
         <FormReference formKey="sql-notebook" />
         <Stack gap="compact">
           <Banner status="info">
-            Notes, SQL and explicitly retained result pages. Opening, importing and sharing never execute SQL.
+            {gettext('Notes, SQL and explicitly retained result pages. Opening, importing and sharing never execute SQL.')}
+            {' '}
             {scope
-              ? ' Run cell uses this SQL editor session with empty parameter bindings and query attributes. Native transaction controls and cancellation remain in the editor.'
-              : 'To execute, open SQL notebook in a native MySQL SQL editor and load this project asset.'}
+              ? gettext('Run cell uses this SQL editor session with empty parameter bindings and query attributes. Native transaction controls and cancellation remain in the editor.')
+              : gettext('To execute, open SQL notebook in a connected database SQL editor and load this project asset.')}
           </Banner>
           {error && <Banner status="error">{error}</Banner>}
           {notice && <Banner status="info">{notice}</Banner>}
@@ -557,14 +559,12 @@ export default function SQLNotebook({
                   )}
                   {cell.snapshot && (
                     <>
-                      <Box
-                        component="pre"
-                        aria-label={gettext('Retained notebook snapshot')}
-                        className="sr-bui-table-card"
-                        sx={{p: 1.25, maxHeight: 220, overflow: 'auto', fontSize: '0.75rem'}}
-                      >
-                        {JSON.stringify(cell.snapshot, null, 2)}
-                      </Box>
+                      <StructuredPayloadCard
+                        title={gettext('Retained cell result snapshot')}
+                        value={cell.snapshot}
+                        rawAriaLabel={gettext('Retained notebook snapshot')}
+                        rawDisclosureLabel={gettext('Raw snapshot JSON')}
+                      />
                       <Box>
                         <Button
                           disabled={locked || readonly}

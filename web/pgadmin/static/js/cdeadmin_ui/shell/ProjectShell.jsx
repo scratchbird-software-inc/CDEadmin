@@ -38,6 +38,7 @@ import {
   T_ACTION_STATUS,
   T_ACTION_TARGET_KIND,
   TActionsRegistry,
+  seedStandardTiBActions,
   t_actions as globalTActions,
   useTActions,
 } from '../actions/t_actions';
@@ -60,8 +61,15 @@ import {
 import {
   ACTION_PLACEMENTS_CHANGED_EVENT,
   CANONICAL_ACTION_CATALOG,
+  resolveGlobalTiBState,
   resolveInstanceNotebookBarSpec,
+  writeLocalPlacements,
 } from './actionPlacementEngine';
+import {
+  buildTiBCssVariables,
+  inferSectionMeta,
+  normalizeGroupControlsForTiB,
+} from './tibStandardConfig';
 
 export const USER_DASHBOARD_ID = '__user_dashboard__';
 const DRAWER_WIDTH_STORAGE_KEY = 'scratchrobin.shell.drawer_widths.v1';
@@ -662,9 +670,22 @@ export function ProjectShellProvider({
   const languageRequest = useRef(0);
 
   useEffect(() => {
+    seedStandardTiBActions(actionsRegistry);
     syncShellActionStrings(actionsRegistry);
     actionsRegistry.setLocale(locale);
   }, [actionsRegistry, locale]);
+
+  // Synchronize centralized Action Definitions (text, icon, hint, status, target) from Settings
+  useEffect(() => {
+    const syncActionDefs = () => {
+      const {actionDefinitions} = resolveGlobalTiBState(settings);
+      actionsRegistry.setActionDefinitions?.(actionDefinitions || {});
+    };
+    syncActionDefs();
+    if (typeof window === 'undefined') return undefined;
+    window.addEventListener(ACTION_PLACEMENTS_CHANGED_EVENT, syncActionDefs);
+    return () => window.removeEventListener(ACTION_PLACEMENTS_CHANGED_EVENT, syncActionDefs);
+  }, [actionsRegistry, settings]);
   const [locked, setLocked] = useState(Boolean(initialLocked));
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState('');
@@ -700,6 +721,7 @@ export function ProjectShellProvider({
   const [subsectionsByInstance, setSubsectionsByInstance] = useState({});
   const subsectionHandlersRef = useRef({});
   const subsectionActionIdsRef = useRef({});
+  const subsectionSpecsRef = useRef({});
   // Focused target: an instanceId (docked or floating), USER_DASHBOARD_ID, or null.
   const [focusedId, setFocusedId] = useState(null);
   const [dashboardTabbed, setDashboardTabbed] = useState(false);
@@ -732,6 +754,7 @@ export function ProjectShellProvider({
         prevIds.forEach((aid) => actionsRegistry.unregister?.(aid));
         delete subsectionActionIdsRef.current[instanceId];
         delete subsectionHandlersRef.current[instanceId];
+        delete subsectionSpecsRef.current[instanceId];
         setSubsectionsByInstance((prev) => {
           if (!prev[instanceId]) return prev;
           const next = {...prev};
@@ -742,6 +765,7 @@ export function ProjectShellProvider({
       }
 
       subsectionHandlersRef.current[instanceId] = spec.onSelect || null;
+      const isFocusedNow = focusedIdRef.current === instanceId;
       const normalized = spec.items.map((raw, idx) => {
         const subId = String(raw.id ?? idx);
         const safeSub = toToken(subId, `s${idx}`);
@@ -751,6 +775,8 @@ export function ProjectShellProvider({
         const icon = raw.icon || 'action.layers';
         const checked = Boolean(raw.checked);
         const disabled = Boolean(raw.disabled);
+        const activeStatus = disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED;
+        const effectiveStatus = isFocusedNow ? activeStatus : T_ACTION_STATUS.INVISIBLE;
         actionsRegistry.upsert({
           id: actionId,
           icon,
@@ -758,17 +784,14 @@ export function ProjectShellProvider({
           defaultText: label,
           defaultHint: hint,
           checked,
-          focusScoped: false,
-          status: disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED,
+          focusScoped: true,
+          status: effectiveStatus,
           target: {
             kind: T_ACTION_TARGET_KIND.CLIENT,
             invoke: () => subsectionHandlersRef.current[instanceId]?.(subId),
           },
         });
-        actionsRegistry.setStatus(
-          actionId,
-          disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED
-        );
+        actionsRegistry.setStatus(actionId, effectiveStatus);
         actionsRegistry.setChecked(actionId, checked);
         return {id: subId, actionId, label, hint, icon, checked, disabled};
       });
@@ -778,6 +801,7 @@ export function ProjectShellProvider({
         if (!nextIds.has(aid)) actionsRegistry.unregister?.(aid);
       });
       subsectionActionIdsRef.current[instanceId] = [...nextIds];
+      subsectionSpecsRef.current[instanceId] = normalized;
 
       const sig = JSON.stringify(normalized);
       setSubsectionsByInstance((prev) => {
@@ -839,10 +863,26 @@ export function ProjectShellProvider({
         setTeardownHistory((prev) => [...prev.slice(-24), {step, ...detail}]);
       };
 
-      // Step 1: Unmerge/remove outgoing menus & hide ALL focus-scoped t_actions
+      // Step 1: Unmerge/remove outgoing workspace menus, TiB sub-tabs/sections & hide ALL focus-scoped t_actions
       menuRegistry.clearFocusedApplicationMenus();
       actionsRegistry.deactivateApplication(null);
-      recordStep('1.menus_cleared', {outgoingAppId: prevInstance?.appId || null});
+      if (prevInstance) {
+        (prevInstance.actions || []).forEach((act) => {
+          if (act?.id && actionsRegistry.has(act.id)) {
+            actionsRegistry.setStatus(act.id, T_ACTION_STATUS.INVISIBLE);
+          }
+        });
+        (subsectionActionIdsRef.current[prevInstance.instanceId] || []).forEach((aid) => {
+          if (actionsRegistry.has(aid)) {
+            actionsRegistry.setStatus(aid, T_ACTION_STATUS.INVISIBLE);
+          }
+        });
+      }
+      recordStep('1.menus_cleared', {
+        outgoingAppId: prevInstance?.appId || null,
+        outgoingInstanceId: prevInstance?.instanceId || null,
+        tibCleared: true,
+      });
 
       // Step 2: Reset Left Side Drawer to closed & grey out Area 2 toggle
       setShellLeftDrawerOpen(false);
@@ -859,7 +899,7 @@ export function ProjectShellProvider({
       }
       recordStep('3.app_settings_cleared', {activeSettingsAppId: null});
 
-      // Step 4: Activate incoming application instance (if focusing an app)
+      // Step 4: Activate incoming workspace instance (mount its menus, TiB sub-tabs, sections & actions)
       const incoming =
         nextTargetId && nextTargetId !== USER_DASHBOARD_ID
           ? nextInstancesList.find((i) => i.instanceId === nextTargetId) || null
@@ -870,6 +910,7 @@ export function ProjectShellProvider({
         : nextTargetId === USER_DASHBOARD_ID
           ? USER_DASHBOARD_ID
           : null;
+      focusedIdRef.current = resolvedFocusedId;
       setFocusedId(resolvedFocusedId);
       actionsRegistry.setActiveInstance?.(incoming ? incoming.instanceId : null);
 
@@ -904,6 +945,15 @@ export function ProjectShellProvider({
         } else {
           actionsRegistry.activateApplication(incoming.appId, incoming.actionStatuses || {});
         }
+        (subsectionSpecsRef.current[incoming.instanceId] || []).forEach((sub) => {
+          if (actionsRegistry.has(sub.actionId)) {
+            actionsRegistry.setStatus(
+              sub.actionId,
+              sub.disabled ? T_ACTION_STATUS.DISABLED : T_ACTION_STATUS.ENABLED
+            );
+            actionsRegistry.setChecked(sub.actionId, Boolean(sub.checked));
+          }
+        });
 
         const resolvedMenus =
           typeof incoming.buildMenus === 'function'
@@ -933,6 +983,7 @@ export function ProjectShellProvider({
           appId: incoming.appId,
           leftDrawerOpen: restoredLeftOpen,
           activeSettingsAppId: incoming.appId,
+          tibMounted: true,
         });
       }
     },
@@ -1473,6 +1524,12 @@ export function ProjectShellProvider({
         } else {
           menuRegistry.clearFocusedApplicationMenus();
         }
+      } else if (Array.isArray(updatedItem.actions)) {
+        updatedItem.actions.forEach((act) => {
+          if (act?.id && actionsRegistry.has(act.id)) {
+            actionsRegistry.setStatus(act.id, T_ACTION_STATUS.INVISIBLE);
+          }
+        });
       }
     },
     [actionsRegistry, menuRegistry]
@@ -1830,6 +1887,25 @@ export function ProjectShellProvider({
             ...values,
           },
         }));
+
+        if (
+          values &&
+          (values.tib_config !== undefined ||
+            values.tib_sections !== undefined ||
+            values.action_definitions !== undefined ||
+            values.icon_assignments !== undefined)
+        ) {
+          const placementPatch = {};
+          if (values.tib_config !== undefined) placementPatch.tib_config = values.tib_config;
+          if (values.tib_sections !== undefined) placementPatch.tib_sections = values.tib_sections;
+          if (values.action_definitions !== undefined) {
+            placementPatch.action_definitions = values.action_definitions;
+          }
+          if (values.icon_assignments !== undefined) {
+            placementPatch.icon_assignments = values.icon_assignments;
+          }
+          writeLocalPlacements(placementPatch);
+        }
 
         const localLayout = loadLocalLayoutPrefs();
         localLayout.global = {
@@ -2229,6 +2305,19 @@ export function ProjectShellProvider({
         },
       },
     });
+    const delegatedSaveId = focusedInstance ? `file.save.${focusedInstance.instanceId}` : '';
+    const delegatedUndoId = focusedInstance ? `edit.undo.${focusedInstance.instanceId}` : '';
+    const delegatedRedoId = focusedInstance ? `edit.redo.${focusedInstance.instanceId}` : '';
+    const canDelegatedSave =
+        Boolean(delegatedSaveId && actionsRegistry.has(delegatedSaveId)) &&
+        actionsRegistry.resolve(delegatedSaveId)?.enabled;
+    const canDelegatedUndo =
+        Boolean(delegatedUndoId && actionsRegistry.has(delegatedUndoId)) &&
+        actionsRegistry.resolve(delegatedUndoId)?.enabled;
+    const canDelegatedRedo =
+        Boolean(delegatedRedoId && actionsRegistry.has(delegatedRedoId)) &&
+        actionsRegistry.resolve(delegatedRedoId)?.enabled;
+
     actionsRegistry.upsert({
       id: 'shell.quick.save',
       icon: 'action.save',
@@ -2236,12 +2325,20 @@ export function ProjectShellProvider({
       defaultText: gettext('Save'),
       defaultHint: gettext('Save active changes'),
       status:
-        typeof focusedInstance?.quickActions?.onSave === 'function'
-          ? T_ACTION_STATUS.ENABLED
-          : T_ACTION_STATUS.DISABLED,
+          typeof focusedInstance?.quickActions?.onSave === 'function' || canDelegatedSave
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
       target: {
         kind: T_ACTION_TARGET_KIND.CLIENT,
-        invoke: () => focusedInstance?.quickActions?.onSave?.(focusedInstance),
+        invoke: () => {
+          if (typeof focusedInstance?.quickActions?.onSave === 'function') {
+            return focusedInstance.quickActions.onSave(focusedInstance);
+          }
+          if (delegatedSaveId && actionsRegistry.has(delegatedSaveId)) {
+            return actionsRegistry.execute(delegatedSaveId);
+          }
+          return null;
+        },
       },
     });
     actionsRegistry.upsert({
@@ -2251,12 +2348,20 @@ export function ProjectShellProvider({
       defaultText: gettext('Undo'),
       defaultHint: gettext('Undo last change'),
       status:
-        typeof focusedInstance?.quickActions?.onUndo === 'function'
-          ? T_ACTION_STATUS.ENABLED
-          : T_ACTION_STATUS.DISABLED,
+          typeof focusedInstance?.quickActions?.onUndo === 'function' || canDelegatedUndo
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
       target: {
         kind: T_ACTION_TARGET_KIND.CLIENT,
-        invoke: () => focusedInstance?.quickActions?.onUndo?.(focusedInstance),
+        invoke: () => {
+          if (typeof focusedInstance?.quickActions?.onUndo === 'function') {
+            return focusedInstance.quickActions.onUndo(focusedInstance);
+          }
+          if (delegatedUndoId && actionsRegistry.has(delegatedUndoId)) {
+            return actionsRegistry.execute(delegatedUndoId);
+          }
+          return null;
+        },
       },
     });
     actionsRegistry.upsert({
@@ -2266,12 +2371,20 @@ export function ProjectShellProvider({
       defaultText: gettext('Redo'),
       defaultHint: gettext('Redo last undone change'),
       status:
-        typeof focusedInstance?.quickActions?.onRedo === 'function'
-          ? T_ACTION_STATUS.ENABLED
-          : T_ACTION_STATUS.DISABLED,
+          typeof focusedInstance?.quickActions?.onRedo === 'function' || canDelegatedRedo
+            ? T_ACTION_STATUS.ENABLED
+            : T_ACTION_STATUS.DISABLED,
       target: {
         kind: T_ACTION_TARGET_KIND.CLIENT,
-        invoke: () => focusedInstance?.quickActions?.onRedo?.(focusedInstance),
+        invoke: () => {
+          if (typeof focusedInstance?.quickActions?.onRedo === 'function') {
+            return focusedInstance.quickActions.onRedo(focusedInstance);
+          }
+          if (delegatedRedoId && actionsRegistry.has(delegatedRedoId)) {
+            return actionsRegistry.execute(delegatedRedoId);
+          }
+          return null;
+        },
       },
     });
     actionsRegistry.upsert({
@@ -3356,6 +3469,7 @@ function NotebookBarHint({ref}) {
 
 export function ProjectApplicationNotebookBar() {
   const shell = useProjectShell();
+  const prefStore = usePreferences();
   useTActions(shell?.actionsRegistry);
   const [, bumpPlacements] = useState(0);
   const draggedTabOutsideRef = useRef(false);
@@ -3412,9 +3526,10 @@ export function ProjectApplicationNotebookBar() {
     return null;
   }
 
-  const {ribbonTabs, quickAccess, iconAssignments} = activeInstance
-    ? resolveInstanceNotebookBarSpec(activeInstance, shell.settings)
-    : {ribbonTabs: [], quickAccess: [], iconAssignments: {}};
+  const currentTone = resolveCurrentTone(prefStore);
+  const {ribbonTabs, quickAccess, iconAssignments, tibConfig, tibSections} = activeInstance
+    ? resolveInstanceNotebookBarSpec(activeInstance, shell?.settings)
+    : resolveInstanceNotebookBarSpec(null, shell?.settings);
 
   const seenControlIds = new Set();
   const dedupeControlSpec = (ctrl) => {
@@ -3437,13 +3552,19 @@ export function ProjectApplicationNotebookBar() {
     return `${prefix}.${cleaned || fallbackIndex}`;
   };
 
-  const hasUnderTabs = Boolean(
-    Array.isArray(ribbonTabs) &&
-      ribbonTabs.length > 1 &&
-      (activeInstance?.useUnderTabs || ribbonTabs.some((rt) => Boolean(rt?.isUnderTab)))
+  const hasMultipleSubTabs = Boolean(Array.isArray(ribbonTabs) && ribbonTabs.length > 1);
+  const showSubTabStrip = Boolean(
+    activeInstance &&
+      Array.isArray(ribbonTabs) &&
+      ribbonTabs.length >= 1 &&
+      (tibConfig.subtab_visibility === 'always'
+        ? ribbonTabs.length >= 1
+        : tibConfig.subtab_visibility === 'hidden'
+          ? false
+          : ribbonTabs.length > 1)
   );
   const selectedUnderTabId =
-    hasUnderTabs && activeInstance
+    activeInstance && Array.isArray(ribbonTabs) && ribbonTabs.length > 0
       ? (ribbonTabs.find((rt) => Boolean(rt?.selected))?.id ||
         (activeInstance.selectedUnderTabId &&
         ribbonTabs.some((rt) => rt.id === activeInstance.selectedUnderTabId)
@@ -3452,23 +3573,42 @@ export function ProjectApplicationNotebookBar() {
             ? underTabByInstance[activeInstance.instanceId]
             : ribbonTabs[0].id))
       : null;
-  const visibleRibbonTabs = hasUnderTabs
-    ? ribbonTabs.filter((rt) => rt.id === selectedUnderTabId)
-    : ribbonTabs || [];
+  const visibleRibbonTabs =
+    hasMultipleSubTabs && selectedUnderTabId
+      ? ribbonTabs.filter((rt) => rt.id === selectedUnderTabId)
+      : ribbonTabs || [];
+
+  const formatTiBGroup = (g, tIdx, gIdx) => {
+    const deduped = (g.controls || g.actions || []).map(dedupeControlSpec).filter(Boolean);
+    const meta = inferSectionMeta({...g, rawGroupId: g.rawGroupId || g.id || ''});
+    const secOverride = meta.sectionId ? tibSections?.[meta.sectionId] : null;
+    const formattedControls = normalizeGroupControlsForTiB(
+      deduped,
+      meta.sectionId,
+      tibSections
+    );
+    if (!formattedControls || formattedControls.length === 0) {
+      return null;
+    }
+    return {
+      ...g,
+      rawGroupId: g.rawGroupId || g.id || '',
+      sectionId: meta.sectionId || undefined,
+      sectionIcon: secOverride?.sectionIcon || meta.sectionIcon,
+      label: secOverride?.label?.trim() || g.label || meta.defaultTitle,
+      id: toNotebookSafeId(
+        'grp',
+        `${activeInstance.instanceId}.t${tIdx}.${g.id || meta.sectionId || `g${gIdx}`}`,
+        gIdx
+      ),
+      controls: formattedControls,
+    };
+  };
 
   const baseActiveGroups = activeInstance
-    ? visibleRibbonTabs.flatMap((rt, tIdx) =>
-      (rt.groups || []).map((g, gIdx) => ({
-        ...g,
-        rawGroupId: g.id || '',
-        id: toNotebookSafeId(
-          'grp',
-          `${activeInstance.instanceId}.t${tIdx}.${g.id || `g${gIdx}`}`,
-          gIdx
-        ),
-        controls: (g.controls || []).map(dedupeControlSpec).filter(Boolean),
-      }))
-    )
+    ? visibleRibbonTabs
+      .flatMap((rt, tIdx) => (rt.groups || []).map((g, gIdx) => formatTiBGroup(g, tIdx, gIdx)))
+      .filter(Boolean)
     : [];
 
   const activeSubsections =
@@ -3478,28 +3618,36 @@ export function ProjectApplicationNotebookBar() {
   const subsectionControls =
     activeSubsections?.items?.length > 0
       ? activeSubsections.items
-        .map((item) => dedupeControlSpec(item.actionId))
-        .filter(Boolean)
+        .map((item) => item.actionId)
+        .filter((id) => Boolean(id) && !seenControlIds.has(id))
       : [];
   const activeGroups =
     subsectionControls.length > 0
       ? baseActiveGroups.filter((g) => g.rawGroupId !== 'inline-fallback-inspect')
       : [...baseActiveGroups];
   if (activeInstance && subsectionControls.length > 0) {
-    const subGroup = {
-      id: toNotebookSafeId('grp', `${activeInstance.instanceId}.subsections`, 998),
-      label: gettext('Sections'),
-      controls: subsectionControls,
-    };
-    let insertIdx = 0;
-    while (
-      insertIdx < activeGroups.length &&
-      (activeGroups[insertIdx].rawGroupId === 'page-views' ||
-        activeGroups[insertIdx].rawGroupId === 'page-connector-modes')
-    ) {
-      insertIdx += 1;
+    const subGroup = formatTiBGroup(
+      {
+        id: 'subsections',
+        rawGroupId: 'subsections',
+        sectionId: 'SEC-WORKSPACE',
+        label: gettext('Sections'),
+        controls: subsectionControls,
+      },
+      99,
+      998
+    );
+    if (subGroup) {
+      let insertIdx = 0;
+      while (
+        insertIdx < activeGroups.length &&
+        (activeGroups[insertIdx].rawGroupId === 'page-views' ||
+          activeGroups[insertIdx].rawGroupId === 'page-connector-modes')
+      ) {
+        insertIdx += 1;
+      }
+      activeGroups.splice(insertIdx, 0, subGroup);
     }
-    activeGroups.splice(insertIdx, 0, subGroup);
   }
 
   const floatingSuffix = translateShell(
@@ -3537,7 +3685,12 @@ export function ProjectApplicationNotebookBar() {
         'command.default';
       return <Icon iconKey={resolvedIcon} decorative size="100%" />;
     },
-    isDashboardActive || !shell.showTabbedIconBar ? [] : quickAccess
+    isDashboardActive || !shell.showTabbedIconBar ? [] : quickAccess,
+    {
+      renderHeaderIcon: (sectionIconKey) => (
+        <Icon iconKey={sectionIconKey} decorative size="100%" />
+      ),
+    }
   );
 
   const selectedSafeTabId = tabIdByInstanceId.get(
@@ -3557,7 +3710,7 @@ export function ProjectApplicationNotebookBar() {
   const zoom3b = shell.resolveAreaZoom?.('area_3b') ?? 1;
   const barStyle = {
     ...COMMAND_BAR_THEME,
-    '--sr-zoom-3b': String(zoom3b),
+    ...buildTiBCssVariables(tibConfig, currentTone, zoom3b),
     '--snb-color-background': 'var(--sr-strip-b)',
     '--snb-color-panel': 'var(--sr-island-bg)',
     '--snb-color-text': 'var(--sr-island-fg)',
@@ -3567,13 +3720,17 @@ export function ProjectApplicationNotebookBar() {
     '--snb-font-size': 'calc(0.84375rem * var(--sr-zoom-3b, 1))',
     '--snb-small-font-size': 'calc(0.74rem * var(--sr-zoom-3b, 1))',
     '--snb-tab-height': 'calc(30px * var(--sr-zoom-3b, 1))',
-    '--snb-panel-height': 'calc(36px * var(--sr-zoom-3b, 1))',
-    '--snb-control-height': 'calc(28px * var(--sr-zoom-3b, 1))',
-    '--snb-icon-size': 'calc(17px * var(--sr-zoom-3b, 1))',
-    '--snb-large-icon-size': 'calc(20px * var(--sr-zoom-3b, 1))',
+    '--snb-panel-height': `calc(${tibConfig.section_height_px + 10}px * var(--sr-zoom-3b, 1))`,
+    '--snb-control-height': `calc(${tibConfig.grid_button_px}px * var(--sr-zoom-3b, 1))`,
+    '--snb-icon-size': `calc(${tibConfig.grid_icon_px}px * var(--sr-zoom-3b, 1))`,
+    '--snb-large-icon-size': `calc(${tibConfig.hero_icon_px}px * var(--sr-zoom-3b, 1))`,
   };
 
   const showControlHint = (target) => {
+    if (!tibConfig.show_hover_hints) {
+      hintRef.current?.setHint(null);
+      return;
+    }
     const controlEl = target?.closest?.('.snb-control, .snb-segment');
     if (!controlEl) {
       hintRef.current?.setHint(null);
@@ -3615,11 +3772,24 @@ export function ProjectApplicationNotebookBar() {
     }
   };
 
+  const selectSubTab = (rt) => {
+    if (!activeInstance || !rt) return;
+    setUnderTabByInstance((prev) => ({
+      ...prev,
+      [activeInstance.instanceId]: rt.id,
+    }));
+    rt.onSelect?.(rt.id, activeInstance.instanceId);
+  };
+
   return (
     <div
       className="sr-island sr-island-3b"
       data-area-part="3b"
-      data-ribbon-mode={activeInstance?.ribbonMode === 'ms-grouped' ? 'ms-grouped' : 'compact'}
+      data-ribbon-mode="unified-tib"
+      data-subtab-visibility={tibConfig.subtab_visibility}
+      data-tib-headers={tibConfig.show_section_headers ? 'true' : 'false'}
+      data-tib-section-icons={tibConfig.show_section_icons ? 'true' : 'false'}
+      data-tib-dividers={tibConfig.show_cluster_dividers ? 'true' : 'false'}
       data-cdeadmin-qa-key="project-application-notebookbar"
       data-dashboard-tab-active={isDashboardActive ? 'true' : 'false'}
       style={barStyle}
@@ -3637,12 +3807,28 @@ export function ProjectApplicationNotebookBar() {
         catalog={bar.catalog}
         selectedTab={selectedSafeTabId}
         subHeader={
-          hasUnderTabs && activeInstance ? (
+          showSubTabStrip && activeInstance ? (
             <div
               className="sr-3b-undertabs"
               role="tablist"
               aria-label={gettext('%s Sub-tabs', activeInstance.title)}
               data-cdeadmin-qa-key="notebookbar-undertabs"
+              onKeyDown={(e) => {
+                const curIdx = ribbonTabs.findIndex((rt) => rt.id === selectedUnderTabId);
+                if (curIdx < 0) return;
+                let nextIdx = -1;
+                if (e.key === 'ArrowRight') nextIdx = (curIdx + 1) % ribbonTabs.length;
+                else if (e.key === 'ArrowLeft') {
+                  nextIdx = (curIdx - 1 + ribbonTabs.length) % ribbonTabs.length;
+                } else if (e.key === 'Home') nextIdx = 0;
+                else if (e.key === 'End') nextIdx = ribbonTabs.length - 1;
+                if (nextIdx >= 0) {
+                  e.preventDefault();
+                  selectSubTab(ribbonTabs[nextIdx]);
+                  const buttons = e.currentTarget.querySelectorAll('[role="tab"]');
+                  buttons[nextIdx]?.focus?.();
+                }
+              }}
             >
               {ribbonTabs.map((rt) => {
                 const isSubSelected = rt.id === selectedUnderTabId;
@@ -3651,15 +3837,10 @@ export function ProjectApplicationNotebookBar() {
                     key={rt.id}
                     type="button"
                     role="tab"
+                    tabIndex={isSubSelected ? 0 : -1}
                     aria-selected={isSubSelected}
                     className={`sr-3b-undertab${isSubSelected ? ' active' : ''}`}
-                    onClick={() => {
-                      setUnderTabByInstance((prev) => ({
-                        ...prev,
-                        [activeInstance.instanceId]: rt.id,
-                      }));
-                      rt.onSelect?.(rt.id, activeInstance.instanceId);
-                    }}
+                    onClick={() => selectSubTab(rt)}
                   >
                     {rt.label}
                   </button>

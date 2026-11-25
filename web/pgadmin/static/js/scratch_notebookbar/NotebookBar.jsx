@@ -53,14 +53,16 @@ function Group({group, state, onCommand, hints, folded, measure, messages}) {
   });
   if(folded || !isGroupVisible(group, state)) return null;
   return <div ref={ref} className="snb-group" role="group"
-    aria-label={group.label || undefined} data-snb-group={group.id}>
+    aria-label={group.label || undefined} data-snb-group={group.id}
+    data-section-id={group.sectionId || undefined}>
     <div className="snb-group-body">
       {group.controls.map((control, index) => <Control
         key={control.id ?? `separator-${index}`} control={control}
         state={state} onCommand={onCommand} hints={hints} messages={messages} />)}
     </div>
     {group.label && <div className="snb-group-label" aria-hidden="true">
-      {group.label}</div>}
+      {group.headerIcon && <span className="snb-group-icon">{group.headerIcon}</span>}
+      <span>{group.label}</span></div>}
   </div>;
 }
 Group.propTypes = {
@@ -180,12 +182,13 @@ export function NotebookBar({model, state={}, context, onCommand, selectedTab,
   }, [shownIds]);
 
   // Overflow: measure group widths, fold what does not fit.
-  // Reset cached widths when switching ribbon tabs or models so stale sizes
-  // never carry across tabs, and ignore <=2px subpixel/border jitter so
-  // folding/unfolding at an exact boundary can never oscillate in useLayoutEffect.
-  useLayoutEffect(() => {
+  // Clear cached widths synchronously when switching tabs (before child Group
+  // useLayoutEffects measure), and ignore <=2px subpixel/border jitter.
+  const prevMeasuredTabRef = useRef(current?.id);
+  if(prevMeasuredTabRef.current !== current?.id) {
+    prevMeasuredTabRef.current = current?.id;
     widths.current.clear();
-  }, [current?.id, resolved]);
+  }
 
   const measure = useCallback((groupId, width) => {
     if(width > 0) {

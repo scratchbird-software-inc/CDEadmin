@@ -58,7 +58,6 @@ import {
   Button,
   EmptyState,
   Icon,
-  ScratchPopoverPalette,
   ScratchScrollArea,
   initializeCDEadminPlatform,
   ProjectExplorer,
@@ -78,12 +77,16 @@ import {
 } from 'sources/cdeadmin_ui';
 import {
   canLaunchServerMenu,
+  openSecurityManagerSurface,
   providerContextMenuItems,
 } from '../../browser/static/js/ProviderContextMenu';
 import {openFamilyCreate} from '../../browser/static/js/ProviderObjectEditor';
 import {SchemaCompareWorkspace} from './cdeadmin_ui/modules/schema_compare/SchemaCompareWorkspace';
 import ObjectDashboardSurface from './cdeadmin_ui/surfaces/ObjectDashboardSurface';
-import ObjectPropertiesInspector from './cdeadmin_ui/surfaces/ObjectPropertiesInspector';
+import ObjectPropertiesInspector, {
+  isObjectPermissionsSupported,
+} from './cdeadmin_ui/surfaces/ObjectPropertiesInspector';
+import PrincipalSecurityManager from './cdeadmin_ui/security/PrincipalSecurityManager';
 import {
   DesignStoreClient,
   ERDDesignerSurface,
@@ -168,7 +171,95 @@ export function catalogNodeIdentityKey(nodeData) {
     nodeData.server_id ??
     nodeData.cde_profile_id ??
     '';
-  return `${type}:${parentPart}:${idPart}`;
+  const sectionSuffix = nodeData.cde_section ? `:${nodeData.cde_section}` : '';
+  return `${type}:${parentPart}:${idPart}${sectionSuffix}`;
+}
+
+function resolveNodeSecurityCapabilities(pgAdmin, selectedItem, selectedData) {
+  if (!selectedData || !selectedData._type) {
+    return {hasUsers: false, hasRoles: false, hasObjectGrants: false, endpoint: {item: null, data: null}};
+  }
+  const tree = pgAdmin?.Browser?.tree;
+  let endpointItem = selectedData._type === 'server' ? selectedItem : null;
+  let endpointData = selectedData._type === 'server' ? selectedData : null;
+  if (!endpointData && tree && selectedItem) {
+    let cur = selectedItem;
+    while (cur) {
+      const curData = tree.itemData?.(cur);
+      if (curData?._type === 'server') {
+        endpointItem = cur;
+        endpointData = curData;
+        break;
+      }
+      cur = tree.hasParent?.(cur) ? tree.parent(cur) : null;
+    }
+  }
+  const rawEngine = String(
+    selectedData.cde_engine_id ||
+    selectedData.engine_id ||
+    endpointData?.cde_engine_id ||
+    selectedData.server_type ||
+    endpointData?.server_type ||
+    (selectedData._type === 'server' || selectedData._type === 'database' || selectedData._type === 'coll-role' || selectedData._type === 'role'
+      ? 'postgresql'
+      : '')
+  ).toLowerCase();
+  const engine = rawEngine === 'pg' ? 'postgresql' : rawEngine;
+  if (!engine || engine === 'sqlite' || engine === 'duckdb') {
+    return {hasUsers: false, hasRoles: false, hasObjectGrants: false, engine, endpoint: {item: endpointItem, data: endpointData}};
+  }
+  const nodeType = String(selectedData._type);
+  if (nodeType === 'server_group' || nodeType === 'engine_type' || nodeType === 'localhost_placeholder') {
+    return {hasUsers: false, hasRoles: false, hasObjectGrants: false, engine, endpoint: {item: endpointItem, data: endpointData}};
+  }
+  const hasDatabaseScope = Boolean(
+    selectedData.cde_database_target_id ||
+    nodeType === 'cde_database_target' ||
+    nodeType === 'database'
+  );
+  if (nodeType === 'server') {
+    return {
+      engine,
+      scope: 'server',
+      hasUsers: true,
+      hasRoles: engine !== 'firebird',
+      hasObjectGrants: false,
+      endpoint: {item: endpointItem, data: endpointData || selectedData},
+    };
+  }
+  if (nodeType === 'cde_database_target' || nodeType === 'database') {
+    return {
+      engine,
+      scope: engine === 'firebird' ? 'database' : 'server',
+      hasUsers: engine !== 'firebird',
+      hasRoles: true,
+      hasObjectGrants: true,
+      endpoint: {item: endpointItem, data: endpointData || selectedData},
+    };
+  }
+  if (
+    nodeType === 'coll-role' ||
+    nodeType === 'role' ||
+    selectedData.cde_resource_kind === 'user' ||
+    selectedData.cde_resource_kind === 'role'
+  ) {
+    return {
+      engine,
+      scope: engine === 'firebird' && hasDatabaseScope ? 'database' : 'server',
+      hasUsers: !(engine === 'firebird' && hasDatabaseScope),
+      hasRoles: !(engine === 'firebird' && !hasDatabaseScope),
+      hasObjectGrants: false,
+      endpoint: {item: endpointItem, data: endpointData || selectedData},
+    };
+  }
+  return {
+    engine,
+    scope: engine === 'firebird' && hasDatabaseScope ? 'database' : 'server',
+    hasUsers: false,
+    hasRoles: false,
+    hasObjectGrants: isObjectPermissionsSupported(selectedData),
+    endpoint: {item: endpointItem, data: endpointData || selectedData},
+  };
 }
 
 const VIEW_ACTION_META = Object.freeze({
@@ -251,6 +342,7 @@ export function buildNavigatorSelectionConfig(
   const viewControlIds = [];
   const connectorModeControlIds = [];
   const pageControlIds = [];
+  const securityControlIds = [];
   const catalogControlIds = [];
   const menuItems = [];
   let menuIndex = 5;
@@ -695,6 +787,92 @@ export function buildNavigatorSelectionConfig(
     }
   }
 
+  // 2b. Standard SEC-SECURITY (Security & Access) TiB section — native per-engine scope
+  const securityCaps = resolveNodeSecurityCapabilities(pgAdmin, selectedItem, selectedData);
+  const pushSecurityAction = ({key, icon, text, hint, checked = false, invoke}) => {
+    const actId = `data-navigator.${key}.${safeInstId}`;
+    actions.push({
+      id: actId,
+      icon,
+      application: 'data-navigator',
+      defaultText: text,
+      defaultHint: hint || text,
+      checked: Boolean(checked),
+      status: T_ACTION_STATUS.ENABLED,
+      focusScoped: true,
+      target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke},
+    });
+    securityControlIds.push(actId);
+    menuItems.push({
+      id: actId,
+      actionId: actId,
+      label: text,
+      iconKey: icon,
+      checked: Boolean(checked),
+      index: menuIndex,
+    });
+    menuIndex += 5;
+  };
+
+  if (securityCaps.hasUsers) {
+    const usersLabel =
+      securityCaps.engine === 'firebird'
+        ? gettext('Manage Server Users')
+        : gettext('Manage Users');
+    pushSecurityAction({
+      key: 'sec_manage_users',
+      icon: 'tib.security_users',
+      text: usersLabel,
+      hint: gettext('View and manage server user accounts, authentication, and memberships'),
+      invoke: () =>
+        openSecurityManagerSurface(securityCaps.endpoint, selectedData, {
+          engine: securityCaps.engine,
+          scope: 'server',
+          kind: 'user',
+        }),
+    });
+  }
+  if (securityCaps.hasRoles) {
+    const rolesLabel =
+      securityCaps.engine === 'firebird' && securityCaps.scope === 'database'
+        ? gettext('Manage Database Roles')
+        : gettext('Manage Roles');
+    pushSecurityAction({
+      key: 'sec_manage_roles',
+      icon: 'tib.security_roles',
+      text: rolesLabel,
+      hint: gettext('View and manage SQL roles, memberships, and role privileges'),
+      invoke: () =>
+        openSecurityManagerSurface(securityCaps.endpoint, selectedData, {
+          engine: securityCaps.engine,
+          scope: securityCaps.scope,
+          kind: 'role',
+        }),
+    });
+  }
+  if (securityCaps.hasObjectGrants) {
+    const isPermActive =
+      resolvedView === 'properties' &&
+      (options.propertiesSectionFilter || 'all') === 'permissions';
+    pushSecurityAction({
+      key: 'sec_object_permissions',
+      icon: 'tib.security_grants',
+      text: gettext('Object Permissions'),
+      hint: gettext('View who has grants on this object and grant or revoke privileges'),
+      checked: isPermActive,
+      invoke: () => {
+        dispatchViewSelect('properties', false);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('scratchrobin:navigator-dashboard-state', {
+              detail: {instanceId, propertiesSectionFilter: 'permissions'},
+            })
+          );
+        }
+      },
+    });
+  }
+
   // 3. Unbound Connectors page action + Catalog Refresh
   if (!nodeType || nodeType === 'server_group') {
     const enginesAction = `data-navigator.engines.${safeInstId}`;
@@ -771,7 +949,11 @@ export function buildNavigatorSelectionConfig(
     target: {
       kind: T_ACTION_TARGET_KIND.CLIENT,
       invoke: () => {
-        if (selectedItem && pgAdmin?.Browser?.tree?.refresh) {
+        const isGroupOrUnselected =
+          !selectedItem || selectedItem?._metadata?.data?._type === 'server_group';
+        if (isGroupOrUnselected && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('scratchrobin:connectors-changed'));
+        } else if (selectedItem && pgAdmin?.Browser?.tree?.refresh) {
           pgAdmin.Browser.tree.refresh(selectedItem);
         } else {
           pgAdmin?.Browser?.Events?.trigger?.('pgadmin-browser:tree:refresh');
@@ -861,17 +1043,45 @@ export function buildNavigatorSelectionConfig(
         ],
       }
     );
-    const dashHistoryPillId = regSubControl(
-      'dash_history_window',
-      'action.history',
-      gettext('Historic Metrics'),
-      gettext('Load stored historic metric series from the embedded UserConfigurationDatabase'),
-      (detail) => {
-        if (detail?.item) {
-          dispatchDashboardState({dashboardWindow: String(detail.item)});
-        }
-      },
-      {value: historyWindow}
+    const dashWinLiveId = regSubControl(
+      'dash_window_live',
+      'tib.window_live',
+      gettext('Live'),
+      gettext('Live 15-minute raw metrics window'),
+      () => dispatchDashboardState({dashboardWindow: 'live'}),
+      {checked: historyWindow === 'live'}
+    );
+    const dashWin1hId = regSubControl(
+      'dash_window_1h',
+      'tib.window_1h',
+      gettext('1 Hour'),
+      gettext('Last 1 hour raw metrics from embedded database'),
+      () => dispatchDashboardState({dashboardWindow: '1h'}),
+      {checked: historyWindow === '1h'}
+    );
+    const dashWin24hId = regSubControl(
+      'dash_window_24h',
+      'tib.vault_history',
+      gettext('24 Hours'),
+      gettext('Last 24 hours raw metrics from embedded database'),
+      () => dispatchDashboardState({dashboardWindow: '24h'}),
+      {checked: historyWindow === '24h'}
+    );
+    const dashWin30dId = regSubControl(
+      'dash_window_30d',
+      'tib.window_30d',
+      gettext('30 Days'),
+      gettext('Last 30 days 5-minute rollups from embedded database'),
+      () => dispatchDashboardState({dashboardWindow: '30d'}),
+      {checked: historyWindow === '30d'}
+    );
+    const dashWin365dId = regSubControl(
+      'dash_window_365d',
+      'tib.window_365d',
+      gettext('365 Days'),
+      gettext('Last 365 days 1-hour rollups from embedded database'),
+      () => dispatchDashboardState({dashboardWindow: '365d'}),
+      {checked: historyWindow === '365d'}
     );
     const dashCustomizeId = regSubControl(
       'dash_customize',
@@ -894,17 +1104,55 @@ export function buildNavigatorSelectionConfig(
           new CustomEvent('scratchrobin:object-properties-refresh', {detail: {instanceId}})
         )
     );
-    const propsSectionPillId = regSubControl(
-      'props_section_filter',
-      'action.properties',
-      gettext('Properties Sections'),
-      gettext('Filter displayed object property sections'),
-      (detail) => {
-        if (detail?.item) {
-          dispatchDashboardState({propertiesSectionFilter: String(detail.item)});
-        }
-      },
-      {value: propsSectionFilter}
+    const propsSecAllId = regSubControl(
+      'props_sec_all',
+      'tib.inspect_all',
+      gettext('All Sections'),
+      gettext('Show all available information about the object'),
+      () => dispatchDashboardState({propertiesSectionFilter: 'all'}),
+      {checked: propsSectionFilter === 'all'}
+    );
+    const propsSecPermsId = isObjectPermissionsSupported(selectedData)
+      ? regSubControl(
+        'props_sec_permissions',
+        'tib.inspect_permissions',
+        gettext('Permissions'),
+        gettext('View who has grants on this object and grant or revoke privileges'),
+        () => dispatchDashboardState({propertiesSectionFilter: 'permissions'}),
+        {checked: propsSectionFilter === 'permissions'}
+      )
+      : null;
+    const propsSecOverviewId = regSubControl(
+      'props_sec_overview',
+      'tib.inspect_overview',
+      gettext('Overview'),
+      gettext('Show connection settings and summary attributes'),
+      () => dispatchDashboardState({propertiesSectionFilter: 'settings'}),
+      {checked: propsSectionFilter === 'settings'}
+    );
+    const propsSecStructureId = regSubControl(
+      'props_sec_structure',
+      'tib.inspect_structure',
+      gettext('Structure'),
+      gettext('Show columns, indexes, constraints, triggers, and partitions'),
+      () => dispatchDashboardState({propertiesSectionFilter: 'structure'}),
+      {checked: propsSectionFilter === 'structure'}
+    );
+    const propsSecDdlId = regSubControl(
+      'props_sec_ddl',
+      'tib.inspect_ddl',
+      gettext('DDL / SQL'),
+      gettext('Show CREATE / DDL SQL definition'),
+      () => dispatchDashboardState({propertiesSectionFilter: 'ddl'}),
+      {checked: propsSectionFilter === 'ddl'}
+    );
+    const propsSecDepsId = regSubControl(
+      'props_sec_dependencies',
+      'tib.inspect_dependencies',
+      gettext('Dependencies'),
+      gettext('Show object dependencies and dependents'),
+      () => dispatchDashboardState({propertiesSectionFilter: 'dependencies'}),
+      {checked: propsSectionFilter === 'dependencies'}
     );
     const propsCopyDdlId = regSubControl(
       'props_copy_ddl',
@@ -928,6 +1176,15 @@ export function buildNavigatorSelectionConfig(
     );
 
     const sharedTailGroups = [];
+    if (securityControlIds.length > 0) {
+      sharedTailGroups.push({
+        id: 'page-security',
+        sectionId: 'SEC-SECURITY',
+        label: gettext('Security & Access'),
+        headerIcon: 'tib.section_security',
+        controls: securityControlIds,
+      });
+    }
     if (pageControlIds.length > 0) {
       sharedTailGroups.push({
         id: 'page-actions',
@@ -945,6 +1202,14 @@ export function buildNavigatorSelectionConfig(
 
     const dashSubTabId = `undertab-dashboard-${safeInstId}`;
     const propsSubTabId = `undertab-properties-${safeInstId}`;
+    const inspectorSectionControls = [
+      propsSecAllId,
+      ...(propsSecPermsId ? [propsSecPermsId] : []),
+      propsSecOverviewId,
+      propsSecStructureId,
+      propsSecDdlId,
+      propsSecDepsId,
+    ];
 
     return {
       title: pageTitle,
@@ -972,55 +1237,27 @@ export function buildNavigatorSelectionConfig(
           groups: [
             {
               id: 'dashboard-controls',
-              label: gettext('Dashboard & Historic Metrics'),
+              sectionId: 'SEC-MON',
+              label: gettext('Dashboard & Metrics'),
+              headerIcon: 'tib.section_monitoring',
               controls: [
                 dashRefreshId,
                 dashDeepId,
                 dashAutoRefreshId,
-                {
-                  id: dashHistoryPillId,
-                  actionId: dashHistoryPillId,
-                  type: 'segmented',
-                  value: historyWindow,
-                  items: [
-                    {
-                      id: 'live',
-                      label: gettext('Live'),
-                      tooltip: gettext('Live 15-minute raw metrics window'),
-                      showLabel: true,
-                      checked: historyWindow === 'live',
-                    },
-                    {
-                      id: '1h',
-                      label: gettext('1h'),
-                      tooltip: gettext('Last 1 hour raw metrics from embedded database'),
-                      showLabel: true,
-                      checked: historyWindow === '1h',
-                    },
-                    {
-                      id: '24h',
-                      label: gettext('24h'),
-                      tooltip: gettext('Last 24 hours raw metrics from embedded database'),
-                      showLabel: true,
-                      checked: historyWindow === '24h',
-                    },
-                    {
-                      id: '30d',
-                      label: gettext('30d'),
-                      tooltip: gettext('Last 30 days 5-minute rollups from embedded database'),
-                      showLabel: true,
-                      checked: historyWindow === '30d',
-                    },
-                    {
-                      id: '365d',
-                      label: gettext('365d'),
-                      tooltip: gettext('Last 365 days 1-hour rollups from embedded database'),
-                      showLabel: true,
-                      checked: historyWindow === '365d',
-                    },
-                  ],
-                },
                 dashCustomizeId,
+              ],
+            },
+            {
+              id: 'dashboard-time-window',
+              sectionId: 'SEC-MON',
+              label: gettext('Time Window'),
+              headerIcon: 'tib.window_live',
+              controls: [
+                dashWinLiveId,
+                dashWin1hId,
+                dashWin24hId,
+                dashWin30dId,
+                dashWin365dId,
               ],
             },
             ...sharedTailGroups,
@@ -1035,53 +1272,19 @@ export function buildNavigatorSelectionConfig(
           allowEmpty: true,
           groups: [
             {
+              id: 'properties-inspector-sections',
+              sectionId: 'SEC-INSPECTOR',
+              label: gettext('Inspector Sections'),
+              headerIcon: 'tib.inspect_all',
+              controls: inspectorSectionControls,
+            },
+            {
               id: 'properties-controls',
-              label: gettext('Properties & Customize'),
+              sectionId: 'SEC-CATALOG',
+              label: gettext('Properties Actions'),
+              headerIcon: 'tib.section_catalog',
               controls: [
                 propsRefreshId,
-                {
-                  id: propsSectionPillId,
-                  actionId: propsSectionPillId,
-                  type: 'segmented',
-                  value: propsSectionFilter,
-                  items: [
-                    {
-                      id: 'all',
-                      label: gettext('All'),
-                      tooltip: gettext('Show all available information about the object'),
-                      showLabel: true,
-                      checked: propsSectionFilter === 'all',
-                    },
-                    {
-                      id: 'structure',
-                      label: gettext('Structure'),
-                      tooltip: gettext('Show columns, indexes, constraints, triggers, and partitions'),
-                      showLabel: true,
-                      checked: propsSectionFilter === 'structure',
-                    },
-                    {
-                      id: 'ddl',
-                      label: gettext('DDL / SQL'),
-                      tooltip: gettext('Show CREATE / DDL SQL definition'),
-                      showLabel: true,
-                      checked: propsSectionFilter === 'ddl',
-                    },
-                    {
-                      id: 'dependencies',
-                      label: gettext('Dependencies'),
-                      tooltip: gettext('Show object dependencies and dependents'),
-                      showLabel: true,
-                      checked: propsSectionFilter === 'dependencies',
-                    },
-                    {
-                      id: 'settings',
-                      label: gettext('Overview'),
-                      tooltip: gettext('Show connection settings and summary attributes'),
-                      showLabel: true,
-                      checked: propsSectionFilter === 'settings',
-                    },
-                  ],
-                },
                 propsCopyDdlId,
                 propsCustomizeId,
               ],
@@ -1106,6 +1309,15 @@ export function buildNavigatorSelectionConfig(
       id: 'page-connector-modes',
       label: gettext('Registration Mode'),
       controls: connectorModeControlIds,
+    });
+  }
+  if (securityControlIds.length > 0) {
+    groups.push({
+      id: 'page-security',
+      sectionId: 'SEC-SECURITY',
+      label: gettext('Security & Access'),
+      headerIcon: 'tib.section_security',
+      controls: securityControlIds,
     });
   }
   if (pageControlIds.length > 0) {
@@ -1240,6 +1452,17 @@ export function CatalogPageCoordinator() {
       const nodeKey = catalogNodeIdentityKey(data);
       if (!nodeKey) return;
 
+      const cdeSec = String(data?.cde_section || '').toLowerCase();
+      const forcedSectionFilter = cdeSec
+        ? ['grants', 'privileges', 'security', 'permissions'].includes(cdeSec)
+          ? 'permissions'
+          : ['dependencies', 'dependents'].includes(cdeSec)
+            ? 'dependencies'
+            : ['ddl', 'definition'].includes(cdeSec)
+              ? 'ddl'
+              : 'all'
+        : null;
+
       const focused = currentShell.focusedInstance;
       const shouldFocusBrowse =
         !focused ||
@@ -1252,18 +1475,19 @@ export function CatalogPageCoordinator() {
           inst.meta?.catalogNodeKey === nodeKey
       );
       if (existing) {
+        const effFilter = forcedSectionFilter || existing.meta?.propertiesSectionFilter;
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           existing.instanceId,
           item,
           data,
-          existing.meta?.activeView || null,
+          cdeSec ? 'properties' : existing.meta?.activeView || null,
           {
             connectorProfileId: existing.meta?.connectorProfileId,
             connectorIntent: existing.meta?.connectorIntent,
             dashboardWindow: existing.meta?.dashboardWindow,
             dashboardAutoRefreshSec: existing.meta?.dashboardAutoRefreshSec,
-            propertiesSectionFilter: existing.meta?.propertiesSectionFilter,
+            propertiesSectionFilter: effFilter,
           }
         );
         currentShell.updateInstance(existing.instanceId, {
@@ -1281,6 +1505,7 @@ export function CatalogPageCoordinator() {
             boundNodeItem: item,
             boundNodeData: data,
             activeView: cfg.activeView,
+            ...(effFilter ? {propertiesSectionFilter: effFilter} : {}),
           },
         });
         if (shouldFocusBrowse) {
@@ -1303,10 +1528,16 @@ export function CatalogPageCoordinator() {
         const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
         const sameType = replaceable.meta?.boundNodeData?._type === data._type;
         const preservedView = sameType ? replaceable.meta?.activeView : null;
-        const initialView =
-          preservedView && allowed.includes(preservedView)
+        const initialView = cdeSec && allowed.includes('properties')
+          ? 'properties'
+          : preservedView && allowed.includes(preservedView)
             ? preservedView
             : allowed[0];
+        const effFilter =
+          forcedSectionFilter ||
+          (replaceable.meta?.propertiesSectionFilter === 'permissions' && !cdeSec
+            ? 'all'
+            : replaceable.meta?.propertiesSectionFilter);
         const cfg = buildNavigatorSelectionConfig(
           pgAdmin,
           replaceable.instanceId,
@@ -1316,7 +1547,7 @@ export function CatalogPageCoordinator() {
           {
             dashboardWindow: replaceable.meta?.dashboardWindow,
             dashboardAutoRefreshSec: replaceable.meta?.dashboardAutoRefreshSec,
-            propertiesSectionFilter: replaceable.meta?.propertiesSectionFilter,
+            propertiesSectionFilter: effFilter,
           }
         );
         currentShell.updateInstance(replaceable.instanceId, {
@@ -1336,6 +1567,7 @@ export function CatalogPageCoordinator() {
             boundNodeItem: item,
             boundNodeData: data,
             activeView: cfg.activeView,
+            ...(effFilter ? {propertiesSectionFilter: effFilter} : {}),
             connectorProfileId: null,
             connectorIntent: 'endpoint',
           },
@@ -1347,7 +1579,7 @@ export function CatalogPageCoordinator() {
       }
 
       const allowed = navigatorTabIdsForNodeType(data._type, pgAdmin);
-      const initialView = allowed[0];
+      const initialView = cdeSec && allowed.includes('properties') ? 'properties' : allowed[0];
       currentShell.openApplication('data-navigator', {
         title: formatCatalogPageTitle(data),
         isUnboundNavigator: false,
@@ -1356,6 +1588,7 @@ export function CatalogPageCoordinator() {
         boundNodeItem: item,
         boundNodeData: data,
         activeView: initialView,
+        ...(forcedSectionFilter ? {propertiesSectionFilter: forcedSectionFilter} : {}),
         connectorProfileId: null,
         connectorIntent: 'endpoint',
         leftOpen:
@@ -1708,8 +1941,16 @@ export function DataNavigatorWorkArea({instanceId}) {
         const rootChildren = tree.children?.() || [];
         const serverGroup = rootChildren[0];
         if (serverGroup) {
+          if (serverGroup.parent?.path && serverGroup._metadata?.data?.id) {
+            serverGroup.resolvedPathCache = `${serverGroup.parent.path}/${serverGroup._metadata.data.id}`;
+          }
           await tree.open?.(serverGroup);
-          const connectors = tree.children?.(serverGroup) || [];
+          let connectors = tree.children?.(serverGroup) || [];
+          if (connectors.length === 0 && tree.refresh) {
+            await tree.refresh(serverGroup);
+            await tree.open?.(serverGroup);
+            connectors = tree.children?.(serverGroup) || [];
+          }
           const match = connectors.find(
             (c) =>
               c?._metadata?.data?.engine_id === engineId ||
@@ -2017,89 +2258,6 @@ const SHARED_UDT_PALETTE_ITEMS = Object.freeze([
   {id: 'json-doc', label: 'Structured JSONB Document', badge: 'Document'},
   {id: 'type-map', label: 'Edit Cross-Engine Type Maps…', badge: 'Map'},
 ]);
-
-function DesignerToolbarPalettes({appId}) {
-  const stencils = DESIGNER_STENCIL_ITEMS[appId] || DESIGNER_STENCIL_ITEMS['erd-designer'];
-  const dispatchPaletteInsert = (kind, itemId) => {
-    window.dispatchEvent(
-      new CustomEvent('scratchrobin:designer-palette-select', {
-        detail: {appId, kind, itemId},
-      })
-    );
-  };
-  return (
-    <Box sx={{display: 'inline-flex', alignItems: 'center', gap: 0.5}}>
-      <ScratchPopoverPalette
-        title={gettext('Insert Diagram Element / Stencil')}
-        qaKey={`palette-entities-${appId}`}
-        trigger={
-          <button
-            type="button"
-            className="sr-icon-btn"
-            aria-label={gettext('Diagram Entity & Stencil Palette')}
-            title={gettext('Diagram Entity & Stencil Palette')}
-            data-cdeadmin-qa-key={`toolbar-palette-entities-${appId}`}
-          >
-            <Icon iconKey="action.palette_entities" decorative />
-          </button>
-        }
-      >
-        <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.25}}>
-          {stencils.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="sr-select-item"
-              style={{border: 'none', background: 'transparent', width: '100%', textAlign: 'left'}}
-              onClick={() => dispatchPaletteInsert('stencil', item.id)}
-            >
-              <span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
-                <Icon iconKey={item.iconKey || 'action.palette_entities'} decorative />
-                <span>{item.label}</span>
-              </span>
-              <span className="sr-bui-pill">{item.badge}</span>
-            </button>
-          ))}
-        </Box>
-      </ScratchPopoverPalette>
-
-      <ScratchPopoverPalette
-        title={gettext('User-Defined Data Types & Domains')}
-        qaKey={`palette-udt-${appId}`}
-        trigger={
-          <button
-            type="button"
-            className="sr-icon-btn"
-            aria-label={gettext('User-Defined Data Types Palette')}
-            title={gettext('User-Defined Data Types Palette')}
-            data-cdeadmin-qa-key={`toolbar-palette-udt-${appId}`}
-          >
-            <Icon iconKey="action.palette_udt" decorative />
-          </button>
-        }
-      >
-        <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.25}}>
-          {SHARED_UDT_PALETTE_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="sr-select-item"
-              style={{border: 'none', background: 'transparent', width: '100%', textAlign: 'left'}}
-              onClick={() => dispatchPaletteInsert('udt', item.id)}
-            >
-              <span>{item.label}</span>
-              <span className="sr-bui-pill">{item.badge}</span>
-            </button>
-          ))}
-        </Box>
-      </ScratchPopoverPalette>
-    </Box>
-  );
-}
-
-DesignerToolbarPalettes.propTypes = {
-  appId: PropTypes.string.isRequired,
-};
 
 function DesignerApplicationWorkArea({
   instanceId,
@@ -3434,6 +3592,78 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
     return () => window.removeEventListener('scratchrobin:open-sql-from-bi', onOpenSqlFromBi);
   }, [pgAdmin]);
   useEffect(() => {
+    const onOpenSecurityManager = (event) => {
+      const detail = event?.detail || {};
+      const engine = String(detail.engine || 'postgresql').toLowerCase();
+      const sid = Number(detail.sid || 0);
+      const scope = detail.scope || (engine === 'firebird' && detail.databaseTargetId ? 'database' : 'server');
+      const databaseTargetId = detail.databaseTargetId || '';
+      const initialKind = detail.initialKind || (engine === 'firebird' && scope === 'database' ? 'role' : 'user');
+      const initialPrincipalId = detail.initialPrincipalId || '';
+      const endpointLabel = detail.endpointLabel || '';
+      const title =
+        detail.title ||
+        (scope === 'database'
+          ? gettext('Database Roles — %s', endpointLabel || engine)
+          : gettext('Users & Roles — %s', endpointLabel || engine));
+      const panelId = `security-manager:${engine}:${sid}:${scope}:${databaseTargetId || 'srv'}`;
+      const renderSurface = () => (
+        <PrincipalSecurityManager
+          key={`${panelId}:${initialKind}:${initialPrincipalId}`}
+          instanceId={panelId}
+          sid={sid}
+          databaseTargetId={databaseTargetId}
+          engine={engine}
+          scope={scope}
+          initialKind={initialKind}
+          initialPrincipalId={initialPrincipalId}
+          endpointLabel={endpointLabel}
+        />
+      );
+      const shellApi =
+        typeof window !== 'undefined' ? window.__scratchrobinProjectShellRef?.current : null;
+      if (shellApi?.openInlineTab) {
+        const existing = (shellApi.instances || []).find((i) => i.instanceId === panelId);
+        if (existing) {
+          shellApi.updateInstance(panelId, {
+            title,
+            renderWorkArea: renderSurface,
+          });
+          shellApi.focusInstance(panelId);
+          return;
+        }
+        shellApi.openInlineTab({
+          instanceId: panelId,
+          appId: 'data-navigator',
+          title,
+          iconKey: initialKind === 'role' ? 'tib.security_roles' : 'tib.security_users',
+          leftDrawerSharedKey: 'data-navigator:shared-left-tree',
+          supportsLeftDrawer: true,
+          supportsRightDrawer: true,
+          supportsTabbedIconBar: true,
+          meta: {isCustomInlineTab: true},
+          renderLeftDrawer: sharedObjectExplorerDrawer,
+          renderWorkArea: renderSurface,
+          renderRightDrawer: () => <InspectorHost />,
+        });
+        return;
+      }
+      pgAdmin.Browser?.docker?.default_workspace?.openTab?.(
+        {
+          id: panelId,
+          title,
+          closable: true,
+          floatable: true,
+          content: renderSurface(),
+        },
+        BROWSER_PANELS.MAIN,
+        'middle'
+      );
+    };
+    window.addEventListener('scratchrobin:open-security-manager', onOpenSecurityManager);
+    return () => window.removeEventListener('scratchrobin:open-security-manager', onOpenSecurityManager);
+  }, [pgAdmin]);
+  useEffect(() => {
     const open = (event) => ensureSurfaceHost().open(
       `schema_compare.${event.detail.surface}`, {
         toolInstanceId: `schema-compare-${event.detail.sessionId}`,
@@ -3617,7 +3847,10 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
         instanceId,
         boundItem,
         boundData,
-        options.activeView || null
+        options.activeView || null,
+        {
+          propertiesSectionFilter: options.propertiesSectionFilter,
+        }
       );
       const resolvedTitle = isUnboundNavigator
         ? (sequence > 1 ? `${appMeta.label} #${sequence}` : appMeta.label)
@@ -3645,6 +3878,9 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
           boundNodeItem: boundItem,
           boundNodeData: boundData,
           activeView: navConfig.activeView,
+          ...(options.propertiesSectionFilter
+            ? {propertiesSectionFilter: options.propertiesSectionFilter}
+            : {}),
         },
         renderLeftDrawer: () => (
           <div style={{height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'}}>
@@ -3670,10 +3906,20 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
       const actAlign = `${pfx}.align`;
       const actLayers = `${pfx}.layers`;
       const actCheckpoints = `${pfx}.checkpoints`;
+      const actStencilPalette = `${pfx}.stencil_palette`;
+      const actUdtPalette = `${pfx}.udt_palette`;
+      const stencils =
+        DESIGNER_STENCIL_ITEMS[designerAppId] || DESIGNER_STENCIL_ITEMS['erd-designer'];
       const emitTool = (tool) =>
         window.dispatchEvent(
           new CustomEvent('scratchrobin:designer-tool-action', {
             detail: {appId: designerAppId, instanceId, tool},
+          })
+        );
+      const emitPalette = (kind, itemId) =>
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:designer-palette-select', {
+            detail: {appId: designerAppId, instanceId, kind, itemId},
           })
         );
       return {
@@ -3762,6 +4008,43 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
             focusScoped: true,
             target: {kind: T_ACTION_TARGET_KIND.CLIENT, invoke: () => emitTool('checkpoints')},
           },
+          {
+            id: actStencilPalette,
+            icon: 'action.palette_entities',
+            application: designerAppId,
+            defaultText: gettext('Diagram Entity & Stencil Palette'),
+            defaultHint: gettext('Insert diagram entity or wireframe stencil element'),
+            focusScoped: true,
+            paletteItems: stencils.map((s) => ({
+              id: s.id,
+              label: `${s.label} (${s.badge})`,
+              icon: s.iconKey || 'action.palette_entities',
+            })),
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: (detail) => {
+                if (detail?.item) emitPalette('stencil', detail.item);
+              },
+            },
+          },
+          {
+            id: actUdtPalette,
+            icon: 'action.palette_udt',
+            application: designerAppId,
+            defaultText: gettext('User-Defined Data Types Palette'),
+            defaultHint: gettext('Insert UDT or domain type onto selected element'),
+            focusScoped: true,
+            paletteItems: SHARED_UDT_PALETTE_ITEMS.map((u) => ({
+              id: u.id,
+              label: `${u.label} (${u.badge})`,
+            })),
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: (detail) => {
+                if (detail?.item) emitPalette('udt', detail.item);
+              },
+            },
+          },
         ],
         ribbonTabs: [
           {
@@ -3770,18 +4053,27 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
             groups: [
               {
                 id: `${designerAppId}-edit`,
-                label: gettext('Edit'),
+                sectionId: 'SEC-CLIP',
+                label: gettext('Clipboard'),
                 controls: [actCreate, actCut, actCopy, actPaste],
               },
               {
                 id: `${designerAppId}-canvas`,
-                label: gettext('Canvas'),
-                controls: [actPointer, actMarquee, actAlign, actLayers, actCheckpoints],
+                sectionId: 'SEC-CANVAS',
+                label: gettext('Canvas & Stencils'),
+                controls: [
+                  actPointer,
+                  actMarquee,
+                  actAlign,
+                  actLayers,
+                  actCheckpoints,
+                  actStencilPalette,
+                  actUdtPalette,
+                ],
               },
             ],
           },
         ],
-        renderToolbarExtras: () => <DesignerToolbarPalettes appId={designerAppId} />,
       };
     };
 
@@ -4054,9 +4346,16 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
             label: gettext('Compare'),
             groups: [
               {
-                id: 'schema-compare-workflow',
-                label: gettext('Workflow'),
-                controls: [actPickLeft, actPickRight, actRun, actReview],
+                id: 'schema-compare-endpoints',
+                sectionId: 'SEC-CMP-SRC',
+                label: gettext('Compare & Filter'),
+                controls: [actPickLeft, actPickRight, actRun],
+              },
+              {
+                id: 'schema-compare-review',
+                sectionId: 'SEC-NATREV',
+                label: gettext('Migration Plan & Review'),
+                controls: [actReview],
               },
             ],
           },
@@ -4073,9 +4372,65 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
     }
 
     if (appId === 'project-explorer') {
+      const actNewProject = `project-explorer.create.${instanceId}`;
+      const actImportDdn = `project-explorer.import_ddn.${instanceId}`;
+      const actExportDdn = `project-explorer.export_ddn.${instanceId}`;
       return {
         leftDrawerSharedKey: 'project-explorer:shared-left-tree',
         leftDrawerTitle: gettext('Project Navigator'),
+        supportsTabbedIconBar: true,
+        actions: [
+          {
+            id: actNewProject,
+            icon: 'action.add',
+            application: 'project-explorer',
+            defaultText: gettext('New Project / Asset'),
+            defaultHint: gettext('Create a new ScratchRobin project or DDN asset'),
+            focusScoped: true,
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: () => window.dispatchEvent(new CustomEvent('cdeadmin:project-create')),
+            },
+          },
+          {
+            id: actImportDdn,
+            icon: 'action.import',
+            application: 'project-explorer',
+            defaultText: gettext('Import DDN Snapshot'),
+            defaultHint: gettext('Import a DDN design file into the active project'),
+            focusScoped: true,
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: () => window.dispatchEvent(new CustomEvent('cdeadmin:project-import-ddn')),
+            },
+          },
+          {
+            id: actExportDdn,
+            icon: 'action.export',
+            application: 'project-explorer',
+            defaultText: gettext('Export DDN Snapshot'),
+            defaultHint: gettext('Export the selected project asset as DDN text'),
+            focusScoped: true,
+            target: {
+              kind: T_ACTION_TARGET_KIND.CLIENT,
+              invoke: () => window.dispatchEvent(new CustomEvent('cdeadmin:project-export-ddn')),
+            },
+          },
+        ],
+        ribbonTabs: [
+          {
+            id: 'project-explorer-home',
+            label: gettext('Assets & Git'),
+            groups: [
+              {
+                id: 'project-explorer-files',
+                sectionId: 'SEC-FILE',
+                label: gettext('Files & Assets'),
+                controls: [actNewProject, actImportDdn, actExportDdn],
+              },
+            ],
+          },
+        ],
         menus: [
           {
             name: 'project',
@@ -4241,12 +4596,14 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
             groups: [
               {
                 id: 'cli-exec',
-                label: gettext('Execution'),
+                sectionId: 'SEC-EXEC',
+                label: gettext('Query Execution'),
                 controls: [actExec, actClear],
               },
               {
                 id: 'cli-shells',
-                label: gettext('Engine Terminals'),
+                sectionId: 'SEC-CONN',
+                label: gettext('Connection & Session'),
                 controls: [actConsole, actIsql, actPsql],
               },
             ],

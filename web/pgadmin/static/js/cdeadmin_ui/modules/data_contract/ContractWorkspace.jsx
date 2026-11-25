@@ -16,6 +16,7 @@ import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import {ScratchDiffTable} from '../../data/beautiful';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {CONTRACT_STATUSES} from './contracts';
 
 export const CONTRACT_SURFACES = Object.freeze([
@@ -218,9 +219,19 @@ function ContractEditor({session, invoke, service, currentUser}) {
     <Box component="section" aria-label="ODCS source and canonical preview" sx={{p: 1,
       display: 'grid', gap: 1, gridTemplateColumns: 'minmax(280px,1fr) minmax(280px,1fr)'}}>
       <Box component="h2" sx={{gridColumn: '1/-1'}}>Source / Preview</Box>
-      <TextArea label="ODCS source JSON" rows={8} value={odcsSource}
+      <Box sx={{gridColumn: '1/-1'}}>
+        <StructuredPayloadCard compact title="Canonical contract summary" value={{
+          name: session.content.name,
+          status: session.content.status,
+          contractVersion: session.content.contractVersion,
+          elements: session.content.elements.length,
+          servers: session.content.servers.length,
+          bindings: session.content.bindings.length,
+        }} showRawDisclosure={false} />
+      </Box>
+      <TextArea label="ODCS source JSON" rows={6} value={odcsSource}
         onChange={(event) => setOdcsSource(event.target.value)} />
-      <TextArea label="Canonical contract preview" rows={8} InputProps={{readOnly: true}}
+      <TextArea label="Canonical contract preview" rows={6} InputProps={{readOnly: true}}
         value={JSON.stringify(session.content, null, 2)} />
       <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
         <Button disabled={!canImportExport || !odcsSource.trim()} onClick={() => {
@@ -248,6 +259,12 @@ function ContractEditor({session, invoke, service, currentUser}) {
       {['constraints', 'physicalDefinition', 'extensions'].map((field) => <TextField key={field}
         label={`${field} JSON`} value={element[field]}
         onChange={(event) => setElement({...element, [field]: event.target.value})} />)}
+      <Box sx={{gridColumn: '1/-1', display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'}}>
+        <KeyValueJsonEditor title="Element constraints" valueJson={element.constraints}
+          onChangeJson={(constraints) => setElement({...element, constraints})} />
+        <KeyValueJsonEditor title="Physical definition" valueJson={element.physicalDefinition}
+          onChangeJson={(physicalDefinition) => setElement({...element, physicalDefinition})} />
+      </Box>
       <Box sx={{display: 'flex', gap: 1}}><Button intent="primary" disabled={
         !permitted(currentUser, 'contract.edit') || !element.id ||
         !element.name || !element.logicalType} onClick={saveElement}>Save element</Button>

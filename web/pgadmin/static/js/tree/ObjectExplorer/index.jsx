@@ -182,21 +182,43 @@ export default function ObjectExplorer() {
   const MOUNT_POINT = '/browser';
   const mtree = useMemo(()=>new ManageTreeNodes(), []);
 
+  const stampChildResolvedPaths = React.useCallback((parentDir) => {
+    if (!parentDir?.path || !Array.isArray(parentDir.children)) return;
+    for (const child of parentDir.children) {
+      const childData = child?._metadata?.data;
+      if (childData?.id) {
+        child.resolvedPathCache = `${parentDir.path}/${childData.id}`;
+        pgAdmin.Browser?.tree?.addNewNode?.(childData.id, childData, child, parentDir.path);
+      }
+    }
+  }, [pgAdmin]);
+
   const expandRootServerGroups = React.useCallback(async (handle = treeHandleRef.current) => {
     const root = treeModelXRef.current?.root;
     if (!root || typeof handle?.openDirectory !== 'function') return;
     try {
+      root.isExpanded = true;
       await root.ensureLoaded();
+      stampChildResolvedPaths(root);
       const children = Array.isArray(root.children) ? [...root.children] : [];
       for (const group of children) {
-        if (group && group.type === FileType.Directory && !group.isExpanded) {
-          await handle.openDirectory(group);
+        if (group && group.type === FileType.Directory) {
+          if (!group.isExpanded) {
+            if (Array.isArray(group._children) && group._children.length === 0) {
+              group._children = null;
+            }
+            await handle.openDirectory(group);
+          }
+          stampChildResolvedPaths(group);
+          if (Array.isArray(group.children) && group.children.length === 0) {
+            await handle.closeDirectory?.(group);
+          }
         }
       }
     } catch {
       // Ignore transient load/expand race during unmount or refresh.
     }
-  }, []);
+  }, [stampChildResolvedPaths]);
 
   const showEmptyEnginesBanner = useMemo(() => {
     if (!engineTypePrefs || typeof engineTypePrefs !== 'object') return false;
@@ -208,18 +230,79 @@ export default function ObjectExplorer() {
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handleConnectorsChanged = async () => {
-      if (mtree?.tempTree) {
-        mtree.tempTree.children = [];
+      try {
+        await usePreferences.getState?.()?.cache?.();
+      } catch {
+        // Ignore offline/test cache errors.
       }
-      if (treeModelXRef.current?.root?.hardReloadChildren) {
-        treeModelXRef.current.root.isExpanded = false;
-        await treeModelXRef.current.root.hardReloadChildren();
-        await expandRootServerGroups(treeHandleRef.current);
+      const root = treeModelXRef.current?.root;
+      const handle = treeHandleRef.current;
+      if (!root) return;
+      root.isExpanded = true;
+      await root.ensureLoaded();
+      if (!Array.isArray(root.children) || root.children.length === 0) {
+        if (mtree?.tempTree) {
+          mtree.tempTree.children = [];
+        }
+        if (root.hardReloadChildren) {
+          await root.hardReloadChildren();
+        }
       }
+      stampChildResolvedPaths(root);
+      const groups = Array.isArray(root.children) ? [...root.children] : [];
+      for (const group of groups) {
+        if (!group || group.type !== FileType.Directory) continue;
+        const previouslyExpandedEngines = new Set(
+          (Array.isArray(group.children) ? group.children : [])
+            .filter((c) => c?.isExpanded && c?._metadata?.data?.id)
+            .map((c) => c._metadata.data.id)
+        );
+        const mGroup = mtree?.findNode?.(group.path);
+        if (mGroup) {
+          mGroup.children = [];
+        }
+        if (group._metadata?.data) {
+          group._metadata.data.has_children = true;
+        }
+        if (handle) {
+          if (group.isExpanded) {
+            await handle.closeDirectory(group);
+          }
+          group._children = null;
+          await handle.openDirectory(group);
+          stampChildResolvedPaths(group);
+          if (Array.isArray(group.children) && group.children.length === 0) {
+            await handle.closeDirectory(group);
+          } else if (previouslyExpandedEngines.size > 0 && Array.isArray(group.children)) {
+            for (const conn of group.children) {
+              if (previouslyExpandedEngines.has(conn?._metadata?.data?.id)) {
+                await handle.openDirectory(conn);
+                stampChildResolvedPaths(conn);
+              }
+            }
+          }
+        } else if (group.hardReloadChildren) {
+          await group.hardReloadChildren();
+          stampChildResolvedPaths(group);
+        }
+      }
+      setLocaleRev((prev) => prev + 1);
+      handle?.resize?.();
     };
     window.addEventListener('scratchrobin:connectors-changed', handleConnectorsChanged);
-    return () => window.removeEventListener('scratchrobin:connectors-changed', handleConnectorsChanged);
-  }, [expandRootServerGroups, mtree]);
+    const deregisterRefresh = pgAdmin?.Browser?.Events?.on?.(
+      'pgadmin-browser:tree:refresh',
+      handleConnectorsChanged
+    );
+    return () => {
+      window.removeEventListener('scratchrobin:connectors-changed', handleConnectorsChanged);
+      if (typeof deregisterRefresh === 'function') {
+        deregisterRefresh();
+      } else {
+        pgAdmin?.Browser?.Events?.off?.('pgadmin-browser:tree:refresh', handleConnectorsChanged);
+      }
+    };
+  }, [expandRootServerGroups, mtree, pgAdmin, stampChildResolvedPaths]);
 
   useEffect(()=>{
     // Init Tree with the Tree Parent node '/browser'

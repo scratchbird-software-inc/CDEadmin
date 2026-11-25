@@ -236,9 +236,14 @@ describe('operation dialog', () => {
     expect(screen.queryByText(/Round-tripped by/)).toBeNull();
   });
 
-  it('says when the operation is a draft', () => {
-    dialog({...dropPartition, status: 'draft'}, jest.fn(), jest.fn());
-    expect(screen.getByText(/This operation is a draft/)).toBeTruthy();
+  it('says when the operation is a draft in QA diagnostics mode', () => {
+    window.__SCRATCHROBIN_SHOW_FORM_REFS = true;
+    try {
+      dialog({...dropPartition, status: 'draft'}, jest.fn(), jest.fn());
+      expect(screen.getByText(/This operation is a draft/)).toBeTruthy();
+    } finally {
+      delete window.__SCRATCHROBIN_SHOW_FORM_REFS;
+    }
   });
 
   it('previews and runs in one click, sending the typed name as the confirmation', async () => {

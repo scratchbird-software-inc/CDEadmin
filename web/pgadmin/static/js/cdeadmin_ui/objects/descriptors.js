@@ -17,7 +17,7 @@
  */
 
 export const SHELL_PRIMITIVES = new Set([
-  'sql_preview', 'data_grid', 'readonly_grid', 'readonly_groups',
+  'sql_preview', 'data_grid', 'readonly_grid', 'readonly_groups', 'privileges',
 ]);
 
 export const MENU_CATEGORIES = [
@@ -313,14 +313,33 @@ export function referenceOffered(field, row, context={}) {
 
 import {resolveSmartDefault} from './smartFieldDefaults';
 
+const UNQUALIFIED_REFERENCE_KINDS = new Set([
+  'schema',
+  'role',
+  'user',
+  'database',
+  'tablespace',
+  'language',
+  'access-method',
+  'extension',
+  'foreign-data-wrapper',
+  'foreign-server',
+]);
+
 /**
  * The value a reference picker sends. Providers take object references as
  * dotted display paths (schema.name) unless the field names another part
- * (`reference_value`: display_name for engine names such as a tablet alias).
+ * (`reference_value`: display_name for engine names such as a tablet alias)
+ * or the referenced kind is itself a top-level/unqualified SQL identifier
+ * (such as `schema`, `role`, `tablespace`, or `language`, whose display_path
+ * starts with the database or server name).
  */
 export function referenceValue(field, row) {
   if(field.reference_value === 'display_name') return row.display_name ?? row.resource_id;
   if(field.reference_value === 'resource_id') return row.resource_id;
+  if(!field.reference_value && UNQUALIFIED_REFERENCE_KINDS.has(field.reference_kind)) {
+    return row.display_name ?? row.resource_id;
+  }
   return Array.isArray(row.display_path) && row.display_path.length ? row.display_path.join('.') :
     row.display_name ?? row.resource_id ?? row.value ?? row;
 }
@@ -526,7 +545,7 @@ export function toBackendDraft(form, draft, {mode='create', baseline=null}={}) {
   const out = {};
   for(const tab of form.tabs || []) {
     for(const field of activeFields(tab.fields, {mode, draft})) {
-      if(!Object.hasOwn(draft, field.field_id) || field.ui_only) continue;
+      if(!Object.hasOwn(draft, field.field_id) || field.ui_only || field.readonly) continue;
       let value = draft[field.field_id];
       if(field.wrap_list && !Array.isArray(value)) value = (value === undefined || value === null || value === '') ? [] : [value];
       if(mode === 'alter' && field.control === 'grid' && field.field_id === 'columns' && baseline) {

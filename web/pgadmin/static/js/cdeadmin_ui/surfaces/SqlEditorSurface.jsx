@@ -22,6 +22,19 @@ import {formatFirebird, firebirdTokens} from '../editors/firebirdFormatting';
 import {firebirdFragments} from '../editors/firebirdExecution';
 import gettext from 'sources/gettext';
 import SurfaceLayoutTemplateList from './SurfaceLayoutTemplateList';
+import {
+  VisualBuilderPipelineBar,
+  VisualCtesInspectorPanel,
+  VisualNamedWindowsPanel,
+  VisualProjectionWindowEditor,
+  applyWindowPreset,
+  createEmptyStageBranch,
+  getActiveStageKey,
+  getActiveVisualStage,
+  inferStageOutputColumns,
+  listVisibleCteSources,
+  updateActiveVisualStage,
+} from './VisualQueryStageControls';
 import {sqlEditorActionHints} from './surfaceActionHints';
 import {Box} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
@@ -310,7 +323,7 @@ export default function SqlEditorSurface({
   const [limitsDraft, setLimitsDraft] = useState({pageSize: 200, maxRows: 1000});
 
   const [hostData, setHostData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
   const executionRef = useRef(null);
   const executionSequence = useRef(0);
@@ -358,6 +371,7 @@ export default function SqlEditorSurface({
   const [vbInspectorTab, setVbInspectorTab] = useState('tables');
   const [vbTableSearch, setVbTableSearch] = useState('');
   const [vbKindFilter, setVbKindFilter] = useState('all'); // 'all' | 'table' | 'view' | 'procedure'
+  const [vbShowSystemObjects, setVbShowSystemObjects] = useState(false);
   const [canvasDropActive, setCanvasDropActive] = useState(false);
   const [canvasNotice, setCanvasNotice] = useState('');
 
@@ -852,7 +866,10 @@ export default function SqlEditorSurface({
         }
         setFanoutWarnings(res?.fanout_warnings || EMPTY_ARRAY);
         if (syncSqlNow && typeof res?.sql_text === 'string') {
-          if (res.sql_text.trim() || (nextModel.tables || []).length === 0) {
+          if (
+            res.sql_text.trim() ||
+            ((nextModel.tables || []).length === 0 && (nextModel.ctes || []).length === 0)
+          ) {
             setSqlText(res.sql_text);
             editorRef.current?.setValue?.(res.sql_text);
             setVisualFidelity('exact');
@@ -870,13 +887,14 @@ export default function SqlEditorSurface({
     async (rawResource, dropCoords = null) => {
       if (!rawResource) return;
       const curModel = visualModelRef.current;
+      const curStage = getActiveVisualStage(curModel);
       const rkind = String(rawResource.resource_kind || 'table').toLowerCase();
       const rname = String(rawResource.display_name || rawResource.name || '').trim();
       if (!rname) return;
 
       if (rkind === 'column') {
         setCanvasNotice(
-          gettext('Drag a Table, View, or Selectable Stored Procedure onto the canvas to add it.')
+          gettext('Drag a Table, View, CTE, or Selectable Stored Procedure onto the canvas to add it.')
         );
         return;
       }
@@ -896,7 +914,7 @@ export default function SqlEditorSurface({
             input_parameters: rawResource.input_parameters,
             extensions: rawResource.extensions,
           },
-          existing_tables: curModel.tables || [],
+          existing_tables: curStage.tables || [],
         });
         if (Array.isArray(res?.catalog_objects)) {
           setVisualCatalogObjects(res.catalog_objects);
@@ -916,7 +934,7 @@ export default function SqlEditorSurface({
         return;
       }
 
-      const idx = (curModel.tables || []).length;
+      const idx = (curStage.tables || []).length;
       const posX =
         dropCoords && Number.isFinite(dropCoords.x)
           ? Math.round(dropCoords.x)
@@ -924,7 +942,7 @@ export default function SqlEditorSurface({
       const posY =
         dropCoords && Number.isFinite(dropCoords.y)
           ? Math.round(dropCoords.y)
-          : 72 + Math.floor(idx / 3) * 280;
+          : 88 + Math.floor(idx / 3) * 280;
 
       const positionedNode = {
         ...resolvedNode,
@@ -933,7 +951,7 @@ export default function SqlEditorSurface({
       };
 
       const existingJoinSigs = new Set(
-        (curModel.joins || []).map(
+        (curStage.joins || []).map(
           (j) => `${j.left_table}.${j.left_column}->${j.right_table}.${j.right_column}`
         )
       );
@@ -944,11 +962,10 @@ export default function SqlEditorSurface({
         return true;
       });
 
-      const nextModel = {
-        ...curModel,
-        tables: [...(curModel.tables || []), positionedNode],
-        joins: [...(curModel.joins || []), ...dedupedNewJoins],
-      };
+      const nextModel = updateActiveVisualStage(curModel, (st) => ({
+        tables: [...(st.tables || []), positionedNode],
+        joins: [...(st.joins || []), ...dedupedNewJoins],
+      }));
       setSelectedCanvasNodeId(positionedNode.id);
       await pushVisualModelUpdate(nextModel, true);
     },
@@ -958,13 +975,14 @@ export default function SqlEditorSurface({
   const handleToggleCanvasField = useCallback(
     (nodeId, colName, nextSelected) => {
       const curModel = visualModelRef.current;
-      const tables = curModel.tables || [];
+      const curStage = getActiveVisualStage(curModel);
+      const tables = curStage.tables || [];
       const targetTbl = tables.find((t) => t.id === nodeId);
       if (!targetTbl) return;
       const tRef = targetTbl.alias || targetTbl.name || targetTbl.id;
 
-      let nextProjections = Array.isArray(curModel.projections)
-        ? [...curModel.projections]
+      let nextProjections = Array.isArray(curStage.projections)
+        ? [...curStage.projections]
         : [];
 
       // When starting from implicit `SELECT *` (`projections === []`) and unchecking one column,
@@ -1017,7 +1035,10 @@ export default function SqlEditorSurface({
         });
       }
 
-      pushVisualModelUpdate({...curModel, projections: nextProjections}, true);
+      pushVisualModelUpdate(
+        updateActiveVisualStage(curModel, {projections: nextProjections}),
+        true
+      );
     },
     [pushVisualModelUpdate]
   );
@@ -1026,11 +1047,12 @@ export default function SqlEditorSurface({
     (sourceNodeId, sourceField, targetNodeId, targetField) => {
       if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) return;
       const curModel = visualModelRef.current;
-      const srcTbl = (curModel.tables || []).find((t) => t.id === sourceNodeId);
-      const dstTbl = (curModel.tables || []).find((t) => t.id === targetNodeId);
+      const curStage = getActiveVisualStage(curModel);
+      const srcTbl = (curStage.tables || []).find((t) => t.id === sourceNodeId);
+      const dstTbl = (curStage.tables || []).find((t) => t.id === targetNodeId);
       if (!srcTbl || !dstTbl) return;
 
-      const exists = (curModel.joins || []).some(
+      const exists = (curStage.joins || []).some(
         (j) =>
           (j.left_table === srcTbl.id || j.left_table === srcTbl.alias) &&
           j.left_column === sourceField &&
@@ -1049,7 +1071,9 @@ export default function SqlEditorSurface({
         cardinality: '1:N',
       };
       pushVisualModelUpdate(
-        {...curModel, joins: [...(curModel.joins || []), newJoin]},
+        updateActiveVisualStage(curModel, (st) => ({
+          joins: [...(st.joins || []), newJoin],
+        })),
         true
       );
     },
@@ -1058,17 +1082,19 @@ export default function SqlEditorSurface({
 
   const handleRemoveCanvasNode = useCallback(
     (nodeId) => {
+      if (nodeId === '__window_over_card__') return;
       const curModel = visualModelRef.current;
-      const targetTbl = (curModel.tables || []).find((t) => t.id === nodeId);
+      const curStage = getActiveVisualStage(curModel);
+      const targetTbl = (curStage.tables || []).find((t) => t.id === nodeId);
       if (!targetTbl) return;
       const matchKeys = new Set(
         [targetTbl.id, targetTbl.alias, targetTbl.name].filter(Boolean)
       );
-      const nextTables = (curModel.tables || []).filter((t) => t.id !== nodeId);
-      const nextJoins = (curModel.joins || []).filter(
+      const nextTables = (curStage.tables || []).filter((t) => t.id !== nodeId);
+      const nextJoins = (curStage.joins || []).filter(
         (j) => !matchKeys.has(j.left_table) && !matchKeys.has(j.right_table)
       );
-      const nextProjections = (curModel.projections || []).filter((p) => {
+      const nextProjections = (curStage.projections || []).filter((p) => {
         if (matchKeys.has(p.table)) return false;
         const expr = String(p.expr || p.expression || '');
         if (targetTbl.alias && expr.startsWith(`${targetTbl.alias}.`)) return false;
@@ -1078,12 +1104,11 @@ export default function SqlEditorSurface({
         setSelectedCanvasNodeId('');
       }
       pushVisualModelUpdate(
-        {
-          ...curModel,
+        updateActiveVisualStage(curModel, {
           tables: nextTables,
           joins: nextJoins,
           projections: nextProjections,
-        },
+        }),
         true
       );
     },
@@ -2126,7 +2151,87 @@ export default function SqlEditorSurface({
     const ds = drawerStateRef.current;
 
     if (ds.panel === 'visual_inspector') {
+      const activeStage = getActiveVisualStage(visualModel);
+      const activeStageKey = getActiveStageKey(visualModel);
+      const activeStageTables = Array.isArray(activeStage.tables) ? activeStage.tables : [];
+      const activeStageProjections = Array.isArray(activeStage.projections) ? activeStage.projections : [];
+      const activeStageJoins = Array.isArray(activeStage.joins) ? activeStage.joins : [];
+      const activeStageWindows = Array.isArray(activeStage.windows) ? activeStage.windows : [];
+      const visibleCteSources = listVisibleCteSources(visualModel);
+
+      const updateStage = (updater, syncNow = true) =>
+        pushVisualModelUpdate(updateActiveVisualStage(visualModel, updater), syncNow);
+
+      const handleWrapWindowStageInCte = () => {
+        const curCtes = Array.isArray(visualModel.ctes) ? visualModel.ctes : [];
+        const cteIdx = curCtes.length + 1;
+        const cteId = `cte_${Date.now()}_${cteIdx}`;
+        const cteName = `windowed_stage_${cteIdx}`;
+        const firstWinProj = activeStageProjections.find(
+          (p) => p?.window || p?.aggregate === 'WINDOW'
+        );
+        const winColAlias = String(firstWinProj?.alias || 'rn').trim() || 'rn';
+        const wrappedAnchor = {
+          tables: activeStageTables,
+          joins: activeStageJoins,
+          projections: activeStageProjections.map((p, idx) =>
+            (p?.window || p?.aggregate === 'WINDOW') && !p?.alias
+              ? {...p, alias: idx === 0 ? winColAlias : `win_${idx + 1}`}
+              : p
+          ),
+          filters: activeStage.filters || [],
+          where: activeStage.where || [],
+          group_by: activeStage.group_by || [],
+          having: activeStage.having || [],
+          windows: activeStageWindows,
+          order_by: [],
+          limit: null,
+          distinct: Boolean(activeStage.distinct),
+        };
+        const outCols = inferStageOutputColumns(wrappedAnchor, '');
+        const newCte = {
+          id: cteId,
+          name: cteName,
+          columns: '',
+          recursive: false,
+          union_mode: 'UNION ALL',
+          materialized: '',
+          cycle: {enabled: false, columns: '', set_column: 'is_cycle', using_column: 'traversal_path'},
+          anchor: wrappedAnchor,
+          recursive_branch: createEmptyStageBranch(),
+        };
+        pushVisualModelUpdate(
+          {
+            ...visualModel,
+            active_stage: '__final__',
+            ctes: [...curCtes, newCte],
+            tables: [
+              {
+                id: 'c1',
+                resource_id: `cte:${cteName}`,
+                resource_kind: 'cte',
+                name: cteName,
+                alias: 'c1',
+                x: 96,
+                y: 92,
+                columns: outCols,
+              },
+            ],
+            joins: [],
+            projections: [],
+            windows: [],
+            where: [`c1.${winColAlias} = 1`],
+            group_by: [],
+            having: [],
+          },
+          true
+        );
+      };
+
       const mergedCatalogMap = new Map();
+      for (const cteSrc of visibleCteSources) {
+        mergedCatalogMap.set(cteSrc.resource_id, cteSrc);
+      }
       for (const item of visualCatalogObjects || []) {
         const key = item.resource_id || `${item.resource_kind}:${item.display_name || item.name}`;
         mergedCatalogMap.set(key, item);
@@ -2152,8 +2257,50 @@ export default function SqlEditorSurface({
         }
       }
       const catalogItems = Array.from(mergedCatalogMap.values());
+      const systemSchemas = new Set([
+        'pg_catalog',
+        'information_schema',
+        'pg_toast',
+        'mysql',
+        'performance_schema',
+        'sys',
+        'crdb_internal',
+      ]);
+      const isSystemCatalogObj = (item) => {
+        const rk = String(item?.resource_kind || '').toLowerCase();
+        if (rk === 'cte' || rk === 'cte-self') return false;
+        if (item?.system_object === true || item?.native?.system_object === true) {
+          return true;
+        }
+        const sName = String(item?.schema_name || '').trim().toLowerCase();
+        if (sName && systemSchemas.has(sName)) return true;
+        const dPath = Array.isArray(item?.display_path) ? item.display_path : [];
+        if (dPath.slice(0, -1).some((seg) => systemSchemas.has(String(seg || '').toLowerCase()))) {
+          return true;
+        }
+        const uName = String(item?.display_name || item?.name || '').trim().toUpperCase();
+        return (
+          uName.startsWith('RDB$') ||
+          uName.startsWith('MON$') ||
+          uName.startsWith('SEC$') ||
+          uName.startsWith('PLG$') ||
+          uName.startsWith('PROFILER$') ||
+          uName.startsWith('SQLITE_') ||
+          uName.startsWith('PG_TOAST_')
+        );
+      };
+      const hiddenSystemCount = catalogItems.reduce(
+        (acc, item) => acc + (isSystemCatalogObj(item) ? 1 : 0),
+        0
+      );
       const filteredCatalog = catalogItems.filter((t) => {
+        if (!vbShowSystemObjects && isSystemCatalogObj(t)) {
+          return false;
+        }
         const rk = String(t.resource_kind || 'table').toLowerCase();
+        if (vbKindFilter === 'cte' && !['cte', 'cte-self'].includes(rk)) {
+          return false;
+        }
         if (vbKindFilter === 'table' && !['table', 'foreign-table', 'partitioned-table'].includes(rk)) {
           return false;
         }
@@ -2168,11 +2315,11 @@ export default function SqlEditorSurface({
           .toLowerCase()
           .includes(vbTableSearch.trim().toLowerCase());
       });
-      const availableCols = visualModel.tables.flatMap((tbl) =>
+      const availableCols = activeStageTables.flatMap((tbl) =>
         (tbl.columns || []).map((c) => ({
-          ref: `${tbl.alias || tbl.name}.${c.name}`,
+          ref: `${tbl.alias || tbl.name}.${c.name || c}`,
           tableAlias: tbl.alias || tbl.name,
-          colName: c.name,
+          colName: c.name || c,
           type: c.type || 'TEXT',
         }))
       );
@@ -2202,6 +2349,44 @@ export default function SqlEditorSurface({
               {gettext('Sync: %s', visualFidelity)}
             </span>
           </div>
+
+          {activeStageKey !== '__final__' && (
+            <div
+              data-cdeadmin-qa-key="vb-active-stage-banner"
+              style={{
+                padding: '5px 8px',
+                borderRadius: 6,
+                background: activeStageKey.endsWith(':recursive')
+                  ? 'rgba(217, 119, 6, 0.14)'
+                  : 'rgba(79, 70, 229, 0.12)',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span>
+                {activeStageKey.endsWith(':recursive')
+                  ? gettext('Editing Recursive Step Canvas')
+                  : gettext('Editing CTE Stage Canvas')}
+              </span>
+              <button
+                type="button"
+                onClick={() => pushVisualModelUpdate({...visualModel, active_stage: '__final__'}, false)}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '0.71rem',
+                  textDecoration: 'underline',
+                  color: 'inherit',
+                }}
+              >
+                {gettext('Final SELECT →')}
+              </button>
+            </div>
+          )}
 
           {visualLossNotes.length > 0 && (
             <div
@@ -2236,13 +2421,16 @@ export default function SqlEditorSurface({
           <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
             {[
               ['tables', gettext('Sources')],
+              ['ctes', gettext('CTEs')],
               ['columns', gettext('Columns')],
+              ['windows', gettext('Windows')],
               ['joins', gettext('Joins')],
               ['clauses', gettext('Clauses')],
             ].map(([tid, lbl]) => (
               <Button
                 key={tid}
                 size="small"
+                data-cdeadmin-qa-key={`vb-inspector-tab-${tid}`}
                 intent={vbInspectorTab === tid ? 'primary' : 'neutral'}
                 onClick={() => setVbInspectorTab(tid)}
               >
@@ -2251,11 +2439,32 @@ export default function SqlEditorSurface({
             ))}
           </div>
 
+          {vbInspectorTab === 'ctes' && (
+            <VisualCtesInspectorPanel
+              visualModel={visualModel}
+              onUpdateModel={(nextModel) => pushVisualModelUpdate(nextModel, true)}
+              onSelectStageAndTab={(stageKey, tabId) => {
+                setVbInspectorTab(tabId);
+                pushVisualModelUpdate({...visualModel, active_stage: stageKey}, false);
+              }}
+            />
+          )}
+
+          {vbInspectorTab === 'windows' && (
+            <VisualNamedWindowsPanel
+              activeStage={activeStage}
+              visualModel={visualModel}
+              availableCols={availableCols}
+              onUpdateActiveStage={(fn) => updateStage(fn, true)}
+              onWrapStageInCte={handleWrapWindowStageInCte}
+            />
+          )}
+
           {vbInspectorTab === 'tables' && (
             <div style={{display: 'grid', gap: 8}}>
               <TextField
-                label={gettext('Drag or Add Table / View / Procedure')}
-                placeholder={gettext('Filter tables, views, procedures…')}
+                label={gettext('Drag or Add Table / View / CTE / Procedure')}
+                placeholder={gettext('Filter tables, views, CTEs, procedures…')}
                 value={vbTableSearch}
                 onChange={(e) => setVbTableSearch(e.target.value)}
               />
@@ -2264,6 +2473,7 @@ export default function SqlEditorSurface({
                   ['all', gettext('All')],
                   ['table', gettext('Tables')],
                   ['view', gettext('Views')],
+                  ['cte', gettext('CTEs')],
                   ['procedure', gettext('Procedures')],
                 ].map(([kid, klbl]) => (
                   <button
@@ -2288,18 +2498,59 @@ export default function SqlEditorSurface({
                   </button>
                 ))}
               </div>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  fontSize: '0.76rem',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+                  <input
+                    type="checkbox"
+                    data-cdeadmin-qa-key="vb-show-system-objects"
+                    checked={vbShowSystemObjects}
+                    onChange={(e) => setVbShowSystemObjects(e.target.checked)}
+                  />
+                  {gettext('Show system objects')}
+                </span>
+                {!vbShowSystemObjects && hiddenSystemCount > 0 && (
+                  <span style={{fontSize: '0.68rem', opacity: 0.7}}>
+                    {gettext('%s hidden', hiddenSystemCount)}
+                  </span>
+                )}
+              </label>
               <div style={{maxHeight: 190, overflow: 'auto', display: 'grid', gap: 4}}>
                 {filteredCatalog.slice(0, 60).map((res) => {
                   const tname = res.display_name || res.name;
                   const rk = String(res.resource_kind || 'table').toLowerCase();
+                  const isCteSelf = rk === 'cte-self';
+                  const isCte = rk === 'cte';
                   const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(rk);
                   const isView = rk.includes('view');
-                  const badgeText = isProc ? 'PROC' : isView ? 'VIEW' : 'TABLE';
-                  const badgeBg = isProc
-                    ? 'rgba(124, 58, 237, 0.14)'
-                    : isView
-                      ? 'rgba(13, 148, 136, 0.14)'
-                      : 'rgba(37, 99, 235, 0.12)';
+                  const isSys = isSystemCatalogObj(res);
+                  const badgeText = isCteSelf
+                    ? '↻ SELF'
+                    : isCte
+                      ? 'CTE'
+                      : isProc
+                        ? 'PROC'
+                        : isView
+                          ? 'VIEW'
+                          : 'TABLE';
+                  const badgeBg = isCteSelf
+                    ? 'rgba(217, 119, 6, 0.2)'
+                    : isCte
+                      ? 'rgba(79, 70, 229, 0.16)'
+                      : isProc
+                        ? 'rgba(124, 58, 237, 0.14)'
+                        : isView
+                          ? 'rgba(13, 148, 136, 0.14)'
+                          : 'rgba(37, 99, 235, 0.12)';
                   return (
                     <div
                       key={res.resource_id || `${rk}:${tname}`}
@@ -2360,6 +2611,20 @@ export default function SqlEditorSurface({
                         <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
                           {tname}
                         </span>
+                        {isSys && (
+                          <span
+                            style={{
+                              padding: '0 4px',
+                              borderRadius: 4,
+                              fontSize: '0.62rem',
+                              fontWeight: 600,
+                              background: 'rgba(100, 116, 139, 0.16)',
+                              opacity: 0.85,
+                            }}
+                          >
+                            SYS
+                          </span>
+                        )}
                       </span>
                       <Button
                         size="small"
@@ -2373,11 +2638,11 @@ export default function SqlEditorSurface({
                 })}
               </div>
 
-              <strong>{gettext('Canvas Sources (%s)', visualModel.tables.length)}</strong>
-              {visualModel.tables.map((t, idx) => {
-                const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(
-                  String(t.resource_kind || '').toLowerCase()
-                );
+              <strong>{gettext('Canvas Sources (%s)', activeStageTables.length)}</strong>
+              {activeStageTables.map((t, idx) => {
+                const rk = String(t.resource_kind || '').toLowerCase();
+                const isProc = ['procedure', 'function', 'routine', 'table-function'].includes(rk);
+                const isCteCard = rk === 'cte' || rk === 'cte-self';
                 const inParams = Array.isArray(t.input_parameters) ? t.input_parameters : [];
                 return (
                   <div
@@ -2404,6 +2669,11 @@ export default function SqlEditorSurface({
                         {isProc && (
                           <span style={{marginLeft: 6, fontSize: '0.68rem', opacity: 0.8}}>
                             [PROC]
+                          </span>
+                        )}
+                        {isCteCard && (
+                          <span style={{marginLeft: 6, fontSize: '0.68rem', opacity: 0.85}}>
+                            {rk === 'cte-self' ? '[↻ SELF]' : '[CTE]'}
                           </span>
                         )}
                       </span>
@@ -2441,7 +2711,7 @@ export default function SqlEditorSurface({
                               value={param.expr ?? `:${param.name}`}
                               onChange={(ev) => {
                                 const nextVal = ev.target.value;
-                                const nextTables = visualModel.tables.map((tblItem, ti) =>
+                                const nextTables = activeStageTables.map((tblItem, ti) =>
                                   ti === idx
                                     ? {
                                       ...tblItem,
@@ -2451,7 +2721,7 @@ export default function SqlEditorSurface({
                                     }
                                     : tblItem
                                 );
-                                pushVisualModelUpdate({...visualModel, tables: nextTables}, true);
+                                updateStage({tables: nextTables}, true);
                               }}
                               style={{minHeight: 24, padding: '2px 6px', fontSize: '0.74rem'}}
                             />
@@ -2466,90 +2736,164 @@ export default function SqlEditorSurface({
           )}
 
           {vbInspectorTab === 'columns' && (
-            <div style={{display: 'grid', gap: 6}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            <div style={{display: 'grid', gap: 8}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6}}>
                 <label style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem'}}>
                   <input
                     type="checkbox"
-                    checked={Boolean(visualModel.distinct)}
-                    onChange={(e) =>
-                      pushVisualModelUpdate({...visualModel, distinct: e.target.checked}, true)
-                    }
+                    checked={Boolean(activeStage.distinct)}
+                    onChange={(e) => updateStage({distinct: e.target.checked}, true)}
                   />
                   DISTINCT
                 </label>
-                <Button
-                  size="small"
-                  onClick={() =>
-                    pushVisualModelUpdate(
-                      {
-                        ...visualModel,
-                        projections: [
-                          ...visualModel.projections,
-                          {expr: availableCols[0]?.ref || '*', alias: '', aggregate: ''},
-                        ],
-                      },
-                      true
-                    )
-                  }
-                >
-                  + {gettext('Add Projection')}
-                </Button>
-              </div>
-              {visualModel.projections.map((p, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 84px 28px',
-                    gap: 4,
-                    alignItems: 'center',
-                  }}
-                >
-                  <input
-                    className="sr-input"
-                    value={p.expr || ''}
-                    placeholder="t1.col"
-                    onChange={(e) => {
-                      const nextProjs = visualModel.projections.map((item, i) =>
-                        i === idx ? {...item, expr: e.target.value} : item
-                      );
-                      pushVisualModelUpdate({...visualModel, projections: nextProjs}, true);
-                    }}
-                  />
-                  <select
-                    className="sr-input"
-                    value={p.aggregate || ''}
-                    onChange={(e) => {
-                      const nextProjs = visualModel.projections.map((item, i) =>
-                        i === idx ? {...item, aggregate: e.target.value} : item
-                      );
-                      pushVisualModelUpdate({...visualModel, projections: nextProjs}, true);
-                    }}
-                  >
-                    <option value="">(raw)</option>
-                    <option value="COUNT">COUNT</option>
-                    <option value="SUM">SUM</option>
-                    <option value="AVG">AVG</option>
-                    <option value="MIN">MIN</option>
-                    <option value="MAX">MAX</option>
-                  </select>
+                <div style={{display: 'flex', gap: 4}}>
                   <Button
                     size="small"
+                    data-cdeadmin-qa-key="vb-add-projection"
                     onClick={() =>
-                      pushVisualModelUpdate(
+                      updateStage(
                         {
-                          ...visualModel,
-                          projections: visualModel.projections.filter((_, i) => i !== idx),
+                          projections: [
+                            ...activeStageProjections,
+                            {expr: availableCols[0]?.ref || '*', alias: '', aggregate: ''},
+                          ],
                         },
                         true
                       )
                     }
                   >
-                    ×
+                    + {gettext('Column')}
+                  </Button>
+                  <Button
+                    size="small"
+                    intent="primary"
+                    data-cdeadmin-qa-key="vb-add-window-projection"
+                    onClick={() =>
+                      updateStage(
+                        {
+                          projections: [
+                            ...activeStageProjections,
+                            {
+                              expr: availableCols[0]?.ref || '*',
+                              alias: `rn_${activeStageProjections.length + 1}`,
+                              aggregate: 'WINDOW',
+                              window: applyWindowPreset('row_number', availableCols[0]?.ref || ''),
+                            },
+                          ],
+                        },
+                        true
+                      )
+                    }
+                  >
+                    + {gettext('Window (OVER)')}
                   </Button>
                 </div>
-              ))}
+              </div>
+              {activeStageProjections.map((p, idx) => {
+                const isWindowMode = Boolean(p.window) || p.aggregate === 'WINDOW';
+                const selectMode = isWindowMode ? 'WINDOW' : p.aggregate || '';
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'grid',
+                      gap: 6,
+                      padding: isWindowMode ? 8 : 0,
+                      borderRadius: 6,
+                      border: isWindowMode ? '1px solid var(--sr-border-subtle)' : 'none',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 84px 96px 28px',
+                        gap: 4,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <input
+                        className="sr-input"
+                        value={p.expr || ''}
+                        placeholder="t1.col"
+                        onChange={(e) => {
+                          const nextProjs = activeStageProjections.map((item, i) =>
+                            i === idx ? {...item, expr: e.target.value} : item
+                          );
+                          updateStage({projections: nextProjs}, true);
+                        }}
+                      />
+                      <input
+                        className="sr-input"
+                        value={p.alias || ''}
+                        placeholder={gettext('alias')}
+                        aria-label={gettext('Column Alias')}
+                        onChange={(e) => {
+                          const nextProjs = activeStageProjections.map((item, i) =>
+                            i === idx ? {...item, alias: e.target.value} : item
+                          );
+                          updateStage({projections: nextProjs}, true);
+                        }}
+                      />
+                      <select
+                        className="sr-input"
+                        value={selectMode}
+                        onChange={(e) => {
+                          const modeVal = e.target.value;
+                          const nextProjs = activeStageProjections.map((item, i) => {
+                            if (i !== idx) return item;
+                            if (modeVal === 'WINDOW') {
+                              return {
+                                ...item,
+                                aggregate: 'WINDOW',
+                                alias: item.alias || `win_${idx + 1}`,
+                                window:
+                                  item.window ||
+                                  applyWindowPreset('row_number', item.expr || availableCols[0]?.ref || ''),
+                              };
+                            }
+                            const cleaned = {...item, aggregate: modeVal};
+                            delete cleaned.window;
+                            return cleaned;
+                          });
+                          updateStage({projections: nextProjs}, true);
+                        }}
+                      >
+                        <option value="">(raw)</option>
+                        <option value="COUNT">COUNT</option>
+                        <option value="SUM">SUM</option>
+                        <option value="AVG">AVG</option>
+                        <option value="MIN">MIN</option>
+                        <option value="MAX">MAX</option>
+                        <option value="WINDOW">OVER (...)</option>
+                      </select>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          updateStage(
+                            {projections: activeStageProjections.filter((_, i) => i !== idx)},
+                            true
+                          )
+                        }
+                      >
+                        ×
+                      </Button>
+                    </div>
+                    {isWindowMode && (
+                      <VisualProjectionWindowEditor
+                        projection={p}
+                        availableCols={availableCols}
+                        namedWindows={activeStageWindows}
+                        onChangeWindow={(nextWin) => {
+                          const nextProjs = activeStageProjections.map((item, i) =>
+                            i === idx ? {...item, aggregate: 'WINDOW', window: nextWin} : item
+                          );
+                          updateStage({projections: nextProjs}, true);
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -2557,10 +2901,10 @@ export default function SqlEditorSurface({
             <div style={{display: 'grid', gap: 8}}>
               <Button
                 size="small"
-                disabled={visualModel.tables.length < 2}
+                disabled={activeStageTables.length < 2}
                 onClick={() => {
-                  const leftT = visualModel.tables[0];
-                  const rightT = visualModel.tables[visualModel.tables.length - 1];
+                  const leftT = activeStageTables[0];
+                  const rightT = activeStageTables[activeStageTables.length - 1];
                   const nextJoin = {
                     join_type: 'INNER',
                     left_table: leftT.alias || leftT.name,
@@ -2568,15 +2912,12 @@ export default function SqlEditorSurface({
                     right_table: rightT.alias || rightT.name,
                     right_column: rightT.columns?.[0]?.name || 'id',
                   };
-                  pushVisualModelUpdate(
-                    {...visualModel, joins: [...visualModel.joins, nextJoin]},
-                    true
-                  );
+                  updateStage({joins: [...activeStageJoins, nextJoin]}, true);
                 }}
               >
                 + {gettext('Add Join Relation')}
               </Button>
-              {visualModel.joins.map((j, idx) => (
+              {activeStageJoins.map((j, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -2592,10 +2933,10 @@ export default function SqlEditorSurface({
                       className="sr-input"
                       value={j.join_type || 'INNER'}
                       onChange={(e) => {
-                        const nextJoins = visualModel.joins.map((item, i) =>
+                        const nextJoins = activeStageJoins.map((item, i) =>
                           i === idx ? {...item, join_type: e.target.value} : item
                         );
-                        pushVisualModelUpdate({...visualModel, joins: nextJoins}, true);
+                        updateStage({joins: nextJoins}, true);
                       }}
                     >
                       <option value="INNER">INNER JOIN</option>
@@ -2606,8 +2947,8 @@ export default function SqlEditorSurface({
                     <Button
                       size="small"
                       onClick={() =>
-                        pushVisualModelUpdate(
-                          {...visualModel, joins: visualModel.joins.filter((_, i) => i !== idx)},
+                        updateStage(
+                          {joins: activeStageJoins.filter((_, i) => i !== idx)},
                           true
                         )
                       }
@@ -2621,12 +2962,12 @@ export default function SqlEditorSurface({
                       value={`${j.left_table}.${j.left_column}`}
                       onChange={(e) => {
                         const [lt, lc] = e.target.value.split('.');
-                        const nextJoins = visualModel.joins.map((item, i) =>
+                        const nextJoins = activeStageJoins.map((item, i) =>
                           i === idx
                             ? {...item, left_table: lt || '', left_column: lc || ''}
                             : item
                         );
-                        pushVisualModelUpdate({...visualModel, joins: nextJoins}, true);
+                        updateStage({joins: nextJoins}, true);
                       }}
                     />
                     <input
@@ -2634,12 +2975,12 @@ export default function SqlEditorSurface({
                       value={`${j.right_table}.${j.right_column}`}
                       onChange={(e) => {
                         const [rt, rc] = e.target.value.split('.');
-                        const nextJoins = visualModel.joins.map((item, i) =>
+                        const nextJoins = activeStageJoins.map((item, i) =>
                           i === idx
                             ? {...item, right_table: rt || '', right_column: rc || ''}
                             : item
                         );
-                        pushVisualModelUpdate({...visualModel, joins: nextJoins}, true);
+                        updateStage({joins: nextJoins}, true);
                       }}
                     />
                   </div>
@@ -2652,26 +2993,22 @@ export default function SqlEditorSurface({
             <div style={{display: 'grid', gap: 8}}>
               <TextField
                 label={gettext('WHERE Condition')}
-                value={(visualModel.where || []).join(' AND ')}
+                value={(activeStage.where || []).join(' AND ')}
                 placeholder="t1.active = 1"
                 onChange={(e) =>
-                  pushVisualModelUpdate(
-                    {
-                      ...visualModel,
-                      where: e.target.value.trim() ? [e.target.value] : [],
-                    },
+                  updateStage(
+                    {where: e.target.value.trim() ? [e.target.value] : []},
                     true
                   )
                 }
               />
               <TextField
                 label={gettext('GROUP BY')}
-                value={(visualModel.group_by || []).join(', ')}
+                value={(activeStage.group_by || []).join(', ')}
                 placeholder="t1.department_id"
                 onChange={(e) =>
-                  pushVisualModelUpdate(
+                  updateStage(
                     {
-                      ...visualModel,
                       group_by: e.target.value
                         .split(',')
                         .map((s) => s.trim())
@@ -2683,14 +3020,13 @@ export default function SqlEditorSurface({
               />
               <TextField
                 label={gettext('ORDER BY')}
-                value={(visualModel.order_by || [])
+                value={(activeStage.order_by || [])
                   .map((o) => (typeof o === 'string' ? o : `${o.expr} ${o.dir || 'ASC'}`))
                   .join(', ')}
                 placeholder="t1.id DESC"
                 onChange={(e) =>
-                  pushVisualModelUpdate(
+                  updateStage(
                     {
-                      ...visualModel,
                       order_by: e.target.value
                         .split(',')
                         .map((s) => s.trim())
@@ -2702,12 +3038,12 @@ export default function SqlEditorSurface({
               />
               <TextField
                 label={gettext('Row Limit')}
-                value={visualModel.limit ?? ''}
+                value={activeStage.limit ?? ''}
                 placeholder="100"
                 onChange={(e) => {
                   const n = parseInt(e.target.value, 10);
-                  pushVisualModelUpdate(
-                    {...visualModel, limit: Number.isFinite(n) && n > 0 ? n : null},
+                  updateStage(
+                    {limit: Number.isFinite(n) && n > 0 ? n : null},
                     true
                   );
                 }}
@@ -3137,6 +3473,7 @@ export default function SqlEditorSurface({
     snippetsPayload,
     vbInspectorTab,
     vbKindFilter,
+    vbShowSystemObjects,
     localeRevision,
     vbTableSearch,
     visualCatalogObjects,
@@ -3235,6 +3572,17 @@ export default function SqlEditorSurface({
   const renderStatusRef = useRef(renderStatusContent);
   renderStatusRef.current = renderStatusContent;
   const stableRenderStatus = useCallback(() => renderStatusRef.current(), []);
+
+  const registeredActionIdsRef = useRef([]);
+  useEffect(
+    () => () => {
+      const curShell = shellRef.current;
+      (registeredActionIdsRef.current || []).forEach((id) =>
+        curShell?.actionsRegistry?.unregister?.(id)
+      );
+    },
+    [instId]
+  );
 
   // Register MS-Grouped TiB (3 Under-Tabs) + Focus-Merged Top Menus (`Query 15`, `Edit 20`, `View 25`, `Window 70`)
   useEffect(() => {
@@ -3838,7 +4186,8 @@ export default function SqlEditorSurface({
         groups: [
           {
             id: 'surface_view',
-            label: gettext('View'),
+            sectionId: 'SEC-WORKSPACE',
+            label: gettext('Workspace & Panels'),
             controls: [
               viewControlSpec,
               ...((hostData?.result_count || 0) > 1
@@ -3858,6 +4207,7 @@ export default function SqlEditorSurface({
           },
           {
             id: 'execute',
+            sectionId: 'SEC-EXEC',
             label: gettext('Execute'),
             controls: [
               execStmtId,
@@ -3882,6 +4232,7 @@ export default function SqlEditorSurface({
           },
           {
             id: 'transaction',
+            sectionId: 'SEC-TX',
             label: gettext('Transaction'),
             controls: [
               ...(startTransactionId ? [startTransactionId] : []),
@@ -3891,6 +4242,7 @@ export default function SqlEditorSurface({
           },
           {
             id: 'navigate',
+            sectionId: 'SEC-NAV',
             label: gettext('Navigate'),
             controls: [
               navFirstId,
@@ -3906,11 +4258,13 @@ export default function SqlEditorSurface({
           },
           {
             id: 'live_edit',
+            sectionId: 'SEC-REC',
             label: gettext('Edit Rows'),
             controls: [editAcceptRowId, insertRowId, duplicateRowId, deleteRowId],
           },
           {
             id: 'library',
+            sectionId: 'SEC-QLIB',
             label: gettext('Snippets & Saved'),
             controls: [snippetsDrawerId, quickQueriesId, historyDrawerId, saveAnyId],
           },
@@ -3922,16 +4276,19 @@ export default function SqlEditorSurface({
         groups: [
           {
             id: 'display_areas',
+            sectionId: 'SEC-WORKSPACE',
             label: gettext('Display Areas'),
             controls: displayAreas.map(({control}) => control),
           },
           {
             id: 'data_display',
-            label: gettext('Data Display'),
+            sectionId: 'SEC-PRES',
+            label: gettext('Data Presentation'),
             controls: [displayControlSpec, applyTemplateId],
           },
           {
             id: 'formatting',
+            sectionId: 'SEC-VALFMT',
             label: gettext('SQL & Values'),
             controls: [
               formatSqlId,
@@ -3950,6 +4307,7 @@ export default function SqlEditorSurface({
           },
           {
             id: 'builder_limits',
+            sectionId: 'SEC-CONN',
             label: gettext('Builder & Session'),
             controls: [vbInspectorId, limitsId, connInfoId],
           },
@@ -3961,11 +4319,13 @@ export default function SqlEditorSurface({
         groups: [
           {
             id: 'sql_files',
+            sectionId: 'SEC-FILE',
             label: gettext('SQL & Snippets'),
             controls: [openSqlFileId, saveAnyId, saveSnippetSelId, saveBiQuestionId],
           },
           {
             id: 'data_exports',
+            sectionId: 'SEC-TRANSFER',
             label: gettext('Result Export'),
             controls: [exportDataId, exportSpreadsheetId, exportPdfId],
           },
@@ -4255,8 +4615,10 @@ export default function SqlEditorSurface({
         items: [
           {
             id: `${pfx}.m.rename_tab`,
+            replacesId: 'shell.window.rename_tab',
             label: gettext('Rename Tab… (F2)'),
-            index: 75,
+            shortcut: 'F2',
+            index: 41,
             callback: () => shellRef.current?.requestTabRename?.(instId),
           },
           {id: `${pfx}.m.limits`, actionId: limitsId, label: gettext('Page & Fetch Limits…'), index: 80},
@@ -4264,6 +4626,8 @@ export default function SqlEditorSurface({
         ],
       },
     ];
+
+    registeredActionIdsRef.current = regList.map((a) => a.id);
 
     curShell.updateInstance?.(instId, {
       ribbonMode: 'ms-grouped',
@@ -4283,9 +4647,7 @@ export default function SqlEditorSurface({
       onBeforeClose: stableConfirmCloseGuard,
     });
 
-    return () => {
-      regList.forEach((a) => curShell.actionsRegistry?.unregister?.(a.id));
-    };
+    return undefined;
   }, [
     localeRevision,
     activeBookmarks,
@@ -4675,6 +5037,40 @@ export default function SqlEditorSurface({
         outlineOffset: -4,
       }}
     >
+      <VisualBuilderPipelineBar
+        visualModel={visualModel}
+        onSelectStage={(stageKey) => {
+          setSelectedCanvasNodeId('');
+          pushVisualModelUpdate({...visualModelRef.current, active_stage: stageKey}, false);
+        }}
+        onAddCte={() => {
+          const cur = visualModelRef.current;
+          const curCtes = Array.isArray(cur.ctes) ? cur.ctes : [];
+          const idx = curCtes.length + 1;
+          const cid = `cte_${Date.now()}_${idx}`;
+          const cname = `stage_cte_${idx}`;
+          const nextCte = {
+            id: cid,
+            name: cname,
+            columns: '',
+            recursive: false,
+            union_mode: 'UNION ALL',
+            materialized: '',
+            cycle: {enabled: false, columns: '', set_column: 'is_cycle', using_column: 'traversal_path'},
+            anchor: createEmptyStageBranch(),
+            recursive_branch: createEmptyStageBranch(),
+          };
+          pushVisualModelUpdate(
+            {...cur, active_stage: `cte:${cid}:anchor`, ctes: [...curCtes, nextCte]},
+            true
+          );
+        }}
+        onOpenCtesInspector={() => {
+          setVbInspectorTab('ctes');
+          openRightDrawerWith({panel: 'visual_inspector'});
+        }}
+      />
+
       <RobinTiledCanvas
         scene={visualScene}
         selectedNodeId={selectedCanvasNodeId}
@@ -4692,12 +5088,11 @@ export default function SqlEditorSurface({
         editable
         onPinNode={(nodeId, x, y) => {
           const cur = visualModelRef.current;
-          const next = {
-            ...cur,
-            tables: (cur.tables || []).map((t) =>
+          const next = updateActiveVisualStage(cur, (st) => ({
+            tables: (st.tables || []).map((t) =>
               t.id === nodeId ? {...t, x, y} : t
             ),
-          };
+          }));
           pushVisualModelUpdate(next, false);
         }}
         canvasApiRef={canvasApiRef}
@@ -4709,7 +5104,7 @@ export default function SqlEditorSurface({
           data-cdeadmin-qa-key="visual-builder-drop-indicator"
           style={{
             position: 'absolute',
-            top: 14,
+            top: 56,
             right: 16,
             padding: '6px 14px',
             borderRadius: 999,
@@ -4721,7 +5116,7 @@ export default function SqlEditorSurface({
             pointerEvents: 'none',
           }}
         >
-          {gettext('Drop Table, View, or Selectable Procedure onto Canvas')}
+          {gettext('Drop Table, View, CTE, or Selectable Procedure onto Canvas')}
         </div>
       )}
 
@@ -4731,7 +5126,7 @@ export default function SqlEditorSurface({
           data-cdeadmin-qa-key="visual-builder-canvas-notice"
           style={{
             position: 'absolute',
-            top: 14,
+            top: 56,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 12,
@@ -4767,11 +5162,11 @@ export default function SqlEditorSurface({
         </div>
       )}
 
-      {visualModel.tables.length === 0 && !canvasNotice && (
+      {(getActiveVisualStage(visualModel).tables || []).length === 0 && !canvasNotice && (
         <div
           style={{
             position: 'absolute',
-            top: 14,
+            top: 56,
             left: 14,
             padding: '7px 14px',
             borderRadius: 999,
@@ -4782,7 +5177,7 @@ export default function SqlEditorSurface({
           }}
         >
           {gettext(
-            'Drag Tables, Views, or Selectable Stored Procedures from Data Navigator (left) or Builder Palette (right) onto this canvas'
+            'Drag Tables, Views, CTEs, or Selectable Stored Procedures from Data Navigator (left) or Builder Palette (right) onto this stage canvas'
           )}
         </div>
       )}

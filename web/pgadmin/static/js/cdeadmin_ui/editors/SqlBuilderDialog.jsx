@@ -422,6 +422,7 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
   const [ddnFlow, setDdnFlow] = useState(null);
   const [focusedStage, setFocusedStage] = useState('__query__');
   const [stagePreview, setStagePreview] = useState(null);
+  const [showSystemObjects, setShowSystemObjects] = useState(false);
   const [busy, setBusy] = useState(false);
   // The dialog shows errors above the form; after a click at the bottom of
   // a long form, bring the message into view.
@@ -435,11 +436,12 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
     let active = true;
     setInfo(null); setLoadError(''); setError(''); setPreview('');
     setDdnFlow(null); setStagePreview(null); setFocusedStage('__query__');
+    setShowSystemObjects(false);
     post({action: 'sql_builder', request: {operation: 'options'}})
       .then((result) => {
         if(!active) return;
         setInfo(result);
-        const first = result?.relations?.[0];
+        const first = result?.relations?.find((item) => !item.system_object) || result?.relations?.[0];
         setDraft(emptyDraft(first ? relationSource(first.path) : ''));
       })
       .catch((failure) => {if(active) setLoadError(requestError(failure));});
@@ -447,10 +449,14 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
   }, [open]);
   const options = info?.options || {};
   const relations = info?.relations || [];
+  const visibleRelations = useMemo(
+    () => relations.filter((item) => showSystemObjects || !item.system_object),
+    [relations, showSystemObjects]
+  );
   const ctes = draft?.ctes || [];
   const columnsOf = useMemo(() => columnResolver(relations, ctes), [relations, ctes]);
   const flowStages = useMemo(() => describeFlowStages(draft), [draft]);
-  const scopeFor = (visible) => ({options, columnsOf, sources: sourceOptions(relations, visible)});
+  const scopeFor = (visible) => ({options, columnsOf, sources: sourceOptions(visibleRelations, visible)});
   const named = ctes.filter((cte) => cte.name.trim());
   const focusStage = (stageKey) => {
     setFocusedStage(stageKey);
@@ -552,8 +558,14 @@ export default function SqlBuilderDialog({open, onClose, post, onInsert}) {
           </Box>)}
         </Box>
       </Box>
-      {relations.length === 0 && <Box component="p" sx={{m: 0}}>
-        This connection&apos;s catalog lists no tables or views.</Box>}
+      <Row>
+        <Checkbox label="Show system objects" checked={showSystemObjects}
+          onChange={(next) => setShowSystemObjects(next)} />
+      </Row>
+      {visibleRelations.length === 0 && <Box component="p" sx={{m: 0}}>
+        {relations.length > 0
+          ? 'No user tables or views are listed (enable "Show system objects" to browse system relations).'
+          : 'This connection\u2019s catalog lists no tables or views.'}</Box>}
       <Section title="Query & CTE Dataflow">
         <Row>
           <Box role="group" aria-label="Query dataflow stages"

@@ -18,17 +18,18 @@ import {Checkbox, Select} from '../../primitives/Choice';
 import {Badge, Banner, ValidationMessage} from '../../feedback/Indicators';
 import FormReference from '../../navigation/FormReference';
 import CodeEditor from '../../editors/CodeEditor';
+import UnifiedDataGrid from '../../data/UnifiedDataGrid';
 import {DuckdbSectionCard, createDuckdbWorkspaceCaller} from './duckdbAdminHelpers';
 
 const textVal = (e) => (e?.target ? e.target.value : String(e ?? ''));
 
 const EDITOR_OP_CHOICES = [
-  {value: 'editor_attachment_inventory', label: 'editor_attachment_inventory (Attached catalogs)'},
-  {value: 'editor_extension_inventory', label: 'editor_extension_inventory (Extension capabilities)'},
-  {value: 'editor_copy_inventory', label: 'editor_copy_inventory (Database copy catalogs)'},
-  {value: 'editor_secret_inventory', label: 'editor_secret_inventory (Session secret identities)'},
-  {value: 'editor_secret_receipts', label: 'editor_secret_receipts (Session secret receipts)'},
-  {value: 'editor_receipt_list', label: 'editor_receipt_list (Archived operation receipts)'},
+  {value: 'editor_attachment_inventory', label: 'Attached catalogs inventory'},
+  {value: 'editor_extension_inventory', label: 'Extension capabilities inventory'},
+  {value: 'editor_copy_inventory', label: 'Database copy catalogs inventory'},
+  {value: 'editor_secret_inventory', label: 'Session secret identities'},
+  {value: 'editor_secret_receipts', label: 'Session secret receipts'},
+  {value: 'editor_receipt_list', label: 'Archived operation receipts'},
 ];
 
 /**
@@ -312,9 +313,30 @@ export default function DuckdbRuntimeSettingsWorkspace({
             </Button>
           </Stack>
           {settingsInventory && (
-            <div>
-              <Badge status="info" label={`Settings observed: ${settingsInventory.settings?.length ?? 0}`} />
-            </div>
+            <Stack gap="xs">
+              <div>
+                <Badge status="info" label={`Settings observed: ${settingsInventory.settings?.length ?? 0}`} />
+              </div>
+              {(settingsInventory.settings?.length ?? 0) > 0 && (
+                <UnifiedDataGrid
+                  caption={gettext('DuckDB Runtime Settings')}
+                  ariaLabel={gettext('DuckDB runtime settings')}
+                  searchable
+                  exportable
+                  minHeight={150}
+                  maxHeight={280}
+                  rows={settingsInventory.settings}
+                  rowKeyGetter={(row, idx) => row.name || idx}
+                  columns={[
+                    {name: 'name', label: gettext('Setting'), width: 180, mono: true},
+                    {name: 'value', label: gettext('Value'), width: 140, mono: true},
+                    {name: 'input_type', label: gettext('Input Type'), width: 110},
+                    {name: 'scope', label: gettext('Scope'), width: 100},
+                    {name: 'description', label: gettext('Description'), width: 320},
+                  ]}
+                />
+              )}
+            </Stack>
           )}
           {settingReview && (
             <pre style={{margin: 0, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap'}}>
@@ -407,7 +429,7 @@ export default function DuckdbRuntimeSettingsWorkspace({
         </DuckdbSectionCard>
 
         <DuckdbSectionCard
-          title={gettext('3. Foreign Attachment Adapters & Retained Descriptor Task Runner')}
+          title={gettext('3. Foreign Attachment Adapters & Session Diagnostics')}
           actions={
             <Button variant="secondary" disabled={busy} onClick={handleLoadForeignAdapters}>
               {gettext('Probe Foreign Attachment Adapters')}
@@ -419,29 +441,36 @@ export default function DuckdbRuntimeSettingsWorkspace({
               {JSON.stringify(foreignAdapters, null, 2)}
             </pre>
           )}
-          <Grid columns={2} gap="sm">
-            <Select
-              label={gettext('Descriptor Operation (duckdb_editor_operation)')}
-              value={editorOpId}
-              options={EDITOR_OP_CHOICES}
-              onChange={setEditorOpId}
-            />
-            <TextField
-              label={gettext('Operation Draft JSON')}
-              value={editorDraftJson}
-              onChange={(e) => setEditorDraftJson(textVal(e))}
-            />
-          </Grid>
-          <Stack direction="row" gap="sm">
-            <Button variant="primary" disabled={busy} onClick={handleRunEditorTask}>
-              {gettext('Execute Original-Session Descriptor Task')}
-            </Button>
-          </Stack>
-          {editorResult && (
-            <pre style={{margin: 0, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap'}}>
-              {JSON.stringify(editorResult, null, 2)}
-            </pre>
-          )}
+          <details style={{marginTop: 8}}>
+            <summary style={{cursor: 'pointer', fontWeight: 600, fontSize: '0.8125rem'}}>
+              {gettext('Advanced / Native Task')}
+            </summary>
+            <Stack gap="sm" style={{marginTop: 8}}>
+              <Grid columns={2} gap="sm">
+                <Select
+                  label={gettext('Session Diagnostic Task')}
+                  value={editorOpId}
+                  options={EDITOR_OP_CHOICES}
+                  onChange={setEditorOpId}
+                />
+                <TextField
+                  label={gettext('Task Parameters (JSON)')}
+                  value={editorDraftJson}
+                  onChange={(e) => setEditorDraftJson(textVal(e))}
+                />
+              </Grid>
+              <Stack direction="row" gap="sm">
+                <Button variant="primary" disabled={busy} onClick={handleRunEditorTask}>
+                  {gettext('Execute Original-Session Descriptor Task')}
+                </Button>
+              </Stack>
+              {editorResult && (
+                <pre style={{margin: 0, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap'}}>
+                  {JSON.stringify(editorResult, null, 2)}
+                </pre>
+              )}
+            </Stack>
+          </details>
         </DuckdbSectionCard>
       </Stack>
     </Box>

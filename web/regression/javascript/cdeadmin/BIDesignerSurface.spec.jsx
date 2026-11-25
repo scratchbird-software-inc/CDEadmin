@@ -1102,11 +1102,14 @@ describe('Task-specific BI Questions & Dashboards Designer (Phase 1 & Phase 2)',
       fireEvent.click(saveBtn);
       await waitFor(() => expect(client.saveBiModel).toHaveBeenCalledTimes(1));
 
-      // Switch category on Area 3b to SQL & AI Draft and click Open in SQL Editor
-      const sqlCatBtn = within(area3bPanel).getByRole('button', {
+      // Switch native sub-tab on Area 3b to SQL & AI Draft and click Open in SQL Editor
+      const area3bUnderTabs = container.querySelector(
+        '[data-cdeadmin-qa-key="notebookbar-undertabs"]'
+      );
+      const sqlCatTab = within(area3bUnderTabs).getByRole('tab', {
         name: /SQL & AI Draft/i,
       });
-      fireEvent.click(sqlCatBtn);
+      fireEvent.click(sqlCatTab);
       const openSqlBtn = await within(area3bPanel).findByRole('button', {
         name: /Open in SQL Editor/i,
       });

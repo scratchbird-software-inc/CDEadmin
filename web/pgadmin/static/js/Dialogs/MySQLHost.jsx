@@ -4,6 +4,13 @@ import {Alert,Box,Button,Checkbox,FormControlLabel,MenuItem,TextField} from '@mu
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
+import {NumberField, Select as SrSelect, Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard from '../cdeadmin_ui/modules/StructuredPayloadCard';
+
+const UPGRADE_SCHEMES=[
+  {value:'mysql',label:'Classic MySQL (mysql)'},
+  {value:'mysqlx',label:'MySQL X Protocol (mysqlx)'},
+];
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLHost({post}) {
@@ -63,6 +70,17 @@ export default function MySQLHost({post}) {
   const observed=receipt?.reconciliation?.remote_receipt || receipt?.remote_receipt;
   const configurationAfter=observed?.configuration_after_process;
   const decode=value => {try{return new TextDecoder().decode(Uint8Array.from(atob(value || ''),char => char.charCodeAt(0)));}catch{return 'Inspect the original encoded native output in the receipt.';}};
+  const parsedUpgradeConn=checkConnection();
+  const updateUpgradeConnField=(patch)=> {
+    const base=parsedUpgradeConn && typeof parsedUpgradeConn==='object' && !Array.isArray(parsedUpgradeConn) ? {...parsedUpgradeConn} : {scheme:'mysql',host:'127.0.0.1',port:3306,user:'root'};
+    Object.entries(patch).forEach(([k,v])=> {
+      if(v===undefined || v==='')delete base[k];
+      else base[k]=v;
+    });
+    setUpgradeCheckConnection(JSON.stringify(base));
+    setReview(null);
+    setConfirmed(false);
+  };
   return <Box sx={{p:1,overflow:'auto',flex:1}}>
     <FormReference formKey="mysql-host" />
     <Alert severity="info">Manage native MySQL configuration, initialization, Linux services and reviewed upgrades on the selected SSH host. Initialization and upgrades use explicit host authority before SQL profile admission. Native process, UUID, data-directory and unit observations bind the review. Python 3.9 or later is required on that host. SQL readiness and data acceptance require separate observations.</Alert>
@@ -75,7 +93,7 @@ export default function MySQLHost({post}) {
       <TextField size="small" label="SSH username" value={user} onChange={change(setUser)} />
       <Button disabled={busy} onClick={() => run('peer',{host,port},setPeer)}>Inspect SSH public key</Button>
     </Box>
-    {catalog && <Box component="details"><summary>Observed native database host</summary><Box component="pre" sx={{whiteSpace:'pre-wrap'}}>{JSON.stringify(catalog,null,2)}</Box></Box>}
+    {catalog && <Box sx={{my:1}}><StructuredPayloadCard title="Observed native database host" value={catalog} rawDisclosureLabel="Observed native database host JSON" /></Box>}
     {peer && <Box><Alert severity="warning">Unauthenticated SSH peer key: {peer.fingerprint}. Confirm it against the expected host identity before pinning it. No credential or remote command was sent.</Alert>
       <Button disabled={busy || peer.host!==host || peer.port!==port} onClick={() => {setHostKey(peer.openssh_key);setReview(null);setConfirmed(false);}}>Use inspected SSH public key as expected key</Button></Box>}
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap',my:1}}>
@@ -119,7 +137,23 @@ export default function MySQLHost({post}) {
         <TextField label="Original native data directory" value={upgradeSourceDirectory} onChange={change(setUpgradeSourceDirectory)} />
         <TextField label="Original native PID file" value={upgradeSourcePid} onChange={change(setUpgradeSourcePid)} />
         <TextField label="Native MySQL Shell 9.7 on SSH host" value={upgradeShell} onChange={change(setUpgradeShell)} />
-        <TextField multiline minRows={2} fullWidth label="Native upgrade-check connection JSON (no passwords)" helperText="Use a direct local socket or loopback connection on this SSH host. Native TLS file paths refer to that host." value={upgradeCheckConnection} onChange={change(setUpgradeCheckConnection)} />
+        <Box sx={{my:1,p:1.25,border:'1px solid var(--sr-border, rgba(128,128,128,0.22))',borderRadius:1.5}}>
+          <Stack gap={1}>
+            <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+              <SrSelect label="Upgrade-check protocol" disabled={busy || !parsedUpgradeConn} options={UPGRADE_SCHEMES} value={parsedUpgradeConn?.scheme || 'mysql'} onChange={val=>updateUpgradeConnField({scheme:val})} style={{minWidth:200}} />
+              <TextField size="small" label="Upgrade-check host" disabled={busy || !parsedUpgradeConn} value={parsedUpgradeConn?.host ?? '127.0.0.1'} onChange={e=>updateUpgradeConnField({host:e.target.value})} />
+              <NumberField label="Upgrade-check port" disabled={busy || !parsedUpgradeConn} value={parsedUpgradeConn?.port ?? 3306} onChange={e=>updateUpgradeConnField({port:Number(e.target.value)||3306})} style={{maxWidth:150}} />
+              <TextField size="small" label="Upgrade-check user" disabled={busy || !parsedUpgradeConn} value={parsedUpgradeConn?.user ?? 'root'} onChange={e=>updateUpgradeConnField({user:e.target.value})} />
+              <TextField size="small" label="Local socket path (optional)" disabled={busy || !parsedUpgradeConn} value={parsedUpgradeConn?.socket ?? ''} onChange={e=>updateUpgradeConnField({socket:e.target.value || undefined})} />
+            </Stack>
+            <Box component="details">
+              <summary style={{cursor:'pointer',fontSize:12,opacity:0.8}}>Advanced JSON overrides</summary>
+              <Box sx={{mt:1}}>
+                <TextField multiline minRows={2} fullWidth label="Native upgrade-check connection JSON (no passwords)" helperText="Use a direct local socket or loopback connection on this SSH host. Native TLS file paths refer to that host." value={upgradeCheckConnection} onChange={change(setUpgradeCheckConnection)} />
+              </Box>
+            </Box>
+          </Stack>
+        </Box>
         <TextField type="password" label="Upgrade-check password" value={checkPassword} onChange={event=>setCheckPassword(event.target.value)} />
         <FormControlLabel label="Use native second authentication factor" control={<Checkbox checked={checkSecond} onChange={event=>setCheckSecond(event.target.checked)} />} />
         {checkSecond && <TextField type="password" label="Upgrade-check second password" value={checkPassword2} onChange={event=>setCheckPassword2(event.target.value)} />}
@@ -143,7 +177,11 @@ export default function MySQLHost({post}) {
     {review && <Box>
       <ul>{review.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
       {review.remote_observation?.upgrade_plan?.preflight?.report && <Alert severity={review.remote_observation.upgrade_plan.preflight.report.errorCount ? 'error' : review.remote_observation.upgrade_plan.preflight.report.warningCount ? 'warning' : 'info'}>Native upgrade checker: {review.remote_observation.upgrade_plan.preflight.report.errorCount} errors, {review.remote_observation.upgrade_plan.preflight.report.warningCount} warnings, {review.remote_observation.upgrade_plan.preflight.report.noticeCount} notices. {review.remote_observation.upgrade_plan.preflight.report.summary} Review the complete native report below. It is rechecked before the original service stops.</Alert>}
-      <Box component="pre" aria-label="Native host diagnostic review" sx={{whiteSpace:'pre-wrap',maxHeight:260,overflow:'auto'}}>{JSON.stringify({source:review.source,source_identity_scope:review.source_identity_scope,execution_host:review.execution_host,observation:review.remote_observation},null,2)}</Box>
+      <StructuredPayloadCard
+        title="Reviewed database host diagnostic plan"
+        value={{source:review.source,source_identity_scope:review.source_identity_scope,execution_host:review.execution_host,observation:review.remote_observation}}
+        rawAriaLabel="Native host diagnostic review"
+      />
       <FormControlLabel label={operation==='validate_config' ? 'Authorize the reviewed native mysqld configuration check on this database SSH host' : operation==='deploy_config' ? 'Authorize the reviewed option-file installation on this database SSH host' : operation==='initialize_data' ? 'Authorize the reviewed native data-directory initialization on this SSH host' : 'Authorize the reviewed native MySQL service action on this database SSH host'} control={<Checkbox disabled={busy || review.state!=='reviewed'} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />} />
       <Button disabled={busy || !confirmed || review.state!=='reviewed' || (review.remote_observation?.upgrade_plan?.preflight?.report?.errorCount || 0)>0} onClick={() => run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true,credentials:credentials(),...(operation==='upgrade_service' ? {upgrade_check_secret:checkSecret()} : {})},value => {setReceipt(value);setReview(current => ({...current,state:value.state}));setConfirmed(false);})}>{operation==='validate_config' ? 'Confirm native host configuration check' : operation==='deploy_config' ? 'Confirm native option-file installation' : operation==='initialize_data' ? 'Confirm native data-directory initialization' : 'Confirm native host service action'}</Button>
     </Box>}
@@ -207,7 +245,19 @@ export default function MySQLHost({post}) {
       <Button disabled={busy || ACTIVE.has(receipt.state) || receipt.state==='reviewed'} onClick={() => run('reconcile',{job_id:receipt.job_id,credentials:credentials()},setReceipt)}>Reconcile native host receipt</Button>
       <Button disabled={busy || receipt.state!=='reviewed'} onClick={() => run('cancel',{job_id:receipt.job_id},setReceipt)}>Cancel unstarted native host check</Button>
       {observed?.result && <Box component="details"><summary>Native diagnostic output: exit {observed.result.return_code}</summary>{['stdout','stderr'].map(name => <Box component="pre" key={name} sx={{whiteSpace:'pre-wrap',maxHeight:240,overflow:'auto'}}>{name}: {decode(observed.result.outputs?.[name]?.base64)}</Box>)}</Box>}
-      <Box component="details"><summary>Native host observations and reconciliation</summary><Box component="pre" aria-label="Native host diagnostic receipt" sx={{whiteSpace:'pre-wrap',maxHeight:360,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
+      <StructuredPayloadCard
+        title="Database host diagnostic receipt"
+        value={{
+          job_id:receipt.job_id,
+          state:receipt.state,
+          operation:receipt.options?.operation,
+          execution_host:receipt.execution_host,
+          return_code:observed?.result?.return_code,
+        }}
+        rawText={JSON.stringify(receipt,null,2)}
+        rawAriaLabel="Native host diagnostic receipt"
+        rawDisclosureLabel="Native host observations and reconciliation"
+      />
     </Box>}
   </Box>;
 }

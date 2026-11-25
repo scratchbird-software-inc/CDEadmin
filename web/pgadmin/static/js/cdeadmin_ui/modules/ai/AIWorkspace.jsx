@@ -14,6 +14,7 @@ import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import {ScratchDiffTable} from '../../data/beautiful';
+import StructuredPayloadCard from '../StructuredPayloadCard';
 
 export const AI_SURFACES = Object.freeze([
   {id: 'assistant_dock', title: 'Assistant Dock'},
@@ -311,10 +312,13 @@ function AIInspector({session}) {
     }
     return session.content.savedPlans.flatMap((item) => item.actions).find((item) => item.id === session.selectedId);
   }, [session]);
-  return <Box><Box component="h3">Selected proposal or evidence</Box><Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>{
-    JSON.stringify(selected ?? {}, null, 2)}</Box><Box component="h3">Validation</Box>
-  <Badge label={session.validation.valid ? 'valid' : 'invalid'} /><Box component="h3">Provider evidence</Box>
-  <Box component="pre" sx={{whiteSpace: 'pre-wrap'}}>{JSON.stringify(session.providerStatuses, null, 2)}</Box></Box>;
+  return <Box><Box component="h3">Selected proposal or evidence</Box>
+    <StructuredPayloadCard compact value={selected ?? {}} />
+    <Box component="h3">Validation</Box>
+    <Badge label={session.validation.valid ? 'valid' : 'invalid'} />
+    <Box component="h3">Provider evidence</Box>
+    <StructuredPayloadCard compact value={session.providerStatuses} />
+  </Box>;
 }
 AIInspector.propTypes = {session: PropTypes.object};
 

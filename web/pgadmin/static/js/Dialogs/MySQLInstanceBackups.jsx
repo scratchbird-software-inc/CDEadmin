@@ -5,9 +5,28 @@ import {startBrowserFileDownload} from './browserFileDownload';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
+import {Checkbox as SrCheckbox, NumberField, Select as SrSelect, Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard from '../cdeadmin_ui/modules/StructuredPayloadCard';
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 const DEFAULT_OPTIONS=JSON.stringify({users:true,consistent:true,checksum:true,threads:4,compression:'zstd;level=1',timeout_seconds:3600},null,2);
+const COMPRESSION_OPTIONS=[
+  {value:'zstd;level=1',label:'zstd (level 1)'},
+  {value:'zstd',label:'zstd (default)'},
+  {value:'gzip',label:'gzip'},
+  {value:'none',label:'Uncompressed (none)'},
+];
+function parseJsonObject(text) {
+  try {
+    const parsed=JSON.parse(text);
+    return parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function splitCsvList(text) {
+  return String(text || '').split(',').map(s=>s.trim()).filter(Boolean);
+}
 export default function MySQLInstanceBackups({post,endpointUrl}) {
   const [options,setOptions]=useState(DEFAULT_OPTIONS);
   const [review,setReview]=useState(null),[receipt,setReceipt]=useState(null),[page,setPage]=useState(null),[files,setFiles]=useState(null);
@@ -41,19 +60,57 @@ export default function MySQLInstanceBackups({post,endpointUrl}) {
       {action:'mysql_instance_backup_download',prefix:'mysql-instance-backup',title:'Native instance backup file'}));}
     catch(failure) {setError(failure.message || 'Backup file download failed');}
   };
+  const parsedOptions=parseJsonObject(options);
+  const updateOptionField=(patch)=> {
+    const base=parsedOptions ? {...parsedOptions} : {};
+    Object.entries(patch).forEach(([k,v])=> {
+      if(v===undefined)delete base[k];
+      else base[k]=v;
+    });
+    setOptions(JSON.stringify(base,null,2));
+    setReview(null);
+  };
   return <Box sx={{p:2}}>
     <FormReference formKey="mysql-instance-backups" />
     <Alert severity="info">Create a native MySQL Shell instance dump containing its selected schemas, objects, data and optional accounts/roles/grants. System schemas excluded by MySQL Shell remain excluded. The utility can briefly pause writes to establish consistency. Output stays in a private directory on the application execution host. Account definitions can contain authentication material.</Alert>
     <Alert severity="info">Backup completion and file verification are separate from restored-data/definition verification, physical recovery and production cutover. Managed backup holds protect source archives until separately retired. Closing this view does not cancel a running job.</Alert>
     {error && <Alert severity="error">{error}</Alert>}
-    <TextField multiline minRows={6} fullWidth label="Native instance backup options" value={options} disabled={busy}
-      helperText="Instance options include users, include_schemas, exclude_schemas, include_users and exclude_users, together with native schema-dump options. Optional system_state_tables select native system-table checkpoints; system_state_write_pause_confirmed:true acknowledges a server-wide read lock throughout the dump. The application assigns the private output path."
-      onChange={event=>{setOptions(event.target.value);setReview(null);}} />
+    <Box sx={{my:1.5,p:1.5,border:'1px solid var(--sr-border, rgba(128,128,128,0.22))',borderRadius:1.5}}>
+      <Stack gap={1.5}>
+        <Stack direction="row" gap={2} style={{flexWrap:'wrap'}}>
+          <SrCheckbox label="Include accounts, roles, and grants (users)" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.users)} onChange={checked=>updateOptionField({users:checked})} />
+          <SrCheckbox label="Consistent snapshot" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.consistent)} onChange={checked=>updateOptionField({consistent:checked})} />
+          <SrCheckbox label="Compute table checksums" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.checksum)} onChange={checked=>updateOptionField({checksum:checked})} />
+          <SrCheckbox label="Dry run only" disabled={busy || !parsedOptions} checked={Boolean(parsedOptions?.dryRun)} onChange={checked=>updateOptionField({dryRun:checked || undefined})} />
+        </Stack>
+        <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+          <NumberField label="Worker threads" disabled={busy || !parsedOptions} value={parsedOptions?.threads ?? 4} onChange={e=>updateOptionField({threads:Math.max(1,Number(e.target.value)||1)})} style={{maxWidth:160}} />
+          <SrSelect label="Compression" disabled={busy || !parsedOptions} options={COMPRESSION_OPTIONS} value={parsedOptions?.compression || 'zstd;level=1'} onChange={val=>updateOptionField({compression:val})} style={{minWidth:200}} />
+          <NumberField label="Timeout (seconds)" disabled={busy || !parsedOptions} value={parsedOptions?.timeout_seconds ?? 3600} onChange={e=>updateOptionField({timeout_seconds:Math.max(1,Number(e.target.value)||3600)})} style={{maxWidth:180}} />
+        </Stack>
+        <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+          <TextField size="small" label="Include schemas (comma-separated)" disabled={busy || !parsedOptions} value={Array.isArray(parsedOptions?.include_schemas) ? parsedOptions.include_schemas.join(', ') : ''} onChange={e=>{const list=splitCsvList(e.target.value);updateOptionField({include_schemas:list.length ? list : undefined});}} sx={{minWidth:240,flex:1}} />
+          <TextField size="small" label="Exclude schemas (comma-separated)" disabled={busy || !parsedOptions} value={Array.isArray(parsedOptions?.exclude_schemas) ? parsedOptions.exclude_schemas.join(', ') : ''} onChange={e=>{const list=splitCsvList(e.target.value);updateOptionField({exclude_schemas:list.length ? list : undefined});}} sx={{minWidth:240,flex:1}} />
+        </Stack>
+        <Box component="details">
+          <summary style={{cursor:'pointer',fontSize:12,opacity:0.8}}>Advanced JSON overrides</summary>
+          <Box sx={{mt:1}}>
+            <TextField multiline minRows={5} fullWidth label="Native instance backup options" value={options} disabled={busy}
+              helperText="Instance options include users, include_schemas, exclude_schemas, include_users and exclude_users, together with native schema-dump options. Optional system_state_tables select native system-table checkpoints; system_state_write_pause_confirmed:true acknowledges a server-wide read lock throughout the dump. The application assigns the private output path."
+              onChange={event=>{setOptions(event.target.value);setReview(null);}} />
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
     <Button disabled={busy} onClick={()=>{try {const selected=JSON.parse(options);run('review',{options:selected},value=>{setReview(value);setReceipt(null);setFiles(null);});} catch(failure) {setError(failure.message);}}}>Review full-instance backup</Button>
     <Button disabled={busy} onClick={()=>load(0)}>Load instance backup jobs</Button>
-    {review && <Box>
+    {review && <Box sx={{my:1}}>
       {review.warnings.map(warning=><Alert severity="warning" key={warning}>{warning}</Alert>)}
-      <Box component="pre" aria-label="Instance backup review" sx={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{JSON.stringify({source:review.source,options:review.options,execution_host:review.execution_host},null,2)}</Box>
+      <StructuredPayloadCard
+        title="Reviewed instance backup plan"
+        value={{source:review.source,options:review.options,execution_host:review.execution_host}}
+        rawAriaLabel="Instance backup review"
+      />
       <Button disabled={busy || review.state!=='reviewed'} onClick={()=>run('start',{job_id:review.job_id,review_digest:review.review_digest,confirmed:true},value=>{setReceipt(value);setReview(current=>({...current,state:value.state}));})}>Confirm and start instance backup</Button>
     </Box>}
     {page && <>
@@ -152,7 +209,20 @@ export default function MySQLInstanceBackups({post,endpointUrl}) {
         <TextField size="small" label="Confirm instance backup job identity for removal" value={confirmation} onChange={event=>setConfirmation(event.target.value)} />
         <Button disabled={busy || confirmation!==receipt.job_id || receipt.retention_pinned} onClick={()=>run(receipt.artifact_removal ? 'removal_reconcile' : 'remove_artifact',{job_id:receipt.job_id,confirmation},value=>{setReceipt(value);setFiles(null);})}>{receipt.artifact_removal ? 'Reconcile instance backup removal' : 'Remove instance backup files'}</Button>
       </Box>}
-      <Box component="details"><summary>Native instance backup observations</summary><Box component="pre" sx={{whiteSpace:'pre-wrap',maxHeight:400,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box></Box>
+      <StructuredPayloadCard
+        title="Instance backup receipt summary"
+        value={{
+          job_id:receipt.job_id,
+          state:receipt.state,
+          native_dump_acknowledged:Boolean(receipt.native_dump_acknowledged),
+          retention_pinned:Boolean(receipt.retention_pinned),
+          artifact_removed:Boolean(receipt.artifact_removed),
+          source:receipt.source,
+          execution_host:receipt.execution_host,
+        }}
+        rawText={JSON.stringify(receipt,null,2)}
+        rawDisclosureLabel="Native instance backup observations"
+      />
     </Box>}
   </Box>;
 }

@@ -123,7 +123,6 @@ export default function PostgresqlCatalog({post, databaseTargetId}) {
     {source && <Alert severity="info">An imported or edited document is retained separately from the latest live capture.</Alert>}
     {result && <PostgresqlDataCapture key={databaseTargetId} post={post}
       databaseTargetId={databaseTargetId} objects={result.objects || []} />}
-    <NativeDataImport post={post} databaseTargetId={databaseTargetId} engine="postgresql" objects={result?.objects} />
     {plan && <Box sx={{overflow: 'auto'}}>
       <Alert severity={plan.blockers.length ? 'warning' : 'info'}>Native plan preview: {plan.blockers.length} blockers. Application outcomes are shown in the receipt below.</Alert>
       {plan.application_supported && <Button disabled={busy || receipt?.state === 'unknown_outcome'}

@@ -222,13 +222,57 @@
       "reference": "SR-F-020027",
       "title": "duckdb view descriptor form"
     },
+    "descriptor-form:firebird:authentication-mapping": {
+      "reference": "SR-F-030655",
+      "title": "Firebird authentication mapping descriptor form"
+    },
+    "descriptor-form:firebird:blob-filter": {
+      "reference": "SR-F-030656",
+      "title": "Firebird blob filter descriptor form"
+    },
+    "descriptor-form:firebird:character-set": {
+      "reference": "SR-F-030657",
+      "title": "Firebird character set descriptor form"
+    },
+    "descriptor-form:firebird:collation": {
+      "reference": "SR-F-030658",
+      "title": "Firebird collation descriptor form"
+    },
+    "descriptor-form:firebird:column": {
+      "reference": "SR-F-030659",
+      "title": "Firebird column descriptor form"
+    },
+    "descriptor-form:firebird:configuration": {
+      "reference": "SR-F-030660",
+      "title": "Firebird configuration descriptor form"
+    },
+    "descriptor-form:firebird:constraint": {
+      "reference": "SR-F-030661",
+      "title": "Firebird constraint descriptor form"
+    },
     "descriptor-form:firebird:database": {
       "reference": "SR-F-020028",
       "title": "firebird database descriptor form"
     },
+    "descriptor-form:firebird:exception": {
+      "reference": "SR-F-030662",
+      "title": "Firebird exception descriptor form"
+    },
+    "descriptor-form:firebird:external-function": {
+      "reference": "SR-F-030663",
+      "title": "Firebird external function descriptor form"
+    },
+    "descriptor-form:firebird:global-authentication-mapping": {
+      "reference": "SR-F-030664",
+      "title": "Firebird global authentication mapping descriptor form"
+    },
     "descriptor-form:firebird:index": {
       "reference": "SR-F-020029",
       "title": "firebird index descriptor form"
+    },
+    "descriptor-form:firebird:publication": {
+      "reference": "SR-F-030665",
+      "title": "Firebird publication descriptor form"
     },
     "descriptor-form:firebird:role": {
       "reference": "SR-F-020030",
@@ -245,6 +289,18 @@
     "descriptor-form:firebird:server": {
       "reference": "SR-F-020033",
       "title": "firebird server descriptor form"
+    },
+    "descriptor-form:firebird:service-operation": {
+      "reference": "SR-F-030666",
+      "title": "Firebird service operation descriptor form"
+    },
+    "descriptor-form:firebird:shadow": {
+      "reference": "SR-F-030667",
+      "title": "Firebird shadow descriptor form"
+    },
+    "descriptor-form:firebird:storage-file": {
+      "reference": "SR-F-030668",
+      "title": "Firebird storage file descriptor form"
     },
     "descriptor-form:firebird:table": {
       "reference": "SR-F-020034",
@@ -634,6 +690,1874 @@
       "reference": "SR-F-020122",
       "title": "yugabytedb view descriptor form"
     },
+    "descriptor-operation:cockroachdb:changefeed:add_table": {
+      "reference": "SR-F-030700",
+      "title": "cockroachdb changefeed: Add table to changefeed"
+    },
+    "descriptor-operation:cockroachdb:changefeed:cancel": {
+      "reference": "SR-F-030699",
+      "title": "cockroachdb changefeed: Cancel changefeed"
+    },
+    "descriptor-operation:cockroachdb:changefeed:drop_table": {
+      "reference": "SR-F-030701",
+      "title": "cockroachdb changefeed: Remove table from changefeed"
+    },
+    "descriptor-operation:cockroachdb:changefeed:pause": {
+      "reference": "SR-F-030697",
+      "title": "cockroachdb changefeed: Pause changefeed"
+    },
+    "descriptor-operation:cockroachdb:changefeed:resume": {
+      "reference": "SR-F-030698",
+      "title": "cockroachdb changefeed: Resume changefeed"
+    },
+    "descriptor-operation:cockroachdb:changefeed:set_sink": {
+      "reference": "SR-F-030702",
+      "title": "cockroachdb changefeed: Change changefeed sink"
+    },
+    "descriptor-operation:cockroachdb:cluster-setting:reset": {
+      "reference": "SR-F-030722",
+      "title": "cockroachdb cluster-setting: Reset to default"
+    },
+    "descriptor-operation:cockroachdb:cluster-setting:set_value": {
+      "reference": "SR-F-030721",
+      "title": "cockroachdb cluster-setting: Set cluster setting"
+    },
+    "descriptor-operation:cockroachdb:cluster:restore_database": {
+      "reference": "SR-F-030669",
+      "title": "cockroachdb cluster: Restore database"
+    },
+    "descriptor-operation:cockroachdb:constraint:validate": {
+      "reference": "SR-F-030707",
+      "title": "cockroachdb constraint: Validate constraint"
+    },
+    "descriptor-operation:cockroachdb:database:add_region": {
+      "reference": "SR-F-030675",
+      "title": "cockroachdb database: Add database region"
+    },
+    "descriptor-operation:cockroachdb:database:backup": {
+      "reference": "SR-F-030681",
+      "title": "cockroachdb database: Back up database"
+    },
+    "descriptor-operation:cockroachdb:database:configure_zone": {
+      "reference": "SR-F-030672",
+      "title": "cockroachdb database: Configure database placement"
+    },
+    "descriptor-operation:cockroachdb:database:drop_region": {
+      "reference": "SR-F-030676",
+      "title": "cockroachdb database: Drop database region"
+    },
+    "descriptor-operation:cockroachdb:database:drop_secondary_region": {
+      "reference": "SR-F-030678",
+      "title": "cockroachdb database: Drop secondary region"
+    },
+    "descriptor-operation:cockroachdb:database:grant": {
+      "reference": "SR-F-030712",
+      "title": "cockroachdb database: Grant database privileges"
+    },
+    "descriptor-operation:cockroachdb:database:reset_zone": {
+      "reference": "SR-F-030673",
+      "title": "cockroachdb database: Reset database placement"
+    },
+    "descriptor-operation:cockroachdb:database:revoke": {
+      "reference": "SR-F-030713",
+      "title": "cockroachdb database: Revoke database privileges"
+    },
+    "descriptor-operation:cockroachdb:database:set_placement": {
+      "reference": "SR-F-030680",
+      "title": "cockroachdb database: Set replica placement policy"
+    },
+    "descriptor-operation:cockroachdb:database:set_primary_region": {
+      "reference": "SR-F-030674",
+      "title": "cockroachdb database: Set primary region"
+    },
+    "descriptor-operation:cockroachdb:database:set_secondary_region": {
+      "reference": "SR-F-030677",
+      "title": "cockroachdb database: Set secondary region"
+    },
+    "descriptor-operation:cockroachdb:database:set_survival_goal": {
+      "reference": "SR-F-030679",
+      "title": "cockroachdb database: Set survival goal"
+    },
+    "descriptor-operation:cockroachdb:index:scatter": {
+      "reference": "SR-F-030687",
+      "title": "cockroachdb index: Scatter index ranges"
+    },
+    "descriptor-operation:cockroachdb:job:cancel": {
+      "reference": "SR-F-030694",
+      "title": "cockroachdb job: Cancel job"
+    },
+    "descriptor-operation:cockroachdb:job:pause": {
+      "reference": "SR-F-030692",
+      "title": "cockroachdb job: Pause job"
+    },
+    "descriptor-operation:cockroachdb:job:resume": {
+      "reference": "SR-F-030693",
+      "title": "cockroachdb job: Resume job"
+    },
+    "descriptor-operation:cockroachdb:materialized-view:refresh": {
+      "reference": "SR-F-030688",
+      "title": "cockroachdb materialized-view: Refresh materialized view"
+    },
+    "descriptor-operation:cockroachdb:node:decommission": {
+      "reference": "SR-F-030670",
+      "title": "cockroachdb node: Decommission node"
+    },
+    "descriptor-operation:cockroachdb:node:recommission": {
+      "reference": "SR-F-030671",
+      "title": "cockroachdb node: Recommission node"
+    },
+    "descriptor-operation:cockroachdb:range:relocate_lease": {
+      "reference": "SR-F-030689",
+      "title": "cockroachdb range: Relocate range lease"
+    },
+    "descriptor-operation:cockroachdb:range:relocate_nonvoter": {
+      "reference": "SR-F-030691",
+      "title": "cockroachdb range: Relocate non-voting replica"
+    },
+    "descriptor-operation:cockroachdb:range:relocate_voter": {
+      "reference": "SR-F-030690",
+      "title": "cockroachdb range: Relocate voting replica"
+    },
+    "descriptor-operation:cockroachdb:role:grant_system": {
+      "reference": "SR-F-030723",
+      "title": "cockroachdb role: Grant system privileges"
+    },
+    "descriptor-operation:cockroachdb:role:reset_setting": {
+      "reference": "SR-F-030709",
+      "title": "cockroachdb role: Reset default setting"
+    },
+    "descriptor-operation:cockroachdb:role:revoke_system": {
+      "reference": "SR-F-030724",
+      "title": "cockroachdb role: Revoke system privileges"
+    },
+    "descriptor-operation:cockroachdb:role:set_setting": {
+      "reference": "SR-F-030708",
+      "title": "cockroachdb role: Set default setting"
+    },
+    "descriptor-operation:cockroachdb:schedule:pause": {
+      "reference": "SR-F-030695",
+      "title": "cockroachdb schedule: Pause schedule"
+    },
+    "descriptor-operation:cockroachdb:schedule:resume": {
+      "reference": "SR-F-030696",
+      "title": "cockroachdb schedule: Resume schedule"
+    },
+    "descriptor-operation:cockroachdb:schema:grant": {
+      "reference": "SR-F-030714",
+      "title": "cockroachdb schema: Grant schema privileges"
+    },
+    "descriptor-operation:cockroachdb:schema:revoke": {
+      "reference": "SR-F-030715",
+      "title": "cockroachdb schema: Revoke schema privileges"
+    },
+    "descriptor-operation:cockroachdb:session:terminate_connection": {
+      "reference": "SR-F-030719",
+      "title": "cockroachdb session: Terminate session"
+    },
+    "descriptor-operation:cockroachdb:session:terminate_query": {
+      "reference": "SR-F-030718",
+      "title": "cockroachdb session: Cancel running statement"
+    },
+    "descriptor-operation:cockroachdb:table:analyze": {
+      "reference": "SR-F-030704",
+      "title": "cockroachdb table: Analyze table"
+    },
+    "descriptor-operation:cockroachdb:table:configure_zone": {
+      "reference": "SR-F-030682",
+      "title": "cockroachdb table: Configure table placement"
+    },
+    "descriptor-operation:cockroachdb:table:create_changefeed": {
+      "reference": "SR-F-030686",
+      "title": "cockroachdb table: Create table changefeed"
+    },
+    "descriptor-operation:cockroachdb:table:repartition": {
+      "reference": "SR-F-030720",
+      "title": "cockroachdb table: Repartition"
+    },
+    "descriptor-operation:cockroachdb:table:reset_storage_parameter": {
+      "reference": "SR-F-030729",
+      "title": "cockroachdb table: Reset storage parameter"
+    },
+    "descriptor-operation:cockroachdb:table:reset_zone": {
+      "reference": "SR-F-030683",
+      "title": "cockroachdb table: Reset table placement"
+    },
+    "descriptor-operation:cockroachdb:table:scatter": {
+      "reference": "SR-F-030685",
+      "title": "cockroachdb table: Scatter table ranges"
+    },
+    "descriptor-operation:cockroachdb:table:set_locality": {
+      "reference": "SR-F-030684",
+      "title": "cockroachdb table: Set table locality"
+    },
+    "descriptor-operation:cockroachdb:table:set_owner": {
+      "reference": "SR-F-030706",
+      "title": "cockroachdb table: Change owner"
+    },
+    "descriptor-operation:cockroachdb:table:set_schema": {
+      "reference": "SR-F-030705",
+      "title": "cockroachdb table: Move to schema"
+    },
+    "descriptor-operation:cockroachdb:table:set_storage_parameter": {
+      "reference": "SR-F-030728",
+      "title": "cockroachdb table: Set storage parameter"
+    },
+    "descriptor-operation:cockroachdb:table:split_at": {
+      "reference": "SR-F-030727",
+      "title": "cockroachdb table: Split ranges at"
+    },
+    "descriptor-operation:cockroachdb:table:truncate": {
+      "reference": "SR-F-030703",
+      "title": "cockroachdb table: Truncate table"
+    },
+    "descriptor-operation:cockroachdb:type:grant": {
+      "reference": "SR-F-030716",
+      "title": "cockroachdb type: Grant type privileges"
+    },
+    "descriptor-operation:cockroachdb:type:revoke": {
+      "reference": "SR-F-030717",
+      "title": "cockroachdb type: Revoke type privileges"
+    },
+    "descriptor-operation:cockroachdb:user:grant_system": {
+      "reference": "SR-F-030725",
+      "title": "cockroachdb user: Grant system privileges"
+    },
+    "descriptor-operation:cockroachdb:user:reset_setting": {
+      "reference": "SR-F-030711",
+      "title": "cockroachdb user: Reset default setting"
+    },
+    "descriptor-operation:cockroachdb:user:revoke_system": {
+      "reference": "SR-F-030726",
+      "title": "cockroachdb user: Revoke system privileges"
+    },
+    "descriptor-operation:cockroachdb:user:set_setting": {
+      "reference": "SR-F-030710",
+      "title": "cockroachdb user: Set default setting"
+    },
+    "descriptor-operation:dolt:backup:sync": {
+      "reference": "SR-F-030751",
+      "title": "dolt backup: Synchronize backup"
+    },
+    "descriptor-operation:dolt:branch:copy": {
+      "reference": "SR-F-030732",
+      "title": "dolt branch: Copy branch"
+    },
+    "descriptor-operation:dolt:branch:set_default": {
+      "reference": "SR-F-030731",
+      "title": "dolt branch: Make default branch"
+    },
+    "descriptor-operation:dolt:commit:cherry_pick": {
+      "reference": "SR-F-030733",
+      "title": "dolt commit: Cherry-pick commit"
+    },
+    "descriptor-operation:dolt:commit:revert": {
+      "reference": "SR-F-030734",
+      "title": "dolt commit: Revert commit"
+    },
+    "descriptor-operation:dolt:conflict:resolve": {
+      "reference": "SR-F-030750",
+      "title": "dolt conflict: Resolve table conflicts"
+    },
+    "descriptor-operation:dolt:database:restore_backup": {
+      "reference": "SR-F-030730",
+      "title": "dolt database: Restore backup as database"
+    },
+    "descriptor-operation:dolt:merge:abort": {
+      "reference": "SR-F-030746",
+      "title": "dolt merge: Abort merge"
+    },
+    "descriptor-operation:dolt:merge:start": {
+      "reference": "SR-F-030745",
+      "title": "dolt merge: Merge revision"
+    },
+    "descriptor-operation:dolt:rebase:abort": {
+      "reference": "SR-F-030749",
+      "title": "dolt rebase: Abort rebase"
+    },
+    "descriptor-operation:dolt:rebase:continue": {
+      "reference": "SR-F-030748",
+      "title": "dolt rebase: Continue rebase"
+    },
+    "descriptor-operation:dolt:rebase:start": {
+      "reference": "SR-F-030747",
+      "title": "dolt rebase: Start rebase"
+    },
+    "descriptor-operation:dolt:remote:fetch": {
+      "reference": "SR-F-030735",
+      "title": "dolt remote: Fetch remote"
+    },
+    "descriptor-operation:dolt:remote:pull": {
+      "reference": "SR-F-030736",
+      "title": "dolt remote: Pull remote"
+    },
+    "descriptor-operation:dolt:remote:push": {
+      "reference": "SR-F-030737",
+      "title": "dolt remote: Push to remote"
+    },
+    "descriptor-operation:dolt:role:grant": {
+      "reference": "SR-F-030754",
+      "title": "dolt role: Grant role membership"
+    },
+    "descriptor-operation:dolt:role:revoke": {
+      "reference": "SR-F-030755",
+      "title": "dolt role: Revoke role membership"
+    },
+    "descriptor-operation:dolt:session:terminate_connection": {
+      "reference": "SR-F-030757",
+      "title": "dolt session: Terminate connection"
+    },
+    "descriptor-operation:dolt:session:terminate_query": {
+      "reference": "SR-F-030756",
+      "title": "dolt session: Terminate running statement"
+    },
+    "descriptor-operation:dolt:system-variable:set_global": {
+      "reference": "SR-F-030758",
+      "title": "dolt system-variable: Set global value"
+    },
+    "descriptor-operation:dolt:table:analyze": {
+      "reference": "SR-F-030753",
+      "title": "dolt table: Analyze table"
+    },
+    "descriptor-operation:dolt:table:set_options": {
+      "reference": "SR-F-030752",
+      "title": "dolt table: Set table options"
+    },
+    "descriptor-operation:dolt:working-set:clean": {
+      "reference": "SR-F-030744",
+      "title": "dolt working-set: Remove untracked tables"
+    },
+    "descriptor-operation:dolt:working-set:commit": {
+      "reference": "SR-F-030738",
+      "title": "dolt working-set: Commit working set"
+    },
+    "descriptor-operation:dolt:working-set:reset_hard": {
+      "reference": "SR-F-030742",
+      "title": "dolt working-set: Reset working set and staging"
+    },
+    "descriptor-operation:dolt:working-set:reset_soft": {
+      "reference": "SR-F-030743",
+      "title": "dolt working-set: Move HEAD without changing tables"
+    },
+    "descriptor-operation:dolt:working-set:stage_all": {
+      "reference": "SR-F-030740",
+      "title": "dolt working-set: Stage all changes"
+    },
+    "descriptor-operation:dolt:working-set:stage_tables": {
+      "reference": "SR-F-030739",
+      "title": "dolt working-set: Stage table changes"
+    },
+    "descriptor-operation:dolt:working-set:unstage_tables": {
+      "reference": "SR-F-030741",
+      "title": "dolt working-set: Unstage table changes"
+    },
+    "descriptor-operation:duckdb:database:analyze": {
+      "reference": "SR-F-030762",
+      "title": "duckdb database: Analyze"
+    },
+    "descriptor-operation:duckdb:database:checkpoint": {
+      "reference": "SR-F-030759",
+      "title": "duckdb database: Checkpoint"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_apply": {
+      "reference": "SR-F-030770",
+      "title": "duckdb database: Apply reviewed attachment"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_discard": {
+      "reference": "SR-F-030772",
+      "title": "duckdb database: Discard attachment review"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_inventory": {
+      "reference": "SR-F-030767",
+      "title": "duckdb database: Inspect attached catalogs"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_receipt": {
+      "reference": "SR-F-030771",
+      "title": "duckdb database: Inspect attachment receipt"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_review_attach": {
+      "reference": "SR-F-030768",
+      "title": "duckdb database: Review catalog attachment"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_review_detach": {
+      "reference": "SR-F-030769",
+      "title": "duckdb database: Review catalog detachment"
+    },
+    "descriptor-operation:duckdb:database:editor_attachment_review_rename": {
+      "reference": "SR-F-030792",
+      "title": "duckdb database: Review native attached catalog alias change"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_apply": {
+      "reference": "SR-F-030780",
+      "title": "duckdb database: Apply reviewed database copy"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_cancel": {
+      "reference": "SR-F-030782",
+      "title": "duckdb database: Cancel database copy"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_discard": {
+      "reference": "SR-F-030783",
+      "title": "duckdb database: Discard database-copy review"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_inventory": {
+      "reference": "SR-F-030778",
+      "title": "duckdb database: Inspect copy catalogs"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_receipt": {
+      "reference": "SR-F-030781",
+      "title": "duckdb database: Inspect database-copy progress"
+    },
+    "descriptor-operation:duckdb:database:editor_copy_review": {
+      "reference": "SR-F-030779",
+      "title": "duckdb database: Review database copy"
+    },
+    "descriptor-operation:duckdb:database:editor_extension_apply": {
+      "reference": "SR-F-030776",
+      "title": "duckdb database: Apply reviewed extension change"
+    },
+    "descriptor-operation:duckdb:database:editor_extension_inventory": {
+      "reference": "SR-F-030773",
+      "title": "duckdb database: Inspect extension capabilities"
+    },
+    "descriptor-operation:duckdb:database:editor_extension_receipt": {
+      "reference": "SR-F-030777",
+      "title": "duckdb database: Inspect extension receipt"
+    },
+    "descriptor-operation:duckdb:database:editor_extension_review_install": {
+      "reference": "SR-F-030774",
+      "title": "duckdb database: Review extension installation"
+    },
+    "descriptor-operation:duckdb:database:editor_extension_review_load": {
+      "reference": "SR-F-030775",
+      "title": "duckdb database: Review extension loading"
+    },
+    "descriptor-operation:duckdb:database:editor_receipt_get": {
+      "reference": "SR-F-030790",
+      "title": "duckdb database: Inspect archived operation receipt"
+    },
+    "descriptor-operation:duckdb:database:editor_receipt_list": {
+      "reference": "SR-F-030789",
+      "title": "duckdb database: List archived operation receipts"
+    },
+    "descriptor-operation:duckdb:database:editor_receipt_release": {
+      "reference": "SR-F-030791",
+      "title": "duckdb database: Release original query connection"
+    },
+    "descriptor-operation:duckdb:database:editor_secret_apply": {
+      "reference": "SR-F-030787",
+      "title": "duckdb database: Apply reviewed session secret change"
+    },
+    "descriptor-operation:duckdb:database:editor_secret_inventory": {
+      "reference": "SR-F-030784",
+      "title": "duckdb database: Inspect session secret identities"
+    },
+    "descriptor-operation:duckdb:database:editor_secret_receipts": {
+      "reference": "SR-F-030788",
+      "title": "duckdb database: Inspect session secret operation receipts"
+    },
+    "descriptor-operation:duckdb:database:editor_secret_review_create": {
+      "reference": "SR-F-030785",
+      "title": "duckdb database: Review session secret creation"
+    },
+    "descriptor-operation:duckdb:database:editor_secret_review_drop": {
+      "reference": "SR-F-030786",
+      "title": "duckdb database: Review session secret removal"
+    },
+    "descriptor-operation:duckdb:database:export_database": {
+      "reference": "SR-F-030763",
+      "title": "duckdb database: Export database"
+    },
+    "descriptor-operation:duckdb:database:force_checkpoint": {
+      "reference": "SR-F-030760",
+      "title": "duckdb database: Force checkpoint"
+    },
+    "descriptor-operation:duckdb:database:import_database": {
+      "reference": "SR-F-030764",
+      "title": "duckdb database: Import database"
+    },
+    "descriptor-operation:duckdb:database:update_extensions": {
+      "reference": "SR-F-030765",
+      "title": "duckdb database: Update all installed extensions"
+    },
+    "descriptor-operation:duckdb:database:vacuum": {
+      "reference": "SR-F-030761",
+      "title": "duckdb database: Vacuum"
+    },
+    "descriptor-operation:duckdb:extension:execute": {
+      "reference": "SR-F-030766",
+      "title": "duckdb extension: Install or load extension"
+    },
+    "descriptor-operation:immudb:database:compact_index": {
+      "reference": "SR-F-030799",
+      "title": "immudb database: Compact database index"
+    },
+    "descriptor-operation:immudb:database:flush_index": {
+      "reference": "SR-F-030798",
+      "title": "immudb database: Flush database index"
+    },
+    "descriptor-operation:immudb:database:load": {
+      "reference": "SR-F-030796",
+      "title": "immudb database: Load database"
+    },
+    "descriptor-operation:immudb:database:truncate_history": {
+      "reference": "SR-F-030800",
+      "title": "immudb database: Truncate retained history"
+    },
+    "descriptor-operation:immudb:database:unload": {
+      "reference": "SR-F-030797",
+      "title": "immudb database: Unload database"
+    },
+    "descriptor-operation:immudb:database:update_settings": {
+      "reference": "SR-F-030795",
+      "title": "immudb database: Update database settings"
+    },
+    "descriptor-operation:immudb:permission:grant_sql": {
+      "reference": "SR-F-030803",
+      "title": "immudb permission: Grant SQL privileges"
+    },
+    "descriptor-operation:immudb:permission:revoke_sql": {
+      "reference": "SR-F-030804",
+      "title": "immudb permission: Revoke SQL privileges"
+    },
+    "descriptor-operation:immudb:server:health": {
+      "reference": "SR-F-030793",
+      "title": "immudb server: Inspect server health"
+    },
+    "descriptor-operation:immudb:server:load_database": {
+      "reference": "SR-F-030794",
+      "title": "immudb server: Load database by name"
+    },
+    "descriptor-operation:immudb:user:change_password": {
+      "reference": "SR-F-030801",
+      "title": "immudb user: Change user password"
+    },
+    "descriptor-operation:immudb:user:set_active": {
+      "reference": "SR-F-030802",
+      "title": "immudb user: Set user activation"
+    },
+    "descriptor-operation:sqlite:database:analyze": {
+      "reference": "SR-F-030813",
+      "title": "sqlite database: Analyze"
+    },
+    "descriptor-operation:sqlite:database:analyze_original_session": {
+      "reference": "SR-F-030876",
+      "title": "sqlite database: Analyze original session"
+    },
+    "descriptor-operation:sqlite:database:backup": {
+      "reference": "SR-F-030805",
+      "title": "sqlite database: Back up database"
+    },
+    "descriptor-operation:sqlite:database:configuration_capabilities": {
+      "reference": "SR-F-030898",
+      "title": "sqlite database: Connection configuration capabilities"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_cancel": {
+      "reference": "SR-F-030951",
+      "title": "sqlite database: Apply Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_catalog": {
+      "reference": "SR-F-030956",
+      "title": "sqlite database: Apply Catalog"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_conflict": {
+      "reference": "SR-F-030990",
+      "title": "sqlite database: Apply Conflict"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_decide": {
+      "reference": "SR-F-030991",
+      "title": "sqlite database: Apply Decide"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_files": {
+      "reference": "SR-F-030953",
+      "title": "sqlite database: Apply Files"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_list": {
+      "reference": "SR-F-030949",
+      "title": "sqlite database: Apply List"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_reconcile": {
+      "reference": "SR-F-030952",
+      "title": "sqlite database: Apply Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_remove_artifact": {
+      "reference": "SR-F-030954",
+      "title": "sqlite database: Apply Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_review": {
+      "reference": "SR-F-030989",
+      "title": "sqlite database: Apply Review"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_sources": {
+      "reference": "SR-F-030988",
+      "title": "sqlite database: Apply Sources"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_start": {
+      "reference": "SR-F-030955",
+      "title": "sqlite database: Apply Start"
+    },
+    "descriptor-operation:sqlite:database:editor_apply_status": {
+      "reference": "SR-F-030950",
+      "title": "sqlite database: Apply Status"
+    },
+    "descriptor-operation:sqlite:database:editor_array_close": {
+      "reference": "SR-F-030916",
+      "title": "sqlite database: Release typed array"
+    },
+    "descriptor-operation:sqlite:database:editor_array_create": {
+      "reference": "SR-F-030914",
+      "title": "sqlite database: Create typed array"
+    },
+    "descriptor-operation:sqlite:database:editor_array_inventory": {
+      "reference": "SR-F-030913",
+      "title": "sqlite database: Typed array inventory"
+    },
+    "descriptor-operation:sqlite:database:editor_array_status": {
+      "reference": "SR-F-030915",
+      "title": "sqlite database: Inspect typed array"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_attach": {
+      "reference": "SR-F-030937",
+      "title": "sqlite database: Capture Attach"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_close": {
+      "reference": "SR-F-030936",
+      "title": "sqlite database: Capture Close"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_configure": {
+      "reference": "SR-F-030938",
+      "title": "sqlite database: Capture Configure"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_diff": {
+      "reference": "SR-F-030940",
+      "title": "sqlite database: Capture Diff"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_inventory": {
+      "reference": "SR-F-030933",
+      "title": "sqlite database: Capture Inventory"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_object_config": {
+      "reference": "SR-F-030939",
+      "title": "sqlite database: Capture Object Config"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_open": {
+      "reference": "SR-F-030934",
+      "title": "sqlite database: Capture Open"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_status": {
+      "reference": "SR-F-030935",
+      "title": "sqlite database: Capture Status"
+    },
+    "descriptor-operation:sqlite:database:editor_capture_table_filter": {
+      "reference": "SR-F-030941",
+      "title": "sqlite database: Capture Table Filter"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_apply": {
+      "reference": "SR-F-031006",
+      "title": "sqlite database: Download native apply"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_conflict_value": {
+      "reference": "SR-F-031011",
+      "title": "sqlite database: Download native conflict value"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_diff": {
+      "reference": "SR-F-031009",
+      "title": "sqlite database: Download native diff"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_export": {
+      "reference": "SR-F-031005",
+      "title": "sqlite database: Download native export"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_inspection": {
+      "reference": "SR-F-031008",
+      "title": "sqlite database: Download native inspection"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_transform": {
+      "reference": "SR-F-031007",
+      "title": "sqlite database: Download native transform"
+    },
+    "descriptor-operation:sqlite:database:editor_delivery_upload": {
+      "reference": "SR-F-031010",
+      "title": "sqlite database: Download native upload"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_cancel": {
+      "reference": "SR-F-030975",
+      "title": "sqlite database: Diff Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_catalog": {
+      "reference": "SR-F-030999",
+      "title": "sqlite database: Diff Catalog"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_files": {
+      "reference": "SR-F-030977",
+      "title": "sqlite database: Diff Files"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_list": {
+      "reference": "SR-F-030973",
+      "title": "sqlite database: Diff List"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_reconcile": {
+      "reference": "SR-F-030976",
+      "title": "sqlite database: Diff Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_remove_artifact": {
+      "reference": "SR-F-030978",
+      "title": "sqlite database: Diff Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_review": {
+      "reference": "SR-F-031001",
+      "title": "sqlite database: Diff Review"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_start": {
+      "reference": "SR-F-030979",
+      "title": "sqlite database: Diff Start"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_status": {
+      "reference": "SR-F-030974",
+      "title": "sqlite database: Diff Status"
+    },
+    "descriptor-operation:sqlite:database:editor_diff_tables": {
+      "reference": "SR-F-031000",
+      "title": "sqlite database: Diff Tables"
+    },
+    "descriptor-operation:sqlite:database:editor_export_cancel": {
+      "reference": "SR-F-030944",
+      "title": "sqlite database: Export Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_export_files": {
+      "reference": "SR-F-030946",
+      "title": "sqlite database: Export Files"
+    },
+    "descriptor-operation:sqlite:database:editor_export_list": {
+      "reference": "SR-F-030942",
+      "title": "sqlite database: Export List"
+    },
+    "descriptor-operation:sqlite:database:editor_export_reconcile": {
+      "reference": "SR-F-030945",
+      "title": "sqlite database: Export Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_export_remove_artifact": {
+      "reference": "SR-F-030947",
+      "title": "sqlite database: Export Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_export_review": {
+      "reference": "SR-F-030987",
+      "title": "sqlite database: Export Review"
+    },
+    "descriptor-operation:sqlite:database:editor_export_start": {
+      "reference": "SR-F-030948",
+      "title": "sqlite database: Export Start"
+    },
+    "descriptor-operation:sqlite:database:editor_export_status": {
+      "reference": "SR-F-030943",
+      "title": "sqlite database: Export Status"
+    },
+    "descriptor-operation:sqlite:database:editor_extension_inventory": {
+      "reference": "SR-F-030909",
+      "title": "sqlite database: Approved extension inventory"
+    },
+    "descriptor-operation:sqlite:database:editor_extension_load": {
+      "reference": "SR-F-030911",
+      "title": "sqlite database: Load reviewed extension"
+    },
+    "descriptor-operation:sqlite:database:editor_extension_receipt": {
+      "reference": "SR-F-030912",
+      "title": "sqlite database: Extension load receipt"
+    },
+    "descriptor-operation:sqlite:database:editor_extension_review": {
+      "reference": "SR-F-030910",
+      "title": "sqlite database: Review extension load"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_cancel": {
+      "reference": "SR-F-030967",
+      "title": "sqlite database: Inspection Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_catalog": {
+      "reference": "SR-F-030972",
+      "title": "sqlite database: Inspection Catalog"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_files": {
+      "reference": "SR-F-030969",
+      "title": "sqlite database: Inspection Files"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_list": {
+      "reference": "SR-F-030965",
+      "title": "sqlite database: Inspection List"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_reconcile": {
+      "reference": "SR-F-030968",
+      "title": "sqlite database: Inspection Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_remove_artifact": {
+      "reference": "SR-F-030970",
+      "title": "sqlite database: Inspection Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_result": {
+      "reference": "SR-F-030998",
+      "title": "sqlite database: Inspection Result"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_review_cell": {
+      "reference": "SR-F-030996",
+      "title": "sqlite database: Inspection Review Cell"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_review_extract": {
+      "reference": "SR-F-030997",
+      "title": "sqlite database: Inspection Review Extract"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_review_page": {
+      "reference": "SR-F-030995",
+      "title": "sqlite database: Inspection Review Page"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_start": {
+      "reference": "SR-F-030971",
+      "title": "sqlite database: Inspection Start"
+    },
+    "descriptor-operation:sqlite:database:editor_inspection_status": {
+      "reference": "SR-F-030966",
+      "title": "sqlite database: Inspection Status"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_clear": {
+      "reference": "SR-F-030922",
+      "title": "sqlite database: Clear preupdate observations"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_events": {
+      "reference": "SR-F-030920",
+      "title": "sqlite database: Read preupdate observations"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_inventory": {
+      "reference": "SR-F-030917",
+      "title": "sqlite database: Preupdate diagnostics availability"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_start": {
+      "reference": "SR-F-030918",
+      "title": "sqlite database: Start preupdate observations"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_status": {
+      "reference": "SR-F-030919",
+      "title": "sqlite database: Preupdate observation status"
+    },
+    "descriptor-operation:sqlite:database:editor_preupdate_stop": {
+      "reference": "SR-F-030921",
+      "title": "sqlite database: Stop preupdate observations"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_alter": {
+      "reference": "SR-F-030925",
+      "title": "sqlite database: Generate table alterations"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_capture": {
+      "reference": "SR-F-030923",
+      "title": "sqlite database: Capture original-session DDN"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_columns": {
+      "reference": "SR-F-030924",
+      "title": "sqlite database: Generate column additions"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_preview": {
+      "reference": "SR-F-030926",
+      "title": "sqlite database: Preview original-session DDN changes"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_receipt_cancel": {
+      "reference": "SR-F-030931",
+      "title": "sqlite database: Cancel original-session DDN application"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_receipt_list": {
+      "reference": "SR-F-030929",
+      "title": "sqlite database: Recent original-session DDN receipts"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_receipt_receipt": {
+      "reference": "SR-F-030930",
+      "title": "sqlite database: Inspect original-session DDN receipt"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_receipt_remove": {
+      "reference": "SR-F-030932",
+      "title": "sqlite database: Remove original-session DDN receipt"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_review": {
+      "reference": "SR-F-030927",
+      "title": "sqlite database: Review original-session DDN changes"
+    },
+    "descriptor-operation:sqlite:database:editor_schema_start": {
+      "reference": "SR-F-030928",
+      "title": "sqlite database: Apply reviewed original-session DDN"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_cancel": {
+      "reference": "SR-F-030959",
+      "title": "sqlite database: Transform Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_catalog": {
+      "reference": "SR-F-030964",
+      "title": "sqlite database: Transform Catalog"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_files": {
+      "reference": "SR-F-030961",
+      "title": "sqlite database: Transform Files"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_list": {
+      "reference": "SR-F-030957",
+      "title": "sqlite database: Transform List"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_reconcile": {
+      "reference": "SR-F-030960",
+      "title": "sqlite database: Transform Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_remove_artifact": {
+      "reference": "SR-F-030962",
+      "title": "sqlite database: Transform Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_review": {
+      "reference": "SR-F-030992",
+      "title": "sqlite database: Transform Review"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_schemas": {
+      "reference": "SR-F-030993",
+      "title": "sqlite database: Transform Schemas"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_sources": {
+      "reference": "SR-F-030994",
+      "title": "sqlite database: Transform Sources"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_start": {
+      "reference": "SR-F-030963",
+      "title": "sqlite database: Transform Start"
+    },
+    "descriptor-operation:sqlite:database:editor_transform_status": {
+      "reference": "SR-F-030958",
+      "title": "sqlite database: Transform Status"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_cancel": {
+      "reference": "SR-F-030982",
+      "title": "sqlite database: Upload Cancel"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_catalog": {
+      "reference": "SR-F-030986",
+      "title": "sqlite database: Upload Catalog"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_chunk": {
+      "reference": "SR-F-031003",
+      "title": "sqlite database: Upload Chunk"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_create": {
+      "reference": "SR-F-031002",
+      "title": "sqlite database: Upload Create"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_files": {
+      "reference": "SR-F-030984",
+      "title": "sqlite database: Upload Files"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_list": {
+      "reference": "SR-F-030980",
+      "title": "sqlite database: Upload List"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_reconcile": {
+      "reference": "SR-F-030983",
+      "title": "sqlite database: Upload Reconcile"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_remove_artifact": {
+      "reference": "SR-F-030985",
+      "title": "sqlite database: Upload Remove Artifact"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_seal": {
+      "reference": "SR-F-031004",
+      "title": "sqlite database: Upload Seal"
+    },
+    "descriptor-operation:sqlite:database:editor_upload_status": {
+      "reference": "SR-F-030981",
+      "title": "sqlite database: Upload Status"
+    },
+    "descriptor-operation:sqlite:database:expert_index_advisor": {
+      "reference": "SR-F-031013",
+      "title": "sqlite database: Expert index advisor (preview-only)"
+    },
+    "descriptor-operation:sqlite:database:foreign_key_check": {
+      "reference": "SR-F-030809",
+      "title": "sqlite database: Check foreign keys"
+    },
+    "descriptor-operation:sqlite:database:incremental_integrity_check": {
+      "reference": "SR-F-031014",
+      "title": "sqlite database: Incremental integrity check"
+    },
+    "descriptor-operation:sqlite:database:incremental_vacuum": {
+      "reference": "SR-F-030811",
+      "title": "sqlite database: Incremental vacuum"
+    },
+    "descriptor-operation:sqlite:database:integrity_check": {
+      "reference": "SR-F-030807",
+      "title": "sqlite database: Integrity check"
+    },
+    "descriptor-operation:sqlite:database:optimize": {
+      "reference": "SR-F-030812",
+      "title": "sqlite database: Optimize"
+    },
+    "descriptor-operation:sqlite:database:quick_check": {
+      "reference": "SR-F-030808",
+      "title": "sqlite database: Quick check"
+    },
+    "descriptor-operation:sqlite:database:rbu_resumable_bulk_update": {
+      "reference": "SR-F-031012",
+      "title": "sqlite database: Resumable bulk update & vacuum (RBU)"
+    },
+    "descriptor-operation:sqlite:database:reindex": {
+      "reference": "SR-F-030814",
+      "title": "sqlite database: Reindex"
+    },
+    "descriptor-operation:sqlite:database:reindex_original_session": {
+      "reference": "SR-F-030875",
+      "title": "sqlite database: Reindex original session"
+    },
+    "descriptor-operation:sqlite:database:restore": {
+      "reference": "SR-F-030806",
+      "title": "sqlite database: Restore database"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_defensive": {
+      "reference": "SR-F-030856",
+      "title": "sqlite database: Set original connection defensive"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_dqs_ddl": {
+      "reference": "SR-F-030860",
+      "title": "sqlite database: Set original connection dqs ddl"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_dqs_dml": {
+      "reference": "SR-F-030859",
+      "title": "sqlite database: Set original connection dqs dml"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_attach_create": {
+      "reference": "SR-F-030892",
+      "title": "sqlite database: Configure enable attach create"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_attach_write": {
+      "reference": "SR-F-030893",
+      "title": "sqlite database: Configure enable attach write"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_comments": {
+      "reference": "SR-F-030894",
+      "title": "sqlite database: Configure enable comments"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_fkey": {
+      "reference": "SR-F-030848",
+      "title": "sqlite database: Set original connection enable fkey"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_fts3_tokenizer": {
+      "reference": "SR-F-030850",
+      "title": "sqlite database: Set original connection enable fts3 tokenizer"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_load_extension": {
+      "reference": "SR-F-030851",
+      "title": "sqlite database: Set original connection enable load extension"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_qpsg": {
+      "reference": "SR-F-030853",
+      "title": "sqlite database: Set original connection enable qpsg"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_trigger": {
+      "reference": "SR-F-030849",
+      "title": "sqlite database: Set original connection enable trigger"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_enable_view": {
+      "reference": "SR-F-030861",
+      "title": "sqlite database: Set original connection enable view"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_fp_digits": {
+      "reference": "SR-F-030897",
+      "title": "sqlite database: Floating-point text digits"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_legacy_alter_table": {
+      "reference": "SR-F-030858",
+      "title": "sqlite database: Set original connection legacy alter table"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_legacy_file_format": {
+      "reference": "SR-F-030862",
+      "title": "sqlite database: Set original connection legacy file format"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_lookaside": {
+      "reference": "SR-F-030896",
+      "title": "sqlite database: Configure lookaside"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_main_dbname": {
+      "reference": "SR-F-030895",
+      "title": "sqlite database: Configure main dbname"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_no_ckpt_on_close": {
+      "reference": "SR-F-030852",
+      "title": "sqlite database: Set original connection no ckpt on close"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_reset_database": {
+      "reference": "SR-F-030855",
+      "title": "sqlite database: Set original connection reset database"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_reverse_scanorder": {
+      "reference": "SR-F-030891",
+      "title": "sqlite database: Configure reverse scanorder"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_stmt_scanstatus": {
+      "reference": "SR-F-030890",
+      "title": "sqlite database: Configure stmt scanstatus"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_trigger_eqp": {
+      "reference": "SR-F-030854",
+      "title": "sqlite database: Set original connection trigger eqp"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_trusted_schema": {
+      "reference": "SR-F-030863",
+      "title": "sqlite database: Set original connection trusted schema"
+    },
+    "descriptor-operation:sqlite:database:set_connection_config_writable_schema": {
+      "reference": "SR-F-030857",
+      "title": "sqlite database: Set original connection writable schema"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_attached": {
+      "reference": "SR-F-030829",
+      "title": "sqlite database: Set original connection attached database count"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_column": {
+      "reference": "SR-F-030825",
+      "title": "sqlite database: Set original connection column count limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_compound_select": {
+      "reference": "SR-F-030827",
+      "title": "sqlite database: Set original connection compound select term limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_expr_depth": {
+      "reference": "SR-F-030826",
+      "title": "sqlite database: Set original connection expression depth limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_function_arg": {
+      "reference": "SR-F-030828",
+      "title": "sqlite database: Set original connection function argument count"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_length": {
+      "reference": "SR-F-030823",
+      "title": "sqlite database: Set original connection value and row byte limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_like_pattern_length": {
+      "reference": "SR-F-030830",
+      "title": "sqlite database: Set original connection like/glob pattern length"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_sql_length": {
+      "reference": "SR-F-030824",
+      "title": "sqlite database: Set original connection sql source byte limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_trigger_depth": {
+      "reference": "SR-F-030832",
+      "title": "sqlite database: Set original connection trigger depth"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_variable_number": {
+      "reference": "SR-F-030831",
+      "title": "sqlite database: Set original connection sql parameter number"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_vdbe_op": {
+      "reference": "SR-F-030843",
+      "title": "sqlite database: Set original connection virtual-machine opcode budget"
+    },
+    "descriptor-operation:sqlite:database:set_connection_limit_worker_threads": {
+      "reference": "SR-F-030844",
+      "title": "sqlite database: Set original connection auxiliary worker thread budget"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_analysis_limit": {
+      "reference": "SR-F-030847",
+      "title": "sqlite database: Set original connection analyze sampling limit (rows per index)"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_automatic_index": {
+      "reference": "SR-F-030838",
+      "title": "sqlite database: Set original connection automatic indexes"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_busy_timeout": {
+      "reference": "SR-F-030845",
+      "title": "sqlite database: Set original connection busy timeout (milliseconds)"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_cache_size": {
+      "reference": "SR-F-030878",
+      "title": "sqlite database: Set original native cache_size"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_cache_spill": {
+      "reference": "SR-F-030879",
+      "title": "sqlite database: Set original native cache_spill"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_case_sensitive_like": {
+      "reference": "SR-F-030874",
+      "title": "sqlite database: Set original connection LIKE policy"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_cell_size_check": {
+      "reference": "SR-F-030842",
+      "title": "sqlite database: Set original connection cell size checks"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_checkpoint_fullfsync": {
+      "reference": "SR-F-030871",
+      "title": "sqlite database: Set original connection checkpoint fullfsync"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_count_changes": {
+      "reference": "SR-F-030868",
+      "title": "sqlite database: Set original connection count changes"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_data_store_directory": {
+      "reference": "SR-F-030900",
+      "title": "sqlite database: Stage host startup data store directory"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_default_cache_size": {
+      "reference": "SR-F-030881",
+      "title": "sqlite database: Set original native default_cache_size"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_defer_foreign_keys": {
+      "reference": "SR-F-030872",
+      "title": "sqlite database: Set original connection defer foreign keys"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_empty_result_callbacks": {
+      "reference": "SR-F-030869",
+      "title": "sqlite database: Set original connection empty result callbacks"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_foreign_keys": {
+      "reference": "SR-F-030833",
+      "title": "sqlite database: Set original connection foreign key enforcement"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_full_column_names": {
+      "reference": "SR-F-030866",
+      "title": "sqlite database: Set original connection full column names"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_fullfsync": {
+      "reference": "SR-F-030870",
+      "title": "sqlite database: Set original connection fullfsync"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_hard_heap_limit": {
+      "reference": "SR-F-030889",
+      "title": "sqlite database: Set process hard_heap_limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_ignore_check_constraints": {
+      "reference": "SR-F-030839",
+      "title": "sqlite database: Set original connection ignore check constraints"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_journal_size_limit": {
+      "reference": "SR-F-030883",
+      "title": "sqlite database: Set original native journal_size_limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_legacy_alter_table": {
+      "reference": "SR-F-030841",
+      "title": "sqlite database: Set original connection legacy alter table"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_lock_proxy_file": {
+      "reference": "SR-F-030908",
+      "title": "sqlite database: Configure native VFS lock proxy"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_locking_mode": {
+      "reference": "SR-F-030886",
+      "title": "sqlite database: Set original native locking_mode"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_max_page_count": {
+      "reference": "SR-F-030880",
+      "title": "sqlite database: Set original native max_page_count"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_mmap_size": {
+      "reference": "SR-F-030884",
+      "title": "sqlite database: Set original native mmap_size"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_parser_trace": {
+      "reference": "SR-F-030907",
+      "title": "sqlite database: Set native debug parser trace"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_query_only": {
+      "reference": "SR-F-030834",
+      "title": "sqlite database: Set original connection query-only mode"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_read_uncommitted": {
+      "reference": "SR-F-030836",
+      "title": "sqlite database: Set original connection read uncommitted"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_recursive_triggers": {
+      "reference": "SR-F-030835",
+      "title": "sqlite database: Set original connection recursive triggers"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_reverse_unordered_selects": {
+      "reference": "SR-F-030837",
+      "title": "sqlite database: Set original connection reverse unordered scans"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_schema_version": {
+      "reference": "SR-F-030882",
+      "title": "sqlite database: Set original native schema_version"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_secure_delete": {
+      "reference": "SR-F-030885",
+      "title": "sqlite database: Set original native secure_delete"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_short_column_names": {
+      "reference": "SR-F-030867",
+      "title": "sqlite database: Set original connection short column names"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_soft_heap_limit": {
+      "reference": "SR-F-030888",
+      "title": "sqlite database: Set process soft_heap_limit"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_sql_trace": {
+      "reference": "SR-F-030901",
+      "title": "sqlite database: Set native debug sql trace"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_temp_store": {
+      "reference": "SR-F-030887",
+      "title": "sqlite database: Set original native temp_store"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_temp_store_directory": {
+      "reference": "SR-F-030899",
+      "title": "sqlite database: Stage host startup temp store directory"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_trusted_schema": {
+      "reference": "SR-F-030840",
+      "title": "sqlite database: Set original connection trusted schema"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_vdbe_addoptrace": {
+      "reference": "SR-F-030904",
+      "title": "sqlite database: Set native debug vdbe addoptrace"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_vdbe_debug": {
+      "reference": "SR-F-030905",
+      "title": "sqlite database: Set native debug vdbe debug"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_vdbe_eqp": {
+      "reference": "SR-F-030906",
+      "title": "sqlite database: Set native debug vdbe eqp"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_vdbe_listing": {
+      "reference": "SR-F-030902",
+      "title": "sqlite database: Set native debug vdbe listing"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_vdbe_trace": {
+      "reference": "SR-F-030903",
+      "title": "sqlite database: Set native debug vdbe trace"
+    },
+    "descriptor-operation:sqlite:database:set_connection_pragma_wal_autocheckpoint": {
+      "reference": "SR-F-030846",
+      "title": "sqlite database: Set original connection automatic wal checkpoint threshold (pages)"
+    },
+    "descriptor-operation:sqlite:database:set_connection_synchronous": {
+      "reference": "SR-F-030822",
+      "title": "sqlite database: Set original connection synchronous policy"
+    },
+    "descriptor-operation:sqlite:database:shrink_memory_original_session": {
+      "reference": "SR-F-030877",
+      "title": "sqlite database: Release original session cache memory"
+    },
+    "descriptor-operation:sqlite:database:sqlite_shell_inspect": {
+      "reference": "SR-F-031016",
+      "title": "sqlite database: Native shell inspection"
+    },
+    "descriptor-operation:sqlite:database:sqlite_sql_dump_exchange": {
+      "reference": "SR-F-031017",
+      "title": "sqlite database: Database-wide SQL script dump & import"
+    },
+    "descriptor-operation:sqlite:database:vacuum": {
+      "reference": "SR-F-030810",
+      "title": "sqlite database: Vacuum"
+    },
+    "descriptor-operation:sqlite:database:wal_checkpoint": {
+      "reference": "SR-F-030815",
+      "title": "sqlite database: Checkpoint write-ahead log"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_delete_all": {
+      "reference": "SR-F-030820",
+      "title": "sqlite fts-table: Delete all FTS index entries"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_flush": {
+      "reference": "SR-F-030821",
+      "title": "sqlite fts-table: Flush session FTS terms"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_integrity_check": {
+      "reference": "SR-F-030818",
+      "title": "sqlite fts-table: Check FTS integrity"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_merge": {
+      "reference": "SR-F-030819",
+      "title": "sqlite fts-table: Merge FTS segments"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_optimize": {
+      "reference": "SR-F-030816",
+      "title": "sqlite fts-table: Optimize FTS index"
+    },
+    "descriptor-operation:sqlite:fts-table:fts_rebuild": {
+      "reference": "SR-F-030817",
+      "title": "sqlite fts-table: Rebuild FTS index"
+    },
+    "descriptor-operation:sqlite:pragma:inspect_value": {
+      "reference": "SR-F-030873",
+      "title": "sqlite pragma: Inspect native value"
+    },
+    "descriptor-operation:sqlite:table:blob_stream_transfer": {
+      "reference": "SR-F-031015",
+      "title": "sqlite table: Incremental large-BLOB transfer"
+    },
+    "descriptor-operation:sqlite:table:rebuild": {
+      "reference": "SR-F-030864",
+      "title": "sqlite table: Rebuild table"
+    },
+    "descriptor-operation:sqlite:view:replace": {
+      "reference": "SR-F-030865",
+      "title": "sqlite view: Replace view"
+    },
+    "descriptor-operation:tidb:binding:create": {
+      "reference": "SR-F-031054",
+      "title": "tidb binding: Create SQL plan binding"
+    },
+    "descriptor-operation:tidb:binding:drop": {
+      "reference": "SR-F-031056",
+      "title": "tidb binding: Drop binding"
+    },
+    "descriptor-operation:tidb:binding:set_status": {
+      "reference": "SR-F-031055",
+      "title": "tidb binding: Enable or disable binding"
+    },
+    "descriptor-operation:tidb:changefeed:pause": {
+      "reference": "SR-F-031034",
+      "title": "tidb changefeed: Pause TiCDC changefeed"
+    },
+    "descriptor-operation:tidb:changefeed:resume": {
+      "reference": "SR-F-031035",
+      "title": "tidb changefeed: Resume TiCDC changefeed"
+    },
+    "descriptor-operation:tidb:cluster:backup_full": {
+      "reference": "SR-F-031018",
+      "title": "tidb cluster: Back up cluster with BR"
+    },
+    "descriptor-operation:tidb:cluster:restore_full": {
+      "reference": "SR-F-031019",
+      "title": "tidb cluster: Restore cluster with BR"
+    },
+    "descriptor-operation:tidb:cluster:restore_point": {
+      "reference": "SR-F-031020",
+      "title": "tidb cluster: Point-in-time restore with BR"
+    },
+    "descriptor-operation:tidb:database:backup_br": {
+      "reference": "SR-F-031021",
+      "title": "tidb database: Back up database with BR"
+    },
+    "descriptor-operation:tidb:database:configure_placement": {
+      "reference": "SR-F-031023",
+      "title": "tidb database: Set database placement policy"
+    },
+    "descriptor-operation:tidb:database:flashback_table": {
+      "reference": "SR-F-031057",
+      "title": "tidb database: Recover dropped table"
+    },
+    "descriptor-operation:tidb:database:reset_placement": {
+      "reference": "SR-F-031024",
+      "title": "tidb database: Use default database placement"
+    },
+    "descriptor-operation:tidb:database:restore_br": {
+      "reference": "SR-F-031022",
+      "title": "tidb database: Restore database with BR"
+    },
+    "descriptor-operation:tidb:database:set_tiflash_replica": {
+      "reference": "SR-F-031025",
+      "title": "tidb database: Set tiflash replica"
+    },
+    "descriptor-operation:tidb:index:admin_check": {
+      "reference": "SR-F-031060",
+      "title": "tidb index: Check data and index consistency"
+    },
+    "descriptor-operation:tidb:index:visibility": {
+      "reference": "SR-F-031045",
+      "title": "tidb index: Set index visibility"
+    },
+    "descriptor-operation:tidb:job:cancel": {
+      "reference": "SR-F-031033",
+      "title": "tidb job: Cancel DDL job"
+    },
+    "descriptor-operation:tidb:partition:analyze": {
+      "reference": "SR-F-031036",
+      "title": "tidb partition: Analyze partition"
+    },
+    "descriptor-operation:tidb:partition:configure_placement": {
+      "reference": "SR-F-031031",
+      "title": "tidb partition: Set partition placement policy"
+    },
+    "descriptor-operation:tidb:partition:exchange": {
+      "reference": "SR-F-031037",
+      "title": "tidb partition: Exchange partition with table"
+    },
+    "descriptor-operation:tidb:partition:reorganize": {
+      "reference": "SR-F-031038",
+      "title": "tidb partition: Reorganize partitions"
+    },
+    "descriptor-operation:tidb:partition:reset_placement": {
+      "reference": "SR-F-031032",
+      "title": "tidb partition: Use default partition placement"
+    },
+    "descriptor-operation:tidb:role:grant": {
+      "reference": "SR-F-031046",
+      "title": "tidb role: Grant role membership"
+    },
+    "descriptor-operation:tidb:role:revoke": {
+      "reference": "SR-F-031047",
+      "title": "tidb role: Revoke role membership"
+    },
+    "descriptor-operation:tidb:role:set_default": {
+      "reference": "SR-F-031048",
+      "title": "tidb role: Make default role of member"
+    },
+    "descriptor-operation:tidb:session:terminate_connection": {
+      "reference": "SR-F-031050",
+      "title": "tidb session: Terminate connection"
+    },
+    "descriptor-operation:tidb:session:terminate_query": {
+      "reference": "SR-F-031049",
+      "title": "tidb session: Terminate running statement"
+    },
+    "descriptor-operation:tidb:system-variable:set_global": {
+      "reference": "SR-F-031051",
+      "title": "tidb system-variable: Set global value"
+    },
+    "descriptor-operation:tidb:table:add_partitions": {
+      "reference": "SR-F-031039",
+      "title": "tidb table: Add partitions"
+    },
+    "descriptor-operation:tidb:table:admin_check": {
+      "reference": "SR-F-031059",
+      "title": "tidb table: Check data and index consistency"
+    },
+    "descriptor-operation:tidb:table:analyze": {
+      "reference": "SR-F-031041",
+      "title": "tidb table: Analyze table"
+    },
+    "descriptor-operation:tidb:table:backup_br": {
+      "reference": "SR-F-031026",
+      "title": "tidb table: Back up table with BR"
+    },
+    "descriptor-operation:tidb:table:configure_placement": {
+      "reference": "SR-F-031028",
+      "title": "tidb table: Set table placement policy"
+    },
+    "descriptor-operation:tidb:table:lock_stats": {
+      "reference": "SR-F-031043",
+      "title": "tidb table: Lock statistics"
+    },
+    "descriptor-operation:tidb:table:remove_ttl": {
+      "reference": "SR-F-031053",
+      "title": "tidb table: Remove row expiry (TTL)"
+    },
+    "descriptor-operation:tidb:table:reset_placement": {
+      "reference": "SR-F-031029",
+      "title": "tidb table: Use default table placement"
+    },
+    "descriptor-operation:tidb:table:restore_br": {
+      "reference": "SR-F-031027",
+      "title": "tidb table: Restore table with BR"
+    },
+    "descriptor-operation:tidb:table:set_cache": {
+      "reference": "SR-F-031042",
+      "title": "tidb table: Set table caching"
+    },
+    "descriptor-operation:tidb:table:set_options": {
+      "reference": "SR-F-031040",
+      "title": "tidb table: Set table options"
+    },
+    "descriptor-operation:tidb:table:set_tiflash_replica": {
+      "reference": "SR-F-031030",
+      "title": "tidb table: Set tiflash replica"
+    },
+    "descriptor-operation:tidb:table:set_ttl": {
+      "reference": "SR-F-031052",
+      "title": "tidb table: Set row expiry (TTL)"
+    },
+    "descriptor-operation:tidb:table:split_regions": {
+      "reference": "SR-F-031058",
+      "title": "tidb table: Split row regions"
+    },
+    "descriptor-operation:tidb:table:unlock_stats": {
+      "reference": "SR-F-031044",
+      "title": "tidb table: Unlock statistics"
+    },
+    "descriptor-operation:vitess:index:visibility": {
+      "reference": "SR-F-031091",
+      "title": "vitess index: Set index visibility"
+    },
+    "descriptor-operation:vitess:keyspace:rebuild_graph": {
+      "reference": "SR-F-031061",
+      "title": "vitess keyspace: Rebuild keyspace serving graph"
+    },
+    "descriptor-operation:vitess:materialize:start": {
+      "reference": "SR-F-031080",
+      "title": "vitess materialize: Start materialization"
+    },
+    "descriptor-operation:vitess:materialize:stop": {
+      "reference": "SR-F-031081",
+      "title": "vitess materialize: Stop materialization"
+    },
+    "descriptor-operation:vitess:online-ddl:cancel": {
+      "reference": "SR-F-031085",
+      "title": "vitess online-ddl: Cancel migration"
+    },
+    "descriptor-operation:vitess:online-ddl:cleanup": {
+      "reference": "SR-F-031086",
+      "title": "vitess online-ddl: Clean up migration artifacts"
+    },
+    "descriptor-operation:vitess:online-ddl:complete": {
+      "reference": "SR-F-031084",
+      "title": "vitess online-ddl: Complete postponed migration"
+    },
+    "descriptor-operation:vitess:online-ddl:force_cutover": {
+      "reference": "SR-F-031089",
+      "title": "vitess online-ddl: Force migration cutover"
+    },
+    "descriptor-operation:vitess:online-ddl:launch": {
+      "reference": "SR-F-031082",
+      "title": "vitess online-ddl: Launch postponed migration"
+    },
+    "descriptor-operation:vitess:online-ddl:retry": {
+      "reference": "SR-F-031083",
+      "title": "vitess online-ddl: Retry failed migration"
+    },
+    "descriptor-operation:vitess:online-ddl:throttle": {
+      "reference": "SR-F-031087",
+      "title": "vitess online-ddl: Throttle migration"
+    },
+    "descriptor-operation:vitess:online-ddl:unthrottle": {
+      "reference": "SR-F-031088",
+      "title": "vitess online-ddl: Unthrottle migration"
+    },
+    "descriptor-operation:vitess:shard:emergency_reparent": {
+      "reference": "SR-F-031063",
+      "title": "vitess shard: Emergency reparent shard"
+    },
+    "descriptor-operation:vitess:shard:planned_reparent": {
+      "reference": "SR-F-031062",
+      "title": "vitess shard: Planned reparent shard"
+    },
+    "descriptor-operation:vitess:shard:set_primary_serving": {
+      "reference": "SR-F-031064",
+      "title": "vitess shard: Set primary serving state"
+    },
+    "descriptor-operation:vitess:table:set_options": {
+      "reference": "SR-F-031090",
+      "title": "vitess table: Set table options"
+    },
+    "descriptor-operation:vitess:tablet:backup": {
+      "reference": "SR-F-031070",
+      "title": "vitess tablet: Back up tablet"
+    },
+    "descriptor-operation:vitess:tablet:change_type": {
+      "reference": "SR-F-031068",
+      "title": "vitess tablet: Change tablet type"
+    },
+    "descriptor-operation:vitess:tablet:ping": {
+      "reference": "SR-F-031065",
+      "title": "vitess tablet: Ping tablet"
+    },
+    "descriptor-operation:vitess:tablet:refresh_state": {
+      "reference": "SR-F-031066",
+      "title": "vitess tablet: Refresh tablet state"
+    },
+    "descriptor-operation:vitess:tablet:restore": {
+      "reference": "SR-F-031071",
+      "title": "vitess tablet: Restore tablet from backup"
+    },
+    "descriptor-operation:vitess:tablet:run_health_check": {
+      "reference": "SR-F-031067",
+      "title": "vitess tablet: Run health check"
+    },
+    "descriptor-operation:vitess:tablet:set_writable": {
+      "reference": "SR-F-031069",
+      "title": "vitess tablet: Set tablet writability"
+    },
+    "descriptor-operation:vitess:vschema:rebuild": {
+      "reference": "SR-F-031072",
+      "title": "vitess vschema: Rebuild serving VSchema"
+    },
+    "descriptor-operation:vitess:workflow:complete": {
+      "reference": "SR-F-031079",
+      "title": "vitess workflow: Complete workflow migration"
+    },
+    "descriptor-operation:vitess:workflow:create_move_tables": {
+      "reference": "SR-F-031073",
+      "title": "vitess workflow: Create MoveTables workflow"
+    },
+    "descriptor-operation:vitess:workflow:create_reshard": {
+      "reference": "SR-F-031074",
+      "title": "vitess workflow: Create Reshard workflow"
+    },
+    "descriptor-operation:vitess:workflow:reverse_traffic": {
+      "reference": "SR-F-031078",
+      "title": "vitess workflow: Reverse workflow traffic"
+    },
+    "descriptor-operation:vitess:workflow:start": {
+      "reference": "SR-F-031075",
+      "title": "vitess workflow: Start workflow"
+    },
+    "descriptor-operation:vitess:workflow:stop": {
+      "reference": "SR-F-031076",
+      "title": "vitess workflow: Stop workflow"
+    },
+    "descriptor-operation:vitess:workflow:switch_traffic": {
+      "reference": "SR-F-031077",
+      "title": "vitess workflow: Switch workflow traffic"
+    },
+    "descriptor-operation:xtdb:document:erase": {
+      "reference": "SR-F-031093",
+      "title": "xtdb document: Erase document history"
+    },
+    "descriptor-operation:xtdb:entity:erase": {
+      "reference": "SR-F-031094",
+      "title": "xtdb entity: Erase document history"
+    },
+    "descriptor-operation:xtdb:health:execute": {
+      "reference": "SR-F-031095",
+      "title": "xtdb health: Finish the current transaction block"
+    },
+    "descriptor-operation:xtdb:table:erase": {
+      "reference": "SR-F-031092",
+      "title": "xtdb table: Erase document history"
+    },
+    "descriptor-operation:yugabytedb:cluster:set_load_balancer": {
+      "reference": "SR-F-031097",
+      "title": "yugabytedb cluster: Set load balancer state"
+    },
+    "descriptor-operation:yugabytedb:constraint:validate": {
+      "reference": "SR-F-031120",
+      "title": "yugabytedb constraint: Validate constraint"
+    },
+    "descriptor-operation:yugabytedb:database:grant": {
+      "reference": "SR-F-031125",
+      "title": "yugabytedb database: Grant database privileges"
+    },
+    "descriptor-operation:yugabytedb:database:revoke": {
+      "reference": "SR-F-031126",
+      "title": "yugabytedb database: Revoke database privileges"
+    },
+    "descriptor-operation:yugabytedb:master:leader_stepdown": {
+      "reference": "SR-F-031107",
+      "title": "yugabytedb master: Step down master leader"
+    },
+    "descriptor-operation:yugabytedb:materialized-view:refresh": {
+      "reference": "SR-F-031096",
+      "title": "yugabytedb materialized-view: Refresh materialized view"
+    },
+    "descriptor-operation:yugabytedb:node:add_blacklist": {
+      "reference": "SR-F-031098",
+      "title": "yugabytedb node: Drain node replicas"
+    },
+    "descriptor-operation:yugabytedb:node:add_leader_blacklist": {
+      "reference": "SR-F-031100",
+      "title": "yugabytedb node: Drain node leaders"
+    },
+    "descriptor-operation:yugabytedb:node:remove_blacklist": {
+      "reference": "SR-F-031099",
+      "title": "yugabytedb node: Return node replicas"
+    },
+    "descriptor-operation:yugabytedb:node:remove_leader_blacklist": {
+      "reference": "SR-F-031101",
+      "title": "yugabytedb node: Return node leaders"
+    },
+    "descriptor-operation:yugabytedb:partition:detach": {
+      "reference": "SR-F-031135",
+      "title": "yugabytedb partition: Detach partition"
+    },
+    "descriptor-operation:yugabytedb:placement-policy:clear": {
+      "reference": "SR-F-031109",
+      "title": "yugabytedb placement-policy: Clear live placement"
+    },
+    "descriptor-operation:yugabytedb:placement-policy:configure": {
+      "reference": "SR-F-031108",
+      "title": "yugabytedb placement-policy: Configure live placement"
+    },
+    "descriptor-operation:yugabytedb:role:reset_setting": {
+      "reference": "SR-F-031122",
+      "title": "yugabytedb role: Reset default setting"
+    },
+    "descriptor-operation:yugabytedb:role:set_setting": {
+      "reference": "SR-F-031121",
+      "title": "yugabytedb role: Set default setting"
+    },
+    "descriptor-operation:yugabytedb:schedule:restore": {
+      "reference": "SR-F-031112",
+      "title": "yugabytedb schedule: Restore snapshot schedule"
+    },
+    "descriptor-operation:yugabytedb:schema:grant": {
+      "reference": "SR-F-031127",
+      "title": "yugabytedb schema: Grant schema privileges"
+    },
+    "descriptor-operation:yugabytedb:schema:revoke": {
+      "reference": "SR-F-031128",
+      "title": "yugabytedb schema: Revoke schema privileges"
+    },
+    "descriptor-operation:yugabytedb:session:terminate_connection": {
+      "reference": "SR-F-031132",
+      "title": "yugabytedb session: Terminate session"
+    },
+    "descriptor-operation:yugabytedb:session:terminate_query": {
+      "reference": "SR-F-031131",
+      "title": "yugabytedb session: Cancel running statement"
+    },
+    "descriptor-operation:yugabytedb:snapshot:create_database": {
+      "reference": "SR-F-031110",
+      "title": "yugabytedb snapshot: Create database snapshot"
+    },
+    "descriptor-operation:yugabytedb:snapshot:restore": {
+      "reference": "SR-F-031111",
+      "title": "yugabytedb snapshot: Restore snapshot"
+    },
+    "descriptor-operation:yugabytedb:table:analyze": {
+      "reference": "SR-F-031117",
+      "title": "yugabytedb table: Analyze table"
+    },
+    "descriptor-operation:yugabytedb:table:attach_partition": {
+      "reference": "SR-F-031134",
+      "title": "yugabytedb table: Attach partition"
+    },
+    "descriptor-operation:yugabytedb:table:compact": {
+      "reference": "SR-F-031103",
+      "title": "yugabytedb table: Compact table tablets"
+    },
+    "descriptor-operation:yugabytedb:table:configure_placement": {
+      "reference": "SR-F-031102",
+      "title": "yugabytedb table: Configure table placement"
+    },
+    "descriptor-operation:yugabytedb:table:create_partition": {
+      "reference": "SR-F-031133",
+      "title": "yugabytedb table: Create partition"
+    },
+    "descriptor-operation:yugabytedb:table:flush": {
+      "reference": "SR-F-031104",
+      "title": "yugabytedb table: Flush table tablets"
+    },
+    "descriptor-operation:yugabytedb:table:set_owner": {
+      "reference": "SR-F-031119",
+      "title": "yugabytedb table: Change owner"
+    },
+    "descriptor-operation:yugabytedb:table:set_schema": {
+      "reference": "SR-F-031118",
+      "title": "yugabytedb table: Move to schema"
+    },
+    "descriptor-operation:yugabytedb:table:truncate": {
+      "reference": "SR-F-031116",
+      "title": "yugabytedb table: Truncate table"
+    },
+    "descriptor-operation:yugabytedb:tablet:leader_stepdown": {
+      "reference": "SR-F-031105",
+      "title": "yugabytedb tablet: Step down tablet leader"
+    },
+    "descriptor-operation:yugabytedb:tablet:split": {
+      "reference": "SR-F-031106",
+      "title": "yugabytedb tablet: Split tablet"
+    },
+    "descriptor-operation:yugabytedb:type:grant": {
+      "reference": "SR-F-031129",
+      "title": "yugabytedb type: Grant type privileges"
+    },
+    "descriptor-operation:yugabytedb:type:revoke": {
+      "reference": "SR-F-031130",
+      "title": "yugabytedb type: Revoke type privileges"
+    },
+    "descriptor-operation:yugabytedb:user:reset_setting": {
+      "reference": "SR-F-031124",
+      "title": "yugabytedb user: Reset default setting"
+    },
+    "descriptor-operation:yugabytedb:user:set_setting": {
+      "reference": "SR-F-031123",
+      "title": "yugabytedb user: Set default setting"
+    },
+    "descriptor-operation:yugabytedb:xcluster-replication:add_tables": {
+      "reference": "SR-F-031114",
+      "title": "yugabytedb xcluster-replication: Add xCluster replicated tables"
+    },
+    "descriptor-operation:yugabytedb:xcluster-replication:remove_tables": {
+      "reference": "SR-F-031115",
+      "title": "yugabytedb xcluster-replication: Remove xCluster replicated tables"
+    },
+    "descriptor-operation:yugabytedb:xcluster-replication:set_enabled": {
+      "reference": "SR-F-031113",
+      "title": "yugabytedb xcluster-replication: Set xCluster replication state"
+    },
     "design-checkpoints-diff": {
       "reference": "SR-F-030040",
       "title": "Design checkpoints, directed save points and version diff"
@@ -662,6 +2586,10 @@
       "reference": "SR-F-010004",
       "title": "DuckDB DDN catalog designer"
     },
+    "duckdb-continuity-storage": {
+      "reference": "SR-F-030591",
+      "title": "DuckDB physical continuity, WAL recovery drills, storage header inspection and storage migration workspace"
+    },
     "duckdb-copy": {
       "reference": "SR-F-010006",
       "title": "DuckDB native table COPY preview"
@@ -674,9 +2602,45 @@
       "reference": "SR-F-010003",
       "title": "DuckDB dashboard editor"
     },
+    "duckdb-data-cell-inspector": {
+      "reference": "SR-F-030595",
+      "title": "DuckDB data grid Arrow 19-family, HUGEINT, DECIMAL, BLOB and nested container cell inspector"
+    },
+    "duckdb-data-row-sql": {
+      "reference": "SR-F-030594",
+      "title": "DuckDB data grid row SQL, ON CONFLICT upsert, COPY snippet and nested literal helper"
+    },
     "duckdb-extensions": {
       "reference": "SR-F-010011",
       "title": "DuckDB original-session extension installation and loading"
+    },
+    "duckdb-form-column": {
+      "reference": "SR-F-030581",
+      "title": "DuckDB column create, rename, comment and inspection form"
+    },
+    "duckdb-form-constraint": {
+      "reference": "SR-F-030582",
+      "title": "DuckDB table constraint inspection form"
+    },
+    "duckdb-form-extension": {
+      "reference": "SR-F-030585",
+      "title": "DuckDB extension capability, install/load and update inspection form"
+    },
+    "duckdb-form-function": {
+      "reference": "SR-F-030583",
+      "title": "DuckDB built-in and extension function overload inspection form"
+    },
+    "duckdb-form-materialization": {
+      "reference": "SR-F-030586",
+      "title": "DuckDB semantic materialization CTAS creation form"
+    },
+    "duckdb-form-schema": {
+      "reference": "SR-F-030580",
+      "title": "DuckDB schema create, drop and inspection form"
+    },
+    "duckdb-form-secret": {
+      "reference": "SR-F-030584",
+      "title": "DuckDB secret create, drop and public metadata inspection form"
     },
     "duckdb-monitoring-policy": {
       "reference": "SR-F-010002",
@@ -686,9 +2650,33 @@
       "reference": "SR-F-030053",
       "title": "DuckDB relational DDN diagram"
     },
+    "duckdb-retained-schema": {
+      "reference": "SR-F-030588",
+      "title": "DuckDB original-session DDN schema observe, preview, review, apply and receipts workspace"
+    },
+    "duckdb-runtime-settings": {
+      "reference": "SR-F-030587",
+      "title": "DuckDB session and global runtime settings, attachments, foreign database copy and rich COPY workspace"
+    },
     "duckdb-server-catalog-ddn": {
       "reference": "SR-F-010008",
       "title": "DuckDB registered-file DDN catalog"
+    },
+    "duckdb-shell": {
+      "reference": "SR-F-030589",
+      "title": "DuckDB supervised directive and SQL batch runner and CLI provenance workspace"
+    },
+    "duckdb-sql-dump": {
+      "reference": "SR-F-030590",
+      "title": "DuckDB single-stream logical SQL dump export and transactional reload workspace"
+    },
+    "duckdb-sql-explain-dialog": {
+      "reference": "SR-F-030593",
+      "title": "DuckDB EXPLAIN, EXPLAIN ANALYZE and prepared parameter/result metadata inspector"
+    },
+    "duckdb-sql-session-dialog": {
+      "reference": "SR-F-030592",
+      "title": "DuckDB SQL editor session settings, catalog attachments, statement grammar and prepare diagnostics"
     },
     "duckdb-test-data": {
       "reference": "SR-F-010005",
@@ -954,6 +2942,94 @@
       "reference": "SR-F-001405",
       "title": "MariaDB DDN dashboard draft and publication"
     },
+    "mariadb-form-available-plugin": {
+      "reference": "SR-F-030652",
+      "title": "MariaDB catalog available plugin inspection form"
+    },
+    "mariadb-form-binary-log": {
+      "reference": "SR-F-030644",
+      "title": "MariaDB binary log file inspection form"
+    },
+    "mariadb-form-binary-log-event": {
+      "reference": "SR-F-030645",
+      "title": "MariaDB binary log event inspection form"
+    },
+    "mariadb-form-binary-log-status": {
+      "reference": "SR-F-030646",
+      "title": "MariaDB primary binary log coordinate status inspection form"
+    },
+    "mariadb-form-column": {
+      "reference": "SR-F-030635",
+      "title": "MariaDB table column create and inspection form"
+    },
+    "mariadb-form-constraint": {
+      "reference": "SR-F-030636",
+      "title": "MariaDB table constraint create and inspection form"
+    },
+    "mariadb-form-general-log-entry": {
+      "reference": "SR-F-030648",
+      "title": "MariaDB mysql.general_log entry inspection form"
+    },
+    "mariadb-form-loadable-function": {
+      "reference": "SR-F-030631",
+      "title": "MariaDB loadable UDF create and inspection form"
+    },
+    "mariadb-form-lock": {
+      "reference": "SR-F-030641",
+      "title": "MariaDB metadata and InnoDB lock inspection form"
+    },
+    "mariadb-form-lock-wait": {
+      "reference": "SR-F-030642",
+      "title": "MariaDB blocking lock-wait edge inspection form"
+    },
+    "mariadb-form-log-configuration": {
+      "reference": "SR-F-030647",
+      "title": "MariaDB general, slow and error log configuration inspection form"
+    },
+    "mariadb-form-metric": {
+      "reference": "SR-F-030650",
+      "title": "MariaDB server status metric inspection form"
+    },
+    "mariadb-form-partition": {
+      "reference": "SR-F-030637",
+      "title": "MariaDB table partition inspection form"
+    },
+    "mariadb-form-plugin": {
+      "reference": "SR-F-030632",
+      "title": "MariaDB server plugin install and inspection form"
+    },
+    "mariadb-form-replication-channel": {
+      "reference": "SR-F-030633",
+      "title": "MariaDB named multi-source replication connection create and alter form"
+    },
+    "mariadb-form-server-link": {
+      "reference": "SR-F-030634",
+      "title": "MariaDB CONNECT / Spider / FederatedX foreign server create and alter form"
+    },
+    "mariadb-form-session": {
+      "reference": "SR-F-030639",
+      "title": "MariaDB processlist session inspection form"
+    },
+    "mariadb-form-slow-query": {
+      "reference": "SR-F-030649",
+      "title": "MariaDB mysql.slow_log entry inspection form"
+    },
+    "mariadb-form-system-variable": {
+      "reference": "SR-F-030640",
+      "title": "MariaDB system variable metadata and runtime value inspection form"
+    },
+    "mariadb-form-table-storage": {
+      "reference": "SR-F-030643",
+      "title": "MariaDB InnoDB / Aria per-table physical storage inspection form"
+    },
+    "mariadb-form-tablespace": {
+      "reference": "SR-F-030638",
+      "title": "MariaDB tablespace inspection form"
+    },
+    "mariadb-form-tls-configuration": {
+      "reference": "SR-F-030651",
+      "title": "MariaDB TLS certificate and cipher posture inspection form"
+    },
     "mariadb-galera-workspace": {
       "reference": "SR-F-030344",
       "title": "MariaDB Galera (wsrep) Cluster Administration Workspace"
@@ -1073,6 +3149,86 @@
     "mysql-data-import": {
       "reference": "SR-F-030071",
       "title": "MySQL native data import workspace"
+    },
+    "mysql-form-character-set": {
+      "reference": "SR-F-030625",
+      "title": "MySQL character set inspection form"
+    },
+    "mysql-form-collation": {
+      "reference": "SR-F-030626",
+      "title": "MySQL collation inspection form"
+    },
+    "mysql-form-component": {
+      "reference": "SR-F-030615",
+      "title": "MySQL server component URN install and inspection form"
+    },
+    "mysql-form-group-replication": {
+      "reference": "SR-F-030617",
+      "title": "MySQL Group Replication cluster status and topology inspection form"
+    },
+    "mysql-form-group-replication-member": {
+      "reference": "SR-F-030618",
+      "title": "MySQL Group Replication member inspection form"
+    },
+    "mysql-form-library": {
+      "reference": "SR-F-030611",
+      "title": "MySQL 9 JavaScript/Wasm library create, alter and inspection form"
+    },
+    "mysql-form-loadable-function": {
+      "reference": "SR-F-030612",
+      "title": "MySQL loadable UDF create and inspection form"
+    },
+    "mysql-form-logfile-group": {
+      "reference": "SR-F-030628",
+      "title": "MySQL NDB Cluster logfile group create and alter form"
+    },
+    "mysql-form-metric": {
+      "reference": "SR-F-030620",
+      "title": "MySQL server status metric inspection form"
+    },
+    "mysql-form-ndb-node": {
+      "reference": "SR-F-030629",
+      "title": "MySQL NDB Cluster node status inspection form"
+    },
+    "mysql-form-plugin": {
+      "reference": "SR-F-030614",
+      "title": "MySQL server plugin install and inspection form"
+    },
+    "mysql-form-replication-channel": {
+      "reference": "SR-F-030616",
+      "title": "MySQL replication channel source configuration and failover form"
+    },
+    "mysql-form-resource-group": {
+      "reference": "SR-F-030619",
+      "title": "MySQL CPU resource group create, alter and thread priority form"
+    },
+    "mysql-form-server-link": {
+      "reference": "SR-F-030624",
+      "title": "MySQL FEDERATED foreign server link create and alter form"
+    },
+    "mysql-form-session": {
+      "reference": "SR-F-030621",
+      "title": "MySQL processlist session inspection form"
+    },
+    "mysql-form-spatial-reference-system": {
+      "reference": "SR-F-030623",
+      "title": "MySQL spatial reference system (SRS) create and alter form"
+    },
+    "mysql-form-storage-engine": {
+      "reference": "SR-F-030627",
+      "title": "MySQL storage engine capability inspection form"
+    },
+    "mysql-form-system-variable": {
+      "reference": "SR-F-030622",
+      "title": "MySQL system variable metadata and runtime value inspection form"
+    },
+    "mysql-form-tablespace": {
+      "reference": "SR-F-030613",
+      "title": "MySQL general, undo and NDB tablespace create and alter form"
+    },
+    "mysql-form-x-collection": {
+      "reference": "SR-F-030630",
+      "title": "MySQL X DevAPI document collection create and JSON Schema validation form"
     },
     "mysql-host": {
       "reference": "SR-F-030072",
@@ -6258,6 +8414,10 @@
       "reference": "SR-F-000008",
       "title": "Native navigation"
     },
+    "object-permissions-matrix": {
+      "reference": "SR-F-030654",
+      "title": "Per-object principal x privilege grants matrix"
+    },
     "operation:alter": {
       "reference": "SR-F-000009",
       "title": "Alter"
@@ -7814,6 +9974,66 @@
       "reference": "SR-F-001380",
       "title": "PostgreSQL DDN dashboard draft and publication"
     },
+    "postgresql-form-column": {
+      "reference": "SR-F-030604",
+      "title": "PostgreSQL table column, identity, generated expression and storage form"
+    },
+    "postgresql-form-constraint": {
+      "reference": "SR-F-030605",
+      "title": "PostgreSQL table constraint and PostgreSQL 18 temporal/enforcement form"
+    },
+    "postgresql-form-default-privileges": {
+      "reference": "SR-F-030608",
+      "title": "PostgreSQL ALTER DEFAULT PRIVILEGES inspection and grant form"
+    },
+    "postgresql-form-extended-statistics": {
+      "reference": "SR-F-030606",
+      "title": "PostgreSQL multivariate extended statistics form"
+    },
+    "postgresql-form-extension": {
+      "reference": "SR-F-030602",
+      "title": "PostgreSQL extension install, schema relocation and update form"
+    },
+    "postgresql-form-foreign-server": {
+      "reference": "SR-F-030610",
+      "title": "PostgreSQL foreign server create, alter and options form"
+    },
+    "postgresql-form-large-object": {
+      "reference": "SR-F-030599",
+      "title": "PostgreSQL large object create and metadata alter form"
+    },
+    "postgresql-form-operator": {
+      "reference": "SR-F-030596",
+      "title": "PostgreSQL operator create, alter and optimization form"
+    },
+    "postgresql-form-parameter-acl": {
+      "reference": "SR-F-030607",
+      "title": "PostgreSQL configuration parameter ACL inspection and grant form"
+    },
+    "postgresql-form-pgagent-job": {
+      "reference": "SR-F-030603",
+      "title": "PostgreSQL pgAgent job, steps and schedules form"
+    },
+    "postgresql-form-prepared-transaction": {
+      "reference": "SR-F-030609",
+      "title": "PostgreSQL two-phase prepared transaction inspection and resolution form"
+    },
+    "postgresql-form-row-policy": {
+      "reference": "SR-F-030598",
+      "title": "PostgreSQL row-level security policy form"
+    },
+    "postgresql-form-rule": {
+      "reference": "SR-F-030597",
+      "title": "PostgreSQL rewrite rule create and alter form"
+    },
+    "postgresql-form-schema": {
+      "reference": "SR-F-030600",
+      "title": "PostgreSQL schema create, alter and default privileges form"
+    },
+    "postgresql-form-tablespace": {
+      "reference": "SR-F-030601",
+      "title": "PostgreSQL tablespace create, options and ACL form"
+    },
     "postgresql-ha-topology": {
       "reference": "SR-F-030452",
       "title": "PostgreSQL streaming replication, pg_ctl and HA topology workspace"
@@ -7918,6 +10138,10 @@
       "reference": "SR-F-030060",
       "title": "ScratchRobin security and access editor"
     },
+    "security-principal-manager": {
+      "reference": "SR-F-030653",
+      "title": "Server and database user & role security manager"
+    },
     "server-profile": {
       "reference": "SR-F-000006",
       "title": "Server profile"
@@ -7946,6 +10170,10 @@
       "reference": "SR-F-030455",
       "title": "PostgreSQL session framing, retained catalog and grammar validation"
     },
+    "sqlite-blob-stream": {
+      "reference": "SR-F-030563",
+      "title": "SQLite incremental large-BLOB transfer workspace"
+    },
     "sqlite-catalog-ddn": {
       "reference": "SR-F-001416",
       "title": "SQLite native catalog and DDN views"
@@ -7962,9 +10190,57 @@
       "reference": "SR-F-001419",
       "title": "SQLite dashboard designer"
     },
+    "sqlite-data-cell-inspector": {
+      "reference": "SR-F-030570",
+      "title": "SQLite data grid dynamic storage-class, int64, BLOB and byte inspector"
+    },
+    "sqlite-data-row-sql": {
+      "reference": "SR-F-030569",
+      "title": "SQLite data grid row SQL generator (ON CONFLICT, INSERT OR REPLACE, rowid/PK)"
+    },
+    "sqlite-expert": {
+      "reference": "SR-F-030561",
+      "title": "SQLite expert index advisor preview-only workspace"
+    },
+    "sqlite-form-collation": {
+      "reference": "SR-F-030576",
+      "title": "SQLite collation sequence inspection form"
+    },
+    "sqlite-form-column": {
+      "reference": "SR-F-030573",
+      "title": "SQLite column create, rename and inspection form"
+    },
+    "sqlite-form-compile-option": {
+      "reference": "SR-F-030577",
+      "title": "SQLite runtime compile-option inspection form"
+    },
+    "sqlite-form-constraint": {
+      "reference": "SR-F-030574",
+      "title": "SQLite table constraint inspection form"
+    },
+    "sqlite-form-extension": {
+      "reference": "SR-F-030572",
+      "title": "SQLite extension inspection form"
+    },
+    "sqlite-form-native-function": {
+      "reference": "SR-F-030575",
+      "title": "SQLite built-in and loadable function inspection form"
+    },
+    "sqlite-form-pragma": {
+      "reference": "SR-F-030571",
+      "title": "SQLite PRAGMA inspection form"
+    },
+    "sqlite-intck": {
+      "reference": "SR-F-030562",
+      "title": "SQLite incremental integrity-check lifecycle workspace"
+    },
     "sqlite-monitoring-policy": {
       "reference": "SR-F-001418",
       "title": "SQLite monitoring collection policy"
+    },
+    "sqlite-rbu": {
+      "reference": "SR-F-030560",
+      "title": "SQLite resumable bulk update and resumable vacuum (RBU)"
     },
     "sqlite-recovery": {
       "reference": "SR-F-010010",
@@ -7982,25 +10258,9 @@
       "reference": "SR-F-001421",
       "title": "SQLite registered-file catalog and selected DDN collection"
     },
-    "sqlite-test-data": {
-      "reference": "SR-F-001422",
-      "title": "SQLite native test-data recipe and SQL generation"
-    },
-    "sqlite-rbu": {
-      "reference": "SR-F-030560",
-      "title": "SQLite resumable bulk update and resumable vacuum (RBU)"
-    },
-    "sqlite-expert": {
-      "reference": "SR-F-030561",
-      "title": "SQLite expert index advisor preview-only workspace"
-    },
-    "sqlite-intck": {
-      "reference": "SR-F-030562",
-      "title": "SQLite incremental integrity-check lifecycle workspace"
-    },
-    "sqlite-blob-stream": {
-      "reference": "SR-F-030563",
-      "title": "SQLite incremental large-BLOB transfer workspace"
+    "sqlite-session-tuning": {
+      "reference": "SR-F-030566",
+      "title": "SQLite original-session connection limits, PRAGMAs, db_config, maintenance and descriptor tasks"
     },
     "sqlite-shell": {
       "reference": "SR-F-030564",
@@ -8010,345 +10270,17 @@
       "reference": "SR-F-030565",
       "title": "SQLite database-wide native SQL script dump and import"
     },
-    "sqlite-session-tuning": {
-      "reference": "SR-F-030566",
-      "title": "SQLite original-session connection limits, PRAGMAs, db_config, maintenance and descriptor tasks"
+    "sqlite-sql-explain-dialog": {
+      "reference": "SR-F-030568",
+      "title": "SQLite EXPLAIN QUERY PLAN and VDBE bytecode inspector"
     },
     "sqlite-sql-session-dialog": {
       "reference": "SR-F-030567",
       "title": "SQLite SQL editor session framing, ATTACH/DETACH, connection tuning and grammar check"
     },
-    "sqlite-sql-explain-dialog": {
-      "reference": "SR-F-030568",
-      "title": "SQLite EXPLAIN QUERY PLAN and VDBE bytecode inspector"
-    },
-    "sqlite-data-row-sql": {
-      "reference": "SR-F-030569",
-      "title": "SQLite data grid row SQL generator (ON CONFLICT, INSERT OR REPLACE, rowid/PK)"
-    },
-    "sqlite-data-cell-inspector": {
-      "reference": "SR-F-030570",
-      "title": "SQLite data grid dynamic storage-class, int64, BLOB and byte inspector"
-    },
-    "sqlite-form-pragma": {
-      "reference": "SR-F-030571",
-      "title": "SQLite PRAGMA inspection form"
-    },
-    "sqlite-form-extension": {
-      "reference": "SR-F-030572",
-      "title": "SQLite extension inspection form"
-    },
-    "sqlite-form-column": {
-      "reference": "SR-F-030573",
-      "title": "SQLite column create, rename and inspection form"
-    },
-    "sqlite-form-constraint": {
-      "reference": "SR-F-030574",
-      "title": "SQLite table constraint inspection form"
-    },
-    "sqlite-form-native-function": {
-      "reference": "SR-F-030575",
-      "title": "SQLite built-in and loadable function inspection form"
-    },
-    "sqlite-form-collation": {
-      "reference": "SR-F-030576",
-      "title": "SQLite collation sequence inspection form"
-    },
-    "sqlite-form-compile-option": {
-      "reference": "SR-F-030577",
-      "title": "SQLite runtime compile-option inspection form"
-    },
-    "duckdb-form-schema": {
-      "reference": "SR-F-030580",
-      "title": "DuckDB schema create, drop and inspection form"
-    },
-    "duckdb-form-column": {
-      "reference": "SR-F-030581",
-      "title": "DuckDB column create, rename, comment and inspection form"
-    },
-    "duckdb-form-constraint": {
-      "reference": "SR-F-030582",
-      "title": "DuckDB table constraint inspection form"
-    },
-    "duckdb-form-function": {
-      "reference": "SR-F-030583",
-      "title": "DuckDB built-in and extension function overload inspection form"
-    },
-    "duckdb-form-secret": {
-      "reference": "SR-F-030584",
-      "title": "DuckDB secret create, drop and public metadata inspection form"
-    },
-    "duckdb-form-extension": {
-      "reference": "SR-F-030585",
-      "title": "DuckDB extension capability, install/load and update inspection form"
-    },
-    "duckdb-form-materialization": {
-      "reference": "SR-F-030586",
-      "title": "DuckDB semantic materialization CTAS creation form"
-    },
-    "duckdb-runtime-settings": {
-      "reference": "SR-F-030587",
-      "title": "DuckDB session and global runtime settings, attachments, foreign database copy and rich COPY workspace"
-    },
-    "duckdb-retained-schema": {
-      "reference": "SR-F-030588",
-      "title": "DuckDB original-session DDN schema observe, preview, review, apply and receipts workspace"
-    },
-    "duckdb-shell": {
-      "reference": "SR-F-030589",
-      "title": "DuckDB supervised directive and SQL batch runner and CLI provenance workspace"
-    },
-    "duckdb-sql-dump": {
-      "reference": "SR-F-030590",
-      "title": "DuckDB single-stream logical SQL dump export and transactional reload workspace"
-    },
-    "duckdb-continuity-storage": {
-      "reference": "SR-F-030591",
-      "title": "DuckDB physical continuity, WAL recovery drills, storage header inspection and storage migration workspace"
-    },
-    "duckdb-sql-session-dialog": {
-      "reference": "SR-F-030592",
-      "title": "DuckDB SQL editor session settings, catalog attachments, statement grammar and prepare diagnostics"
-    },
-    "duckdb-sql-explain-dialog": {
-      "reference": "SR-F-030593",
-      "title": "DuckDB EXPLAIN, EXPLAIN ANALYZE and prepared parameter/result metadata inspector"
-    },
-    "duckdb-data-row-sql": {
-      "reference": "SR-F-030594",
-      "title": "DuckDB data grid row SQL, ON CONFLICT upsert, COPY snippet and nested literal helper"
-    },
-    "duckdb-data-cell-inspector": {
-      "reference": "SR-F-030595",
-      "title": "DuckDB data grid Arrow 19-family, HUGEINT, DECIMAL, BLOB and nested container cell inspector"
-    },
-    "postgresql-form-operator": {
-      "reference": "SR-F-030596",
-      "title": "PostgreSQL operator create, alter and optimization form"
-    },
-    "postgresql-form-rule": {
-      "reference": "SR-F-030597",
-      "title": "PostgreSQL rewrite rule create and alter form"
-    },
-    "postgresql-form-row-policy": {
-      "reference": "SR-F-030598",
-      "title": "PostgreSQL row-level security policy form"
-    },
-    "postgresql-form-large-object": {
-      "reference": "SR-F-030599",
-      "title": "PostgreSQL large object create and metadata alter form"
-    },
-    "postgresql-form-schema": {
-      "reference": "SR-F-030600",
-      "title": "PostgreSQL schema create, alter and default privileges form"
-    },
-    "postgresql-form-tablespace": {
-      "reference": "SR-F-030601",
-      "title": "PostgreSQL tablespace create, options and ACL form"
-    },
-    "postgresql-form-extension": {
-      "reference": "SR-F-030602",
-      "title": "PostgreSQL extension install, schema relocation and update form"
-    },
-    "postgresql-form-pgagent-job": {
-      "reference": "SR-F-030603",
-      "title": "PostgreSQL pgAgent job, steps and schedules form"
-    },
-    "postgresql-form-column": {
-      "reference": "SR-F-030604",
-      "title": "PostgreSQL table column, identity, generated expression and storage form"
-    },
-    "postgresql-form-constraint": {
-      "reference": "SR-F-030605",
-      "title": "PostgreSQL table constraint and PostgreSQL 18 temporal/enforcement form"
-    },
-    "postgresql-form-extended-statistics": {
-      "reference": "SR-F-030606",
-      "title": "PostgreSQL multivariate extended statistics form"
-    },
-    "postgresql-form-parameter-acl": {
-      "reference": "SR-F-030607",
-      "title": "PostgreSQL configuration parameter ACL inspection and grant form"
-    },
-    "postgresql-form-default-privileges": {
-      "reference": "SR-F-030608",
-      "title": "PostgreSQL ALTER DEFAULT PRIVILEGES inspection and grant form"
-    },
-    "postgresql-form-prepared-transaction": {
-      "reference": "SR-F-030609",
-      "title": "PostgreSQL two-phase prepared transaction inspection and resolution form"
-    },
-    "postgresql-form-foreign-server": {
-      "reference": "SR-F-030610",
-      "title": "PostgreSQL foreign server create, alter and options form"
-    },
-    "mysql-form-library": {
-      "reference": "SR-F-030611",
-      "title": "MySQL 9 JavaScript/Wasm library create, alter and inspection form"
-    },
-    "mysql-form-loadable-function": {
-      "reference": "SR-F-030612",
-      "title": "MySQL loadable UDF create and inspection form"
-    },
-    "mysql-form-tablespace": {
-      "reference": "SR-F-030613",
-      "title": "MySQL general, undo and NDB tablespace create and alter form"
-    },
-    "mysql-form-plugin": {
-      "reference": "SR-F-030614",
-      "title": "MySQL server plugin install and inspection form"
-    },
-    "mysql-form-component": {
-      "reference": "SR-F-030615",
-      "title": "MySQL server component URN install and inspection form"
-    },
-    "mysql-form-replication-channel": {
-      "reference": "SR-F-030616",
-      "title": "MySQL replication channel source configuration and failover form"
-    },
-    "mysql-form-group-replication": {
-      "reference": "SR-F-030617",
-      "title": "MySQL Group Replication cluster status and topology inspection form"
-    },
-    "mysql-form-group-replication-member": {
-      "reference": "SR-F-030618",
-      "title": "MySQL Group Replication member inspection form"
-    },
-    "mysql-form-resource-group": {
-      "reference": "SR-F-030619",
-      "title": "MySQL CPU resource group create, alter and thread priority form"
-    },
-    "mysql-form-metric": {
-      "reference": "SR-F-030620",
-      "title": "MySQL server status metric inspection form"
-    },
-    "mysql-form-session": {
-      "reference": "SR-F-030621",
-      "title": "MySQL processlist session inspection form"
-    },
-    "mysql-form-system-variable": {
-      "reference": "SR-F-030622",
-      "title": "MySQL system variable metadata and runtime value inspection form"
-    },
-    "mysql-form-spatial-reference-system": {
-      "reference": "SR-F-030623",
-      "title": "MySQL spatial reference system (SRS) create and alter form"
-    },
-    "mysql-form-server-link": {
-      "reference": "SR-F-030624",
-      "title": "MySQL FEDERATED foreign server link create and alter form"
-    },
-    "mysql-form-character-set": {
-      "reference": "SR-F-030625",
-      "title": "MySQL character set inspection form"
-    },
-    "mysql-form-collation": {
-      "reference": "SR-F-030626",
-      "title": "MySQL collation inspection form"
-    },
-    "mysql-form-storage-engine": {
-      "reference": "SR-F-030627",
-      "title": "MySQL storage engine capability inspection form"
-    },
-    "mysql-form-logfile-group": {
-      "reference": "SR-F-030628",
-      "title": "MySQL NDB Cluster logfile group create and alter form"
-    },
-    "mysql-form-ndb-node": {
-      "reference": "SR-F-030629",
-      "title": "MySQL NDB Cluster node status inspection form"
-    },
-    "mysql-form-x-collection": {
-      "reference": "SR-F-030630",
-      "title": "MySQL X DevAPI document collection create and JSON Schema validation form"
-    },
-    "mariadb-form-loadable-function": {
-      "reference": "SR-F-030631",
-      "title": "MariaDB loadable UDF create and inspection form"
-    },
-    "mariadb-form-plugin": {
-      "reference": "SR-F-030632",
-      "title": "MariaDB server plugin install and inspection form"
-    },
-    "mariadb-form-replication-channel": {
-      "reference": "SR-F-030633",
-      "title": "MariaDB named multi-source replication connection create and alter form"
-    },
-    "mariadb-form-server-link": {
-      "reference": "SR-F-030634",
-      "title": "MariaDB CONNECT / Spider / FederatedX foreign server create and alter form"
-    },
-    "mariadb-form-column": {
-      "reference": "SR-F-030635",
-      "title": "MariaDB table column create and inspection form"
-    },
-    "mariadb-form-constraint": {
-      "reference": "SR-F-030636",
-      "title": "MariaDB table constraint create and inspection form"
-    },
-    "mariadb-form-partition": {
-      "reference": "SR-F-030637",
-      "title": "MariaDB table partition inspection form"
-    },
-    "mariadb-form-tablespace": {
-      "reference": "SR-F-030638",
-      "title": "MariaDB tablespace inspection form"
-    },
-    "mariadb-form-session": {
-      "reference": "SR-F-030639",
-      "title": "MariaDB processlist session inspection form"
-    },
-    "mariadb-form-system-variable": {
-      "reference": "SR-F-030640",
-      "title": "MariaDB system variable metadata and runtime value inspection form"
-    },
-    "mariadb-form-lock": {
-      "reference": "SR-F-030641",
-      "title": "MariaDB metadata and InnoDB lock inspection form"
-    },
-    "mariadb-form-lock-wait": {
-      "reference": "SR-F-030642",
-      "title": "MariaDB blocking lock-wait edge inspection form"
-    },
-    "mariadb-form-table-storage": {
-      "reference": "SR-F-030643",
-      "title": "MariaDB InnoDB / Aria per-table physical storage inspection form"
-    },
-    "mariadb-form-binary-log": {
-      "reference": "SR-F-030644",
-      "title": "MariaDB binary log file inspection form"
-    },
-    "mariadb-form-binary-log-event": {
-      "reference": "SR-F-030645",
-      "title": "MariaDB binary log event inspection form"
-    },
-    "mariadb-form-binary-log-status": {
-      "reference": "SR-F-030646",
-      "title": "MariaDB primary binary log coordinate status inspection form"
-    },
-    "mariadb-form-log-configuration": {
-      "reference": "SR-F-030647",
-      "title": "MariaDB general, slow and error log configuration inspection form"
-    },
-    "mariadb-form-general-log-entry": {
-      "reference": "SR-F-030648",
-      "title": "MariaDB mysql.general_log entry inspection form"
-    },
-    "mariadb-form-slow-query": {
-      "reference": "SR-F-030649",
-      "title": "MariaDB mysql.slow_log entry inspection form"
-    },
-    "mariadb-form-metric": {
-      "reference": "SR-F-030650",
-      "title": "MariaDB server status metric inspection form"
-    },
-    "mariadb-form-tls-configuration": {
-      "reference": "SR-F-030651",
-      "title": "MariaDB TLS certificate and cipher posture inspection form"
-    },
-    "mariadb-form-available-plugin": {
-      "reference": "SR-F-030652",
-      "title": "MariaDB catalog available plugin inspection form"
+    "sqlite-test-data": {
+      "reference": "SR-F-001422",
+      "title": "SQLite native test-data recipe and SQL generation"
     },
     "workspace": {
       "reference": "SR-F-000001",

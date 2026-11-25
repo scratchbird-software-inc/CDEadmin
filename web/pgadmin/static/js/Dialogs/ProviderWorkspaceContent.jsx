@@ -171,23 +171,13 @@ function errorMessage(error) {
     gettext('The provider workspace request failed.');
 }
 
-function GridActivationStatus({contract, hidePassed=false}) {
+function GridActivationStatus({contract}) {
   if (!contract) return null;
   const blocked = (contract.activation_gates || []).filter(
     (gate) => gate.state !== 'passed'
   );
   const runtimeReady = contract.runtime_gate?.state === 'passed';
-  if (!blocked.length && runtimeReady) {
-    if (hidePassed) return null;
-    return <Box component="details" sx={{m: 1, flexShrink: 0}}
-      aria-label={gettext('Provider grid activation status')}>
-      <Box component="summary" sx={{cursor: 'pointer'}}>
-        {gettext('Grid checks passed')}</Box>
-      <Box component="p" sx={{mt: 1, mb: 0}}>
-        {gettext('grid contract checks passed; this is not full engine qualification')}
-      </Box>
-    </Box>;
-  }
+  if (!blocked.length && runtimeReady) return null;
   const detail = blocked.length ? blocked.map((gate) => gate.gate_id).join(', ') :
     gettext('live provider verification');
   return <Alert severity="warning" sx={{m: 1}}
@@ -1200,7 +1190,6 @@ export function VisualAdministration({catalog, resources, selectedResource, post
   const setConfirmed = (value) => setConfirmedPlan(value && plan ? planned : null);
   const setPlan = (value) => setPlanned(value ? {context: editorContext, value} : null);
   const setValidation = (value) => setValidated(value ? {context: editorContext, value} : null);
-  const graphicalContract = catalog?.graphical_interface;
   const groupedObjects = useMemo(() => {
     const declaredGroups = catalog?.navigator?.groups || [];
     const groups = declaredGroups.map((group) => ({...group, objects: []}));
@@ -1456,14 +1445,6 @@ export function VisualAdministration({catalog, resources, selectedResource, post
     </Alert>}
     {refreshWarning && <Alert severity="warning" sx={{mb: 2}}>
       {refreshWarning}</Alert>}
-    {!focused && !objectEditor && graphicalContract && <Alert severity={
-      graphicalContract?.activation_state === 'passed' ? 'info' : 'warning'
-    } sx={{mb: 2}} aria-label={gettext('Engine graphical interface status')}>
-      <Box component="strong">{catalog.engine_name} {catalog.reference_profile}</Box>
-      {' — '}{graphicalContract?.graphical_operation_count || 0}/
-      {graphicalContract?.native_operation_count || 0}{' '}
-      {gettext('native operations have provider-owned form definitions. Full option coverage and live behavior require separate verification.')}
-    </Alert>}
     <Box sx={{display: 'grid', gridTemplateColumns: focused || objectEditor ? 'minmax(0, 1fr)' :
       {xs: 'minmax(0, 1fr)', md: 'minmax(180px, 240px) minmax(0, 1fr)'}, gap: 1,
     alignItems: 'start'}}>
@@ -1603,10 +1584,105 @@ export function VisualAdministration({catalog, resources, selectedResource, post
           {validation && !validation.valid && <Alert severity="error" sx={{mt: 2}}>
             {validation.errors.map((item) => item.message).join(' ')}
           </Alert>}
-          {plan && <Box component="pre" aria-label={gettext('Provider plan preview')}
-            sx={{mt: 2, p: 1, overflow: 'auto', maxHeight: 240, bgcolor: 'background.default'}}>
-            {JSON.stringify(plan, null, 2)}
-          </Box>}
+          {plan && (() => {
+            const rawStatements = Array.isArray(plan.statements)
+              ? plan.statements
+              : Array.isArray(plan.command_preview?.statements)
+                ? plan.command_preview.statements
+                : null;
+            const sqlParts = rawStatements
+              ? rawStatements
+                .map((stmt) => (typeof stmt === 'string' ? stmt : stmt?.sql || stmt?.statement || stmt?.source || ''))
+                .filter(Boolean)
+              : [
+                plan.sql,
+                plan.source,
+                plan.preview_source,
+                plan.command_preview?.sql,
+                plan.command_preview?.source,
+              ].filter((s) => typeof s === 'string' && s.trim());
+            const sqlPreview = sqlParts.length ? sqlParts.join(';\n\n') : '';
+            const blockers = Array.isArray(plan.blockers) ? plan.blockers.filter(Boolean) : [];
+            return (
+              <Box
+                role="region"
+                aria-label={gettext('Provider plan preview')}
+                sx={{
+                  mt: 2,
+                  p: 1.5,
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center', fontSize: '0.8125rem'}}>
+                  {plan.state && (
+                    <Box component="span">
+                      <strong>{gettext('Plan state')}:</strong> {String(plan.state)}
+                    </Box>
+                  )}
+                  {plan.plan_id && (
+                    <Box component="span" sx={{color: 'text.secondary', fontFamily: 'monospace'}}>
+                      {String(plan.plan_id)}
+                    </Box>
+                  )}
+                </Box>
+                {blockers.length > 0 && (
+                  <Alert severity="warning" sx={{mt: 1}}>
+                    {blockers.join(', ')}
+                  </Alert>
+                )}
+                {sqlPreview && (
+                  <Box sx={{mt: 1}}>
+                    <Box sx={{fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', mb: 0.5}}>
+                      {gettext('SQL preview')}
+                    </Box>
+                    <Box
+                      component="pre"
+                      sx={{
+                        m: 0,
+                        p: 1,
+                        overflow: 'auto',
+                        maxHeight: 220,
+                        bgcolor: 'background.default',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 0.5,
+                        fontFamily: 'monospace',
+                        fontSize: '0.8125rem',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {sqlPreview}
+                    </Box>
+                  </Box>
+                )}
+                <Box component="details" sx={{mt: 1}}>
+                  <Box
+                    component="summary"
+                    sx={{cursor: 'pointer', fontSize: '0.75rem', color: 'text.secondary', userSelect: 'none'}}
+                  >
+                    {gettext('Technical plan details')}
+                  </Box>
+                  <Box
+                    component="pre"
+                    sx={{
+                      mt: 1,
+                      mb: 0,
+                      p: 1,
+                      overflow: 'auto',
+                      maxHeight: 240,
+                      bgcolor: 'background.default',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    {JSON.stringify(plan, null, 2)}
+                  </Box>
+                </Box>
+              </Box>
+            );
+          })()}
           {plan?.impact && <Alert severity={
             plan.impact.availability_risk === 'high' ? 'warning' : 'info'
           } sx={{mt: 2}}>
@@ -6603,12 +6679,12 @@ export default function ProviderWorkspaceContent({
       </Box>}
       {!isDedicatedSurface && <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
         {workspace && tab !== 'studio' && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
-        <Button onClick={() => setTab('metadata-search')}>Search database metadata</Button>}
+        <Button onClick={() => setTab('metadata-search')}>{gettext('Search database metadata')}</Button>}
         {workspace && tab !== 'studio' && queryDatabaseTargetId && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
-        <Button onClick={() => setTab('firebird-events')}>Monitor database events</Button>}
+        <Button onClick={() => setTab('firebird-events')}>{gettext('Monitor database events')}</Button>}
         {workspace && tab === 'firebird-events' && <FirebirdEvents key={queryDatabaseTargetId} post={post} databaseTargetId={queryDatabaseTargetId} />}
         {workspace && selectedResource && ['object', 'resources'].includes(tab) && ['firebird-native', 'firebird-embedded'].includes(workspace.endpoint?.profile_id) &&
-        <Button onClick={() => setTab('firebird-templates')}>Object code templates</Button>}
+        <Button onClick={() => setTab('firebird-templates')}>{gettext('Object code templates')}</Button>}
       </Box>}
       {workspace && (selectedResource || dedicatedSqlTargetResource) && tab === 'firebird-templates' && <FirebirdTemplates post={post}
         resource={selectedResource || dedicatedSqlTargetResource} generation={resourcePage?.generation} databaseTargetId={queryDatabaseTargetId}

@@ -94,7 +94,13 @@ export function DatabaseEnginesEditor({
   fetchImpl = null,
   onChangeGlobal,
 }) {
-  const runFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+  const runFetch = useMemo(() => {
+    if (fetchImpl) return fetchImpl;
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      return window.fetch.bind(window);
+    }
+    return typeof fetch === 'function' ? fetch : null;
+  }, [fetchImpl]);
 
   const [engines, setEngines] = useState(() =>
     FALLBACK_DATABASE_ENGINES.map((e) => ({

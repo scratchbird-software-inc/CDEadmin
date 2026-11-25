@@ -45,6 +45,10 @@ function resourceEditorAvailable(bundle, resourceKind) {
  */
 function nodeEditorAvailable(bundle, resourceKind, itemData, operation) {
   if (!bundle || !resourceKind) return false;
+  if (operation === 'inspect') {
+    return Boolean(bundle?.kinds?.[resourceKind]?.tier1?.includes('inspect')) &&
+      resourceEditorAvailable(bundle, resourceKind);
+  }
   const tier1SupportsOp = !operation || Boolean(bundle?.kinds?.[resourceKind]?.tier1?.includes(operation));
   return (tier1SupportsOp && resourceEditorAvailable(bundle, resourceKind)) ||
     (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes(operation)) ||
@@ -236,23 +240,64 @@ function closeInlineOrWorkspaceTab(panelId, workspace) {
   workspace?.close?.(panelId);
 }
 
+function resolveAncestorSchemaName(itemData, item) {
+  if (itemData?._type === 'cde_resource' && itemData.cde_resource_kind === 'schema') {
+    return itemData.label || itemData._label || null;
+  }
+  const tree = pgAdmin?.Browser?.tree;
+  if (!tree || !item) return null;
+  let cursor = item;
+  for (let depth = 0; depth < 8 && cursor && tree.hasParent?.(cursor); depth++) {
+    cursor = tree.parent(cursor);
+    const data = tree.itemData?.(cursor);
+    if (data?._type === 'cde_resource' && data.cde_resource_kind === 'schema') {
+      return data.label || data._label || null;
+    }
+    if (data?._type === 'cde_database_target' || data?._type === 'server') break;
+  }
+  return null;
+}
+
+function resolveDatabaseTargetId(itemData, item) {
+  if (itemData?.cde_database_target_id) return itemData.cde_database_target_id;
+  if (itemData?._type === 'cde_database_target' && itemData.target_id) return itemData.target_id;
+  const tree = pgAdmin?.Browser?.tree;
+  if (!tree || !item) return undefined;
+  let cursor = item;
+  for (let depth = 0; depth < 10 && cursor && tree.hasParent?.(cursor); depth++) {
+    cursor = tree.parent(cursor);
+    const data = tree.itemData?.(cursor);
+    if (data?.cde_database_target_id) return data.cde_database_target_id;
+    if (data?._type === 'cde_database_target' && data.target_id) return data.target_id;
+    if (data?._type === 'server') break;
+  }
+  return undefined;
+}
+
 function openEditorPanel({context, itemData, item, resourceKind, resourceId, mode, displayName}) {
   const serverNode = pgAdmin.Browser.Nodes.server;
+  const resolvedDbTargetId = resolveDatabaseTargetId(itemData, item);
   const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
-    itemData.cde_database_target_id);
+    resolvedDbTargetId);
   const workspace = pgAdmin.Browser.docker.default_workspace;
   const panelId = `id-object-editor-${++editorSequence}`;
   const onClose = () => closeInlineOrWorkspaceTab(panelId, workspace);
-  const title = gettext('%s — %s', mode === 'create' ? gettext('Create') : gettext('Edit'), displayName);
-  const onAuthRequired = () => promptEndpointVerification(context.endpoint.item, itemData.cde_database_target_id);
+  const modeVerb = mode === 'create' ? gettext('Create') : mode === 'inspect' ? gettext('Inspect') : gettext('Edit');
+  const title = gettext('%s — %s', modeVerb, displayName);
+  const onAuthRequired = () => promptEndpointVerification(context.endpoint.item, resolvedDbTargetId);
+  const ancestorSchema = mode === 'create' ? resolveAncestorSchemaName(itemData, item) : null;
+  const initialRecord = ancestorSchema
+    ? {parent: ancestorSchema, schema: ancestorSchema, basensp: ancestorSchema}
+    : {};
   const content = <ErrorBoundary>
     <ProviderObjectEditorHost api={context.api} endpointUrl={endpointUrl} engine={context.engine}
       version={context.version} versionSupport={context.versionSupport} resourceId={resourceId} resourceKind={resourceKind}
-      databaseTargetId={itemData.cde_database_target_id} mode={mode} displayName={displayName}
+      databaseTargetId={resolvedDbTargetId} mode={mode} displayName={displayName}
+      initialRecord={initialRecord}
       onClose={onClose} onApplied={() => refreshNode(item, {parent: mode === 'alter', openIfClosed: mode === 'create'})}
       onAuthRequired={onAuthRequired}
       onOpenData={() => serverNode.callbacks.open_cde_workspace.call(serverNode, {item: context.endpoint.item}, 'data', {
-        database_target_id: itemData.cde_database_target_id, resource_id: resourceId, resource_kind: resourceKind,
+        database_target_id: resolvedDbTargetId, resource_id: resourceId, resource_kind: resourceKind,
         display_name: displayName, task_title: gettext('Data')})} />
   </ErrorBoundary>;
   openInlineOrWorkspaceTab(panelId, title, content, workspace);
@@ -287,6 +332,59 @@ export function openFamilyCreate(itemData, item, resourceKind) {
   if(!bundle || !nodeEditorAvailable(bundle, resourceKind, itemData, 'create')) return false;
   return openEditorPanel({context, itemData, item, resourceKind, resourceId: null, mode: 'create',
     displayName: `${itemData.label || itemData._label} / ${kindTitle(bundle, resourceKind)}`});
+}
+
+/** Open the native OperationDialog modal for dropping a tree resource (typed confirmation + SQL preview). */
+export function openFamilyDrop(itemData, item) {
+  if(itemData?._type !== 'cde_resource' || !itemData.cde_resource_kind) return false;
+  const context = treeContext(itemData, item);
+  if(!context) return false;
+  const serverNode = pgAdmin.Browser.Nodes.server;
+  const endpointUrl = providerEndpointUrl(serverNode, context.endpoint.item, context.endpoint.data,
+    itemData.cde_database_target_id);
+  const onAuthRequired = () => promptEndpointVerification(context.endpoint.item, itemData.cde_database_target_id);
+  const post = makePost(context.api, endpointUrl, itemData.cde_database_target_id, {onAuthRequired});
+  const mount = document.createElement('div');
+  document.body.appendChild(mount);
+  const root = createRoot(mount);
+  const close = () => {
+    root.unmount();
+    mount.remove();
+  };
+  const run = async () => {
+    const [target, bundle, nativeForms] = await Promise.all([
+      operationTarget(post, itemData),
+      descriptorClient(context.api).bundle(context.engine, {version: context.version}).catch(() => null),
+      post({action: 'native_forms', request: {resource_kind: itemData.cde_resource_kind}}).catch(() => null),
+    ]);
+    const dropForm = (nativeForms?.operations || []).find((op) => op.operation_id === 'drop');
+    const rawFields = Array.isArray(dropForm?.fields) ? dropForm.fields : [];
+    const hasTypedConfirmation = rawFields.some((f) => f.field_id === 'confirmation');
+    const targetName = target?.display_name || itemData.label || itemData._label;
+    const labelTitle = bundle ? kindTitle(bundle, itemData.cde_resource_kind) : itemData.cde_resource_kind;
+    const operation = {
+      operation_id: 'drop',
+      resource_kind: itemData.cde_resource_kind,
+      title: gettext('Drop %s', labelTitle),
+      tier: 2,
+      confirmation: hasTypedConfirmation ? 'typed_name' : 'simple',
+      fields: rawFields,
+      form_id: dropForm?.form_id || `${itemData.cde_resource_kind}.drop`,
+    };
+    const calls = visualAdminCalls(post, {
+      resourceKind: itemData.cde_resource_kind,
+      operationId: 'drop',
+      target,
+    });
+    root.render(<Theme><OperationDialog open operation={operation} targetName={targetName}
+      context={operationContext(bundle, [], target)}
+      plan={({draft}) => calls.plan({draft})}
+      apply={({plan}) => calls.apply({plan})}
+      onClose={close}
+      onApplied={() => refreshNode(item, {parent: true})} /></Theme>);
+  };
+  run();
+  return true;
 }
 
 /** Run a tier 2/3 descriptor operation on a tree resource in the OperationDialog. */
@@ -375,18 +473,43 @@ export function familyEditorContextActions(itemData, item) {
   if(itemData._type === 'cde_resource' && nodeEditorAvailable(bundle, resourceKind, itemData, 'alter')) {
     entries.push({category: 'common', id: 'family-editor-edit', label: gettext('Edit...'), iconKey: 'action.edit',
       intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'alter'})});
+  } else if(itemData._type === 'cde_resource' && nodeEditorAvailable(bundle, resourceKind, itemData, 'inspect')) {
+    entries.push({category: 'common', id: 'family-editor-inspect', label: gettext('Inspect...'), iconKey: 'action.properties',
+      intent: 'default', enabled: true, execute: () => tryOpenFamilyEditor(itemData, item, {mode: 'inspect'})});
+  }
+  if(itemData._type === 'cde_resource' && resourceKind !== 'server' && (
+    bundle.kinds[resourceKind]?.tier1?.includes('drop') ||
+    (Array.isArray(itemData?.cde_native_editor) && itemData.cde_native_editor.includes('drop'))
+  )) {
+    entries.push({category: 'common', id: 'family-editor-drop', label: gettext('Drop...'), iconKey: 'action.delete',
+      intent: 'destructive', enabled: true, execute: () => openFamilyDrop(itemData, item)});
   }
   // Create entries: a group node creates its own kind; a database creates any top-level kind.
   // A database node also creates the engine-object kinds the server flags as
   // natively creatable (owner decision 2026-11-11, option 1).
+  // Firebird SQL roles (RDB$ROLES) are database-scoped whereas PostgreSQL / MySQL / MariaDB
+  // roles are server-scoped, so 'role' is allowed on Firebird database nodes.
   const DATABASE_NON_CHILD_KINDS = new Set([
-    'database', 'server', 'role', 'tablespace', 'pgagent-job', 'replica-node',
+    'database', 'server', ...(context.engine === 'firebird' ? [] : ['role']), 'user',
+    'tablespace', 'pgagent-job', 'replica-node',
     'column', 'constraint', 'index', 'partitioned-index', 'trigger', 'rule',
     'row-policy', 'partition', 'global-authentication-mapping', 'service-operation',
   ]);
+  const SCHEMA_CHILD_KINDS = new Set([
+    'table', 'foreign-table', 'view', 'materialized-view', 'sequence',
+    'domain', 'type', 'function', 'procedure', 'macro', 'collation',
+    'fts-configuration', 'fts-dictionary', 'fts-parser', 'fts-template',
+  ]);
   const nativeKinds = (Array.isArray(itemData.cde_native_editor_kinds) ? itemData.cde_native_editor_kinds : [])
     .filter((kind) => !['database', 'server'].includes(kind));
-  const childKinds = itemData._type === 'cde_resource_group' ? [itemData.cde_resource_kind] :
+  const childKinds = itemData._type === 'cde_resource_group' ? (
+    itemData.cde_resource_kind === 'firebird-folder' && itemData.virtual_branch === 'programming'
+      ? ['domain', 'sequence', 'procedure', 'function', 'package', 'exception']
+      : [itemData.cde_resource_kind]
+  ) : itemData._type === 'cde_resource' && itemData.cde_resource_kind === 'schema' ?
+      Object.values(bundle.kinds).filter((kind) =>
+        kind.tier1.includes('create') && SCHEMA_CHILD_KINDS.has(kind.resource_kind)
+      ).map((kind) => kind.resource_kind) :
     itemData._type === 'cde_database_target' ?
       [...new Set([...Object.values(bundle.kinds).filter((kind) =>
         kind.tier1.includes('create') &&

@@ -32,6 +32,10 @@ import {ColorSchemesAndFontsEditor} from './settings/ColorSchemesAndFontsEditor'
 import {ActionMenuToolbarEditor} from './settings/ActionMenuToolbarEditor';
 import {SecurityAccessEditor} from './settings/SecurityAccessEditor';
 import {DatabaseEnginesEditor} from './settings/DatabaseEnginesEditor';
+import {
+  readShowFormReferences,
+  setShowFormReferences,
+} from '../navigation/FormReference';
 
 const EXTRA_PREFS_STORAGE_KEY = 'scratchrobin.preferences.domains.v1';
 
@@ -140,6 +144,10 @@ function resolveSectionTarget(sectionId, mode, appId, fallbackAppId) {
     return restrictUser({pageId: 'menus', tabId: 'app-menus'});
   case 'actions:iconbars':
     return restrictUser({pageId: 'menus', tabId: 'iconbars'});
+  case 'actions:tib':
+  case 'actions:tib-appearance':
+  case 'appearance:tib':
+    return restrictUser({pageId: 'menus', tabId: 'tib-appearance'});
   case 'actions:icons':
     return restrictUser({pageId: 'menus', tabId: 'icons'});
   case 'shortcuts':
@@ -296,6 +304,7 @@ export function ScratchPreferencesDialog({
   const [globalDefaultRibbon, setGlobalDefaultRibbon] = useState(
     globalConfig.default_tabbed_icon_bar !== false
   );
+  const [showFormRefs, setShowFormRefs] = useState(() => readShowFormReferences());
   const [globalPanelGap, setGlobalPanelGap] = useState(
     Number(globalConfig.panel_gap ?? 6)
   );
@@ -594,7 +603,8 @@ export function ScratchPreferencesDialog({
           {id: 'global-menus', label: gettext('Global Menus'), qaKey: 'actions-tab-global-menus'},
           {id: 'app-menus', label: gettext('Application Menus'), qaKey: 'actions-tab-app-menus'},
           {id: 'iconbars', label: gettext('Tabbed Iconbars'), qaKey: 'actions-tab-iconbars'},
-          {id: 'icons', label: gettext('Action Icons'), qaKey: 'actions-tab-icons'},
+          {id: 'tib-appearance', label: gettext('TiB Appearance'), qaKey: 'actions-tab-tib-appearance'},
+          {id: 'icons', label: gettext('Actions'), qaKey: 'actions-tab-icons'},
         ],
       };
     case 'shortcuts':
@@ -813,6 +823,13 @@ export function ScratchPreferencesDialog({
         },
         permittedApps,
       });
+      if (Array.isArray(pendingGlobalPatch?.enabled_engines) && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('scratchrobin:connectors-changed', {
+            detail: {enabled_engines: pendingGlobalPatch.enabled_engines},
+          })
+        );
+      }
     };
 
     if (mode === 'user') {
@@ -1135,6 +1152,18 @@ export function ScratchPreferencesDialog({
                         />
                       ))}
                     </div>
+                  </SettingsGroup>
+                  <SettingsGroup title={gettext('Developer & Diagnostics')}>
+                    <Checkbox
+                      label={gettext('Show Form Reference IDs (SR-F-*) on Screens & Dialogs')}
+                      checked={showFormRefs}
+                      onChange={(checked) => {
+                        const next = Boolean(checked);
+                        setShowFormRefs(next);
+                        setShowFormReferences(next);
+                        setDirtyExtras(true);
+                      }}
+                    />
                   </SettingsGroup>
                 </>
               )}

@@ -13,6 +13,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import StructuredPayloadCard from '../StructuredPayloadCard';
 import {cutoverReadiness, rollbackState} from './MigrationEngine';
 
 export const MIGRATION_SURFACES = Object.freeze([
@@ -314,7 +315,7 @@ function MigrationInspector({session}) {
   const selected = mapping ?? operation ?? session.runs.find((item) => item.id === session.selectedId) ??
     session.tasks?.find((item) => item.id === session.selectedId);
   const rollback = rollbackState(session.content.rollbackPlan, session.runtime.completedCutoverSteps);
-  return <Box><Box component="h3">Selected operation</Box><pre>{JSON.stringify(selected ?? {}, null, 2)}</pre>
+  return <Box><Box component="h3">Selected operation</Box><StructuredPayloadCard compact value={selected ?? {}} />
     <Box component="h3">Source/target mapping</Box><Box>{mapping?.sourceRef.canonical ??
       session.content.sourceBinding?.canonical ?? 'Not selected'} → {mapping?.targetRef?.canonical ??
       session.content.targetBinding?.canonical ?? 'Not selected'}</Box>

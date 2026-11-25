@@ -13,6 +13,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import StructuredPayloadCard from '../StructuredPayloadCard';
 import {exportAsyncAPI, exportOpenAPI} from './APIEngine';
 
 export const API_SURFACES = Object.freeze([
@@ -228,8 +229,9 @@ function Source({session, execute, currentUser}) {
         !['openapi_http', 'asyncapi_event'].includes(profile)} onClick={() => invokeSafely(execute,
       profile === 'openapi_http' ? 'api.export.openapi' : 'api.export.asyncapi', {}, setError)}>
       Export source</Button></Toolbar>{error && <Banner status="error">{error}</Banner>}
+    <Box sx={{p: 1}}><StructuredPayloadCard compact title="Specification summary" value={source} showRawDisclosure={false} /></Box>
     <TextArea label={`${profile} source`} value={source}
-      onChange={(event) => setSource(event.target.value)} rows={20} /></Box>;
+      onChange={(event) => setSource(event.target.value)} rows={14} /></Box>;
 }
 Source.propTypes = {session: PropTypes.object, execute: PropTypes.func, currentUser: PropTypes.object};
 
@@ -270,8 +272,8 @@ function APIInspector({session}) {
   const values = [...session.content.operations, ...session.content.channels, ...session.content.schemas,
     ...session.content.security, ...session.content.tests];
   const selected = values.find((item) => item.id === session.selectedId);
-  return <Box><Box component="h3">Selected schema/field</Box><pre>{JSON.stringify(selected ?? {}, null, 2)}</pre>
-    <Box component="h3">Data binding</Box><pre>{JSON.stringify(selected?.binding ?? {}, null, 2)}</pre>
+  return <Box><Box component="h3">Selected schema/field</Box><StructuredPayloadCard compact value={selected ?? {}} />
+    <Box component="h3">Data binding</Box><StructuredPayloadCard compact value={selected?.binding ?? {}} />
     <Box component="h3">Permissions</Box><Box>{selected?.securityRequirementIds?.join(', ') || 'None'}</Box>
     <Box component="h3">Version notes</Box><Box>{session.content.externalSpecVersion ?? 'Native profile'}</Box>
     <Box component="h3">Validation</Box><Badge label={session.validation.valid ? 'valid' : 'invalid'} /></Box>;

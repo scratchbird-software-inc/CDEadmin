@@ -129,8 +129,9 @@ ButtonBody.propTypes = {control: PropTypes.object, state: PropTypes.object,
   showLabel: PropTypes.bool};
 
 function showsLabel(control, inMenu) {
-  return inMenu || control.size === 'large' || control.showLabel !== false ||
-    !control.icon;
+  if(inMenu || !control.icon) return true;
+  if(control.showLabel === false) return false;
+  return control.size === 'large' || control.showLabel !== false;
 }
 
 export function CommandButton({control, state, onCommand, hints, inMenu}) {
@@ -264,7 +265,7 @@ export function ColorControl({control, state, onCommand, hints, messages}) {
         {renderIcon(control.icon, control.size)}
         <span className="snb-swatch" style={{background: value || 'transparent'}} />
       </span>
-      {control.size === 'large' && <span className="snb-label">{control.label}</span>}
+      {control.size === 'large' && control.showLabel !== false && <span className="snb-label">{control.label}</span>}
       <Hint value={hints?.[control.id]} />
     </button>
     <button ref={arrow} type="button" className="snb-control snb-arrow"
@@ -328,9 +329,12 @@ GalleryControl.propTypes = controlProps;
 export function SegmentedControl({control, state, onCommand, hints}) {
   const enabled = isControlEnabled(control, state);
   const currentValue = commandState(state, control).value ?? control.value;
+  const items = control.items ?? [];
+  const isIconGrid = items.length > 0 && items.every((e) => Boolean(e.icon) && !e.showLabel);
   return <span className="snb-segmented" role="radiogroup"
-    aria-label={control.label} data-snb-control={control.id}>
-    {(control.items ?? []).map((entry) => {
+    aria-label={control.label} data-snb-control={control.id}
+    data-icon-grid={isIconGrid ? 'true' : undefined}>
+    {items.map((entry) => {
       const checked = entry.checked !== undefined ?
         Boolean(entry.checked) : entry.id === currentValue;
       const itemDisabled = !enabled || Boolean(entry.disabled);

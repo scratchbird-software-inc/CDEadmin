@@ -17,7 +17,6 @@ import {Tab} from '../../navigation/TabsAndBreadcrumbs';
 import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Banner, Badge, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
-import DataGrid from '../../data/PagedDataGrid';
 import {ScratchDiffTable} from '../../data/beautiful';
 import FormReference from '../../navigation/FormReference';
 
@@ -210,61 +209,327 @@ DiffTree.propTypes = {
   openSurface: PropTypes.func.isRequired,
 };
 
+function formatCompareAttributeValue(val) {
+  if (val === undefined) return '—';
+  if (val === null) return 'NULL';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'object') return JSON.stringify(val);
+  return String(val);
+}
+
+function buildAttributeDiffRows(left, right) {
+  const rows = [];
+  const pushRow = (attribute, hasLeft, leftVal, hasRight, rightVal) => {
+    let status = 'Identical';
+    let badgeStatus = 'success';
+    if (!hasLeft && hasRight) {
+      status = 'Target only';
+      badgeStatus = 'info';
+    } else if (hasLeft && !hasRight) {
+      status = 'Source only';
+      badgeStatus = 'warning';
+    } else if (JSON.stringify(leftVal) !== JSON.stringify(rightVal)) {
+      status = 'Modified';
+      badgeStatus = 'warning';
+    }
+    rows.push({
+      attribute,
+      sourceValue: hasLeft ? formatCompareAttributeValue(leftVal) : '—',
+      targetValue: hasRight ? formatCompareAttributeValue(rightVal) : '—',
+      status,
+      badgeStatus,
+    });
+  };
+
+  pushRow(
+    gettext('Qualified name'),
+    Boolean(left),
+    left?.qualifiedName,
+    Boolean(right),
+    right?.qualifiedName
+  );
+  pushRow(gettext('Kind'), Boolean(left), left?.kind, Boolean(right), right?.kind);
+  if (left?.comment || right?.comment) {
+    pushRow(gettext('Comment'), Boolean(left), left?.comment ?? '', Boolean(right), right?.comment ?? '');
+  }
+
+  const normKeys = new Set([
+    ...Object.keys(left?.normalized || {}),
+    ...Object.keys(right?.normalized || {}),
+  ]);
+  for (const key of normKeys) {
+    const hasL = Boolean(left?.normalized && Object.hasOwn(left.normalized, key));
+    const hasR = Boolean(right?.normalized && Object.hasOwn(right.normalized, key));
+    pushRow(key, hasL, left?.normalized?.[key], hasR, right?.normalized?.[key]);
+  }
+
+  const nativeKeys = new Set([
+    ...Object.keys(left?.native || {}),
+    ...Object.keys(right?.native || {}),
+  ]);
+  for (const key of nativeKeys) {
+    const hasL = Boolean(left?.native && Object.hasOwn(left.native, key));
+    const hasR = Boolean(right?.native && Object.hasOwn(right.native, key));
+    const label = normKeys.has(key) ? `${key} (native)` : key;
+    pushRow(label, hasL, left?.native?.[key], hasR, right?.native?.[key]);
+  }
+
+  return rows;
+}
+
+function buildSqlDiffPreview(diff, left, right, plan) {
+  const plannedOps = (plan?.operations || []).filter(
+    (op) => op.diffId === diff.id || op.qualifiedName === diff.qualifiedName
+  );
+  const leftSql =
+    left?.native?.ddl || left?.normalized?.ddl || left?.native?.definition || left?.normalized?.definition || '';
+  const rightSql =
+    right?.native?.ddl || right?.normalized?.ddl || right?.native?.definition || right?.normalized?.definition || '';
+
+  const lines = [];
+  if (leftSql || rightSql) {
+    lines.push(`-- Source (${left?.qualifiedName || gettext('not present')})`);
+    lines.push(leftSql || `-- (${gettext('no DDL source')})`);
+    lines.push('');
+    lines.push(`-- Target (${right?.qualifiedName || gettext('not present')})`);
+    lines.push(rightSql || `-- (${gettext('no DDL source')})`);
+  }
+  if (plannedOps.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(`-- ${gettext('Planned migration statements')}`);
+    for (const op of plannedOps) {
+      lines.push(op.nativeStatement);
+    }
+  }
+  if (lines.length === 0) {
+    lines.push(
+      `-- ${diff.kind.toUpperCase()} ${diff.qualifiedName} (${diff.classification.replaceAll('_', ' ')})`
+    );
+    lines.push(
+      `-- Source: ${left ? left.qualifiedName : gettext('absent')} | Target: ${right ? right.qualifiedName : gettext('absent')}`
+    );
+  }
+  return lines.join('\n');
+}
+
 function ObjectDiff({session}) {
   const diff = session.result?.differences.find((item) => item.id === session.selectedDiffId);
-  if(!diff) return <EmptyState message="Select an item in Diff Tree to inspect it." />;
+  if (!diff) return <EmptyState message={gettext('Select an item in Diff Tree to inspect it.')} />;
   const left = session.leftSnapshot?.objects?.find((item) => item.id === diff.leftId);
   const right = session.rightSnapshot?.objects?.find((item) => item.id === diff.rightId);
-  return <Box sx={{height: '100%', display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', overflow: 'hidden'}}>
-    {[['Left', left], ['Right', right]].map(([label, object]) => <Box key={label}
-      component="section" aria-label={`${label} object definition`}
-      sx={{p: 2, overflow: 'auto', borderRight: label === 'Left' ? '1px solid' : 0,
-        borderColor: 'divider'}}>
-      <Box component="h2" sx={{mt: 0}}>{label}</Box>
-      {!object ? <EmptyState message={`No ${label.toLowerCase()} object exists.`} /> : <>
-        <Badge label={object.kind} />
-        <Box component="h3">{object.qualifiedName}</Box>
-        <Box component="h4">Normalized metadata</Box>
-        <Box component="pre" tabIndex={0} sx={{whiteSpace: 'pre-wrap'}}>
-          {JSON.stringify(object.normalized, null, 2)}
+  const attributeRows = buildAttributeDiffRows(left, right);
+  const sqlPreview = buildSqlDiffPreview(diff, left, right, session.plan);
+
+  return (
+    <ScratchScrollArea orientation="both" style={{height: '100%'}}>
+      <Box sx={{p: 2, display: 'flex', flexDirection: 'column', gap: 2}}>
+        <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center'}}>
+          <Box component="h2" sx={{m: 0}}>
+            {diff.qualifiedName}
+          </Box>
+          <Badge label={diff.kind} />
+          <Badge status="info" label={diff.classification.replaceAll('_', ' ')} />
+          {!left && <Badge status="warning" label={gettext('Missing in source')} />}
+          {!right && <Badge status="warning" label={gettext('Missing in target')} />}
         </Box>
-        <Box component="h4">Provider-native metadata</Box>
-        <Box component="pre" tabIndex={0} sx={{whiteSpace: 'pre-wrap'}}>
-          {JSON.stringify(object.native, null, 2)}
+
+        <Box sx={{overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1}}>
+          <Box
+            component="table"
+            aria-label={gettext('Object attribute comparison')}
+            sx={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: '0.8125rem',
+              '& th, & td': {
+                p: 1,
+                textAlign: 'left',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                verticalAlign: 'top',
+              },
+              '& th': {
+                fontWeight: 600,
+                bgcolor: 'background.default',
+              },
+            }}
+          >
+            <thead>
+              <tr>
+                <th>{gettext('Attribute')}</th>
+                <th>{gettext('Source Value')}</th>
+                <th>{gettext('Target Value')}</th>
+                <th>{gettext('Status')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attributeRows.map((row) => (
+                <tr key={row.attribute}>
+                  <td style={{fontWeight: 600}}>{row.attribute}</td>
+                  <td style={{fontFamily: 'monospace', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
+                    {row.sourceValue}
+                  </td>
+                  <td style={{fontFamily: 'monospace', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
+                    {row.targetValue}
+                  </td>
+                  <td>
+                    <Badge status={row.badgeStatus} label={gettext(row.status)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Box>
         </Box>
-      </>}
-    </Box>)}
-  </Box>;
+
+        <Box component="section" aria-label={gettext('SQL diff preview')}>
+          <Box component="h3" sx={{mt: 0, mb: 1, fontSize: '0.9rem'}}>
+            {gettext('SQL Diff Preview')}
+          </Box>
+          <Box
+            component="pre"
+            tabIndex={0}
+            sx={{
+              m: 0,
+              p: 1.5,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: 'background.default',
+              fontFamily: 'monospace',
+              fontSize: '0.8125rem',
+              whiteSpace: 'pre-wrap',
+              overflow: 'auto',
+            }}
+          >
+            {sqlPreview}
+          </Box>
+        </Box>
+      </Box>
+    </ScratchScrollArea>
+  );
 }
 
 ObjectDiff.propTypes = {session: PropTypes.object.isRequired};
 
 function MappingReview({session, invoke}) {
-  if(!session.result) return <EmptyState message="Run a comparison to review mappings." />;
+  if (!session.result) return <EmptyState message={gettext('Run a comparison to review mappings.')} />;
+  const acceptedSet = new Set(
+    (session.content?.acceptedMappings || [])
+      .filter((m) => m.accepted)
+      .map((m) => `${m.leftId}::${m.rightId}`)
+  );
   const rows = session.result.renameCandidates.map((candidate) => ({
-    ...candidate, evidenceText: candidate.evidence.join(', '),
+    ...candidate,
+    evidenceText: (candidate.evidence || []).join(', '),
+    isAccepted: acceptedSet.has(`${candidate.leftId}::${candidate.rightId}`),
   }));
-  return <Box sx={{height: '100%', minHeight: 0, p: 1}}>
-    <Box component="h2" sx={{mt: 0}}>Rename and equivalence candidates</Box>
-    <Banner status="info">Candidates are never accepted automatically. Review native
-      semantics before accepting a mapping.</Banner>
-    <Box sx={{height: 'calc(100% - 92px)', mt: 1}}>
-      <DataGrid gridId="schema-compare/mappings" aria-label="Mapping candidates"
-        columns={[
-          {key: 'leftId', name: 'Left object'}, {key: 'rightId', name: 'Right object'},
-          {key: 'kind', name: 'Kind'}, {key: 'evidenceText', name: 'Evidence'},
-        ]} rows={rows} readOnly enableRowSelect rowKeyGetter={(row) => row.id}
-        onItemSelect={(rowOrIdx) => {
-          const row = typeof rowOrIdx === 'number' ? rows[rowOrIdx] : rowOrIdx;
-          if (row?.id) {
-            invoke('schema_compare.rename.accept', {
-              candidateId: row.id, category: 'representational_difference',
-            });
-          }
-        }} />
-    </Box>
-  </Box>;
+  const busy = session.state === 'background_task_active';
+
+  return (
+    <ScratchScrollArea orientation="both" style={{height: '100%'}}>
+      <Box sx={{p: 2, display: 'flex', flexDirection: 'column', gap: 1.5}}>
+        <Box component="h2" sx={{m: 0}}>
+          {gettext('Rename and equivalence candidates')}
+        </Box>
+        <Banner status="info">
+          {gettext(
+            'Candidates are never accepted automatically. Review native semantics before accepting a mapping.'
+          )}
+        </Banner>
+        {rows.length === 0 ? (
+          <EmptyState message={gettext('No rename or equivalence candidates were detected.')} />
+        ) : (
+          <Box sx={{overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1}}>
+            <Box
+              component="table"
+              aria-label={gettext('Mapping candidates')}
+              sx={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '0.8125rem',
+                '& th, & td': {
+                  p: 1,
+                  textAlign: 'left',
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  verticalAlign: 'middle',
+                },
+                '& th': {
+                  fontWeight: 600,
+                  bgcolor: 'background.default',
+                },
+              }}
+            >
+              <thead>
+                <tr>
+                  <th>{gettext('Left object')}</th>
+                  <th>{gettext('Right object')}</th>
+                  <th>{gettext('Kind')}</th>
+                  <th>{gettext('Evidence')}</th>
+                  <th>{gettext('Status')}</th>
+                  <th>{gettext('Actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td style={{fontFamily: 'monospace'}}>{row.leftId}</td>
+                    <td style={{fontFamily: 'monospace'}}>{row.rightId}</td>
+                    <td>
+                      <Badge label={row.kind} />
+                    </td>
+                    <td>{row.evidenceText}</td>
+                    <td>
+                      <Badge
+                        status={row.isAccepted ? 'success' : 'info'}
+                        label={row.isAccepted ? gettext('Accepted') : gettext('Pending review')}
+                      />
+                    </td>
+                    <td>
+                      <Box sx={{display: 'flex', gap: 1, flexWrap: 'wrap'}}>
+                        <Button
+                          size="small"
+                          intent="primary"
+                          disabled={busy}
+                          onClick={() =>
+                            invoke('schema_compare.rename.accept', {
+                              candidateId: row.id,
+                              category: 'representational_difference',
+                            })
+                          }
+                        >
+                          {gettext('Accept Rename')}
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={busy}
+                          onClick={() =>
+                            invoke('schema_compare.mapping.set', {
+                              mapping: {
+                                mappingId: `mapping:${row.leftId}:${row.rightId}`,
+                                leftId: row.leftId,
+                                rightId: row.rightId,
+                                category: 'representational_difference',
+                                version: 1,
+                                evidence: row.evidence ?? [],
+                                accepted: false,
+                              },
+                            })
+                          }
+                        >
+                          {gettext('Reject / Unmap')}
+                        </Button>
+                      </Box>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </ScratchScrollArea>
+  );
 }
 
 MappingReview.propTypes = {

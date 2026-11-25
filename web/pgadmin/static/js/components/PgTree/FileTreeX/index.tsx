@@ -179,6 +179,9 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
       window.addEventListener('scratchrobin:language-changed', this.handleLanguageChanged);
     }
     for(const child of this.props.model.root.children) {
+      if (child.parent?.path && child._metadata?.data?.id) {
+        child.resolvedPathCache = child.parent.path + '/' + child._metadata.data.id;
+      }
       this.events.dispatch(FileTreeXEvent.onTreeEvents, window.event, 'loaded', child);
     }
   }
@@ -391,7 +394,12 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   };
 
   private readonly refresh = async (item): Promise<void> => {
-    const isOpen = item.isExpanded;
+    if (!item) return;
+    if (item.parent?.path && item._metadata?.data?.id) {
+      item.resolvedPathCache = item.parent.path + '/' + item._metadata.data.id;
+    }
+    const isServerGroup = item._metadata?.data?._type === 'server_group';
+    const isOpen = item.isExpanded || isServerGroup;
     if (item.children && item.children.length > 0) {
       for(const entry of [...item.children]) {
         await this.remove(entry).then(() => {/*intentional*/}, () => {console.warn('Error removing item');});
@@ -407,14 +415,18 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
         this.showLoader(ref);
       }
 
-      await this.fileTreeHandle.closeDirectory(item as Directory);
+      if (item.isExpanded) {
+        await this.fileTreeHandle.closeDirectory(item as Directory);
+      }
       (item as any)._children = null;
       await this.fileTreeHandle.openDirectory(item as Directory);
       await this.changeResolvePath(item as Directory);
       if (item._metadata?.data) {
         const count = Array.isArray(item.children) ? item.children.length : 0;
         if (count === 0) {
-          item._metadata.data.has_children = false;
+          if (!isServerGroup) {
+            item._metadata.data.has_children = false;
+          }
           await this.fileTreeHandle.closeDirectory(item as Directory);
         } else {
           item._metadata.data.has_children = true;
@@ -426,6 +438,9 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
       if (ref) {
         this.hideLoader(ref);
       }
+    } else if (item._metadata?.data && item._metadata.data.inode !== false) {
+      item._metadata.data.has_children = true;
+      this.forceUpdate();
     }
   };
 
@@ -637,6 +652,12 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
           }
           return;
         }
+        if ((dir as Directory).parent?.path && (dir as any)._metadata?.data?.id) {
+          (dir as any).resolvedPathCache = (dir as Directory).parent.path + '/' + (dir as any)._metadata.data.id;
+        }
+        if (Array.isArray((dir as any)._children) && (dir as any)._children.length === 0) {
+          (dir as any)._children = null;
+        }
         await this.fileTreeHandle.openDirectory(dir as Directory);
         await this.changeResolvePath(dir as Directory);
 
@@ -788,8 +809,8 @@ export class FileTreeX extends React.Component<IFileTreeXProps, IFileTreeXState>
   private readonly resize = (scrollX, scrollY) => {
     const scrollXPos = scrollX || 0;
     const scrollYPos = scrollY || this.props.model.state.scrollOffset;
-    const div = this.wrapperRef.current.querySelector('div').querySelector('div') as HTMLDivElement;
-    if (div) {
+    const div = this.wrapperRef.current?.querySelector('div')?.querySelector('div') as HTMLDivElement;
+    if (typeof div?.scroll === 'function') {
       div.scroll(scrollXPos, scrollYPos);
     }
 

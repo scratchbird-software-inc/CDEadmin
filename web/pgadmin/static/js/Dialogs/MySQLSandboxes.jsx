@@ -4,6 +4,17 @@ import {Alert,Box,Button,MenuItem,TextField} from '@mui/material';
 import FormReference from '../cdeadmin_ui/navigation/FormReference';
 import UnifiedDataGrid from '../cdeadmin_ui/data/UnifiedDataGrid';
 import GridNavigation from '../cdeadmin_ui/data/GridNavigation';
+import {NumberField, Stack} from '../cdeadmin_ui';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../cdeadmin_ui/modules/StructuredPayloadCard';
+
+function parseJsonObject(text) {
+  try {
+    const parsed=JSON.parse(text);
+    return parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const ACTIVE=new Set(['dispatching','active','cancel_requested']);
 export default function MySQLSandboxes({post}) {
@@ -44,6 +55,16 @@ export default function MySQLSandboxes({post}) {
     });}catch(failure){setError(failure.message);}
   };
   const loadJobs=offset=>run('list',{offset,limit:25},setJobs);
+  const parsedNativeOpts=parseJsonObject(nativeOptions);
+  const updateSandboxOpt=(patch)=> {
+    const base=parsedNativeOpts ? {...parsedNativeOpts} : {};
+    Object.entries(patch).forEach(([k,v])=> {
+      if(v===undefined || v==='')delete base[k];
+      else base[k]=v;
+    });
+    setNativeOptions(JSON.stringify(base,null,2));
+    invalidate();
+  };
   return <Box sx={{p:2}}>
     <FormReference formKey="mysql-sandboxes" />
     <Alert severity="info">Native MySQL testing sandboxes run on the ScratchRobin application execution host under its operating-system account. This works without connecting to the selected database registration. Review the host and directory before dispatch. Closing this view does not stop a job or a sandbox.</Alert>
@@ -58,17 +79,36 @@ export default function MySQLSandboxes({post}) {
         {catalog.sandbox_directories.map(value=><MenuItem key={value} value={value}>{value}</MenuItem>)}
       </TextField>
       <TextField fullWidth label="Sandbox classic protocol port" value={port} disabled={busy} onChange={event=>{setPort(event.target.value);invalidate();}} />
-      {operation==='deploy' && <TextField fullWidth multiline minRows={4} label="Native sandbox deployment options (JSON object)" value={nativeOptions} disabled={busy}
-        helperText="Native mysqldOptions retains ordered option=value strings. portx defaults to ten times the classic port. Passwords are supplied separately at dispatch."
-        onChange={event=>{setNativeOptions(event.target.value);invalidate();}} />}
+      {operation==='deploy' && <Box sx={{my:1.5,p:1.5,border:'1px solid var(--sr-border, rgba(128,128,128,0.22))',borderRadius:1.5}}>
+        <Stack gap={1.25}>
+          <Stack direction="row" gap={1.5} style={{flexWrap:'wrap'}}>
+            <NumberField label="X Protocol port (portx)" disabled={busy || !parsedNativeOpts} value={parsedNativeOpts?.portx ?? ''} onChange={e=>updateSandboxOpt({portx:e.target.value ? Number(e.target.value) : undefined})} style={{maxWidth:200}} />
+            <TextField size="small" label="Allow root from host pattern" disabled={busy || !parsedNativeOpts} value={parsedNativeOpts?.allowRootFrom ?? ''} onChange={e=>updateSandboxOpt({allowRootFrom:e.target.value || undefined})} sx={{minWidth:220,flex:1}} />
+            <TextField size="small" label="mysqldOptions (comma-separated option=value)" disabled={busy || !parsedNativeOpts} value={Array.isArray(parsedNativeOpts?.mysqldOptions) ? parsedNativeOpts.mysqldOptions.join(', ') : ''} onChange={e=>{const list=e.target.value.split(',').map(s=>s.trim()).filter(Boolean);updateSandboxOpt({mysqldOptions:list.length ? list : undefined});}} sx={{minWidth:260,flex:1}} />
+          </Stack>
+          <KeyValueJsonEditor title="Deployment option parameters" disabled={busy} valueJson={nativeOptions} onChangeJson={nextJson=>{setNativeOptions(nextJson);invalidate();}} />
+          <Box component="details">
+            <summary style={{cursor:'pointer',fontSize:12,opacity:0.8}}>Advanced JSON overrides</summary>
+            <Box sx={{mt:1}}>
+              <TextField fullWidth multiline minRows={4} label="Native sandbox deployment options (JSON object)" value={nativeOptions} disabled={busy}
+                helperText="Native mysqldOptions retains ordered option=value strings. portx defaults to ten times the classic port. Passwords are supplied separately at dispatch."
+                onChange={event=>{setNativeOptions(event.target.value);invalidate();}} />
+            </Box>
+          </Box>
+        </Stack>
+      </Box>}
       <TextField fullWidth label="Sandbox native runtime seconds or null" value={timeout} disabled={busy} onChange={event=>{setTimeout(event.target.value);invalidate();}} />
       <Button disabled={busy} onClick={()=>prepare('inspect')}>Inspect local sandbox</Button>
       <Button disabled={busy} onClick={()=>prepare('review')}>Review native sandbox operation</Button>
     </>}
-    {observed && !observed.observation_digest && <Box component="pre" aria-label="Local sandbox inspection" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>{JSON.stringify(observed,null,2)}</Box>}
-    {review && <Box>
+    {observed && !observed.observation_digest && <Box sx={{my:1}}><StructuredPayloadCard title="Local sandbox inspection" value={observed} rawAriaLabel="Local sandbox inspection" /></Box>}
+    {review && <Box sx={{my:1}}>
       {review.warnings.map(value=><Alert key={value} severity="warning">{value}</Alert>)}
-      <Box component="pre" aria-label="Native sandbox review" sx={{whiteSpace:'pre-wrap',maxHeight:350,overflow:'auto'}}>{JSON.stringify({sandbox:review.sandbox,options:review.options,execution_host:review.execution_host,program:review.program},null,2)}</Box>
+      <StructuredPayloadCard
+        title="Reviewed sandbox operation"
+        value={{sandbox:review.sandbox,options:review.options,execution_host:review.execution_host,program:review.program}}
+        rawAriaLabel="Native sandbox review"
+      />
       {needsSecret && <TextField fullWidth type="password" autoComplete="new-password" label="Sandbox native root password" value={password} disabled={busy}
         helperText="Excluded from the saved review and cleared after dispatch. Enter an empty value explicitly to use an empty native password."
         onChange={event=>{setPassword(event.target.value);setSecretReady(true);}} />}
@@ -133,7 +173,20 @@ export default function MySQLSandboxes({post}) {
         <Button disabled={busy || confirmation!==String(receipt.sandbox.port) || receipt.native_process_termination_confirmed!==true || !receipt.reconciliation?.state?.process?.qualified}
           onClick={()=>run('acknowledge',{job_id:receipt.job_id,observation_digest:observed.observation_digest,sandbox_confirmation:confirmation},setReceipt)}>Acknowledge observed sandbox state</Button>
       </>}
-      <Box component="pre" aria-label="Native sandbox receipt" sx={{whiteSpace:'pre-wrap',maxHeight:450,overflow:'auto'}}>{JSON.stringify(receipt,null,2)}</Box>
+      <Box sx={{my:1}}>
+        <StructuredPayloadCard
+          title="Sandbox job receipt"
+          value={{
+            job_id:receipt.job_id,
+            state:receipt.state,
+            native_operation_outcome:receipt.native_operation_outcome,
+            sandbox:receipt.sandbox,
+            options:receipt.options,
+          }}
+          rawText={JSON.stringify(receipt,null,2)}
+          rawAriaLabel="Native sandbox receipt"
+        />
+      </Box>
     </Box>}
   </Box>;
 }

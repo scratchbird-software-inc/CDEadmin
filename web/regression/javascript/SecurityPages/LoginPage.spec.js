@@ -61,27 +61,18 @@ describe('LoginPage', ()=>{
     expect(brand).toHaveTextContent('ScratchBird Software Inc.');
     expect(screen.getByRole('button', {name: 'Sign in'}))
       .toHaveAttribute('name', 'internal_button');
-    expect(screen.getByLabelText('Enable QA visual element IDs'))
-      .not.toBeChecked();
+    expect(screen.queryByLabelText('Enable QA visual element IDs'))
+      .not.toBeInTheDocument();
+    expect(screen.queryByText(/QA mode — show visual element IDs on hover/i))
+      .not.toBeInTheDocument();
   });
 
-  it('enables persistent visual QA identities from the login form', async ()=>{
-    const ctrl = ctrlMount({userLanguage: 'en', langOptions: [{label: 'English',
+  it('does not expose developer QA mode toggle on the production login form', ()=>{
+    ctrlMount({userLanguage: 'en', langOptions: [{label: 'English',
       value: 'en'}], forgotPassUrl: '/forgot/url', csrfToken: 'some-token',
     loginUrl: '/login/url', authSources: ['internal'], authSourcesEnum: {
       OAUTH2: 'oauth2', KERBEROS: 'kerberos'}, oauth2Config: [], loginBanner: ''});
-    fireEvent.click(screen.getByLabelText('Enable QA visual element IDs'));
-    expect(window.localStorage.getItem(
-      'cdeadmin.qa.visual-identities.enabled.v1')).toBe('true');
-    await waitFor(() => expect(ctrl.container.querySelector('form'))
-      .toHaveAttribute('data-cdeadmin-qa-id'));
-    ctrl.unmount();
-    ctrlMount({userLanguage: 'en', langOptions: [{label: 'English', value: 'en'}],
-      forgotPassUrl: '/forgot/url', csrfToken: 'some-token',
-      loginUrl: '/login/url', authSources: ['internal'], authSourcesEnum: {
-        OAUTH2: 'oauth2', KERBEROS: 'kerberos'}, oauth2Config: [],
-      loginBanner: ''});
-    expect(screen.getByLabelText('Enable QA visual element IDs')).toBeChecked();
+    expect(screen.queryByLabelText('Enable QA visual element IDs')).toBeNull();
   });
 
   it('reveals and hides browser-autofilled credentials and database key without losing their values', async ()=>{
@@ -117,7 +108,7 @@ describe('LoginPage', ()=>{
     expect(screen.getByLabelText('Show password')).not.toBeChecked();
   });
 
-  it('offers visual QA mode when internal authentication is unavailable', ()=>{
+  it('hides internal authentication inputs and omits QA toggle when only OAuth2 is enabled', ()=>{
     const ctrl = ctrlMount({userLanguage: 'en', langOptions: [],
       forgotPassUrl: '/forgot/url', csrfToken: 'some-token',
       loginUrl: '/login/url', authSources: ['oauth2'], authSourcesEnum: {
@@ -126,8 +117,7 @@ describe('LoginPage', ()=>{
         OAUTH2_ICON: 'fa-github', OAUTH2_DISPLAY_NAME: 'Github'}],
       loginBanner: ''});
     expect(ctrl.container.querySelector('input[name="email"]')).toBeNull();
-    expect(screen.getByLabelText('Enable QA visual element IDs'))
-      .toBeInTheDocument();
+    expect(screen.queryByLabelText('Enable QA visual element IDs')).toBeNull();
   });
 
   it('oauth2', ()=>{

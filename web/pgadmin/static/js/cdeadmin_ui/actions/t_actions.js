@@ -11,6 +11,10 @@ import {useEffect, useReducer} from 'react';
 import gettext from 'sources/gettext';
 import {commandRegistry} from '../commands/CommandRegistry';
 import {inferActionIconKey} from '../icons/registry';
+import {
+  CALLABLE_CODE_TARGETS,
+  STANDARD_TIB_ACTIONS,
+} from '../shell/tibStandardConfig';
 
 const ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/;
 
@@ -68,13 +72,34 @@ function normalizeTarget(id, input = {}) {
 
   const kind = String(rawTarget.kind || '').trim().toLowerCase();
   if (kind === T_ACTION_TARGET_KIND.CLIENT) {
-    const invoke = rawTarget.invoke ?? rawTarget.handler ?? rawTarget.execute;
+    const handlerId = rawTarget.handlerId ? String(rawTarget.handlerId).trim() : '';
+    const eventName = rawTarget.eventName ? String(rawTarget.eventName).trim() : '';
+    const actionKey = rawTarget.actionKey ? String(rawTarget.actionKey).trim() : '';
+    const invoke =
+      rawTarget.invoke ??
+      rawTarget.handler ??
+      rawTarget.execute ??
+      (eventName
+        ? (args, context) => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent(eventName, {
+                detail: {actionId: id, handlerId, actionKey, args, context},
+              })
+            );
+          }
+          return {ok: true, eventName, actionId: id};
+        }
+        : null);
     if (typeof invoke !== 'function') {
       throw new TypeError(`Client t_action "${id}" requires a callable invoke handler.`);
     }
     return Object.freeze({
       kind: T_ACTION_TARGET_KIND.CLIENT,
       invoke,
+      ...(handlerId ? {handlerId} : {}),
+      ...(eventName ? {eventName} : {}),
+      ...(actionKey ? {actionKey} : {}),
     });
   }
 
@@ -110,6 +135,7 @@ function stringList(value) {
 
 export function createTAction(input = {}) {
   const id = normalizeActionId(input.id);
+  const canonicalId = input.canonicalId ? String(input.canonicalId).trim() : '';
   const application = String(input.application || 'project').trim().toLowerCase() || 'project';
   const defaultText = String(input.defaultText ?? input.text ?? input.label ?? id);
   const defaultHint = String(input.defaultHint ?? input.hint ?? input.description ?? '');
@@ -126,6 +152,7 @@ export function createTAction(input = {}) {
   return Object.freeze({
     schema: T_ACTION_SCHEMA,
     id,
+    ...(canonicalId ? {canonicalId} : {}),
     icon,
     application,
     status: baseStatus,
@@ -173,6 +200,14 @@ export class TActionsRegistry {
     this._runtimeStatuses = new Map();
     this._checkedStates = new Map();
     this._authzOverrides = new Map();
+    this._actionDefinitions = new Map();
+    this._callableTargets = new Map();
+    CALLABLE_CODE_TARGETS.forEach((entry) => {
+      this._callableTargets.set(entry.id, {
+        ...entry,
+        invoke: null,
+      });
+    });
     this._currentUser = null;
     this._activeInstanceId = null;
     this._instanceBindings = new Map();
@@ -180,6 +215,112 @@ export class TActionsRegistry {
     this._i18nCatalog = new Map();
     this._locale = 'en';
     this._listeners = new Set();
+  }
+
+  registerCallableTarget(handlerId, invoke, meta = {}) {
+    const cleanId = String(handlerId || '').trim();
+    if (!cleanId) return () => {};
+    const existing = this._callableTargets.get(cleanId) || {};
+    this._callableTargets.set(cleanId, {
+      ...existing,
+      ...meta,
+      id: cleanId,
+      label: meta.label || existing.label || cleanId,
+      category: meta.category || existing.category || 'Custom',
+      invoke: typeof invoke === 'function' ? invoke : existing.invoke || null,
+    });
+    return () => {
+      const cur = this._callableTargets.get(cleanId);
+      if (cur && cur.invoke === invoke) {
+        this._callableTargets.set(cleanId, {...cur, invoke: null});
+      }
+    };
+  }
+
+  listCallableTargets() {
+    return [...this._callableTargets.values()];
+  }
+
+  setActionDefinitions(definitions = {}) {
+    this._actionDefinitions.clear();
+    Object.entries(definitions || {}).forEach(([rawId, spec]) => {
+      if (!spec || typeof spec !== 'object') return;
+      const cleanId = String(rawId || '').trim();
+      if (!ACTION_ID_PATTERN.test(cleanId)) return;
+      const next = {};
+      if (typeof spec.text === 'string' && spec.text.trim()) next.text = spec.text.trim();
+      if (typeof spec.hint === 'string') next.hint = spec.hint.trim();
+      if (typeof spec.icon === 'string' && spec.icon.trim()) next.icon = spec.icon.trim();
+      if (typeof spec.shortcut === 'string') next.shortcut = spec.shortcut.trim();
+      if (spec.status && VALID_STATUSES.has(String(spec.status).toLowerCase())) {
+        next.status = String(spec.status).toLowerCase();
+      }
+      if (spec.target && typeof spec.target === 'object') {
+        const tKind = String(spec.target.kind || '').trim().toLowerCase();
+        if (tKind === T_ACTION_TARGET_KIND.CLIENT || tKind === T_ACTION_TARGET_KIND.SERVER) {
+          next.target = {
+            kind: tKind,
+            ...(spec.target.handlerId ? {handlerId: String(spec.target.handlerId).trim()} : {}),
+            ...(spec.target.eventName ? {eventName: String(spec.target.eventName).trim()} : {}),
+            ...(spec.target.actionKey ? {actionKey: String(spec.target.actionKey).trim()} : {}),
+            ...(spec.target.endpoint ? {endpoint: String(spec.target.endpoint).trim()} : {}),
+            ...(spec.target.method ? {method: String(spec.target.method).trim().toUpperCase()} : {}),
+          };
+        }
+      }
+      if (Object.keys(next).length > 0) {
+        this._actionDefinitions.set(cleanId, Object.freeze(next));
+      }
+    });
+    this._notify();
+  }
+
+  getActionDefinitions() {
+    return Object.fromEntries(this._actionDefinitions.entries());
+  }
+
+  _lookupDefinitionOverride(normalized, base) {
+    if (this._actionDefinitions.size === 0) return null;
+    if (this._actionDefinitions.has(normalized)) {
+      return this._actionDefinitions.get(normalized);
+    }
+    if (base?.canonicalId && this._actionDefinitions.has(base.canonicalId)) {
+      return this._actionDefinitions.get(base.canonicalId);
+    }
+    const parts = normalized.split('.');
+    // Match base prefix for trailing instance-scoped IDs (`sql-editor.execute.sql-editor-1` -> `sql-editor.execute`)
+    if (parts.length >= 2) {
+      const stem = parts.slice(0, -1).join('.');
+      if (this._actionDefinitions.has(stem)) {
+        return this._actionDefinitions.get(stem);
+      }
+    }
+    // Match middle-instance surface IDs (`ds.<inst>.commit`, `sql-surf.<inst>.exec_stmt`, `designer.cmd.<inst>.<tab>.<item>`)
+    const tail = parts.at(-1);
+    if (tail) {
+      const surfaceAliases = {
+        exec_stmt: 'tib.exec.execute_sql',
+        exec_script: 'tib.exec.execute_script',
+        autocommit: 'tib.tx.auto_commit_toggle',
+        commit: 'tib.tx.commit',
+        rollback: 'tib.tx.rollback',
+        edit_accept: 'tib.rec.edit_accept_row',
+        insert_row: 'tib.rec.insert_row',
+        duplicate_row: 'tib.rec.duplicate_row',
+        set_null: 'tib.rec.set_null',
+      };
+      if (parts[0] === 'ds' || parts[0] === 'sql-surf') {
+        const directStem = `${parts[0]}.${tail}`;
+        if (this._actionDefinitions.has(directStem)) {
+          return this._actionDefinitions.get(directStem);
+        }
+      }
+      const canonicalCandidate = surfaceAliases[tail] || `tib.${tail}`;
+      if (this._actionDefinitions.has(canonicalCandidate)) {
+        return this._actionDefinitions.get(canonicalCandidate);
+      }
+    }
+    return null;
   }
 
   setCurrentUser(user = null) {
@@ -440,9 +581,13 @@ export class TActionsRegistry {
       runtimeStatus = T_ACTION_STATUS.DISABLED;
     }
 
+    const defOverride = this._lookupDefinitionOverride(normalized, base);
     const userPolicyStatus = this._evaluateUserPolicy(base);
     const authzOverride = this._authzOverrides.get(normalized);
     let effectiveStatus = runtimeStatus;
+    if (defOverride?.status) {
+      effectiveStatus = defOverride.status;
+    }
     if (
       authzOverride === T_ACTION_STATUS.INVISIBLE ||
       userPolicyStatus === T_ACTION_STATUS.INVISIBLE
@@ -456,8 +601,16 @@ export class TActionsRegistry {
       effectiveStatus = T_ACTION_STATUS.DISABLED;
     }
 
-    const text = this._lookupI18n(normalized, 'text', base.defaultText);
-    const hint = this._lookupI18n(normalized, 'hint', base.defaultHint);
+    const text =
+      defOverride?.text ||
+      this._lookupI18n(normalized, 'text', base.defaultText);
+    const hint =
+      defOverride?.hint !== undefined
+        ? defOverride.hint
+        : this._lookupI18n(normalized, 'hint', base.defaultHint);
+    const resolvedIcon = defOverride?.icon || base.icon;
+    const resolvedShortcut =
+      defOverride?.shortcut !== undefined ? defOverride.shortcut : base.shortcut;
     const checked = delegatedResolved && typeof delegatedResolved.checked === 'boolean'
       ? delegatedResolved.checked
       : delegation?.type === 'inline' && typeof delegation.spec.checked === 'boolean'
@@ -472,6 +625,9 @@ export class TActionsRegistry {
 
     return Object.freeze({
       ...base,
+      icon: resolvedIcon,
+      shortcut: resolvedShortcut,
+      ...(defOverride?.target ? {targetOverride: defOverride.target} : {}),
       ...(paletteItems ? {paletteItems} : {}),
       status: effectiveStatus,
       enabled: effectiveStatus === T_ACTION_STATUS.ENABLED,
@@ -598,6 +754,67 @@ export class TActionsRegistry {
       throw err;
     }
 
+    // User-configured target override from Settings -> Actions takes top precedence
+    if (resolved.targetOverride) {
+      const ov = resolved.targetOverride;
+      if (ov.kind === T_ACTION_TARGET_KIND.SERVER) {
+        const endpoint = ov.endpoint || `/cdeadmin/api/shell/actions/${resolved.id}/invoke`;
+        const method = (ov.method || 'POST').toUpperCase();
+        const response = await this._fetch(endpoint, {
+          method,
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            ...csrfHeaders(),
+          },
+          ...(method === 'GET' ? {} : {body: JSON.stringify(args ?? {})}),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const err = new Error(data?.error || `Server action failed (${response.status})`);
+          err.code = data?.code || 'server_action_failed';
+          throw err;
+        }
+        return data;
+      }
+      if (ov.kind === T_ACTION_TARGET_KIND.CLIENT) {
+        if (ov.handlerId && this._callableTargets.has(ov.handlerId)) {
+          const entry = this._callableTargets.get(ov.handlerId);
+          if (typeof entry.invoke === 'function') {
+            return await entry.invoke(args, context);
+          }
+          if (entry.eventName && typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent(entry.eventName, {
+                detail: {
+                  actionId: resolved.id,
+                  handlerId: entry.id,
+                  actionKey: ov.actionKey || entry.actionKey || entry.id,
+                  args,
+                  context,
+                },
+              })
+            );
+            return {ok: true, handlerId: entry.id};
+          }
+        }
+        if (ov.eventName && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent(ov.eventName, {
+              detail: {
+                actionId: resolved.id,
+                handlerId: ov.handlerId || '',
+                actionKey: ov.actionKey || '',
+                args,
+                context,
+              },
+            })
+          );
+          return {ok: true, eventName: ov.eventName};
+        }
+      }
+    }
+
     const delegation = this._resolveInstanceDelegation(resolved.id);
     if (delegation?.type === 'action' && delegation.actionId !== resolved.id) {
       return await this.execute(delegation.actionId, args, context);
@@ -610,6 +827,12 @@ export class TActionsRegistry {
     }
 
     if (resolved.target.kind === T_ACTION_TARGET_KIND.CLIENT) {
+      if (
+        resolved.target.handlerId &&
+        this._callableTargets.get(resolved.target.handlerId)?.invoke
+      ) {
+        return await this._callableTargets.get(resolved.target.handlerId).invoke(args, context);
+      }
       return await resolved.target.invoke(args, context);
     }
 
@@ -639,9 +862,10 @@ export class TActionsRegistry {
    * Build `{model, state, catalog, onCommand}` for `scratch_notebookbar`'s
    * `<NotebookBar />` directly from `t_actions` entries.
    */
-  toNotebookBar(tabsSpec = [], renderIcon = () => null, quickAccessSpec = []) {
+  toNotebookBar(tabsSpec = [], renderIcon = () => null, quickAccessSpec = [], options = {}) {
     const state = {};
     const catalog = {};
+    const showSectionIcons = options?.showSectionIcons !== false;
 
     const mapControl = (itemSpec) => {
       if (!itemSpec) return null;
@@ -744,10 +968,17 @@ export class TActionsRegistry {
           group.title || group.label || group.id || `${tab.id}.g${idx}`
         );
         const rawItems = group.controls || group.actions || [];
+        const headerIcon =
+          showSectionIcons && group.sectionIcon
+            ? renderIcon({id: group.id, icon: group.sectionIcon, text: groupLabel}, 'section')
+            : null;
         return {
           id: group.id || `${tab.id}.g${idx}`,
           label: groupLabel,
           title: groupTitle,
+          ...(group.sectionId ? {sectionId: group.sectionId} : {}),
+          ...(group.sectionIcon ? {sectionIcon: group.sectionIcon} : {}),
+          ...(headerIcon ? {headerIcon} : {}),
           priority: Number.isFinite(group.priority) ? group.priority : (100 - idx),
           controls: rawItems.map(mapControl).filter(Boolean),
         };
@@ -827,8 +1058,36 @@ export class TActionsRegistry {
   }
 }
 
+/**
+ * Seeds all 232 canonical TiB button actions onto a TActionsRegistry so every
+ * standard TiB action is inspectable, placeable, and editable (text, icon,
+ * hint, status, and code target) from Settings -> Menus & Toolbars -> Actions.
+ */
+export function seedStandardTiBActions(registry) {
+  if (!registry || typeof registry.upsert !== 'function') return;
+  for (const act of STANDARD_TIB_ACTIONS) {
+    if (registry.has(act.id)) continue;
+    registry.upsert({
+      id: act.id,
+      icon: act.icon,
+      application: 'tib',
+      defaultText: act.label,
+      defaultHint: act.hint,
+      toolbarSize: act.slotKind === 'hero' ? 'large' : 'small',
+      status: T_ACTION_STATUS.ENABLED,
+      target: {
+        kind: T_ACTION_TARGET_KIND.CLIENT,
+        handlerId: act.handlerId,
+        eventName: 'scratchrobin:tib-command',
+        actionKey: act.id,
+      },
+    });
+  }
+}
+
 export const t_actions = new TActionsRegistry();
 t_actions.attachCommandRegistry(commandRegistry);
+seedStandardTiBActions(t_actions);
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('scratchrobin:language-changed', (ev) => {

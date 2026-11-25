@@ -374,4 +374,39 @@ describe('SqlBuilderDialog', () => {
       resetDDNLibraryLoaderForTests();
     }
   });
+
+  it('hides system objects by default and reveals them when Show system objects is checked', async () => {
+    const post = jest.fn(async ({request}) => {
+      if (request.operation === 'options') {
+        const base = optionsResponse();
+        return {
+          ...base,
+          relations: [
+            {path: ['MON$ATTACHMENTS'], kind: 'table', name: 'MON$ATTACHMENTS', columns: ['MON$ATTACHMENT_ID'], system_object: true},
+            ...base.relations,
+          ],
+        };
+      }
+      return {source: 'SELECT * FROM "main"."customers"', language_profile: 'sqlite-sql'};
+    });
+
+    const Wrapped = withTheme(SqlBuilderDialog);
+    render(<Wrapped open onClose={jest.fn()} post={post} onInsert={jest.fn()} />);
+
+    const showSysCheckbox = await screen.findByLabelText('Show system objects');
+    expect(showSysCheckbox).not.toBeChecked();
+
+    // Open Query FROM combobox: system object MON$ATTACHMENTS is hidden by default, and first user table is selected
+    const fromSelect = screen.getByLabelText('Query FROM');
+    fireEvent.mouseDown(fromSelect);
+    expect(await screen.findByRole('option', {name: 'main.customers (table)'})).toBeInTheDocument();
+    expect(screen.queryByRole('option', {name: /MON\$ATTACHMENTS/})).not.toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement || document.body, {key: 'Escape'});
+
+    // Enable Show system objects -> MON$ATTACHMENTS is now offered
+    fireEvent.click(showSysCheckbox);
+    expect(showSysCheckbox).toBeChecked();
+    fireEvent.mouseDown(screen.getByLabelText('Query FROM'));
+    expect(await screen.findByRole('option', {name: 'MON$ATTACHMENTS (table)'})).toBeInTheDocument();
+  });
 });

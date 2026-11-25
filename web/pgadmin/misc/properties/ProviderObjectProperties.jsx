@@ -16,7 +16,21 @@ import getApiInstance from '../../static/js/api_instance';
 import FormReference from '../../static/js/cdeadmin_ui/navigation/FormReference';
 import {resolveSectionIconKey} from '../../static/js/cdeadmin_ui/icons/registry';
 import {useProjectInstanceScope} from '../../static/js/cdeadmin_ui/shell/ProjectShell';
+import ObjectPermissionsMatrix from '../../static/js/cdeadmin_ui/security/ObjectPermissionsMatrix';
+import {isObjectPermissionsSupported} from '../../static/js/cdeadmin_ui/surfaces/ObjectPropertiesInspector';
 import {promptEndpointVerification} from '../../browser/static/js/ProviderObjectEditor';
+
+const PRIVILEGE_SECTION_ALIASES = new Set(['privileges', 'grants', 'security', 'permissions']);
+
+function resolveRequestedSection(requested, sections) {
+  if (!requested) return sections[0] || 'properties';
+  if (sections.includes(requested)) return requested;
+  if (PRIVILEGE_SECTION_ALIASES.has(requested)) {
+    const match = sections.find((sec) => PRIVILEGE_SECTION_ALIASES.has(sec));
+    if (match) return match;
+  }
+  return sections[0] || 'properties';
+}
 
 const SECTION_EXCLUDED_NATIVE_KEYS = new Set([
   'property_sections', 'definition', 'metadata_source', 'ddl',
@@ -36,6 +50,7 @@ const SECTION_TITLE_MSGIDS = {
   definition: 'Definition',
   ddl: 'SQL / DDL',
   privileges: 'Privileges',
+  permissions: 'Permissions',
   security: 'Security',
   grants: 'Grants',
   dependencies: 'Dependencies',
@@ -130,7 +145,7 @@ function formatScalarValue(value) {
   return {text: String(value), muted: false};
 }
 
-function computeSections(resource, descriptor) {
+function computeSections(resource, descriptor, nodeData = null) {
   const native = providerNative(resource);
   const sections = ['properties'];
   if (Array.isArray(native.property_sections) && native.property_sections.length > 0) {
@@ -145,6 +160,12 @@ function computeSections(resource, descriptor) {
         if (!sections.includes(sec)) sections.push(sec);
       }
     });
+  }
+  if (
+    isObjectPermissionsSupported(nodeData) &&
+    !sections.some((sec) => PRIVILEGE_SECTION_ALIASES.has(sec))
+  ) {
+    sections.push('privileges');
   }
   if (Array.isArray(descriptor?.operations) && descriptor.operations.length > 0 && !sections.includes('operations')) {
     sections.push('operations');
@@ -558,18 +579,18 @@ export default function ProviderObjectProperties({nodeData}) {
   }, [url, identity, resourceKind, targetId, reloadNonce]);
 
   const sections = useMemo(
-    () => (state.resource ? computeSections(state.resource, state.descriptor) : ['properties']),
-    [state.resource, state.descriptor]
+    () => (state.resource ? computeSections(state.resource, state.descriptor, nodeData) : ['properties']),
+    [nodeData, state.resource, state.descriptor]
   );
-  const [section, setSection] = useState(nodeData.cde_section || 'properties');
+  const [section, setSection] = useState(() => resolveRequestedSection(nodeData.cde_section, ['properties']));
 
   useEffect(() => {
-    setSection(nodeData.cde_section || sections[0] || 'properties');
+    setSection(resolveRequestedSection(nodeData.cde_section, sections));
   }, [nodeData.cde_section, identity, sections]);
 
   useEffect(() => {
     if (!sections.includes(section)) {
-      setSection(sections[0] || 'properties');
+      setSection(resolveRequestedSection(section, sections));
     }
   }, [section, sections]);
 
@@ -625,12 +646,6 @@ export default function ProviderObjectProperties({nodeData}) {
   }
   if (resource.display_path !== undefined) {
     summaryFields.push({key: 'display_path', label: gettext('Display path'), value: resource.display_path});
-  }
-  if (resource.authority_path !== undefined) {
-    summaryFields.push({key: 'authority_path', label: gettext('Authority path'), value: resource.authority_path});
-  }
-  if (resource.generation !== undefined) {
-    summaryFields.push({key: 'generation', label: gettext('Generation'), value: resource.generation});
   }
 
   Object.entries(native).forEach(([k, val]) => {
@@ -741,6 +756,8 @@ export default function ProviderObjectProperties({nodeData}) {
               </Box>
             ))}
           </Box>
+        ) : PRIVILEGE_SECTION_ALIASES.has(section) && isObjectPermissionsSupported(nodeData) ? (
+          <ObjectPermissionsMatrix boundNodeData={nodeData} resource={resource} />
         ) : (
           <SectionPayloadRenderer
             payload={resolveSectionContent(section, resource, state.descriptor)}

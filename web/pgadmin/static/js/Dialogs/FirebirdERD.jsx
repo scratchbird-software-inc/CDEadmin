@@ -52,7 +52,12 @@ export default function FirebirdERD({diagram, post, databaseTargetId, generation
     <FormReference formKey={`${engine}-relational-diagram`} />
     <Alert severity="info">Native tables, views, columns and foreign keys. Diagram edits do not alter the database. Save a design revision or download it to retain changes. Native application requires schema reconciliation and explicit review.</Alert>
     {(diagram.warnings || []).map((warning, index) => <Alert severity="warning" key={index}>{warning}</Alert>)}
-    <Box>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1}}>
+      <Button variant="outlined" disabled={editing || merging || reviewing} onClick={() => {
+        window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+          detail: {appId: 'erd-designer', engine, databaseTargetId, snapshot: snapshot()},
+        }));
+      }}>Open in ERD Designer</Button>
       <Button disabled={editing || merging || reviewing} onClick={() => {
         seed.current = snapshot(); editor.current = null; setEditing(true);
       }}>Edit relational diagram in DDN</Button>

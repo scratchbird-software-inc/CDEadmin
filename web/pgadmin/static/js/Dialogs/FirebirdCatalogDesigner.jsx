@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import {Alert, Box, Button} from '@mui/material';
-import {DDNDesignerSurface} from '../cdeadmin_ui/integrations/ddn';
+import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {validateDDNSnapshot} from '../cdeadmin_ui/integrations/ddn/contracts';
 import {Dialog} from '../cdeadmin_ui/overlays/Dialog';
 import FirebirdDesignStorage from './FirebirdDesignStorage';
@@ -44,6 +44,11 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
     } catch (failure) {setError(failure.message || 'Unable to capture the current catalog design.');}
   };
   return <Box>
+    <Button variant="outlined" disabled={disabled || merging || !initial} onClick={() => {
+      window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+        detail: {appId: 'erd-designer', engine, databaseTargetId, snapshot: draft || initial},
+      }));
+    }}>Open in ERD Designer</Button>
     <Button disabled={disabled || merging || !initial} onClick={() => {
       seed.current = draft || initial; editor.current = null; setReady(false); setError(''); setOpen(true);
     }}>Edit catalog design in DDN</Button>
@@ -58,6 +63,11 @@ export default function FirebirdCatalogDesigner({baseline, disabled, onReview, p
       finally {if (serial === epoch.current) setMerging(false);}
     }}>Merge latest native catalog into design</Button>
     {!open && error && <Alert severity="error">{error}</Alert>}
+    {!open && draft && typeof DDNViewerSurface === 'function' && (
+      <Box sx={{maxHeight: 280, overflow: 'auto', my: 1}}>
+        <DDNViewerSurface presentation snapshot={draft} />
+      </Box>
+    )}
     {storage && <FirebirdDesignStorage post={post} databaseTargetId={databaseTargetId} kind="catalog" engine={engine} disabled={disabled || merging || open || !initial}
       capture={() => ({snapshot: draft || initial, baseline: original.current})}
       onLoad={value => {setDraft(value.snapshot); original.current = value.baseline; setError('');

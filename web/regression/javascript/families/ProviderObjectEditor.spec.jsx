@@ -107,6 +107,7 @@ describe('family editor tree glue', () => {
     await primeBundle('firebird');
     const entries = familyEditorContextActions(tableData, 'table');
     expect(entries.find((entry) => entry.id === 'family-editor-edit')).toMatchObject({category: 'common', label: 'Edit...'});
+    expect(entries.find((entry) => entry.id === 'family-editor-drop')).toMatchObject({category: 'common', label: 'Drop...', intent: 'destructive'});
     const reorder = entries.find((entry) => entry.id === 'descriptor-op-reorder_columns');
     expect(reorder).toMatchObject({category: 'maintenance', label: 'Reorder columns'});
     // a group node offers create for its kind; a database offers a Create submenu

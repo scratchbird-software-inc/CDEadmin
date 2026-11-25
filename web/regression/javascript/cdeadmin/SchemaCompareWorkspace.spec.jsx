@@ -56,7 +56,7 @@ describe('SchemaCompareWorkspace', () => {
       expect.objectContaining({sessionId: 'session-one', service}));
   });
 
-  it('supports tree navigation, selection and the object metadata alternative', () => {
+  it('supports tree navigation, selection and structured side-by-side attribute comparison', () => {
     const service = fakeService();
     render(<Component service={service} sessionId="session-one"
       executeCommand={jest.fn().mockResolvedValue({})} surface="diff_tree" />);
@@ -67,16 +67,49 @@ describe('SchemaCompareWorkspace', () => {
       'session-one', difference.id
     );
     fireEvent.doubleClick(item);
-    expect(screen.getByRole('heading', {name: 'Left'})).toBeVisible();
-    expect(screen.getByText(/"columns": 1/)).toBeVisible();
-    expect(screen.getByText(/"columns": 2/)).toBeVisible();
+    const diffTable = screen.getByRole('table', {name: 'Object attribute comparison'});
+    expect(diffTable).toBeVisible();
+    expect(within(diffTable).getByText('columns')).toBeVisible();
+    expect(within(diffTable).getByText('1')).toBeVisible();
+    expect(within(diffTable).getByText('2')).toBeVisible();
+    expect(within(diffTable).getByText('Modified')).toBeVisible();
+    expect(screen.getByLabelText('SQL diff preview'))
+      .toHaveTextContent('ALTER TABLE ASSETS ADD NAME VARCHAR(80)');
   });
 
-  it('exposes mappings, dependency plans and provider-native apply review', () => {
+  it('requires explicit Accept Rename or Reject / Unmap button clicks without auto-accepting on row click', () => {
     const service = fakeService(); const executeCommand = jest.fn().mockResolvedValue('{}');
     render(<Component service={service} sessionId="session-one"
       executeCommand={executeCommand} surface="mapping_review" />);
     expect(screen.getByText(/Candidates are never accepted automatically/)).toBeVisible();
+    const candidatesTable = screen.getByRole('table', {name: 'Mapping candidates'});
+    fireEvent.click(within(candidatesTable).getByText('same_normalized_definition'));
+    expect(executeCommand).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Accept Rename'}));
+    expect(executeCommand).toHaveBeenCalledWith(
+      'schema_compare.rename.accept',
+      {candidateId: 'rename:A:B', category: 'representational_difference'},
+      expect.any(Object)
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Reject / Unmap'}));
+    expect(executeCommand).toHaveBeenCalledWith(
+      'schema_compare.mapping.set',
+      {
+        mapping: {
+          mappingId: 'mapping:A:B',
+          leftId: 'A',
+          rightId: 'B',
+          category: 'representational_difference',
+          version: 1,
+          evidence: ['same_normalized_definition'],
+          accepted: false,
+        },
+      },
+      expect.any(Object)
+    );
+
     fireEvent.click(screen.getByRole('tab', {name: 'Change Plan'}));
     expect(screen.getByText('ALTER TABLE ASSETS ADD NAME VARCHAR(80)')).toBeVisible();
     fireEvent.click(screen.getByRole('tab', {name: 'Apply/Export Review'}));
@@ -94,7 +127,9 @@ describe('SchemaCompareWorkspace', () => {
         executeCommand={jest.fn()} surface="object_diff" />);
       expect(screen.getByRole('alert')).toHaveTextContent('Target disconnected');
       expect(screen.getByText(/displayed result is stale/)).toBeVisible();
-      expect(screen.getByText(/"columns": 1/)).toBeVisible();
+      const diffTable = screen.getByRole('table', {name: 'Object attribute comparison'});
+      expect(within(diffTable).getByText('columns')).toBeVisible();
+      expect(within(diffTable).getByText('1')).toBeVisible();
     });
 });
 

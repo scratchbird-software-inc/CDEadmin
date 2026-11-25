@@ -17,6 +17,7 @@ import {
   providerEndpointUrl, reportServerEditorFailure, tryOpenFamilyEditor, tryOpenServerForm,
 } from './ProviderObjectEditor';
 import {diagramChoices} from 'sources/cdeadmin_ui/integrations/ddn/toDiagramMenu';
+import {isObjectPermissionsSupported} from 'sources/cdeadmin_ui/surfaces/ObjectPropertiesInspector';
 import {
   BI_DESIGN_OPEN_EVENT,
   CUBE_OPEN_EVENT,
@@ -188,6 +189,26 @@ export function openNodeDatabaseProperties(itemData, item, fallbackMenu = null) 
   return false;
 }
 
+export function openObjectPermissionsInspector(itemData, item) {
+  const tree = pgAdmin.Browser?.tree;
+  const targetItem = item || tree?.selected?.();
+  focusNavigatorPropertiesTab(tree, targetItem);
+  const selectPermissions = () => {
+    window.dispatchEvent(
+      new CustomEvent('scratchrobin:navigator-dashboard-state', {
+        detail: {propertiesSectionFilter: 'permissions'},
+      })
+    );
+  };
+  if (typeof window !== 'undefined') {
+    selectPermissions();
+    if (typeof window.setTimeout === 'function') {
+      window.setTimeout(selectPermissions, 0);
+    }
+  }
+  return true;
+}
+
 function showConnectorInformation(args, context) {
   const title = context.itemData?.label || context.itemData?._label ||
     gettext('Connector information');
@@ -244,7 +265,81 @@ const SURFACE_APP_TARGETS = Object.freeze({
   'design.cube': {appId: 'cube-designer', openEvent: CUBE_OPEN_EVENT},
   'screen.meshes': {appId: 'screen-mesh-designer', openEvent: SCREEN_MESH_OPEN_EVENT},
   'design.screen_mesh': {appId: 'screen-mesh-designer', openEvent: SCREEN_MESH_OPEN_EVENT},
+  'security.manager': {appId: 'security-manager', openEvent: 'scratchrobin:open-security-manager'},
 });
+
+export function openSecurityManagerSurface(endpoint, itemData = null, args = {}, customTitle = '') {
+  const engine =
+    args.engine ||
+    itemData?.cde_engine_id ||
+    endpoint?.data?.cde_engine_id ||
+    itemData?.server_type ||
+    'postgresql';
+  const sid = Number(
+    args.sid ??
+    endpoint?.data?._id ??
+    endpoint?.data?.id ??
+    itemData?.cde_endpoint_id ??
+    itemData?.server_id ??
+    itemData?._id ??
+    0
+  );
+  const databaseTargetId =
+    args.database_target_id ||
+    itemData?.cde_database_target_id ||
+    (itemData?._type === 'cde_database_target' ? itemData._id : '') ||
+    '';
+  const endpointLabel =
+    args.endpointLabel ||
+    itemData?.cde_database ||
+    (databaseTargetId && itemData?.label) ||
+    endpoint?.data?.label ||
+    endpoint?.data?._label ||
+    '';
+  const normalizedEngine = engine === 'pg' ? 'postgresql' : String(engine).toLowerCase();
+  const scope =
+    args.scope ||
+    (normalizedEngine === 'firebird' && databaseTargetId ? 'database' : 'server');
+  const initialKind =
+    args.kind ||
+    args.initialKind ||
+    args.resource_kind ||
+    (itemData?.cde_resource_kind === 'role' || itemData?.cde_resource_kind === 'user'
+      ? itemData.cde_resource_kind
+      : normalizedEngine === 'firebird' && scope === 'database'
+        ? 'role'
+        : 'user');
+  const initialPrincipalId =
+    args.principal_id ||
+    args.resource_id ||
+    (itemData?.cde_resource_kind === 'role' || itemData?.cde_resource_kind === 'user'
+      ? itemData.cde_resource_id || itemData.label || ''
+      : '');
+  const title =
+    customTitle ||
+    (scope === 'database'
+      ? gettext('Database Roles & Authorization — %s', endpointLabel || normalizedEngine)
+      : gettext('Server Users & Roles — %s', endpointLabel || normalizedEngine));
+
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(
+      new CustomEvent('scratchrobin:open-security-manager', {
+        detail: {
+          sid,
+          databaseTargetId,
+          engine: normalizedEngine,
+          scope,
+          initialKind,
+          initialPrincipalId,
+          endpointLabel,
+          title,
+        },
+      })
+    );
+    return true;
+  }
+  return false;
+}
 
 /**
  * Engine-neutral opener for a surface registered in the workbench tool
@@ -292,8 +387,29 @@ export function openRegisteredTool(surfaceId, endpoint, title, args = {}) {
   if(!endpoint?.data) {
     throw new Error(gettext('The workbench tool host is unavailable.'));
   }
+  if(surfaceId === 'security.manager') {
+    return openSecurityManagerSurface(endpoint, args?.__itemData || null, args, title);
+  }
   const endpointId = Number(endpoint.data._id ?? endpoint.data.id);
   const label = endpoint.data.label || endpoint.data._label || '';
+  if(SURFACE_APP_TARGETS[surfaceId] && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    const surfaceTarget = SURFACE_APP_TARGETS[surfaceId];
+    const payload = {
+      ...args,
+      surface: surfaceId,
+      title: label ? gettext('%s — %s', title, label) : title,
+      endpointId,
+      providerId: endpoint.data.cde_engine_id,
+      endpointLabel: label,
+    };
+    window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+      detail: {appId: surfaceTarget.appId, payload},
+    }));
+    if(surfaceTarget.openEvent) {
+      window.dispatchEvent(new CustomEvent(surfaceTarget.openEvent, {detail: payload}));
+    }
+    return true;
+  }
   if(typeof workbench?.openSurface === 'function') {
     return workbench.openSurface(surfaceId, {
       toolInstanceId: `${surfaceId}:${endpointId}`,
@@ -423,7 +539,10 @@ function dispatch(action, args, context) {
       item: endpoint.item,
     });
   case 'open_tool':
-    return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''), args);
+    return openRegisteredTool(args.surface, endpoint, action.label.replace(/\.\.\.$/, ''), {
+      ...args,
+      __itemData: context.itemData,
+    });
   case 'open_inherited_tool':
     return openInheritedTool(args.tool, item);
   case 'add_to_diagram':
@@ -450,6 +569,17 @@ function dispatch(action, args, context) {
         item: endpoint.item,
         url: 'drop',
       });
+    }
+    if (
+      args?.tab === 'administration' &&
+      (args?.resource_kind === 'user' || args?.resource_kind === 'role')
+    ) {
+      return openSecurityManagerSurface(
+        endpoint,
+        context.itemData,
+        args,
+        action.label.replace(/\.\.\.$/, '')
+      );
     }
     return serverNode.callbacks.open_cde_workspace.call(
       serverNode, {item: endpoint.item}, args.tab || 'resources', {
@@ -691,10 +821,18 @@ export function executeProviderAction(menu, itemData, item) {
 }
 
 export async function openProviderObject(itemData, item) {
+  if (itemData?.cde_resource_kind === 'user' || itemData?.cde_resource_kind === 'role') {
+    const endpoint = serverSelection(item || pgAdmin.Browser?.tree?.selected?.());
+    if (openSecurityManagerSurface(endpoint, itemData)) {
+      return true;
+    }
+  }
   // Descriptor-driven family editor first (design phase 2); the legacy
   // provider workspace remains the fallback until every kind has an editor.
   const opened = await tryOpenFamilyEditor(itemData, item);
   if (opened) return opened;
+  const inspected = await tryOpenFamilyEditor(itemData, item, {mode: 'inspect'});
+  if (inspected) return inspected;
   const menu = providerContextMenuItems(itemData, item)?.find(
     (candidate) => candidate.commandId.endsWith('.browse')
   );
@@ -776,10 +914,14 @@ export function canLaunchServerMenu(menu, itemData, item) {
   if (menu.enable?.(itemData, item)) return true;
   if (
     itemData?._type !== 'server' ||
-    menu.handler !== 'open_workspace' ||
+    (menu.handler !== 'open_workspace' && menu.handler !== 'open_tool') ||
     !UNVERIFIED_ENDPOINT_REASONS.has(menu.disabledReason)
   ) {
     return false;
+  }
+  if (menu.handler === 'open_tool') {
+    const args = typeof menu.commandArguments === 'function' ? menu.commandArguments({itemData, item}) : {};
+    return args?.surface === 'security.manager';
   }
   const suffix = String(menu.commandId).split('.').at(-1);
   if (suffix !== 'register_database' && suffix !== 'create_database') {
@@ -839,6 +981,13 @@ export function providerTreeContextActions(itemData, item=null) {
   // id yield to them.
   const descriptorEntries = familyEditorContextActions(itemData, item);
   const descriptorOperationIds = new Set(descriptorEntries.map((entry) => entry.id.replace(/^descriptor-op-/, '')));
+  if (descriptorOperationIds.has('family-editor-edit')) descriptorOperationIds.add('alter');
+  if (descriptorOperationIds.has('family-editor-inspect')) descriptorOperationIds.add('inspect');
+  if (descriptorOperationIds.has('family-editor-drop')) descriptorOperationIds.add('drop');
+  if (nodeType === 'cde_resource_group' &&
+      descriptorEntries.some((entry) => String(entry.id || '').startsWith('family-editor-create'))) {
+    descriptorOperationIds.add('create');
+  }
   descriptorEntries.forEach((entry) => {
     if(!grouped.has(entry.category)) grouped.set(entry.category, []);
     grouped.get(entry.category).push({providerId: itemData?.cde_provider_id || '', objectTypes: [nodeType || 'object'],
@@ -917,6 +1066,27 @@ export function providerTreeContextActions(itemData, item=null) {
       enabled: true,
       requiresConfirmation: false,
       execute: () => openNodeDatabaseProperties(itemData, item),
+      providerId: itemData?.cde_provider_id || itemData?.cde_engine_id || '',
+      objectTypes: [nodeType],
+    });
+  }
+
+  if (
+    nodeType &&
+    nodeType !== 'server' &&
+    !itemData?.cde_section &&
+    isObjectPermissionsSupported(itemData)
+  ) {
+    if (!grouped.has('security')) grouped.set('security', []);
+    grouped.get('security').unshift({
+      id: 'object-permissions-grants',
+      label: gettext('Permissions & Grants...'),
+      description: gettext('View and manage user/role grants on this object'),
+      iconKey: 'tib.security_grants',
+      intent: 'default',
+      enabled: true,
+      requiresConfirmation: false,
+      execute: () => openObjectPermissionsInspector(itemData, item),
       providerId: itemData?.cde_provider_id || itemData?.cde_engine_id || '',
       objectTypes: [nodeType],
     });

@@ -15,6 +15,7 @@ import {Toolbar} from '../../layout/WorkbenchChrome';
 import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
+import {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {
   QUALITY_DIMENSIONS, QUALITY_EVALUATION_MODES, QUALITY_RULE_FAMILIES,
   QUALITY_ACTION_TYPES, QUALITY_SEVERITIES, QUALITY_SAMPLING_MODES,
@@ -180,6 +181,12 @@ function RuleDetailEditor({rule, session, invoke}) {
       onChange={(event) => update({nativeDetails: event.target.value})} />
     <TextField label="Rule documentation" value={draft.documentation}
       onChange={(event) => update({documentation: event.target.value})} />
+    <Box sx={{gridColumn: '1/-1', display: 'grid', gap: 1, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'}}>
+      <KeyValueJsonEditor title="Rule parameters" valueJson={draft.parameters}
+        onChangeJson={(parameters) => update({parameters})} />
+      <KeyValueJsonEditor title="Provider-native rule details" valueJson={draft.nativeDetails}
+        onChangeJson={(nativeDetails) => update({nativeDetails})} />
+    </Box>
     <Box sx={{gridColumn: '1/-1', display: 'flex', gap: 1, flexWrap: 'wrap'}}>
       {session.content.actions.map((action) => <Checkbox key={action.id}
         label={`Action: ${action.label}`} checked={draft.actionIds.includes(action.id)}

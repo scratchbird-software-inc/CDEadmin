@@ -24,7 +24,7 @@ import gettext from 'sources/gettext';
 import {Box, ScrollArea, Stack} from '../primitives/Layout';
 import {Button} from '../primitives/Button';
 import {Tab} from '../navigation/TabsAndBreadcrumbs';
-import FormReference from '../navigation/FormReference';
+import FormReference, {readShowFormReferences} from '../navigation/FormReference';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {EmptyState} from '../feedback/EmptyState';
 import CodeEditor from '../editors/CodeEditor';
@@ -45,6 +45,7 @@ export function planSqlText(plan) {
   }
   if(preview.source) return preview.source;
   if(preview.sql) return preview.sql;
+  if(preview.statement) return preview.statement;
   return JSON.stringify(preview, null, 2);
 }
 
@@ -239,9 +240,30 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
     if(activeTab === 'SQL' && autoPlan && planState.status === 'idle') refreshPlan();
   }, [activeTab, autoPlan, planState.status, refreshPlan]);
 
+  const hasTyptypeField = useMemo(
+    () => (form.tabs || []).some((tab) => (tab.fields || []).some((f) => f.field_id === 'typtype')),
+    [form.tabs]
+  );
+
   const onFieldChange = (fieldId, value) => {
     setTouchedFields((current) => current.has(fieldId) ? current : new Set([...current, fieldId]));
-    setDraft((current) => ({...current, [fieldId]: value}));
+    setDraft((current) => {
+      const next = {...current, [fieldId]: value};
+      if (hasTyptypeField && fieldId === 'variant') {
+        const variantToTyptype = {
+          composite: 'c', enum: 'e', external: 'b', range: 'r', shell: 'p', multirange: 'm',
+        };
+        if (variantToTyptype[value]) next.typtype = variantToTyptype[value];
+      } else if (hasTyptypeField && fieldId === 'typtype') {
+        const typtypeToVariant = {
+          c: 'composite', e: 'enum', b: 'external', r: 'range', p: 'shell', m: 'multirange',
+        };
+        if (typtypeToVariant[value] && current.variant && current.variant !== 'domain') {
+          next.variant = typtypeToVariant[value];
+        }
+      }
+      return next;
+    });
   };
 
   const reset = () => {
@@ -347,7 +369,7 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
       </Box>
       {form.form_reference && <FormReference reference={form.form_reference} />}
     </Box>
-    {form.status !== 'complete' && <Banner status="info">
+    {(form.status === 'pending' || (form.status !== 'complete' && readShowFormReferences())) && <Banner status="info">
       {form.status === 'draft'
         ? gettext('This %s form is a draft: fields are listed, round-trip verification is pending.', gettext(form.family_title).toLowerCase())
         : gettext('This form is a skeleton; the engine descriptor has no fields yet.')}
@@ -364,7 +386,14 @@ export default function ObjectEditor({form, mode='create', resourceKind, record=
         {current.primitive === 'sql_preview' && <SqlTab planState={planState} canPlan={canPlan} errors={errors}
           onRefresh={refreshPlan} mode={mode} dirty={dirty} />}
         {current.primitive !== 'sql_preview' && (tabRenderers[current.tab] ?
-          tabRenderers[current.tab]({tab: current, draft, record, context, mode}) :
+          <Stack gap="comfortable">
+            {tabRenderers[current.tab]({tab: current, draft, record, context, mode})}
+            {activeFields(current.fields, {mode, draft}).some((field) => !field.hidden) &&
+              <FieldsTab tab={current} form={form} draft={draft} errors={errors} shownError={shownError}
+                mode={mode} context={context}
+                resourceKind={resourceKind} disabled={readOnly || applyState.status === 'loading'}
+                fixedFields={fixedFields} suppressSubTabs={hostedOnTabbedIconBar} onFieldChange={onFieldChange} />}
+          </Stack> :
           (current.fields.length ?
             <FieldsTab tab={current} form={form} draft={draft} errors={errors} shownError={shownError}
               mode={mode} context={context}
@@ -437,7 +466,7 @@ SqlTab.propTypes = {
 
 ObjectEditor.propTypes = {
   form: PropTypes.object.isRequired,
-  mode: PropTypes.oneOf(['create', 'alter']),
+  mode: PropTypes.oneOf(['create', 'alter', 'inspect']),
   resourceKind: PropTypes.string,
   record: PropTypes.object,
   context: PropTypes.object,

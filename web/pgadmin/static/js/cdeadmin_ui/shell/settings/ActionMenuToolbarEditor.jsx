@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////
 //
-// ScratchRobin — Action, Menu & Tabbed-Notebook-Iconbar Placement Editor
+// ScratchRobin — Unified Action, Menu, Standard Section & TiB Settings Editor
 //
 // Copyright (C) 2026, The ScratchBird Development Team
 // This software is released under the PostgreSQL Licence
@@ -16,12 +16,19 @@ import {Select, Switch} from '../../primitives/Choice';
 import {SearchField} from '../../primitives/AdvancedControls';
 import {Icon, listIconDefinitions} from '../../icons';
 import {
-  CANONICAL_ACTION_CATALOG,
+  EXTENDED_ACTION_CATALOG,
   CANONICAL_APPLICATION_SURFACES,
   FALLBACK_QUICK_ACCESS_IDS,
   readLocalPlacements,
   writeLocalPlacements,
 } from '../actionPlacementEngine';
+import {
+  CALLABLE_CODE_TARGETS,
+  DEFAULT_TIB_CONFIG,
+  DEFAULT_TIB_PALETTE_LIGHT,
+  STANDARD_TIB_SECTIONS,
+  normalizeTiBConfig,
+} from '../tibStandardConfig';
 
 const BASELINE_GLOBAL_MENUS = Object.freeze([
   {
@@ -57,11 +64,12 @@ function cloneTabs(tabs = []) {
     hidden: Boolean(t.hidden),
     groups: (t.groups || []).map((g) => ({
       id: g.id,
+      sectionId: g.sectionId || '',
       label: g.label,
       hidden: Boolean(g.hidden),
-      actions: [...(g.actions || g.controls || [])].map((a) =>
-        typeof a === 'string' ? a : a?.actionId || a?.command || ''
-      ).filter(Boolean),
+      actions: [...(g.actions || g.controls || [])]
+        .map((a) => (typeof a === 'string' ? a : a?.actionId || a?.command || ''))
+        .filter(Boolean),
     })),
   }));
 }
@@ -99,9 +107,24 @@ export function ActionMenuToolbarEditor({
         ? localInitial.quick_access
         : [...FALLBACK_QUICK_ACCESS_IDS]
   );
-  const [iconAssignments, setIconAssignments] = useState(
-    () => globalSettings.icon_assignments || localInitial.icon_assignments || {}
+  const [iconAssignments, setIconAssignments] = useState(() => ({
+    ...(globalSettings.icon_assignments || {}),
+    ...(localInitial.icon_assignments || {}),
+  }));
+  const [tibConfig, setTibConfig] = useState(() =>
+    normalizeTiBConfig({
+      ...(globalSettings.tib_config || {}),
+      ...(localInitial.tib_config || {}),
+    })
   );
+  const [tibSections, setTibSections] = useState(() => ({
+    ...(globalSettings.tib_sections || {}),
+    ...(localInitial.tib_sections || {}),
+  }));
+  const [actionDefinitions, setActionDefinitions] = useState(() => ({
+    ...(globalSettings.action_definitions || {}),
+    ...(localInitial.action_definitions || {}),
+  }));
   const [appConfigs, setAppConfigs] = useState(() => {
     const merged = {...(localInitial.applications || {})};
     Object.entries(applicationSettings || {}).forEach(([id, cfg]) => {
@@ -115,8 +138,11 @@ export function ActionMenuToolbarEditor({
   const [selectedAppId, setSelectedAppId] = useState(
     () => applications[0]?.id || 'data-navigator'
   );
+  const [selectedSectionId, setSelectedSectionId] = useState(
+    () => STANDARD_TIB_SECTIONS[0]?.id || 'SEC-WORKSPACE'
+  );
   const [selectedActionToAdd, setSelectedActionToAdd] = useState(
-    CANONICAL_ACTION_CATALOG[0]?.id || 'shell.quick.new'
+    EXTENDED_ACTION_CATALOG[0]?.id || 'shell.quick.new'
   );
   const [selectedQuickActionToAdd, setSelectedQuickActionToAdd] = useState('sql.execute');
   const [selectedTabIdx, setSelectedTabIdx] = useState(0);
@@ -124,28 +150,51 @@ export function ActionMenuToolbarEditor({
   const [newTabLabel, setNewTabLabel] = useState('');
   const [newGroupLabel, setNewGroupLabel] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [expandedActionId, setExpandedActionId] = useState(null);
 
   // Merge canonical catalog + any dynamic actions registered in `actionsRegistry`
   const allActions = useMemo(() => {
     const byId = new Map();
-    CANONICAL_ACTION_CATALOG.forEach((item) => {
+    EXTENDED_ACTION_CATALOG.forEach((item) => {
       byId.set(item.id, {...item});
     });
     if (typeof actionsRegistry?.list === 'function') {
       actionsRegistry.list().forEach((act) => {
-        if (!act?.id || byId.has(act.id)) return;
-        // Skip instance-suffixed duplicates (`foo.bar.sql-editor-1`) in catalog picker
-        if (/\.[a-z0-9-]+-\d+$/i.test(act.id)) return;
+        if (!act?.id) return;
+        // Skip instance-suffixed duplicates (`foo.bar.sql-editor-1`, `ds.inst-1.commit`) in catalog picker
+        if (/\.[a-z0-9-]+-\d+$/i.test(act.id) || /^(?:ds|sql-surf|designer\.cmd)\./i.test(act.id)) {
+          return;
+        }
+        const existing = byId.get(act.id);
+        if (existing) {
+          byId.set(act.id, {
+            ...existing,
+            hint: existing.hint || act.defaultHint || act.hint || existing.label,
+            shortcut: existing.shortcut || act.shortcut || '',
+          });
+          return;
+        }
         byId.set(act.id, {
           id: act.id,
-          label: act.text || act.defaultText || act.id,
+          label: act.defaultText || act.text || act.id,
+          hint: act.defaultHint || act.hint || '',
           icon: act.icon || 'command.default',
+          shortcut: act.shortcut || '',
           scope: act.application || 'global',
         });
       });
     }
     return [...byId.values()];
   }, [actionsRegistry]);
+
+  const allScopes = useMemo(() => {
+    const set = new Set();
+    allActions.forEach((a) => {
+      if (a.scope) set.add(a.scope);
+    });
+    return [...set].sort();
+  }, [allActions]);
 
   const iconOptions = useMemo(() => {
     const defs = listIconDefinitions() || [];
@@ -155,21 +204,34 @@ export function ActionMenuToolbarEditor({
     }));
   }, []);
 
+  const callableTargetOptions = useMemo(() => {
+    const list =
+      typeof actionsRegistry?.listCallableTargets === 'function'
+        ? actionsRegistry.listCallableTargets()
+        : CALLABLE_CODE_TARGETS;
+    return list.map((entry) => ({
+      value: entry.id,
+      label: `${entry.label || entry.id} (${entry.id})`,
+    }));
+  }, [actionsRegistry]);
+
   const actionOptions = useMemo(
     () =>
       allActions.map((a) => ({
         value: a.id,
-        label: `${a.label} [${a.scope}]`,
+        label: `${actionDefinitions[a.id]?.text || a.label} [${a.scope}]`,
       })),
-    [allActions]
+    [allActions, actionDefinitions]
   );
 
   const resolveActionMeta = (actionId) => {
     const found = allActions.find((a) => a.id === actionId);
-    const assignedIcon = iconAssignments[actionId];
+    const def = actionDefinitions[actionId] || {};
+    const assignedIcon = def.icon || iconAssignments[actionId];
     return {
       id: actionId,
-      label: found?.label || actionId,
+      label: def.text || found?.label || actionId,
+      hint: def.hint ?? found?.hint ?? found?.label ?? '',
       icon: assignedIcon || found?.icon || 'command.default',
       scope: found?.scope || 'global',
     };
@@ -179,20 +241,68 @@ export function ActionMenuToolbarEditor({
     const nextMenus = nextPatch.menuPlacements ?? menuPlacements;
     const nextQuick = nextPatch.quickAccess ?? quickAccess;
     const nextIcons = nextPatch.iconAssignments ?? iconAssignments;
+    const nextTibConfig = normalizeTiBConfig(nextPatch.tibConfig ?? tibConfig);
+    const nextTibSections = nextPatch.tibSections ?? tibSections;
+    const nextActionDefs = nextPatch.actionDefinitions ?? actionDefinitions;
 
     setMenuPlacements(nextMenus);
     setQuickAccess(nextQuick);
     setIconAssignments(nextIcons);
+    setTibConfig(nextTibConfig);
+    setTibSections(nextTibSections);
+    setActionDefinitions(nextActionDefs);
 
-    writeLocalPlacements({
+    actionsRegistry?.setActionDefinitions?.(nextActionDefs);
+
+    const payload = {
       menu_placements: nextMenus,
       quick_access: nextQuick,
       icon_assignments: nextIcons,
+      tib_config: nextTibConfig,
+      tib_sections: nextTibSections,
+      action_definitions: nextActionDefs,
+    };
+    writeLocalPlacements(payload);
+    onChangeGlobal?.(payload);
+  };
+
+  const updateSingleActionDefinition = (actionId, fieldPatch) => {
+    const prevDef = actionDefinitions[actionId] || {};
+    const merged = {...prevDef, ...fieldPatch};
+    Object.keys(merged).forEach((k) => {
+      if (merged[k] === undefined) delete merged[k];
     });
-    onChangeGlobal?.({
-      menu_placements: nextMenus,
-      quick_access: nextQuick,
-      icon_assignments: nextIcons,
+    const nextDefs = {...actionDefinitions};
+    if (Object.keys(merged).length === 0) {
+      delete nextDefs[actionId];
+    } else {
+      nextDefs[actionId] = merged;
+    }
+    const nextIcons = {...iconAssignments};
+    if (fieldPatch.icon !== undefined) {
+      if (fieldPatch.icon) nextIcons[actionId] = fieldPatch.icon;
+      else delete nextIcons[actionId];
+    }
+    if (fieldPatch.status && actionsRegistry?.has?.(actionId)) {
+      actionsRegistry.setStatus?.(actionId, fieldPatch.status);
+    }
+    commitGlobalPlacements({
+      actionDefinitions: nextDefs,
+      iconAssignments: nextIcons,
+    });
+  };
+
+  const resetSingleActionDefinition = (actionId) => {
+    const nextDefs = {...actionDefinitions};
+    delete nextDefs[actionId];
+    const nextIcons = {...iconAssignments};
+    delete nextIcons[actionId];
+    if (actionsRegistry?.has?.(actionId)) {
+      actionsRegistry.setStatus?.(actionId, 'enabled');
+    }
+    commitGlobalPlacements({
+      actionDefinitions: nextDefs,
+      iconAssignments: nextIcons,
     });
   };
 
@@ -228,7 +338,8 @@ export function ActionMenuToolbarEditor({
         ['global-menus', gettext('Global Top Menus')],
         ['app-menus', gettext('Application Menus')],
         ['iconbars', gettext('Tabbed-Notebook Iconbars')],
-        ['icons', gettext('Action Icons & Status')],
+        ['tib-appearance', gettext('TiB Appearance')],
+        ['icons', gettext('Actions & Code Targets')],
       ].map(([key, label]) => {
         const selected = activeSubView === key;
         return (
@@ -646,9 +757,10 @@ export function ActionMenuToolbarEditor({
         <Select
           label={gettext('Application')}
           value={selectedAppId}
-          options={(applications.length ? applications : [{id: 'data-navigator', label: 'Data Navigator'}]).map(
-            (a) => ({value: a.id, label: a.label || a.id})
-          )}
+          options={(applications.length
+            ? applications
+            : [{id: 'data-navigator', label: 'Data Navigator'}]
+          ).map((a) => ({value: a.id, label: a.label || a.id}))}
           onChange={(val) => val && setSelectedAppId(val)}
         />
 
@@ -748,7 +860,7 @@ export function ActionMenuToolbarEditor({
   }
 
   // -------------------------------------------------------------------------
-  // Sub-view 3: Tabbed-Notebook Iconbars (`Area 3b` & `3b1` Quick Strip)
+  // Sub-view 3: Tabbed-Notebook Iconbars (`Area 3b`, `3b1` & 26 Standard Sections)
   // -------------------------------------------------------------------------
   if (activeSubView === 'iconbars') {
     const surface =
@@ -775,6 +887,20 @@ export function ActionMenuToolbarEditor({
       });
     };
 
+    const stdSection =
+      STANDARD_TIB_SECTIONS.find((s) => s.id === selectedSectionId) || STANDARD_TIB_SECTIONS[0];
+    const secOverride = tibSections[stdSection.id] || {};
+    const saveSectionOverride = (patch) => {
+      const merged = {...secOverride, ...patch};
+      const nextSections = {...tibSections, [stdSection.id]: merged};
+      commitGlobalPlacements({tibSections: nextSections});
+    };
+    const resetSectionOverride = () => {
+      const nextSections = {...tibSections};
+      delete nextSections[stdSection.id];
+      commitGlobalPlacements({tibSections: nextSections});
+    };
+
     return (
       <div
         data-cdeadmin-qa-key="settings-iconbars-editor"
@@ -783,11 +909,11 @@ export function ActionMenuToolbarEditor({
         {subViewTabsBar}
         <div>
           <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
-            {gettext('Tabbed-Notebook Iconbars Editor (Area 3b & 3b1 Quick Strip)')}
+            {gettext('Tabbed-Notebook Iconbars & Shared Standard Sections (Area 3b & 3b1)')}
           </div>
           <div style={{fontSize: '0.78rem', color: 'var(--sr-text-secondary)'}}>
             {gettext(
-              'Place, reorder, or remove compact action icons on the 3b1 Quick-Access strip and every application’s 3b Tabbed-Notebook-Iconbar.'
+              'Configure the 3b1 Quick-Access strip, edit any of the 26 shared Standard Sections once for all worksurfaces, or customize per-worksurface sub-tabs.'
             )}
           </div>
         </div>
@@ -880,6 +1006,179 @@ export function ActionMenuToolbarEditor({
           </div>
         </div>
 
+        {/* Global Shared Standard TiB Sections (26 Sections — Single Edit Updates All Worksurfaces) */}
+        <div
+          data-cdeadmin-qa-key="tib-standard-sections-editor"
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid var(--sr-border-default)',
+            background: 'var(--sr-surface-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8}}>
+            <div>
+              <div style={{fontWeight: 700, fontSize: '0.84rem'}}>
+                {gettext('Global Standard TiB Sections (26 Shared Sections)')}
+              </div>
+              <div style={{fontSize: '0.75rem', color: 'var(--sr-text-secondary)'}}>
+                {gettext(
+                  'Modifying a standard section here updates its title, header icon, visibility, and extra buttons on every worksurface that mounts it.'
+                )}
+              </div>
+            </div>
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="tib-section-reset"
+              onClick={resetSectionOverride}
+            >
+              {gettext('Reset Section')}
+            </Button>
+          </div>
+
+          <Select
+            label={gettext('Standard Section')}
+            value={stdSection.id}
+            options={STANDARD_TIB_SECTIONS.map((s) => ({
+              value: s.id,
+              label: `${s.id} — ${secOverride?.id === s.id ? secOverride.label || s.title : tibSections[s.id]?.label || s.title} (${s.usedBy})`,
+            }))}
+            onChange={(val) => val && setSelectedSectionId(val)}
+          />
+
+          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'center'}}>
+            <TextField
+              label={gettext('Section Footer Title')}
+              value={secOverride.label ?? stdSection.title}
+              inputProps={{'data-cdeadmin-qa-key': 'tib-section-title-input'}}
+              onChange={(e) => saveSectionOverride({label: e.target.value})}
+            />
+            <Select
+              label={gettext('Section Header Icon (14×14)')}
+              value={secOverride.sectionIcon || stdSection.sectionIcon}
+              options={iconOptions}
+              onChange={(val) => val && saveSectionOverride({sectionIcon: val})}
+            />
+            <div style={{paddingTop: 18}}>
+              <Switch
+                label={gettext('Visible')}
+                checked={secOverride.hidden !== true}
+                onChange={(checked) => saveSectionOverride({hidden: !checked})}
+              />
+            </div>
+          </div>
+
+          <div style={{display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'end'}}>
+            <Select
+              label={gettext('Add Extra Action to "%s" Across All Worksurfaces', secOverride.label || stdSection.title)}
+              value={selectedActionToAdd}
+              options={actionOptions}
+              onChange={(val) => val && setSelectedActionToAdd(val)}
+            />
+            <Button
+              intent="neutral"
+              data-cdeadmin-qa-key="tib-section-add-hero"
+              onClick={() => {
+                if (!selectedActionToAdd) return;
+                const list = [...new Set([...(secOverride.added_hero_actions || []), selectedActionToAdd])];
+                saveSectionOverride({added_hero_actions: list});
+              }}
+            >
+              {gettext('+ Add Hero (42×42)')}
+            </Button>
+            <Button
+              intent="primary"
+              data-cdeadmin-qa-key="tib-section-add-grid"
+              onClick={() => {
+                if (!selectedActionToAdd) return;
+                const list = [...new Set([...(secOverride.added_grid_actions || []), selectedActionToAdd])];
+                saveSectionOverride({added_grid_actions: list});
+              }}
+            >
+              {gettext('+ Add Grid (20×20)')}
+            </Button>
+          </div>
+
+          {((secOverride.added_hero_actions || []).length > 0 ||
+            (secOverride.added_grid_actions || []).length > 0) && (
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: 6}}>
+              {(secOverride.added_hero_actions || []).map((aid) => {
+                const meta = resolveActionMeta(aid);
+                return (
+                  <span
+                    key={`hero-${aid}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: 'var(--sr-surface-card)',
+                      border: '1px solid var(--sr-border-default)',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <Icon iconKey={meta.icon} decorative size="14px" />
+                    <span>{meta.label} (Hero)</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${meta.label}`}
+                      onClick={() =>
+                        saveSectionOverride({
+                          added_hero_actions: (secOverride.added_hero_actions || []).filter(
+                            (x) => x !== aid
+                          ),
+                        })
+                      }
+                      style={{border: 'none', background: 'transparent', cursor: 'pointer'}}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+              {(secOverride.added_grid_actions || []).map((aid) => {
+                const meta = resolveActionMeta(aid);
+                return (
+                  <span
+                    key={`grid-${aid}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: 'var(--sr-surface-card)',
+                      border: '1px solid var(--sr-border-default)',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <Icon iconKey={meta.icon} decorative size="14px" />
+                    <span>{meta.label} (Grid)</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${meta.label}`}
+                      onClick={() =>
+                        saveSectionOverride({
+                          added_grid_actions: (secOverride.added_grid_actions || []).filter(
+                            (x) => x !== aid
+                          ),
+                        })
+                      }
+                      style={{border: 'none', background: 'transparent', cursor: 'pointer'}}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* 3b Application Tabbed-Notebook-Iconbar */}
         <div
           style={{
@@ -897,9 +1196,10 @@ export function ActionMenuToolbarEditor({
               label={gettext('Application Tabbed-Notebook-Iconbar (Area 3b)')}
               value={selectedAppId}
               style={{flex: 1}}
-              options={(applications.length ? applications : [{id: 'data-navigator', label: 'Data Navigator'}]).map(
-                (a) => ({value: a.id, label: a.label || a.id})
-              )}
+              options={(applications.length
+                ? applications
+                : [{id: 'data-navigator', label: 'Data Navigator'}]
+              ).map((a) => ({value: a.id, label: a.label || a.id}))}
               onChange={(val) => {
                 if (!val) return;
                 setSelectedAppId(val);
@@ -916,10 +1216,10 @@ export function ActionMenuToolbarEditor({
             </Button>
           </div>
 
-          {/* Tabs strip */}
+          {/* Sub-Tabs strip */}
           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end'}}>
             <Select
-              label={gettext('Notebook Tab (3b2 / 3b3)')}
+              label={gettext('Worksurface Sub-Tab')}
               value={String(safeTabIdx)}
               options={tabs.map((t, idx) => ({value: String(idx), label: t.label}))}
               onChange={(val) => {
@@ -928,7 +1228,7 @@ export function ActionMenuToolbarEditor({
               }}
             />
             <TextField
-              label={gettext('New Tab Title')}
+              label={gettext('New Sub-Tab Title')}
               placeholder="e.g. Custom Tools"
               value={newTabLabel}
               onChange={(e) => setNewTabLabel(e.target.value)}
@@ -960,7 +1260,7 @@ export function ActionMenuToolbarEditor({
           {/* Group selector + add group */}
           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end'}}>
             <Select
-              label={gettext('Icon Group inside "%s"', currentTab.label)}
+              label={gettext('Section inside "%s"', currentTab.label)}
               value={String(safeGroupIdx)}
               options={(currentTab.groups || []).map((g, idx) => ({
                 value: String(idx),
@@ -969,7 +1269,7 @@ export function ActionMenuToolbarEditor({
               onChange={(val) => setSelectedGroupIdx(Number(val) || 0)}
             />
             <TextField
-              label={gettext('New Group Label')}
+              label={gettext('New Section Label')}
               placeholder="e.g. Export"
               value={newGroupLabel}
               onChange={(e) => setNewGroupLabel(e.target.value)}
@@ -1095,12 +1395,259 @@ export function ActionMenuToolbarEditor({
   }
 
   // -------------------------------------------------------------------------
-  // Sub-view 4: Action Semantic Icons & Tri-State Status
+  // Sub-view 4: Global TiB Appearance, Visibility & Geometry (`tib-appearance`)
+  // -------------------------------------------------------------------------
+  if (activeSubView === 'tib-appearance') {
+    const updateTibCfg = (patch) => {
+      commitGlobalPlacements({tibConfig: {...tibConfig, ...patch}});
+    };
+
+    const customPal = tibConfig.custom_palette || DEFAULT_TIB_PALETTE_LIGHT;
+    const updateCustomColor = (key, val) => {
+      updateTibCfg({
+        palette_mode: 'custom',
+        custom_palette: {...customPal, [key]: val},
+      });
+    };
+
+    return (
+      <div
+        data-cdeadmin-qa-key="settings-tib-appearance-editor"
+        style={{display: 'flex', flexDirection: 'column', gap: 14}}
+      >
+        {subViewTabsBar}
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10}}>
+          <div>
+            <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
+              {gettext('Global Tabbed-Icon-Bar (TiB) Appearance & Geometry')}
+            </div>
+            <div style={{fontSize: '0.78rem', color: 'var(--sr-text-secondary)'}}>
+              {gettext(
+                'Every setting on this page applies immediately to all Tabbed-Icon-Bar instances across all 13 worksurfaces.'
+              )}
+            </div>
+          </div>
+          <Button
+            intent="neutral"
+            data-cdeadmin-qa-key="tib-reset-defaults"
+            onClick={() => commitGlobalPlacements({tibConfig: {...DEFAULT_TIB_CONFIG}})}
+          >
+            {gettext('Reset TiB Defaults')}
+          </Button>
+        </div>
+
+        {/* Sub-Tab & Element Visibility */}
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid var(--sr-border-default)',
+            background: 'var(--sr-surface-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <div style={{fontWeight: 700, fontSize: '0.82rem'}}>
+            {gettext('Sub-Tab Strip & Structural Elements')}
+          </div>
+          <Select
+            label={gettext('Sub-Tab Bar Visibility')}
+            aria-label={gettext('Sub-Tab Bar Visibility')}
+            value={tibConfig.subtab_visibility}
+            options={[
+              {
+                value: 'multi_only',
+                label: gettext('Hide sub-tab bar when worksurface has only 1 sub-tab (Default)'),
+              },
+              {
+                value: 'always',
+                label: gettext('Always show sub-tab bar (even for single sub-tab)'),
+              },
+              {
+                value: 'hidden',
+                label: gettext('Always hide sub-tab bar'),
+              },
+            ]}
+            onChange={(val) => val && updateTibCfg({subtab_visibility: val})}
+          />
+
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10}}>
+            <Switch
+              label={gettext('Show Quick-Access Strip (3b1)')}
+              checked={tibConfig.show_quick_access}
+              onChange={(checked) => updateTibCfg({show_quick_access: Boolean(checked)})}
+            />
+            <Switch
+              label={gettext('Show Section Footer Headers')}
+              checked={tibConfig.show_section_headers}
+              onChange={(checked) => updateTibCfg({show_section_headers: Boolean(checked)})}
+            />
+            <Switch
+              label={gettext('Show Section Header Icons (14×14)')}
+              checked={tibConfig.show_section_icons}
+              onChange={(checked) => updateTibCfg({show_section_icons: Boolean(checked)})}
+            />
+            <Switch
+              label={gettext('Show Cluster Dividers')}
+              checked={tibConfig.show_cluster_dividers}
+              onChange={(checked) => updateTibCfg({show_cluster_dividers: Boolean(checked)})}
+            />
+            <Switch
+              label={gettext('Show Hover Tooltip Hints')}
+              checked={tibConfig.show_hover_hints}
+              onChange={(checked) => updateTibCfg({show_hover_hints: Boolean(checked)})}
+            />
+          </div>
+        </div>
+
+        {/* Dimensions & Geometry */}
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid var(--sr-border-default)',
+            background: 'var(--sr-surface-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <div style={{fontWeight: 700, fontSize: '0.82rem'}}>
+            {gettext('Section Card & Button Geometry')}
+          </div>
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10}}>
+            <NumberField
+              label={gettext('Section Height (px)')}
+              min={56}
+              max={124}
+              value={tibConfig.section_height_px}
+              inputProps={{'data-cdeadmin-qa-key': 'tib-section-height-px'}}
+              onChange={(e) => updateTibCfg({section_height_px: Number(e.target.value) || 82})}
+            />
+            <NumberField
+              label={gettext('Hero Button Size (px)')}
+              min={28}
+              max={64}
+              value={tibConfig.hero_button_px}
+              inputProps={{'data-cdeadmin-qa-key': 'tib-hero-button-px'}}
+              onChange={(e) => updateTibCfg({hero_button_px: Number(e.target.value) || 42})}
+            />
+            <NumberField
+              label={gettext('Hero Icon Size (px)')}
+              min={16}
+              max={44}
+              value={tibConfig.hero_icon_px}
+              onChange={(e) => updateTibCfg({hero_icon_px: Number(e.target.value) || 28})}
+            />
+            <NumberField
+              label={gettext('Grid Button Size (px)')}
+              min={16}
+              max={32}
+              value={tibConfig.grid_button_px}
+              inputProps={{'data-cdeadmin-qa-key': 'tib-grid-button-px'}}
+              onChange={(e) => updateTibCfg({grid_button_px: Number(e.target.value) || 20})}
+            />
+            <NumberField
+              label={gettext('Grid Icon Size (px)')}
+              min={12}
+              max={24}
+              value={tibConfig.grid_icon_px}
+              onChange={(e) => updateTibCfg({grid_icon_px: Number(e.target.value) || 16})}
+            />
+            <NumberField
+              label={gettext('Grid Gap (px)')}
+              min={1}
+              max={8}
+              value={tibConfig.grid_gap_px}
+              onChange={(e) => updateTibCfg({grid_gap_px: Number(e.target.value) || 2})}
+            />
+            <NumberField
+              label={gettext('Section Gap (px)')}
+              min={2}
+              max={20}
+              value={tibConfig.section_gap_px}
+              onChange={(e) => updateTibCfg({section_gap_px: Number(e.target.value) || 8})}
+            />
+            <NumberField
+              label={gettext('Section Radius (px)')}
+              min={0}
+              max={14}
+              step={0.5}
+              value={tibConfig.section_radius_px}
+              onChange={(e) => updateTibCfg({section_radius_px: Number(e.target.value) || 0})}
+            />
+            <NumberField
+              label={gettext('Button Radius (px)')}
+              min={0}
+              max={12}
+              step={0.5}
+              value={tibConfig.button_radius_px}
+              onChange={(e) => updateTibCfg({button_radius_px: Number(e.target.value) || 0})}
+            />
+          </div>
+        </div>
+
+        {/* Palette & Three-Tone Icon Colours */}
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid var(--sr-border-default)',
+            background: 'var(--sr-surface-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          <Select
+            label={gettext('TiB Card & Three-Tone Icon Palette')}
+            value={tibConfig.palette_mode}
+            options={[
+              {value: 'theme', label: gettext('Follow Active Workbench Colour Theme (Default)')},
+              {value: 'custom', label: gettext('Custom TiB Card & Three-Tone Icon Palette')},
+            ]}
+            onChange={(val) => val && updateTibCfg({palette_mode: val})}
+          />
+          {tibConfig.palette_mode === 'custom' && (
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10}}>
+              {[
+                ['section_bg', gettext('Section Background')],
+                ['section_border', gettext('Section Border')],
+                ['footer_fg', gettext('Section Header Text')],
+                ['button_bg', gettext('Button Fill')],
+                ['button_border', gettext('Button Border')],
+                ['button_checked_bg', gettext('Active Button Fill')],
+                ['icon_primary', gettext('Icon Primary Ink')],
+                ['icon_secondary', gettext('Icon Secondary Tone')],
+                ['icon_accent', gettext('Icon Semantic Accent')],
+              ].map(([key, labelText]) => (
+                <TextField
+                  key={key}
+                  label={labelText}
+                  value={customPal[key] || ''}
+                  inputProps={{'data-cdeadmin-qa-key': `tib-color-${key}`}}
+                  onChange={(e) => updateCustomColor(key, e.target.value)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Sub-view 5: Unified Actions Registry (`icons` — Text, Icon, Hint, Status & Target Code)
   // -------------------------------------------------------------------------
   const filteredActions = allActions.filter((a) => {
+    if (scopeFilter !== 'all' && a.scope !== scopeFilter) return false;
     const q = actionFilter.trim().toLowerCase();
     if (!q) return true;
-    return `${a.id} ${a.label} ${a.scope}`.toLowerCase().includes(q);
+    const def = actionDefinitions[a.id] || {};
+    return `${a.id} ${def.text || a.label} ${def.hint || a.hint || ''} ${a.scope} ${a.sectionId || ''}`
+      .toLowerCase()
+      .includes(q);
   });
 
   return (
@@ -1111,81 +1658,320 @@ export function ActionMenuToolbarEditor({
       {subViewTabsBar}
       <div>
         <div style={{fontWeight: 700, fontSize: '0.92rem'}}>
-          {gettext('Action Semantic Icons & Tri-State Visibility')}
+          {gettext('Actions Registry — Text, Icons, Hints, Status & Callable Code Targets')}
         </div>
         <div style={{fontSize: '0.78rem', color: 'var(--sr-text-secondary)'}}>
           {gettext(
-            'Reassign semantic icons or override Enabled / Disabled / Invisible status for any t_action across menus and iconbars.'
+            'Adjust the label text, icon, hover hint, tri-state visibility (Enabled / Disabled / Invisible), and callable client handler or server endpoint for any button action from one place.'
           )}
         </div>
       </div>
 
-      <SearchField
-        label={gettext('Filter actions')}
-        placeholder={gettext('Search by action ID, label, or application…')}
-        value={actionFilter}
-        onChange={setActionFilter}
-      />
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 220px', gap: 8, alignItems: 'end'}}>
+        <SearchField
+          label={gettext('Filter actions (%s shown)', filteredActions.length)}
+          placeholder={gettext('Search by action ID, text, hint, section, or worksurface…')}
+          value={actionFilter}
+          onChange={setActionFilter}
+        />
+        <Select
+          label={gettext('Scope')}
+          value={scopeFilter}
+          options={[
+            {value: 'all', label: gettext('All Worksurfaces & Scopes')},
+            ...allScopes.map((sc) => ({value: sc, label: sc})),
+          ]}
+          onChange={(val) => val && setScopeFilter(val)}
+        />
+      </div>
 
       <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
-        {filteredActions.slice(0, 30).map((act) => {
-          const currentIcon = iconAssignments[act.id] || act.icon || 'command.default';
-          const liveStatus = actionsRegistry?.has?.(act.id)
-            ? actionsRegistry.resolve(act.id)?.status || 'enabled'
-            : 'enabled';
+        {filteredActions.map((act) => {
+          const def = actionDefinitions[act.id] || {};
+          const regResolved = actionsRegistry?.has?.(act.id)
+            ? actionsRegistry.resolve(act.id)
+            : null;
+          const displayLabel = def.text || regResolved?.text || act.label;
+          const displayHint = def.hint ?? regResolved?.hint ?? act.hint ?? act.label;
+          const displayShortcut = def.shortcut ?? regResolved?.shortcut ?? act.shortcut ?? '';
+          const currentIcon =
+            def.icon || iconAssignments[act.id] || regResolved?.icon || act.icon || 'command.default';
+          const liveStatus =
+            def.status || regResolved?.status || 'enabled';
+          const targetSpec = def.target || regResolved?.target || {};
+          const targetKind = targetSpec.kind === 'server' ? 'server' : 'client';
+          const targetHandlerId = targetSpec.handlerId || act.handlerId || '';
+          const targetEventName = targetSpec.eventName || '';
+          const targetEndpoint = targetSpec.endpoint || `/cdeadmin/api/shell/actions/${act.id}/invoke`;
+          const targetMethod = targetSpec.method || 'POST';
+          const isExpanded = expandedActionId === act.id || filteredActions.length <= 5;
+          const hasOverride = Boolean(actionDefinitions[act.id] || iconAssignments[act.id]);
 
           return (
             <div
               key={act.id}
               data-cdeadmin-qa-key={`action-icon-row-${act.id}`}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(160px, 1.3fr) minmax(170px, 1.2fr) 130px',
+                display: 'flex',
+                flexDirection: 'column',
                 gap: 8,
-                alignItems: 'center',
-                padding: '6px 10px',
+                padding: '8px 10px',
                 borderRadius: 8,
-                border: '1px solid var(--sr-border-subtle)',
+                border: hasOverride
+                  ? '1px solid var(--sr-accent, #2563eb)'
+                  : '1px solid var(--sr-border-subtle)',
                 background: 'var(--sr-surface-card)',
               }}
             >
-              <div style={{display: 'flex', alignItems: 'center', gap: 8, minWidth: 0}}>
-                <Icon iconKey={currentIcon} decorative size="17px" />
-                <div style={{minWidth: 0}}>
-                  <div style={{fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                    {act.label}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(170px, 1.35fr) minmax(170px, 1.15fr) 128px auto',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{display: 'flex', alignItems: 'center', gap: 8, minWidth: 0}}>
+                  <Icon iconKey={currentIcon} decorative size="18px" />
+                  <div style={{minWidth: 0}}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {displayLabel}
+                    </div>
+                    <code style={{fontSize: '0.68rem', color: 'var(--sr-text-secondary)'}}>
+                      {act.id}
+                    </code>
                   </div>
-                  <code style={{fontSize: '0.68rem', color: 'var(--sr-text-secondary)'}}>
-                    {act.id}
-                  </code>
                 </div>
+
+                <Select
+                  aria-label={`Semantic icon for ${act.label}`}
+                  value={currentIcon}
+                  options={iconOptions}
+                  onChange={(val) => {
+                    if (!val) return;
+                    updateSingleActionDefinition(act.id, {icon: val});
+                  }}
+                />
+
+                <Select
+                  aria-label={`Status for ${act.label}`}
+                  value={liveStatus}
+                  options={[
+                    {value: 'enabled', label: gettext('Enabled')},
+                    {value: 'disabled', label: gettext('Disabled')},
+                    {value: 'invisible', label: gettext('Invisible')},
+                  ]}
+                  onChange={(val) => {
+                    if (!val) return;
+                    updateSingleActionDefinition(act.id, {status: val});
+                  }}
+                />
+
+                <Button
+                  intent={isExpanded ? 'primary' : 'neutral'}
+                  data-cdeadmin-qa-key={`action-configure-${act.id}`}
+                  onClick={() =>
+                    setExpandedActionId((prev) => (prev === act.id ? null : act.id))
+                  }
+                >
+                  {isExpanded ? gettext('Hide Details') : gettext('Configure…')}
+                </Button>
               </div>
 
-              <Select
-                aria-label={`Semantic icon for ${act.label}`}
-                value={currentIcon}
-                options={iconOptions}
-                onChange={(val) => {
-                  if (!val) return;
-                  commitGlobalPlacements({
-                    iconAssignments: {...iconAssignments, [act.id]: val},
-                  });
-                }}
-              />
+              {isExpanded && (
+                <div
+                  data-cdeadmin-qa-key={`action-details-${act.id}`}
+                  style={{
+                    paddingTop: 8,
+                    borderTop: '1px solid var(--sr-border-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1.2fr 140px', gap: 8}}>
+                    <TextField
+                      label={gettext('Button Text')}
+                      value={displayLabel}
+                      inputProps={{
+                        'aria-label': `Button text for ${act.id}`,
+                        'data-cdeadmin-qa-key': `action-text-${act.id}`,
+                      }}
+                      onChange={(e) =>
+                        updateSingleActionDefinition(act.id, {text: e.target.value})
+                      }
+                    />
+                    <TextField
+                      label={gettext('Hover Hint / Tooltip')}
+                      value={displayHint}
+                      inputProps={{
+                        'aria-label': `Hint for ${act.id}`,
+                        'data-cdeadmin-qa-key': `action-hint-${act.id}`,
+                      }}
+                      onChange={(e) =>
+                        updateSingleActionDefinition(act.id, {hint: e.target.value})
+                      }
+                    />
+                    <TextField
+                      label={gettext('Shortcut')}
+                      value={displayShortcut}
+                      placeholder="e.g. F5"
+                      inputProps={{
+                        'aria-label': `Shortcut for ${act.id}`,
+                        'data-cdeadmin-qa-key': `action-shortcut-${act.id}`,
+                      }}
+                      onChange={(e) =>
+                        updateSingleActionDefinition(act.id, {shortcut: e.target.value})
+                      }
+                    />
+                  </div>
 
-              <Select
-                aria-label={`Status for ${act.label}`}
-                value={liveStatus}
-                options={[
-                  {value: 'enabled', label: gettext('Enabled')},
-                  {value: 'disabled', label: gettext('Disabled')},
-                  {value: 'invisible', label: gettext('Invisible')},
-                ]}
-                onChange={(val) => {
-                  if (!val || !actionsRegistry?.setStatus) return;
-                  actionsRegistry.setStatus(act.id, val);
-                }}
-              />
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        targetKind === 'client'
+                          ? '150px 1.2fr 1fr auto'
+                          : '150px 1.5fr 110px auto',
+                      gap: 8,
+                      alignItems: 'end',
+                    }}
+                  >
+                    <Select
+                      label={gettext('Code Target Kind')}
+                      aria-label={`Target kind for ${act.id}`}
+                      value={targetKind}
+                      options={[
+                        {value: 'client', label: gettext('Client Handler')},
+                        {value: 'server', label: gettext('Server Endpoint')},
+                      ]}
+                      onChange={(val) => {
+                        if (!val) return;
+                        if (val === 'server') {
+                          updateSingleActionDefinition(act.id, {
+                            target: {
+                              kind: 'server',
+                              endpoint: targetEndpoint,
+                              method: targetMethod,
+                            },
+                          });
+                        } else {
+                          updateSingleActionDefinition(act.id, {
+                            target: {
+                              kind: 'client',
+                              handlerId: targetHandlerId || CALLABLE_CODE_TARGETS[0]?.id || '',
+                              eventName: targetEventName,
+                            },
+                          });
+                        }
+                      }}
+                    />
+
+                    {targetKind === 'client' ? (
+                      <>
+                        <Select
+                          label={gettext('Callable Handler (Code Called)')}
+                          aria-label={`Callable handler for ${act.id}`}
+                          value={targetHandlerId}
+                          options={[
+                            ...(targetHandlerId &&
+                            !callableTargetOptions.some((o) => o.value === targetHandlerId)
+                              ? [{value: targetHandlerId, label: targetHandlerId}]
+                              : []),
+                            ...callableTargetOptions,
+                          ]}
+                          onChange={(val) =>
+                            val &&
+                            updateSingleActionDefinition(act.id, {
+                              target: {
+                                kind: 'client',
+                                handlerId: val,
+                                ...(targetEventName ? {eventName: targetEventName} : {}),
+                              },
+                            })
+                          }
+                        />
+                        <TextField
+                          label={gettext('Custom Window Event (Optional)')}
+                          placeholder="e.g. scratchrobin:custom-cmd"
+                          value={targetEventName}
+                          inputProps={{
+                            'aria-label': `Window event for ${act.id}`,
+                            'data-cdeadmin-qa-key': `action-event-${act.id}`,
+                          }}
+                          onChange={(e) =>
+                            updateSingleActionDefinition(act.id, {
+                              target: {
+                                kind: 'client',
+                                ...(targetHandlerId ? {handlerId: targetHandlerId} : {}),
+                                eventName: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <TextField
+                          label={gettext('Server API Endpoint')}
+                          value={targetEndpoint}
+                          inputProps={{
+                            'aria-label': `Server endpoint for ${act.id}`,
+                            'data-cdeadmin-qa-key': `action-endpoint-${act.id}`,
+                          }}
+                          onChange={(e) =>
+                            updateSingleActionDefinition(act.id, {
+                              target: {
+                                kind: 'server',
+                                endpoint: e.target.value,
+                                method: targetMethod,
+                              },
+                            })
+                          }
+                        />
+                        <Select
+                          label={gettext('HTTP Method')}
+                          aria-label={`HTTP method for ${act.id}`}
+                          value={targetMethod}
+                          options={[
+                            {value: 'POST', label: 'POST'},
+                            {value: 'PUT', label: 'PUT'},
+                            {value: 'GET', label: 'GET'},
+                            {value: 'DELETE', label: 'DELETE'},
+                          ]}
+                          onChange={(val) =>
+                            val &&
+                            updateSingleActionDefinition(act.id, {
+                              target: {
+                                kind: 'server',
+                                endpoint: targetEndpoint,
+                                method: val,
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    )}
+
+                    <Button
+                      intent="neutral"
+                      disabled={!hasOverride}
+                      data-cdeadmin-qa-key={`action-reset-${act.id}`}
+                      onClick={() => resetSingleActionDefinition(act.id)}
+                    >
+                      {gettext('Reset')}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1195,7 +1981,13 @@ export function ActionMenuToolbarEditor({
 }
 
 ActionMenuToolbarEditor.propTypes = {
-  subView: PropTypes.oneOf(['global-menus', 'app-menus', 'iconbars', 'icons']),
+  subView: PropTypes.oneOf([
+    'global-menus',
+    'app-menus',
+    'iconbars',
+    'tib-appearance',
+    'icons',
+  ]),
   hideTabs: PropTypes.bool,
   globalSettings: PropTypes.object,
   applicationSettings: PropTypes.object,

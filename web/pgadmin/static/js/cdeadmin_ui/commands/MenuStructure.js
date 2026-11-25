@@ -297,6 +297,7 @@ function normalizeProjectMenuItem(raw, fallbackIndex = 0, owner = 'shell') {
     type: raw?.type || (children ? 'submenu' : 'item'),
     actionId: raw?.actionId ? String(raw.actionId) : '',
     commandId: raw?.commandId ? String(raw.commandId) : (raw?.actionId ? String(raw.actionId) : ''),
+    replacesId: raw?.replacesId ? String(raw.replacesId) : '',
     iconKey: raw?.iconKey ? String(raw.iconKey) : '',
     shortcut: raw?.shortcut ? String(raw.shortcut) : '',
     i18nKey: raw?.i18nKey ? String(raw.i18nKey) : '',
@@ -341,6 +342,15 @@ function mergeMenuItemLists(baseItems = [], incomingItems = []) {
         });
         continue;
       }
+    }
+    const replaceIdx = merged.findIndex(
+      (existing) =>
+        (incoming.replacesId && existing.id === incoming.replacesId) ||
+        existing.id === incoming.id
+    );
+    if (replaceIdx >= 0) {
+      merged[replaceIdx] = incoming;
+      continue;
     }
     merged.push(incoming);
   }

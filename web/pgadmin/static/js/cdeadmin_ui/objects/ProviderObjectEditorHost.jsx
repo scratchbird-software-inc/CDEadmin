@@ -23,6 +23,7 @@ import {EmptyState} from '../feedback/EmptyState';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
+import ObjectPermissionsMatrix from '../security/ObjectPermissionsMatrix';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
 import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice, nativeEditorForm, nativeInitialValues} from './descriptors';
 import {Stack} from '../primitives/Layout';
@@ -56,13 +57,22 @@ export function isChildOf(row, resource) {
 export function recordFromResource(resource, {form=null, resources=[]}={}) {
   if(!resource) return {};
   const native = resourceNative(resource);
+  const kindFactsKey = `${String(resource.resource_kind || '').replace(/-/g, '_')}_facts`;
+  const kindFacts = (
+    (native[kindFactsKey] && typeof native[kindFactsKey] === 'object' ? native[kindFactsKey] : null) ||
+    (native.routine_facts && typeof native.routine_facts === 'object' ? native.routine_facts : null) ||
+    (native.view_facts && typeof native.view_facts === 'object' ? native.view_facts : null) ||
+    (native.text_search_facts && typeof native.text_search_facts === 'object' ? native.text_search_facts : null) ||
+    {}
+  );
   const record = {
     ...native,
-    name: native.name ?? resource.display_name,
+    ...kindFacts,
+    name: kindFacts.name ?? native.name ?? resource.display_name,
     display_name: resource.display_name,
     resource_id: resource.resource_id,
     resource_kind: resource.resource_kind,
-    parent: native.parent ?? ((resource.display_path || []).slice(0, -1).join('.') || undefined),
+    parent: native.parent ?? native.schema ?? ((resource.display_path || []).slice(0, -1).join('.') || undefined),
   };
   for(const [fieldId, rule] of Object.entries(form?.record_children || {})) {
     record[fieldId] = (resources || []).filter((row) => row.resource_kind === rule.resource_kind && isChildOf(row, resource))
@@ -113,6 +123,23 @@ export function makePost(api, endpointUrl, databaseTargetId, {onAuthRequired} = 
         const verified = await onAuthRequired(error);
         if (verified) {
           return send();
+        }
+      }
+      const respData = error?.response?.data;
+      if (respData && typeof respData === 'object') {
+        const fieldMsgs = Array.isArray(respData.data?.errors)
+          ? respData.data.errors.map((e) => e?.message).filter(Boolean)
+          : [];
+        const baseMsg = respData.errormsg || respData.error;
+        const combined = fieldMsgs.length
+          ? `${baseMsg ? baseMsg + ': ' : ''}${fieldMsgs.join('; ')}`
+          : baseMsg;
+        if (combined) {
+          const enriched = new Error(combined);
+          enriched.data = respData.data;
+          enriched.status = error?.response?.status ?? error?.status;
+          enriched.response = error?.response;
+          throw enriched;
         }
       }
       throw error;
@@ -189,7 +216,7 @@ function NativeChildList({resource, resources, kind}) {
 NativeChildList.propTypes = {resource: PropTypes.object, resources: PropTypes.array, kind: PropTypes.string};
 
 export default function ProviderObjectEditorHost({api, endpointUrl, engine, version, versionSupport, resourceId, resourceKind,
-  databaseTargetId, mode='alter', displayName, context={}, tabRenderers: tabRenderersProp={}, onClose, onApplied,
+  databaseTargetId, mode='alter', displayName, initialRecord={}, context={}, tabRenderers: tabRenderersProp={}, onClose, onApplied,
   onOpenData, onAuthRequired, descriptorClient}) {
   const client = useMemo(() => descriptorClient || new DescriptorClient(api), [api, descriptorClient]);
   const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId, {onAuthRequired}),
@@ -202,7 +229,9 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
       try {
         const bundle = await client.bundle(engine, {version});
         const [resource, resources, nativeForms] = await Promise.all([
-          mode === 'alter' && resourceId ? post({action: 'resource_inspect', request: {resource_id: resourceId}}) : null,
+          (mode === 'alter' || mode === 'inspect') && resourceId
+            ? post({action: 'resource_inspect', request: {resource_id: resourceId}})
+            : null,
           // The endpoint's resources feed catalog lists, reference pickers
           // and options offered only where the engine reports a resource.
           loadEndpointResources(post),
@@ -244,6 +273,19 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     target: resource});
   const optionContext = buildOptionContext(bundle, resources);
   const target = resource ? {columns: (resourceNative(resource).columns || []).map((column) => column?.name ?? column)} : {};
+  const isPrincipalKind = resourceKind === 'role' || resourceKind === 'user';
+  const boundResourceNode = {
+    _type: 'cde_resource',
+    cde_engine_id: engine,
+    cde_database_target_id: databaseTargetId,
+    cde_resource_id: resourceId || resource?.resource_id,
+    cde_resource_kind: resourceKind,
+    _id: resourceId || resource?.resource_id,
+    label: displayName || resource?.display_name || resourceKind,
+  };
+  const renderPermissionsTab = !isPrincipalKind && mode !== 'create'
+    ? () => <ObjectPermissionsMatrix boundNodeData={boundResourceNode} resource={resource} compact />
+    : undefined;
   const tabRenderers = {
     Statistics: () => <NativeProperties resource={resource} />,
     Dependencies: () => <NativeDependencies resource={resource} />,
@@ -251,17 +293,26 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
       onAction={onOpenData ? () => onOpenData({resourceId, resourceKind, databaseTargetId}) : undefined} />,
     Indexes: () => <NativeChildList resource={resource} resources={resources} kind="index" />,
     Triggers: () => <NativeChildList resource={resource} resources={resources} kind="trigger" />,
+    ...(renderPermissionsTab ? {Security: renderPermissionsTab, Privileges: renderPermissionsTab} : {}),
     ...tabRenderersProp,
   };
-  const record = {...recordFromResource(resource, {form, resources}),
+  const inspectedRecord = recordFromResource(resource, {form, resources});
+  const resolvedVariant = variant || (typeof inspectedRecord.kind === 'string' && inspectedRecord.kind !== 'other'
+    ? inspectedRecord.kind : null);
+  const record = {
+    ...(mode === 'create' ? initialRecord : {}),
+    ...inspectedRecord,
     ...(nativeForm ? nativeInitialValues(nativeForm, resourceNative(resource)) : {}),
-    ...(variant ? {variant} : {})};
+    ...(resolvedVariant ? {variant: resolvedVariant} : {}),
+  };
   const notice = versionSupportNotice(versionSupport);
+  const modeTitleVerb = mode === 'create' ? 'Create' : mode === 'inspect' ? 'Inspect' : 'Edit';
   const editor = <ObjectEditor form={form} mode={mode} resourceKind={resourceKind}
+    readOnly={mode === 'inspect'}
     record={record} context={{...context, ...optionContext, target, target_resource: resource}}
     fixedFields={fixed}
     tabRenderers={tabRenderers}
-    title={displayName ? `${mode === 'create' ? 'Create' : 'Edit'} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
+    title={displayName ? `${modeTitleVerb} ${form.family_title.toLowerCase()} — ${displayName}` : undefined}
     plan={({draft}) => calls.plan({draft})}
     apply={({plan}) => calls.apply({plan})}
     onClose={onClose} onApplied={onApplied} />;
@@ -276,9 +327,10 @@ ProviderObjectEditorHost.propTypes = {
   resourceId: PropTypes.string,
   resourceKind: PropTypes.string.isRequired,
   databaseTargetId: PropTypes.string,
-  mode: PropTypes.oneOf(['create', 'alter']),
+  mode: PropTypes.oneOf(['create', 'alter', 'inspect']),
   versionSupport: PropTypes.object,
   displayName: PropTypes.string,
+  initialRecord: PropTypes.object,
   context: PropTypes.object,
   onClose: PropTypes.func,
   onApplied: PropTypes.func,

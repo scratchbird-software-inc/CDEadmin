@@ -269,8 +269,8 @@ export default function DuckdbRetainedSchemaWorkspace({
         >
           {observed && (
             <Badge
-              status="info"
-              label={`Model contract: ${observed.model?.contract || observed.provenance?.mapping || 'scratchrobin.duckdb.retained-session-ddn@1'}`}
+              status="success"
+              label={gettext('Retained session schema captured')}
             />
           )}
           <CodeEditor
@@ -400,12 +400,51 @@ export default function DuckdbRetainedSchemaWorkspace({
           {receipts.length > 0 && (
             <UnifiedDataGrid
               caption={gettext('Retained Schema Application Receipts')}
+              ariaLabel={gettext('Retained schema application receipts')}
               searchable
               exportable
               minHeight={140}
               maxHeight={260}
               rows={receipts}
-              rowKeyGetter={(r, idx) => r.application_id || r.review_id || idx}
+              rowKeyGetter={(r, idx) => r.receipt_id || r.application_id || r.review_id || idx}
+              columns={[
+                {
+                  name: 'receipt_id',
+                  label: gettext('Receipt ID'),
+                  width: 180,
+                  mono: true,
+                  accessorFn: (r) => r.receipt_id ?? r.application_id ?? r.review_id ?? '',
+                },
+                {
+                  name: 'status',
+                  label: gettext('Status'),
+                  width: 120,
+                  accessorFn: (r) => r.status ?? r.state ?? 'recorded',
+                },
+                {
+                  name: 'applied_at',
+                  label: gettext('Applied At'),
+                  width: 180,
+                  accessorFn: (r) =>
+                    r.applied_at ?? r.finished_at ?? r.native_acknowledged_at ?? r.created_at ?? '',
+                },
+                {
+                  name: 'statement_count',
+                  label: gettext('Statements'),
+                  width: 110,
+                  numeric: true,
+                  accessorFn: (r) =>
+                    r.statement_count ??
+                    (Array.isArray(r.plan?.operations) ? r.plan.operations.length : 0),
+                },
+                {
+                  name: 'summary',
+                  label: gettext('Summary'),
+                  width: 280,
+                  accessorFn: (r) =>
+                    r.summary ?? r.acknowledgement_scope ?? r.database ?? '',
+                },
+              ]}
             />
           )}
         </DuckdbSectionCard>

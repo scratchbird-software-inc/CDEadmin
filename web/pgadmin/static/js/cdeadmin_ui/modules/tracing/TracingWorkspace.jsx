@@ -15,6 +15,7 @@ import {Badge, Banner, ProgressBar, Skeleton} from '../../feedback/Indicators';
 import {EmptyState} from '../../feedback/EmptyState';
 import DataGrid from '../../data/PagedDataGrid';
 import GraphSurface from '../../visualization/GraphSurface';
+import StructuredPayloadCard, {KeyValueJsonEditor} from '../StructuredPayloadCard';
 import {criticalPath, traceDuration} from './TracingEngine';
 
 export const TRACING_SURFACES = Object.freeze([
@@ -186,9 +187,9 @@ function SpanInspector({session, invoke}) {
       <DataGrid gridId="tracing/span-attributes" aria-label="Span attributes" rows={attributes} readOnly
         rowKeyGetter={(row) => row.id} columns={[{key: 'key', name: 'Attribute'},
           {key: 'value', name: 'Value'}]} />
-      <Box component="h3">Events</Box><pre>{JSON.stringify(span.events, null, 2)}</pre>
-      <Box component="h3">Links</Box><pre>{JSON.stringify(span.links, null, 2)}</pre>
-      <Box component="h3">Resource</Box><pre>{JSON.stringify(span.resource, null, 2)}</pre>
+      <Box component="h3">Events</Box><StructuredPayloadCard compact value={span.events} />
+      <Box component="h3">Links</Box><StructuredPayloadCard compact value={span.links} />
+      <Box component="h3">Resource</Box><StructuredPayloadCard compact value={span.resource} />
     </Box>
   </Box>;
 }
@@ -259,9 +260,12 @@ function IngestionSampling({session, invoke, currentUser}) {
       (exception) => setError(exception.message));
     } catch(exception) { setError(exception.message); return null; }
   };
-  const rows = session.content.sourceConfigs.map((source) => ({...source,
-    status: session.sourceStatuses.find((item) => item.sourceId === source.id)?.supportState ?? 'unknown',
-    counts: JSON.stringify(session.sourceCounters.find((item) => item.sourceId === source.id) ?? {})}));
+  const rows = session.content.sourceConfigs.map((source) => {
+    const counter = session.sourceCounters.find((item) => item.sourceId === source.id) ?? {};
+    return {...source,
+      status: session.sourceStatuses.find((item) => item.sourceId === source.id)?.supportState ?? 'unknown',
+      counts: `${counter.accepted ?? 0} / ${counter.dropped ?? 0} / ${counter.rejected ?? 0} / ${counter.redacted ?? 0}`};
+  });
   return <Box sx={{height: '100%', overflow: 'auto', p: 1}}>
     {error && <Banner status="error">{error}</Banner>}
     <DataGrid gridId="tracing/sources" aria-label="Trace ingestion sources" rows={rows} readOnly
@@ -269,11 +273,13 @@ function IngestionSampling({session, invoke, currentUser}) {
         {key: 'sourceType', name: 'Type'}, {key: 'status', name: 'Support'},
         {key: 'counts', name: 'Accepted / dropped / rejected / redacted'}]} />
     <Box component="fieldset"><legend>Trace source configuration</legend>
+      <KeyValueJsonEditor title="Source parameters" valueJson={sourceText} onChangeJson={setSourceText} />
       <TextArea label="Source JSON" value={sourceText} onChange={(event) => setSourceText(event.target.value)} />
       <Button disabled={!authoredEdit(session, currentUser, 'trace.configure_source')}
         onClick={() => call('trace.source.configure', sourceText)}>Validate and save source</Button>
     </Box>
     <Box component="fieldset"><legend>Sampling and sensitivity policy</legend>
+      <KeyValueJsonEditor title="Sampling policy parameters" valueJson={policyText} onChangeJson={setPolicyText} />
       <TextArea label="Sampling policy JSON" value={policyText} onChange={(event) => setPolicyText(event.target.value)} />
       <Button disabled={!authoredEdit(session, currentUser, 'trace.admin')}
         onClick={() => call('trace.sampling.update', policyText)}>Validate and save policy</Button>
@@ -326,8 +332,8 @@ TracingNavigator.propTypes = {service: PropTypes.object.isRequired, onOpen: Prop
 function TracingInspector({session}) {
   const trace = selectedTrace(session); const span = selectedSpan(session);
   return <Box><Box component="h3">Span</Box><Box>{span?.name ?? 'No span selected'}</Box>
-    <Box component="h3">Resource</Box><pre>{JSON.stringify(span?.resource ?? {}, null, 2)}</pre>
-    <Box component="h3">Attributes</Box><pre>{JSON.stringify(span?.attributes ?? {}, null, 2)}</pre>
+    <Box component="h3">Resource</Box><StructuredPayloadCard compact value={span?.resource ?? {}} />
+    <Box component="h3">Attributes</Box><StructuredPayloadCard compact value={span?.attributes ?? {}} />
     <Box component="h3">Events</Box><Box>{span?.events.length ?? 0}</Box>
     <Box component="h3">Links</Box><Box>{span?.links.length ?? 0}</Box>
     <Box component="h3">ScratchRobin correlation</Box><Box>{span?.correlationRefs.length ?? 0}</Box>

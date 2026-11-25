@@ -5,7 +5,7 @@ import pgAdmin from 'sources/pgadmin';
 import url_for from 'sources/url_for';
 import getApiInstance from '../api_instance';
 import {LAYOUT_EVENTS} from '../helpers/Layout';
-import {DDNDesignerSurface} from '../cdeadmin_ui/integrations/ddn';
+import {DDNDesignerSurface, DDNViewerSurface} from '../cdeadmin_ui/integrations/ddn';
 import {loadDDNLibraries} from '../cdeadmin_ui/integrations/ddn/library';
 import {validatePublication} from '../cdeadmin_ui/integrations/ddn/dashboardPublication.mjs';
 import {firebirdDashboardFiles, firebirdFleetFiles} from '../cdeadmin_ui/integrations/ddn/firebirdDashboard';
@@ -50,6 +50,10 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
         setDefinition(data.data);
         setSourceVersion(data.data.assetRef.assetVersion);
         setPublicationVersion(data.data.publication_version || 0);
+        if (typeof DDNViewerSurface === 'function') {
+          controller.current = {isDirty: () => false, beforeClose: async () => false};
+          setReady(true);
+        }
       }
     }).catch((err) => {
       if(active) setError(err.response?.data?.errormsg || 'Dashboard draft is unavailable.');
@@ -119,14 +123,27 @@ export default function FirebirdDashboardEditor({serverId, targetId, panelId, en
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
+  return <Box sx={{height: '100%', display: 'flex', flexDirection: 'column', gap: 1}}>
     <FormReference formKey={`${engine}-dashboard-editor`} />
     <Alert severity="info">Saving preserves a draft. Publish a saved revision to use its layout in the read-only dashboard. Metric values come from authorized collectors; publishing does not change collection.</Alert>
-    <Box><Button disabled={!ready || !sourceVersion || publishing} onClick={publish}>Publish saved revision</Button>
-      <span>{publicationVersion ? `Published revision ${publicationVersion}` : 'Standard dashboard is active'}</span></Box>
+    <Box sx={{display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1}}>
+      <Button variant="outlined" onClick={() => {
+        window.dispatchEvent(new CustomEvent('scratchrobin:open-app-surface', {
+          detail: {appId: 'bi-designer', engine, serverId, targetId, snapshot},
+        }));
+      }}>Open in BI Designer</Button>
+      <Button disabled={!ready || !sourceVersion || publishing} onClick={publish}>Publish saved revision</Button>
+      <span>{publicationVersion ? `Published revision ${publicationVersion}` : 'Standard dashboard is active'}</span>
+    </Box>
     {error && <Alert severity="error">{error}</Alert>}
-    {definition && <DDNDesignerSurface snapshot={snapshot} assetRef={definition.assetRef}
-      saveAsset={save} onExport={exportSVG} onReady={(value) => { controller.current = value; setReady(true); }} />}
+    {definition && (typeof DDNViewerSurface === 'function' ? (
+      <Box sx={{flex: 1, minHeight: 320, overflow: 'auto'}}>
+        <DDNViewerSurface presentation snapshot={snapshot} />
+      </Box>
+    ) : (
+      <DDNDesignerSurface snapshot={snapshot} assetRef={definition.assetRef}
+        saveAsset={save} onExport={exportSVG} onReady={(value) => { controller.current = value; setReady(true); }} />
+    ))}
   </Box>;
 }
 FirebirdDashboardEditor.propTypes = {engine: PropTypes.oneOf(['firebird', 'postgresql', 'mysql', 'mariadb', 'duckdb', 'sqlite']), serverId: PropTypes.number,
