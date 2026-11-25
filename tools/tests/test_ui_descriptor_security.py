@@ -211,3 +211,37 @@ def test_only_engines_with_live_verified_operations_are_complete():
     # PostgreSQL has no privilege operation yet, and MySQL's operations have not
     # been round-tripped through the descriptor-driven manager.
     assert states == {'firebird': 'complete', 'mysql': 'draft', 'postgresql': 'draft'}
+
+
+def test_grants_carry_their_own_status_separate_from_principals():
+    for engine in FIRST_SLICE:
+        doc = json.loads((DESCRIPTORS / engine / 'security.json').read_text(encoding='utf-8'))
+        assert doc['grants']['status'] in ('draft', 'complete')
+    fb = json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))
+    assert fb['grants']['status'] == 'complete'
+
+
+def test_declared_grants_need_a_status(engine_copy):
+    def mutate(doc):
+        doc['grants'].pop('status')
+    errors = check(engine_copy('mysql', mutate))
+    assert any('grants.status' in e for e in errors), errors
+
+
+def test_a_listing_may_not_name_its_object_two_ways(engine_copy):
+    def both(doc):
+        doc['grants']['listing']['object_field'] = 'x'
+    assert any('both object_field and object_fields' in e for e in check(engine_copy('mysql', both)))
+
+
+def test_a_listing_must_name_its_object(engine_copy):
+    def neither(doc):
+        doc['grants']['listing'].pop('object_fields')
+    assert any('needs object_field or object_fields' in e for e in check(engine_copy('mysql', neither)))
+
+
+def test_mysql_declares_a_composite_listing_without_privilege_codes():
+    doc = json.loads((DESCRIPTORS / 'mysql' / 'security.json').read_text(encoding='utf-8'))
+    listing = doc['grants']['listing']
+    assert listing['object_fields'] == ['database', 'table_name']
+    assert 'privilege_codes' not in listing

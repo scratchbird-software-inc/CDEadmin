@@ -35,7 +35,7 @@ import {listResources} from './providerList';
 /** Whether the descriptor offers an object-grants view for this kind of object. */
 export function objectGrantsOffered(bundle, objectKind) {
   const security = bundle?.security;
-  if(security?.status !== 'complete' || !security.grants?.listing) return false;
+  if(security?.grants?.status !== 'complete' || !security.grants.listing) return false;
   const grantable = bundle.options?.dialect?.[security.grants.grantable_kinds];
   return Array.isArray(grantable) && grantable.includes(objectKind);
 }
@@ -43,17 +43,22 @@ export function objectGrantsOffered(bundle, objectKind) {
 /** The object-grant rows for one object, read through the descriptor's listing. */
 export function grantRows(grants, resources, objectName) {
   const listing = grants.listing;
+  // A grant names its object by one native field, or by a path whose last field is the object's own name.
+  const objectKey = listing.object_field || listing.object_fields.at(-1);
+  // Without codes the engine stores privilege names directly.
+  const codes = listing.privilege_codes;
+  const privilegeName = (stored) => (codes ? codes[stored] : stored);
   return resources
     .filter((resource) => resource.resource_kind === grants.grant_kind)
     .map((resource) => resourceNative(resource))
-    .filter((native) => native[listing.object_field] === objectName
-      && Object.hasOwn(listing.privilege_codes, native[listing.privilege_field]))
+    .filter((native) => native[objectKey] === objectName
+      && (!codes || Object.hasOwn(codes, native[listing.privilege_field])))
     .map((native) => {
       const kindCode = listing.grantee_kind_field ? native[listing.grantee_kind_field] : undefined;
       return {
         grantee: native[listing.grantee_field],
         granteeKind: listing.grantee_kinds?.[String(kindCode)] ?? null,
-        privilege: listing.privilege_codes[native[listing.privilege_field]],
+        privilege: privilegeName(native[listing.privilege_field]),
         column: listing.column_field ? native[listing.column_field] || '' : '',
         grantOption: listing.grant_option_field
           ? native[listing.grant_option_field] === listing.grant_option_equals : null,

@@ -811,7 +811,7 @@ def normalize_grants_matrix(
 # --------------------------------------------------------------------------
 
 
-def _administered_by_provider(engine_id: str) -> bool:
+def _administered_by_provider(engine_id: str, feature: str = 'principals') -> bool:
     """True when the engine's security.json is complete, so its principals and grants
     are managed through its provider operations (Security Manager, object grants view)
     and this endpoint must not also write to it (design Decision 21)."""
@@ -820,11 +820,14 @@ def _administered_by_provider(engine_id: str) -> bool:
         bundle = UIDescriptorService().engine(str(engine_id or '').strip().lower())
     except UIDescriptorError:
         return False
-    return (bundle.get('security') or {}).get('status') == 'complete'
+    security = bundle.get('security') or {}
+    if feature == 'grants':
+        return (security.get('grants') or {}).get('status') == 'complete'
+    return security.get('status') == 'complete'
 
 
-def _refuse_provider_managed(engine_id: str) -> None:
-    if _administered_by_provider(engine_id):
+def _refuse_provider_managed(engine_id: str, feature: str = 'principals') -> None:
+    if _administered_by_provider(engine_id, feature):
         raise SecurityAuthorityError(
             f'{engine_id} security is administered through its provider operations '
             '(the Security Manager and each object\'s grants view), not this endpoint'
@@ -1533,7 +1536,7 @@ class SecurityAuthorityHost:
     def get_object_grants(self, params: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(params.get('sid') or 0)
         info = self._resolve_target_info(sid)
-        _refuse_provider_managed(info['engine_id'])
+        _refuse_provider_managed(info['engine_id'], 'grants')
         engine_id = info['engine_id']
         fam = _dialect_family(engine_id)
         obj_kind = str(params.get('object_kind') or 'table').strip().lower()
@@ -1876,7 +1879,7 @@ class SecurityAuthorityHost:
     def plan_object_grants(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
-        _refuse_provider_managed(info['engine_id'])
+        _refuse_provider_managed(info['engine_id'], 'grants')
         return compile_object_grants_plan(
             info['engine_id'],
             str(body.get('object_kind') or 'table'),
@@ -1889,7 +1892,7 @@ class SecurityAuthorityHost:
     def apply_object_grants(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
-        _refuse_provider_managed(info['engine_id'])
+        _refuse_provider_managed(info['engine_id'], 'grants')
         compiled = compile_object_grants_plan(
             info['engine_id'],
             str(body.get('object_kind') or 'table'),

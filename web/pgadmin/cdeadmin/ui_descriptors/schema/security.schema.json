@@ -247,12 +247,10 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "object_field",
             "grantee_field",
-            "privilege_field",
-            "privilege_codes"
+            "privilege_field"
           ],
-          "description": "how to read the grants on one object from the provider's grant_kind resources: which native field names the object, grantee, privilege and so on, and what each stored privilege code means",
+          "description": "how to read the grants on one object from the provider's grant_kind resources: which native field names the object, grantee, privilege and so on, and what each stored privilege code means. Name the object with object_field (one native field) or object_fields (a path, qualifiers first and the object's own name last, for engines whose grants are keyed by database, table and so on).",
           "properties": {
             "object_field": {
               "type": "string",
@@ -276,7 +274,7 @@
             },
             "privilege_codes": {
               "type": "object",
-              "description": "stored privilege code to privilege name; a row whose code is not listed (memberships, DDL grants) is not an object grant",
+              "description": "stored privilege code to privilege name; a row whose code is not listed (memberships, DDL grants) is not an object grant. Omit when the engine stores privilege names directly",
               "additionalProperties": {
                 "type": "string"
               }
@@ -292,8 +290,23 @@
             },
             "grantor_field": {
               "type": "string"
+            },
+            "object_fields": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "description": "native fields forming the object's path; the last is the object's name, earlier ones qualify it"
             }
           }
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "complete"
+          ],
+          "description": "Per feature status of the object-grants view: complete means the descriptor-driven view serves this engine's objects and its grant and revoke operations are round-tripped live; draft keeps the previous permissions matrix. Independent of the top-level status, which covers principals and membership. Required when grants are declared."
         }
       }
     },

@@ -1521,3 +1521,25 @@ Not carried over, deliberately recorded:
   are verified, so the roster shows names only.
 - ``test_firebird_embedded_contracts`` has two failures that predate this change
   (they fail on a clean checkout of the committed baseline too).
+
+Decision 21: per-feature status and composite grant listings (2026-11-25)
+-------------------------------------------------------------------------
+
+``security.json`` ``status`` now covers principals and membership only. Object
+grants carry their own ``grants.status`` (``draft`` or ``complete``), required
+whenever grants are declared. The legacy host guard
+(``_refuse_provider_managed``) and the object-grants dispatcher read the matching
+status, so an engine can move its Security Manager to the descriptor-driven view
+while its object grants stay on the previous matrix, and neither breaks.
+Firebird: both ``complete``. MySQL and PostgreSQL: ``draft``.
+
+``grants.listing`` now accepts ``object_fields`` (a path, the last field being the
+object's own name) as an alternative to ``object_field``, and ``privilege_codes``
+is optional for engines that store privilege names directly. MySQL declares such a
+listing and stays ``draft``.
+
+Not done: MySQL's listing reads table-scoped rows only (database, routine and
+global grants are not keyed by ``table_name``); the grant operation's user/host
+grid is not prefilled from a row; nothing was verified against a MySQL or MariaDB
+server because none is available here. Lint counts are unchanged (engine_prop 135,
+security_ui 22).

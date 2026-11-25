@@ -157,3 +157,16 @@ describe('ObjectGrantsSurface', () => {
     expect(screen.getByTestId('legacy-matrix')).toBeInTheDocument();
   });
 });
+
+describe('grantRows with a composite object path and stored privilege names', () => {
+  const grants = {grant_kind: 'privilege', listing: {object_fields: ['database', 'table_name'], grantee_field: 'grantee',
+    privilege_field: 'privilege', column_field: 'column_name', grant_option_field: 'is_grantable', grant_option_equals: 'YES'}};
+  const grant = (native) => ({resource_kind: 'privilege', native});
+  it('matches on the last path field and keeps privilege names as stored', () => {
+    const rows = grantRows(grants, [
+      grant({grantee: "'app'@'%'", privilege: 'SELECT', database: 'd', table_name: 't', is_grantable: 'YES'}),
+      grant({grantee: "'app'@'%'", privilege: 'DROP', database: 'd', table_name: 'other'}),
+    ], 't');
+    expect(rows).toEqual([expect.objectContaining({grantee: "'app'@'%'", privilege: 'SELECT', grantOption: true, granteeKind: null})]);
+  });
+});

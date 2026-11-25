@@ -2,7 +2,7 @@
   "schema": "cdeadmin.ui-security.v1",
   "engine": "mysql",
   "status": "draft",
-  "notes": "Accounts and roles are both identified by name and host. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here.",
+  "notes": "Accounts and roles are both identified by name and host. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here. Grant listing: the provider's privilege rows are keyed by database, table and optionally column, with the grantee as one account string and privilege names stored directly. The listing reads table-scoped rows only; database, routine and global grants are not keyed by table_name and are not yet listed, and the grant operation's separate user and host grid is not prefilled from a row. The grant listing and operations are not verified against a live server (none is available), so status stays draft.",
   "principals": [
     {
       "kind": "user",
@@ -40,6 +40,7 @@
   },
   "grants": {
     "grant_kind": "privilege",
+    "status": "draft",
     "system_privileges": "system_privileges",
     "object_privileges": "privileges",
     "grantable_kinds": "grantable_kinds",
@@ -56,7 +57,18 @@
         "UPDATE"
       ]
     },
-    "grant_option": true
+    "grant_option": true,
+    "listing": {
+      "object_fields": [
+        "database",
+        "table_name"
+      ],
+      "grantee_field": "grantee",
+      "privilege_field": "privilege",
+      "column_field": "column_name",
+      "grant_option_field": "is_grantable",
+      "grant_option_equals": "YES"
+    }
   },
   "requires": {
     "inspect": "verified",

@@ -22,6 +22,7 @@
   },
   "grants": {
     "grant_kind": "privilege",
+    "status": "draft",
     "object_privileges": "privileges",
     "grantable_kinds": "grantable_kinds",
     "column_privileges": {
