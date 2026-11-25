@@ -204,6 +204,8 @@ class ProviderWorkspaceService:
         focused_operation_id=None,
     ):
         from .firebird_editor import languages as editor_languages
+        if database_target_id == 'cdeadmin-server-scope':
+            database_target_id = None
         context, endpoint, root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id
         )
@@ -557,6 +559,8 @@ class ProviderWorkspaceService:
         continuation = request.get('continuation')
         generation = request.get('generation')
         database_target_id = request.get('database_target_id', Ellipsis)
+        if database_target_id == 'cdeadmin-server-scope':
+            database_target_id = None
         if continuation is not None and not isinstance(continuation, str):
             raise ProviderWorkspaceError(
                 'resource page continuation must be text'
@@ -580,6 +584,8 @@ class ProviderWorkspaceService:
         Tree navigation is independently scoped per retained database.  It
         never changes the endpoint's active Data Studio database.
         """
+        if database_target_id == 'cdeadmin-server-scope':
+            database_target_id = None
         context, endpoint, root = self.endpoint_service.workspace(
             server, database_target_id=database_target_id,
         )
@@ -5505,7 +5511,9 @@ class ProviderWorkspaceService:
             )
         payload = copy.deepcopy(request)
         database_target_id = payload.pop('database_target_id', Ellipsis)
-        if database_target_id is not Ellipsis and (
+        if database_target_id == 'cdeadmin-server-scope':
+            database_target_id = None
+        elif database_target_id is not Ellipsis and (
                 not isinstance(database_target_id, str) or
                 not database_target_id):
             raise ProviderWorkspaceError(
@@ -5520,7 +5528,9 @@ class ProviderWorkspaceService:
             candidate = cdeadmin.get('database_target_id') if isinstance(
                 cdeadmin, dict
             ) else None
-            if candidate is not None:
+            if candidate == 'cdeadmin-server-scope':
+                database_target_id = None
+            elif candidate is not None:
                 if not isinstance(candidate, str) or not candidate:
                     raise ProviderWorkspaceError(
                         'database target identity is invalid'
@@ -5628,6 +5638,8 @@ def init_app(
     init_mysql_backup_schedule(app,service)
     from .object_dashboard_host import init_app as init_object_dashboard
     service.object_dashboard_host = init_object_dashboard(app, service)
+    from .security_authority import init_app as init_security_authority
+    service.security_authority = init_security_authority(app, service)
     return service
 
 

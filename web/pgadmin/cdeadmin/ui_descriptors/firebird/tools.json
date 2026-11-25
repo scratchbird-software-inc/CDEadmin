@@ -385,29 +385,32 @@
       "mutation": "admin"
     },
     {
-      "command_id": "database.firebird.security.user",
-      "scope": "database",
-      "label": "Manage Firebird users...",
-      "handler": "open_workspace",
-      "slot": "post_lifecycle",
+      "command_id": "endpoint.firebird.security.user",
+      "scope": "endpoint",
+      "label": "Manage Server Users...",
+      "handler": "open_tool",
+      "slot": "after_verify",
       "icon": "action.security",
       "group": "security",
       "priority": 45,
       "mutation": "admin",
-      "inherit_base": false,
-      "base_keys": [
-        "database_target_id"
+      "when": {
+        "route_kind": "network"
+      },
+      "enabled_when": [
+        "verified"
       ],
       "arguments": {
-        "tab": "administration",
-        "resource_kind": "user"
+        "surface": "security.manager",
+        "scope": "server",
+        "initial_kind": "user"
       }
     },
     {
       "command_id": "database.firebird.security.role",
       "scope": "database",
       "label": "Manage Firebird roles...",
-      "handler": "open_workspace",
+      "handler": "open_tool",
       "slot": "post_lifecycle",
       "icon": "action.security",
       "group": "security",
@@ -418,15 +421,16 @@
         "database_target_id"
       ],
       "arguments": {
-        "tab": "administration",
-        "resource_kind": "role"
+        "surface": "security.manager",
+        "scope": "database",
+        "initial_kind": "role"
       }
     },
     {
       "command_id": "database.firebird.security.privilege",
       "scope": "database",
       "label": "Manage Firebird grants and privileges...",
-      "handler": "open_workspace",
+      "handler": "open_tool",
       "slot": "post_lifecycle",
       "icon": "action.security",
       "group": "security",
@@ -437,9 +441,9 @@
         "database_target_id"
       ],
       "arguments": {
-        "tab": "administration",
-        "resource_kind": "privilege",
-        "operation_id": "grant"
+        "surface": "security.manager",
+        "scope": "database",
+        "initial_kind": "role"
       }
     },
     {

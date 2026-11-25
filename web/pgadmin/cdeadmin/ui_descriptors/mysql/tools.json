@@ -3,6 +3,47 @@
   "engine": "mysql",
   "tools": [
     {
+      "command_id": "endpoint.mysql.security.user",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage Users & Roles...",
+      "description": "Manage server-wide MySQL user accounts, roles, memberships and global privileges.",
+      "handler": "open_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 45,
+      "mutation": "admin",
+      "enabled_when": [
+        "verified"
+      ],
+      "arguments": {
+        "surface": "security.manager",
+        "scope": "server",
+        "initial_kind": "user"
+      }
+    },
+    {
+      "command_id": "database.mysql.security.privilege",
+      "scope": "database",
+      "slot": "post_lifecycle",
+      "label": "Manage Database Privileges...",
+      "description": "Inspect and manage database, table and routine privileges for this database.",
+      "handler": "open_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 45,
+      "mutation": "admin",
+      "inherit_base": false,
+      "base_keys": [
+        "database_target_id"
+      ],
+      "arguments": {
+        "surface": "security.manager",
+        "scope": "database",
+        "initial_kind": "privilege"
+      }
+    },
+    {
       "command_id": "endpoint.mysql.data_drift",
       "scope": "endpoint",
       "slot": "after_verify",

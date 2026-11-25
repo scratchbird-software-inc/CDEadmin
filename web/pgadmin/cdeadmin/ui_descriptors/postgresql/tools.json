@@ -4,6 +4,26 @@
   "notes": "Tool openers for this engine. Lifecycle entries come from the family forms and tier 2/3 operations from operations.json; keep only openers here. Owner direction 2026-11-08 / decision 2026-11-10 (M2): the database actions the inherited database node offered (dashboard, monitoring settings, dashboard editor, catalog DDN, test data, large-object files, advanced objects) are declared here for the provider tree, so a PostgreSQL server browsed through it keeps them. Labels match the inherited entries. M6 (2026-11-11): the inherited backup, restore, import/export and psql utilities are declared as openers (handler open_inherited_tool); the client identity bridge (legacyNodeData) lets them read a provider node as the inherited node it stands for.",
   "tools": [
     {
+      "command_id": "endpoint.postgresql.security.role",
+      "scope": "endpoint",
+      "slot": "after_verify",
+      "label": "Manage Cluster Roles...",
+      "description": "Manage cluster-wide login and group roles, memberships and system privileges.",
+      "handler": "open_tool",
+      "icon": "action.security",
+      "group": "security",
+      "priority": 45,
+      "mutation": "admin",
+      "enabled_when": [
+        "verified"
+      ],
+      "arguments": {
+        "surface": "security.manager",
+        "scope": "server",
+        "initial_kind": "role"
+      }
+    },
+    {
       "command_id": "endpoint.{engine_id}.bi_questions",
       "scope": "endpoint",
       "label": "BI questions...",
